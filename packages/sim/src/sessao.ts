@@ -7,8 +7,35 @@
 // A sessão roda com ZERO visualizadores. Se algum caminho presumir que existe um, quebra na
 // primeira hunt AFK — que é o modo padrão do jogo.
 
-import type { CharacterRuntime } from './personagem.js';
+import { CharacterRuntime } from './personagem.js';
+import type { EstadoDePersonagem } from './personagem.js';
 import type { Rng, EstadoDeRng } from './rng.js';
+
+/**
+ * Versão do FORMATO de snapshot — não do conteúdo, não do servidor.
+ *
+ * Existe desde o primeiro snapshot de propósito: sem ela, o primeiro deploy que mudar o
+ * formato descarta em silêncio milhares de sessões em voo, e ninguém liga uma coisa à outra.
+ * Mudou o formato, sobe o número e decide explicitamente entre migrar e descartar.
+ */
+export const VERSAO_DO_FORMATO_DE_SNAPSHOT = 1;
+
+export interface SnapshotDeSessao {
+  readonly versaoDoFormato: number;
+  readonly versaoDeConteudo: string;
+  readonly id: string;
+  readonly tipo: TipoDeSessao;
+  readonly criadaEmMs: number;
+  readonly ultimoTickMs: number;
+  readonly rng: EstadoDeRng;
+  readonly participantes: readonly EstadoDePersonagem[];
+  readonly agregados: Agregados;
+  readonly eventosNotaveis: readonly EventoNotavel[];
+  readonly ledgerSeq: number;
+  readonly encerradaPor: MotivoDeEncerramento | null;
+  /** Opaco: quem entende do formato é o próprio ruleset. */
+  readonly ruleset?: unknown;
+}
 
 export type TipoDeSessao = 'cidade' | 'hunt' | 'treino' | 'quest' | 'boss' | 'guild-war';
 
@@ -63,6 +90,13 @@ export interface Ruleset {
   aoTick(sessao: Sessao, dtMs: number): void;
   aoMorrer(sessao: Sessao, personagem: CharacterRuntime): void;
   aoEncerrar(sessao: Sessao, motivo: MotivoDeEncerramento): void;
+
+  /**
+   * Estado próprio do ruleset, para entrar no snapshot. Ruleset sem estado pode omitir.
+   * O serializador trata o retorno como opaco — quem entende do formato é o ruleset.
+   */
+  estado?(): unknown;
+  restaurar?(estado: unknown): void;
 }
 
 export interface OpcoesDeSessao {
@@ -93,6 +127,43 @@ export class Sessao {
   #visualizadores = new Set<string>();
   #ultimoTickMs: number;
   #encerradaPor: MotivoDeEncerramento | null = null;
+
+  /**
+   * Reconstrói uma sessão a partir de um snapshot (FUN-27, FUN-28).
+   *
+   * Visualizadores NÃO são restaurados: são conexões, e conexão não sobrevive à queda de um
+   * nó. Uma sessão retomada nasce desanexada, que é o estado correto — quem estava olhando
+   * vai reanexar por conta própria.
+   */
+  static deSnapshot(snapshot: SnapshotDeSessao, ruleset: Ruleset, rng: Rng): Sessao {
+    if (snapshot.versaoDoFormato !== VERSAO_DO_FORMATO_DE_SNAPSHOT) {
+      throw new Error(
+        `snapshot na versão ${snapshot.versaoDoFormato}; este servidor lê ` +
+          `${VERSAO_DO_FORMATO_DE_SNAPSHOT}. Migre ou descarte explicitamente.`,
+      );
+    }
+    if (ruleset.tipo !== snapshot.tipo) {
+      throw new Error(`ruleset "${ruleset.tipo}" não corresponde ao snapshot "${snapshot.tipo}"`);
+    }
+
+    const sessao = new Sessao({
+      id: snapshot.id,
+      versaoDeConteudo: snapshot.versaoDeConteudo,
+      ruleset,
+      rng,
+      criadaEmMs: snapshot.criadaEmMs,
+    });
+    sessao.#ultimoTickMs = snapshot.ultimoTickMs;
+    sessao.#encerradaPor = snapshot.encerradaPor;
+    sessao.ledgerSeq = snapshot.ledgerSeq;
+    Object.assign(sessao.agregados, snapshot.agregados);
+    sessao.eventosNotaveis.push(...snapshot.eventosNotaveis);
+    for (const estado of snapshot.participantes) {
+      sessao.participantes.push(new CharacterRuntime(estado));
+    }
+    if (snapshot.ruleset !== undefined) ruleset.restaurar?.(snapshot.ruleset);
+    return sessao;
+  }
 
   constructor(opcoes: OpcoesDeSessao) {
     this.id = opcoes.id;
@@ -186,5 +257,30 @@ export class Sessao {
 
   estadoDoRng(): EstadoDeRng {
     return this.rng.estado();
+  }
+
+  /**
+   * Snapshot para o Redis (FUN-27). Precisa reconstruir a sessão EXATAMENTE — cooldowns,
+   * temporizadores em curso e o estado do gerador aleatório inclusive. Sem o gerador, a
+   * sessão retomada continua com outra sequência de loot, e nenhuma investigação de "por
+   * que não caiu" fica possível.
+   */
+  snapshot(): SnapshotDeSessao {
+    const estadoDoRuleset = this.ruleset.estado?.();
+    return {
+      versaoDoFormato: VERSAO_DO_FORMATO_DE_SNAPSHOT,
+      versaoDeConteudo: this.versaoDeConteudo,
+      id: this.id,
+      tipo: this.ruleset.tipo,
+      criadaEmMs: this.criadaEmMs,
+      ultimoTickMs: this.#ultimoTickMs,
+      rng: this.rng.estado(),
+      participantes: this.participantes.map((p) => p.estado()),
+      agregados: { ...this.agregados },
+      eventosNotaveis: [...this.eventosNotaveis],
+      ledgerSeq: this.ledgerSeq,
+      encerradaPor: this.#encerradaPor,
+      ...(estadoDoRuleset === undefined ? {} : { ruleset: estadoDoRuleset }),
+    };
   }
 }
