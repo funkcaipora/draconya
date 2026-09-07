@@ -136,6 +136,69 @@ lote comprimido, não snapshot por tick.
 
 ---
 
+## Correção — latência escolhe o fornecedor, não preço por core
+
+A primeira versão deste documento recomendou Hetzner no estágio 3 com base em custo e tráfego
+incluído. **Isso subponderou latência, e a correção muda a recomendação.**
+
+A Hetzner não tem data center na América do Sul: o mais próximo é a Virgínia (~120 ms do Brasil)
+e a Alemanha fica em ~200 ms. Para a hunt idle isso não incomoda — ninguém está olhando. **Para a
+Guild War, incomoda muito**, e a Guild War é o diferencial do produto. A predição no cliente cobre
+só o próprio passo; empurrar alguém e ver o resultado é ida e volta completa. PvP tático em grade,
+com público brasileiro, rodando na Virgínia é uma decisão que se sente no empurrão.
+
+**O critério que escolhe o fornecedor é presença em São Paulo.** Preço por core desempata depois.
+
+| Fornecedor | Região BR | Observação |
+|---|---|---|
+| **Hostinger VPS** | São Paulo | Preço promocional agressivo no primeiro período, renovação bem mais alta. Cobrança em BRL |
+| **Vultr** | São Paulo | Preço estável, sem jogo de renovação |
+| **Contabo** | São Paulo | Barato por core; reputação de I/O irregular |
+| **Oracle Cloud Free Tier** | São Paulo | 4 cores ARM + 24 GB + 10 TB de egresso, **sempre grátis** |
+| **Hetzner** | não tem | Melhor preço por core e 20 TB inclusos, mas ~120 ms de latência |
+
+**Sobre o Oracle Free Tier:** é desproporcionalmente generoso para validar e até para um
+lançamento pequeno. As ressalvas são reais — capacidade de ARM em região popular costuma faltar,
+conta ociosa pode ser recuperada, e ARM exige build `arm64`. Não apostaria a operação nele, mas
+para validar sem gastar é difícil bater.
+
+**O que continua valendo do estágio 3:** em escala, a conta é dominada por banda, e fornecedor com
+tráfego incluído continua sendo a rota barata. A correção não é sobre isso — é sobre em que
+continente o servidor fica.
+
+---
+
+## O caminho decidido: local primeiro, VPS depois
+
+**Nada é hospedado até a Fase 2 terminar.** O critério de saída da Fase 1 — fechar o navegador,
+voltar depois e encontrar a sessão rodando — é testável inteiro em `localhost`, incluindo o
+`kill -9` no nó e a drenagem em deploy. O `docker-compose.yml` já cobre. Hospedar antes disso
+só adiciona a classe de problema "funciona aqui e não lá" na fase cujo propósito é provar uma
+propriedade de arquitetura.
+
+**Destino: VPS em São Paulo.** É também a opção mais agent friendly da lista — SSH e
+`docker compose` são inteiramente script, inteiramente verificáveis do terminal, sem nenhum
+passo de painel.
+
+### O que "preparar para migrar" exige
+
+Se estas quatro coisas valerem desde o começo, trocar de máquina ou de fornecedor é uma tarde:
+
+1. Tudo em container, com `docker compose` como única forma de subir.
+2. Configuração **só** por variável de ambiente — já é o caso, e `carregarConfiguracao` derruba
+   o boot se faltar alguma.
+3. Nenhum estado em disco local além do volume do Postgres e da pasta de assets.
+4. Deploy que seja `git pull && docker compose up -d`, sem passo manual.
+
+### A única coisa que não pode ficar para depois
+
+**Backup do Postgres.** Assumir a VPS é assumir backup, e `account` e `ledger` são a joia da coroa
+— ainda mais com a venda de personagem entre contas prevista no §35 do PRD. "Configuro backup
+depois" é literalmente como se perde dado. `pg_dump` diário para o R2, com restauração testada
+pelo menos uma vez, é meia hora de trabalho.
+
+---
+
 ## O que ainda não foi escolhido
 
 | Peça | Quando | Candidatos |
