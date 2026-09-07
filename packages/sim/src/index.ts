@@ -3,3 +3,6 @@
 
 export * from './relogio.js';
 export * from './rng.js';
+export * from './cooldown.js';
+export * from './personagem.js';
+export * from './sessao.js';
