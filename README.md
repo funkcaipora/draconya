@@ -72,6 +72,7 @@ fronteiras, invariantes locais e armadilhas conhecidas.
 | [`docs/produto/`](docs/produto/) | Documentação funcional por sistema: o que existe de fato | vivo |
 | [`docs/prd-v0.9.md`](docs/prd-v0.9.md) | O PRD do jogo | instantâneo |
 | [`docs/plano-harness.md`](docs/plano-harness.md) | Como a documentação e os padrões são mantidos | vivo |
+| [`docs/infraestrutura.md`](docs/infraestrutura.md) | Fornecedores, recursos e custo estimado em três estágios | vivo |
 
 A distinção que mais importa: o **PRD é um instantâneo** do que se pretendia numa data, com
 itens em aberto espalhados. `docs/produto/` é o documento **vivo** — o que o código faz hoje,

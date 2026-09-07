@@ -29,3 +29,4 @@ descrito muda.
 reescrito depois, nem quando a implementação diverge dele: `docs/produto/` é quem registra a
 leitura do PRD confrontada com o que foi de fato construído, inclusive os pontos `[ABERTO]` que
 a implementação teve que resolver sozinha, sem esperar resposta.
+- [`infraestrutura.md`](infraestrutura.md) — fornecedores, recursos e custo estimado em três estágios. Vivo.
