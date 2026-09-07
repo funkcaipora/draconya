@@ -1,0 +1,7 @@
+{
+  "id": "paladin",
+  "name": "Paladin",
+  "healthPerLevel": 15,
+  "manaPerLevel": 10,
+  "capacityPerLevel": 20
+}

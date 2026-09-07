@@ -1,0 +1,13 @@
+{
+  "id": "rat-cellars",
+  "name": "Rat Cellars",
+  "recommendedLevel": 1,
+  "mapId": "rat-cellars",
+  "difficulties": {
+    "beginner": {
+      "perSpawnPoint": 2,
+      "composition": [{ "monsterId": "rat", "weight": 1 }],
+      "respawnDelayMs": 30000
+    }
+  }
+}

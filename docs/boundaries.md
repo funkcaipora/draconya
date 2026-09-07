@@ -142,3 +142,12 @@ para evitá-lo seria abrir espaço para o caso que ela existe pra pegar.
 
 Um dos dois está desatualizado. Corrija os dois no mesmo commit — nunca só o que for mais fácil
 de mudar no momento.
+
+## Pontos de entrada de `content/`
+
+`content/` expõe dois: `.` é puro (schemas, tipos, montagem em memória) e `/load` lê disco
+com `node:fs`. **`sim/` pode importar o primeiro e não o segundo.**
+
+Vale explicitar porque é a única fronteira desta tabela que não é entre pacotes, e sim
+*dentro* de um: sem ela, `sim` importa `content`, `content` importa `node:fs`, e a pureza do
+invariante 1 se perde por transitividade — sem que nenhum import proibido apareça em `sim/`.
