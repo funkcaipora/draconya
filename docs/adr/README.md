@@ -28,3 +28,4 @@ uma inconsistência, não uma atualização.
 | [0010](0010-drenagem-em-deploy-encerra-creditando.md) | Drenagem em deploy encerra creditando | aceito | Em deploy, o nó encerra cada sessão creditando o progresso, em vez de migrar sessões ao vivo; o formato de snapshot já nasce pronto para migração futura. |
 | [0011](0011-stack-de-bibliotecas.md) | Stack de bibliotecas | aceito | Zod, Drizzle, ioredis, Fastify, pino, prom-client e Vitest fixados como escolha única; `sim/` segue sem dependência. |
 | [0012](0012-autenticacao-delegada-ao-workos.md) | Autenticação delegada ao WorkOS | aceito | Credencial e fluxos de conta no AuthKit; `account` local segue dona de Coins, personagens e ledger, com `senha_hash` nulável reservado. |
+| [0013](0013-imagens-multi-arquitetura.md) | Imagens multi-arquitetura | aceito | Build para `amd64` e `arm64` desde o primeiro Dockerfile; desenvolvimento em ARM, destino de deploy livre, e a medição de custo passa a depender da arquitetura. |
