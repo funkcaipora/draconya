@@ -3,8 +3,11 @@
 Fornecedores, recursos e ordem de grandeza de custo em três estágios. As escolhas de biblioteca
 estão no [ADR 0011](adr/0011-stack-de-bibliotecas.md); aqui é só onde as coisas rodam.
 
-> **Preços são ordem de grandeza, para decidir.** Confirme no site antes de contratar — tier
-> gratuito e tabela mudam com frequência, e mais de um fornecedor desta lista já mudou.
+> **Preços e limites são ordem de grandeza, para decidir.** Confirme na documentação do
+> fornecedor antes de contratar — tier gratuito e tabela mudam com frequência, e mais de um
+> fornecedor desta lista já mudou. O limite do Oracle Always Free nesta página já foi corrigido
+> uma vez contra a documentação oficial; trate os demais com o mesmo ceticismo, inclusive a
+> franquia de egresso do próprio Oracle.
 
 ---
 
@@ -154,12 +157,17 @@ com público brasileiro, rodando na Virgínia é uma decisão que se sente no em
 | **Hostinger VPS** | São Paulo | Preço promocional agressivo no primeiro período, renovação bem mais alta. Cobrança em BRL |
 | **Vultr** | São Paulo | Preço estável, sem jogo de renovação |
 | **Contabo** | São Paulo | Barato por core; reputação de I/O irregular |
-| **Oracle Cloud Free Tier** | São Paulo | 4 cores ARM + 24 GB + 10 TB de egresso, **sempre grátis** |
+| **Oracle Cloud Free Tier** | São Paulo | 2 OCPUs ARM + 12 GB, **sempre grátis**. Cobre validação; aperta no lançamento pequeno |
 | **Hetzner** | não tem | Melhor preço por core e 20 TB inclusos, mas ~120 ms de latência |
 
-**Sobre o Oracle Free Tier:** é desproporcionalmente generoso para validar e até para um
-lançamento pequeno. As ressalvas são reais — capacidade de ARM em região popular costuma faltar,
-conta ociosa pode ser recuperada, e ARM exige build `arm64`. Não apostaria a operação nele, mas
+**Sobre o Oracle Free Tier.** O Always Free dá **1.500 horas de OCPU e 9.000 GB-hora por mês**
+no VM.Standard.A1.Flex, o que equivale a **2 OCPUs e 12 GB rodando 24/7** — não os 4 OCPUs e 24 GB
+que circulam em material mais antigo. As microinstâncias AMD (E2.1.Micro) que vêm junto são
+pequenas demais para o `game`.
+
+Dois OCPUs e 12 GB **cobrem bem a validação** e ficam **apertados no lançamento pequeno**, onde a
+estimativa do estágio 2 é de 4 vCPU. Ressalvas reais: capacidade de ARM em região popular costuma
+faltar, conta ociosa pode ser recuperada, e ARM exige build `arm64`. Não apostaria a operação nele, mas
 para validar sem gastar é difícil bater.
 
 **O que continua valendo do estágio 3:** em escala, a conta é dominada por banda, e fornecedor com
