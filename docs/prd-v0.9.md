@@ -14,7 +14,7 @@ Este PRD consolida as decisões de produto e game design definidas para o Dracon
 
 O PRD descreve **o que o produto precisa fazer**, quais regras devem ser respeitadas, quais sistemas pertencem ao MVP e quais capacidades devem ficar preparadas para evolução futura. Ele deliberadamente **não escolhe linguagem, banco de dados, framework, engine web ou provedor de infraestrutura**.
 
-O arquivo `arquitetura.md` continua sendo uma referência de restrições técnicas e de custo. Onde uma decisão de produto posterior conflitar com uma hipótese antiga desse arquivo, **a decisão mais recente deste PRD prevalece como requisito de produto**. Exemplo: stamina em zero não encerra mais automaticamente uma hunt; a sessão pode continuar sem gerar XP, loot ou progresso de Livraria.
+O arquivo `arquitetura.md` continua sendo uma referência de restrições técnicas e de custo. Onde uma decisão de produto posterior conflitar com uma hipótese antiga desse arquivo, **a decisão mais recente deste PRD prevalece como requisito de produto**. Exemplo: stamina em zero não encerra mais automaticamente uma hunt; a sessão pode continuar sem gerar XP, loot ou progresso de Bestiário.
 
 ### 1.1 Convenções
 
@@ -30,7 +30,7 @@ O arquivo `arquitetura.md` continua sendo uma referência de restrições técni
 
 Draconya é um MMORPG de navegador, em pixel art e grade de tiles, inspirado na estrutura de progressão do Tibia, mas construído ao redor de uma experiência principal **idle/AFK oficializada no servidor**.
 
-O jogador desenvolve um personagem persistente, sobe de level, evolui skills pelo uso, troca equipamentos, monta builds, completa Livraria, utiliza Prey, enfrenta bosses, realiza quests e participa de guildas. A principal fonte de progressão cotidiana é a hunt automatizada, que continua rodando mesmo com o navegador fechado.
+O jogador desenvolve um personagem persistente, sobe de level, evolui skills pelo uso, troca equipamentos, monta builds, completa Bestiário, utiliza Prey, enfrenta bosses, realiza quests e participa de guildas. A principal fonte de progressão cotidiana é a hunt automatizada, que continua rodando mesmo com o navegador fechado.
 
 Ao lado dessa progressão persistente, o jogo possui conteúdos manuais instanciados. No MVP, o principal conteúdo competitivo é a **Guild War 15x15 pelo trono**. O objetivo é combinar a profundidade de um MMORPG tradicional com a acessibilidade de jogos modernos em que o usuário consegue entrar em um modo estruturado, jogar e sair sem transformar toda morte em uma perda destrutiva de itens.
 
@@ -48,7 +48,7 @@ Ao lado dessa progressão persistente, o jogo possui conteúdos manuais instanci
 
 ### 3.2 Progressão persistente de RPG
 
-O personagem cresce em level, skills, equipamentos, passivas, Livraria e outros sistemas permanentes. O jogador deve sentir evolução de longo prazo mesmo quando consome conteúdo em sessões curtas.
+O personagem cresce em level, skills, equipamentos, passivas, Bestiário e outros sistemas permanentes. O jogador deve sentir evolução de longo prazo mesmo quando consome conteúdo em sessões curtas.
 
 ### 3.3 Multiplayer deve ser incentivado, não punido
 
@@ -76,7 +76,7 @@ A morte pode ser relevante pela perda de XP, inclusive causando perda de level, 
 
 ### 3.9 Conteúdo deve ser orientado a configuração
 
-Números de balanceamento - XP, loot, preços, cooldowns, stamina, Prey, Livraria, dificuldades e bônus - devem ser tratados como dados/configuração e não como regras impossíveis de alterar sem uma nova versão do produto.
+Números de balanceamento - XP, loot, preços, cooldowns, stamina, Prey, Bestiário, dificuldades e bônus - devem ser tratados como dados/configuração e não como regras impossíveis de alterar sem uma nova versão do produto.
 
 ---
 
@@ -98,7 +98,7 @@ O MVP é um **vertical slice técnico e de produto**, não um lançamento com vo
 | Stamina | Sim |
 | Party / matchmaking | Sim, até 4 em hunts |
 | Prey | Sim |
-| Livraria | Sim |
+| Bestiário | Sim |
 | Equipment / inventory | Sim |
 | Imbuement | Sim |
 | Forja | Não; preparado para futuro |
@@ -214,7 +214,7 @@ Um personagem não pode, por exemplo, estar simultaneamente em treino e hunt.
 - Quantidade de personagens por conta: ilimitada.
 - Máximo de personagens simultaneamente logados por conta: 2.
 - Os dois podem estar em hunts AFK ao mesmo tempo.
-- Cada personagem é independente e isolado em progressão, inventário, stamina, Livraria, Premium e sessões.
+- Cada personagem é independente e isolado em progressão, inventário, stamina, Bestiário, Premium e sessões.
 
 ### 7.2 Coins
 
@@ -326,7 +326,7 @@ Quando chega a 0:
 - pode morrer normalmente;
 - não recebe XP;
 - não recebe loot;
-- não contabiliza abates para a Livraria.
+- não contabiliza abates para a Bestiário.
 
 A hunt não é encerrada automaticamente por stamina zerada.
 
@@ -372,11 +372,11 @@ O jogador escolhe o modo Treino e é enviado para uma instância dedicada.
 - Existe atributo Dodge para o defensor.
 - Quando Dodge ativa, o ataque recebido causa **50% do dano que causaria normalmente**.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de bosses.
-- A chance de Dodge é percentual e pode ser obtida por sistemas como Livraria.
+- A chance de Dodge é percentual e pode ser obtida por sistemas como Bestiário.
 
 ### 12.3 PvE x PvP
 
-Bônus permanentes da Livraria são **PvE-only**. O PvP não deve herdar automaticamente vantagens de farm de Livraria.
+Bônus permanentes da Bestiário são **PvE-only**. O PvP não deve herdar automaticamente vantagens de farm de Bestiário.
 
 ---
 
@@ -618,7 +618,7 @@ Anéis e colares consumíveis **não entram** nessa equalização.
 - Não existe prioridade por last hit.
 - Não existe prioridade por maior dano.
 - Cada membro parte da mesma chance base de loot.
-- Cada jogador aplica seus próprios modificadores individuais, como Prey e Livraria.
+- Cada jogador aplica seus próprios modificadores individuais, como Prey e Bestiário.
 - O sorteio é individual por personagem.
 
 Se um membro sair ou morrer, os demais podem continuar normalmente na instância. Cada personagem decide previamente se deseja sair automaticamente nessas situações.
@@ -670,11 +670,11 @@ Bosses futuros podem utilizar comportamentos mais inteligentes e mecânicas espe
 
 ---
 
-## 18. Livraria / Bestiário
+## 18. Bestiário
 
 ### 18.1 Objetivo
 
-A Livraria recompensa o jogador por abater grandes quantidades de uma criatura e cria progressão permanente orientada a famílias de monstros.
+A Bestiário recompensa o jogador por abater grandes quantidades de uma criatura e cria progressão permanente orientada a famílias de monstros.
 
 ### 18.2 Marcos
 
@@ -707,11 +707,11 @@ Os bônus são individuais ao personagem.
 
 ### 18.5 Escopo PvE
 
-**[DECIDIDO]** Bônus de Livraria valem em PvE. Não devem gerar vantagem automática em Guild War.
+**[DECIDIDO]** Bônus de Bestiário valem em PvE. Não devem gerar vantagem automática em Guild War.
 
 ### 18.6 Stamina
 
-Abates realizados com stamina 0 não contam para a Livraria.
+Abates realizados com stamina 0 não contam para a Bestiário.
 
 ---
 
@@ -1251,7 +1251,7 @@ Esses itens não devem inflar o MVP além do necessário para preparar dados e I
 
 ### 36.2 Rankings
 
-**[ABERTO / não bloqueia MVP]** Rankings de level, skills, Livraria, bosses e Guild War podem ser adicionados, mas não foram definidos como requisito obrigatório do vertical slice.
+**[ABERTO / não bloqueia MVP]** Rankings de level, skills, Bestiário, bosses e Guild War podem ser adicionados, mas não foram definidos como requisito obrigatório do vertical slice.
 
 ---
 
@@ -1306,7 +1306,7 @@ Os seguintes elementos devem poder ser alterados por dados/configuração, prefe
 - parâmetros do bot;
 - densidade/composição de dificuldades;
 - Prey;
-- Livraria;
+- Bestiário;
 - Premium;
 - penalidade de morte;
 - boss cooldown/limites;
@@ -1340,7 +1340,7 @@ Eventos relevantes:
 - boss iniciado/concluído;
 - reward do boss;
 - Prey roll/reroll;
-- marco de Livraria;
+- marco de Bestiário;
 - Market list/buy/cancel;
 - transferência de Coins por Market;
 - compra de Coins;
@@ -1504,12 +1504,12 @@ O MVP técnico deve conseguir demonstrar de ponta a ponta, no mínimo, os fluxos
 6. listar/comprar item no Market sem taxa;
 7. listar/comprar Coins por gold.
 
-### 44.6 Prey e Livraria
+### 44.6 Prey e Bestiário
 
 1. rolar Prey dentro do range de level recomendado;
 2. aplicar um dos bônus de 10%;
 3. reroll cobrar 10k gold;
-4. kills avançarem Livraria somente com stamina > 0;
+4. kills avançarem Bestiário somente com stamina > 0;
 5. marco conceder recompensa PvE permanente.
 
 ### 44.7 Boss
@@ -1550,7 +1550,7 @@ A próxima etapa deve receber este PRD e o arquivo técnico `arquitetura.md`, ma
 
 1. arquitetura lógica de serviços/processos;
 2. modelo de sessão para Hunt, Treino e conteúdos manuais;
-3. modelo de dados de conta, personagem, item, market, Coins, Premium, Livraria e Prey;
+3. modelo de dados de conta, personagem, item, market, Coins, Premium, Bestiário e Prey;
 4. estratégia de persistência e retomada de hunts AFK;
 5. protocolo client-servidor e sincronização/reconexão;
 6. arquitetura do motor de bot server-side;
@@ -1588,7 +1588,7 @@ A próxima etapa deve receber este PRD e o arquivo técnico `arquitetura.md`, ma
 **PZ:** Protect Zone; cidade/área segura sem combate.  
 **Hunt:** instância automatizada de PvE.  
 **Supply:** poções, runas e munições abstratas pagas diretamente em gold.  
-**Livraria:** progressão permanente por quantidade de kills de cada criatura.  
+**Bestiário:** progressão permanente por quantidade de kills de cada criatura.  
 **Prey:** bônus temporário associado a uma criatura sorteada.  
 **Bot:** motor oficial de regras de automação server-side.  
 **Lure:** acumular múltiplos monstros antes de parar para combater.  
@@ -1606,7 +1606,7 @@ A próxima etapa deve receber este PRD e o arquivo técnico `arquitetura.md`, ma
 
 Draconya deve ser tratado como um MMORPG de navegador **server-authoritative e idle-first**. A hunt é uma sessão persistente do servidor, não uma extensão da conexão do client. O jogador configura um bot oficial, fecha o navegador e retorna depois para a mesma simulação. Conteúdos manuais - Quest, Boss e Guild War - usam o mesmo personagem persistente, mas exigem input quando o jogador está conectado.
 
-O MVP deve provar o loop inteiro com pouco conteúdo: uma hunt, um boss, uma quest e um mapa de Guild War. A complexidade está nos **sistemas reutilizáveis**, não no volume de mapas. Esses sistemas incluem bot server-side, stamina, treino offline, party, economia de supply em gold, loot individual, Market, Coins, Premium, Livraria, Prey, imbuement, persistência/reconexão e Guild War.
+O MVP deve provar o loop inteiro com pouco conteúdo: uma hunt, um boss, uma quest e um mapa de Guild War. A complexidade está nos **sistemas reutilizáveis**, não no volume de mapas. Esses sistemas incluem bot server-side, stamina, treino offline, party, economia de supply em gold, loot individual, Market, Coins, Premium, Bestiário, Prey, imbuement, persistência/reconexão e Guild War.
 
 A etapa técnica não deve otimizar prematuramente para conteúdo em escala, mas deve preservar as propriedades que são difíceis de migrar depois: sessões AFK retomáveis, autoridade do servidor, transações econômicas consistentes, IDs/proveniência de itens, configuração data-driven, e separação entre simulação e apresentação.
 

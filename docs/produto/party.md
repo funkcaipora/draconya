@@ -12,7 +12,7 @@ A composição de vocações afeta o XP do grupo: vocações repetidas não gera
 
 Os gastos de supplies abstratos (poções, runas, munições pagas em gold) são equalizados entre os membros da party: se dois jogadores consomem 50k e 100k de supply, o custo total de 150k deve ser repartido igualmente, resultando em 75k efetivos para cada um. Anéis e colares consumíveis ficam de fora dessa equalização — cada jogador arca com os próprios.
 
-No loot, não existe prioridade por last hit nem por maior dano: todo membro parte da mesma chance base, cada jogador aplica seus próprios modificadores individuais (Prey, Livraria), e o sorteio é individual por personagem. Se um membro sair ou morrer, os demais podem continuar normalmente na instância — cada personagem decide previamente, via bot, se quer sair automaticamente nessas situações (ver `bot.md`, §13.9).
+No loot, não existe prioridade por last hit nem por maior dano: todo membro parte da mesma chance base, cada jogador aplica seus próprios modificadores individuais (Prey, Bestiário), e o sorteio é individual por personagem. Se um membro sair ou morrer, os demais podem continuar normalmente na instância — cada personagem decide previamente, via bot, se quer sair automaticamente nessas situações (ver `bot.md`, §13.9).
 
 ## Regras
 
@@ -24,7 +24,7 @@ No loot, não existe prioridade por last hit nem por maior dano: todo membro par
 - XP calculada a partir de pool coletivo, dividida entre os membros.
 - Gastos de supply são equalizados igualmente entre os membros da party.
 - Anéis e colares consumíveis não entram na equalização de gastos.
-- Loot: mesma chance base para todos, sem prioridade por last hit ou dano; sorteio individual por personagem, com modificadores individuais aplicados (Prey, Livraria).
+- Loot: mesma chance base para todos, sem prioridade por last hit ou dano; sorteio individual por personagem, com modificadores individuais aplicados (Prey, Bestiário).
 - Saída ou morte de um membro não interrompe os demais; cada personagem decide previamente sua própria regra de saída.
 
 ## Parâmetros de balanceamento

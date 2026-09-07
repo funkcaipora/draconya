@@ -35,7 +35,7 @@ Opcodes e tipos de mensagem vivem só aqui, num arquivo, como fonte única das d
 
 ### `content` — dado, não lógica
 
-`content` descreve dados de jogo — monstros, hunts, itens, magias, vocações, prey, livraria,
+`content` descreve dados de jogo — monstros, hunts, itens, magias, vocações, prey, bestiário,
 supply, economia, flags (`docs/arquitetura-tecnica.md` §8) — e só depende de `protocol` para
 tipos compartilhados. Ele nunca contém arte, só `appearanceId`/`outfitId`.
 

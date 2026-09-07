@@ -204,7 +204,7 @@ content/
   magias/       custo, cooldown, dano, requisito de level e vocação
   vocacoes/     HP/mana por level, magias liberadas, árvore de passivas
   prey/         bônus e durações
-  livraria/     marcos e recompensas por monstro
+  bestiário/     marcos e recompensas por monstro
   supply/       preços
   economia/     penalidade de morte, bônus premium, bônus de party
   flags/        feature flags
@@ -228,7 +228,7 @@ item_instance(id, character_id | market_offer_id | loot_box_id,
               origem_character_id, origem_tipo, origem_em)   -- proveniência §25.3
 inventory_slot(character_id, slot, item_instance_id, quantidade)
 bot_config(character_id, versao_vocabulario, regras_json)
-livraria(character_id, monstro_id, kills, marcos_json)
+bestiário(character_id, monstro_id, kills, marcos_json)
 prey(character_id, slot, monstro_id, bonus, expira_em, ultimo_roll_gratis)
 imbuement(item_instance_id, efeito, tier, ms_efetivos_restantes)
 guild(id, nome), guild_member(guild_id, character_id, cargo)
@@ -353,7 +353,7 @@ O §4 define um MVP grande. Separando por risco estrutural:
 runtime de sessão, tick variável, snapshot e retomada, bot server-side, combate, hunt com rota fixa, supply em gold, ledger, morte, stamina, analisador, cliente base.
 
 **Camadas — importantes para o produto, mas são configuração e contadores sobre o núcleo:**
-Prey, Livraria, imbuement, árvore de passivas, autovenda, caixa de loot, premium.
+Prey, Bestiário, imbuement, árvore de passivas, autovenda, caixa de loot, premium.
 
 **Modos — reutilizam um mesmo motor manual:**
 Quest, Boss e Guild War compartilham movimento manual, empurrão e instância fechada. Construir o motor uma vez e derivar os três.
@@ -412,7 +412,7 @@ Tamanhos: **P** ≤ 1 dia · **M** 2–4 dias · **G** ≥ 1 semana.
 - [ ] **M** Execução de rota fixa: percorrer, parar, retomar
 - [ ] **G** Ruleset de Hunt: entrada, 4 dificuldades, encerramento (§14.8)
 - [ ] **P** Troca de dificuldade encerrando e recriando instância (§14.7)
-- [ ] **M** Bloqueio de XP, loot e Livraria com stamina zero (§10.2)
+- [ ] **M** Bloqueio de XP, loot e Bestiário com stamina zero (§10.2)
 
 #### E4 — Bot server-side
 - [ ] **M** Vocabulário fechado e versionado de condições e ações
@@ -440,7 +440,7 @@ Tamanhos: **P** ≤ 1 dia · **M** 2–4 dias · **G** ≥ 1 semana.
 - [ ] **M** Lista de eventos notáveis no snapshot, para a tela de retorno (§16.2)
 
 #### E7 — Progressão persistente
-- [ ] **M** Livraria: contagem por monstro, 5 marcos, recompensas PvE (§18)
+- [ ] **M** Bestiário: contagem por monstro, 5 marcos, recompensas PvE (§18)
 - [ ] **M** Prey: slots, roll diário, reroll de 10k, pool por level recomendado, 4 bônus (§19)
 - [ ] **M** Árvore de passivas por vocação com respec livre em PZ (§9.5)
 - [ ] **M** Imbuement com duração em tempo efetivo de hunt (§23.2)
@@ -487,7 +487,7 @@ Tamanhos: **P** ≤ 1 dia · **M** 2–4 dias · **G** ≥ 1 semana.
 - [ ] **M** Respawn em 5 s na base, sem perda de XP durante a partida (§30.5)
 - [ ] **M** Resultado: penalidade ao time derrotado, bônus de 24 h ao vencedor (§30.6)
 - [ ] **P** Agendamento diário no `jobs` (§30.7)
-- [ ] **P** Livraria não aplica bônus em Guild War (§18.5)
+- [ ] **P** Bestiário não aplica bônus em Guild War (§18.5)
 
 #### E13 — Market, Coins e Premium
 - [ ] **M** Market global sem taxa: listar, comprar, cancelar (§33)
@@ -509,7 +509,7 @@ Tamanhos: **P** ≤ 1 dia · **M** 2–4 dias · **G** ≥ 1 semana.
 - [ ] **M** Seleção de hunt com level recomendado e dificuldades
 - [ ] **M** Janela do analisador, minimizável
 - [ ] **M** Inventário, equipamento, skills, mochila
-- [ ] **M** Market, Prey, Livraria, passivas, guilda
+- [ ] **M** Market, Prey, Bestiário, passivas, guilda
 - [ ] **M** Modo manual: hotkeys, alvo, empurrão, sem reorganizar a tela (§5.5)
 - [ ] **M** Responsivo para celular sem exigir jogabilidade completa (§5.1)
 - [ ] **G** Tutorial guiado do level 1 ao 8 com escolha de vocação (§8)

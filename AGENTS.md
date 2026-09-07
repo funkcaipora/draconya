@@ -11,7 +11,7 @@ movimento e ação por tile que a hunt usa.
 Isto é o norte de arquitetura em forma operacional. Toda decisão futura é medida contra esta
 lista, e violar qualquer item exige um ADR (`docs/adr/`) explicando por quê.
 
-Skill é invocada, hook é imposto. Esta lista vive num `CLAUDE.md` — carregado sempre, sem
+Skill é invocada, hook é imposto. Esta lista vive num `AGENTS.md` — carregado sempre, sem
 depender de alguém lembrar de invocar nada — porque é a única camada em que uma regra deste peso
 pode morar (ver `docs/plano-harness.md` §1).
 
@@ -74,7 +74,7 @@ pode morar (ver `docs/plano-harness.md` §1).
 - `packages/protocol` — opcodes, tipos de mensagem e codec de frame; fonte única das tabelas
   cliente/servidor
 - `packages/content` — dados de jogo versionados: monstros, hunts, itens, magias, vocações, prey,
-  livraria, supply, economia, flags. Nunca arte.
+  bestiário, supply, economia, flags. Nunca arte.
 - `packages/sim` — motor de simulação puro: combate, movimento, bot. Sem I/O; roda em qualquer
   runtime, inclusive num cliente sintético de carga.
 - `packages/server` — processos `api` / `game` / `jobs`; persistência, diretório de sessão e

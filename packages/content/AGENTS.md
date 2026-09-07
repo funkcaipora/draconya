@@ -2,7 +2,7 @@
 
 ## Propósito
 
-Dados de jogo versionados: monstros, hunts e rotas, itens, magias, vocações, prey, livraria,
+Dados de jogo versionados: monstros, hunts e rotas, itens, magias, vocações, prey, bestiário,
 supply, parâmetros de economia e feature flags. Validados por schema no boot do nó.
 
 ## Fronteiras

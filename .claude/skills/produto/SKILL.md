@@ -13,7 +13,7 @@ acontece.
 
 ## Passo 0 — identificar o sistema e reunir as fontes
 
-Se o usuário não nomeou o sistema (`hunt`, `bot`, `economia`, `stamina`, `livraria`, `prey`, etc.),
+Se o usuário não nomeou o sistema (`hunt`, `bot`, `economia`, `stamina`, `bestiário`, `prey`, etc.),
 pergunte. Nome de arquivo em kebab-case, singular. Antes de criar um arquivo novo, liste
 `docs/produto/` e confira se já existe um arquivo para o mesmo sistema com nome ligeiramente
 diferente (`hunt.md` vs `hunts.md`) — reaproveite o existente em vez de duplicar.

@@ -44,7 +44,7 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Hunt | [`hunt.md`](./hunt.md) | não implementado | E3 | §14 |
 | Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analisador.md`](./analisador.md) | não implementado | E6 | §16, §43.10 |
-| Livraria / Bestiário | [`livraria.md`](./livraria.md) | não implementado | E7 | §18 |
+| Bestiário | [`bestiario.md`](./bestiario.md) | não implementado | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
 | Economia, supply e Market | [`economia.md`](./economia.md) | não implementado | E5, E13 | §20, §32, §33, §43.5 |
 | Itens, equipamento e inventário | [`itens.md`](./itens.md) | não implementado | E5, E7, E11 | §21-§23, §25, §43.6 |
