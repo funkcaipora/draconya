@@ -1,0 +1,91 @@
+# .github/workflows/ci.yml — CI do harness do Draconya (docs/plano-harness.md §4.4).
+#
+# Dois jobs independentes, que rodam em paralelo:
+#
+#   - docs: valida a documentação estrutural (scripts/docs-check.mjs). Não depende de o
+#     monorepo existir, então roda cheio desde o primeiro commit.
+#   - code: pnpm install / lint / test / build. Antes da Fase 1 criar o package.json raiz
+#     (docs/arquitetura-tecnica.md §17, épico E0) não há nada para instalar, lintar, testar
+#     ou buildar — o job detecta isso e PULA os passos em vez de falhar, para o CI não ficar
+#     vermelho por um monorepo que ainda não nasceu. Ver o passo "Verifica se o monorepo já
+#     existe" abaixo: assim que o package.json raiz existir, os passos passam a rodar de
+#     verdade sozinhos, sem precisar editar este arquivo.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Padrão de menor privilégio: nenhum job aqui escreve de volta no repositório ou em release.
+permissions:
+  contents: read
+
+jobs:
+  docs:
+    name: docs-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Valida documentação (CLAUDE.md por pacote, ADRs, links, ABERTO)
+        run: node scripts/docs-check.mjs
+
+  code:
+    name: lint, test e build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Sem esta checagem, o passo "pnpm install" seria o primeiro a falhar (não há
+      # package.json nem lockfile para instalar) e todo o job ficaria vermelho por um motivo
+      # que não é um bug de código — é só a Fase 1 ainda não ter rodado.
+      - name: Verifica se o monorepo já existe
+        id: monorepo
+        run: |
+          if [ -f package.json ]; then
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            echo "package.json não existe na raiz ainda (Fase 1 não rodou) — pulando install/lint/test/build."
+          fi
+
+      - name: Instala pnpm
+        if: steps.monorepo.outputs.existe == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          # Versão fixada aqui porque o package.json raiz pode ainda não declarar o campo
+          # "packageManager" — sem um dos dois, pnpm/action-setup falha ao resolver a versão.
+          # Quando o package.json passar a declarar "packageManager", este `version` pode sair.
+          version: 10
+
+      - name: Node 22
+        if: steps.monorepo.outputs.existe == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Instala dependências
+        if: steps.monorepo.outputs.existe == 'true'
+        run: pnpm install
+
+      - name: Lint (inclui as regras de fronteira entre pacotes de eslint.config.js)
+        if: steps.monorepo.outputs.existe == 'true'
+        run: pnpm lint
+
+      - name: Testes
+        if: steps.monorepo.outputs.existe == 'true'
+        run: pnpm test
+
+      - name: Build
+        if: steps.monorepo.outputs.existe == 'true'
+        run: pnpm build

@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Git hook commit-msg -- pega commit feito fora do Claude Code (linha de comando, GUI).
+#
+# Mesma regra de .claude/hooks/valida-commit.sh, duplicada de proposito: sao dois scripts
+# pequenos, com contratos de hook diferentes (git commit-msg le um arquivo; o hook do Claude
+# Code le JSON do stdin), e nao vale a pena abstrair isso numa lib compartilhada.
+#
+# Para ativar neste clone:
+#   git config core.hooksPath .githooks
+#
+# Formato exigido (docs/plano-harness.md secao 4.1, CLAUDE.md):
+#
+#   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
+#
+#   tipo:   feat | fix | refactor | perf | docs | test | chore
+#   escopo: sim | protocol | content | server | client | tools | docs
+#
+# (FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
+#
+# Contrato do hook commit-msg: exit 0 aceita o commit; exit != 0 aborta e o git mostra o
+# stderr deste script para quem esta commitando.
+
+set -u
+
+arquivo_msg="${1:-}"
+[ -n "$arquivo_msg" ] && [ -r "$arquivo_msg" ] || exit 0
+
+TIPOS='feat|fix|refactor|perf|docs|test|chore'
+ESCOPOS='sim|protocol|content|server|client|tools|docs'
+
+falha() {
+  cat >&2 <<MSG
+commit rejeitado pelo hook commit-msg: $1
+
+formato esperado:
+  <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
+
+  tipo:   feat | fix | refactor | perf | docs | test | chore
+  escopo: sim | protocol | content | server | client | tools | docs
+
+(FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
+exemplo: feat(sim): tick por dtMs em vez de contador (FUN-25)
+MSG
+  exit 1
+}
+
+# primeira linha nao vazia e que nao seja comentario (git usa '#' por padrao antes do
+# cleanup da mensagem final)
+assunto=""
+while IFS= read -r linha; do
+  case "$linha" in
+    '#'*) continue ;;
+  esac
+  if [ -n "${linha//[[:space:]]/}" ]; then
+    assunto="$linha"
+    break
+  fi
+done < "$arquivo_msg"
+
+[ -n "$assunto" ] || exit 0
+
+assunto="$(printf '%s' "$assunto" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+[ -n "$assunto" ] || exit 0
+
+if [[ "$assunto" =~ ^([A-Za-z0-9_-]+)\(([A-Za-z0-9_-]+)\):[[:space:]]*(.*)$ ]]; then
+  tipo="${BASH_REMATCH[1]}"
+  escopo="${BASH_REMATCH[2]}"
+  resto="${BASH_REMATCH[3]}"
+else
+  falha "\"$assunto\" nao segue <tipo>(<escopo>): <descricao> (FUN-nn)"
+fi
+
+if [[ ! "$tipo" =~ ^($TIPOS)$ ]]; then
+  falha "tipo \"$tipo\" invalido em \"$assunto\" -- use um de: feat, fix, refactor, perf, docs, test, chore"
+fi
+
+if [[ ! "$escopo" =~ ^($ESCOPOS)$ ]]; then
+  falha "escopo \"$escopo\" invalido em \"$assunto\" -- use um de: sim, protocol, content, server, client, tools, docs"
+fi
+
+descricao="$resto"
+tem_fun=0
+if [[ "$resto" =~ ^(.*[^[:space:]])[[:space:]]+\(FUN-[0-9]+\)[[:space:]]*$ ]]; then
+  tem_fun=1
+  descricao="${BASH_REMATCH[1]}"
+fi
+
+if [ -z "$descricao" ]; then
+  falha "descricao vazia em \"$assunto\""
+fi
+
+if [[ "$tipo" != "chore" && "$tipo" != "docs" && "$tem_fun" -eq 0 ]]; then
+  falha "faltando (FUN-nn) em \"$assunto\" -- obrigatorio para tipo '$tipo' (so chore e docs dispensam)"
+fi
+
+exit 0
