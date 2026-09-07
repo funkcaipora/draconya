@@ -1,4 +1,7 @@
-// @draconya/content — ver packages/content/CLAUDE.md para propósito e fronteiras.
-// Esqueleto: o conteúdo real deste pacote é implementado pelas issues da Fase 1 no Linear.
+// @draconya/content — dados de jogo versionados. Ver packages/content/AGENTS.md.
+//
+// Este ponto de entrada é PURO: só schemas, tipos e montagem em memória. `sim` importa daqui.
+// A leitura de disco vive em `@draconya/content/load`, que `sim` não pode importar.
 
-export const PACKAGE_NAME = '@draconya/content' as const;
+export * from './schemas.js';
+export * from './content.js';

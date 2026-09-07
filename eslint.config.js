@@ -195,6 +195,16 @@ export default [
       'no-restricted-imports': ['error', {
         patterns: [
           {
+            // content/ has two entry points: "." is pure (schemas and types) and "/load"
+            // reads disk with node:fs. Importing the loader here would drag I/O into sim/
+            // transitively — without a single node:* import appearing in this package,
+            // which is what makes the violation hard to spot in review.
+            group: ['@draconya/content/load', '**/content/src/load*'],
+            message:
+              "sim/ is pure: import only the '@draconya/content' entry point. Disk reads " +
+              "belong to server/ and tools/. " + SEE_DOC,
+          },
+          {
             group: ['server', 'client', 'tools'],
             message:
               "sim/ cannot import its hosts: server/, client/ or tools/. " + SEE_DOC,

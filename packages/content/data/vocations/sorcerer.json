@@ -1,0 +1,7 @@
+{
+  "id": "sorcerer",
+  "name": "Sorcerer",
+  "healthPerLevel": 5,
+  "manaPerLevel": 25,
+  "capacityPerLevel": 10
+}

@@ -10,6 +10,22 @@ supply, parâmetros de economia e feature flags. Validados por schema no boot do
 **Pode importar:** `protocol`.
 **Não pode importar:** `sim`, `server`, `client`, `tools`.
 
+## Dois pontos de entrada
+
+```
+@draconya/content        schemas, tipos e montagem em memória — PURO
+@draconya/content/load   leitura de disco com node:fs
+```
+
+`sim` importa só o primeiro, e o lint impede o segundo. O motivo é o invariante 1: se o
+carregador saísse pelo mesmo ponto de entrada, `node:fs` entraria em `sim/` por
+transitividade — **sem nenhum import de `node:*` aparecer no pacote**, que é o que torna
+esse tipo de violação difícil de enxergar em revisão.
+
+Regra prática: se a função lê arquivo, ela vai para `load.ts`. Se ela só valida ou monta
+estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
+
+
 ## Invariantes locais
 
 - **Nunca contém arte** (invariante 6). Um item declara `appearanceId`, um monstro declara
