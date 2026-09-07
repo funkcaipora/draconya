@@ -1,0 +1,20 @@
+node_modules
+**/node_modules
+dist
+**/dist
+# Precisa do **: `*.tsbuildinfo` sozinho só casa na raiz, e o arquivo mora dentro de cada
+# pacote. Vazando para a imagem, o `tsc -b` acha que já compilou e não emite nada — falha
+# silenciosa que só aparece na hora de rodar.
+*.tsbuildinfo
+**/*.tsbuildinfo
+.git
+.github
+.claude
+.githooks
+docs
+things
+backups
+coverage
+.env
+.env.*
+!.env.example

@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @draconya/client build",
@@ -13,10 +13,11 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "docs-check": "node scripts/docs-check.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check",
+    "dev": "pnpm --filter @draconya/server dev"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^24.13.3",
     "@typescript-eslint/parser": "^8.70.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.17.0",

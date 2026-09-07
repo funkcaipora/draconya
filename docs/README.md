@@ -30,3 +30,4 @@ reescrito depois, nem quando a implementação diverge dele: `docs/produto/` é 
 leitura do PRD confrontada com o que foi de fato construído, inclusive os pontos `[ABERTO]` que
 a implementação teve que resolver sozinha, sem esperar resposta.
 - [`infraestrutura.md`](infraestrutura.md) — fornecedores, recursos e custo estimado em três estágios. Vivo.
+- [`deploy.md`](deploy.md) — como subir local e na VPS, os três papéis, drenagem e backup. Vivo.

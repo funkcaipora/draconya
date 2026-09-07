@@ -2,3 +2,5 @@
 
 export * from './config.js';
 export * as schema from './db/schema.js';
+export * from './papel.js';
+export * from './log.js';

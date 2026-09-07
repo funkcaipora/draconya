@@ -31,7 +31,7 @@ pnpm check        # lint + typecheck + test + docs-check
 | `pnpm docs-check` | valida a documentação estrutural |
 | `pnpm --filter @draconya/client dev` | sobe o cliente em modo de desenvolvimento |
 
-Requisitos: Node 22+ e pnpm (via corepack).
+Requisitos: Node 24+ e pnpm (via corepack).
 
 **Antes do primeiro commit**, ligue os hooks de git:
 
@@ -73,6 +73,7 @@ fronteiras, invariantes locais e armadilhas conhecidas.
 | [`docs/prd-v0.9.md`](docs/prd-v0.9.md) | O PRD do jogo | instantâneo |
 | [`docs/plano-harness.md`](docs/plano-harness.md) | Como a documentação e os padrões são mantidos | vivo |
 | [`docs/infraestrutura.md`](docs/infraestrutura.md) | Fornecedores, recursos e custo estimado em três estágios | vivo |
+| [`docs/deploy.md`](docs/deploy.md) | Como subir local e na VPS, papéis, drenagem e backup | vivo |
 
 A distinção que mais importa: o **PRD é um instantâneo** do que se pretendia numa data, com
 itens em aberto espalhados. `docs/produto/` é o documento **vivo** — o que o código faz hoje,

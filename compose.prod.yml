@@ -1,0 +1,62 @@
+# Produção numa VPS. Sobe com:
+#
+#   docker compose -f compose.prod.yml up -d --build
+#
+# Modo solo por padrão (PROCESSOS com os três papéis). Quando a simulação pedir mais de
+# uma máquina, separe `game` em serviço próprio e replique — a imagem é a mesma, muda
+# só a variável.
+services:
+  app:
+    build:
+      context: .
+      # Em VPS x86 use linux/amd64; no Oracle Ampere, linux/arm64 (ADR 0013).
+      platforms: ['linux/amd64']
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      PROCESSOS: api,game,jobs
+      DATABASE_URL: postgres://draconya:${POSTGRES_PASSWORD:?defina no .env}@postgres:5432/draconya
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '3000:3000'
+      - '7171:7171'
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    # Prazo de encerramento maior que o de drenagem do main.ts (25 s). Drenagem
+    # interrompida no meio é pior que drenagem nenhuma: metade credita e metade some.
+    stop_grace_period: 40s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: draconya
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: draconya
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U draconya']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Sem porta publicada: o Postgres só é alcançável pela rede interna do compose.
+    # Publicar a 5432 numa VPS é como a maioria dos bancos vaza.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:

@@ -61,7 +61,7 @@ pode morar (ver `docs/plano-harness.md` §1).
 
 ## Stack
 
-- **Node 22** + **uWebSockets.js**, em três processos: `api` (stateless, HTTP), `game` (stateful,
+- **Node 24** + **uWebSockets.js**, em três processos: `api` (stateless, HTTP), `game` (stateful,
   hospeda sessões via WebSocket) e `jobs` (singleton com lock — agendador e reconciliação)
 - **PostgreSQL** (verdade durável) + **Redis** (diretório de sessões, leases, filas, snapshots
   quentes)
@@ -122,6 +122,12 @@ commit, PR e issue sem trabalho manual.
   do que se pretendia numa data; `docs/produto/` é o que existe de fato, incluindo os parâmetros
   de balanceamento e onde eles moram em `content/`.
 - **Antes de abrir PR ou fechar issue:** `pnpm check` (lint, typecheck, test, docs-check).
+- **A versão do Node é fixada** em `.node-version` e em `engines`. Desenvolvimento, Docker e CI
+  usam a mesma. Rodar em versão diferente quebra o binário nativo do `uWebSockets.js`, com
+  mensagem que não menciona a versão do Node — é o tipo de meia hora perdida que não precisa
+  acontecer duas vezes.
+- **Dependência nativa nova precisa de binário para `linux/amd64` e `linux/arm64`** (ADR 0013).
+  Confira antes de adicionar; o CI reprova depois.
 
 ## Sobre este arquivo e o CLAUDE.md
 
