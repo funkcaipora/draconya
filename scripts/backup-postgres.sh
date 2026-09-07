@@ -10,36 +10,36 @@
 #   0 4 * * * cd /srv/draconya && ./scripts/backup-postgres.sh >> /var/log/draconya-backup.log 2>&1
 set -euo pipefail
 
-DESTINO="${DESTINO:-./backups}"
-RETENCAO_DIAS="${RETENCAO_DIAS:-14}"
-SERVICO="${SERVICO:-postgres}"
+BACKUP_DIR="${BACKUP_DIR:-./backups}"
+RETENTION_DAYS="${RETENTION_DAYS:-14}"
+SERVICE="${SERVICE:-postgres}"
 COMPOSE="${COMPOSE:-docker compose -f compose.prod.yml}"
 
-mkdir -p "$DESTINO"
-CARIMBO="$(date -u +%Y%m%dT%H%M%SZ)"
-ARQUIVO="$DESTINO/draconya-$CARIMBO.sql.gz"
+mkdir -p "$BACKUP_DIR"
+TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+BACKUP_FILE="$BACKUP_DIR/draconya-$TIMESTAMP.sql.gz"
 
-echo "backup: gerando $ARQUIVO"
-$COMPOSE exec -T "$SERVICO" pg_dump -U draconya --format=plain --no-owner draconya \
-  | gzip -9 > "$ARQUIVO"
+echo "backup: creating $BACKUP_FILE"
+$COMPOSE exec -T "$SERVICE" pg_dump -U draconya --format=plain --no-owner draconya \
+  | gzip -9 > "$BACKUP_FILE"
 
 # Dump vazio ou truncado é pior que backup nenhum, porque passa despercebido.
-TAMANHO=$(wc -c < "$ARQUIVO")
-if [ "$TAMANHO" -lt 1024 ]; then
-  echo "backup: FALHOU — arquivo com $TAMANHO bytes, pequeno demais para ser real" >&2
-  rm -f "$ARQUIVO"
+SIZE=$(wc -c < "$BACKUP_FILE")
+if [ "$SIZE" -lt 1024 ]; then
+  echo "backup: FAILED — file has $SIZE bytes, too small to be a valid dump" >&2
+  rm -f "$BACKUP_FILE"
   exit 1
 fi
-echo "backup: ok, $TAMANHO bytes"
+echo "backup: ok, $SIZE bytes"
 
 if [ -n "${R2_BUCKET:-}" ]; then
-  echo "backup: enviando para o R2"
+  echo "backup: uploading to R2"
   # Precisa de rclone configurado com um remote chamado `r2`.
-  rclone copy "$ARQUIVO" "r2:$R2_BUCKET/postgres/"
+  rclone copy "$BACKUP_FILE" "r2:$R2_BUCKET/postgres/"
 fi
 
-echo "backup: removendo locais com mais de $RETENCAO_DIAS dias"
-find "$DESTINO" -name 'draconya-*.sql.gz' -mtime "+$RETENCAO_DIAS" -delete
+echo "backup: removing local files older than $RETENTION_DAYS days"
+find "$BACKUP_DIR" -name 'draconya-*.sql.gz' -mtime "+$RETENTION_DAYS" -delete
 
 # LEMBRETE: backup que nunca foi restaurado não é backup, é esperança.
 # Teste a restauração pelo menos uma vez, e de novo quando o schema mudar de forma:

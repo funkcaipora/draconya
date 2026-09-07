@@ -1,101 +1,98 @@
 import { describe, expect, it } from 'vitest';
 import {
-  codificarC2S, codificarS2C, decodificarC2S, decodificarS2C, empacotarLote,
+  encodeC2S, encodeS2C, decodeC2S, decodeS2C, packBatch,
 } from './codec.js';
-import type { MensagemC2S, MensagemS2C } from './tipos.js';
+import type { C2SMessage, S2CMessage } from './types.js';
 
-const andar: MensagemC2S = { type: 'walk', direcao: 'norte' };
-const passo: MensagemS2C = {
+const walk: C2SMessage = { type: 'walk', direction: 'north' };
+const step: S2CMessage = {
   type: 'creature-move',
   id: 42,
-  de: { x: 10, y: 10, z: 7 },
-  para: { x: 10, y: 9, z: 7 },
-  duracaoMs: 400,
+  from: { x: 10, y: 10, z: 7 },
+  to: { x: 10, y: 9, z: 7 },
+  durationMs: 400,
 };
 
-describe('ida e volta', () => {
-  it('mensagem simples do cliente', () => {
-    expect(decodificarC2S(codificarC2S(andar))).toEqual([andar]);
+describe('round trip', () => {
+  it('simple client message', () => {
+    expect(decodeC2S(encodeC2S(walk))).toEqual([walk]);
   });
 
-  it('mensagem simples do servidor', () => {
-    expect(decodificarS2C(codificarS2C(passo))).toEqual([passo]);
+  it('simple server message', () => {
+    expect(decodeS2C(encodeS2C(step))).toEqual([step]);
   });
 
-  it('aceita ArrayBuffer, não só Uint8Array', () => {
-    const frame = codificarC2S(andar);
-    const copia = frame.slice().buffer;
-    expect(decodificarC2S(copia)).toEqual([andar]);
+  it('accepts ArrayBuffer as well as Uint8Array', () => {
+    const frame = encodeC2S(walk);
+    const copy = frame.slice().buffer;
+    expect(decodeC2S(copy)).toEqual([walk]);
   });
 
-  it('comprime acima do limiar e volta igual', () => {
-    const grande: MensagemS2C = {
-      type: 'system-message', nivel: 'info', texto: 'x'.repeat(20_000),
+  it('compresses above the threshold and round trips unchanged', () => {
+    const large: S2CMessage = {
+      type: 'system-message', level: 'info', text: 'x'.repeat(20_000),
     };
-    const frame = codificarS2C(grande);
+    const frame = encodeS2C(large);
     // Comprimido: bem menor que os 20 KB do texto cru.
     expect(frame.length).toBeLessThan(5_000);
-    expect(decodificarS2C(frame)).toEqual([grande]);
+    expect(decodeS2C(frame)).toEqual([large]);
   });
 });
 
-describe('lote', () => {
-  it('50 mensagens pequenas cabem num frame e voltam na ordem', () => {
-    const mensagens: MensagemS2C[] = Array.from({ length: 50 }, (_, i) => ({
-      type: 'creature-health', id: i, vida: 100 - i, vidaMaxima: 100,
+describe('batch', () => {
+  it('packs fifty small messages into one frame and preserves their order', () => {
+    const messages: S2CMessage[] = Array.from({ length: 50 }, (_, i) => ({
+      type: 'creature-health', id: i, health: 100 - i, maxHealth: 100,
     }));
-    const frame = empacotarLote(mensagens.map(codificarS2C));
-    expect(decodificarS2C(frame)).toEqual(mensagens);
+    const frame = packBatch(messages.map(encodeS2C));
+    expect(decodeS2C(frame)).toEqual(messages);
   });
 
-  it('lote de um item funciona', () => {
-    expect(decodificarS2C(empacotarLote([codificarS2C(passo)]))).toEqual([passo]);
+  it('supports a batch with one item', () => {
+    expect(decodeS2C(packBatch([encodeS2C(step)]))).toEqual([step]);
   });
 
-  it('lote vazio devolve lista vazia', () => {
-    expect(decodificarS2C(empacotarLote([]))).toEqual([]);
+  it('returns an empty list for an empty batch', () => {
+    expect(decodeS2C(packBatch([]))).toEqual([]);
   });
 });
 
-describe('entrada inválida devolve null, nunca lança', () => {
-  it('curta demais', () => {
-    expect(decodificarC2S(new Uint8Array([1, 2, 3]))).toBeNull();
+describe('invalid input returns null without throwing', () => {
+  it('rejects short frames', () => {
+    expect(decodeC2S(new Uint8Array([1, 2, 3]))).toBeNull();
   });
 
-  it('vazia', () => {
-    expect(decodificarC2S(new Uint8Array(0))).toBeNull();
+  it('rejects empty frames', () => {
+    expect(decodeC2S(new Uint8Array(0))).toBeNull();
   });
 
-  it('corrompida em qualquer byte', () => {
-    const original = codificarC2S(andar);
+  it('handles corruption at every byte', () => {
+    const original = encodeC2S(walk);
     for (let i = 0; i < original.length; i++) {
-      const alterado = original.slice();
-      alterado[i] = ((alterado[i] as number) ^ 0xff) & 255;
-      expect(() => decodificarC2S(alterado)).not.toThrow();
+      const altered = original.slice();
+      altered[i] = ((altered[i] as number) ^ 0xff) & 255;
+      expect(() => decodeC2S(altered)).not.toThrow();
     }
   });
 
-  it('opcode desconhecido', () => {
+  it('rejects unknown opcodes', () => {
     // Um frame do servidor lido como se fosse do cliente: opcodes não batem.
-    const doServidor = codificarS2C({ type: 'chat-message', canal: 'g', autor: 'a', texto: 't' });
-    const lido = decodificarC2S(doServidor);
-    expect(lido === null || lido.length === 0 || lido[0]?.type !== 'chat-message').toBe(true);
+    const serverFrame = encodeS2C({ type: 'chat-message', channel: 'g', author: 'a', text: 't' });
+    const decoded = decodeC2S(serverFrame);
+    expect(decoded === null || decoded.length === 0 || decoded[0]?.type !== 'chat-message').toBe(true);
   });
 
-  it('props que não passam no schema', () => {
-    // duracaoMs precisa ser positivo — um frame forjado com 0 é recusado.
-    const invalido = codificarS2C({ ...passo, duracaoMs: 400 });
-    expect(decodificarS2C(invalido)).not.toBeNull();
-    const texto = JSON.stringify([6, { ...passo, type: undefined, duracaoMs: -1 }]);
-    expect(texto).toContain('-1'); // sanidade do próprio teste
+  it('rejects properties that fail schema validation', () => {
+    // O encoder permite representar o frame forjado; a validação acontece na recepção.
+    expect(decodeS2C(encodeS2C({ ...step, durationMs: -1 }))).toBeNull();
   });
 });
 
-describe('ofuscação', () => {
-  it('dois frames iguais produzem bytes diferentes', () => {
-    const a = codificarC2S(andar);
-    const b = codificarC2S(andar);
+describe('obfuscation', () => {
+  it('equal messages produce different frame bytes', () => {
+    const a = encodeC2S(walk);
+    const b = encodeC2S(walk);
     expect(a).not.toEqual(b); // chave aleatória por frame
-    expect(decodificarC2S(a)).toEqual(decodificarC2S(b));
+    expect(decodeC2S(a)).toEqual(decodeC2S(b));
   });
 });

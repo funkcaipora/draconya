@@ -3,7 +3,7 @@
 
 import { z } from 'zod';
 
-const Ambiente = z.object({
+const EnvironmentSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
@@ -17,32 +17,32 @@ const Ambiente = z.object({
   WORKOS_CLIENT_ID: z.string().optional(),
   AUTH_DEV_MODE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 
-  THINGS_VERSAO: z.string().default('1332'),
+  THINGS_VERSION: z.string().default('1332'),
   THINGS_DIR: z.string().default('./things'),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
-export type Configuracao = z.infer<typeof Ambiente>;
+export type Configuration = z.infer<typeof EnvironmentSchema>;
 
-export function carregarConfiguracao(fonte: NodeJS.ProcessEnv = process.env): Configuracao {
-  const resultado = Ambiente.safeParse(fonte);
-  if (!resultado.success) {
-    const problemas = resultado.error.issues
+export function loadConfiguration(source: NodeJS.ProcessEnv = process.env): Configuration {
+  const result = EnvironmentSchema.safeParse(source);
+  if (!result.success) {
+    const problems = result.error.issues
       .map((i) => `  ${i.path.join('.')}: ${i.message}`)
       .join('\n');
-    throw new Error(`configuração inválida — veja .env.example\n${problemas}`);
+    throw new Error(`invalid configuration — see .env.example\n${problems}`);
   }
-  const cfg = resultado.data;
+  const configuration = result.data;
 
   // AUTH_DEV_MODE aceita qualquer e-mail sem verificar. Em produção isso é conta grátis
   // para qualquer um; falhar no boot é a única reação aceitável.
-  if (cfg.NODE_ENV === 'production' && cfg.AUTH_DEV_MODE) {
-    throw new Error('AUTH_DEV_MODE não pode estar ligado em produção');
+  if (configuration.NODE_ENV === 'production' && configuration.AUTH_DEV_MODE) {
+    throw new Error('AUTH_DEV_MODE cannot be enabled in production');
   }
-  if (cfg.NODE_ENV === 'production' && !cfg.WORKOS_API_KEY) {
-    throw new Error('WORKOS_API_KEY é obrigatório em produção');
+  if (configuration.NODE_ENV === 'production' && !configuration.WORKOS_API_KEY) {
+    throw new Error('WORKOS_API_KEY is required in production');
   }
-  return cfg;
+  return configuration;
 }

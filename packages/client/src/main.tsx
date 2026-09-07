@@ -7,10 +7,10 @@ function App() {
   return <main>Draconya</main>;
 }
 
-const raiz = document.getElementById('root');
-if (!raiz) throw new Error('elemento #root ausente em index.html');
+const root = document.getElementById('root');
+if (!root) throw new Error('missing #root element in index.html');
 
-createRoot(raiz).render(
+createRoot(root).render(
   <StrictMode>
     <App />
   </StrictMode>,

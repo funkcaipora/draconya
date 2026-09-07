@@ -34,7 +34,7 @@ tarefa — o valor da lista é ser única.
 ## Autenticação (ADR 0012)
 
 Credencial e fluxos de conta ficam no WorkOS AuthKit; a tabela `account` local segue dona de
-Coins, personagens e ledger, ligada por `external_auth_id`. A coluna `senha_hash` existe nulável
+Coins, personagens e ledger, ligada por `external_auth_id`. A coluna `password_hash` existe nulável
 e sem uso, para que trazer a autenticação para casa seja aditivo. `AUTH_DEV_MODE=true` aceita
 qualquer e-mail em desenvolvimento e derruba o boot em produção.
 

@@ -1,10 +1,10 @@
 // Cooldowns (FUN-36, ADR 0003). São dois mecanismos diferentes, e confundi-los é o erro.
 //
-// 1. AÇÃO DISPARADA POR EVENTO — `iniciar` / `pronto` / `restanteMs`.
+// 1. AÇÃO DISPARADA POR EVENTO — `start` / `isReady` / `remainingMs`.
 //    Guarda TIMESTAMP ABSOLUTO. O jogador usou uma poção; ela volta em 1 s. Absoluto
 //    sobrevive a snapshot e a retomada tardia; tempo restante, não (FUN-27).
 //
-// 2. AÇÃO PERIÓDICA — `vezesQueCoube`.
+// 2. AÇÃO PERIÓDICA — `timesThatFit`.
 //    Guarda ACUMULADOR DE DURAÇÃO. É o que faz 1 Hz e 10 Hz renderem o mesmo.
 //
 // Sobre o segundo, vale registrar o erro que já foi cometido aqui: ancorar a fase no
@@ -12,80 +12,82 @@
 // t=100 ms; a 1 Hz, em t=1000 — e a diferença de fase se propaga por toda a sessão. O
 // acumulador não tem origem, então não tem esse problema.
 
-/** Teto de aplicações num único tick. Ver `vezesQueCoube`. */
-export const RECUPERACAO_MAXIMA = 32;
+/** Teto de aplicações num único tick. Ver `timesThatFit`. */
+export const MAX_CATCH_UP = 32;
 
-export interface EstadoDeCooldowns {
+export interface CooldownState {
   /** chave → instante absoluto em que a ação por evento fica disponível. */
-  readonly ate: Readonly<Record<string, number>>;
+  readonly until: Readonly<Record<string, number>>;
   /** chave → milissegundos já acumulados para a próxima aplicação periódica. */
-  readonly acumulado: Readonly<Record<string, number>>;
+  readonly accumulated: Readonly<Record<string, number>>;
 }
 
 export class Cooldowns {
-  readonly #ate = new Map<string, number>();
-  readonly #acumulado = new Map<string, number>();
+  readonly #until = new Map<string, number>();
+  readonly #accumulated = new Map<string, number>();
 
-  static deEstado(estado: Partial<EstadoDeCooldowns>): Cooldowns {
+  static fromState(state: Partial<CooldownState>): Cooldowns {
     const cd = new Cooldowns();
-    for (const [k, v] of Object.entries(estado.ate ?? {})) cd.#ate.set(k, v);
-    for (const [k, v] of Object.entries(estado.acumulado ?? {})) cd.#acumulado.set(k, v);
+    for (const [key, value] of Object.entries(state.until ?? {})) cd.#until.set(key, value);
+    for (const [key, value] of Object.entries(state.accumulated ?? {})) {
+      cd.#accumulated.set(key, value);
+    }
     return cd;
   }
 
-  estado(): EstadoDeCooldowns {
+  getState(): CooldownState {
     return {
-      ate: Object.fromEntries(this.#ate),
-      acumulado: Object.fromEntries(this.#acumulado),
+      until: Object.fromEntries(this.#until),
+      accumulated: Object.fromEntries(this.#accumulated),
     };
   }
 
   // --- 1. ação disparada por evento -------------------------------------------------------
 
-  pronto(chave: string, agoraMs: number): boolean {
-    return agoraMs >= (this.#ate.get(chave) ?? -Infinity);
+  isReady(key: string, nowMs: number): boolean {
+    return nowMs >= (this.#until.get(key) ?? -Infinity);
   }
 
-  restanteMs(chave: string, agoraMs: number): number {
-    return Math.max(0, (this.#ate.get(chave) ?? -Infinity) - agoraMs);
+  remainingMs(key: string, nowMs: number): number {
+    return Math.max(0, (this.#until.get(key) ?? -Infinity) - nowMs);
   }
 
-  iniciar(chave: string, agoraMs: number, duracaoMs: number): void {
-    this.#ate.set(chave, agoraMs + duracaoMs);
+  start(key: string, nowMs: number, durationMs: number): void {
+    this.#until.set(key, nowMs + durationMs);
   }
 
   // --- 2. ação periódica ------------------------------------------------------------------
 
   /**
-   * Quantas vezes uma ação de período `intervaloMs` coube nos `dtMs` decorridos.
+ * Quantas vezes uma ação de período `intervalMs` coube nos `dtMs` decorridos.
    *
-   * Recebe o INTERVALO, não o instante: é o que torna o resultado independente da taxa de
+ * Recebe o INTERVALO, não o instante: é o que torna o resultado independente da taxa de
    * tick. A ação começa pronta, então a primeira chamada devolve pelo menos 1.
    *
    * O teto existe por causa da retomada de sessão (FUN-28): um intervalo de horas entre
    * snapshot e retomada não pode virar centenas de ataques num tick só. Ao estourar, o
    * excedente é descartado em vez de virar dívida que explodiria no tick seguinte.
    */
-  vezesQueCoube(chave: string, dtMs: number, intervaloMs: number): number {
-    if (intervaloMs <= 0) throw new Error(`intervaloMs precisa ser positivo: ${intervaloMs}`);
-    if (dtMs < 0) throw new Error(`dtMs não pode ser negativo: ${dtMs}`);
+  timesThatFit(key: string, dtMs: number, intervalMs: number): number {
+    if (intervalMs <= 0) throw new Error(`intervalMs must be positive: ${intervalMs}`);
+    if (dtMs < 0) throw new Error(`dtMs cannot be negative: ${dtMs}`);
 
     // Sem entrada anterior a ação começa pronta — daí o acumulado inicial ser o intervalo.
-    let acumulado = (this.#acumulado.get(chave) ?? intervaloMs) + dtMs;
+    let accumulated = (this.#accumulated.get(key) ?? intervalMs) + dtMs;
 
-    let vezes = 0;
-    while (acumulado >= intervaloMs && vezes < RECUPERACAO_MAXIMA) {
-      vezes++;
-      acumulado -= intervaloMs;
+    let times = 0;
+    while (accumulated >= intervalMs && times < MAX_CATCH_UP) {
+      times++;
+      accumulated -= intervalMs;
     }
-    if (vezes === RECUPERACAO_MAXIMA) acumulado = 0;
+    if (times === MAX_CATCH_UP) accumulated = 0;
 
-    this.#acumulado.set(chave, acumulado);
-    return vezes;
+    this.#accumulated.set(key, accumulated);
+    return times;
   }
 
-  limpar(chave: string): void {
-    this.#ate.delete(chave);
-    this.#acumulado.delete(chave);
+  clear(key: string): void {
+    this.#until.delete(key);
+    this.#accumulated.delete(key);
   }
 }

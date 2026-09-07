@@ -10,24 +10,24 @@
 
 import { deflateSync, inflateSync } from 'fflate';
 import {
-  CLIENTE_PARA_SERVIDOR, OPCODE_PARA_NOME_C2S, OPCODE_PARA_NOME_S2C, SERVIDOR_PARA_CLIENTE,
-} from './mensagens.js';
-import { ESQUEMAS_C2S, ESQUEMAS_S2C } from './tipos.js';
-import type { MensagemC2S, MensagemS2C } from './tipos.js';
+  CLIENT_TO_SERVER, OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
+} from './messages.js';
+import { C2S_SCHEMAS, S2C_SCHEMAS } from './types.js';
+import type { C2SMessage, S2CMessage } from './types.js';
 
-const SEMENTE = 0x4853_5254;
-const FLAG_COMPRIMIDO = 1;
-const FLAG_LOTE = 2;
+const SEED = 0x4853_5254;
+const COMPRESSED_FLAG = 1;
+const BATCH_FLAG = 2;
 /** Abaixo disso, deflate gasta CPU e costuma aumentar o tamanho. */
-const LIMIAR_DE_COMPRESSAO = 8 * 1024;
+const COMPRESSION_THRESHOLD = 8 * 1024;
 
-const codificadorDeTexto = new TextEncoder();
-const decodificadorDeTexto = new TextDecoder();
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 /** XOR com xorshift32; é involução, então serve para embaralhar e desembaralhar. */
-function embaralhar(buf: Uint8Array, chave: number): void {
-  let r = (chave ^ SEMENTE) >>> 0;
-  if (r === 0) r = SEMENTE;
+function scramble(buf: Uint8Array, key: number): void {
+  let r = (key ^ SEED) >>> 0;
+  if (r === 0) r = SEED;
   for (let i = 0; i < buf.length; i++) {
     if ((i & 3) === 0) {
       r ^= r << 13; r >>>= 0;
@@ -38,156 +38,156 @@ function embaralhar(buf: Uint8Array, chave: number): void {
   }
 }
 
-function montarFrame(opcode: number, props: unknown, permitirCompressao: boolean): Uint8Array {
-  let corpo = codificadorDeTexto.encode(JSON.stringify([opcode, props]));
+function buildFrame(opcode: number, props: unknown, allowCompression: boolean): Uint8Array {
+  let body = textEncoder.encode(JSON.stringify([opcode, props]));
   let flags = 0;
-  if (permitirCompressao && corpo.length >= LIMIAR_DE_COMPRESSAO) {
-    corpo = deflateSync(corpo, { level: 3 });
-    flags |= FLAG_COMPRIMIDO;
+  if (allowCompression && body.length >= COMPRESSION_THRESHOLD) {
+    body = deflateSync(body, { level: 3 });
+    flags |= COMPRESSED_FLAG;
   }
-  const chave = (Math.random() * 0x1_0000_0000) >>> 0;
-  const frame = new Uint8Array(5 + corpo.length);
-  frame[0] = chave & 255;
-  frame[1] = (chave >>> 8) & 255;
-  frame[2] = (chave >>> 16) & 255;
-  frame[3] = (chave >>> 24) & 255;
+  const key = (Math.random() * 0x1_0000_0000) >>> 0;
+  const frame = new Uint8Array(5 + body.length);
+  frame[0] = key & 255;
+  frame[1] = (key >>> 8) & 255;
+  frame[2] = (key >>> 16) & 255;
+  frame[3] = (key >>> 24) & 255;
   frame[4] = flags;
-  frame.set(corpo, 5);
-  embaralhar(frame.subarray(4), chave);
+  frame.set(body, 5);
+  scramble(frame.subarray(4), key);
   return frame;
 }
 
-function abrirFrame(entrada: ArrayBuffer | Uint8Array): { flags: number; corpo: Uint8Array } | null {
-  const bytes = entrada instanceof Uint8Array ? entrada : new Uint8Array(entrada);
+function openFrame(input: ArrayBuffer | Uint8Array): { flags: number; body: Uint8Array } | null {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   if (bytes.length < 5) return null;
-  const chave =
+  const key =
     ((bytes[0] as number) | ((bytes[1] as number) << 8) |
      ((bytes[2] as number) << 16) | ((bytes[3] as number) << 24)) >>> 0;
-  const restante = new Uint8Array(bytes.subarray(4));
-  embaralhar(restante, chave);
-  return { flags: restante[0] as number, corpo: restante.subarray(1) };
+  const remainder = new Uint8Array(bytes.subarray(4));
+  scramble(remainder, key);
+  return { flags: remainder[0] as number, body: remainder.subarray(1) };
 }
 
 /** Divide o corpo de um lote: [tamanho uint32 LE][frame]... */
-function dividirLote(corpo: Uint8Array): Uint8Array[] | null {
+function splitBatch(body: Uint8Array): Uint8Array[] | null {
   const frames: Uint8Array[] = [];
   let i = 0;
-  while (i < corpo.length) {
-    if (i + 4 > corpo.length) return null;
-    const tamanho =
-      ((corpo[i] as number) | ((corpo[i + 1] as number) << 8) |
-       ((corpo[i + 2] as number) << 16) | ((corpo[i + 3] as number) << 24)) >>> 0;
+  while (i < body.length) {
+    if (i + 4 > body.length) return null;
+    const size =
+      ((body[i] as number) | ((body[i + 1] as number) << 8) |
+       ((body[i + 2] as number) << 16) | ((body[i + 3] as number) << 24)) >>> 0;
     i += 4;
-    if (i + tamanho > corpo.length) return null;
-    frames.push(corpo.subarray(i, i + tamanho));
-    i += tamanho;
+    if (i + size > body.length) return null;
+    frames.push(body.subarray(i, i + size));
+    i += size;
   }
   return frames;
 }
 
-function lerUm<M>(
-  entrada: ArrayBuffer | Uint8Array,
-  tabela: ReadonlyMap<number, string>,
-  esquemas: Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown } }>,
+function readMessage<M>(
+  input: ArrayBuffer | Uint8Array,
+  table: ReadonlyMap<number, string>,
+  schemas: Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown } }>,
 ): M | null {
-  const aberto = abrirFrame(entrada);
-  if (!aberto) return null;
-  if ((aberto.flags & ~FLAG_COMPRIMIDO) !== 0) return null;
+  const opened = openFrame(input);
+  if (!opened) return null;
+  if ((opened.flags & ~COMPRESSED_FLAG) !== 0) return null;
 
-  let corpo = aberto.corpo;
-  if ((aberto.flags & FLAG_COMPRIMIDO) !== 0) {
-    try { corpo = inflateSync(corpo); } catch { return null; }
+  let body = opened.body;
+  if ((opened.flags & COMPRESSED_FLAG) !== 0) {
+    try { body = inflateSync(body); } catch { return null; }
   }
 
-  let cru: unknown;
-  try { cru = JSON.parse(decodificadorDeTexto.decode(corpo)); } catch { return null; }
-  if (!Array.isArray(cru) || cru.length !== 2) return null;
+  let raw: unknown;
+  try { raw = JSON.parse(textDecoder.decode(body)); } catch { return null; }
+  if (!Array.isArray(raw) || raw.length !== 2) return null;
 
-  const [opcode, props] = cru as [unknown, unknown];
+  const [opcode, props] = raw as [unknown, unknown];
   if (typeof opcode !== 'number') return null;
-  const nome = tabela.get(opcode);
-  if (nome === undefined) return null;
+  const name = table.get(opcode);
+  if (name === undefined) return null;
 
-  const esquema = esquemas[nome];
-  if (!esquema) return null;
-  const validado = esquema.safeParse(props);
-  if (!validado.success) return null;
+  const schema = schemas[name];
+  if (!schema) return null;
+  const validated = schema.safeParse(props);
+  if (!validated.success) return null;
 
-  return { ...(validado.data as object), type: nome } as M;
+  return { ...(validated.data as object), type: name } as M;
 }
 
-function lerFrame<M>(
-  entrada: ArrayBuffer | Uint8Array,
-  tabela: ReadonlyMap<number, string>,
-  esquemas: Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown } }>,
+function readFrame<M>(
+  input: ArrayBuffer | Uint8Array,
+  table: ReadonlyMap<number, string>,
+  schemas: Record<string, { safeParse(v: unknown): { success: boolean; data?: unknown } }>,
 ): M[] | null {
-  const aberto = abrirFrame(entrada);
-  if (!aberto) return null;
+  const opened = openFrame(input);
+  if (!opened) return null;
 
-  if ((aberto.flags & FLAG_LOTE) === 0) {
-    const uma = lerUm<M>(entrada, tabela, esquemas);
-    return uma ? [uma] : null;
+  if ((opened.flags & BATCH_FLAG) === 0) {
+    const one = readMessage<M>(input, table, schemas);
+    return one ? [one] : null;
   }
-  if (aberto.flags !== FLAG_LOTE) return null;
+  if (opened.flags !== BATCH_FLAG) return null;
 
-  const partes = dividirLote(aberto.corpo);
-  if (!partes) return null;
-  const mensagens: M[] = [];
-  for (const parte of partes) {
-    const uma = lerUm<M>(parte, tabela, esquemas);
-    if (uma) mensagens.push(uma);
+  const parts = splitBatch(opened.body);
+  if (!parts) return null;
+  const messages: M[] = [];
+  for (const part of parts) {
+    const one = readMessage<M>(part, table, schemas);
+    if (one) messages.push(one);
   }
-  return mensagens;
+  return messages;
 }
 
 // --- API pública -----------------------------------------------------------------------
 
-export function codificarC2S(msg: MensagemC2S): Uint8Array {
+export function encodeC2S(msg: C2SMessage): Uint8Array {
   const { type, ...props } = msg;
-  return montarFrame(CLIENTE_PARA_SERVIDOR[type], props, true);
+  return buildFrame(CLIENT_TO_SERVER[type], props, true);
 }
 
-export function codificarS2C(msg: MensagemS2C): Uint8Array {
+export function encodeS2C(msg: S2CMessage): Uint8Array {
   const { type, ...props } = msg;
-  return montarFrame(SERVIDOR_PARA_CLIENTE[type], props, true);
+  return buildFrame(SERVER_TO_CLIENT[type], props, true);
 }
 
 /** Lê o que o servidor recebe. Devolve null — nunca lança — para entrada inválida. */
-export function decodificarC2S(entrada: ArrayBuffer | Uint8Array): MensagemC2S[] | null {
-  return lerFrame<MensagemC2S>(entrada, OPCODE_PARA_NOME_C2S, ESQUEMAS_C2S);
+export function decodeC2S(input: ArrayBuffer | Uint8Array): C2SMessage[] | null {
+  return readFrame<C2SMessage>(input, OPCODE_TO_NAME_C2S, C2S_SCHEMAS);
 }
 
 /** Lê o que o cliente recebe. */
-export function decodificarS2C(entrada: ArrayBuffer | Uint8Array): MensagemS2C[] | null {
-  return lerFrame<MensagemS2C>(entrada, OPCODE_PARA_NOME_S2C, ESQUEMAS_S2C);
+export function decodeS2C(input: ArrayBuffer | Uint8Array): S2CMessage[] | null {
+  return readFrame<S2CMessage>(input, OPCODE_TO_NAME_S2C, S2C_SCHEMAS);
 }
 
 /**
  * Empacota vários frames num só. É o que sustenta a projeção de 0,5–1,5 KB/s por jogador:
  * o `game` acumula a saída de um tick e manda um frame, não um `send` por evento.
  */
-export function empacotarLote(frames: readonly Uint8Array[]): Uint8Array {
+export function packBatch(frames: readonly Uint8Array[]): Uint8Array {
   let total = 0;
   for (const f of frames) total += 4 + f.length;
-  const corpo = new Uint8Array(total);
+  const body = new Uint8Array(total);
   let i = 0;
   for (const f of frames) {
-    corpo[i] = f.length & 255;
-    corpo[i + 1] = (f.length >>> 8) & 255;
-    corpo[i + 2] = (f.length >>> 16) & 255;
-    corpo[i + 3] = (f.length >>> 24) & 255;
+    body[i] = f.length & 255;
+    body[i + 1] = (f.length >>> 8) & 255;
+    body[i + 2] = (f.length >>> 16) & 255;
+    body[i + 3] = (f.length >>> 24) & 255;
     i += 4;
-    corpo.set(f, i);
+    body.set(f, i);
     i += f.length;
   }
-  const chave = (Math.random() * 0x1_0000_0000) >>> 0;
-  const frame = new Uint8Array(5 + corpo.length);
-  frame[0] = chave & 255;
-  frame[1] = (chave >>> 8) & 255;
-  frame[2] = (chave >>> 16) & 255;
-  frame[3] = (chave >>> 24) & 255;
-  frame[4] = FLAG_LOTE;
-  frame.set(corpo, 5);
-  embaralhar(frame.subarray(4), chave);
+  const key = (Math.random() * 0x1_0000_0000) >>> 0;
+  const frame = new Uint8Array(5 + body.length);
+  frame[0] = key & 255;
+  frame[1] = (key >>> 8) & 255;
+  frame[2] = (key >>> 16) & 255;
+  frame[3] = (key >>> 24) & 255;
+  frame[4] = BATCH_FLAG;
+  frame.set(body, 5);
+  scramble(frame.subarray(4), key);
   return frame;
 }

@@ -2,53 +2,53 @@ import { describe, expect, it } from 'vitest';
 import { Rng } from './rng.js';
 
 describe('Rng', () => {
-  it('mesma semente produz a mesma sequência', () => {
-    const a = Rng.deSemente('sessao-1');
-    const b = Rng.deSemente('sessao-1');
-    const seqA = Array.from({ length: 100 }, () => a.proximo());
-    const seqB = Array.from({ length: 100 }, () => b.proximo());
-    expect(seqA).toEqual(seqB);
+  it('the same seed produces the same sequence', () => {
+    const a = Rng.fromSeed('session-1');
+    const b = Rng.fromSeed('session-1');
+    const sequenceA = Array.from({ length: 100 }, () => a.next());
+    const sequenceB = Array.from({ length: 100 }, () => b.next());
+    expect(sequenceA).toEqual(sequenceB);
   });
 
-  it('sementes diferentes divergem', () => {
-    const a = Rng.deSemente('sessao-1');
-    const b = Rng.deSemente('sessao-2');
-    expect(a.proximo()).not.toBe(b.proximo());
+  it('different seeds diverge', () => {
+    const a = Rng.fromSeed('session-1');
+    const b = Rng.fromSeed('session-2');
+    expect(a.next()).not.toBe(b.next());
   });
 
-  it('retomar do estado continua a mesma sequência', () => {
+  it('resuming from state continues the same sequence', () => {
     // É o caso da FUN-28: sessão volta do snapshot e o loot precisa seguir igual.
-    const original = Rng.deSemente('sessao-1');
-    for (let i = 0; i < 37; i++) original.proximo();
-    const retomado = new Rng(original.estado());
-    const esperado = Array.from({ length: 20 }, () => original.proximo());
-    const obtido = Array.from({ length: 20 }, () => retomado.proximo());
-    expect(obtido).toEqual(esperado);
+    const original = Rng.fromSeed('session-1');
+    for (let i = 0; i < 37; i++) original.next();
+    const resumed = new Rng(original.getState());
+    const expected = Array.from({ length: 20 }, () => original.next());
+    const actual = Array.from({ length: 20 }, () => resumed.next());
+    expect(actual).toEqual(expected);
   });
 
-  it('estado todo-zero não trava o gerador', () => {
+  it('an all-zero state does not lock the generator', () => {
     const rng = new Rng({ a: 0, b: 0, c: 0, d: 0 });
-    const valores = new Set(Array.from({ length: 10 }, () => rng.proximo()));
-    expect(valores.size).toBeGreaterThan(1);
+    const values = new Set(Array.from({ length: 10 }, () => rng.next()));
+    expect(values.size).toBeGreaterThan(1);
   });
 
-  it('fracao fica em [0, 1)', () => {
-    const rng = Rng.deSemente('x');
+  it('fraction stays in [0, 1)', () => {
+    const rng = Rng.fromSeed('x');
     for (let i = 0; i < 1000; i++) {
-      const f = rng.fracao();
+      const f = rng.fraction();
       expect(f).toBeGreaterThanOrEqual(0);
       expect(f).toBeLessThan(1);
     }
   });
 
-  it('inteiro respeita os extremos, inclusive', () => {
-    const rng = Rng.deSemente('y');
-    const vistos = new Set<number>();
-    for (let i = 0; i < 2000; i++) vistos.add(rng.inteiro(1, 6));
-    expect([...vistos].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
+  it('integer includes both endpoints', () => {
+    const rng = Rng.fromSeed('y');
+    const seen = new Set<number>();
+    for (let i = 0; i < 2000; i++) seen.add(rng.integer(1, 6));
+    expect([...seen].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it('intervalo invertido é erro, não silêncio', () => {
-    expect(() => Rng.deSemente('z').inteiro(5, 1)).toThrow();
+  it('an inverted range is an error', () => {
+    expect(() => Rng.fromSeed('z').integer(5, 1)).toThrow();
   });
 });

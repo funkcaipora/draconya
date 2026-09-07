@@ -2,7 +2,7 @@
 
 export * from './config.js';
 export * as schema from './db/schema.js';
-export * from './papel.js';
+export * from './role.js';
 export * from './log.js';
-export * from './diretorio.js';
-export * from './relogio.js';
+export * from './directory.js';
+export * from './clock.js';

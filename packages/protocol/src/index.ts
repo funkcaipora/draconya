@@ -1,6 +1,6 @@
-export * from './mensagens.js';
-export * from './tipos.js';
+export * from './messages.js';
+export * from './types.js';
 export * from './codec.js';
 
-/** Versão do protocolo. O `authenticate` a envia; o servidor recusa incompatível. */
-export const VERSAO_DO_PROTOCOLO = '0.1.0' as const;
+/** Versão do contrato. A negociação no handshake será integrada ao WebSocket na FUN-13. */
+export const PROTOCOL_VERSION = '0.2.0' as const;
