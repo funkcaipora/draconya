@@ -40,6 +40,11 @@
 // que passa batido). Também por isso as regras abaixo não tentam cobrir
 // `require()` — a stack é ESM por decisão de arquitetura (docs/arquitetura.md).
 //
+// Formato de módulo: ESM (`export default`). Este arquivo nasceu em CommonJS porque, quando foi
+// escrito, ainda não existia `package.json` na raiz e o Node trataria `.js` como CommonJS por
+// padrão. Com o monorepo criado e `"type": "module"` na raiz, CommonJS passou a quebrar o
+// carregamento do config — a conversão foi feita junto com o scaffold.
+//
 // Por que os padrões abaixo são estáticos (não leem packages/ em disco):
 // os seis pacotes já estão decididos (docs/arquitetura-tecnica.md §17, E0).
 // Escanear o diretório para descobrir pacotes só adicionaria uma leitura de
@@ -90,7 +95,21 @@ const SIM_IO_PATTERNS = [
   'fastify',
 ];
 
-module.exports = [
+import tsParser from '@typescript-eslint/parser';
+
+export default [
+  // Parser de TypeScript. O parser padrão do ESLint (espree) não entende sintaxe de tipos nem
+  // JSX; sem este bloco, todo arquivo .ts falha com "Parsing error" antes de qualquer regra de
+  // fronteira rodar. Só o parser — nenhuma regra do typescript-eslint —, porque o propósito
+  // deste config é impor as fronteiras de import, não estilo.
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2023,
+      sourceType: 'module',
+    },
+  },
   {
     ignores: [
       '**/node_modules/**',

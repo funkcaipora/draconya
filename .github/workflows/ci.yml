@@ -60,12 +60,10 @@ jobs:
 
       - name: Instala pnpm
         if: steps.monorepo.outputs.existe == 'true'
+        # Sem `version`: o package.json raiz declara "packageManager" desde o scaffold do
+        # monorepo, e é dele que a action tira a versão. Declarar nos dois lugares é como as
+        # duas fontes divergem sem ninguém perceber.
         uses: pnpm/action-setup@v4
-        with:
-          # Versão fixada aqui porque o package.json raiz pode ainda não declarar o campo
-          # "packageManager" — sem um dos dois, pnpm/action-setup falha ao resolver a versão.
-          # Quando o package.json passar a declarar "packageManager", este `version` pode sair.
-          version: 10
 
       - name: Node 22
         if: steps.monorepo.outputs.existe == 'true'
