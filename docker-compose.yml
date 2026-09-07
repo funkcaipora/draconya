@@ -1,0 +1,31 @@
+# Infraestrutura local de desenvolvimento e de teste.
+# Não é o desenho de produção — lá Postgres e Redis são gerenciados.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: draconya
+      POSTGRES_PASSWORD: draconya
+      POSTGRES_DB: draconya
+    ports: ['5432:5432']
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U draconya']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ['6379:6379']
+    # appendonly porque o diretório de sessões e os leases não podem sumir
+    # num restart de desenvolvimento no meio de um teste de retomada.
+    command: ['redis-server', '--appendonly', 'yes']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  pgdata:

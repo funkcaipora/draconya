@@ -1,4 +1,4 @@
-// @draconya/server — ver packages/server/CLAUDE.md para propósito e fronteiras.
-// Esqueleto: o conteúdo real deste pacote é implementado pelas issues da Fase 1 no Linear.
+// @draconya/server — processos api, game e jobs. Ver packages/server/AGENTS.md.
 
-export const NOME_DO_PACOTE = '@draconya/server' as const;
+export * from './config.js';
+export * as schema from './db/schema.js';

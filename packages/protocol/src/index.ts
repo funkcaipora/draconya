@@ -1,4 +1,6 @@
-// @draconya/protocol — ver packages/protocol/CLAUDE.md para propósito e fronteiras.
-// Esqueleto: o conteúdo real deste pacote é implementado pelas issues da Fase 1 no Linear.
+export * from './mensagens.js';
+export * from './tipos.js';
+export * from './codec.js';
 
-export const NOME_DO_PACOTE = '@draconya/protocol' as const;
+/** Versão do protocolo. O `authenticate` a envia; o servidor recusa incompatível. */
+export const VERSAO_DO_PROTOCOLO = '0.1.0' as const;

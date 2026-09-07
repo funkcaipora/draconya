@@ -1,4 +1,5 @@
-// @draconya/sim — ver packages/sim/CLAUDE.md para propósito e fronteiras.
-// Esqueleto: o conteúdo real deste pacote é implementado pelas issues da Fase 1 no Linear.
+// @draconya/sim — motor de simulação puro. Ver packages/sim/AGENTS.md para fronteiras.
+// Sem I/O, sem framework, sem rede, sem banco, sem relógio global.
 
-export const NOME_DO_PACOTE = '@draconya/sim' as const;
+export * from './relogio.js';
+export * from './rng.js';

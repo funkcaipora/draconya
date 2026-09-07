@@ -25,6 +25,19 @@ Persistência, diretório de sessão e roteamento.
 - O limite de 2 personagens ativos por conta é aplicado com script atômico no Redis, nunca com
   verificação otimista.
 
+## Bibliotecas fixas (ADR 0011)
+
+Drizzle + drizzle-kit no Postgres, ioredis, Fastify no `api`, uWebSockets.js no `game`, pino,
+prom-client. Zod para validação. Trocar qualquer uma exige ADR novo, não decisão no meio de uma
+tarefa — o valor da lista é ser única.
+
+## Autenticação (ADR 0012)
+
+Credencial e fluxos de conta ficam no WorkOS AuthKit; a tabela `account` local segue dona de
+Coins, personagens e ledger, ligada por `external_auth_id`. A coluna `senha_hash` existe nulável
+e sem uso, para que trazer a autenticação para casa seja aditivo. `AUTH_DEV_MODE=true` aceita
+qualquer e-mail em desenvolvimento e derruba o boot em produção.
+
 ## Como testar
 
 ```
