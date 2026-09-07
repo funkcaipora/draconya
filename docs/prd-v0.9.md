@@ -3,7 +3,7 @@
 **Versão:** 0.9 - consolidado para handoff técnico  
 **Data:** 07/09/2026  
 **Status:** Game design macro consolidado; pronto para definição de arquitetura, stack e plano técnico do MVP  
-**Documento-base técnico analisado:** `arquitetura.md`  
+**Documento-base técnico analisado:** `architecture.md`
 **Referências de experiência:** Tibia, Huntera e OTClientV8  
 
 ---
@@ -14,7 +14,7 @@ Este PRD consolida as decisões de produto e game design definidas para o Dracon
 
 O PRD descreve **o que o produto precisa fazer**, quais regras devem ser respeitadas, quais sistemas pertencem ao MVP e quais capacidades devem ficar preparadas para evolução futura. Ele deliberadamente **não escolhe linguagem, banco de dados, framework, engine web ou provedor de infraestrutura**.
 
-O arquivo `arquitetura.md` continua sendo uma referência de restrições técnicas e de custo. Onde uma decisão de produto posterior conflitar com uma hipótese antiga desse arquivo, **a decisão mais recente deste PRD prevalece como requisito de produto**. Exemplo: stamina em zero não encerra mais automaticamente uma hunt; a sessão pode continuar sem gerar XP, loot ou progresso de Bestiário.
+O arquivo `architecture.md` continua sendo uma referência de restrições técnicas e de custo. Onde uma decisão de produto posterior conflitar com uma hipótese antiga desse arquivo, **a decisão mais recente deste PRD prevalece como requisito de produto**. Exemplo: stamina em zero não encerra mais automaticamente uma hunt; a sessão pode continuar sem gerar XP, loot ou progresso de Bestiário.
 
 ### 1.1 Convenções
 
@@ -1546,7 +1546,7 @@ O MVP técnico deve conseguir demonstrar de ponta a ponta, no mínimo, os fluxos
 
 ## 45. Handoff para arquitetura e stack
 
-A próxima etapa deve receber este PRD e o arquivo técnico `arquitetura.md`, mas está livre para revisar as escolhas de stack anteriores. Ela deve produzir pelo menos:
+A próxima etapa deve receber este PRD e o arquivo técnico `architecture.md`, mas está livre para revisar as escolhas de stack anteriores. Ela deve produzir pelo menos:
 
 1. arquitetura lógica de serviços/processos;
 2. modelo de sessão para Hunt, Treino e conteúdos manuais;

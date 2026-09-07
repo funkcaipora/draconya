@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/docs-check.mjs — valida a documentação do harness (plano-harness.md §4.4).
+// scripts/docs-check.mjs — valida a documentação do harness (harness-plan.md §4.4).
 //
 // Quatro checagens que derrubam o script, todas sobre a documentação estrutural do
 // repositório, nunca sobre o conteúdo em prosa:
@@ -12,10 +12,10 @@
 //
 // Mais um inventário informativo, que NÃO derruba o script:
 //
-//   5. As pendências [ABERTO] em docs/produto/*.md, com arquivo e linha.
+//   5. As pendências [ABERTO] em docs/product/*.md, com arquivo e linha.
 //
 // Regra geral do script inteiro: diretório que ainda não existe (packages/, docs/adr/,
-// docs/produto/) não é erro — é o estado normal de um projeto que ainda não chegou na Fase
+// docs/product/) não é erro — é o estado normal de um projeto que ainda não chegou na Fase
 // 1. Erro é sempre um arquivo ou link que já existe e está errado, nunca a ausência de algo
 // que só vai nascer depois. Isso é o que permite este script rodar limpo hoje, com o
 // repositório como está, sem se tornar um script que "sempre falha até a Fase 1 acabar" —
@@ -29,7 +29,7 @@
 // visibilidade de quantas decisões seguem abertas, e onde.
 //
 // Nem toda ocorrência do texto "[ABERTO]" é um item pendente. Na prática (e pela própria
-// skill /produto, Passo 3 e Passo 4) uma pendência real sempre vive numa linha de TABELA
+// skill /product, Passo 3 e Passo 4) uma pendência real sempre vive numa linha de TABELA
 // ("Parâmetros de balanceamento") ou num ITEM DE LISTA ("Itens [ABERTO] resolvidos") — nunca
 // em parágrafo corrido. Prosa corrida com "[ABERTO]" no meio está falando SOBRE o conceito,
 // não registrando uma pendência nova: "Nenhum `[ABERTO]` do PRD atinge este sistema." ou "o
@@ -51,44 +51,44 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Problemas agrupados por tipo, na ordem em que aparecem no relatório final. Cada item é
 // { path, line, message } — `line` fica null quando o problema não é de uma linha específica
 // (ex.: "pacote sem CLAUDE.md" é do diretório inteiro, não de uma linha).
-const problemas = {
-  claudeMdAusente: [],
-  adrNaoIndexado: [],
-  adrNumeracao: [],
-  linkQuebrado: [],
+const problems = {
+  missingClaudeMd: [],
+  unindexedAdr: [],
+  adrNumbering: [],
+  brokenLink: [],
 };
 
 // Avisos: aparecem no relatório, mas NÃO derrubam o docs-check. Ver comentário no topo.
-const avisos = {
-  pendenciasAbertas: [],
+const warnings = {
+  openDecisions: [],
 };
 
-function registrar(lista, caminho, linha, mensagem) {
-  lista.push({ path: caminho, line: linha, message: mensagem });
+function record(list, filePath, lineText, messageText) {
+  list.push({ path: filePath, line: lineText, message: messageText });
 }
 
-function paraExibicao(caminhoAbsoluto) {
-  return relative(ROOT, caminhoAbsoluto) || '.';
+function displayPath(absolutePath) {
+  return relative(ROOT, absolutePath) || '.';
 }
 
 // ---------------------------------------------------------------------------------------
 // 1. packages/*/CLAUDE.md
 // ---------------------------------------------------------------------------------------
-function checarClaudeMdDosPacotes() {
+function checkPackageClaudeFiles() {
   const packagesDir = join(ROOT, 'packages');
   if (!existsSync(packagesDir)) return; // Fase 1 ainda não criou o monorepo — nada a checar.
 
-  const entradas = readdirSync(packagesDir, { withFileTypes: true });
-  for (const entrada of entradas) {
-    if (!entrada.isDirectory()) continue;
-    const claudeMd = join(packagesDir, entrada.name, 'CLAUDE.md');
+  const entries = readdirSync(packagesDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const claudeMd = join(packagesDir, entry.name, 'CLAUDE.md');
     if (!existsSync(claudeMd)) {
-      registrar(
-        problemas.claudeMdAusente,
-        `packages/${entrada.name}`,
+      record(
+        problems.missingClaudeMd,
+        `packages/${entry.name}`,
         null,
-        `falta packages/${entrada.name}/CLAUDE.md — todo pacote precisa de propósito, ` +
-          `fronteiras e invariantes locais documentados (docs/plano-harness.md §2.3).`,
+        `missing packages/${entry.name}/CLAUDE.md — every package requires its purpose, ` +
+          `boundaries and local invariants to be documented (docs/harness-plan.md §2.3).`,
       );
     }
   }
@@ -97,83 +97,83 @@ function checarClaudeMdDosPacotes() {
 // ---------------------------------------------------------------------------------------
 // 2 e 3. ADRs — indexação em docs/adr/README.md e numeração sem buraco/duplicata
 // ---------------------------------------------------------------------------------------
-const PADRAO_ADR = /^(\d{4})-.+\.md$/;
+const ADR_PATTERN = /^(\d{4})-.+\.md$/;
 
-function checarAdrs() {
+function checkAdrs() {
   const adrDir = join(ROOT, 'docs', 'adr');
   if (!existsSync(adrDir)) return; // Nenhum ADR ainda — nada a checar.
 
   const readmePath = join(adrDir, 'README.md');
   // Se o índice não existe, nenhum ADR está de fato indexado — cada um vira um problema
   // próprio abaixo, em vez de um erro genérico só sobre o índice faltando.
-  const readmeConteudo = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : '';
+  const readmeContent = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : '';
 
-  const arquivos = readdirSync(adrDir, { withFileTypes: true }).filter(
+  const files = readdirSync(adrDir, { withFileTypes: true }).filter(
     (e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'README.md',
   );
 
-  const numerados = []; // { numero, arquivo }
-  for (const arquivo of arquivos) {
-    const m = arquivo.name.match(PADRAO_ADR);
+  const numberedFiles = []; // { numero, arquivo }
+  for (const file of files) {
+    const m = file.name.match(ADR_PATTERN);
     if (!m) {
-      registrar(
-        problemas.adrNumeracao,
-        `docs/adr/${arquivo.name}`,
+      record(
+        problems.adrNumbering,
+        `docs/adr/${file.name}`,
         null,
-        `nome fora do padrão NNNN-titulo-em-kebab.md — não dá para checar numeração nem ` +
-          `indexação para este arquivo.`,
+        `filename does not match NNNN-kebab-title.md — cannot check numbering or ` +
+          `indexing for this file.`,
       );
       continue;
     }
-    numerados.push({ numero: parseInt(m[1], 10), arquivo: arquivo.name });
+    numberedFiles.push({ number: parseInt(m[1], 10), file: file.name });
   }
 
   // Indexação: cada ADR precisa ter o próprio nome de arquivo citado no índice. Checagem por
   // substring, não por parser de Markdown — robusta a `(0001-foo.md)` com ou sem `./` na
   // frente, e ao texto do link não ser exatamente o número.
-  for (const { arquivo } of numerados) {
-    if (!readmeConteudo.includes(arquivo)) {
-      registrar(
-        problemas.adrNaoIndexado,
-        `docs/adr/${arquivo}`,
+  for (const { file } of numberedFiles) {
+    if (!readmeContent.includes(file)) {
+      record(
+        problems.unindexedAdr,
+        `docs/adr/${file}`,
         null,
-        `ADR existe mas não está citado em docs/adr/README.md — o índice ficaria mentindo ` +
-          `sobre quantas decisões existem.`,
+        `ADR exists but is not listed in docs/adr/README.md — the index must reflect ` +
+          `all recorded decisions.`,
       );
     }
   }
 
   // Numeração — duplicata: dois arquivos com o mesmo NNNN.
-  const porNumero = new Map();
-  for (const { numero, arquivo } of numerados) {
-    if (!porNumero.has(numero)) porNumero.set(numero, []);
-    porNumero.get(numero).push(arquivo);
+  const byNumber = new Map();
+  for (const { number, file } of numberedFiles) {
+    if (!byNumber.has(number)) byNumber.set(number, []);
+    byNumber.get(number).push(file);
   }
-  for (const [numero, arquivosDoNumero] of porNumero) {
-    if (arquivosDoNumero.length > 1) {
-      registrar(
-        problemas.adrNumeracao,
+  for (const [number, filesForNumber] of byNumber) {
+    if (filesForNumber.length > 1) {
+      record(
+        problems.adrNumbering,
         'docs/adr/',
         null,
-        `número ${String(numero).padStart(4, '0')} duplicado entre: ` +
-          `${arquivosDoNumero.join(', ')}.`,
+        `number ${String(number).padStart(4, '0')} duplicated across: ` +
+          `${filesForNumber.join(', ')}.`,
       );
     }
   }
 
   // Numeração — buraco: a sequência deve ser contígua a partir de 0001 até o maior número
-  // encontrado. ADR numerado a partir de 1 é a convenção já em uso (plano-harness.md §3.1
+  // encontrado. ADR numerado a partir de 1 é a convenção já em uso (harness-plan.md §3.1
   // e o backfill de 0001-0010).
-  if (porNumero.size > 0) {
-    const maiorNumero = Math.max(...porNumero.keys());
-    for (let n = 1; n <= maiorNumero; n++) {
-      if (!porNumero.has(n)) {
-        registrar(
-          problemas.adrNumeracao,
+  if (byNumber.size > 0) {
+    const highestNumber = Math.max(...byNumber.keys());
+    for (let n = 1; n <= highestNumber; n++) {
+      if (!byNumber.has(n)) {
+        record(
+          problems.adrNumbering,
           'docs/adr/',
           null,
-          `número ${String(n).padStart(4, '0')} ausente na sequência (existe ADR até ` +
-            `${String(maiorNumero).padStart(4, '0')}, mas este número não aparece).`,
+          `number ${String(n).padStart(4, '0')} missing from the sequence (highest ADR is ` +
+            `${String(highestNumber).padStart(4, '0')}, but this number is absent).`,
         );
       }
     }
@@ -188,63 +188,63 @@ function checarAdrs() {
 // repositório (confirmado por inspeção antes de escrever este script). Links de referência
 // (`[texto][ref]` + `[ref]: alvo`) não são resolvidos; se passarem a ser usados, este script
 // precisa crescer junto.
-const PADRAO_LINK = /\[([^\]]*)\]\(([^)]+)\)/g;
-const PADRAO_ESQUEMA_URL = /^[a-z][a-z0-9+.-]*:/i;
+const LINK_PATTERN = /\[([^\]]*)\]\(([^)]+)\)/g;
+const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 
-function listarArquivosMarkdown(dir) {
+function listMarkdownFiles(dir) {
   if (!existsSync(dir)) return [];
-  const resultado = [];
-  for (const entrada of readdirSync(dir, { withFileTypes: true })) {
-    const caminho = join(dir, entrada.name);
-    if (entrada.isDirectory()) {
-      resultado.push(...listarArquivosMarkdown(caminho));
-    } else if (entrada.isFile() && entrada.name.endsWith('.md')) {
-      resultado.push(caminho);
+  const result = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const filePath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      result.push(...listMarkdownFiles(filePath));
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      result.push(filePath);
     }
   }
-  return resultado;
+  return result;
 }
 
-function resolverAlvoDoLink(alvoBruto, arquivoOrigem) {
+function resolveLinkTarget(rawTarget, sourceFile) {
   // Título opcional estilo `(alvo "título")`: fica só a primeira palavra.
-  const semTitulo = alvoBruto.trim().split(/\s+/)[0] ?? '';
+  const withoutTitle = rawTarget.trim().split(/\s+/)[0] ?? '';
   // Âncora dentro do arquivo (`#secao`) não é validada, só removida antes de checar o alvo.
-  const semAncora = semTitulo.split('#')[0];
-  if (semAncora === '') return null; // Link que é só uma âncora na própria página.
+  const withoutAnchor = withoutTitle.split('#')[0];
+  if (withoutAnchor === '') return null; // Link que é só uma âncora na própria página.
 
-  if (semAncora.startsWith('/')) {
+  if (withoutAnchor.startsWith('/')) {
     // Estilo GitHub, relativo à raiz do repositório.
-    return join(ROOT, semAncora);
+    return join(ROOT, withoutAnchor);
   }
-  return resolve(dirname(arquivoOrigem), semAncora);
+  return resolve(dirname(sourceFile), withoutAnchor);
 }
 
-function checarLinks() {
-  const arquivos = listarArquivosMarkdown(join(ROOT, 'docs'));
-  const claudeMdRaiz = join(ROOT, 'CLAUDE.md');
-  if (existsSync(claudeMdRaiz)) arquivos.push(claudeMdRaiz);
+function checkLinks() {
+  const files = listMarkdownFiles(join(ROOT, 'docs'));
+  const rootClaudeMd = join(ROOT, 'CLAUDE.md');
+  if (existsSync(rootClaudeMd)) files.push(rootClaudeMd);
 
-  for (const arquivo of arquivos) {
-    const linhas = readFileSync(arquivo, 'utf8').split('\n');
-    linhas.forEach((linha, indice) => {
-      PADRAO_LINK.lastIndex = 0;
+  for (const file of files) {
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((lineText, offset) => {
+      LINK_PATTERN.lastIndex = 0;
       let m;
-      while ((m = PADRAO_LINK.exec(linha)) !== null) {
-        const alvoBruto = m[2].trim();
-        if (alvoBruto === '' || alvoBruto.startsWith('#') || alvoBruto.startsWith('//')) {
+      while ((m = LINK_PATTERN.exec(lineText)) !== null) {
+        const rawTarget = m[2].trim();
+        if (rawTarget === '' || rawTarget.startsWith('#') || rawTarget.startsWith('//')) {
           continue; // âncora na própria página ou link protocol-relative — fora do escopo.
         }
-        if (PADRAO_ESQUEMA_URL.test(alvoBruto)) continue; // http:, mailto:, etc. — não é link relativo.
+        if (URL_SCHEME_PATTERN.test(rawTarget)) continue; // http:, mailto:, etc. — não é link relativo.
 
-        const resolvido = resolverAlvoDoLink(alvoBruto, arquivo);
-        if (resolvido === null) continue;
+        const resolved = resolveLinkTarget(rawTarget, file);
+        if (resolved === null) continue;
 
-        if (!existsSync(resolvido)) {
-          registrar(
-            problemas.linkQuebrado,
-            paraExibicao(arquivo),
-            indice + 1,
-            `link para '${alvoBruto}' não resolve para nenhum arquivo ou pasta existente.`,
+        if (!existsSync(resolved)) {
+          record(
+            problems.brokenLink,
+            displayPath(file),
+            offset + 1,
+            `link to '${rawTarget}' does not resolve to an existing file or directory.`,
           );
         }
       }
@@ -253,44 +253,44 @@ function checarLinks() {
 }
 
 // ---------------------------------------------------------------------------------------
-// 5. [ABERTO] em docs/produto/*.md — inventário informativo
+// 5. [ABERTO] em docs/product/*.md — inventário informativo
 // ---------------------------------------------------------------------------------------
-const PADRAO_ABERTO = /\[ABERTO\b/;
-const PADRAO_NEGACAO = /\bnenhum[a]?\b/i;
-const PADRAO_LINHA_ESTRUTURADA = /^\s*(\||[-*+]\s|\d+[.)]\s)/;
-const PADRAO_LINHA_DE_TABELA = /^\s*\|/;
+const OPEN_DECISION_PATTERN = /\[ABERTO\b/;
+const NEGATION_PATTERN = /\bnenhum[a]?\b/i;
+const STRUCTURED_LINE_PATTERN = /^\s*(\||[-*+]\s|\d+[.)]\s)/;
+const TABLE_LINE_PATTERN = /^\s*\|/;
 
 // Decide se a ocorrência de "[ABERTO" na linha é uma pendência de verdade, não uma menção em
 // prosa corrida (ver comentário no topo do arquivo). Precisa estar numa linha estruturada
 // (tabela ou item de lista) e não estar riscada nem negada.
-function ehAbertoPendente(linha) {
-  const indice = linha.search(PADRAO_ABERTO);
-  if (indice === -1) return false;
-  if (!PADRAO_LINHA_ESTRUTURADA.test(linha)) return false; // prosa falando sobre o conceito.
-  const antes = linha.slice(0, indice);
-  if (/~~\s*$/.test(antes)) return false; // "...~~[ABERTO...]~~" — já resolvido e riscado.
-  if (PADRAO_NEGACAO.test(antes)) return false; // "Nenhum ... [ABERTO...]" — resumo, não pendência.
+function isOpenDecision(lineText) {
+  const offset = lineText.search(OPEN_DECISION_PATTERN);
+  if (offset === -1) return false;
+  if (!STRUCTURED_LINE_PATTERN.test(lineText)) return false; // prosa falando sobre o conceito.
+  const before = lineText.slice(0, offset);
+  if (/~~\s*$/.test(before)) return false; // "...~~[ABERTO...]~~" — já resolvido e riscado.
+  if (NEGATION_PATTERN.test(before)) return false; // "Nenhum ... [ABERTO...]" — resumo, não pendência.
   return true;
 }
 
-function listarPendenciasAbertas() {
-  const produtoDir = join(ROOT, 'docs', 'produto');
-  if (!existsSync(produtoDir)) return; // docs/produto/ ainda não existe — nada a listar.
+function listOpenDecisions() {
+  const productDir = join(ROOT, 'docs', 'product');
+  if (!existsSync(productDir)) return; // docs/product/ ainda não existe — nada a listar.
 
-  const arquivos = readdirSync(produtoDir, { withFileTypes: true }).filter(
+  const files = readdirSync(productDir, { withFileTypes: true }).filter(
     (e) => e.isFile() && e.name.endsWith('.md'),
   );
 
-  for (const arquivo of arquivos) {
-    const caminho = join(produtoDir, arquivo.name);
-    const linhas = readFileSync(caminho, 'utf8').split('\n');
-    linhas.forEach((linha, indice) => {
-      if (!ehAbertoPendente(linha)) return;
-      registrar(
-        avisos.pendenciasAbertas,
-        `docs/produto/${arquivo.name}`,
-        indice + 1,
-        linha.trim().replace(/\s+/g, ' ').slice(0, 120),
+  for (const file of files) {
+    const filePath = join(productDir, file.name);
+    const lines = readFileSync(filePath, 'utf8').split('\n');
+    lines.forEach((lineText, offset) => {
+      if (!isOpenDecision(lineText)) return;
+      record(
+        warnings.openDecisions,
+        `docs/product/${file.name}`,
+        offset + 1,
+        lineText.trim().replace(/\s+/g, ' ').slice(0, 120),
       );
     });
   }
@@ -299,26 +299,26 @@ function listarPendenciasAbertas() {
 // ---------------------------------------------------------------------------------------
 // Relatório
 // ---------------------------------------------------------------------------------------
-function relatar() {
-  const secoes = [
-    ['CLAUDE.md ausente em pacote', problemas.claudeMdAusente],
-    ['ADR não indexado em docs/adr/README.md', problemas.adrNaoIndexado],
-    ['Numeração de ADR (buraco ou duplicata)', problemas.adrNumeracao],
-    ['Link relativo quebrado', problemas.linkQuebrado],
+function report() {
+  const sections = [
+    ['Missing package CLAUDE.md', problems.missingClaudeMd],
+    ['ADR missing from docs/adr/README.md', problems.unindexedAdr],
+    ['ADR numbering (gap or duplicate)', problems.adrNumbering],
+    ['Broken relative link', problems.brokenLink],
   ];
 
-  const total = secoes.reduce((soma, [, lista]) => soma + lista.length, 0);
+  const total = sections.reduce((sum, [, list]) => sum + list.length, 0);
 
   if (total === 0) {
-    console.log('docs-check: tudo certo — nenhum problema encontrado.');
+    console.log('docs-check: passed — no problems found.');
   } else {
-    console.log(`docs-check: ${total} problema(s) encontrado(s).\n`);
-    for (const [titulo, lista] of secoes) {
-      if (lista.length === 0) continue;
-      console.log(`## ${titulo} (${lista.length})`);
-      for (const problema of lista) {
-        const local = problema.line != null ? `${problema.path}:${problema.line}` : problema.path;
-        console.log(`  - ${local} — ${problema.message}`);
+    console.log(`docs-check: ${total} problem(s) found.\n`);
+    for (const [title, list] of sections) {
+      if (list.length === 0) continue;
+      console.log(`## ${title} (${list.length})`);
+      for (const problem of list) {
+        const local = problem.line != null ? `${problem.path}:${problem.line}` : problem.path;
+        console.log(`  - ${local} — ${problem.message}`);
       }
       console.log('');
     }
@@ -327,11 +327,11 @@ function relatar() {
   // Inventário informativo. Não derruba o check: a atribuição de dono e prazo de uma pendência
   // de produto vive no Linear, não em markdown — duplicar isso aqui seria burocracia que apodrece.
   // O valor deste bloco é visibilidade: quantas decisões seguem abertas, e onde.
-  const pendencias = avisos.pendenciasAbertas;
-  if (pendencias.length > 0) {
-    console.log(`## Pendências [ABERTO] em docs/produto (${pendencias.length}) — informativo`);
-    for (const aviso of pendencias) {
-      console.log(`  - ${aviso.path}:${aviso.line} — ${aviso.message}`);
+  const decisions = warnings.openDecisions;
+  if (decisions.length > 0) {
+    console.log(`## Open decisions [ABERTO] in docs/product (${decisions.length}) — informational`);
+    for (const warning of decisions) {
+      console.log(`  - ${warning.path}:${warning.line} — ${warning.message}`);
     }
     console.log('');
   }
@@ -344,13 +344,13 @@ function relatar() {
 // saída explicada com código 1, igual a um problema de documentação encontrado.
 // ---------------------------------------------------------------------------------------
 try {
-  checarClaudeMdDosPacotes();
-  checarAdrs();
-  checarLinks();
-  listarPendenciasAbertas();
-  process.exitCode = relatar();
-} catch (erro) {
-  console.error('docs-check: falha inesperada ao rodar as checagens (isto é um bug no próprio script).');
-  console.error(erro instanceof Error ? erro.stack : String(erro));
+  checkPackageClaudeFiles();
+  checkAdrs();
+  checkLinks();
+  listOpenDecisions();
+  process.exitCode = report();
+} catch (error) {
+  console.error('docs-check: unexpected failure while running checks (this is a bug in the script).');
+  console.error(error instanceof Error ? error.stack : String(error));
   process.exitCode = 1;
 }

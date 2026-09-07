@@ -1,9 +1,9 @@
 // eslint.config.js — lint de fronteiras entre pacotes (Draconya)
 //
 // Este arquivo implementa em código a tabela de camadas descrita em
-// docs/fronteiras.md e em docs/plano-harness.md §4.2: "quem pode importar
+// docs/boundaries.md e em docs/harness-plan.md §4.2: "quem pode importar
 // quem" deixa de ser um combinado em prosa e vira erro de build. A tabela
-// em docs/fronteiras.md é normativa — mudou uma fronteira aqui, muda lá,
+// em docs/boundaries.md é normativa — mudou uma fronteira aqui, muda lá,
 // e vice-versa.
 //
 // Por que CommonJS (`module.exports`) e não `export default`:
@@ -38,7 +38,7 @@
 // aceito deliberadamente: o custo de um falso positivo (renomear um arquivo
 // local ambíguo) é muito menor que o de um falso negativo (import proibido
 // que passa batido). Também por isso as regras abaixo não tentam cobrir
-// `require()` — a stack é ESM por decisão de arquitetura (docs/arquitetura.md).
+// `require()` — a stack é ESM por decisão de arquitetura (docs/architecture.md).
 //
 // Formato de módulo: ESM (`export default`). Este arquivo nasceu em CommonJS porque, quando foi
 // escrito, ainda não existia `package.json` na raiz e o Node trataria `.js` como CommonJS por
@@ -46,7 +46,7 @@
 // carregamento do config — a conversão foi feita junto com o scaffold.
 //
 // Por que os padrões abaixo são estáticos (não leem packages/ em disco):
-// os seis pacotes já estão decididos (docs/arquitetura-tecnica.md §17, E0).
+// os seis pacotes já estão decididos (docs/technical-architecture.md §17, E0).
 // Escanear o diretório para descobrir pacotes só adicionaria uma leitura de
 // disco no carregamento do config sem nenhum ganho — e um `files` que não
 // casa com nada não é erro em flat config, então isto não quebra hoje, com
@@ -64,15 +64,15 @@ function pkg(name) {
   return `packages/${name}/**/*.{js,jsx,mjs,cjs,ts,tsx}`;
 }
 
-const VER_DOC = 'Ver docs/fronteiras.md.';
+const SEE_DOC = 'See docs/boundaries.md.';
 
 // Módulos de I/O, rede, banco e framework que sim/ nunca pode importar
-// (invariante 1 do CLAUDE.md raiz / plano-harness.md §2.2: "sim/ é puro —
+// (invariante 1 do CLAUDE.md raiz / harness-plan.md §2.2: "sim/ é puro —
 // sem I/O, sem framework, sem rede, sem banco, sem relógio global").
 // "node:*" cobre qualquer builtin do Node já no formato prefixado (com ou
 // sem subcaminho, ex.: "node:fs/promises"); a lista abaixo cobre as formas
 // sem prefixo mais comuns, e os pacotes de terceiros que a arquitetura já
-// nomeou (docs/arquitetura.md e docs/arquitetura-tecnica.md §2, §7). Lista
+// nomeou (docs/architecture.md e docs/technical-architecture.md §2, §7). Lista
 // não exaustiva — some aqui qualquer novo cliente de banco, fila ou
 // framework HTTP que sim/ tentar importar no futuro.
 const SIM_IO_PATTERNS = [
@@ -137,10 +137,7 @@ export default [
           {
             group: ['content', 'sim', 'server', 'client', 'tools'],
             message:
-              'protocol/ é a raiz da árvore de dependências: client/ e server/ (que nunca podem ' +
-              'se importar) só compartilham código porque protocol/ não depende de nenhum dos ' +
-              'dois. Opcodes e tipos de mensagem vivem só aqui, como fonte única das duas tabelas. ' +
-              VER_DOC,
+              "protocol/ defines shared opcodes and messages and cannot depend on another workspace package. " + SEE_DOC,
           },
         ],
       }],
@@ -151,7 +148,7 @@ export default [
   // client, tools.
   //
   // content/ descreve dados de jogo (monstros, hunts, itens, magias,
-  // vocações — arquitetura-tecnica.md §8) e nunca contém arte (invariante
+  // vocações — technical-architecture.md §8) e nunca contém arte (invariante
   // 6). É lido por processos bem diferentes: o servidor de jogo, o
   // cliente, e futuras ferramentas de balanceamento. Se dependesse de
   // quem o consome, deixaria de poder ser lido por qualquer um deles
@@ -164,11 +161,7 @@ export default [
           {
             group: ['sim', 'server', 'client', 'tools'],
             message:
-              'content/ é dado de jogo (stats, hunts, itens, magias) e só depende de protocol/ ' +
-              'para tipos. sim/, server/, client/ e tools/ são consumidores desse dado — se ' +
-              'content/ importasse de algum deles, o mesmo arquivo de conteúdo deixaria de poder ' +
-              'ser lido por processos diferentes (jogo, cliente, ferramenta de balanceamento) sem ' +
-              'arrastar o resto do monólito junto. ' + VER_DOC,
+              "content/ defines game data and may only import protocol/ for shared types. " + SEE_DOC,
           },
         ],
       }],
@@ -178,7 +171,7 @@ export default [
   // sim — pode importar: protocol, content. Não pode importar: server,
   // client, tools, e nenhuma forma de I/O.
   //
-  // Esta é a fronteira mais importante do projeto (plano-harness.md §4.2).
+  // Esta é a fronteira mais importante do projeto (harness-plan.md §4.2).
   // Duas regras distintas, tratadas em separado porque a razão de cada
   // uma é diferente: uma é sobre camadas (sim não conhece quem o hospeda),
   // a outra é sobre pureza (sim não toca em nada que não seja o próprio
@@ -190,11 +183,11 @@ export default [
         globals: [
           {
             name: 'Date',
-            message: 'sim/ recebe tempo como parâmetro. O relógio real vive em server/. ' + VER_DOC,
+            message: "sim/ receives time as a parameter. The real clock belongs in server/. " + SEE_DOC,
           },
           {
             name: 'performance',
-            message: 'sim/ recebe tempo como parâmetro. O relógio real vive em server/. ' + VER_DOC,
+            message: "sim/ receives time as a parameter. The real clock belongs in server/. " + SEE_DOC,
           },
         ],
         checkGlobalObject: true,
@@ -204,21 +197,12 @@ export default [
           {
             group: ['server', 'client', 'tools'],
             message:
-              'sim/ é o núcleo de simulação e não conhece quem o hospeda: a mesma lógica de tick, ' +
-              'combate e bot precisa dar resultado idêntico rodando em teste, em carga sintética ' +
-              'ou em produção, sem nenhuma pista de como o resultado chega até alguém (nem ' +
-              'servidor, nem cliente, nem ferramenta). ' + VER_DOC,
+              "sim/ cannot import its hosts: server/, client/ or tools/. " + SEE_DOC,
           },
           {
             group: SIM_IO_PATTERNS,
             message:
-              'sim/ é puro por decisão de arquitetura (docs/arquitetura.md): sem I/O, sem rede, ' +
-              'sem banco, sem framework, sem relógio global — todo cálculo é função só do dtMs ' +
-              'recebido e do estado já em memória. É essa pureza que permite rodar a mesma hunt a ' +
-              '10 Hz anexada e a 1-2 Hz desanexada com resultado idêntico, testar combate e bot ' +
-              'sem subir servidor, Postgres ou Redis, e — se o custo de CPU virar gargalo algum ' +
-              'dia — reescrever o núcleo em Rust ou Go sem tocar no protocolo nem no cliente. I/O ' +
-              'e framework HTTP/WebSocket vivem em server/. ' + VER_DOC,
+              "sim/ must remain pure: no I/O, network, database, framework or global clock. Pass elapsed time explicitly. " + SEE_DOC,
           },
         ],
       }],
@@ -232,7 +216,7 @@ export default [
   // aqui — a única fronteira dura é essa. (tools/ fica de fora da lista de
   // proibidos de propósito: server/ pode usar utilitário operacional de
   // tools/ quando fizer sentido, por exemplo no processo `jobs`; ver
-  // docs/fronteiras.md para o raciocínio completo.)
+  // docs/boundaries.md para o raciocínio completo.)
   {
     files: [pkg('server')],
     rules: {
@@ -241,10 +225,7 @@ export default [
           {
             group: ['client'],
             message:
-              'server/ roda em Node e nunca importa client/: um processo de jogo não pode ' +
-              'depender de código que pressupõe DOM, React ou o bundler do navegador. Tipos e ' +
-              'regras compartilhados vêm de protocol/, content/ e sim/ — nunca do pacote que roda ' +
-              'no browser de outra pessoa. ' + VER_DOC,
+              "server/ runs on Node and cannot depend on browser client code. " + SEE_DOC,
           },
         ],
       }],
@@ -266,11 +247,7 @@ export default [
           {
             group: ['sim', 'server', 'tools'],
             message:
-              'client/ roda no navegador de qualquer jogador. Enviar sim/ ou server/ para o ' +
-              'bundle exporia e tornaria alterável no browser a lógica que decide dano, loot e ' +
-              'economia — o cliente só manda intenção, o resultado é sempre calculado no servidor. ' +
-              'tools/ fica de fora por ser código de operação/offline, que não deveria ser ' +
-              'distribuído ao jogador. ' + VER_DOC,
+              "client/ only sends intentions and cannot import authoritative simulation, server or operational tools. " + SEE_DOC,
           },
         ],
       }],
@@ -281,7 +258,7 @@ export default [
   //
   // Sem entrada aqui de propósito: tools/ é o topo da árvore (scripts de
   // operação, importadores de conteúdo, cliente sintético de carga —
-  // arquitetura-tecnica.md §17, E0) e por isso tem acesso irrestrito aos
+  // technical-architecture.md §17, E0) e por isso tem acesso irrestrito aos
   // outros cinco pacotes. Nada deveria importar DE tools/ (é por isso que
   // ele aparece na lista de proibidos de content/, sim/ e client/), mas
   // tools/ importar de qualquer um dos outros é esperado e sadio.

@@ -11,7 +11,7 @@ rulesets de hunt/treino/quest/boss/guild war. É onde o jogo acontece.
 **Não pode importar:** `server`, `client`, `tools`, e **nenhum I/O** — `node:*`, `fs`, `net`,
 `http`, `pg`, `redis`, `uWebSockets.js`, `express`.
 
-Esta é a fronteira mais importante do repositório, e o lint a impõe. Ver `docs/fronteiras.md`.
+Esta é a fronteira mais importante do repositório, e o lint a impõe. Ver `docs/boundaries.md`.
 
 ## Invariantes locais
 
@@ -42,7 +42,7 @@ Se divergir, alguma fórmula está contando ticks em vez de tempo.
   senão espera. Consequência barata: campo bloqueante não invalida caminho nenhum, porque não
   existe caminho guardado. Ver ADR 0009.
 - A hunt **não faz pathfinding** — a rota é uma lista fixa de tiles vinda de `content`.
-- O adaptador `relogioDoSistema` vive em `server/`. Aqui ficam apenas o contrato `Relogio` e o
+- O adaptador `systemClock` vive em `server/`. Aqui ficam apenas o contrato `Clock` e o
   relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.
 - O motor de bot é compilado ao entrar na sessão, para um vetor de predicados. Interpretar JSON a

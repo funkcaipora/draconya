@@ -7,7 +7,7 @@
 
 import { bigint, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
-export const contas = pgTable(
+export const accounts = pgTable(
   'account',
   {
     id: text('id').primaryKey(),
@@ -20,50 +20,50 @@ export const contas = pgTable(
     // Nulável e sem uso hoje: a autenticação é do provedor externo. Existe para que
     // trazer a autenticação para casa seja uma migração aditiva, e não uma reescrita
     // do fluxo de conta com usuários reais dentro. Ver ADR 0012.
-    senhaHash: text('senha_hash'),
+    passwordHash: text('password_hash'),
 
     coins: integer('coins').notNull().default(0),
-    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    emailUnico: uniqueIndex('account_email_unico').on(t.email),
-    authExternoUnico: uniqueIndex('account_external_auth_unico').on(t.externalAuthId),
+    uniqueEmail: uniqueIndex('account_email_unique').on(t.email),
+    uniqueExternalAuth: uniqueIndex('account_external_auth_unique').on(t.externalAuthId),
   }),
 );
 
-export const personagens = pgTable(
+export const characters = pgTable(
   'character',
   {
     id: text('id').primaryKey(),
-    contaId: text('account_id').notNull().references(() => contas.id),
-    nome: text('nome').notNull(),
+    accountId: text('account_id').notNull().references(() => accounts.id),
+    name: text('name').notNull(),
 
     // Nulável de propósito: o personagem nasce sem vocação e escolhe no level 8 (§7.4).
-    vocacao: text('vocacao'),
+    vocation: text('vocation'),
 
     level: integer('level').notNull().default(1),
     xp: bigint('xp', { mode: 'number' }).notNull().default(0),
     skills: jsonb('skills').notNull().default({}),
 
     gold: bigint('gold', { mode: 'number' }).notNull().default(0),
-    capacidade: integer('capacidade').notNull().default(400),
+    capacity: integer('capacity').notNull().default(400),
 
     // Premium é POR PERSONAGEM, mesmo comprado com Coins da conta (§7.3).
-    premiumAte: timestamp('premium_ate', { withTimezone: true }),
+    premiumUntil: timestamp('premium_until', { withTimezone: true }),
 
     // Stamina é função do tempo decorrido, não recurso decrementado por job (FUN-39).
     // Guarda-se o valor materializado e o instante em que ele valia.
     staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(86_400_000),
-    staminaAtualizadaEm: timestamp('stamina_atualizada_em', { withTimezone: true }).notNull().defaultNow(),
+    staminaUpdatedAt: timestamp('stamina_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
-    estado: text('estado').notNull().default('cidade'),
-    sessaoId: text('sessao_id'),
+    state: text('state').notNull().default('city'),
+    sessionId: text('session_id'),
 
-    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    nomeUnico: uniqueIndex('character_nome_unico').on(t.nome),
-    porConta: index('character_por_conta').on(t.contaId),
+    uniqueName: uniqueIndex('character_name_unique').on(t.name),
+    byAccount: index('character_by_account').on(t.accountId),
   }),
 );
 
@@ -73,16 +73,16 @@ export const ledger = pgTable(
   'ledger',
   {
     id: text('id').primaryKey(),
-    personagemId: text('character_id').notNull().references(() => personagens.id),
-    sessaoId: text('session_id').notNull(),
+    characterId: text('character_id').notNull().references(() => characters.id),
+    sessionId: text('session_id').notNull(),
     seq: integer('seq').notNull(),
-    tipo: text('tipo').notNull(),
+    type: text('type').notNull(),
     delta: bigint('delta', { mode: 'number' }).notNull(),
     ref: jsonb('ref'),
-    criadoEm: timestamp('criado_em', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    idempotencia: uniqueIndex('ledger_sessao_seq_unico').on(t.sessaoId, t.seq),
-    porPersonagem: index('ledger_por_personagem').on(t.personagemId, t.criadoEm),
+    idempotency: uniqueIndex('ledger_session_seq_unique').on(t.sessionId, t.seq),
+    byCharacter: index('ledger_by_character').on(t.characterId, t.createdAt),
   }),
 );

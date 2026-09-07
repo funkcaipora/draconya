@@ -13,7 +13,7 @@ lista, e violar qualquer item exige um ADR (`docs/adr/`) explicando por quê.
 
 Skill é invocada, hook é imposto. Esta lista vive num `AGENTS.md` — carregado sempre, sem
 depender de alguém lembrar de invocar nada — porque é a única camada em que uma regra deste peso
-pode morar (ver `docs/plano-harness.md` §1).
+pode morar (ver `docs/harness-plan.md` §1).
 
 1. **`sim/` é puro** — sem I/O, sem framework, sem rede, sem banco, sem relógio global.
    Por quê: é o que permite testar a simulação sem infraestrutura, rodar num cliente sintético de
@@ -38,7 +38,7 @@ pode morar (ver `docs/plano-harness.md` §1).
 6. **`content/` nunca contém arte** — só `appearanceId` e `outfitId`.
    Por quê: troca de pacote de assets vira remapeamento de ids, não reescrita de conteúdo. Importa
    porque o pacote de assets atual (cliente Tibia) carrega risco jurídico — ver
-   `docs/arquitetura-tecnica.md` §8 e §13.1.
+   `docs/technical-architecture.md` §8 e §13.1.
 
 7. **A versão de conteúdo é fixada na sessão** e não muda no meio dela.
    Por quê: sem isso, um deploy no meio de milhares de hunts desanexadas produz resultado
@@ -83,32 +83,46 @@ pode morar (ver `docs/plano-harness.md` §1).
 - `packages/tools` — scripts de importação (tilemap, rota, assets do cliente Tibia) e o cliente
   sintético de carga
 
+## Idioma
+
+- **Código em inglês:** nomes de todos os arquivos e pastas (inclusive documentação), variáveis, funções, classes, tipos,
+  propriedades, constantes, tabelas/colunas, configuração, contratos de rede, logs, erros e
+  descrições de testes. Exemplos: `Session`, `characterId`, `contentVersion`, `loadConfiguration`.
+- **Documentação e comentários em português.** Identificadores citados nesses textos e exemplos
+  de código seguem os nomes reais em inglês. Documentos históricos preservam o contexto da época.
+- Commits e títulos de PR usam inglês. A descrição do PR pode ser em português, como documentação.
+- Renomear contratos persistidos exige tratar compatibilidade explicitamente; nunca descartar
+  dados só para padronizar nomes. Ver ADR 0014.
+
 ## Padrão de commit e branch
 
 ```
-<tipo>(<escopo>): <descrição no imperativo> (FUN-nn)
+<type>(<scope>): <imperative description in English> (FUN-nn)
 
-tipo:   feat | fix | refactor | perf | docs | test | chore
-escopo: sim | protocol | content | server | client | tools | docs
+type:   feat | fix | refactor | perf | docs | test | chore
+scope: sim | protocol | content | server | client | tools | docs
 ```
 
-Exemplo: `feat(sim): tick por dtMs em vez de contador (FUN-25)`
+Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
 
 `(FUN-nn)` é obrigatório em todo commit, exceto tipo `chore` e `docs`. Um hook recusa o commit que
-não bater: `.claude/hooks/valida-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
+não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
 commit feito fora dele (git de linha de comando ou GUI).
 
 **Branch:** a que o Linear já gera (`funkcaipora/fun-25-...`). Fecha o link automático entre
 commit, PR e issue sem trabalho manual.
 
+**Entrega:** commit e PR para `main` fazem parte do trabalho autorizado, sem pedir confirmação
+a cada entrega. Nunca faça push direto na `main`; execute `pnpm check` antes de abrir o PR.
+
 ## Documentação
 
-- `docs/arquitetura.md` — restrições do motor impostas pelo design do jogo (instantâneo)
-- `docs/arquitetura-tecnica.md` — arquitetura de sistema e plano do MVP, épicos e fases
+- `docs/architecture.md` — restrições do motor impostas pelo design do jogo (instantâneo)
+- `docs/technical-architecture.md` — arquitetura de sistema e plano do MVP, épicos e fases
   (instantâneo)
-- `docs/plano-harness.md` — por que este harness (CLAUDE.md, hooks, skills, CI) tem esta forma
+- `docs/harness-plan.md` — por que este harness (CLAUDE.md, hooks, skills, CI) tem esta forma
 - `docs/adr/` — uma decisão técnica por arquivo: contexto, decisão, alternativas, consequências
-- `docs/produto/` — o que cada sistema faz de fato, hoje. Vivo; diverge do PRD quando a
+- `docs/product/` — o que cada sistema faz de fato, hoje. Vivo; diverge do PRD quando a
   implementação decidiu diferente, e marca o porquê
 
 ## Ao trabalhar aqui
@@ -118,8 +132,8 @@ commit, PR e issue sem trabalho manual.
   pacote específico. "`sim/` não pode importar de `server/`" está lá, e também é regra de lint.
 - **Decisão de arquitetura vira ADR** em `docs/adr/`. Se ela muda um dos onze invariantes acima,
   este arquivo é atualizado no mesmo commit — senão o norte descrito aqui e o código divergem.
-- **Sistema do PRD que sai do papel atualiza `docs/produto/<sistema>.md`.** O PRD é o instantâneo
-  do que se pretendia numa data; `docs/produto/` é o que existe de fato, incluindo os parâmetros
+- **Sistema do PRD que sai do papel atualiza `docs/product/<system>.md`.** O PRD é o instantâneo
+  do que se pretendia numa data; `docs/product/` é o que existe de fato, incluindo os parâmetros
   de balanceamento e onde eles moram em `content/`.
 - **Antes de abrir PR ou fechar issue:** `pnpm check` (lint, typecheck, test, docs-check).
 - **A versão do Node é fixada** em `.node-version` e em `engines`. Desenvolvimento, Docker e CI
@@ -137,5 +151,5 @@ projeto é executado por mais de uma ferramenta — Claude Code lê `CLAUDE.md`,
 perceber. Um arquivo, dois nomes.
 
 Se você estiver no Claude Code, existem skills em `.claude/skills/` que automatizam os rituais
-acima: `/adr`, `/modulo`, `/conformidade`, `/produto` e `/entregar`. Em qualquer outra ferramenta,
+acima: `/adr`, `/module`, `/compliance`, `/product` e `/delivery`. Em qualquer outra ferramenta,
 os mesmos arquivos servem como checklist legível — a regra vale igual, muda só quem executa.

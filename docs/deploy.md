@@ -1,7 +1,7 @@
 # Deploy
 
-Local primeiro; VPS em São Paulo depois. Ver [`infraestrutura.md`](infraestrutura.md) para
-fornecedores e custo, e o [ADR 0013](adr/0013-imagens-multi-arquitetura.md) para arquitetura.
+Local primeiro; VPS em São Paulo depois. Ver [`infrastructure.md`](infrastructure.md) para
+fornecedores e custo, e o [ADR 0013](adr/0013-multi-architecture-images.md) para arquitetura.
 
 ## Local
 

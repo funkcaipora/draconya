@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Git hook commit-msg -- pega commit feito fora do Claude Code (linha de comando, GUI).
 #
-# Mesma regra de .claude/hooks/valida-commit.sh, duplicada de proposito: sao dois scripts
+# Mesma regra de .claude/hooks/validate-commit.sh, duplicada de proposito: sao dois scripts
 # pequenos, com contratos de hook diferentes (git commit-msg le um arquivo; o hook do Claude
 # Code le JSON do stdin), e nao vale a pena abstrair isso numa lib compartilhada.
 #
 # Para ativar neste clone:
 #   git config core.hooksPath .githooks
 #
-# Formato exigido (docs/plano-harness.md secao 4.1, CLAUDE.md):
+# Formato exigido (docs/harness-plan.md secao 4.1, CLAUDE.md):
 #
 #   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
 #
@@ -22,75 +22,75 @@
 
 set -u
 
-arquivo_msg="${1:-}"
-[ -n "$arquivo_msg" ] && [ -r "$arquivo_msg" ] || exit 0
+message_file="${1:-}"
+[ -n "$message_file" ] && [ -r "$message_file" ] || exit 0
 
-TIPOS='feat|fix|refactor|perf|docs|test|chore'
-ESCOPOS='sim|protocol|content|server|client|tools|docs'
+TYPES='feat|fix|refactor|perf|docs|test|chore'
+SCOPES='sim|protocol|content|server|client|tools|docs'
 
-falha() {
+fail() {
   cat >&2 <<MSG
-commit rejeitado pelo hook commit-msg: $1
+commit rejected by hook commit-msg: $1
 
-formato esperado:
-  <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
+expected format:
+  <type>(<scope>): <imperative description in English> (FUN-nn)
 
-  tipo:   feat | fix | refactor | perf | docs | test | chore
-  escopo: sim | protocol | content | server | client | tools | docs
+  type:   feat | fix | refactor | perf | docs | test | chore
+  scope: sim | protocol | content | server | client | tools | docs
 
-(FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
-exemplo: feat(sim): tick por dtMs em vez de contador (FUN-25)
+(FUN-nn) is required except for chore and docs commits.
+example: feat(sim): advance simulation using elapsed time (FUN-25)
 MSG
   exit 1
 }
 
 # primeira linha nao vazia e que nao seja comentario (git usa '#' por padrao antes do
 # cleanup da mensagem final)
-assunto=""
-while IFS= read -r linha; do
-  case "$linha" in
+subject=""
+while IFS= read -r line; do
+  case "$line" in
     '#'*) continue ;;
   esac
-  if [ -n "${linha//[[:space:]]/}" ]; then
-    assunto="$linha"
+  if [ -n "${line//[[:space:]]/}" ]; then
+    subject="$line"
     break
   fi
-done < "$arquivo_msg"
+done < "$message_file"
 
-[ -n "$assunto" ] || exit 0
+[ -n "$subject" ] || exit 0
 
-assunto="$(printf '%s' "$assunto" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-[ -n "$assunto" ] || exit 0
+subject="$(printf '%s' "$subject" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+[ -n "$subject" ] || exit 0
 
-if [[ "$assunto" =~ ^([A-Za-z0-9_-]+)\(([A-Za-z0-9_-]+)\):[[:space:]]*(.*)$ ]]; then
-  tipo="${BASH_REMATCH[1]}"
-  escopo="${BASH_REMATCH[2]}"
-  resto="${BASH_REMATCH[3]}"
+if [[ "$subject" =~ ^([A-Za-z0-9_-]+)\(([A-Za-z0-9_-]+)\):[[:space:]]*(.*)$ ]]; then
+  type="${BASH_REMATCH[1]}"
+  scope="${BASH_REMATCH[2]}"
+  remainder="${BASH_REMATCH[3]}"
 else
-  falha "\"$assunto\" nao segue <tipo>(<escopo>): <descricao> (FUN-nn)"
+  fail "\"$subject\" does not match <type>(<scope>): <description> (FUN-nn)"
 fi
 
-if [[ ! "$tipo" =~ ^($TIPOS)$ ]]; then
-  falha "tipo \"$tipo\" invalido em \"$assunto\" -- use um de: feat, fix, refactor, perf, docs, test, chore"
+if [[ ! "$type" =~ ^($TYPES)$ ]]; then
+  fail "type \"$type\" is invalid in \"$subject\" -- use one of: feat, fix, refactor, perf, docs, test, chore"
 fi
 
-if [[ ! "$escopo" =~ ^($ESCOPOS)$ ]]; then
-  falha "escopo \"$escopo\" invalido em \"$assunto\" -- use um de: sim, protocol, content, server, client, tools, docs"
+if [[ ! "$scope" =~ ^($SCOPES)$ ]]; then
+  fail "scope \"$scope\" is invalid in \"$subject\" -- use one of: sim, protocol, content, server, client, tools, docs"
 fi
 
-descricao="$resto"
-tem_fun=0
-if [[ "$resto" =~ ^(.*[^[:space:]])[[:space:]]+\(FUN-[0-9]+\)[[:space:]]*$ ]]; then
-  tem_fun=1
-  descricao="${BASH_REMATCH[1]}"
+description="$remainder"
+has_issue=0
+if [[ "$remainder" =~ ^(.*[^[:space:]])[[:space:]]+\(FUN-[0-9]+\)[[:space:]]*$ ]]; then
+  has_issue=1
+  description="${BASH_REMATCH[1]}"
 fi
 
-if [ -z "$descricao" ]; then
-  falha "descricao vazia em \"$assunto\""
+if [ -z "$description" ]; then
+  fail "empty description in \"$subject\""
 fi
 
-if [[ "$tipo" != "chore" && "$tipo" != "docs" && "$tem_fun" -eq 0 ]]; then
-  falha "faltando (FUN-nn) em \"$assunto\" -- obrigatorio para tipo '$tipo' (so chore e docs dispensam)"
+if [[ "$type" != "chore" && "$type" != "docs" && "$has_issue" -eq 0 ]]; then
+  fail "missing (FUN-nn) in \"$subject\" -- required for type '$type' (only chore and docs are exempt)"
 fi
 
 exit 0

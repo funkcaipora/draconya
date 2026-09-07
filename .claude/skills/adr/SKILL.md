@@ -28,7 +28,7 @@ esquerda (`0001`, `0002`, ...). Se o diretório não tiver nenhum arquivo `NNNN-
 ## Passo 2 — título em kebab-case
 
 Título curto, minúsculo, sem acento, espaços viram hífen. Exemplo: "Sessão desacoplada da
-conexão" → `sessao-desacoplada-da-conexao`. Arquivo final: `docs/adr/NNNN-titulo-em-kebab.md`.
+conexão" → `session-desacoplada-da-conexao`. Arquivo final: `docs/adr/NNNN-titulo-em-kebab.md`.
 
 ## Passo 3 — preencher o template
 

@@ -6,101 +6,101 @@
 // A mesma imagem serve aos dois. Validar numa VPS pequena não exige desenho diferente
 // do de escala — muda só a variável.
 
-import { carregarConfiguracao } from './config.js';
-import { criarLog } from './log.js';
-import { criarApi } from './api/servidor.js';
-import { criarGame } from './game/servidor.js';
-import { criarJobs } from './jobs/agendador.js';
-import type { Papel } from './papel.js';
+import { loadConfiguration } from './config.js';
+import { createLogger } from './log.js';
+import { createApi } from './api/server.js';
+import { createGame } from './game/server.js';
+import { createJobs } from './jobs/scheduler.js';
+import type { Role } from './role.js';
 
-const PAPEIS_VALIDOS = ['api', 'game', 'jobs'] as const;
-type NomeDePapel = (typeof PAPEIS_VALIDOS)[number];
+const VALID_ROLES = ['api', 'game', 'jobs'] as const;
+type RoleName = (typeof VALID_ROLES)[number];
 
 /** Prazo para drenar antes de o orquestrador mandar SIGKILL. */
-const PRAZO_DE_DRENAGEM_MS = 25_000;
+const DRAIN_TIMEOUT_MS = 25_000;
 
-function papeisPedidos(): NomeDePapel[] {
-  const cru = process.env['PROCESSOS'] ?? 'api,game,jobs';
-  const pedidos = cru.split(',').map((p) => p.trim()).filter(Boolean);
-  const invalidos = pedidos.filter((p) => !PAPEIS_VALIDOS.includes(p as NomeDePapel));
-  if (invalidos.length > 0) {
+function requestedRoles(): RoleName[] {
+  const raw = process.env['PROCESSES'] ?? 'api,game,jobs';
+  const requested = raw.split(',').map((role) => role.trim()).filter(Boolean);
+  const invalid = requested.filter((role) => !VALID_ROLES.includes(role as RoleName));
+  if (invalid.length > 0) {
     throw new Error(
-      `PROCESSOS inválido: ${invalidos.join(', ')}. Válidos: ${PAPEIS_VALIDOS.join(', ')}`,
+      `Invalid PROCESSES value: ${invalid.join(', ')}. Valid roles: ${VALID_ROLES.join(', ')}`,
     );
   }
-  if (pedidos.length === 0) throw new Error('PROCESSOS não pode ser vazio');
-  return pedidos as NomeDePapel[];
+  if (requested.length === 0) throw new Error('PROCESSES cannot be empty');
+  return requested as RoleName[];
 }
 
-async function principal(): Promise<void> {
-  const cfg = carregarConfiguracao();
-  const nomes = papeisPedidos();
-  const log = criarLog(cfg.LOG_LEVEL, nomes.join('+'));
+async function main(): Promise<void> {
+  const configuration = loadConfiguration();
+  const names = requestedRoles();
+  const logger = createLogger(configuration.LOG_LEVEL, names.join('+'));
 
-  const construtores: Record<NomeDePapel, () => Papel> = {
-    api: () => criarApi(cfg, log.child({ papel: 'api' })),
-    game: () => criarGame(cfg, log.child({ papel: 'game' })),
-    jobs: () => criarJobs(cfg, log.child({ papel: 'jobs' })),
+  const factories: Record<RoleName, () => Role> = {
+    api: () => createApi(configuration, logger.child({ role: 'api' })),
+    game: () => createGame(configuration, logger.child({ role: 'game' })),
+    jobs: () => createJobs(configuration, logger.child({ role: 'jobs' })),
   };
 
-  const papeis = nomes.map((n) => construtores[n]());
-  log.info({ papeis: nomes, solo: nomes.length > 1 }, 'iniciando');
+  const roles = names.map((name) => factories[name]());
+  logger.info({ roles: names, standalone: names.length > 1 }, 'Starting');
 
-  for (const papel of papeis) await papel.iniciar();
+  for (const role of roles) await role.start();
 
-  let encerrando = false;
-  const encerrar = (sinal: string): void => {
+  let shuttingDown = false;
+  const shutdown = (signal: string): void => {
     // Segundo sinal força a saída: se o operador mandou duas vezes, ele quer agora.
-    if (encerrando) {
-      log.warn({ sinal }, 'segundo sinal — saindo imediatamente');
+    if (shuttingDown) {
+      logger.warn({ signal }, 'Second signal received; exiting immediately');
       process.exit(1);
     }
-    encerrando = true;
-    log.info({ sinal }, 'drenando');
+    shuttingDown = true;
+    logger.info({ signal }, 'Draining');
 
-    const prazo = setTimeout(() => {
-      log.error({ prazoMs: PRAZO_DE_DRENAGEM_MS }, 'drenagem estourou o prazo — saindo');
+    const timeout = setTimeout(() => {
+      logger.error({ timeoutMs: DRAIN_TIMEOUT_MS }, 'Drain timed out; exiting');
       process.exit(1);
-    }, PRAZO_DE_DRENAGEM_MS);
-    prazo.unref();
+    }, DRAIN_TIMEOUT_MS);
+    timeout.unref();
 
     // Ordem importa: `api` primeiro para parar de emitir ticket, depois `jobs` para
     // não competir por sessão órfã, e `game` por último para ter o prazo inteiro —
     // é ele que precisa creditar progresso de quem não está olhando.
-    const ordem = ['api', 'jobs', 'game'];
-    const drenagem = [...papeis].sort(
-      (a, b) => ordem.indexOf(a.nome) - ordem.indexOf(b.nome),
+    const drainOrder = ['api', 'jobs', 'game'];
+    const draining = [...roles].sort(
+      (a, b) => drainOrder.indexOf(a.name) - drainOrder.indexOf(b.name),
     );
 
     void (async () => {
-      for (const papel of drenagem) {
+      for (const role of draining) {
         try {
-          await papel.drenar();
-        } catch (erro) {
-          log.error({ erro, papel: papel.nome }, 'falha ao drenar');
+          await role.drain();
+        } catch (error) {
+          logger.error({ error, role: role.name }, 'Failed to drain role');
         }
       }
-      clearTimeout(prazo);
-      log.info('encerrado com limpeza');
+      clearTimeout(timeout);
+      logger.info('Shutdown completed cleanly');
       process.exit(0);
     })();
   };
 
-  process.on('SIGTERM', () => encerrar('SIGTERM'));
-  process.on('SIGINT', () => encerrar('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
   // Estado inconsistente não pode continuar servindo: melhor cair e ser reiniciado.
-  process.on('uncaughtException', (erro) => {
-    log.fatal({ erro }, 'exceção não tratada');
+  process.on('uncaughtException', (error) => {
+    logger.fatal({ error }, 'Uncaught exception');
     process.exit(1);
   });
-  process.on('unhandledRejection', (motivo) => {
-    log.fatal({ motivo }, 'promessa rejeitada sem tratamento');
+  process.on('unhandledRejection', (reason) => {
+    logger.fatal({ reason }, 'Unhandled rejection');
     process.exit(1);
   });
 }
 
-principal().catch((erro: unknown) => {
-  console.error('falha ao iniciar:', erro);
+main().catch((error: unknown) => {
+  console.error('Failed to start:', error);
   process.exit(1);
 });

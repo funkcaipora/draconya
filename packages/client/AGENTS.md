@@ -19,7 +19,7 @@ O pacote de arte **não é versionado neste repositório** (`things/` está no `
 está em nenhum repositório público. Ele vem de uma instalação do cliente do Tibia, e fica local:
 
 ```
-things/<versao>/           # THINGS_DIR e THINGS_VERSAO no .env
+things/<version>/           # THINGS_DIR e THINGS_VERSION no .env
   catalog-content.json
   appearances-<hash>.dat
   sprites-<hash>.bmp.lzma
