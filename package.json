@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "docs-check": "node scripts/docs-check.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check",
-    "dev": "pnpm --filter @draconya/server dev"
+    "dev": "pnpm --filter @draconya/server dev",
+    "content:check": "pnpm --filter @draconya/tools content:check"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

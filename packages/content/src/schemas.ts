@@ -70,3 +70,44 @@ export type Monster = z.infer<typeof monsterSchema>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;
 export type Vocation = z.infer<typeof vocationSchema>;
+
+// --- mapa e rota (FUN-9) -------------------------------------------------------------------
+
+const point = z.object({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  z: z.number().int(),
+});
+
+/**
+ * O mapa vem como grade de caracteres, uma string por linha: `#` bloqueia, qualquer outro
+ * caractere é livre.
+ *
+ * Escolha deliberada sobre um formato binário compacto: mapa é conteúdo, e conteúdo se edita
+ * e se revisa. Numa grade ASCII o diff de um pull request mostra a parede que mudou; num
+ * blob base64 mostra que "o mapa mudou". O custo é tamanho de arquivo, que não importa para
+ * dezenas de mapas — e a conversão para bitmap acontece uma vez, no carregamento.
+ */
+export const tilemapSchema = z.object({
+  id: z.string().min(1),
+  z: z.number().int(),
+  grid: z.array(z.string().min(1)).min(1),
+});
+
+export const routeSchema = z.object({
+  id: z.string().min(1),
+  mapId: z.string().min(1),
+  /** Ordenada, e fecha um laço: o último tile é adjacente ao primeiro (§14.4). */
+  tiles: z.array(point).min(2),
+  spawnPoints: z.array(
+    z.object({
+      /** Índice na rota. Ancorar no índice, e não em coordenada, mantém rota e spawn juntos. */
+      routeIndex: z.number().int().nonnegative(),
+      radius: z.number().int().positive().default(3),
+    }),
+  ).default([]),
+});
+
+export type TilemapData = z.infer<typeof tilemapSchema>;
+export type RouteData = z.infer<typeof routeSchema>;
+export type Point = z.infer<typeof point>;

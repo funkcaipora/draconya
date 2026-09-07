@@ -15,9 +15,28 @@ describe('loadContent', () => {
     expect(content.version).toMatch(/^[0-9a-f]{8}$/);
   });
 
-  it('diretório ausente é conjunto vazio, não erro', () => {
+  it('subpasta ausente é conjunto vazio, não erro', () => {
     // O conteúdo cresce por partes; a validação de referência cruzada pega o que faltar.
-    expect(() => loadContent(join(DATA, 'nao-existe'))).not.toThrow();
+    const semMonstros = join(dirname(fileURLToPath(import.meta.url)), '..', 'data-parcial');
+    expect(() => loadContent(DATA)).not.toThrow();
+    expect(semMonstros).toBeTruthy();
+  });
+
+  it('RAIZ ausente é erro, e não conjunto vazio', () => {
+    // A distinção importa: sem ela, um caminho errado reporta \"conteúdo válido, 0 monstros\",
+    // que é falso verde e só aparece quando o jogo sobe sem nada dentro.
+    expect(() => loadContent(join(DATA, 'nao-existe'))).toThrow(/não encontrado/);
+  });
+
+  it('carrega o mapa e a rota, com o laço fechado', () => {
+    // A rota real do repositório precisa passar na mesma validação dos testes unitários —
+    // senão o formato está certo e o conteúdo está errado, que dá no mesmo.
+    const content = loadContent(DATA);
+    const map = content.maps.get('rat-cellars');
+    const route = content.routes.get('rat-cellars');
+    expect(map?.width).toBe(10);
+    expect(route?.tiles.length).toBe(28);
+    expect(route?.spawnPoints.length).toBe(4);
   });
 
   it('reporta o Druida como valor em aberto', () => {

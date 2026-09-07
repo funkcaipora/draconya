@@ -26,6 +26,26 @@ Regra prática: se a função lê arquivo, ela vai para `load.ts`. Se ela só va
 estrutura em memória, vai para `content.ts` e pode ser usada por qualquer um.
 
 
+## Mapa e rota
+
+O mapa é **grade de caracteres**, uma string por linha: `#` bloqueia, o resto é livre. Escolha
+deliberada sobre um formato binário compacto — mapa é conteúdo, e conteúdo se edita e se revisa.
+Numa grade ASCII o diff do PR mostra a parede que mudou; num blob base64 mostra que "o mapa
+mudou". A conversão para `Uint8Array` acontece uma vez, no carregamento.
+
+O bitmap em memória é **array plano indexado por `y * width + x`**, não array de objetos: é
+consultado a cada passo de cada monstro de cada instância, e é a estrutura mais quente do motor.
+
+**A rota fecha um laço** (§14.4), e isso é validado no carregamento. Rota aberta faz o
+personagem chegar ao fim e parar — o sintoma chega dias depois como "a hunt travou", sem ligação
+nenhuma com o arquivo de rota.
+
+Confira antes de subir o servidor:
+
+```
+pnpm content:check
+```
+
 ## Invariantes locais
 
 - **Nunca contém arte** (invariante 6). Um item declara `appearanceId`, um monstro declara
