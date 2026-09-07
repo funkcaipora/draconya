@@ -11,7 +11,20 @@ A frase que define o produto: **é o Tibia jogado com bot, com o bot oficializad
 se reparte de forma explícita — posicionamento e foco são do jogador, reação é da máquina. Como
 todo mundo tem o mesmo bot, a luta não é decidida por quem comprou o script melhor.
 
-**Status:** Fase 1 (espinha dorsal). O monorepo está de pé; os pacotes são esqueletos.
+**Status:** Fase 1 (espinha dorsal), com a conexão ponta a ponta ainda em construção.
+
+| Área | Implementado | Próxima integração |
+|---|---|---|
+| Protocolo | Opcodes, schemas e codec binário com lote e compressão (FUN-6/7) | Despacho das mensagens no WebSocket |
+| Simulação | Sessão por tempo decorrido, RNG determinístico, cooldowns, snapshot em memória e ruleset de Cidade (FUN-25/27/31) | Agendador, persistência e ruleset de Hunt |
+| Servidor | Configuração, schema inicial, processos `api`/`game`/`jobs`, health/metrics e diretório Redis com leases e limite atômico de ativos (FUN-14/15/48) | Auth, personagens, tickets e visualizadores |
+| Conteúdo, cliente e ferramentas | Estrutura dos pacotes e entrada React | Carregador versionado, mapa/importador e cliente conectado |
+
+O próximo critério de aceite é o **M1 — Fundação e conexão**: autenticar, selecionar personagem,
+receber um ticket de uso único e aparecer num mapa de teste com retângulos. Os snapshots do núcleo
+ainda não provam recuperação após queda do processo; persistência, retomada e drenagem com crédito
+continuam como integrações pendentes. O andamento das tarefas fica no
+[Linear](https://linear.app/funkcaipora/project/draconya-8ad404c2226c).
 
 ---
 
@@ -31,7 +44,7 @@ pnpm check        # lint + typecheck + test + docs-check
 | `pnpm docs-check` | valida a documentação estrutural |
 | `pnpm --filter @draconya/client dev` | sobe o cliente em modo de desenvolvimento |
 
-Requisitos: Node 24+ e pnpm (via corepack).
+Requisitos: Node 24 (conforme `.node-version`) e pnpm (via corepack).
 
 **Antes do primeiro commit**, ligue os hooks de git:
 
@@ -98,7 +111,10 @@ O formato é validado por hook — nas duas pontas, dentro e fora do Claude Code
 **Branch:** use a que o Linear gera para a issue (`funkcaipora/fun-25-...`), que fecha o
 vínculo entre commit, PR e issue sem trabalho manual.
 
-**Antes de fechar uma issue:** `pnpm check` verde, e o `AGENTS.md` do pacote atualizado se alguma
+**Entrega:** sempre por PR com destino à `main`, usando a branch da issue; sem push direto na
+`main`.
+
+**Antes de abrir PR ou fechar uma issue:** `pnpm check` verde, e o `AGENTS.md` do pacote atualizado se alguma
 fronteira ou armadilha mudou. Decisão de arquitetura vira ADR; sistema que sai do papel atualiza
 `docs/produto/`.
 

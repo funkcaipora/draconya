@@ -42,5 +42,8 @@ Se divergir, alguma fórmula está contando ticks em vez de tempo.
   senão espera. Consequência barata: campo bloqueante não invalida caminho nenhum, porque não
   existe caminho guardado. Ver ADR 0009.
 - A hunt **não faz pathfinding** — a rota é uma lista fixa de tiles vinda de `content`.
+- O adaptador `relogioDoSistema` vive em `server/`. Aqui ficam apenas o contrato `Relogio` e o
+  relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
+  `globalThis`, para impedir que tempo real volte a entrar no núcleo.
 - O motor de bot é compilado ao entrar na sessão, para um vetor de predicados. Interpretar JSON a
   cada avaliação é o caminho fácil e errado. Ver ADR 0002.

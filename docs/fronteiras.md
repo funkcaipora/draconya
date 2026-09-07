@@ -77,6 +77,12 @@ nomeou para banco, cache e framework HTTP/WebSocket (`pg`, `redis`, `express`, `
 e variações próximas). A lista em `eslint.config.js` não é fechada — cresce quando aparecer um
 novo cliente de banco, fila ou framework que `sim` tente importar.
 
+Relógios globais também são proibidos pelo lint: `no-restricted-globals` recusa `Date` e
+`performance` em `sim`, incluindo acessos por `globalThis`. O pacote expõe o contrato `Relogio`
+e um relógio de teste controlado; o adaptador de tempo real `relogioDoSistema` vive em
+`packages/server/src/relogio.ts`. A simulação recebe os instantes como parâmetros e calcula
+`dtMs` a partir deles.
+
 ### `server` — roda em Node, não no navegador
 
 `server` pode importar `protocol`, `content` e `sim` — é ele quem monta a simulação pura com I/O
