@@ -186,6 +186,19 @@ export default [
   {
     files: [pkg('sim')],
     rules: {
+      'no-restricted-globals': ['error', {
+        globals: [
+          {
+            name: 'Date',
+            message: 'sim/ recebe tempo como parâmetro. O relógio real vive em server/. ' + VER_DOC,
+          },
+          {
+            name: 'performance',
+            message: 'sim/ recebe tempo como parâmetro. O relógio real vive em server/. ' + VER_DOC,
+          },
+        ],
+        checkGlobalObject: true,
+      }],
       'no-restricted-imports': ['error', {
         patterns: [
           {
