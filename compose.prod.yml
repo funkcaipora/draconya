@@ -2,7 +2,7 @@
 #
 #   docker compose -f compose.prod.yml up -d --build
 #
-# Modo solo por padrão (PROCESSOS com os três papéis). Quando a simulação pedir mais de
+# Modo solo por padrão (PROCESSES com os três papéis). Quando a simulação pedir mais de
 # uma máquina, separe `game` em serviço próprio e replique — a imagem é a mesma, muda
 # só a variável.
 services:
@@ -15,7 +15,7 @@ services:
     env_file: [.env]
     environment:
       NODE_ENV: production
-      PROCESSOS: api,game,jobs
+      PROCESSES: api,game,jobs
       DATABASE_URL: postgres://draconya:${POSTGRES_PASSWORD:?defina no .env}@postgres:5432/draconya
       REDIS_URL: redis://redis:6379
     ports:
