@@ -19,7 +19,7 @@
     "content:check": "pnpm --filter @draconya/tools content:check"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^26.4.1",
     "@typescript-eslint/parser": "^8.70.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.17.0",
