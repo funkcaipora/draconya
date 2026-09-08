@@ -1,23 +1,36 @@
 // Processo `game` — stateful. Hospeda sessões e o WebSocket.
 //
-// ESQUELETO. O que existe aqui é o ciclo de vida do processo: subir, aceitar conexão,
-// e drenar em SIGTERM. A sessão de verdade é a FUN-25; anexar/desanexar visualizador é a
-// FUN-13; a drenagem que encerra creditando é a FUN-29. Os pontos de encaixe estão marcados.
+// A escolha do uWebSockets.js é pela CONTA DE CONEXÕES, não pela CPU: o gargalo projetado do
+// sistema é quanta gente cabe conectada, e não quanto custa simular.
+//
+// O que este arquivo faz é a borda: handshake por ticket, decodificação de frame e ciclo de
+// vida do processo. Quem hospeda sessão e visualizador é o `SessionHost`.
 
 import uWS from 'uWebSockets.js';
+import { decodeC2S } from '@draconya/protocol';
 import type { Configuration } from '../config.js';
 import type { SessionDirectory } from '../directory.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
+import { SessionHost, type SessionFactory } from './host.js';
+import { Viewer } from './viewer.js';
 
 export interface GameDependencies {
   readonly directory?: SessionDirectory;
   readonly tickets?: TicketService;
+  readonly createSession?: SessionFactory;
+  readonly contentVersion?: string;
 }
 
 /** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */
 const HEARTBEAT_INTERVAL_MS = 10_000;
+
+interface SocketData {
+  accountId: string;
+  characterId: string;
+  viewer: Viewer | null;
+}
 
 export function createGame(
   configuration: Configuration,
@@ -31,6 +44,16 @@ export function createGame(
   const nodeId = configuration.NODE_ID;
   const app = uWS.App();
 
+  const host = dependencies.createSession === undefined
+    ? null
+    : new SessionHost({
+      nodeId,
+      contentVersion: dependencies.contentVersion ?? 'unknown',
+      createSession: dependencies.createSession,
+      logger,
+      ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
+    });
+
   app.get('/healthz', (response) => {
     // Durante a drenagem o nó continua vivo para as sessões existentes, mas para de
     // aceitar novas — o balanceador precisa enxergar isso.
@@ -39,11 +62,15 @@ export function createGame(
     response.end(JSON.stringify({ ok: acceptingNewSessions, role: 'game' }));
   });
 
-  app.ws('/*', {
-    // Limites conservadores: cliente lento não pode fazer o nó crescer sem limite (FUN-13).
+  app.ws<SocketData>('/*', {
+    // Limites conservadores: cliente lento não pode fazer o nó crescer sem limite.
     maxPayloadLength: 64 * 1024,
     idleTimeout: 60,
     maxBackpressure: 1024 * 1024,
+    // Ping de protocolo do próprio WebSocket, para o socket morto ser recolhido pelo
+    // `idleTimeout`. O `ping` do nosso protocolo é outra coisa: serve para o CLIENTE medir
+    // latência, e é respondido fora da fila de saída.
+    sendPingsAutomatically: true,
 
     upgrade: (response, request, context) => {
       if (!acceptingNewSessions) {
@@ -60,9 +87,9 @@ export function createGame(
       const extensions = request.getHeader('sec-websocket-extensions');
 
       const tickets = dependencies.tickets;
-      if (tickets === undefined) {
-        // Fechado por padrão: sem serviço de ticket ninguém entra. Aberto seria "qualquer
-        // um vira qualquer personagem", que é pior do que o socket não funcionar.
+      if (tickets === undefined || host === null) {
+        // Fechado por padrão: sem ticket e sem hospedagem ninguém entra. Aberto seria
+        // "qualquer um vira qualquer personagem", que é pior do que o socket não funcionar.
         response.writeStatus('503 Service Unavailable').end();
         return;
       }
@@ -83,8 +110,8 @@ export function createGame(
             response.writeStatus('401 Unauthorized').end();
             return;
           }
-          response.upgrade(
-            { accountId: claim.accountId, characterId: claim.characterId },
+          response.upgrade<SocketData>(
+            { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
             key,
             protocol,
             extensions,
@@ -95,18 +122,35 @@ export function createGame(
     },
 
     open: (socket) => {
-      // FUN-13: anexar visualizador à sessão. Desanexar não pode ter efeito sobre ela.
-      const { characterId } = socket.getUserData() as { characterId: string };
-      logger.debug({ characterId }, 'Connection opened');
+      if (host === null) return;
+      const data = socket.getUserData();
+      data.viewer = host.attach(socket, data.characterId);
     },
 
-    message: () => {
-      // FUN-7 + FUN-13: decodificar o frame e despachar por opcode.
+    message: (socket, message, isBinary) => {
+      const data = socket.getUserData();
+      const viewer = data.viewer;
+      if (host === null || viewer === null) return;
+
+      const decoded = isBinary ? decodeC2S(message) : null;
+      if (decoded === null) {
+        // Frame que não decodifica é cliente quebrado ou hostil. Fechar é mais honesto que
+        // ignorar: ignorar deixa os dois lados achando que a conversa continua.
+        logger.warn({ characterId: data.characterId }, 'Closing connection on invalid frame');
+        viewer.close(1002, 'protocol error');
+        return;
+      }
+      for (const one of decoded) host.handle(viewer, one);
     },
 
-    close: () => {
-      // FUN-13: desanexar visualizador. A SESSÃO CONTINUA — é o ADR 0001 em uma linha.
-      logger.debug('Connection closed');
+    close: (socket) => {
+      if (host === null) return;
+      const data = socket.getUserData();
+      if (data.viewer === null) return;
+      // O socket JÁ caiu: marcar sem tocar nele. A SESSÃO CONTINUA — ADR 0001 em uma linha.
+      data.viewer.markClosed();
+      host.detach(data.viewer);
+      data.viewer = null;
     },
   });
 
@@ -125,16 +169,18 @@ export function createGame(
         });
       });
 
+      host?.start();
+
       // O batimento é o que torna este nó VISÍVEL para o `api` emitir ticket. Sem ele o
       // processo sobe, aceita conexão e nunca recebe nenhuma — falha silenciosa clássica.
       const directory = dependencies.directory;
       if (directory !== undefined) {
-        // TODO(FUN-13): `sessions` sai do contador real de sessões hospedadas. Enquanto for
-        // zero fixo, a escolha do nó menos carregado é na prática arbitrária — o que só não
-        // importa porque hoje existe um nó.
         const beat = (): void => {
           void directory
-            .heartbeat(nodeId, { sessions: 0, url: configuration.GAME_PUBLIC_URL })
+            .heartbeat(nodeId, {
+              sessions: host?.sessionCount ?? 0,
+              url: configuration.GAME_PUBLIC_URL,
+            })
             .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
         };
         beat();
@@ -146,11 +192,12 @@ export function createGame(
       // final de cada sessão, encerrar creditando o progresso, notificar. O orçamento
       // de tempo importa: drenagem interrompida no meio é pior que drenagem nenhuma.
       acceptingNewSessions = false;
-      logger.info('Game stopped accepting new sessions');
+      logger.info({ sessions: host?.sessionCount ?? 0 }, 'Game stopped accepting new sessions');
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
       }
+      host?.stop();
       if (listeningSocket) {
         uWS.us_listen_socket_close(listeningSocket);
         listeningSocket = null;

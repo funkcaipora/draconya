@@ -6,11 +6,14 @@
 // A mesma imagem serve aos dois. Validar numa VPS pequena não exige desenho diferente
 // do de escala — muda só a variável.
 
+import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
+import { loadContent } from '@draconya/content/load';
 import { loadConfiguration, type Configuration } from './config.js';
 import { createLogger } from './log.js';
 import { createApi, type ApiDependencies } from './api/server.js';
 import { createGame } from './game/server.js';
+import { createCitySessionFactory } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
@@ -66,6 +69,13 @@ async function main(): Promise<void> {
   const directory = new SessionDirectory(redis);
   const tickets = new TicketService(redis, directory);
 
+  const contentDir = resolve(configuration.CONTENT_DIR);
+  const content = loadContent(contentDir);
+  logger.info(
+    { contentDir, contentVersion: content.version, monsters: content.monsters.size },
+    'Content loaded',
+  );
+
   const factories: Record<RoleName, () => Role> = {
     api: () => createApi(configuration, logger.child({ role: 'api' }), {
       tickets,
@@ -74,6 +84,8 @@ async function main(): Promise<void> {
     game: () => createGame(configuration, logger.child({ role: 'game' }), {
       directory,
       tickets,
+      contentVersion: content.version,
+      createSession: createCitySessionFactory(content.version),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), { tickets }),
   };

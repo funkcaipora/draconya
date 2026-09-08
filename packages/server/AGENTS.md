@@ -55,6 +55,24 @@ uma regra só: passado o prazo, se o personagem não tem sessão no diretório, 
 o que cobre ticket abandonado, ticket queimado numa conexão que morreu, e ticket duplicado
 sem um caminho de limpeza para cada caso.
 
+## Sessão e visualizador (FUN-13)
+
+Duas coisas, e a distinção entre elas é a arquitetura inteira:
+
+- a **sessão** vive no `SessionHost`, avança sozinha e sobrevive ao socket;
+- o **visualizador** é um socket olhando essa sessão, e entra e sai sem consequência nenhuma.
+
+Duas abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões.
+Se desanexar encerrar, pausar, creditar ou zerar qualquer coisa, o modelo está errado.
+
+A `Session` do `sim` guarda só IDS de visualizador — ela não pode conhecer socket
+(invariante 1). A ponte é `session.attached`, que decide a taxa de tick: a sessão sabe SE
+alguém olha, nunca QUEM.
+
+Saída é **um frame por ciclo**, em lote, nunca um `send` por evento — é o que sustenta a
+projeção de 0,5–1,5 KB/s por jogador. As exceções são `welcome` e `pong`, que saem na hora:
+`pong` que espera o ciclo mede a fila, não a rede.
+
 ## Como testar
 
 ```

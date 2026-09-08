@@ -25,6 +25,14 @@ const EnvironmentSchema = z.object({
   WORKOS_CLIENT_ID: z.string().optional(),
   AUTH_DEV_MODE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 
+  /**
+   * Diretório de `content`. O default é relativo ao diretório de execução, que é a raiz do
+   * repositório em desenvolvimento e `/app` na imagem — os dois funcionam, mas o caminho
+   * resolvido é registrado no boot de propósito: CWD errado produziria "conteúdo válido,
+   * 0 monstros" em vez de erro.
+   */
+  CONTENT_DIR: z.string().default('./packages/content/data'),
+
   THINGS_VERSION: z.string().default('1332'),
   THINGS_DIR: z.string().default('./things'),
 
