@@ -3,7 +3,9 @@
 // Quem lê arquivo é `@draconya/content/load`, e o lint impede `sim` de importar de lá.
 
 import { z } from 'zod';
-import { huntSchema, monsterSchema, vocationSchema } from './schemas.js';
+import { buildRoute, buildTilemap } from './map.js';
+import type { Route, Tilemap } from './map.js';
+import { huntSchema, monsterSchema, routeSchema, tilemapSchema, vocationSchema } from './schemas.js';
 import type { Hunt, Monster, Vocation } from './schemas.js';
 
 export interface Content {
@@ -15,6 +17,8 @@ export interface Content {
   readonly monsters: ReadonlyMap<string, Monster>;
   readonly hunts: ReadonlyMap<string, Hunt>;
   readonly vocations: ReadonlyMap<string, Vocation>;
+  readonly maps: ReadonlyMap<string, Tilemap>;
+  readonly routes: ReadonlyMap<string, Route>;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
   readonly openValues: readonly string[];
 }
@@ -23,6 +27,8 @@ export interface RawContent {
   readonly monsters: readonly unknown[];
   readonly hunts: readonly unknown[];
   readonly vocations: readonly unknown[];
+  readonly maps?: readonly unknown[];
+  readonly routes?: readonly unknown[];
 }
 
 export class ContentError extends Error {
@@ -45,6 +51,25 @@ export function buildContent(raw: RawContent): Content {
   const monsters = parseAll('monster', raw.monsters, monsterSchema, problems);
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
+  const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
+  const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
+
+  const maps = new Map<string, Tilemap>();
+  for (const data of mapData.values()) maps.set(data.id, buildTilemap(data));
+
+  const routes = new Map<string, Route>();
+  for (const data of routeData.values()) {
+    const map = maps.get(data.mapId);
+    if (!map) {
+      problems.push(`rota "${data.id}" referencia mapa inexistente "${data.mapId}"`);
+      continue;
+    }
+    try {
+      routes.set(data.id, buildRoute(data, map));
+    } catch (erro) {
+      problems.push((erro as Error).message);
+    }
+  }
 
   // Referência cruzada: validar formato não basta. Uma hunt apontando monstro inexistente
   // passa em qualquer schema e só falha quando alguém entra nela.
@@ -61,6 +86,12 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  for (const hunt of hunts.values()) {
+    if (maps.size > 0 && !maps.has(hunt.mapId)) {
+      problems.push(`hunt "${hunt.id}" referencia mapa inexistente "${hunt.mapId}"`);
+    }
+  }
+
   if (problems.length > 0) throw new ContentError(problems);
 
   const openValues = [...vocations.values()]
@@ -72,6 +103,8 @@ export function buildContent(raw: RawContent): Content {
     monsters,
     hunts,
     vocations,
+    maps,
+    routes,
     openValues,
   };
 }

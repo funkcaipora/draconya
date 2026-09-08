@@ -4,4 +4,5 @@
 // A leitura de disco vive em `@draconya/content/load`, que `sim` não pode importar.
 
 export * from './schemas.js';
+export * from './map.js';
 export * from './content.js';
