@@ -15,8 +15,8 @@ pnpm dev                      # os três papéis num processo
 `pnpm dev` sobe em **modo solo**. Para separar:
 
 ```bash
-PROCESSOS=game pnpm dev
-PROCESSOS=api,jobs pnpm dev
+PROCESSES=game pnpm dev
+PROCESSES=api,jobs pnpm dev
 ```
 
 Nada precisa ser hospedado até a Fase 2 terminar: o critério de saída da Fase 1 — fechar o
@@ -31,7 +31,7 @@ navegador, voltar e encontrar a sessão rodando — é testável inteiro em `loc
 | `game` | **stateful** | N, sessão presa ao nó | WebSocket; hospeda as sessões |
 | `jobs` | singleton com lock | 1 | Agendador, expirações, reconciliação, sessão órfã |
 
-`PROCESSOS` decide quais sobem. A mesma imagem serve para o modo solo e para um papel por
+`PROCESSES` decide quais sobem. A mesma imagem serve para o modo solo e para um papel por
 container — validar numa VPS pequena não exige desenho diferente do de escala.
 
 ## Drenagem

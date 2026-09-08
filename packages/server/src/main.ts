@@ -1,7 +1,7 @@
 // Entrada única dos três papéis.
 //
-//   PROCESSOS=api,game,jobs   modo solo — tudo num processo (desenvolvimento e validação)
-//   PROCESSOS=game            um papel por container (escala)
+//   PROCESSES=api,game,jobs   modo solo — tudo num processo (desenvolvimento e validação)
+//   PROCESSES=game            um papel por container (escala)
 //
 // A mesma imagem serve aos dois. Validar numa VPS pequena não exige desenho diferente
 // do de escala — muda só a variável.
@@ -26,6 +26,16 @@ type RoleName = (typeof VALID_ROLES)[number];
 const DRAIN_TIMEOUT_MS = 25_000;
 
 function requestedRoles(): RoleName[] {
+  // `PROCESSOS` foi o nome até a migração para inglês (ADR 0014). Um ambiente que ainda o
+  // declara é o pior caso possível: a variável é IGNORADA, o default entra no lugar, e quem
+  // pediu só `game` recebe os três papéis — inclusive um `api` e um `jobs` a mais por
+  // container, sem nada no log dizendo isso. Falhar no boot é a única reação honesta.
+  if (process.env['PROCESSOS'] !== undefined) {
+    throw new Error(
+      'PROCESSOS was renamed to PROCESSES (ADR 0014). Rename it; it is being ignored, and '
+      + 'the process would silently start every role instead of the ones you asked for.',
+    );
+  }
   const raw = process.env['PROCESSES'] ?? 'api,game,jobs';
   const requested = raw.split(',').map((role) => role.trim()).filter(Boolean);
   const invalid = requested.filter((role) => !VALID_ROLES.includes(role as RoleName));

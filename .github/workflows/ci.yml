@@ -13,8 +13,8 @@
 #   - code: pnpm install / lint / test / build. O passo "Check workspace availability" abaixo
 #     é herança da época em que o monorepo ainda não existia e o job precisava pular em vez
 #     de falhar; hoje a condição é sempre verdadeira.
-#   - image: constrói a imagem em `linux/amd64`. O build `arm64` está SUSPENSO — ver o
-#     comentário no job e a emenda no ADR 0013.
+#   - image: constrói a imagem em `linux/amd64` E A SOBE, porque construir não é subir. O
+#     build `arm64` está SUSPENSO — ver o comentário no job e a emenda no ADR 0013.
 
 name: CI
 
@@ -114,8 +114,16 @@ jobs:
         run: pnpm build
 
   image:
-    name: image build (amd64)
+    name: image build and boot (amd64)
     runs-on: ubuntu-latest
+    services:
+      # O nó carrega `content` e conecta no diretório de sessões antes de servir. Sem Redis
+      # o passo de boot abaixo não teria o que provar.
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -151,5 +159,38 @@ jobs:
           context: .
           platforms: linux/amd64
           push: false
+          load: true
+          tags: draconya:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Construir não é subir. A imagem já saiu daqui compilando e SEM conseguir bootar: os
+      # dados de `content` não entravam, e o nó os carrega no boot para fixar a versão em cada
+      # sessão. O CI aprovou; quem descobriu foi um `docker run` à mão.
+      #
+      # Este passo custa segundos e cobre a classe inteira: falta arquivo no estágio final,
+      # variável obrigatória sem default, permissão do usuário `node`, binário nativo com ABI
+      # errada. Nenhuma delas aparece no build.
+      - name: Boot the image and hit /healthz
+        if: steps.docker.outputs.exists == 'true'
+        env:
+          REDIS_URL: redis://172.17.0.1:6379
+        run: |
+          docker run -d --name draconya-ci -p 3000:3000 \
+            -e DATABASE_URL=postgres://u:p@127.0.0.1:5432/d \
+            -e REDIS_URL="$REDIS_URL" \
+            -e NODE_ENV=development \
+            draconya:ci
+          if ! curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://localhost:3000/healthz; then
+            echo '::error::a imagem não respondeu em /healthz'
+            docker logs draconya-ci
+            exit 1
+          fi
+          echo
+
+          # Drenar também é contrato: o `game` precisa do SIGTERM para encerrar creditando
+          # (ADR 0010). Saída diferente de 0 aqui é drenagem quebrada, não detalhe.
+          docker stop draconya-ci
+          code=$(docker inspect -f '{{.State.ExitCode}}' draconya-ci)
+          docker logs draconya-ci | tail -20
+          test "$code" = "0" || { echo "::error::saída $code na drenagem"; exit 1; }

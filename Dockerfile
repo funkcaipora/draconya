@@ -11,14 +11,20 @@
 # falha só surge dentro do container, com uma mensagem que não menciona a versão do Debian.
 
 # --- dependências ------------------------------------------------------------------------
-FROM node:24-trixie-slim AS deps
+# Imagem COMPLETA nos estágios de build, `slim` só no runtime.
+#
+# O motivo é medido, não estético: o `uWebSockets.js` é instalado a partir do GitHub e exige
+# `git`, que a `slim` não traz. Instalá-lo pelo gerenciador de pacotes do Debian levou 842
+# SEGUNDOS num build de CI — contra 14 s do `pnpm install` inteiro no mesmo build. Quase todo
+# o tempo do job era a atualização de índice esperando mirror.
+#
+# A imagem completa já traz git e ca-certificates, então o passo simplesmente deixa de
+# existir. O custo é um pull maior no builder; nada disso entra na imagem final, que continua
+# partindo da `slim`.
+FROM node:24-trixie AS deps
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /app
-
-# git porque o uWebSockets.js é instalado a partir do GitHub, não do registro npm.
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 # Manifestos primeiro: a camada de dependências só invalida quando eles mudam.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -46,12 +52,10 @@ RUN test -f packages/server/dist/main.js || (echo 'ERRO: tsc -b não emitiu dist
 #
 # `pnpm deploy` seria mais direto, mas exige inject-workspace-packages=true, que mudaria a
 # estratégia de instalação do workspace inteiro só para servir ao Docker.
-FROM node:24-trixie-slim AS prod-deps
+FROM node:24-trixie AS prod-deps
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/protocol/package.json  packages/protocol/
 COPY packages/content/package.json   packages/content/
@@ -85,10 +89,20 @@ COPY --from=build --chown=node:node /app/packages/protocol/dist ./packages/proto
 COPY --from=build --chown=node:node /app/packages/content/dist  ./packages/content/dist
 COPY --from=build --chown=node:node /app/packages/sim/dist      ./packages/sim/dist
 COPY --from=build --chown=node:node /app/packages/server/dist   ./packages/server/dist
+
+# ...e os DADOS de conteúdo, que não são compilados e não estão em `dist` nenhum. O nó carrega
+# `content` no boot e fixa a versão em cada sessão (invariante 7); sem esta linha a imagem
+# constrói, passa no CI e morre ao subir com "diretório de conteúdo não encontrado".
+COPY --from=build --chown=node:node /app/packages/content/data  ./packages/content/data
 USER node
 
-# PROCESSOS decide quais papéis sobem. Sem ele, modo solo — os três num processo.
-ENV PROCESSOS=api,game,jobs
+# PROCESSES decide quais papéis sobem. Sem ele, modo solo — os três num processo.
+#
+# Estava escrito `PROCESSOS` até aqui, sobra da migração para inglês (ADR 0014): o código
+# passou a ler `PROCESSES` e este arquivo continuou declarando o nome antigo. Como o valor
+# coincidia com o default, nada quebrou — mas quem seguisse o `docs/deploy.md` e subisse um
+# container pedindo um papel só teria os TRÊS rodando, sem aviso nenhum.
+ENV PROCESSES=api,game,jobs
 EXPOSE 3000 7171
 
 # O healthcheck bate no `api`. Num container que só roda `game`, aponte para a 7171
