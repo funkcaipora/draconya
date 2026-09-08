@@ -1,15 +1,20 @@
 # .github/workflows/ci.yml — CI do harness do Draconya (docs/harness-plan.md §4.4).
 #
-# Dois jobs independentes, que rodam em paralelo:
+# Três jobs independentes, que rodam em paralelo:
 #
-#   - docs: valida a documentação estrutural (scripts/docs-check.mjs). Não depende de o
-#     monorepo existir, então roda cheio desde o primeiro commit.
-#   - code: pnpm install / lint / test / build. Antes da Fase 1 criar o package.json raiz
-#     (docs/technical-architecture.md §17, épico E0) não há nada para instalar, lintar, testar
-#     ou buildar — o job detecta isso e PULA os passos em vez de falhar, para o CI não ficar
-#     vermelho por um monorepo que ainda não nasceu. Ver o passo "Verifica se o monorepo já
-#     existe" abaixo: assim que o package.json raiz existir, os passos passam a rodar de
-#     verdade sozinhos, sem precisar editar este arquivo.
+#   - docs: valida a documentação estrutural e a política de linguagem do repositório.
+#     Chama os scripts pelo NOME no package.json, nunca o arquivo direto: assim, como um
+#     script executa é decisão de um lugar só — foi o `node scripts/docs-check.mjs` cravado
+#     aqui que fez a migração para TypeScript (ADR 0016) ter dois lugares para acertar em
+#     vez de um.
+#     Este job passou a instalar o workspace, porque os scripts rodam por `tsx`. Ele não é
+#     mais o job que rodaria num repositório sem monorepo — o que deixou de importar quando
+#     a Fase 1 criou o package.json raiz.
+#   - code: pnpm install / lint / test / build. O passo "Check workspace availability" abaixo
+#     é herança da época em que o monorepo ainda não existia e o job precisava pular em vez
+#     de falhar; hoje a condição é sempre verdadeira.
+#   - image: constrói as duas arquiteturas do ADR 0013, para reprovar o PR quando alguma
+#     dependência nativa nova não tiver binário para as duas.
 
 name: CI
 
@@ -30,13 +35,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
       - name: Node 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Validate documentation
-        run: node scripts/docs-check.mjs
+        run: pnpm docs-check
+
+      - name: Validate source language policy
+        run: pnpm source-policy
 
   code:
     name: lint, test and build

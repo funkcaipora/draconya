@@ -156,7 +156,7 @@ placeholder ("Uma frase.", "...") no arquivo final:
 **No `CLAUDE.md` raiz:** abra a seção de stack/mapa do repositório e adicione uma linha para o
 novo pacote — nome, propósito de uma linha, link para `packages/<name>/CLAUDE.md`.
 
-**No `eslint.config.js`:** adicione o pacote às regras de fronteira, no mesmo mecanismo que já
+**No `eslint.config.ts`:** adicione o pacote às regras de fronteira, no mesmo mecanismo que já
 estiver em uso no arquivo:
 
 - Se usa `eslint-plugin-boundaries`: adicione o `type` do pacote e as regras `allow`/`disallow`
@@ -171,4 +171,4 @@ estiver em uso no arquivo:
 
 Reporte: caminho do pacote criado, propósito e fronteiras definidos (perguntados ou derivados da
 tabela do Passo 1), convenções seguidas ou adotadas (escopo do pacote, framework de teste), e onde
-o registro foi feito (`CLAUDE.md` raiz e `eslint.config.js`).
+o registro foi feito (`CLAUDE.md` raiz e `eslint.config.ts`).

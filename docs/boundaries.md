@@ -1,10 +1,10 @@
 # Fronteiras entre pacotes
 
 Este documento explica **por que** cada pacote do monorepo pode importar o que pode e não pode
-importar o que não pode. É o que ler quando `eslint.config.js` recusar um import e a mensagem de
+importar o que não pode. É o que ler quando `eslint.config.ts` recusar um import e a mensagem de
 erro não bastar.
 
-**Esta tabela é normativa, junto com `eslint.config.js`.** Os dois têm que dizer a mesma coisa
+**Esta tabela é normativa, junto com `eslint.config.ts`.** Os dois têm que dizer a mesma coisa
 sempre. Se uma fronteira muda — um pacote passa a poder importar outro, ou uma restrição de I/O
 fica mais estrita — o commit que muda isso atualiza os dois arquivos juntos. Uma tabela que
 descreve uma regra que o lint não aplica é uma mentira documentada; um lint que aplica uma regra
@@ -74,7 +74,7 @@ consequências práticas, na ordem em que elas importam no dia a dia:
 Por isso a lista de módulos proibidos em `sim` não é só `node:*` — inclui os nomes sem prefixo
 mais comuns (`fs`, `net`, `http`, `https`...) e os pacotes de terceiros que a arquitetura já
 nomeou para banco, cache e framework HTTP/WebSocket (`pg`, `redis`, `express`, `uWebSockets.js`,
-e variações próximas). A lista em `eslint.config.js` não é fechada — cresce quando aparecer um
+e variações próximas). A lista em `eslint.config.ts` não é fechada — cresce quando aparecer um
 novo cliente de banco, fila ou framework que `sim` tente importar.
 
 Relógios globais também são proibidos pelo lint: `no-restricted-globals` recusa `Date` e
@@ -118,7 +118,7 @@ compartilhado —, nunca liberar o import.
 
 ## Como isso vira lint
 
-`eslint.config.js` implementa esta tabela com `no-restricted-imports` — regra nativa do ESLint,
+`eslint.config.ts` implementa esta tabela com `no-restricted-imports` — regra nativa do ESLint,
 sem dependência extra — um bloco por pacote, restrito via `files` a `packages/<pacote>/**`.
 
 Um detalhe que vale saber antes de tentar contornar um erro de lint escrevendo um caminho
@@ -138,7 +138,7 @@ está com um nome ambíguo; renomeie-o (`http-client.ts`, por exemplo) em vez de
 regra. O custo desse falso positivo ocasional é baixo — é um `git mv`. O custo de afrouxar a regra
 para evitá-lo seria abrir espaço para o caso que ela existe pra pegar.
 
-## Se este documento e `eslint.config.js` divergirem
+## Se este documento e `eslint.config.ts` divergirem
 
 Um dos dois está desatualizado. Corrija os dois no mesmo commit — nunca só o que for mais fácil
 de mudar no momento.

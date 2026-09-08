@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-// scripts/docs-check.mjs — valida a documentação do harness (harness-plan.md §4.4).
+// scripts/docs-check.ts — valida a documentação do harness (harness-plan.md §4.4).
 //
 // Quatro checagens que derrubam o script, todas sobre a documentação estrutural do
 // repositório, nunca sobre o conteúdo em prosa:
@@ -40,7 +39,9 @@
 // Só sobra o marcador cru (`[ABERTO]` ou `[ABERTO — valor provisório: X]`) dentro de tabela ou
 // lista, que é exatamente o que a skill instrui a escrever para uma pendência de verdade.
 //
-// Nenhuma dependência externa: só stdlib do Node (fs, path, url).
+// Nenhuma dependência de runtime: só stdlib do Node (fs, path, url). Roda por `tsx`
+// (ADR 0016) — código first-party do Draconya é TypeScript, e um script fora do typecheck
+// é justamente onde erro de digitação sobrevive até alguém rodar o comando.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -48,10 +49,19 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// Problemas agrupados por tipo, na ordem em que aparecem no relatório final. Cada item é
-// { path, line, message } — `line` fica null quando o problema não é de uma linha específica
-// (ex.: "pacote sem CLAUDE.md" é do diretório inteiro, não de uma linha).
-const problems = {
+/**
+ * Uma linha do relatório. `line` é `null` quando o problema não é de uma linha específica
+ * — "pacote sem CLAUDE.md" é do diretório inteiro.
+ */
+interface CheckProblem {
+  readonly path: string;
+  readonly line: number | null;
+  readonly message: string;
+}
+
+/** Problemas agrupados por tipo, na ordem em que aparecem no relatório final. */
+const problems: Record<'missingClaudeMd' | 'unindexedAdr' | 'adrNumbering' | 'brokenLink',
+  CheckProblem[]> = {
   missingClaudeMd: [],
   unindexedAdr: [],
   adrNumbering: [],
@@ -59,22 +69,27 @@ const problems = {
 };
 
 // Avisos: aparecem no relatório, mas NÃO derrubam o docs-check. Ver comentário no topo.
-const warnings = {
+const warnings: Record<'openDecisions', CheckProblem[]> = {
   openDecisions: [],
 };
 
-function record(list, filePath, lineText, messageText) {
-  list.push({ path: filePath, line: lineText, message: messageText });
+function record(
+  list: CheckProblem[],
+  path: string,
+  line: number | null,
+  message: string,
+): void {
+  list.push({ path, line, message });
 }
 
-function displayPath(absolutePath) {
+function displayPath(absolutePath: string): string {
   return relative(ROOT, absolutePath) || '.';
 }
 
 // ---------------------------------------------------------------------------------------
 // 1. packages/*/CLAUDE.md
 // ---------------------------------------------------------------------------------------
-function checkPackageClaudeFiles() {
+function checkPackageClaudeFiles(): void {
   const packagesDir = join(ROOT, 'packages');
   if (!existsSync(packagesDir)) return; // Fase 1 ainda não criou o monorepo — nada a checar.
 
@@ -99,7 +114,13 @@ function checkPackageClaudeFiles() {
 // ---------------------------------------------------------------------------------------
 const ADR_PATTERN = /^(\d{4})-.+\.md$/;
 
-function checkAdrs() {
+/** Um ADR cujo nome de arquivo casa com `NNNN-titulo.md`. */
+interface NumberedAdr {
+  readonly number: number;
+  readonly file: string;
+}
+
+function checkAdrs(): void {
   const adrDir = join(ROOT, 'docs', 'adr');
   if (!existsSync(adrDir)) return; // Nenhum ADR ainda — nada a checar.
 
@@ -112,10 +133,12 @@ function checkAdrs() {
     (e) => e.isFile() && e.name.endsWith('.md') && e.name !== 'README.md',
   );
 
-  const numberedFiles = []; // { numero, arquivo }
+  const numberedFiles: NumberedAdr[] = [];
   for (const file of files) {
-    const m = file.name.match(ADR_PATTERN);
-    if (!m) {
+    const m = ADR_PATTERN.exec(file.name);
+    // O grupo 1 é obrigatório no padrão, mas o tipo não sabe disso: checar os dois é o que
+    // mantém o script compilando sob `noUncheckedIndexedAccess` sem asserção.
+    if (m?.[1] === undefined) {
       record(
         problems.adrNumbering,
         `docs/adr/${file.name}`,
@@ -125,7 +148,7 @@ function checkAdrs() {
       );
       continue;
     }
-    numberedFiles.push({ number: parseInt(m[1], 10), file: file.name });
+    numberedFiles.push({ number: Number.parseInt(m[1], 10), file: file.name });
   }
 
   // Indexação: cada ADR precisa ter o próprio nome de arquivo citado no índice. Checagem por
@@ -144,10 +167,11 @@ function checkAdrs() {
   }
 
   // Numeração — duplicata: dois arquivos com o mesmo NNNN.
-  const byNumber = new Map();
+  const byNumber = new Map<number, string[]>();
   for (const { number, file } of numberedFiles) {
-    if (!byNumber.has(number)) byNumber.set(number, []);
-    byNumber.get(number).push(file);
+    const forNumber = byNumber.get(number) ?? [];
+    forNumber.push(file);
+    byNumber.set(number, forNumber);
   }
   for (const [number, filesForNumber] of byNumber) {
     if (filesForNumber.length > 1) {
@@ -191,9 +215,9 @@ function checkAdrs() {
 const LINK_PATTERN = /\[([^\]]*)\]\(([^)]+)\)/g;
 const URL_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 
-function listMarkdownFiles(dir) {
+function listMarkdownFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
-  const result = [];
+  const result: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const filePath = join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -205,11 +229,11 @@ function listMarkdownFiles(dir) {
   return result;
 }
 
-function resolveLinkTarget(rawTarget, sourceFile) {
+function resolveLinkTarget(rawTarget: string, sourceFile: string): string | null {
   // Título opcional estilo `(alvo "título")`: fica só a primeira palavra.
   const withoutTitle = rawTarget.trim().split(/\s+/)[0] ?? '';
   // Âncora dentro do arquivo (`#secao`) não é validada, só removida antes de checar o alvo.
-  const withoutAnchor = withoutTitle.split('#')[0];
+  const withoutAnchor = withoutTitle.split('#')[0] ?? '';
   if (withoutAnchor === '') return null; // Link que é só uma âncora na própria página.
 
   if (withoutAnchor.startsWith('/')) {
@@ -219,7 +243,7 @@ function resolveLinkTarget(rawTarget, sourceFile) {
   return resolve(dirname(sourceFile), withoutAnchor);
 }
 
-function checkLinks() {
+function checkLinks(): void {
   const files = listMarkdownFiles(join(ROOT, 'docs'));
   const rootClaudeMd = join(ROOT, 'CLAUDE.md');
   if (existsSync(rootClaudeMd)) files.push(rootClaudeMd);
@@ -228,9 +252,9 @@ function checkLinks() {
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((lineText, offset) => {
       LINK_PATTERN.lastIndex = 0;
-      let m;
+      let m: RegExpExecArray | null;
       while ((m = LINK_PATTERN.exec(lineText)) !== null) {
-        const rawTarget = m[2].trim();
+        const rawTarget = (m[2] ?? '').trim();
         if (rawTarget === '' || rawTarget.startsWith('#') || rawTarget.startsWith('//')) {
           continue; // âncora na própria página ou link protocol-relative — fora do escopo.
         }
@@ -258,12 +282,11 @@ function checkLinks() {
 const OPEN_DECISION_PATTERN = /\[ABERTO\b/;
 const NEGATION_PATTERN = /\bnenhum[a]?\b/i;
 const STRUCTURED_LINE_PATTERN = /^\s*(\||[-*+]\s|\d+[.)]\s)/;
-const TABLE_LINE_PATTERN = /^\s*\|/;
 
 // Decide se a ocorrência de "[ABERTO" na linha é uma pendência de verdade, não uma menção em
 // prosa corrida (ver comentário no topo do arquivo). Precisa estar numa linha estruturada
 // (tabela ou item de lista) e não estar riscada nem negada.
-function isOpenDecision(lineText) {
+function isOpenDecision(lineText: string): boolean {
   const offset = lineText.search(OPEN_DECISION_PATTERN);
   if (offset === -1) return false;
   if (!STRUCTURED_LINE_PATTERN.test(lineText)) return false; // prosa falando sobre o conceito.
@@ -273,7 +296,7 @@ function isOpenDecision(lineText) {
   return true;
 }
 
-function listOpenDecisions() {
+function listOpenDecisions(): void {
   const productDir = join(ROOT, 'docs', 'product');
   if (!existsSync(productDir)) return; // docs/product/ ainda não existe — nada a listar.
 
@@ -299,8 +322,8 @@ function listOpenDecisions() {
 // ---------------------------------------------------------------------------------------
 // Relatório
 // ---------------------------------------------------------------------------------------
-function report() {
-  const sections = [
+function report(): number {
+  const sections: Array<[string, CheckProblem[]]> = [
     ['Missing package CLAUDE.md', problems.missingClaudeMd],
     ['ADR missing from docs/adr/README.md', problems.unindexedAdr],
     ['ADR numbering (gap or duplicate)', problems.adrNumbering],

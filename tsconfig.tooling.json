@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "eslint.config.ts",
+    "vitest.config.ts",
+    "drizzle.config.ts"
+  ]
+}
