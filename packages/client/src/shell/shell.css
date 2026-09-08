@@ -1,0 +1,61 @@
+/* Geografia do §5.3. Sem tema ainda — o que importa aqui é onde cada coisa fica. */
+:root { color-scheme: dark; }
+
+body {
+  margin: 0;
+  background: #0b0b0f;
+  color: #d6d6de;
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 200px 1fr 200px;
+  grid-template-rows: 1fr auto;
+  gap: 8px;
+  min-height: 100vh;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* Reservado para as janelas da F2 — inventário, bot, analisador. */
+.panel {
+  border: 1px dashed #2a2a35;
+  border-radius: 4px;
+  min-height: 120px;
+}
+
+.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.stage-top {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; max-width: 576px;
+}
+.character { color: #8f8fa0; }
+
+.viewport { line-height: 0; border: 1px solid #2a2a35; border-radius: 4px; overflow: hidden; }
+
+.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid #2a2a35; }
+.badge-connected { color: #6fc28a; border-color: #2f5a3c; }
+.badge-connecting, .badge-reconnecting { color: #c2a54a; border-color: #5a4f2f; }
+.badge-failed { color: #c25b4a; border-color: #5a3430; }
+.badge-idle { color: #7a7a88; }
+
+.vitals { display: flex; gap: 16px; }
+.ring { position: relative; width: 56px; height: 56px; }
+.ring svg { transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: #23232c; stroke-width: 6; }
+.ring-value { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 120ms linear; }
+.ring-label {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat {
+  grid-column: 1 / 2; grid-row: 2;
+  border: 1px solid #2a2a35; border-radius: 4px;
+  padding: 6px 8px; min-height: 96px; max-height: 160px; overflow-y: auto;
+}
+.chat p { margin: 0 0 2px; }
+.chat .quiet { color: #4a4a56; }
+.system-warning { color: #c2a54a; }
+.system-error { color: #c25b4a; }

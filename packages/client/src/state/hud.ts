@@ -7,6 +7,16 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
+export type ConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  /** Socket aberto e estado recebido. */
+  | 'connected'
+  /** Caiu e vai voltar sozinho — reconectar é REANEXAR, não logar de novo. */
+  | 'reconnecting'
+  /** Desistiu, ou o servidor recusou de um jeito que tentar de novo não resolve. */
+  | 'failed';
+
 /** Uma linha de chat já pronta para desenhar. */
 export interface ChatLine {
   readonly channel: string;
@@ -39,6 +49,14 @@ export interface HudState {
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
 
+  /**
+   * Estado da conexão, e ele PRECISA ser visível na tela.
+   *
+   * Um jogo idle silencioso é indistinguível de um jogo travado: sem indicador, o jogador não
+   * tem como saber se a hunt está rendendo ou se o socket caiu há dez minutos.
+   */
+  readonly connection: ConnectionStatus;
+
   readonly chat: readonly ChatLine[];
   readonly systemMessages: readonly SystemLine[];
 }
@@ -51,6 +69,7 @@ export const INITIAL_HUD: HudState = {
   level: 0, xp: 0,
   capacity: 0, gold: 0, staminaMs: 0,
   latencyMs: null,
+  connection: 'idle',
   chat: [],
   systemMessages: [],
 };
