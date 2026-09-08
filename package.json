@@ -11,7 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json",
+    "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json && tsc -p packages/client/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

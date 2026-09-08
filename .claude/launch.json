@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "autoPort": true,
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@draconya/client",
+        "dev"
+      ],
+      "port": 5174
+    }
+  ]
+}
