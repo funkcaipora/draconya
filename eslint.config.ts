@@ -1,4 +1,4 @@
-// eslint.config.js — lint de fronteiras entre pacotes (Draconya)
+// eslint.config.ts — lint de fronteiras entre pacotes (Draconya)
 //
 // Este arquivo implementa em código a tabela de camadas descrita em
 // docs/boundaries.md e em docs/harness-plan.md §4.2: "quem pode importar
@@ -6,20 +6,13 @@
 // em docs/boundaries.md é normativa — mudou uma fronteira aqui, muda lá,
 // e vice-versa.
 //
-// Por que CommonJS (`module.exports`) e não `export default`:
-// hoje não existe package.json em lugar nenhum do repositório, e sem um
-// campo "type" declarado o Node trata todo .js como CommonJS por padrão.
-// Escrever este arquivo em ESM faria ele quebrar por SyntaxError antes de
-// chegar perto de qualquer regra de lint — exatamente o tipo de explosão
-// que este arquivo precisa evitar enquanto a Fase 1 não existe. Quando a
-// Fase 1 criar o package.json raiz do monorepo (presumivelmente com
-// "type": "module", dado que o resto da stack é TypeScript/ESM), este
-// arquivo deve ser convertido para `export default` ou renomeado para
-// eslint.config.cjs — ESLint aceita as duas formas.
+// TypeScript, e não JavaScript, por decisão de política: código first-party do Draconya é
+// TypeScript (ADR 0016). O ESLint carrega config em TypeScript via `jiti`, sem flag e sem
+// wrapper — `eslint .` continua sendo o comando.
 //
 // Por que `no-restricted-imports` e não eslint-plugin-boundaries:
-// é uma regra nativa do ESLint, não pede dependência nova — e como ainda
-// não existe package.json, não haveria nem onde declarar essa dependência.
+// é uma regra nativa do ESLint e não pede plugin novo. A lista de bibliotecas
+// fixas (ADR 0011) é curta de propósito, e o valor dela é ser curta.
 //
 // Como o casamento de padrão funciona (importante para quem for mexer
 // aqui): cada string em `patterns[].group` é tratada como uma regra estilo
@@ -40,11 +33,6 @@
 // que passa batido). Também por isso as regras abaixo não tentam cobrir
 // `require()` — a stack é ESM por decisão de arquitetura (docs/architecture.md).
 //
-// Formato de módulo: ESM (`export default`). Este arquivo nasceu em CommonJS porque, quando foi
-// escrito, ainda não existia `package.json` na raiz e o Node trataria `.js` como CommonJS por
-// padrão. Com o monorepo criado e `"type": "module"` na raiz, CommonJS passou a quebrar o
-// carregamento do config — a conversão foi feita junto com o scaffold.
-//
 // Por que os padrões abaixo são estáticos (não leem packages/ em disco):
 // os seis pacotes já estão decididos (docs/technical-architecture.md §17, E0).
 // Escanear o diretório para descobrir pacotes só adicionaria uma leitura de
@@ -53,14 +41,17 @@
 // packages/ vazio ou inexistente, nem quando só parte dos seis pacotes já
 // tiver nascido.
 
-'use strict';
+import type { Linter } from 'eslint';
+import tsParser from '@typescript-eslint/parser';
 
-/** Glob dos arquivos-fonte de um pacote. .ts/.tsx já cobertos para quando a
- * Fase 1 trouxer TypeScript: no modo flat config, `eslint .` amplia
- * automaticamente as extensões varridas com base nas extensões citadas em
- * `files` de qualquer bloco, então nenhum ajuste extra vai ser necessário
- * só por causa da extensão do arquivo. */
-function pkg(name) {
+/**
+ * Glob dos arquivos-fonte de um pacote.
+ *
+ * As extensões de JavaScript continuam listadas mesmo com a política do ADR 0016: se um
+ * `.js` first-party reaparecer, ele precisa cair nas regras de fronteira e não passar
+ * despercebido enquanto o `source-policy` não roda.
+ */
+function pkg(name: string): string {
   return `packages/${name}/**/*.{js,jsx,mjs,cjs,ts,tsx}`;
 }
 
@@ -95,9 +86,7 @@ const SIM_IO_PATTERNS = [
   'fastify',
 ];
 
-import tsParser from '@typescript-eslint/parser';
-
-export default [
+const config: Linter.Config[] = [
   // Parser de TypeScript. O parser padrão do ESLint (espree) não entende sintaxe de tipos nem
   // JSX; sem este bloco, todo arquivo .ts falha com "Parsing error" antes de qualquer regra de
   // fronteira rodar. Só o parser — nenhuma regra do typescript-eslint —, porque o propósito
@@ -273,3 +262,5 @@ export default [
   // ele aparece na lista de proibidos de content/, sim/ e client/), mas
   // tools/ importar de qualquer um dos outros é esperado e sadio.
 ];
+
+export default config;

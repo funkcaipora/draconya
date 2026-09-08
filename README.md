@@ -34,7 +34,7 @@ continuam como integrações pendentes. O andamento das tarefas fica no
 
 ```bash
 pnpm install
-pnpm check        # lint + typecheck + test + docs-check
+pnpm check        # lint + typecheck + test + docs-check + source-policy
 ```
 
 | Comando | O que faz |
@@ -44,6 +44,7 @@ pnpm check        # lint + typecheck + test + docs-check
 | `pnpm test` | Vitest em todos os pacotes |
 | `pnpm lint` | ESLint, incluindo as fronteiras de import entre pacotes |
 | `pnpm docs-check` | valida a documentação estrutural |
+| `pnpm source-policy` | recusa código first-party em JavaScript ([ADR 0016](docs/adr/0016-typescript-only-first-party-code.md)) |
 | `pnpm --filter @draconya/client dev` | sobe o cliente em modo de desenvolvimento |
 
 Requisitos: Node 24 (conforme `.node-version`) e pnpm (via corepack).
