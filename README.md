@@ -18,7 +18,7 @@ todo mundo tem o mesmo bot, a luta não é decidida por quem comprou o script me
 | Protocolo | Opcodes, schemas e codec binário com lote e compressão (FUN-6/7) | Despacho das mensagens no WebSocket |
 | Simulação | Sessão por tempo decorrido, RNG determinístico, cooldowns, snapshot em memória e ruleset de Cidade (FUN-25/27/31) | Agendador, persistência e ruleset de Hunt |
 | Servidor | Configuração, auth WorkOS + sessão HTTP em Redis, CRUD de personagens, processos `api`/`game`/`jobs`, health/metrics, diretório Redis com leases e limite atômico de ativos, ticket de sessão com resolução de nó, e WebSocket hospedando sessões com anexar/desanexar (FUN-10/11/12/13/14/15/48) | Persistência/retomada de sessão e integração do cliente |
-| Conteúdo, cliente e ferramentas | Carregador versionado, formato de tilemap e rota com validação de laço, validador de CLI e entrada React (FUN-8/9) | Assets do cliente Tibia e cliente conectado |
+| Conteúdo, cliente e ferramentas | Carregador versionado, formato de tilemap e rota, validador de CLI, store de estado fora do React e viewport Pixi com câmera e interpolação (FUN-8/9/22/23) | Assets do cliente Tibia e cliente conectado ao socket |
 
 O próximo critério de aceite é o **M1 — Fundação e conexão**: autenticar, selecionar personagem,
 receber um ticket de uso único e aparecer num mapa de teste com retângulos. Auth, personagem,

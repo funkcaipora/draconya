@@ -13,7 +13,8 @@
     "./load": {
       "types": "./dist/load.d.ts",
       "default": "./dist/load.js"
-    }
+    },
+    "./data/*": "./data/*"
   },
   "scripts": {
     "build": "tsc -b",
