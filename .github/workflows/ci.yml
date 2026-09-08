@@ -173,17 +173,23 @@ jobs:
       # errada. Nenhuma delas aparece no build.
       - name: Boot the image and hit /healthz
         if: steps.docker.outputs.exists == 'true'
-        env:
-          REDIS_URL: redis://172.17.0.1:6379
         run: |
-          docker run -d --name draconya-ci -p 3000:3000 \
+          # `--network host`, e não `-p`: o serviço de Redis do job publica a porta no HOST do
+          # runner, não numa rede que um container avulso alcance. Com `-p` e o IP do bridge o
+          # boot trava no `redis.ping()` ANTES de qualquer log — a primeira tentativa deste
+          # passo falhou exatamente assim, com `docker logs` vazio e nada explicando.
+          docker run -d --name draconya-ci --network host \
             -e DATABASE_URL=postgres://u:p@127.0.0.1:5432/d \
-            -e REDIS_URL="$REDIS_URL" \
+            -e REDIS_URL=redis://localhost:6379 \
             -e NODE_ENV=development \
             draconya:ci
           if ! curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://localhost:3000/healthz; then
             echo '::error::a imagem não respondeu em /healthz'
-            docker logs draconya-ci
+            docker logs draconya-ci 2>&1 | tail -40
+            # Log vazio aqui não é ausência de pista: é a pista. Significa que o processo
+            # morreu ou travou antes da primeira linha, o que aponta para o boot — conexão
+            # com Redis ou carregamento de `content`.
+            test -n "$(docker logs draconya-ci 2>&1)" || echo '::error::o container não produziu log nenhum — travou antes de logar'
             exit 1
           fi
           echo
