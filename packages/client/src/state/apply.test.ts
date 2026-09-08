@@ -125,3 +125,58 @@ describe('HUD deltas', () => {
     expect(chat[chat.length - 1]?.text).toBe('249');
   });
 });
+
+describe('session-state', () => {
+  const state = (creatures: Array<{ id: number; x: number; y: number }>) => ({
+    type: 'session-state' as const,
+    sessionType: 'hunt',
+    elapsedMs: 600_000,
+    self: {
+      creatureId: 1, characterId: 'char-1',
+      health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200,
+    },
+    world: {
+      mapId: 'rat-cellars',
+      creatures: creatures.map((c) => ({
+        id: c.id, position: at(c.x, c.y), appearanceId: 1,
+        name: `c${c.id}`, health: 10, maxHealth: 10,
+      })),
+    },
+    aggregates: {
+      durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 0, kills: 12, deaths: 0,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+  });
+
+  it('replaces the world instead of merging into it', () => {
+    // Mesclar deixaria uma criatura que morreu enquanto ninguém olhava desenhada para
+    // sempre — um monstro parado que nunca some, descoberto semanas depois.
+    applyMessage(spawn(99, at(3, 3)), 0);
+    applyMessage(state([{ id: 1, x: 5, y: 5 }]), 0);
+
+    expect([...world.creatures.keys()]).toEqual([1]);
+    expect(world.mapId).toBe('rat-cellars');
+    expect(world.selfId).toBe(1);
+  });
+
+  it('arrives with no step in progress', () => {
+    // O estado diz onde as coisas ESTÃO, não como chegaram lá. Reproduzir o movimento que
+    // aconteceu enquanto ninguém olhava é o erro que o §16.2 nomeia.
+    applyMessage(state([{ id: 1, x: 5, y: 5 }]), 0);
+    const creature = world.creatures.get(1);
+    expect(creature?.step).toBeNull();
+    expect(interpolate(creature!, 999_999)).toEqual(at(5, 5));
+  });
+
+  it('fills the HUD from the player, in one notification', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (s) => s.health, notified);
+
+    applyMessage(state([{ id: 1, x: 5, y: 5 }]), 0);
+
+    expect(hud.get().health).toBe(120);
+    expect(hud.get().maxHealth).toBe(185);
+    expect(hud.get().level).toBe(8);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+});

@@ -3,6 +3,7 @@ import {
   encodeC2S, encodeS2C, decodeC2S, decodeS2C, packBatch,
 } from './codec.js';
 import type { C2SMessage, S2CMessage } from './types.js';
+import { C2S_SCHEMAS, S2C_SCHEMAS } from './types.js';
 
 const walk: C2SMessage = { type: 'walk', direction: 'north' };
 const step: S2CMessage = {
@@ -94,5 +95,23 @@ describe('obfuscation', () => {
     const b = encodeC2S(walk);
     expect(a).not.toEqual(b); // chave aleatória por frame
     expect(decodeC2S(a)).toEqual(decodeC2S(b));
+  });
+});
+
+describe('message shape', () => {
+  it('never lets a payload declare a field named `type`', () => {
+    // O codec serializa com `const { type, ...props } = msg`: `type` é o discriminador da
+    // MENSAGEM. Um campo de carga com o mesmo nome é apagado no caminho, e a mensagem
+    // inteira passa a ser recusada na validação do outro lado — em SILÊNCIO, porque
+    // `decodeS2C` devolve `null`. Aconteceu com o `session-state`, que nasceu com um `type`
+    // de "tipo de sessão" e só falhou quando alguém finalmente mandou a mensagem.
+    const offenders: string[] = [];
+    for (const [table, schemas] of [['C2S', C2S_SCHEMAS], ['S2C', S2C_SCHEMAS]] as const) {
+      for (const [name, schema] of Object.entries(schemas)) {
+        const shape = (schema as unknown as { shape?: Record<string, unknown> }).shape;
+        if (shape !== undefined && 'type' in shape) offenders.push(`${table}.${name}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

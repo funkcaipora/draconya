@@ -13,7 +13,7 @@
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
 import type { Session, SessionType } from '@draconya/sim';
-import type { C2SMessage } from '@draconya/protocol';
+import type { C2SMessage, S2CMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
@@ -36,6 +36,14 @@ export interface SessionHostOptions {
 interface HostedSession {
   readonly session: Session;
   readonly viewers: Set<Viewer>;
+  /**
+   * `characterId` (UUID) → id numérico de criatura na instância.
+   *
+   * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
+   * bytes por `creature-move`, dezenas de vezes por segundo, contra 36 de um UUID. A tradução
+   * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
+   */
+  readonly creatureIds: Map<string, number>;
 }
 
 /** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
@@ -225,6 +233,16 @@ export class SessionHost {
         // Fora da fila: `pong` que espera o ciclo mede a fila, não a rede.
         viewer.sendNow({ type: 'pong', t: message.t });
         return;
+      case 'session-attach': {
+        const hosted = this.#hostedSession(viewer.characterId);
+        if (hosted === undefined) return;
+        // ENFILEIRADO, nunca `sendNow`. A troca de "estado completo" para "só deltas" precisa
+        // ser atômica: mandar o estado na frente da fila o colocaria DEPOIS de deltas que já
+        // estavam esperando, e o cliente aplicaria um passo antigo por cima do estado atual.
+        // A própria fila é a atomicidade — basta não furá-la.
+        viewer.send(this.#sessionState(hosted, viewer.characterId));
+        return;
+      }
       case 'logout':
         // Sair do jogo ENCERRA a sessão e devolve o slot; fechar o socket não.
         //
@@ -294,6 +312,60 @@ export class SessionHost {
     this.#renewTimer = null;
   }
 
+  /** Id numérico da criatura, criado na primeira vez que alguém precisa dele. */
+  #creatureId(hosted: HostedSession, characterId: string): number {
+    const existing = hosted.creatureIds.get(characterId);
+    if (existing !== undefined) return existing;
+    const assigned = hosted.creatureIds.size + 1;
+    hosted.creatureIds.set(characterId, assigned);
+    return assigned;
+  }
+
+  /**
+   * O estado ATUAL, montado do zero a cada pedido.
+   *
+   * Não existe fila de eventos guardada para reproduzir depois, e isso é decisão, não
+   * economia: guardar seis horas de eventos para reproduzir na volta é o erro que o §16.2
+   * nomeia. O que a sessão guarda é onde tudo está agora, os agregados e a lista curta de
+   * eventos notáveis.
+   */
+  #sessionState(hosted: HostedSession, characterId: string): S2CMessage {
+    const { session } = hosted;
+    const self = session.participants.find((participant) => participant.id === characterId);
+
+    const creatures = session.participants.map((participant) => ({
+      id: this.#creatureId(hosted, participant.id),
+      position: participant.position,
+      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
+      appearanceId: 1,
+      name: participant.id,
+      health: participant.health,
+      maxHealth: participant.maxHealth,
+    }));
+
+    return {
+      type: 'session-state',
+      sessionType: session.ruleset.type,
+      elapsedMs: session.aggregates.durationMs,
+      self: {
+        creatureId: this.#creatureId(hosted, characterId),
+        characterId,
+        health: self?.health ?? 0,
+        maxHealth: self?.maxHealth ?? 0,
+        mana: self?.mana ?? 0,
+        maxMana: self?.maxMana ?? 0,
+        level: self?.level ?? 0,
+        xp: self?.xp ?? 0,
+      },
+      world: {
+        mapId: null,
+        creatures,
+      },
+      aggregates: { ...session.aggregates },
+      notableEvents: session.notableEvents.map((event) => ({ ...event })),
+    };
+  }
+
   #hostedSession(characterId: string): HostedSession | undefined {
     const sessionId = this.#sessionIdByCharacter.get(characterId);
     return sessionId === undefined ? undefined : this.#sessions.get(sessionId);
@@ -310,7 +382,7 @@ export class SessionHost {
   }
 
   #createLocal(characterId: string, session: Session, accountId?: string): void {
-    const hosted: HostedSession = { session, viewers: new Set() };
+    const hosted: HostedSession = { session, viewers: new Set(), creatureIds: new Map() };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
     if (accountId !== undefined) this.#accountIdByCharacter.set(characterId, accountId);

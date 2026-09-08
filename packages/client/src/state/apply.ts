@@ -107,10 +107,34 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, latencyMs: nowMs - message.t }));
       return;
 
-    case 'session-state':
-      // FUN-32 define o formato de `self`, `world` e `aggregates`, que hoje são `unknown` no
-      // schema. Aplicar por adivinhação criaria um contrato que o servidor ainda não tem.
+    case 'session-state': {
+      // Estado completo SUBSTITUI o mundo; não é acumulado por cima. Mesclar deixaria uma
+      // criatura que morreu enquanto ninguém olhava desenhada para sempre, e o sintoma é um
+      // monstro parado que nunca some — o tipo de coisa que se descobre semanas depois.
+      world.mapId = message.world.mapId;
+      world.selfId = message.self.creatureId;
+      world.creatures.clear();
+      for (const creature of message.world.creatures) {
+        world.creatures.set(creature.id, {
+          id: creature.id,
+          appearanceId: creature.appearanceId,
+          name: creature.name,
+          health: creature.health,
+          maxHealth: creature.maxHealth,
+          position: creature.position,
+          // Sem passo em curso: o estado diz onde as coisas ESTÃO, não como chegaram lá.
+          // Reproduzir o movimento que aconteceu enquanto ninguém olhava é o erro do §16.2.
+          step: null,
+        });
+      }
+      hud.set((state) => ({
+        ...state,
+        health: message.self.health, maxHealth: message.self.maxHealth,
+        mana: message.self.mana, maxMana: message.self.maxMana,
+        level: message.self.level, xp: message.self.xp,
+      }));
       return;
+    }
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
