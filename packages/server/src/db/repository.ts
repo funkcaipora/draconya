@@ -236,8 +236,15 @@ function isUniqueViolation(error: unknown, constraintName: string): boolean {
   return false;
 }
 
+/**
+ * Falha FECHADA quando o driver não diz qual constraint estourou.
+ *
+ * Casar com qualquer coisa faria uma violação de índice futuro em `character` sair como
+ * HTTP 409 "name-taken": o jogador é mandado escolher outro nome por uma colisão que não
+ * tem nada a ver com o nome, e a causa real some, engolida pelo erro tipado. Sem nome,
+ * o certo é deixar o erro subir com o que ele é.
+ */
 function matchesConstraint(error: object, constraintName: string): boolean {
   const candidate = error as { constraint_name?: unknown; constraint?: unknown };
-  const actual = candidate.constraint_name ?? candidate.constraint;
-  return actual === undefined || actual === constraintName;
+  return (candidate.constraint_name ?? candidate.constraint) === constraintName;
 }

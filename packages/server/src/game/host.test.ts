@@ -30,7 +30,10 @@ function countingRuleset(hzAttached = 10, hzDetached = 1) {
   return { ruleset, counter };
 }
 
-function buildHost(ruleset: Ruleset, options: { now?: () => number } = {}) {
+function buildHost(
+  ruleset: Ruleset,
+  options: { now?: () => number; directory?: SessionDirectory } = {},
+) {
   const sessions: Session[] = [];
   const host = new SessionHost({
     nodeId: 'n1',
@@ -59,6 +62,50 @@ function buildHost(ruleset: Ruleset, options: { now?: () => number } = {}) {
 }
 
 describe('session host', () => {
+  it('releases a session the handshake created but never attached', async () => {
+    // Handshake abortado: o `prepare` cria e registra, o cliente some antes do upgrade, e
+    // nenhum socket vai chegar para desanexar depois. Sem soltar, a sessão fica hospedada
+    // para sempre segurando um dos dois slots da conta — e o personagem nem pode ser
+    // apagado, porque o diretório o reporta ativo.
+    const released: string[] = [];
+    const slotsReleased: Array<[string, string]> = [];
+    const directory = {
+      register: async () => true,
+      release: async (characterId: string) => {
+        released.push(characterId);
+      },
+      releaseSlot: async (accountId: string, characterId: string) => {
+        slotsReleased.push([accountId, characterId]);
+      },
+    } as unknown as SessionDirectory;
+    const { ruleset, counter } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory });
+
+    const first = await host.prepare('p1', undefined, 'a1');
+    expect(first.created).toBe(true);
+    expect(host.sessionFor('p1')).toBeDefined();
+
+    await host.release('p1');
+
+    expect(host.sessionFor('p1')).toBeUndefined();
+    expect(host.sessionCount).toBe(0);
+    expect(released).toEqual(['p1']);
+    expect(slotsReleased).toEqual([['a1', 'p1']]);
+    // Encerrada pelo ruleset, não descartada: quem sabe se há algo a creditar é ele.
+    expect(counter.ended).toBe(1);
+  });
+
+  it('tells a second handshake that it did not create the session', async () => {
+    // Reconexão reencontra a sessão. Se ela dissesse `created`, um abort seguinte
+    // derrubaria a sessão que o primeiro socket está usando.
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory });
+
+    expect((await host.prepare('p1', undefined, 'a1')).created).toBe(true);
+    expect((await host.prepare('p1', undefined, 'a1')).created).toBe(false);
+  });
+
   it('waits for directory registration before exposing a prepared session', async () => {
     const { ruleset } = countingRuleset();
     let finishRegistration: ((registered: boolean) => void) | undefined;

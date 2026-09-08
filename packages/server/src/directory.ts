@@ -175,9 +175,20 @@ export class SessionDirectory {
     }
     const results = await pipeline.exec();
     if (results === null) throw new Error('Session lease renewal transaction was aborted');
-    for (const [error, renewed] of results) {
+    // Coletar, não estourar no primeiro. Lançar na primeira falha esconde quantas outras
+    // sessões também expiraram e não diz NENHUM `characterId` — e este é justamente o sinal
+    // que antecede uma sessão ser retomada em outro nó (FUN-28). Um erro recorrente que não
+    // nomeia nada é um erro que ninguém consegue investigar.
+    const expired: string[] = [];
+    for (const [index, result] of results.entries()) {
+      const [error, renewed] = result;
       if (error !== null) throw error;
-      if (renewed !== 1) throw new Error('Session lease or active reservation expired');
+      if (renewed === 1) continue;
+      const session = sessions[index];
+      expired.push(typeof session === 'string' ? session : session?.characterId ?? '(desconhecido)');
+    }
+    if (expired.length > 0) {
+      throw new Error(`session lease or active reservation expired: ${expired.join(', ')}`);
     }
   }
 

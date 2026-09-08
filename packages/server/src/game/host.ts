@@ -38,6 +38,11 @@ interface HostedSession {
   readonly viewers: Set<Viewer>;
 }
 
+/** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
+export interface PrepareResult {
+  readonly created: boolean;
+}
+
 /**
  * Teto de taxa do laço: 10 Hz. Uma sessão pode pedir menos — a política por tipo e por
  * presença de visualizador é do próprio ruleset (ADR 0003) e é lida a cada ciclo.
@@ -92,17 +97,19 @@ export class SessionHost {
     characterId: string,
     initialCharacter?: InitialCharacter,
     accountId?: string,
-  ): Promise<void> {
+  ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
       await this.#register(characterId, existing, accountId);
-      return;
+      return { created: false };
     }
 
     const pending = this.#preparations.get(characterId);
     if (pending !== undefined) {
       await pending;
-      return;
+      // Quem esperou a preparação de outro NÃO criou nada: soltar seria derrubar a sessão
+      // que o outro handshake está prestes a usar.
+      return { created: false };
     }
 
     const preparation = this.#createAndRegister(characterId, initialCharacter, accountId);
@@ -114,6 +121,7 @@ export class SessionHost {
         this.#preparations.delete(characterId);
       }
     }
+    return { created: true };
   }
 
   /** Liga um socket a uma sessão já preparada. */
@@ -157,9 +165,40 @@ export class SessionHost {
       { characterId: viewer.characterId, sessionId, viewers: hosted.viewers.size },
       'Viewer detached',
     );
-    // TODO(FUN-30): sessão de cidade sem visualizador e sem estado fica aqui para sempre.
-    // Quem decide que ela pode ir embora é a máquina de estados do personagem — recolher
-    // no detach seria exatamente o defeito que esta issue existe para não ter.
+    // A sessão FICA, mesmo sem ninguém olhando — é o ADR 0001, e há teste de integração
+    // exigindo que uma reconexão reencontre a MESMA sessão.
+    //
+    // O efeito colateral disso hoje é grave e está registrado na FUN-52: como nada mais
+    // solta um slot de personagem ativo, duas sessões criadas alguma vez neste nó esgotam o
+    // teto de dois até o processo reiniciar. Resolver exige decidir se "ativo" é "tem sessão
+    // hospedada" ou "tem alguém jogando", e essa decisão é da FUN-30, não deste detach.
+  }
+
+  /**
+   * Tira a sessão deste nó e devolve o slot da conta. Encerra antes de soltar, para o
+   * ruleset ter a chance de creditar o que for dele.
+   */
+  async release(characterId: string): Promise<void> {
+    const hosted = this.#hostedSession(characterId);
+    if (hosted === undefined) return;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+
+    if (hosted.session.ended === null) hosted.session.end('manual-exit');
+    this.#sessions.delete(hosted.session.id);
+    this.#sessionIdByCharacter.delete(characterId);
+    this.#accountIdByCharacter.delete(characterId);
+
+    const directory = this.#options.directory;
+    if (directory === undefined) return;
+    try {
+      await directory.release(characterId);
+      if (accountId !== undefined) await directory.releaseSlot(accountId, characterId);
+    } catch (error) {
+      // Falhar aqui deixa o slot preso até o lease expirar, que é ruim mas se resolve
+      // sozinho. Silenciar seria pior: é a única pista de por que uma conta ficou sem slot.
+      this.#logger.error({ error, characterId }, 'Failed to release session from the directory');
+    }
+    this.#logger.info({ characterId, sessionId: hosted.session.id }, 'Session released');
   }
 
   /** Ações do jogador são tratadas NA CHEGADA, não enfileiradas para o tick (ver AGENTS.md). */
