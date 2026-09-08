@@ -13,8 +13,8 @@
 #   - code: pnpm install / lint / test / build. O passo "Check workspace availability" abaixo
 #     é herança da época em que o monorepo ainda não existia e o job precisava pular em vez
 #     de falhar; hoje a condição é sempre verdadeira.
-#   - image: constrói as duas arquiteturas do ADR 0013, para reprovar o PR quando alguma
-#     dependência nativa nova não tiver binário para as duas.
+#   - image: constrói a imagem em `linux/amd64`. O build `arm64` está SUSPENSO — ver o
+#     comentário no job e a emenda no ADR 0013.
 
 name: CI
 
@@ -114,7 +114,7 @@ jobs:
         run: pnpm build
 
   image:
-    name: multi-architecture build
+    name: image build (amd64)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -124,22 +124,32 @@ jobs:
         id: docker
         run: test -f Dockerfile && echo "exists=true" >> "$GITHUB_OUTPUT" || echo "exists=false" >> "$GITHUB_OUTPUT"
 
-      - name: QEMU
-        if: steps.docker.outputs.exists == 'true'
-        uses: docker/setup-qemu-action@v4
-
       - name: Buildx
         if: steps.docker.outputs.exists == 'true'
         uses: docker/setup-buildx-action@v4
 
-      # Constrói as duas arquiteturas do ADR 0013. Não publica: o objetivo aqui é falhar
-      # o PR quando alguma dependência nativa nova não tiver binário para as duas.
-      - name: Build amd64 e arm64
+      # Uma arquitetura só, e sem QEMU. O runner do GitHub é amd64: construir amd64 é nativo
+      # e rápido; construir arm64 aqui significa EMULAR, e a emulação era a quase totalidade
+      # dos ~5 minutos que este job levava.
+      #
+      # O que se PERDE: a checagem do ADR 0013 de que toda dependência nativa nova publica
+      # binário para as duas arquiteturas. A perda é menor do que parece — o desenvolvimento
+      # roda em Apple Silicon, então o build local já exercita `arm64` nativamente. O CI passa
+      # a cobrir justamente a arquitetura que a máquina de quem desenvolve não cobre.
+      #
+      # O que ainda se GANHA: saber que a imagem constrói. Não é formalidade — foi este job
+      # que pegou o vazamento de `.tsbuildinfo` (imagem publicada sem `dist`) e o GLIBC velho
+      # do bookworm, dois defeitos invisíveis no macOS.
+      #
+      # QUANDO RELIGAR: antes do primeiro deploy em ARM (o Oracle Ampere é a rota de
+      # validação sem custo), ou ao adicionar dependência nativa nova. Religar são duas
+      # linhas: o passo de setup do QEMU de volta, e a segunda plataforma em `platforms`.
+      - name: Build amd64
         if: steps.docker.outputs.exists == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
