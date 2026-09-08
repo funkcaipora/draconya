@@ -4,12 +4,27 @@
 import { hostname } from 'node:os';
 import { z } from 'zod';
 
+const HttpUrl = z.string().url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === 'http:' || protocol === 'https:';
+}, 'must use http or https');
+
+const HttpOrigin = HttpUrl.refine((value) => {
+  const url = new URL(value);
+  return url.username === ''
+    && url.password === ''
+    && url.pathname === '/'
+    && url.search === ''
+    && url.hash === '';
+}, 'must be an origin without credentials, path, query, or fragment')
+  .transform((value) => new URL(value).origin);
+
 const EnvironmentSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
-  API_ORIGIN: z.string().url().default('http://localhost:5173'),
+  API_ORIGIN: HttpOrigin.default('http://localhost:5173'),
 
   GAME_PORT: z.coerce.number().int().positive().default(7171),
   GAME_PUBLIC_URL: z.string().default('ws://localhost:7171'),
@@ -21,8 +36,16 @@ const EnvironmentSchema = z.object({
    */
   NODE_ID: z.string().min(1).default(hostname()),
 
-  WORKOS_API_KEY: z.string().optional(),
-  WORKOS_CLIENT_ID: z.string().optional(),
+  WORKOS_API_KEY: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().min(1).optional(),
+  ),
+  WORKOS_CLIENT_ID: z.preprocess(
+    (value) => value === '' ? undefined : value,
+    z.string().min(1).optional(),
+  ),
+  WORKOS_REDIRECT_URI: HttpUrl.default('http://localhost:3000/api/auth/callback'),
+  AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(43_200),
   AUTH_DEV_MODE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 
   /**
@@ -57,8 +80,22 @@ export function loadConfiguration(source: NodeJS.ProcessEnv = process.env): Conf
   if (configuration.NODE_ENV === 'production' && configuration.AUTH_DEV_MODE) {
     throw new Error('AUTH_DEV_MODE cannot be enabled in production');
   }
-  if (configuration.NODE_ENV === 'production' && !configuration.WORKOS_API_KEY) {
-    throw new Error('WORKOS_API_KEY is required in production');
+  if ((configuration.WORKOS_API_KEY === undefined) !== (configuration.WORKOS_CLIENT_ID === undefined)) {
+    throw new Error('WORKOS_API_KEY and WORKOS_CLIENT_ID must be configured together');
+  }
+  if (configuration.NODE_ENV === 'production') {
+    if (!configuration.WORKOS_API_KEY) {
+      throw new Error('WORKOS_API_KEY is required in production');
+    }
+    if (!configuration.WORKOS_CLIENT_ID) {
+      throw new Error('WORKOS_CLIENT_ID is required in production');
+    }
+    if (new URL(configuration.API_ORIGIN).protocol !== 'https:') {
+      throw new Error('API_ORIGIN must use https in production');
+    }
+    if (new URL(configuration.WORKOS_REDIRECT_URI).protocol !== 'https:') {
+      throw new Error('WORKOS_REDIRECT_URI must use https in production');
+    }
   }
   return configuration;
 }

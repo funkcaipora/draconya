@@ -53,15 +53,43 @@ describe.runIf(available)('session directory', () => {
   });
 
   it('renews sessions in a batch', async () => {
-    const directory = new SessionDirectory(redis, { leaseMs: 300 });
+    const directory = new SessionDirectory(redis, { leaseMs: 10_000 });
     const ids = ['p1', 'p2', 'p3'];
     for (const id of ids) {
       await directory.register(id, { sessionId: id, nodeId: 'n1', type: 'hunt' });
+      await redis.pexpire(`char:${id}:session`, 2_000);
     }
-    await new Promise((resolve) => setTimeout(resolve, 150));
     await directory.renew(ids);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    for (const id of ids) expect(await directory.lookup(id)).not.toBeNull();
+    for (const id of ids) {
+      expect(await redis.pttl(`char:${id}:session`)).toBeGreaterThan(5_000);
+      expect(await directory.lookup(id)).not.toBeNull();
+    }
+  });
+
+  it('registers an authenticated session only while its active reservation exists', async () => {
+    const directory = new SessionDirectory(redis, { leaseMs: 300 });
+    const location = { sessionId: 's1', nodeId: 'n1', type: 'city' };
+
+    expect(await directory.register('p1', location, 'a1')).toBe(false);
+    expect(await directory.lookup('p1')).toBeNull();
+
+    await directory.reserveSlot('a1', 'p1');
+    expect(await directory.register('p1', location, 'a1')).toBe(true);
+    expect(await directory.lookup('p1')).toEqual(location);
+  });
+
+  it('renews the active slot together with the owned session lease', async () => {
+    const directory = new SessionDirectory(redis, { leaseMs: 10_000 });
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'hunt' }, 'a1');
+
+    await redis.pexpire('char:p1:session', 2_000);
+    await redis.pexpire('account:a1:active', 2_000);
+    await directory.renew([{ accountId: 'a1', characterId: 'p1' }]);
+    expect(await redis.pttl('char:p1:session')).toBeGreaterThan(5_000);
+    expect(await redis.pttl('account:a1:active')).toBeGreaterThan(5_000);
+    expect(await directory.lookup('p1')).not.toBeNull();
+    expect(await directory.activeSlots('a1')).toEqual(['p1']);
   });
 
   it('expires a node heartbeat', async () => {
@@ -74,6 +102,16 @@ describe.runIf(available)('session directory', () => {
 });
 
 describe.runIf(available)('two active characters per account limit', () => {
+  it('rejects a second node trying to overwrite a live character session', async () => {
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    const original = { sessionId: 's1', nodeId: 'n1', type: 'city' };
+    const competing = { sessionId: 's2', nodeId: 'n2', type: 'city' };
+    expect(await directory.register('p1', original, 'a1')).toBe(true);
+    expect(await directory.register('p1', competing, 'a1')).toBe(false);
+    expect(await directory.lookup('p1')).toEqual(original);
+    expect(await directory.register('p1', original, 'a1')).toBe(true);
+  });
   it('allows exactly two characters across ten simultaneous attempts', async () => {
     // O TESTE QUE DEFINE A FUN-15. Verificação otimista passaria aqui e falharia em
     // produção; só a atomicidade do script Lua segura o teto sob concorrência.

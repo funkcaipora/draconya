@@ -83,12 +83,13 @@ COPY --from=prod-deps --chown=node:node /app/package.json ./package.json
 # ...e por cima, só o compilado. Nenhum `src` entra na imagem.
 COPY --from=build --chown=node:node /app/packages/protocol/dist ./packages/protocol/dist
 COPY --from=build --chown=node:node /app/packages/content/dist  ./packages/content/dist
+COPY --from=build --chown=node:node /app/packages/content/data  ./packages/content/data
 COPY --from=build --chown=node:node /app/packages/sim/dist      ./packages/sim/dist
 COPY --from=build --chown=node:node /app/packages/server/dist   ./packages/server/dist
 USER node
 
-# PROCESSOS decide quais papéis sobem. Sem ele, modo solo — os três num processo.
-ENV PROCESSOS=api,game,jobs
+# PROCESSES decide quais papéis sobem. Sem ele, modo solo — os três num processo.
+ENV PROCESSES=api,game,jobs
 EXPOSE 3000 7171
 
 # O healthcheck bate no `api`. Num container que só roda `game`, aponte para a 7171

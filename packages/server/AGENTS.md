@@ -35,25 +35,45 @@ tarefa — o valor da lista é ser única.
 
 Credencial e fluxos de conta ficam no WorkOS AuthKit; a tabela `account` local segue dona de
 Coins, personagens e ledger, ligada por `external_auth_id`. A coluna `password_hash` existe nulável
-e sem uso, para que trazer a autenticação para casa seja aditivo. `AUTH_DEV_MODE=true` aceita
-qualquer e-mail em desenvolvimento e derruba o boot em produção.
+e sem uso, para que trazer a autenticação para casa seja aditivo. Depois que o WorkOS prova a
+identidade, o `api` cria uma sessão opaca no Redis e envia só o token num cookie httpOnly — o
+provedor não fica no caminho de cada request autenticado. `AUTH_DEV_MODE=true` troca o redirect
+por `POST /api/auth/dev-login`, aceita qualquer e-mail válido e continua proibido em produção.
+
+Rotas atuais: `GET /api/auth/login`, `GET /api/auth/register`, `GET /api/auth/callback`,
+`POST /api/auth/logout`, `GET /api/auth/me` e, somente em dev, `POST /api/auth/dev-login`.
+A callback confere `state`; a sessão local tem TTL e fica em `auth:session:*` no Redis.
 
 ## Ticket de sessão (FUN-12)
 
 A sessão HTTP morre no `api`. O que segue para o socket é um ticket de ~30 s, uso único,
-consumido com `GETDEL` e amarrado a um `nodeId` — apresentado a outro nó, é recusado. Duas
+consumido atomicamente com a reserva ativa e amarrado a um `nodeId` — apresentado a outro nó, é recusado. Duas
 regras não são negociáveis aqui:
 
 - **Reconexão volta para o MESMO nó.** Sessão viva num nó que parou de bater é recusada, não
   re-hospedada: escolher outro nó cria a segunda sessão do mesmo personagem (invariante 8).
   Decidir que uma sessão morreu é da retomada (FUN-28), com lock.
-- **Sem autenticação, a rota responde 501.** Emissão de ticket sem dono é acesso a qualquer
-  conta; falhar aberto aqui é pior que não ter a rota.
+- **Sem autenticação configurada, a rota responde 501.** Emissão de ticket sem dono é acesso a
+  qualquer conta; falhar aberto aqui é pior que não ter a rota. No fluxo normal, a FUN-10 injeta
+  o principal da sessão HTTP e a FUN-11 consulta a posse no Postgres.
 
 O slot de personagem ativo é reservado na EMISSÃO. A varredura em `jobs` devolve o slot por
 uma regra só: passado o prazo, se o personagem não tem sessão no diretório, o slot volta —
 o que cobre ticket abandonado, ticket queimado numa conexão que morreu, e ticket duplicado
 sem um caminho de limpeza para cada caso.
+
+
+## Personagens (FUN-11)
+
+Personagem nasce sem vocação, com Coins fora dele (na conta) e Premium por personagem. Nomes são
+únicos sem diferenciar maiúsculas/minúsculas. Exclusão é **soft delete** (`deleted_at`) para não
+quebrar proveniência futura de item/ledger; personagem com `session_id`, lease ou reserva ativa não pode ser apagado. Exclusão e emissão
+de ticket usam a mesma trava de linha do Postgres; o teste de concorrência é obrigatório.
+O limite de dois personagens simultaneamente ativos NÃO mora no Postgres — continua no Redis
+(FUN-15).
+
+Rotas: `POST /api/characters`, `GET /api/characters`, `POST /api/characters/:id/select` e
+`DELETE /api/characters/:id`.
 
 ## Sessão e visualizador (FUN-13)
 
@@ -93,3 +113,10 @@ terceiro slot de personagem.
 - **Teste que usa Redis escolhe um banco só seu** (`testing/redis.ts`). O Vitest roda arquivos
   em paralelo e `flushdb` é global: dois arquivos no mesmo banco passam sozinhos e falham
   juntos, de forma intermitente.
+
+## Testes de autenticação e admissão
+
+`TEST_REDIS_URL` deve apontar para um Redis descartável; bancos 1–4 são apagados pelos testes.
+`DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
+fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
+`state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

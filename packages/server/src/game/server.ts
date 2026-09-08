@@ -100,24 +100,36 @@ export function createGame(
       });
 
       void (async () => {
-        const claim = await tickets.consume(ticket, nodeId);
-        // Cliente desistiu enquanto o Redis respondia. Tocar em `response` depois do abort
-        // derruba o processo inteiro. O ticket já foi queimado, e o slot volta pela
-        // varredura de `tickets:pending` — que é justamente o desfecho que ela cobre.
-        if (aborted) return;
-        response.cork(() => {
-          if (claim === null) {
-            response.writeStatus('401 Unauthorized').end();
-            return;
+        try {
+          const claim = await tickets.consume(ticket, nodeId);
+          if (claim !== null) {
+            await host.prepare(claim.characterId, claim.initialCharacter, claim.accountId);
           }
-          response.upgrade<SocketData>(
-            { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
-            key,
-            protocol,
-            extensions,
-            context,
-          );
-        });
+          // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`
+          // depois do abort derruba o processo inteiro.
+          if (aborted) return;
+          response.cork(() => {
+            if (claim === null) {
+              response.writeStatus('401 Unauthorized').end();
+              return;
+            }
+            response.upgrade<SocketData>(
+              { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
+              key,
+              protocol,
+              extensions,
+              context,
+            );
+          });
+        } catch (error) {
+          logger.error({ error }, 'Game handshake failed');
+          if (aborted) return;
+          response.cork(() => {
+            if (!aborted) {
+              response.writeStatus('503 Service Unavailable').end();
+            }
+          });
+        }
       })();
     },
 

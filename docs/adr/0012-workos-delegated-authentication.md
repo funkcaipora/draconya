@@ -58,3 +58,9 @@ produção.
 ## Invariantes afetados
 
 Nenhum. A autenticação fica fora do modelo de sessão e do caminho de simulação.
+
+## Verificação de implementação — 2026-09-07
+
+O risco sobre modo headless foi verificado antes da implementação: a documentação atual do WorkOS confirma que a Authentication API permite construir UI própria, além do Hosted AuthKit. O MVP mantém o Hosted AuthKit porque é o caminho de menor superfície, mas a decisão não fica presa a essa UI.
+
+A sessão do aplicativo é deliberadamente local: depois da troca do authorization code, o `api` grava uma capability opaca no Redis e envia somente o token em cookie httpOnly. Isso preserva a consequência desejada desta ADR — indisponibilidade transitória do WorkOS não invalida requests de uma sessão Draconya já criada. Logout remove a sessão local e, quando existe `sid` no token retornado na autenticação, também fornece a URL de logout do WorkOS.

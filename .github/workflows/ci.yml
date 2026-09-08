@@ -64,8 +64,18 @@ jobs:
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: draconya
+          POSTGRES_PASSWORD: review-local
+          POSTGRES_DB: draconya_review
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U draconya" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
-      REDIS_URL: redis://localhost:6379
+      TEST_REDIS_URL: redis://localhost:6379
+      DATABASE_TEST_URL: postgres://draconya:review-local@localhost:5432/draconya_review
     steps:
       - name: Checkout
         uses: actions/checkout@v7

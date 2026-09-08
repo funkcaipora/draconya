@@ -2,12 +2,10 @@
 
 O PRD (`Draconya_PRD_Consolidado_v0.9.md`) é um **instantâneo**: descreve o que se pretendia em
 07/09/2026, com `[ABERTO]` espalhado por toda parte. Esta pasta é o **documento vivo**: o que
-existe de fato, hoje, no código. Hoje as duas coisas estão quase idênticas — nada foi implementado
-ainda —, e por isso cada arquivo aqui nasce como um esqueleto honesto: reorganiza o que o PRD
-especifica por sistema, marca o status como `não implementado`, e já estrutura as duas seções que
-vão importar de verdade conforme cada sistema sai do papel — **Parâmetros de balanceamento** (onde
-cada número mora em `packages/content`) e **Em aberto** (quais decisões de produto, herdadas do
-PRD, ainda faltam fechar).
+existe de fato, hoje, no código. Alguns blocos da espinha dorsal já saíram do papel, então os
+arquivos podem estar como `não implementado`, `parcial` ou `implementado`. Cada sistema registra
+**Parâmetros de balanceamento** (onde cada número mora em `packages/content`) e **Em aberto**
+(quais decisões de produto, herdadas do PRD, ainda faltam fechar).
 
 O PRD não deve ser editado para refletir a implementação — ele é histórico, a foto de um momento.
 Toda mudança de comportamento real entra aqui.
@@ -35,7 +33,8 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 
 | Sistema | Arquivo | Status | Épico | PRD |
 |---|---|---|---|---|
-| Onboarding e tutorial | [`onboarding.md`](./onboarding.md) | não implementado | E14 | §7.4, §8 |
+| Contas, autenticação e personagens | [`accounts-and-characters.md`](./accounts-and-characters.md) | parcial | E0 | §7.1–§7.4 |
+| Onboarding e tutorial | [`onboarding.md`](./onboarding.md) | parcial | E14 | §7.4, §8 |
 | Progressão, vocações e level | [`progression.md`](./progression.md) | não implementado | E2, E7 | §4.1, §9, §43.1 |
 | Stamina | [`stamina.md`](./stamina.md) | não implementado | E2, E3 | §10 |
 | Treino | [`training.md`](./training.md) | não implementado | E8 | §11 |

@@ -45,6 +45,24 @@ export interface SessionDirectoryOptions {
 const DEFAULT_LEASE_MS = 30_000;
 const DEFAULT_ACTIVE_LIMIT = 2;
 
+/** Registra a sessão somente enquanto a reserva autenticada ainda existe. */
+const REGISTER_SESSION = `
+if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
+local existing = redis.call('GET', KEYS[1])
+if existing and existing ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[1], ARGV[2], 'PX', tonumber(ARGV[3]))
+redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[3]))
+return 1
+`;
+
+/** Renova o lease da sessão e o slot que autoriza aquela sessão como uma unidade. */
+const RENEW_SESSION = `
+if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
+if redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[2])) ~= 1 then return 0 end
+redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[2]))
+return 1
+`;
+
 /**
  * Checar e inserir precisam ser UMA operação.
  *
@@ -76,14 +94,54 @@ export class SessionDirectory {
     this.#leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
     this.#activeLimit = options.activeLimit ?? DEFAULT_ACTIVE_LIMIT;
     this.#redis.defineCommand('reserveSlot', { numberOfKeys: 1, lua: RESERVE_SLOT });
+    this.#redis.defineCommand('registerReservedSession', {
+      numberOfKeys: 2,
+      lua: REGISTER_SESSION,
+    });
+    this.#redis.defineCommand('renewReservedSession', {
+      numberOfKeys: 2,
+      lua: RENEW_SESSION,
+    });
+  }
+
+  get leaseMs(): number {
+    return this.#leaseMs;
+  }
+
+  get activeLimit(): number {
+    return this.#activeLimit;
   }
 
   // --- onde o personagem está -------------------------------------------------------------
 
-  async register(characterId: string, location: SessionLocation): Promise<void> {
-    await this.#redis.set(
-      sessionKey(characterId), JSON.stringify(location), 'PX', this.#leaseMs,
-    );
+  async register(
+    characterId: string,
+    location: SessionLocation,
+    accountId?: string,
+  ): Promise<boolean> {
+    if (accountId === undefined) {
+      await this.#redis.set(
+        sessionKey(characterId), JSON.stringify(location), 'PX', this.#leaseMs,
+      );
+      return true;
+    }
+
+    const redis = this.#redis as Redis & {
+      registerReservedSession(
+        session: string,
+        active: string,
+        member: string,
+        payload: string,
+        ttl: string,
+      ): Promise<number>;
+    };
+    return (await redis.registerReservedSession(
+      sessionKey(characterId),
+      activeCharactersKey(accountId),
+      characterId,
+      JSON.stringify(location),
+      String(this.#leaseMs),
+    )) === 1;
   }
 
   async lookup(characterId: string): Promise<SessionLocation | null> {
@@ -95,11 +153,32 @@ export class SessionDirectory {
    * Renova em lote. Um `pipeline` por ciclo, não um comando por sessão: com milhares de
    * sessões num nó, a diferença entre os dois é a diferença entre caber e não caber no ciclo.
    */
-  async renew(characterIds: readonly string[]): Promise<void> {
-    if (characterIds.length === 0) return;
+  async renew(
+    sessions: readonly (string | { readonly characterId: string; readonly accountId: string })[],
+  ): Promise<void> {
+    if (sessions.length === 0) return;
     const pipeline = this.#redis.pipeline();
-    for (const id of characterIds) pipeline.pexpire(sessionKey(id), this.#leaseMs);
-    await pipeline.exec();
+    for (const session of sessions) {
+      if (typeof session === 'string') {
+        // Compatibilidade para chamadores antigos que ainda não conhecem a conta.
+        pipeline.pexpire(sessionKey(session), this.#leaseMs);
+        continue;
+      }
+      pipeline.eval(
+        RENEW_SESSION,
+        2,
+        sessionKey(session.characterId),
+        activeCharactersKey(session.accountId),
+        session.characterId,
+        String(this.#leaseMs),
+      );
+    }
+    const results = await pipeline.exec();
+    if (results === null) throw new Error('Session lease renewal transaction was aborted');
+    for (const [error, renewed] of results) {
+      if (error !== null) throw error;
+      if (renewed !== 1) throw new Error('Session lease or active reservation expired');
+    }
   }
 
   async release(characterId: string): Promise<void> {
@@ -154,7 +233,7 @@ export class SessionDirectory {
   // --- limite de personagens ativos por conta ---------------------------------------------
 
   /** `true` se o slot foi reservado (ou já era dele). `false` se a conta está no teto. */
-  async reserveSlot(accountId: string, characterId: string): Promise<boolean> {
+  async reserveSlot(accountId: string, characterId: string, ttlMs = this.#leaseMs): Promise<boolean> {
     const redis = this.#redis as Redis & {
       reserveSlot(key: string, member: string, limit: string, ttl: string): Promise<number>;
     };
@@ -162,7 +241,7 @@ export class SessionDirectory {
       activeCharactersKey(accountId),
       characterId,
       String(this.#activeLimit),
-      String(this.#leaseMs),
+      String(ttlMs),
     );
     return reserved === 1;
   }

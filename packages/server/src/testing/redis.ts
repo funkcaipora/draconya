@@ -10,6 +10,8 @@
 //   0  livre (é o banco do desenvolvimento local)
 //   1  directory.test.ts
 //   2  tickets.test.ts
+//   3  auth/sessions.test.ts
+//   4  api/integration.test.ts
 
 import { Redis } from 'ioredis';
 
@@ -20,7 +22,12 @@ export interface TestRedis {
 }
 
 export async function connectTestRedis(db: number): Promise<TestRedis> {
-  const url = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+  // Nunca assumir que o Redis de desenvolvimento pode sofrer FLUSHDB. O destino de
+  // integração deve ser explicitamente dedicado aos testes.
+  const url = process.env['TEST_REDIS_URL'];
+  if (url === undefined) {
+    throw new Error('TEST_REDIS_URL must point to a disposable Redis instance');
+  }
   const redis = new Redis(url, { db, lazyConnect: true, maxRetriesPerRequest: 1 });
   try {
     await redis.connect();

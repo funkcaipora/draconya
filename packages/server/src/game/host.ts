@@ -16,10 +16,11 @@ import type { Session, SessionType } from '@draconya/sim';
 import type { C2SMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
 import type { Logger } from '../log.js';
+import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
-export type SessionFactory = (characterId: string) => Session;
+export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
 
 export interface SessionHostOptions {
   readonly nodeId: string;
@@ -52,6 +53,8 @@ export class SessionHost {
   /** Por sessão. O índice por personagem existe porque uma sessão terá vários (guild war). */
   readonly #sessions = new Map<string, HostedSession>();
   readonly #sessionIdByCharacter = new Map<string, string>();
+  readonly #accountIdByCharacter = new Map<string, string>();
+  readonly #preparations = new Map<string, Promise<void>>();
 
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
@@ -82,11 +85,47 @@ export class SessionHost {
   }
 
   /**
-   * Liga um socket à sessão do personagem, criando-a se ainda não existir. Duas abas do mesmo
-   * personagem produzem DOIS visualizadores da MESMA sessão — nunca duas sessões.
+   * Cria e registra a sessão antes de o handshake aceitar o socket. Chamadas simultâneas
+   * compartilham a mesma promessa, portanto nunca criam duas sessões locais do personagem.
    */
+  async prepare(
+    characterId: string,
+    initialCharacter?: InitialCharacter,
+    accountId?: string,
+  ): Promise<void> {
+    const existing = this.sessionFor(characterId);
+    if (existing !== undefined) {
+      await this.#register(characterId, existing, accountId);
+      return;
+    }
+
+    const pending = this.#preparations.get(characterId);
+    if (pending !== undefined) {
+      await pending;
+      return;
+    }
+
+    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId);
+    this.#preparations.set(characterId, preparation);
+    try {
+      await preparation;
+    } finally {
+      if (this.#preparations.get(characterId) === preparation) {
+        this.#preparations.delete(characterId);
+      }
+    }
+  }
+
+  /** Liga um socket a uma sessão já preparada. */
   attach(socket: ViewerSocket, characterId: string): Viewer {
-    const hosted = this.#sessionOf(characterId);
+    let hosted = this.#hostedSession(characterId);
+    // Mantém o host sem diretório útil em testes e em consumidores locais. Em produção,
+    // `prepare` é obrigatório porque o registro precisa terminar antes do upgrade.
+    if (hosted === undefined && this.#options.directory === undefined) {
+      this.#createLocal(characterId, this.#options.createSession(characterId));
+      hosted = this.#hostedSession(characterId);
+    }
+    if (hosted === undefined) throw new Error(`session for ${characterId} was not prepared`);
     const viewer = new Viewer(socket, characterId, this.#options.viewer);
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
@@ -191,39 +230,57 @@ export class SessionHost {
     this.#renewTimer = null;
   }
 
-  #sessionOf(characterId: string): HostedSession {
-    const existing = this.sessionFor(characterId);
-    if (existing !== undefined) {
-      return this.#sessions.get(existing.id) as HostedSession;
-    }
+  #hostedSession(characterId: string): HostedSession | undefined {
+    const sessionId = this.#sessionIdByCharacter.get(characterId);
+    return sessionId === undefined ? undefined : this.#sessions.get(sessionId);
+  }
 
-    const session = this.#options.createSession(characterId);
+  async #createAndRegister(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+  ): Promise<void> {
+    const session = this.#options.createSession(characterId, initialCharacter);
+    await this.#register(characterId, session, accountId);
+    this.#createLocal(characterId, session, accountId);
+  }
+
+  #createLocal(characterId: string, session: Session, accountId?: string): void {
     const hosted: HostedSession = { session, viewers: new Set() };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
-
-    // O diretório é o que faz a reconexão voltar para ESTE nó (FUN-12). Registrar depois de
-    // aceitar o socket seria uma janela em que o personagem está hospedado e invisível.
-    void this.#options.directory
-      ?.register(characterId, {
-        sessionId: session.id,
-        nodeId: this.#options.nodeId,
-        type: session.ruleset.type satisfies SessionType,
-      })
-      .catch((error: unknown) => this.#logger.error({ error }, 'Failed to register session'));
+    if (accountId !== undefined) this.#accountIdByCharacter.set(characterId, accountId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },
       'Session created',
     );
-    return hosted;
+  }
+
+  async #register(
+    characterId: string,
+    session: Session,
+    accountId: string | undefined,
+  ): Promise<void> {
+    const directory = this.#options.directory;
+    if (directory === undefined) return;
+    if (accountId === undefined) throw new Error('account is required to register a session');
+    const registered = await directory.register(characterId, {
+      sessionId: session.id,
+      nodeId: this.#options.nodeId,
+      type: session.ruleset.type satisfies SessionType,
+    }, accountId);
+    if (!registered) throw new Error('active reservation expired before session registration');
   }
 
   async #renewLeases(): Promise<void> {
     const directory = this.#options.directory;
     if (directory === undefined || this.#sessionIdByCharacter.size === 0) return;
     try {
-      await directory.renew([...this.#sessionIdByCharacter.keys()]);
+      await directory.renew([...this.#accountIdByCharacter].map(([characterId, accountId]) => ({
+        characterId,
+        accountId,
+      })));
     } catch (error) {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.

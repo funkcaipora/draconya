@@ -1,12 +1,12 @@
 # Onboarding e tutorial
 
-**Status:** não implementado
+**Status:** parcial — criação inicial de personagem implementada; tutorial e escolha de vocação pendentes
 **PRD:** §7.4, §8
 **Épico:** E14 (tutorial guiado do level 1 ao 8 com escolha de vocação). E0 cobre o que precede o tutorial — CRUD e criação inicial de personagem.
 
 ## Comportamento
 
-O jogador escolhe o nome do personagem antes de qualquer outra coisa — é a primeira decisão do fluxo. Em seguida entra direto no tutorial, sem escolher vocação ainda. O tutorial ocorre entre os levels 1 e 8 e ensina fazendo: o jogador aprende jogando, não lendo telas de explicação separadas da ação.
+O jogador já pode criar o personagem escolhendo o nome antes de qualquer outra coisa; o registro nasce sem vocação, como previsto. A entrada automática no tutorial ainda não está implementada. Quando esse fluxo visual entrar, o personagem seguirá direto para o tutorial sem escolher vocação ainda. O tutorial ocorre entre os levels 1 e 8 e ensina fazendo: o jogador aprende jogando, não lendo telas de explicação separadas da ação.
 
 Ao longo do tutorial, o jogo introduz: as barras de HP/Mana, a action bar e suas hotkeys, o funcionamento de skills, movimentação e interação básicas, a noção de que a hunt roda de forma idle, a existência de equipamentos e mochila, e a leitura geral do client.
 

@@ -8,6 +8,9 @@
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @draconya/client build",
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
     "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -15,7 +18,7 @@
     "docs-check": "tsx scripts/docs-check.ts",
     "source-policy": "tsx scripts/source-policy.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy",
-    "dev": "pnpm --filter @draconya/server dev",
+    "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "pnpm --filter @draconya/tools content:check"
   },
   "devDependencies": {

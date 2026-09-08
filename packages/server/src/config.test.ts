@@ -13,6 +13,16 @@ describe('loadConfiguration', () => {
     expect(configuration.AUTH_DEV_MODE).toBe(false);
   });
 
+  it('treats blank optional WorkOS credentials as unconfigured', () => {
+    const configuration = loadConfiguration({
+      ...minimumEnvironment,
+      WORKOS_API_KEY: '',
+      WORKOS_CLIENT_ID: '',
+    } as NodeJS.ProcessEnv);
+    expect(configuration.WORKOS_API_KEY).toBeUndefined();
+    expect(configuration.WORKOS_CLIENT_ID).toBeUndefined();
+  });
+
   it('fails with a useful message when a required variable is missing', () => {
     expect(() => loadConfiguration({} as NodeJS.ProcessEnv)).toThrow(/DATABASE_URL/);
   });
@@ -29,5 +39,44 @@ describe('loadConfiguration', () => {
     expect(() =>
       loadConfiguration({ ...minimumEnvironment, NODE_ENV: 'production' } as NodeJS.ProcessEnv),
     ).toThrow(/WORKOS_API_KEY/);
+  });
+
+  it('requires WORKOS_CLIENT_ID in production', () => {
+    expect(() =>
+      loadConfiguration({
+        ...minimumEnvironment,
+        NODE_ENV: 'production',
+        WORKOS_API_KEY: 'sk_test',
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/WORKOS_CLIENT_ID/);
+  });
+
+  it('rejects a partially configured WorkOS integration', () => {
+    expect(() => loadConfiguration({
+      ...minimumEnvironment,
+      WORKOS_CLIENT_ID: 'client_test',
+    } as NodeJS.ProcessEnv)).toThrow(/configured together/);
+  });
+
+  it('requires HTTPS origins and redirects in production', () => {
+    const production = {
+      ...minimumEnvironment,
+      NODE_ENV: 'production',
+      WORKOS_API_KEY: 'sk_test',
+      WORKOS_CLIENT_ID: 'client_test',
+    } as NodeJS.ProcessEnv;
+
+    expect(() => loadConfiguration(production)).toThrow(/API_ORIGIN must use https/);
+    expect(() => loadConfiguration({
+      ...production,
+      API_ORIGIN: 'https://game.example.com',
+    })).toThrow(/WORKOS_REDIRECT_URI must use https/);
+  });
+
+  it('rejects API_ORIGIN paths because it is also the CORS origin', () => {
+    expect(() => loadConfiguration({
+      ...minimumEnvironment,
+      API_ORIGIN: 'https://game.example.com/play',
+    } as NodeJS.ProcessEnv)).toThrow(/must be an origin/);
   });
 });

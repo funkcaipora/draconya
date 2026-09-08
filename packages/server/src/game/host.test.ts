@@ -1,10 +1,15 @@
 import { CharacterRuntime, Rng, Session, type Ruleset } from '@draconya/sim';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
+import type { SessionDirectory } from '../directory.js';
 import { SessionHost } from './host.js';
 import { FakeSocket } from './testing.js';
 
 const logger = createLogger('silent', 'test');
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 /** Ruleset instrumentado: conta ticks e muda de taxa com a presença de visualizador. */
 function countingRuleset(hzAttached = 10, hzDetached = 1) {
@@ -54,6 +59,98 @@ function buildHost(ruleset: Ruleset, options: { now?: () => number } = {}) {
 }
 
 describe('session host', () => {
+  it('waits for directory registration before exposing a prepared session', async () => {
+    const { ruleset } = countingRuleset();
+    let finishRegistration: ((registered: boolean) => void) | undefined;
+    const registration = new Promise<boolean>((resolve) => {
+      finishRegistration = resolve;
+    });
+    const directory = {
+      register: () => registration,
+    } as unknown as SessionDirectory;
+    const sessions: Session[] = [];
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory,
+      createSession: (characterId) => {
+        const session = new Session({
+          id: `s-${characterId}`, contentVersion: 'v-test', ruleset,
+          rng: Rng.fromSeed(characterId), createdAtMs: 0,
+        });
+        sessions.push(session);
+        return session;
+      },
+    });
+
+    const preparing = host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+    expect(host.sessionCount).toBe(0);
+    finishRegistration?.(true);
+    await preparing;
+    expect(host.sessionCount).toBe(1);
+    expect(sessions).toHaveLength(1);
+  });
+
+  it('shares one preparation across concurrent handshakes', async () => {
+    const { ruleset } = countingRuleset();
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    let created = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory,
+      createSession: (characterId) => {
+        created += 1;
+        return new Session({
+          id: `s-${characterId}`, contentVersion: 'v-test', ruleset,
+          rng: Rng.fromSeed(characterId), createdAtMs: 0,
+        });
+      },
+    });
+
+    await Promise.all([
+      host.prepare('p1', { level: 1, xp: 0 }, 'a1'),
+      host.prepare('p1', { level: 1, xp: 0 }, 'a1'),
+    ]);
+    expect(created).toBe(1);
+  });
+
+  it('does not host a session whose active reservation expired', async () => {
+    const { ruleset } = countingRuleset();
+    const directory = { register: async () => false } as unknown as SessionDirectory;
+    const guarded = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory,
+      createSession: (characterId) => new Session({
+        id: `s-${characterId}`, contentVersion: 'v-test', ruleset,
+        rng: Rng.fromSeed(characterId), createdAtMs: 0,
+      }),
+    });
+
+    await expect(guarded.prepare('p1', { level: 1, xp: 0 }, 'a1')).rejects.toThrow(
+      'active reservation expired',
+    );
+    expect(guarded.sessionCount).toBe(0);
+  });
+
+  it('renews the account slot with the session lease', async () => {
+    vi.useFakeTimers();
+    const { ruleset } = countingRuleset(0, 0);
+    const renew = vi.fn(async () => undefined);
+    const directory = {
+      register: async () => true,
+      renew,
+    } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, directory,
+      createSession: (characterId) => new Session({
+        id: `s-${characterId}`, contentVersion: 'v-test', ruleset,
+        rng: Rng.fromSeed(characterId), createdAtMs: 0,
+      }),
+    });
+    await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+    host.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    host.stop();
+
+    expect(renew).toHaveBeenCalledWith([{ characterId: 'p1', accountId: 'a1' }]);
+  });
   it('gives two connections of one character the same session', () => {
     // Duas abas são dois VISUALIZADORES, nunca duas sessões — invariante 8.
     const { ruleset } = countingRuleset();

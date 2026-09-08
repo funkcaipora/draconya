@@ -124,6 +124,9 @@ importers:
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.69.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/dddd8ffd1b2c28a66022160923ca92f064cdacb4
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
 
   packages/sim:
     dependencies:
