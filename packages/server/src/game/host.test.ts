@@ -314,6 +314,49 @@ describe('session host', () => {
     ]);
   });
 
+  it('answers session-attach with the current state, through the queue', () => {
+    // ENFILEIRADO, não imediato. Mandar o estado na frente da fila o colocaria depois de
+    // deltas que já esperavam, e o cliente aplicaria um passo antigo por cima do estado
+    // atual — a troca de "completo" para "só deltas" tem que ser atômica.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'session-attach' });
+    expect(socket.frames).toHaveLength(0);
+    expect(viewer.queued).toBe(1);
+
+    host.flush();
+    const state = socket.received().find((m) => m.type === 'session-state');
+    expect(state).toBeDefined();
+    if (state?.type !== 'session-state') return;
+    expect(state.self.characterId).toBe('p1');
+    expect(state.self.creatureId).toBe(1);
+    expect(state.self.maxHealth).toBe(100);
+    expect(state.world.creatures).toHaveLength(1);
+    expect(state.world.creatures[0]?.id).toBe(1);
+    // Estado, não replay: o que vai é onde as coisas estão e o agregado, nunca a fila.
+    expect(state.aggregates.durationMs).toBe(0);
+  });
+
+  it('keeps the same creature number across reattachments', () => {
+    // Renumerar a cada pedido faria o cliente achar que a criatura antiga sumiu e outra
+    // apareceu no mesmo lugar — e a câmera perderia o alvo no meio de um passo.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const viewer = host.attach(new FakeSocket(), 'p1');
+
+    host.handle(viewer, { type: 'session-attach' });
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    const ids = (viewer as unknown as { characterId: string }).characterId;
+    expect(ids).toBe('p1');
+    expect(host.sessionFor('p1')).toBeDefined();
+  });
+
   it('answers ping immediately, without waiting for the cycle', () => {
     const { ruleset } = countingRuleset();
     const { host } = buildHost(ruleset);

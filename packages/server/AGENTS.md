@@ -93,6 +93,30 @@ Saída é **um frame por ciclo**, em lote, nunca um `send` por evento — é o q
 projeção de 0,5–1,5 KB/s por jogador. As exceções são `welcome` e `pong`, que saem na hora:
 `pong` que espera o ciclo mede a fila, não a rede.
 
+## Reanexar devolve estado, nunca replay (FUN-32)
+
+`session-attach` responde com `session-state`: **onde as coisas estão agora**, mais os
+agregados e a lista curta de eventos notáveis. Nunca a fila de eventos que aconteceram
+enquanto ninguém olhava — voltar depois de seis horas não pode virar seis horas de animação.
+A versão sutil do mesmo erro é mandar "os últimos N eventos" e deixar o cliente decidir; por
+isso não existe campo para isso na mensagem.
+
+Duas armadilhas concretas:
+
+- **O `session-state` vai pela FILA, nunca por `sendNow`.** Mandá-lo na frente o colocaria
+  depois de deltas que já esperavam, e o cliente aplicaria um passo antigo por cima do estado
+  atual. A fila é a atomicidade da troca entre "completo" e "só deltas"; basta não furá-la.
+- **Nenhum campo de carga pode se chamar `type`.** O codec serializa com
+  `const { type, ...props } = msg`, então um campo com esse nome é apagado no caminho e a
+  mensagem inteira é recusada do outro lado **em silêncio** (`decodeS2C` devolve `null`). O
+  `session-state` nasceu com esse defeito e só falhou quando alguém mandou a mensagem pela
+  primeira vez. Há teste estrutural em `protocol` cobrindo todas as mensagens.
+
+O id numérico de criatura é do servidor. O protocolo usa `number` porque isso vai no caminho
+quente — 4 bytes por `creature-move`, dezenas de vezes por segundo, contra 36 de um UUID. O
+`sim` não conhece protocolo e o cliente não pode inventar número, então a tradução mora no
+`SessionHost` e é estável enquanto a sessão viver.
+
 ## Como testar
 
 ```
