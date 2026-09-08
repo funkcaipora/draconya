@@ -1,0 +1,90 @@
+# .github/dependabot.yml — atualização de dependências (docs/harness-plan.md §4.4).
+#
+# O que este arquivo tenta resolver: dependência desatualizada não avisa. Ela vira uma CVE que
+# alguém descobre meses depois, ou um salto de três versões maiores no dia em que precisa ser
+# atualizada com pressa. Um PR por semana, revisado, é mais barato que qualquer dos dois.
+#
+# O que ele tenta EVITAR: virar ruído. Dependabot sem agrupamento num monorepo abre um PR por
+# pacote por semana, e PR que ninguém lê ensina a ignorar a aba de PRs inteira — o mesmo
+# problema do CI que nasce vermelho (§4.4).
+#
+# Por isso: minor e patch são agrupados e chegam como DOIS PRs por semana no npm (produção e
+# desenvolvimento); versão MAIOR vem sozinha, porque cada uma é uma decisão, não uma tarefa.
+#
+# Mensagem de commit: `chore(deps): ...`, que é o formato exigido pelo hook de commit
+# (.githooks/commit-msg). O escopo `deps` foi adicionado à lista junto com este arquivo —
+# forçar um bump do fastify em packages/server a se chamar `tools` tornaria o campo de escopo
+# inútil justamente para o tipo de commit que mais vai aparecer.
+
+version: 2
+
+updates:
+  # --- npm / pnpm workspace ---------------------------------------------------------------
+  #
+  # Um único registro, na raiz. O workspace inteiro é resolvido a partir do `pnpm-lock.yaml`
+  # da raiz, que é onde as versões de todos os pacotes de fato vivem — apontar também para
+  # `packages/*` produziria PRs concorrentes sobre o mesmo lockfile.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 5
+    # `increase` mexe no intervalo declarado no package.json, não só no lockfile. É o certo
+    # para aplicação: nenhum pacote daqui é publicado, então não há consumidor externo para
+    # quem um intervalo estreito custe alguma coisa.
+    versioning-strategy: increase
+    commit-message:
+      prefix: chore(deps)
+      prefix-development: chore(deps)
+    groups:
+      production-minor-and-patch:
+        dependency-type: production
+        update-types: ['minor', 'patch']
+      development-minor-and-patch:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+
+  # --- GitHub Actions ---------------------------------------------------------------------
+  #
+  # As actions do CI são pinadas por versão maior (`@v4`), então o que chega aqui é
+  # majoritariamente `v4 → v5`. Vale acompanhar: action abandonada é como um CI passa a rodar
+  # em runner obsoleto sem ninguém pedir.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      github-actions:
+        patterns: ['*']
+
+  # --- Docker -----------------------------------------------------------------------------
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Sao_Paulo
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: chore(deps)
+    ignore:
+      # A versão MAIOR do Node é fixada em quatro lugares que precisam concordar:
+      # `.node-version`, `engines` no package.json, o `FROM` do Dockerfile e o `node-version`
+      # do CI. Um PR que mexe só no Dockerfile produz exatamente a divergência que o AGENTS.md
+      # documenta: o binário nativo do uWebSockets.js quebra com uma mensagem que não menciona
+      # a versão do Node.
+      #
+      # Trocar de Node maior é uma decisão coordenada, não um bump. Isto ignora só atualização
+      # de VERSÃO — alerta de segurança do Dependabot continua chegando.
+      - dependency-name: node
+        update-types: ['version-update:semver-major']

@@ -216,7 +216,7 @@ Não faz nada que as outras não façam — garante que nenhuma seja esquecida, 
 <type>(<scope>): <description no imperativo> (FUN-nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
-scope: sim | protocol | content | server | client | tools | docs
+scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
 Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
@@ -262,6 +262,40 @@ Hook que incomoda vira hook desligado. Três:
 > exatamente a burocracia que a §7 manda não criar. O que sobrou é o que tem valor: saber
 > quantas decisões seguem abertas e onde. Um CI que nasce vermelho por uma regra sem sinal
 > ensina todo mundo a ignorar o CI.
+
+### 4.4.1 Dependabot
+
+`.github/dependabot.yml`, três ecossistemas: npm (a raiz do workspace pnpm), GitHub Actions e
+Docker. Semanal, segunda de manhã.
+
+O problema que ele resolve não é interessante — dependência desatualizada não avisa, e vira ou
+uma CVE descoberta meses depois ou um salto de três versões maiores num dia de pressa. O
+problema que ele **cria** é: Dependabot sem agrupamento num monorepo abre um PR por pacote por
+semana, e PR que ninguém lê ensina a ignorar a aba de PRs inteira. É o mesmo mecanismo do CI
+que nasce vermelho (§4.4), e a mesma cura: menos sinal e sinal que vale.
+
+Por isso minor e patch chegam agrupados — dois PRs de npm por semana, produção e
+desenvolvimento — e versão maior vem sozinha, porque cada uma é uma decisão, não uma tarefa.
+
+Uma exclusão, e ela é de arquitetura: **a versão maior do Node não é bump.** Ela é fixada em
+quatro lugares que precisam concordar (`.node-version`, `engines`, o `FROM` do Dockerfile e o
+`node-version` do CI), e um PR que mexe só num deles produz exatamente a divergência que
+quebra o binário nativo do `uWebSockets.js` com uma mensagem que não menciona a versão do Node.
+A exclusão é só de atualização de versão; alerta de segurança continua chegando.
+
+Escopo de commit: `chore(deps)`, adicionado à lista de escopos junto com o arquivo. Sem isso,
+todo commit do Dependabot seria recusado pelo hook de mensagem — e a alternativa, chamar de
+`tools` um bump que vive em `packages/server`, tornaria o campo de escopo inútil.
+
+**O arquivo sozinho liga só metade.** `dependabot.yml` ativa as atualizações de VERSÃO; as de
+SEGURANÇA dependem de os alertas do Dependabot estarem ligados, e num repositório privado eles
+vêm desligados. Foram ligados junto com este arquivo — sem isso, a exclusão do Node maior
+acima não teria a válvula de escape que ela promete, porque alerta nenhum chegaria.
+
+As correções automáticas de segurança (`automated-security-fixes`) seguem **desligadas**, por
+escolha: elas abrem PR fora do agendamento semanal, e o valor de um agendamento é ser o único
+momento em que dependência entra na cabeça de alguém. Ligar é uma linha:
+`gh api -X PUT repos/funkcaipora/draconya/automated-security-fixes`.
 
 ### 4.5 Harness da sessão — `.claude/settings.json`
 

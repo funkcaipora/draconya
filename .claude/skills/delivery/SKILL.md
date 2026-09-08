@@ -66,7 +66,7 @@ Padrão obrigatório:
 
 ```
 type:   feat | fix | refactor | perf | docs | test | chore
-scope: sim | protocol | content | server | client | tools | docs
+scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
 Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
