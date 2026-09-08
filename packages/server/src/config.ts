@@ -1,6 +1,7 @@
 // Configuração por ambiente, validada no boot. Falta de variável obrigatória derruba o
 // processo aqui, com mensagem clara — nunca vira `undefined` numa query três camadas abaixo.
 
+import { hostname } from 'node:os';
 import { z } from 'zod';
 
 const EnvironmentSchema = z.object({
@@ -12,6 +13,13 @@ const EnvironmentSchema = z.object({
 
   GAME_PORT: z.coerce.number().int().positive().default(7171),
   GAME_PUBLIC_URL: z.string().default('ws://localhost:7171'),
+
+  /**
+   * Identidade do nó no diretório de sessões. O default cobre o caso de um nó só; com mais
+   * de um por máquina ele PRECISA ser distinto, senão dois processos disputam o mesmo
+   * batimento e o `api` roteia ticket para o nó errado.
+   */
+  NODE_ID: z.string().min(1).default(hostname()),
 
   WORKOS_API_KEY: z.string().optional(),
   WORKOS_CLIENT_ID: z.string().optional(),
