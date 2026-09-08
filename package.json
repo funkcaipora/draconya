@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -b && pnpm --filter @draconya/client build",
-    "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json",
+    "typecheck": "tsc -b --force && tsc -p tsconfig.tooling.json && tsc -p packages/client/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

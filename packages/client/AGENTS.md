@@ -44,10 +44,17 @@ a ser GPL. Leia como referência se quiser; não copie linha.
 
 ## Invariantes locais
 
-- **O estado de jogo vive num store mutável fora do React**, alimentado pelos deltas do WebSocket.
-  Componentes assinam fatias estreitas. **O canvas nunca renderiza através do React.** Chegam
-  dezenas de deltas por segundo; um HUD denso re-renderizando por contexto a cada `creature-move`
-  derruba a taxa de quadros, e nenhuma memoização salva depois. Ver ADR 0007.
+- **O estado de jogo vive num store mutável fora do React**, em `src/state/`, alimentado pelos
+  deltas do WebSocket. São DUAS camadas, e a divisão é a garantia:
+  - `state/world.ts` — criaturas, instância, mapa. **Não existe `subscribe` neste módulo.** Um
+    `creature-move` não pode causar render de React porque não há caminho do movimento até o
+    React. É estrutural, não combinado — disciplina dura até o quinto componente.
+  - `state/hud.ts` — o que uma pessoa lê como texto ou barra. Assinatura por fatia, com
+    throttle opcional para valor contínuo.
+
+  `state/apply.ts` é a única costura entre socket e estado, e cada `case` dele decide mundo ou
+  HUD. **O canvas nunca renderiza através do React**; ele lê `world` direto no laço de render.
+  Ver ADR 0007.
 - **O cliente só manda intenção** (invariante 4).
 - Predição é **só do próprio passo**, com reconciliação. Nunca preveja dano, loot, nem o passo
   dos outros.
@@ -57,11 +64,18 @@ a ser GPL. Leia como referência se quiser; não copie linha.
 ## Como testar
 
 ```
+pnpm vitest run packages/client
 pnpm --filter @draconya/client build
 ```
 
-Testes de componente entram quando houver componente. O teste de desempenho que importa:
-com 40 criaturas se movendo, o número de commits do React por segundo fica próximo de zero.
+O pacote **entrou no `pnpm typecheck`** junto com a FUN-22. Antes disso ele não era verificado
+por ninguém: o `tsconfig.json` dele tem `composite: false` e `noEmit`, o que o impede de ser
+project reference, e o `vite build` usa esbuild, que remove tipo sem checar. Dava para escrever
+`const x: number = 'texto'` aqui e o `pnpm check` continuar verde.
+
+O teste de desempenho que importa — com 40 criaturas se movendo, os commits do React ficam
+próximos de zero — é medido no `apply.test.ts` uma camada abaixo: commit só acontece se alguém
+for avisado, então o teste conta AVISOS, e o número esperado é zero, não "baixo".
 
 ## Armadilhas conhecidas
 

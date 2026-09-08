@@ -1,0 +1,127 @@
+import type { S2CMessage } from '@draconya/protocol';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { applyMessage } from './apply.js';
+import { INITIAL_HUD, hud, subscribeSlice } from './hud.js';
+import { interpolate, world } from './world.js';
+
+const at = (x: number, y: number, z = 7) => ({ x, y, z });
+
+beforeEach(() => {
+  world.creatures.clear();
+  world.instanceId = null;
+  world.mapId = null;
+  hud.set(() => INITIAL_HUD);
+});
+
+function spawn(id: number, position = at(0, 0)): S2CMessage {
+  return {
+    type: 'creature-appear',
+    id, position, appearanceId: 100, name: `rat-${id}`, health: 20, maxHealth: 20,
+  };
+}
+
+describe('world deltas', () => {
+  it('never reaches a HUD subscriber, with forty creatures moving', () => {
+    // É O TESTE QUE DEFINE ESTA ISSUE. O critério de aceite fala em "commits do React
+    // próximos de zero"; um commit só acontece se alguém for avisado, então o que se mede
+    // aqui é a causa, e de forma determinística — o número tem que ser ZERO, não "baixo".
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state, notified);
+
+    for (let id = 0; id < 40; id++) applyMessage(spawn(id, at(id, 0)), 0);
+    // Dez passos por criatura: uma segunda inteira de jogo a 10 Hz.
+    for (let tick = 1; tick <= 10; tick++) {
+      for (let id = 0; id < 40; id++) {
+        applyMessage(
+          { type: 'creature-move', id, from: at(id, tick - 1), to: at(id, tick), durationMs: 400 },
+          tick * 100,
+        );
+      }
+      for (let id = 0; id < 40; id++) {
+        applyMessage({ type: 'creature-health', id, health: 20 - tick, maxHealth: 20 }, tick * 100);
+      }
+    }
+
+    expect(world.creatures.size).toBe(40);
+    expect(notified).toHaveBeenCalledTimes(0);
+  });
+
+  it('keeps the step so the canvas can interpolate instead of teleporting', () => {
+    applyMessage(spawn(1, at(0, 0)), 0);
+    applyMessage(
+      { type: 'creature-move', id: 1, from: at(0, 0), to: at(1, 0), durationMs: 400 },
+      1_000,
+    );
+
+    const creature = world.creatures.get(1);
+    expect(creature).toBeDefined();
+    if (creature === undefined) return;
+
+    expect(interpolate(creature, 1_000)).toEqual(at(0, 0));
+    expect(interpolate(creature, 1_200)).toEqual({ x: 0.5, y: 0, z: 7 });
+    expect(interpolate(creature, 1_400)).toEqual(at(1, 0));
+    // Passado o fim, PARA no destino. Extrapolar seria prever o passo dos outros, que o
+    // AGENTS.md do pacote proíbe.
+    expect(interpolate(creature, 9_000)).toEqual(at(1, 0));
+  });
+
+  it('ignores a step for a creature it never saw appear', () => {
+    // Normal, não erro: pode ter sido filtrado por interest management ou chegado fora de
+    // ordem. Inventar a criatura desenharia um fantasma sem aparência.
+    applyMessage(
+      { type: 'creature-move', id: 99, from: at(0, 0), to: at(1, 0), durationMs: 400 },
+      0,
+    );
+    expect(world.creatures.size).toBe(0);
+  });
+
+  it('clears the world when entering another instance', () => {
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'instance-enter', instanceId: 'i2', map: 'rat-cellars' }, 0);
+
+    expect(world.creatures.size).toBe(0);
+    expect(world.instanceId).toBe('i2');
+    expect(world.mapId).toBe('rat-cellars');
+  });
+
+  it('removes a creature that disappeared', () => {
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'creature-disappear', id: 1 }, 0);
+    expect(world.creatures.has(1)).toBe(false);
+  });
+});
+
+describe('HUD deltas', () => {
+  it('applies stats and notifies once', () => {
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+      },
+      0,
+    );
+
+    expect(hud.get().health).toBe(150);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  it('measures latency from the round trip', () => {
+    applyMessage({ type: 'pong', t: 1_000 }, 1_042);
+    expect(hud.get().latencyMs).toBe(42);
+  });
+
+  it('caps the chat instead of growing forever', () => {
+    // Chat de MMORPG roda o dia inteiro. Sem teto o sintoma chega horas depois como "o jogo
+    // fica lento com o tempo", que ninguém liga ao chat.
+    for (let i = 0; i < 250; i++) {
+      applyMessage({ type: 'chat-message', channel: 'local', author: 'a', text: `${i}` }, i);
+    }
+    const chat = hud.get().chat;
+    expect(chat).toHaveLength(200);
+    expect(chat[chat.length - 1]?.text).toBe('249');
+  });
+});
