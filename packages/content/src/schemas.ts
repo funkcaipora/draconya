@@ -47,7 +47,15 @@ export const huntSchema = z.object({
   name: z.string().min(1),
   recommendedLevel: z.number().int().positive(),
   mapId: z.string().min(1),
-  difficulties: z.record(
+  /**
+   * `partialRecord`, e não `record`: uma hunt define as dificuldades que fazem sentido para
+   * ela, não obrigatoriamente as quatro. É o que o `refine` abaixo sempre disse — exigir ao
+   * menos uma só faz sentido se nem todas forem obrigatórias.
+   *
+   * A distinção passou a ser explícita no zod 4, onde `record` com chave de enum virou
+   * exaustivo. No zod 3 as duas se escreviam igual, e o comportamento era este.
+   */
+  difficulties: z.partialRecord(
     z.enum(['beginner', 'professional', 'hero', 'legendary']),
     huntDifficultySchema,
   ).refine((d) => Object.keys(d).length > 0, 'a hunt precisa de ao menos uma dificuldade'),
