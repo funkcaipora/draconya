@@ -326,15 +326,69 @@ describe('session host', () => {
     expect(viewer.queued).toBe(0);
   });
 
-  it('closes the connection on logout without touching the session', () => {
+  it('ends the session and gives the slot back on logout', async () => {
+    // Sair do jogo não é desconectar. Enquanto o `logout` só fechava o socket, NADA no
+    // servidor devolvia um slot de personagem ativo: dois personagens que já tivessem
+    // conectado esgotavam o teto até o processo reiniciar (FUN-52).
+    const released: string[] = [];
+    const slotsReleased: Array<[string, string]> = [];
+    const directory = {
+      register: async () => true,
+      release: async (characterId: string) => {
+        released.push(characterId);
+      },
+      releaseSlot: async (accountId: string, characterId: string) => {
+        slotsReleased.push([accountId, characterId]);
+      },
+    } as unknown as SessionDirectory;
     const { ruleset, counter } = countingRuleset();
-    const { host } = buildHost(ruleset);
+    const { host } = buildHost(ruleset, { directory });
+    await host.prepare('p1', undefined, 'a1');
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
 
     host.handle(viewer, { type: 'logout' });
+    await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
 
     expect(socket.ended?.code).toBe(1000);
+    expect(counter.ended).toBe(1);
+    expect(released).toEqual(['p1']);
+    expect(slotsReleased).toEqual([['a1', 'p1']]);
+  });
+
+  it('closes every tab of the character on logout, not just the one that asked', async () => {
+    // Sair do jogo é do personagem, não da aba. A outra aba ficaria olhando uma sessão que
+    // não existe mais, sem atualizar e sem dizer por quê.
+    const directory = {
+      register: async () => true,
+      release: async () => {},
+      releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory });
+    await host.prepare('p1', undefined, 'a1');
+    const first = new FakeSocket();
+    const second = new FakeSocket();
+    const viewer = host.attach(first, 'p1');
+    host.attach(second, 'p1');
+
+    host.handle(viewer, { type: 'logout' });
+    await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
+
+    expect(first.ended?.code).toBe(1000);
+    expect(second.ended?.code).toBe(1000);
+    expect(host.viewersOf('p1')).toBe(0);
+  });
+
+  it('keeps the session when the socket merely closes', () => {
+    // O contraponto do teste acima, e o ADR 0001 em uma linha: desconectar não encerra.
+    const { ruleset, counter } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const viewer = host.attach(new FakeSocket(), 'p1');
+
+    viewer.markClosed();
+    host.detach(viewer);
+
     expect(host.sessionFor('p1')?.ended).toBeNull();
     expect(counter.ended).toBe(0);
   });

@@ -37,6 +37,26 @@ Excluir um personagem usa soft delete para preservar identidade histórica e fut
 | GET | `/api/auth/callback` | valida `state`, conclui login e cria sessão local |
 | GET | `/api/auth/me` | devolve a conta autenticada |
 | POST | `/api/auth/logout` | encerra sessão local e informa URL de logout do WorkOS quando aplicável |
+
+### Desconectar não é sair
+
+São duas coisas diferentes, e a distinção decide quando um slot de personagem ativo volta.
+
+**Desconectar** (fechar a aba, cair a rede) não encerra nada. A sessão continua no nó, e uma
+hunt continua rendendo — é o [ADR 0001](../adr/0001-session-decoupled-from-connection.md), e é
+o produto inteiro.
+
+**Sair** é o `logout` do protocolo de jogo (opcode C2S 8). Esse encerra a sessão pelo ruleset,
+solta o registro no diretório e **devolve o slot** da conta. Todas as abas daquele personagem
+são fechadas junto: sair é do personagem, não da aba.
+
+O `POST /api/auth/logout` do HTTP é outra coisa ainda — ele encerra a sessão de *conta* e não
+fala com os nós de jogo. Sair do jogo com o personagem exige o `logout` do socket.
+
+Fica em aberto o caso de quem fecha o navegador e nunca mais volta: hoje esse personagem
+segura o slot indefinidamente ([FUN-52](https://linear.app/funkcaipora/issue/FUN-52)). Fechar
+isso exige a máquina de estados do personagem (FUN-30), que é quem sabe quando uma sessão de
+repouso pode ir embora.
 | POST | `/api/auth/dev-login` | login local, somente com `AUTH_DEV_MODE=true` |
 | GET | `/api/characters` | lista personagens não excluídos da conta |
 | POST | `/api/characters` | cria personagem |

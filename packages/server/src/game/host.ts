@@ -174,14 +174,31 @@ export class SessionHost {
     // hospedada" ou "tem alguém jogando", e essa decisão é da FUN-30, não deste detach.
   }
 
+  async #logout(characterId: string): Promise<void> {
+    try {
+      await this.release(characterId, 1000, 'logout');
+    } catch (error) {
+      this.#logger.error({ error, characterId }, 'Failed to log the character out');
+    }
+  }
+
   /**
    * Tira a sessão deste nó e devolve o slot da conta. Encerra antes de soltar, para o
    * ruleset ter a chance de creditar o que for dele.
+   *
+   * Fecha TODOS os visualizadores do personagem, não só quem pediu: sair do jogo é do
+   * personagem, não da aba. Deixar a outra aba aberta olhando uma sessão que já não existe
+   * seria uma tela que não atualiza mais e não diz por quê.
    */
-  async release(characterId: string): Promise<void> {
+  async release(characterId: string, closeCode?: number, closeReason?: string): Promise<void> {
     const hosted = this.#hostedSession(characterId);
     if (hosted === undefined) return;
     const accountId = this.#accountIdByCharacter.get(characterId);
+
+    if (closeCode !== undefined) {
+      for (const viewer of [...hosted.viewers]) viewer.close(closeCode, closeReason ?? '');
+    }
+    hosted.viewers.clear();
 
     if (hosted.session.ended === null) hosted.session.end('manual-exit');
     this.#sessions.delete(hosted.session.id);
@@ -209,7 +226,15 @@ export class SessionHost {
         viewer.sendNow({ type: 'pong', t: message.t });
         return;
       case 'logout':
-        viewer.close(1000, 'logout');
+        // Sair do jogo ENCERRA a sessão e devolve o slot; fechar o socket não.
+        //
+        // A distinção é a que o ADR 0001 faz: desconectar não é sair. Uma hunt precisa
+        // sobreviver ao navegador fechado, e é por isso que o `detach` não encerra nada. Mas
+        // um `logout` explícito é o jogador dizendo que terminou — e enquanto ele não
+        // encerrava nada, o slot de personagem ativo não tinha NENHUMA forma de voltar
+        // (FUN-52): dois personagens que já tivessem conectado esgotavam o teto até o
+        // processo reiniciar, e nem apagar o personagem funcionava.
+        void this.#logout(viewer.characterId);
         return;
       default:
         // walk, walk-to, say, client-ready, session-attach e authenticate chegam nas
