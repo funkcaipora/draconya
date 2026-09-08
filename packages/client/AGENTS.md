@@ -53,8 +53,16 @@ a ser GPL. Leia como referência se quiser; não copie linha.
     throttle opcional para valor contínuo.
 
   `state/apply.ts` é a única costura entre socket e estado, e cada `case` dele decide mundo ou
-  HUD. **O canvas nunca renderiza através do React**; ele lê `world` direto no laço de render.
-  Ver ADR 0007.
+  HUD. **O canvas nunca renderiza através do React**; ele lê `world` direto no laço de render
+  (`world/viewport.ts`). Ver ADR 0007.
+- **O mundo é desenhado com RETÂNGULOS por enquanto** (`world/`). O pacote de arte não está no
+  repositório e o pipeline dele é a FUN-16..21. O que existe é tudo o que não depende de arte:
+  câmera de 18×14, camadas, ordem de desenho por `y`, reaproveitamento de sprite e
+  interpolação de passo. Trocar retângulo por sprite é trocar a textura e ligar os
+  `frameGroups`, não reescrever o viewport.
+- **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
+  criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
+  trabalho 60 vezes por segundo.
 - **O cliente só manda intenção** (invariante 4).
 - Predição é **só do próprio passo**, com reconciliação. Nunca preveja dano, loot, nem o passo
   dos outros.

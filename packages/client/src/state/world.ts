@@ -52,12 +52,21 @@ export interface World {
   /** Instância em que o personagem está, ou `null` antes de entrar em alguma. */
   instanceId: string | null;
   mapId: string | null;
+  /**
+   * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
+   *
+   * Fica `null` até a FUN-32 (`session-state`) dizer quem é: o `welcome` traz o
+   * `characterId`, que é UUID, e as criaturas são numeradas por instância — não há como
+   * ligar os dois no cliente sem o servidor dizer.
+   */
+  selfId: number | null;
   readonly creatures: Map<number, Creature>;
 }
 
 export const world: World = {
   instanceId: null,
   mapId: null,
+  selfId: null,
   creatures: new Map(),
 };
 
@@ -68,6 +77,7 @@ export const world: World = {
 export function enterInstance(instanceId: string, mapId: string): void {
   world.instanceId = instanceId;
   world.mapId = mapId;
+  world.selfId = null;
   world.creatures.clear();
 }
 
