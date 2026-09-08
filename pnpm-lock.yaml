@@ -80,8 +80,8 @@ importers:
         specifier: workspace:*
         version: link:../protocol
       zod:
-        specifier: ^3.24.0
-        version: 3.25.76
+        specifier: ^4.5.4
+        version: 4.5.4
 
   packages/protocol:
     dependencies:
@@ -123,7 +123,7 @@ importers:
         version: 15.1.3
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.69.0
-        version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/dddd8ffd1b2c28a66022160923ca92f064cdacb4
+        version: git+https://git@github.com:uNetworking/uWebSockets.js.git#dddd8ffd1b2c28a66022160923ca92f064cdacb4
 
   packages/sim:
     dependencies:
@@ -1998,8 +1998,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/dddd8ffd1b2c28a66022160923ca92f064cdacb4:
-    resolution: {tarball: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/dddd8ffd1b2c28a66022160923ca92f064cdacb4}
+  uWebSockets.js@git+https://git@github.com:uNetworking/uWebSockets.js.git#dddd8ffd1b2c28a66022160923ca92f064cdacb4:
+    resolution: {commit: dddd8ffd1b2c28a66022160923ca92f064cdacb4, repo: git@github.com:uNetworking/uWebSockets.js.git, type: git}
     version: 20.69.0
 
   undici-types@7.18.2:
@@ -2135,9 +2135,6 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
-
-  zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
   zod@4.5.4:
     resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
@@ -3707,7 +3704,7 @@ snapshots:
 
   typescript@5.9.3: {}
 
-  uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/dddd8ffd1b2c28a66022160923ca92f064cdacb4: {}
+  uWebSockets.js@git+https://git@github.com:uNetworking/uWebSockets.js.git#dddd8ffd1b2c28a66022160923ca92f064cdacb4: {}
 
   undici-types@7.18.2: {}
 
@@ -3811,8 +3808,6 @@ snapshots:
   yallist@3.1.1: {}
 
   yocto-queue@0.1.0: {}
-
-  zod@3.25.76: {}
 
   zod@4.5.4: {}
 
