@@ -5,4 +5,5 @@ export * as schema from './db/schema.js';
 export * from './role.js';
 export * from './log.js';
 export * from './directory.js';
+export * from './tickets.js';
 export * from './clock.js';

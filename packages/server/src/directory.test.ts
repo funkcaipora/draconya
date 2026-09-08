@@ -1,22 +1,12 @@
-import { Redis } from 'ioredis';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { SessionDirectory } from './directory.js';
-
-const URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
+import { connectTestRedis } from './testing/redis.js';
 
 // A verificação precisa acontecer no TOPO DO MÓDULO, e não em `beforeAll`: o `runIf` do
 // describe é avaliado na coleta, quando nenhum hook rodou ainda. Feito no beforeAll, ele
 // sempre lê `false` e o arquivo inteiro pula em silêncio — que foi exatamente o que
 // aconteceu na primeira versão deste teste.
-const redis = new Redis(URL, { lazyConnect: true, maxRetriesPerRequest: 1 });
-let available = false;
-try {
-  await redis.connect();
-  await redis.ping();
-  available = true;
-} catch {
-  redis.disconnect();
-}
+const { redis, available } = await connectTestRedis(1);
 
 afterAll(async () => {
   if (available) await redis.quit();
@@ -76,7 +66,7 @@ describe.runIf(available)('session directory', () => {
 
   it('expires a node heartbeat', async () => {
     const directory = new SessionDirectory(redis, { leaseMs: 120 });
-    await directory.heartbeat('n1', { sessions: 3 });
+    await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });
     expect(await directory.isNodeAlive('n1')).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(await directory.isNodeAlive('n1')).toBe(false);
@@ -136,5 +126,26 @@ describe.runIf(available)('two active characters per account limit', () => {
     const directory = new SessionDirectory(redis, { activeLimit: 1 });
     expect(await directory.reserveSlot('a1', 'p1')).toBe(true);
     expect(await directory.reserveSlot('a1', 'p2')).toBe(false);
+  });
+
+  it('lists alive nodes with the URL each one published', async () => {
+    const directory = new SessionDirectory(redis);
+    await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });
+    await directory.heartbeat('n2', { sessions: 9, url: 'ws://n2:7171' });
+
+    const nodes = await directory.aliveNodes();
+    expect(nodes.map((node) => node.nodeId).sort()).toEqual(['n1', 'n2']);
+    expect(await directory.node('n2')).toEqual({ nodeId: 'n2', sessions: 9, url: 'ws://n2:7171' });
+  });
+
+  it('discards a heartbeat without a URL instead of returning an unreachable node', async () => {
+    // Batimento de antes da migração. Rotear para ele produziria uma wsUrl vazia, e o
+    // sintoma chegaria no cliente como "não conecta", longe da causa.
+    const directory = new SessionDirectory(redis);
+    await redis.set('node:n1:heartbeat', JSON.stringify({ sessions: 1 }), 'PX', 5_000);
+
+    expect(await directory.isNodeAlive('n1')).toBe(true);
+    expect(await directory.node('n1')).toBeNull();
+    expect(await directory.aliveNodes()).toEqual([]);
   });
 });

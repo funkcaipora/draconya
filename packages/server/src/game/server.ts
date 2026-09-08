@@ -6,13 +6,29 @@
 
 import uWS from 'uWebSockets.js';
 import type { Configuration } from '../config.js';
+import type { SessionDirectory } from '../directory.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
+import type { TicketService } from '../tickets.js';
 
-export function createGame(configuration: Configuration, logger: Logger): Role {
+export interface GameDependencies {
+  readonly directory?: SessionDirectory;
+  readonly tickets?: TicketService;
+}
+
+/** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */
+const HEARTBEAT_INTERVAL_MS = 10_000;
+
+export function createGame(
+  configuration: Configuration,
+  logger: Logger,
+  dependencies: GameDependencies = {},
+): Role {
   let listeningSocket: uWS.us_listen_socket | null = null;
   let acceptingNewSessions = true;
+  let heartbeatTimer: NodeJS.Timeout | null = null;
 
+  const nodeId = configuration.NODE_ID;
   const app = uWS.App();
 
   app.get('/healthz', (response) => {
@@ -34,20 +50,54 @@ export function createGame(configuration: Configuration, logger: Logger): Role {
         response.writeStatus('503 Service Unavailable').end();
         return;
       }
-      // FUN-12: validar o ticket aqui, de uso único, e resolver o personagem.
+
+      // `request` é válido SÓ durante esta chamada — o uWS reaproveita a estrutura assim
+      // que o handler retorna. Tudo que o caminho assíncrono vai precisar é lido agora;
+      // ler depois devolve lixo, e o bug aparece como header vazio de vez em quando.
       const ticket = new URLSearchParams(request.getQuery()).get('ticket') ?? '';
-      response.upgrade(
-        { ticket },
-        request.getHeader('sec-websocket-key'),
-        request.getHeader('sec-websocket-protocol'),
-        request.getHeader('sec-websocket-extensions'),
-        context,
-      );
+      const key = request.getHeader('sec-websocket-key');
+      const protocol = request.getHeader('sec-websocket-protocol');
+      const extensions = request.getHeader('sec-websocket-extensions');
+
+      const tickets = dependencies.tickets;
+      if (tickets === undefined) {
+        // Fechado por padrão: sem serviço de ticket ninguém entra. Aberto seria "qualquer
+        // um vira qualquer personagem", que é pior do que o socket não funcionar.
+        response.writeStatus('503 Service Unavailable').end();
+        return;
+      }
+
+      let aborted = false;
+      response.onAborted(() => {
+        aborted = true;
+      });
+
+      void (async () => {
+        const claim = await tickets.consume(ticket, nodeId);
+        // Cliente desistiu enquanto o Redis respondia. Tocar em `response` depois do abort
+        // derruba o processo inteiro. O ticket já foi queimado, e o slot volta pela
+        // varredura de `tickets:pending` — que é justamente o desfecho que ela cobre.
+        if (aborted) return;
+        response.cork(() => {
+          if (claim === null) {
+            response.writeStatus('401 Unauthorized').end();
+            return;
+          }
+          response.upgrade(
+            { accountId: claim.accountId, characterId: claim.characterId },
+            key,
+            protocol,
+            extensions,
+            context,
+          );
+        });
+      })();
     },
 
-    open: () => {
+    open: (socket) => {
       // FUN-13: anexar visualizador à sessão. Desanexar não pode ter efeito sobre ela.
-      logger.debug('Connection opened');
+      const { characterId } = socket.getUserData() as { characterId: string };
+      logger.debug({ characterId }, 'Connection opened');
     },
 
     message: () => {
@@ -70,10 +120,26 @@ export function createGame(configuration: Configuration, logger: Logger): Role {
             return;
           }
           listeningSocket = socket;
-          logger.info({ port: configuration.GAME_PORT }, 'Game listening');
+          logger.info({ port: configuration.GAME_PORT, nodeId }, 'Game listening');
           resolve();
         });
       });
+
+      // O batimento é o que torna este nó VISÍVEL para o `api` emitir ticket. Sem ele o
+      // processo sobe, aceita conexão e nunca recebe nenhuma — falha silenciosa clássica.
+      const directory = dependencies.directory;
+      if (directory !== undefined) {
+        // TODO(FUN-13): `sessions` sai do contador real de sessões hospedadas. Enquanto for
+        // zero fixo, a escolha do nó menos carregado é na prática arbitrária — o que só não
+        // importa porque hoje existe um nó.
+        const beat = (): void => {
+          void directory
+            .heartbeat(nodeId, { sessions: 0, url: configuration.GAME_PUBLIC_URL })
+            .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
+        };
+        beat();
+        heartbeatTimer = setInterval(beat, HEARTBEAT_INTERVAL_MS);
+      }
     },
     async drain() {
       // FUN-29: aqui é onde a drenagem de verdade entra — parar de aceitar, snapshot
@@ -81,6 +147,10 @@ export function createGame(configuration: Configuration, logger: Logger): Role {
       // de tempo importa: drenagem interrompida no meio é pior que drenagem nenhuma.
       acceptingNewSessions = false;
       logger.info('Game stopped accepting new sessions');
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
       if (listeningSocket) {
         uWS.us_listen_socket_close(listeningSocket);
         listeningSocket = null;

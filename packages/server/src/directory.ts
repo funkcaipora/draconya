@@ -17,6 +17,17 @@ export interface SessionLocation {
   readonly type: string;
 }
 
+/** O que um nó de jogo publica sobre si mesmo a cada batimento. */
+export interface NodeLoad {
+  readonly sessions: number;
+  /** URL pública do WebSocket deste nó — é dela que sai a `wsUrl` do ticket. */
+  readonly url: string;
+}
+
+export interface NodeStatus extends NodeLoad {
+  readonly nodeId: string;
+}
+
 export interface SessionDirectoryOptions {
   /**
    * Validade do lease. Precisa ser FOLGADAMENTE maior que o intervalo de renovação.
@@ -97,14 +108,47 @@ export class SessionDirectory {
 
   // --- nós vivos --------------------------------------------------------------------------
 
-  async heartbeat(nodeId: string, load: { sessions: number }): Promise<void> {
-    await this.#redis.set(
-      `node:${nodeId}:heartbeat`, JSON.stringify(load), 'PX', this.#leaseMs,
-    );
+  /**
+   * O batimento carrega a URL pública do próprio nó porque quem precisa dela é OUTRO
+   * processo: o `api` monta a `wsUrl` do ticket (FUN-12) e não tem como saber o endereço
+   * externo de um nó de jogo que ele nunca viu. Deduzir de configuração local só funciona
+   * enquanto existe um nó só.
+   */
+  async heartbeat(nodeId: string, load: NodeLoad): Promise<void> {
+    await this.#redis.set(nodeKey(nodeId), JSON.stringify(load), 'PX', this.#leaseMs);
   }
 
   async isNodeAlive(nodeId: string): Promise<boolean> {
-    return (await this.#redis.exists(`node:${nodeId}:heartbeat`)) === 1;
+    return (await this.#redis.exists(nodeKey(nodeId))) === 1;
+  }
+
+  async node(nodeId: string): Promise<NodeStatus | null> {
+    const raw = await this.#redis.get(nodeKey(nodeId));
+    return raw === null ? null : parseNodeStatus(nodeId, raw);
+  }
+
+  /**
+   * `SCAN`, nunca `KEYS`. Redis é de uma thread só e é o mesmo Redis do diretório de
+   * sessões: um `KEYS` num conjunto grande trava todo mundo pelo tempo da varredura, e o
+   * sintoma aparece como lag de jogo em sessões que não têm nada a ver com isto.
+   */
+  async aliveNodes(): Promise<NodeStatus[]> {
+    const nodes: NodeStatus[] = [];
+    let cursor = '0';
+    do {
+      const [next, keys] = await this.#redis.scan(cursor, 'MATCH', nodeKey('*'), 'COUNT', 100);
+      cursor = next;
+      if (keys.length === 0) continue;
+      const values = await this.#redis.mget(...keys);
+      for (const [index, raw] of values.entries()) {
+        // Expirou entre o SCAN e o MGET: o nó morreu no meio da varredura, e é justamente
+        // por isso que ele não pode entrar na lista.
+        if (raw === null) continue;
+        const status = parseNodeStatus(nodeIdFromKey(keys[index] ?? ''), raw);
+        if (status !== null) nodes.push(status);
+      }
+    } while (cursor !== '0');
+    return nodes;
   }
 
   // --- limite de personagens ativos por conta ---------------------------------------------
@@ -134,6 +178,25 @@ export class SessionDirectory {
 
 const sessionKey = (characterId: string): string => `char:${characterId}:session`;
 const activeCharactersKey = (accountId: string): string => `account:${accountId}:active`;
+const nodeKey = (nodeId: string): string => `node:${nodeId}:heartbeat`;
+const nodeIdFromKey = (key: string): string => key.slice('node:'.length, -':heartbeat'.length);
+
+function parseNodeStatus(nodeId: string, raw: string): NodeStatus | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const value = parsed as Record<string, unknown>;
+  const url = value['url'];
+  const sessions = value['sessions'];
+  // Sem URL o nó existe mas é inalcançável para quem precisa roteá-lo. Descartar é mais
+  // seguro que devolver endereço vazio: batimento antigo some sozinho em um lease.
+  if (typeof url !== 'string' || url === '' || typeof sessions !== 'number') return null;
+  return { nodeId, sessions, url };
+}
 
 function parseSessionLocation(raw: string): SessionLocation {
   const parsed: unknown = JSON.parse(raw);
