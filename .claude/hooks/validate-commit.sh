@@ -8,7 +8,7 @@
 #   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
 #
 #   tipo:   feat | fix | refactor | perf | docs | test | chore
-#   escopo: sim | protocol | content | server | client | tools | docs
+#   escopo: sim | protocol | content | server | client | tools | docs | deps
 #
 # (FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
 #
@@ -29,7 +29,7 @@
 set -u
 
 TYPES='feat|fix|refactor|perf|docs|test|chore'
-SCOPES='sim|protocol|content|server|client|tools|docs'
+SCOPES='sim|protocol|content|server|client|tools|docs|deps'
 
 fail() {
   cat >&2 <<MSG
@@ -39,7 +39,7 @@ expected format:
   <type>(<scope>): <imperative description in English> (FUN-nn)
 
   type:   feat | fix | refactor | perf | docs | test | chore
-  scope: sim | protocol | content | server | client | tools | docs
+  scope: sim | protocol | content | server | client | tools | docs | deps
 
 (FUN-nn) is required except for chore and docs commits.
 example: feat(sim): advance simulation using elapsed time (FUN-25)
@@ -190,7 +190,7 @@ if [[ ! "$type" =~ ^($TYPES)$ ]]; then
 fi
 
 if [[ ! "$scope" =~ ^($SCOPES)$ ]]; then
-  fail "scope \"$scope\" is invalid in \"$subject\" -- use one of: sim, protocol, content, server, client, tools, docs"
+  fail "scope \"$scope\" is invalid in \"$subject\" -- use one of: sim, protocol, content, server, client, tools, docs, deps"
 fi
 
 description="$remainder"

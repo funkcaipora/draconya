@@ -100,10 +100,14 @@ pode morar (ver `docs/harness-plan.md` §1).
 <type>(<scope>): <imperative description in English> (FUN-nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
-scope: sim | protocol | content | server | client | tools | docs
+scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
 Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
+
+O escopo `deps` é do Dependabot (`.github/dependabot.yml`) e de atualização de dependência
+feita à mão. Existe porque bump de `fastify` em `packages/server` não é `tools`: escopo que
+mente torna o campo inútil justamente no tipo de commit que mais aparece.
 
 `(FUN-nn)` é obrigatório em todo commit, exceto tipo `chore` e `docs`. Um hook recusa o commit que
 não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para

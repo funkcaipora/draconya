@@ -110,7 +110,7 @@ identificadores em inglês. Commits e títulos de PR também ficam em inglês. V
 <type>(<scope>): <imperative description in English> (FUN-nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
-scope: sim | protocol | content | server | client | tools | docs
+scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
 A referência `(FUN-nn)` aponta a issue no Linear e é obrigatória, exceto em `chore` e `docs`.
