@@ -21,6 +21,6 @@
   },
   "dependencies": {
     "@draconya/protocol": "workspace:*",
-    "zod": "^3.24.0"
+    "zod": "^4.5.4"
   }
 }
