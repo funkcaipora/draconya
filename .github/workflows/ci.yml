@@ -64,8 +64,18 @@ jobs:
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: draconya
+          POSTGRES_PASSWORD: review-local
+          POSTGRES_DB: draconya_review
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U draconya" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
-      REDIS_URL: redis://localhost:6379
+      TEST_REDIS_URL: redis://localhost:6379
+      DATABASE_TEST_URL: postgres://draconya:review-local@localhost:5432/draconya_review
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -124,6 +134,19 @@ jobs:
         ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      # E Postgres porque o papel `api` passou a exigir banco no boot (FUN-10/FUN-11): o
+      # `main.ts` faz `database.ping()` antes de servir. Só o `select 1` — nenhuma migração
+      # precisa ter rodado —, mas sem o serviço o container sobe em modo solo e trava antes
+      # de emitir a primeira linha de log.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: draconya
+          POSTGRES_PASSWORD: boot-check
+          POSTGRES_DB: draconya_boot
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U draconya" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -179,7 +202,7 @@ jobs:
           # boot trava no `redis.ping()` ANTES de qualquer log — a primeira tentativa deste
           # passo falhou exatamente assim, com `docker logs` vazio e nada explicando.
           docker run -d --name draconya-ci --network host \
-            -e DATABASE_URL=postgres://u:p@127.0.0.1:5432/d \
+            -e DATABASE_URL=postgres://draconya:boot-check@localhost:5432/draconya_boot \
             -e REDIS_URL=redis://localhost:6379 \
             -e NODE_ENV=development \
             draconya:ci

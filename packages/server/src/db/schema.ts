@@ -5,7 +5,18 @@
 //   - `item_instance` terá identidade própria desde o primeiro item, porque lendário
 //     negociável na Fase 2 exige proveniência estável.
 
-import { bigint, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  bigint,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 export const accounts = pgTable(
   'account',
@@ -60,9 +71,15 @@ export const characters = pgTable(
     sessionId: text('session_id'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Soft delete preserva proveniência futura de itens lendários e ledger (FUN-11/ADR 0008).
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => ({
-    uniqueName: uniqueIndex('character_name_unique').on(t.name),
+    // Nome de personagem é único sem diferenciar maiúsculas/minúsculas.
+    uniqueName: uniqueIndex('character_name_unique')
+      .on(sql`lower(normalize(${t.name}, NFC))`)
+      .where(sql`${t.deletedAt} is null`),
+    normalizedName: check('character_name_nfc', sql`${t.name} = normalize(${t.name}, NFC)`),
     byAccount: index('character_by_account').on(t.accountId),
   }),
 );

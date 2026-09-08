@@ -9,21 +9,19 @@ import { CharacterRuntime, Rng, Session, createCityRuleset } from '@draconya/sim
 import type { SessionFactory } from './host.js';
 
 /**
- * Estado inicial de PLACEHOLDER. O personagem de verdade vem do banco na FUN-11; até lá
- * todo mundo entra igual. Está aqui, num lugar só e com nome que denuncia o que é, para não
- * virar constante espalhada que alguém confunde com balanceamento.
+ * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
+ * dado enviado pelo cliente participa da criação da sessão.
  */
-const PLACEHOLDER_CHARACTER = {
+const INITIAL_RUNTIME = {
   position: { x: 0, y: 0, z: 7 },
   health: 185, maxHealth: 185,
   mana: 35, maxMana: 35,
-  level: 8, xp: 4200,
   goldDelta: 0, alive: true,
   cooldowns: {},
 } as const;
 
 export function createCitySessionFactory(contentVersion: string): SessionFactory {
-  return (characterId: string): Session => {
+  return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
     const id = randomUUID();
     const session = new Session({
       id,
@@ -36,7 +34,12 @@ export function createCitySessionFactory(contentVersion: string): SessionFactory
       rng: Rng.fromSeed(id),
       createdAtMs: performance.now(),
     });
-    session.enter(new CharacterRuntime({ id: characterId, ...PLACEHOLDER_CHARACTER }));
+    session.enter(new CharacterRuntime({
+      id: characterId,
+      ...INITIAL_RUNTIME,
+      level: initialCharacter.level,
+      xp: initialCharacter.xp,
+    }));
     return session;
   };
 }

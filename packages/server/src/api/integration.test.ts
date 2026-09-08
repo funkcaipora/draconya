@@ -1,0 +1,276 @@
+import { createServer } from 'node:net';
+import { randomUUID } from 'node:crypto';
+import { Redis } from 'ioredis';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { decodeS2C, encodeC2S } from '@draconya/protocol';
+import { AuthService } from '../auth/service.js';
+import { RedisAuthSessionStore } from '../auth/sessions.js';
+import { loadConfiguration } from '../config.js';
+import { DrizzleGameRepository } from '../db/repository.js';
+import { SessionDirectory } from '../directory.js';
+import { createGame } from '../game/server.js';
+import { createCitySessionFactory } from '../game/sessions.js';
+import { createLogger } from '../log.js';
+import type { Role } from '../role.js';
+import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
+import { connectTestRedis } from '../testing/redis.js';
+import { TicketService } from '../tickets.js';
+import { buildApi } from './server.js';
+
+const logger = createLogger('silent', 'integration');
+let database: TestDatabase;
+let redis: Redis;
+let repository: DrizzleGameRepository;
+let directory: SessionDirectory;
+let app: ReturnType<typeof buildApi>;
+let game: Role;
+let baseUrl: string;
+const sockets = new Set<WebSocket>();
+
+async function availablePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('missing test port');
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return address.port;
+}
+
+function request(path: string, method = 'GET', cookie?: string, body?: object) {
+  return fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      origin: 'http://localhost:5173',
+      ...(cookie === undefined ? {} : { cookie }),
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+}
+
+async function login() {
+  const response = await request('/api/auth/dev-login', 'POST', undefined, {
+    email: `${randomUUID()}@example.com`,
+  });
+  expect(response.status).toBe(200);
+  const cookie = response.headers.get('set-cookie')?.split(';')[0];
+  if (cookie === undefined) throw new Error('missing session cookie');
+  const principal = await response.json();
+  return { cookie, accountId: String(principal.accountId) };
+}
+
+async function createCharacter(cookie: string, name = `Hero ${randomUUID().replace(/[^a-f]/g, '')}`) {
+  const response = await request('/api/characters', 'POST', cookie, { name });
+  expect(response.status).toBe(201);
+  return response.json();
+}
+
+function receive(socket: WebSocket): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('WebSocket message timeout')), 3000);
+    socket.addEventListener('message', (event) => {
+      clearTimeout(timer);
+      resolve(new Uint8Array(event.data as ArrayBuffer));
+    }, { once: true });
+    socket.addEventListener('error', () => {
+      clearTimeout(timer);
+      reject(new Error('WebSocket handshake rejected'));
+    }, { once: true });
+  });
+}
+
+beforeAll(async () => {
+  database = await connectTestDatabase();
+  const connection = await connectTestRedis(4);
+  if (!connection.available) throw new Error('integration Redis is unavailable');
+  redis = connection.redis;
+  await redis.flushdb();
+  repository = new DrizzleGameRepository(database.database.db);
+  directory = new SessionDirectory(redis);
+  const tickets = new TicketService(redis, directory);
+  const gamePort = await availablePort();
+  const configuration = loadConfiguration({
+    DATABASE_URL: database.url, REDIS_URL: process.env['TEST_REDIS_URL'],
+    NODE_ENV: 'test', AUTH_DEV_MODE: 'true', GAME_PORT: String(gamePort),
+    GAME_PUBLIC_URL: `ws://127.0.0.1:${gamePort}`, NODE_ID: 'integration-node',
+  });
+  const auth = new AuthService({
+    repository, sessions: new RedisAuthSessionStore(redis, 3600), devMode: true,
+  });
+  app = buildApi(configuration, logger, {
+    auth, repository, tickets,
+    isCharacterActive: async (accountId, characterId) =>
+      (await directory.lookup(characterId)) !== null
+      || (await directory.activeSlots(accountId)).includes(characterId),
+  });
+  baseUrl = await app.listen({ port: 0, host: '127.0.0.1' });
+  game = createGame(configuration, logger, {
+    directory, tickets, contentVersion: 'integration-v1',
+    createSession: createCitySessionFactory('integration-v1'),
+  });
+  await game.start();
+  await directory.heartbeat('integration-node', { sessions: 0, url: configuration.GAME_PUBLIC_URL });
+}, 20_000);
+
+afterAll(async () => {
+  for (const socket of sockets) socket.close();
+  await app?.close();
+  await game?.drain();
+  if (redis !== undefined) { await redis.flushdb(); await redis.quit(); }
+  await database?.cleanup();
+});
+
+describe('authentication and characters with PostgreSQL, Redis and WebSocket', () => {
+  it('creates a persistent account and invalidates the Redis session on logout', async () => {
+    expect((await request('/api/auth/me')).status).toBe(401);
+    const { cookie, accountId } = await login();
+    const token = cookie.split('=')[1]!;
+    expect(await redis.ttl(`auth:session:${token}`)).toBeGreaterThan(0);
+    expect((await request('/api/auth/me', 'GET', cookie)).status).toBe(200);
+    expect(await repository.listCharacters(accountId)).toEqual([]);
+    expect((await request('/api/auth/logout', 'POST', cookie)).status).toBe(200);
+    expect(await redis.exists(`auth:session:${token}`)).toBe(0);
+    expect((await request('/api/auth/me', 'GET', cookie)).status).toBe(401);
+  });
+
+  it('keeps initial state and enforces ownership and soft deletion across all routes', async () => {
+    const owner = await login();
+    const other = await login();
+    const character = await createCharacter(owner.cookie);
+    expect(character).toMatchObject({
+      vocation: null, level: 1, xp: 0, gold: 0, capacity: 400,
+      staminaMs: 86400000, premiumUntil: null, state: 'city',
+    });
+    expect(Number.isNaN(Date.parse(character.staminaUpdatedAt))).toBe(false);
+    for (const [path, method, body] of [
+      [`/api/characters/${character.id}/select`, 'POST', undefined],
+      [`/api/characters/${character.id}`, 'DELETE', undefined],
+      ['/api/tickets', 'POST', { characterId: character.id }],
+    ] as const) {
+      expect((await request(path, method, other.cookie, body)).status).toBe(404);
+    }
+    expect((await request(`/api/characters/${character.id}/select`, 'POST', owner.cookie)).status).toBe(200);
+    expect((await request(`/api/characters/${character.id}`, 'DELETE', owner.cookie)).status).toBe(204);
+    expect((await (await request('/api/characters', 'GET', owner.cookie)).json()).characters).toEqual([]);
+    expect((await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).status).toBe(404);
+    expect((await request(`/api/characters/${character.id}/select`, 'POST', owner.cookie)).status).toBe(404);
+  });
+
+  it('rejects concurrent case-insensitive duplicate names using the database constraint', async () => {
+    const owner = await login();
+    const name = `Race ${randomUUID().replace(/[^a-f]/g, '')}`;
+    const results = await Promise.all([
+      request('/api/characters', 'POST', owner.cookie, { name }),
+      request('/api/characters', 'POST', owner.cookie, { name: name.toUpperCase() }),
+    ]);
+    expect(results.map((response) => response.status).sort()).toEqual([201, 409]);
+  });
+
+  it('reserves only two active characters while allowing more characters to exist', async () => {
+    const owner = await login();
+    const characters = [];
+    for (let i = 0; i < 4; i++) characters.push(await createCharacter(owner.cookie));
+    const responses = await Promise.all(characters.map((character) =>
+      request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })));
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 200, 409, 409]);
+    for (const id of await directory.activeSlots(owner.accountId)) {
+      expect((await request(`/api/characters/${id}`, 'DELETE', owner.cookie)).status).toBe(409);
+    }
+  });
+
+  it('serializes deletion and ticket issuance without issuing a deleted character ticket', async () => {
+    for (let i = 0; i < 6; i++) {
+      const owner = await login();
+      const character = await createCharacter(owner.cookie);
+      const [ticket, deletion] = await Promise.all([
+        request('/api/tickets', 'POST', owner.cookie, { characterId: character.id }),
+        request(`/api/characters/${character.id}`, 'DELETE', owner.cookie),
+      ]);
+      expect([[200, 409], [404, 204]]).toContainEqual([ticket.status, deletion.status]);
+    }
+  });
+
+  it('uses a one-time ticket for a real socket, keeps the session after disconnect, and reconnects', async () => {
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    const issue = await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id });
+    const ticket = await issue.json();
+    const forgedUrl = new URL(ticket.wsUrl);
+    forgedUrl.searchParams.set('ticket', owner.cookie.split('=')[1]!);
+    const forged = new WebSocket(forgedUrl);
+    sockets.add(forged);
+    await expect(receive(forged)).rejects.toThrow('handshake rejected');
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    const welcome = decodeS2C(await receive(socket));
+    expect(welcome).toContainEqual({ type: 'welcome', characterId: character.id, contentVersion: 'integration-v1' });
+    const pong = receive(socket);
+    socket.send(encodeC2S({ type: 'ping', t: 123 }));
+    expect(decodeS2C(await pong)).toContainEqual({ type: 'pong', t: 123 });
+    const location = await directory.lookup(character.id);
+    expect(location?.nodeId).toBe('integration-node');
+    expect((await request(`/api/characters/${character.id}`, 'DELETE', owner.cookie)).status).toBe(409);
+    const replay = new WebSocket(ticket.wsUrl);
+    sockets.add(replay);
+    await expect(receive(replay)).rejects.toThrow('handshake rejected');
+    socket.close();
+    const nextTicket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const reconnected = new WebSocket(nextTicket.wsUrl);
+    sockets.add(reconnected);
+    reconnected.binaryType = 'arraybuffer';
+    await receive(reconnected);
+    expect(await directory.lookup(character.id)).toEqual(location);
+  });
+
+  it('fails closed when the HTTP session store loses Redis', async () => {
+    const owner = await login();
+    const disconnected = new Redis(process.env['TEST_REDIS_URL']!, {
+      lazyConnect: true, enableOfflineQueue: false, retryStrategy: () => null,
+    });
+    disconnected.disconnect();
+    const configuration = loadConfiguration({
+      DATABASE_URL: database.url, REDIS_URL: process.env['TEST_REDIS_URL'], NODE_ENV: 'test',
+    });
+    const failedApi = buildApi(configuration, logger, {
+      auth: new AuthService({
+        repository, sessions: new RedisAuthSessionStore(disconnected, 3600), devMode: true,
+      }),
+      repository,
+    });
+    try {
+      const response = await failedApi.inject({
+        method: 'GET', url: '/api/characters', headers: { cookie: owner.cookie },
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'service-unavailable' });
+    } finally {
+      await failedApi.close();
+    }
+  });
+
+  it('rejects a failed Redis handshake without stopping the game process', async () => {
+    const port = await availablePort();
+    const disconnected = new Redis(process.env['TEST_REDIS_URL']!, {
+      lazyConnect: true, enableOfflineQueue: false, retryStrategy: () => null,
+    });
+    disconnected.disconnect();
+    const configuration = loadConfiguration({
+      DATABASE_URL: database.url, REDIS_URL: process.env['TEST_REDIS_URL'], NODE_ENV: 'test',
+      GAME_PORT: String(port), NODE_ID: 'failed-handshake-node',
+    });
+    const failedGame = createGame(configuration, logger, {
+      tickets: new TicketService(disconnected, directory),
+      contentVersion: 'integration-v1', createSession: createCitySessionFactory('integration-v1'),
+    });
+    await failedGame.start();
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/?ticket=unavailable`);
+      sockets.add(socket);
+      await expect(receive(socket)).rejects.toThrow('handshake rejected');
+      expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+    } finally {
+      await failedGame.drain();
+    }
+  });
+});

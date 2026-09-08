@@ -1,7 +1,14 @@
 import Fastify from 'fastify';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
 import type { IssueResult } from '../tickets.js';
+import type { CharacterRecord } from '../db/repository.js';
+
+const CHARACTER: CharacterRecord = {
+  id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
+  capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
+  state: 'city', sessionId: null, createdAt: new Date(),
+};
 
 const ISSUED: IssueResult = {
   ok: true,
@@ -15,14 +22,14 @@ function build(overrides: Partial<TicketRouteDependencies> = {}) {
   app.post('/api/tickets', createTicketHandler({
     tickets: { issue: async () => ISSUED },
     authenticate: async () => ({ accountId: 'a1' }),
-    ownsCharacter: async () => true,
+    withOwnedCharacter: async (_accountId, _characterId, operation) => operation(CHARACTER),
     ...overrides,
   }));
   return app;
 }
 
-const post = (app: ReturnType<typeof build>, body: unknown) =>
-  app.inject({ method: 'POST', url: '/api/tickets', payload: body as never });
+const post = (app: ReturnType<typeof build>, body: Record<string, unknown>) =>
+  app.inject({ method: 'POST', url: '/api/tickets', payload: body });
 
 describe('POST /api/tickets', () => {
   it('returns the ticket and the URL of the resolved node', async () => {
@@ -47,8 +54,17 @@ describe('POST /api/tickets', () => {
 
   it('answers 404 for a character that is not the caller\'s', async () => {
     // Não 403: distinguir "não existe" de "não é seu" entrega uma lista de personagens.
-    const response = await post(build({ ownsCharacter: async () => false }), { characterId: 'p1' });
+    const response = await post(build({ withOwnedCharacter: async () => null }), { characterId: 'p1' });
     expect(response.statusCode).toBe(404);
+  });
+
+  it('uses persisted attributes instead of client supplied progress', async () => {
+    const issue = vi.fn(async () => ISSUED);
+    const response = await post(build({ tickets: { issue } }), {
+      characterId: 'p1', level: 999, xp: 999999, accountId: 'attacker',
+    });
+    expect(response.statusCode).toBe(200);
+    expect(issue).toHaveBeenCalledWith('a1', 'p1', { level: 1, xp: 0 });
   });
 
   it('rejects a malformed body', async () => {

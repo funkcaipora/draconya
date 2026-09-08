@@ -40,6 +40,21 @@ describe.runIf(available)('session ticket', () => {
     expect(await tickets.consume(issued.value.ticket, 'n1')).toBeNull();
   });
 
+  it('carries server-authoritative character progress in the claim', async () => {
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const issued = await tickets.issue('a1', 'p1', { level: 17, xp: 93_000 });
+    if (!issued.ok) throw new Error('expected a ticket');
+
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a1',
+      characterId: 'p1',
+      nodeId: 'n1',
+      initialCharacter: { level: 17, xp: 93_000 },
+    });
+  });
+
   it('expires in seconds', async () => {
     const { directory, tickets } = build({ ttlMs: 120 });
     await directory.heartbeat('n1', NODE);
@@ -59,6 +74,17 @@ describe.runIf(available)('session ticket', () => {
     if (!issued.ok) throw new Error('expected a ticket');
 
     expect(await tickets.consume(issued.value.ticket, 'n2')).toBeNull();
+    expect(await tickets.consume(issued.value.ticket, 'n1')).not.toBeNull();
+  });
+
+  it('refuses a ticket after its active reservation was removed', async () => {
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const issued = await tickets.issue('a1', 'p1');
+    if (!issued.ok) throw new Error('expected a ticket');
+
+    await directory.releaseSlot('a1', 'p1');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toBeNull();
   });
 
   it('sends a reconnection back to the node that already hosts the session', async () => {
@@ -178,6 +204,41 @@ describe.runIf(available)('session ticket', () => {
     await tickets.issue('a1', 'p1');
     expect(await tickets.sweepAbandoned()).toBe(0);
     expect(await directory.activeSlots('a1')).toEqual(['p1']);
+  });
+
+  it('reserves the active slot through the ticket grace period', async () => {
+    const directory = new SessionDirectory(redis, { leaseMs: 50 });
+    const tickets = new TicketService(redis, directory, { ttlMs: 120, graceMs: 120 });
+    await directory.heartbeat('n1', NODE);
+
+    await tickets.issue('a1', 'p1');
+    await new Promise((resolve) => setTimeout(resolve, 90));
+
+    expect(await directory.activeSlots('a1')).toEqual(['p1']);
+  });
+
+  it('does not sweep a reservation reissued after the due list was read', async () => {
+    let now = 1_000_000;
+    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    await directory.heartbeat('n1', NODE);
+    await tickets.issue('a1', 'p1');
+    now += 1_000;
+
+    const original = redis.zrangebyscore.bind(redis);
+    const mutableRedis = redis as typeof redis & {
+      zrangebyscore: typeof redis.zrangebyscore;
+    };
+    mutableRedis.zrangebyscore = (async (...args: Parameters<typeof redis.zrangebyscore>) => {
+      const due = await original(...args);
+      await tickets.issue('a1', 'p1');
+      return due;
+    }) as typeof redis.zrangebyscore;
+    try {
+      expect(await tickets.sweepAbandoned()).toBe(0);
+      expect(await directory.activeSlots('a1')).toEqual(['p1']);
+    } finally {
+      mutableRedis.zrangebyscore = original;
+    }
   });
 
   it('rejects an empty or unknown ticket', async () => {

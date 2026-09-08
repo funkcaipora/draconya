@@ -17,13 +17,12 @@ todo mundo tem o mesmo bot, a luta não é decidida por quem comprou o script me
 |---|---|---|
 | Protocolo | Opcodes, schemas e codec binário com lote e compressão (FUN-6/7) | Despacho das mensagens no WebSocket |
 | Simulação | Sessão por tempo decorrido, RNG determinístico, cooldowns, snapshot em memória e ruleset de Cidade (FUN-25/27/31) | Agendador, persistência e ruleset de Hunt |
-| Servidor | Configuração, schema inicial, processos `api`/`game`/`jobs`, health/metrics, diretório Redis com leases e limite atômico de ativos, ticket de sessão com resolução de nó, e WebSocket hospedando sessões com anexar/desanexar (FUN-12/13/14/15/48) | Auth, personagens e persistência de sessão |
+| Servidor | Configuração, auth WorkOS + sessão HTTP em Redis, CRUD de personagens, processos `api`/`game`/`jobs`, health/metrics, diretório Redis com leases e limite atômico de ativos, ticket de sessão com resolução de nó, e WebSocket hospedando sessões com anexar/desanexar (FUN-10/11/12/13/14/15/48) | Persistência/retomada de sessão e integração do cliente |
 | Conteúdo, cliente e ferramentas | Carregador versionado, formato de tilemap e rota com validação de laço, validador de CLI e entrada React (FUN-8/9) | Assets do cliente Tibia e cliente conectado |
 
 O próximo critério de aceite é o **M1 — Fundação e conexão**: autenticar, selecionar personagem,
-receber um ticket de uso único e aparecer num mapa de teste com retângulos. O ticket e o
-socket já existem ponta a ponta — falta a autenticação real que diz de quem é o ticket, e o
-cliente que desenha o que chega. Os snapshots do núcleo
+receber um ticket de uso único e aparecer num mapa de teste com retângulos. Auth, personagem,
+ticket e socket já existem no servidor; falta fechar a demonstração pelo cliente. Os snapshots do núcleo
 ainda não provam recuperação após queda do processo; persistência, retomada e drenagem com crédito
 continuam como integrações pendentes. O andamento das tarefas fica no
 [Linear](https://linear.app/funkcaipora/project/draconya-8ad404c2226c).
@@ -34,12 +33,32 @@ continuam como integrações pendentes. O andamento das tarefas fica no
 
 ```bash
 pnpm install
+cp .env.example .env
+docker compose up -d postgres redis
+pnpm db:push      # cria/atualiza o schema local a partir do Drizzle
+# Para check/test, exporte TEST_REDIS_URL e DATABASE_TEST_URL apontando para serviços descartáveis.
 pnpm check        # lint + typecheck + test + docs-check + source-policy
+pnpm dev
 ```
+
+Com `AUTH_DEV_MODE=true`, faça login local sem credencial WorkOS:
+
+```bash
+curl -i -X POST http://localhost:3000/api/auth/dev-login \
+  -H 'content-type: application/json' \
+  -d '{"email":"dev@example.com"}'
+```
+
+O cookie retornado é a sessão HTTP usada em `/api/characters` e `/api/tickets`. Em produção,
+`AUTH_DEV_MODE` é proibido e o fluxo usa Hosted AuthKit com callback em
+`WORKOS_REDIRECT_URI`.
 
 | Comando | O que faz |
 |---|---|
 | `pnpm build` | `tsc -b` nas bibliotecas + `vite build` no cliente |
+| `pnpm db:push` | aplica o schema Drizzle ao Postgres local; não usar para adivinhar renomeações de banco legado |
+| `pnpm db:generate` | gera migração Drizzle para revisão antes de produção |
+| `pnpm db:migrate` | aplica migrações versionadas em banco novo; consulte o procedimento para banco existente em `docs/product/accounts-and-characters.md` |
 | `pnpm typecheck` | compila sem emitir, via referências de projeto |
 | `pnpm test` | Vitest em todos os pacotes |
 | `pnpm lint` | ESLint, incluindo as fronteiras de import entre pacotes |
@@ -48,6 +67,11 @@ pnpm check        # lint + typecheck + test + docs-check + source-policy
 | `pnpm --filter @draconya/client dev` | sobe o cliente em modo de desenvolvimento |
 
 Requisitos: Node 24 (conforme `.node-version`) e pnpm (via corepack).
+
+Os testes de integração usam `TEST_REDIS_URL` e `DATABASE_TEST_URL`, ambos explícitos.
+O Redis deve ser descartável: os bancos 1–4 sofrem `FLUSHDB`. Cada teste de Postgres cria e
+remove somente seu próprio schema. O CI fornece esses serviços; não aponte testes para bancos
+de desenvolvimento com dados que precisam ser preservados.
 
 **Antes do primeiro commit**, ligue os hooks de git:
 

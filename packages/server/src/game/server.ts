@@ -100,24 +100,48 @@ export function createGame(
       });
 
       void (async () => {
-        const claim = await tickets.consume(ticket, nodeId);
-        // Cliente desistiu enquanto o Redis respondia. Tocar em `response` depois do abort
-        // derruba o processo inteiro. O ticket já foi queimado, e o slot volta pela
-        // varredura de `tickets:pending` — que é justamente o desfecho que ela cobre.
-        if (aborted) return;
-        response.cork(() => {
-          if (claim === null) {
-            response.writeStatus('401 Unauthorized').end();
+        try {
+          const claim = await tickets.consume(ticket, nodeId);
+          let created = false;
+          if (claim !== null) {
+            ({ created } = await host.prepare(
+              claim.characterId, claim.initialCharacter, claim.accountId,
+            ));
+          }
+          // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`
+          // depois do abort derruba o processo inteiro.
+          if (aborted) {
+            // A sessão já foi criada e registrada, e nenhum socket vai chegar para
+            // desanexá-la depois. Sem isto ela fica hospedada para sempre, segurando um dos
+            // dois slots da conta e impedindo até apagar o personagem. Só solta o que ESTA
+            // chamada criou: uma reconexão que reencontrou a sessão não pode derrubá-la.
+            if (claim !== null && created && host.viewersOf(claim.characterId) === 0) {
+              await host.release(claim.characterId);
+            }
             return;
           }
-          response.upgrade<SocketData>(
-            { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
-            key,
-            protocol,
-            extensions,
-            context,
-          );
-        });
+          response.cork(() => {
+            if (claim === null) {
+              response.writeStatus('401 Unauthorized').end();
+              return;
+            }
+            response.upgrade<SocketData>(
+              { accountId: claim.accountId, characterId: claim.characterId, viewer: null },
+              key,
+              protocol,
+              extensions,
+              context,
+            );
+          });
+        } catch (error) {
+          logger.error({ error }, 'Game handshake failed');
+          if (aborted) return;
+          response.cork(() => {
+            if (!aborted) {
+              response.writeStatus('503 Service Unavailable').end();
+            }
+          });
+        }
       })();
     },
 

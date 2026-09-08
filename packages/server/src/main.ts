@@ -9,15 +9,20 @@
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
-import { loadConfiguration, type Configuration } from './config.js';
+import { loadConfiguration } from './config.js';
 import { createLogger } from './log.js';
-import { createApi, type ApiDependencies } from './api/server.js';
+import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import { createCitySessionFactory } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import type { Role } from './role.js';
+import { createDatabase } from './db/client.js';
+import { DrizzleGameRepository } from './db/repository.js';
+import { RedisAuthSessionStore } from './auth/sessions.js';
+import { AuthService } from './auth/service.js';
+import { WorkOsIdentityProvider } from './auth/workos.js';
 
 const VALID_ROLES = ['api', 'game', 'jobs'] as const;
 type RoleName = (typeof VALID_ROLES)[number];
@@ -48,24 +53,6 @@ function requestedRoles(): RoleName[] {
   return requested as RoleName[];
 }
 
-/**
- * Enquanto a FUN-10 (auth) e a FUN-11 (personagens) não existem, a emissão de ticket precisa
- * de um dono e de uma prova de posse vindos de algum lugar. Em `AUTH_DEV_MODE` isso é um
- * cabeçalho, o que basta para exercitar o fluxo ponta a ponta; fora dele não existe, e a
- * rota responde 501. Falhar fechado é a única opção: um endpoint que emite ticket para
- * qualquer personagem é acesso a qualquer conta.
- */
-function developmentPrincipals(configuration: Configuration): ApiDependencies {
-  if (!configuration.AUTH_DEV_MODE) return {};
-  return {
-    authenticate: async (request) => {
-      const accountId = request.headers['x-dev-account'];
-      return typeof accountId === 'string' && accountId !== '' ? { accountId } : null;
-    },
-    ownsCharacter: async () => true,
-  };
-}
-
 async function main(): Promise<void> {
   const configuration = loadConfiguration();
   const names = requestedRoles();
@@ -73,11 +60,45 @@ async function main(): Promise<void> {
 
   // Um cliente para os três papéis. Falhar aqui é melhor que falhar na primeira requisição:
   // sem Redis não há diretório de sessão, e sem diretório nenhum papel faz o seu trabalho.
-  const redis = new Redis(configuration.REDIS_URL, { maxRetriesPerRequest: 3 });
+  const redis = new Redis(configuration.REDIS_URL, {
+    lazyConnect: true,
+    enableOfflineQueue: false,
+    maxRetriesPerRequest: 1,
+    connectTimeout: 3_000,
+    commandTimeout: 3_000,
+  });
+  await redis.connect();
   await redis.ping();
 
   const directory = new SessionDirectory(redis);
   const tickets = new TicketService(redis, directory);
+
+  // Postgres só é exigido quando o papel `api` está presente. Um nó exclusivamente `game`
+  // continua sem conexão de banco no caminho quente da simulação.
+  const database = names.includes('api') ? createDatabase(configuration.DATABASE_URL) : null;
+  if (database !== null) await database.ping();
+  const repository = database === null ? null : new DrizzleGameRepository(database.db);
+  const authSessions = new RedisAuthSessionStore(redis, configuration.AUTH_SESSION_TTL_SECONDS);
+
+  const auth = repository === null
+    ? null
+    : new AuthService({
+        repository,
+        sessions: authSessions,
+        authorizationStates: authSessions,
+        devMode: configuration.AUTH_DEV_MODE,
+        ...(configuration.AUTH_DEV_MODE
+          || configuration.WORKOS_API_KEY === undefined
+          || configuration.WORKOS_CLIENT_ID === undefined
+          ? {}
+          : {
+              provider: new WorkOsIdentityProvider({
+                apiKey: configuration.WORKOS_API_KEY,
+                clientId: configuration.WORKOS_CLIENT_ID,
+                redirectUri: configuration.WORKOS_REDIRECT_URI,
+              }),
+            }),
+      });
 
   const contentDir = resolve(configuration.CONTENT_DIR);
   const content = loadContent(contentDir);
@@ -89,7 +110,15 @@ async function main(): Promise<void> {
   const factories: Record<RoleName, () => Role> = {
     api: () => createApi(configuration, logger.child({ role: 'api' }), {
       tickets,
-      ...developmentPrincipals(configuration),
+      ...(auth === null || repository === null
+        ? {}
+        : {
+            auth,
+            repository,
+            isCharacterActive: async (accountId, characterId) =>
+              (await directory.lookup(characterId)) !== null
+              || (await directory.activeSlots(accountId)).includes(characterId),
+          }),
     }),
     game: () => createGame(configuration, logger.child({ role: 'game' }), {
       directory,
@@ -138,6 +167,7 @@ async function main(): Promise<void> {
         }
       }
       // Depois de todo mundo drenar: o `game` usa o Redis até o último crédito.
+      if (database !== null) await database.close().catch(() => undefined);
       await redis.quit().catch(() => redis.disconnect());
       clearTimeout(timeout);
       logger.info('Shutdown completed cleanly');

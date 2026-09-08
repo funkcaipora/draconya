@@ -87,6 +87,7 @@ COPY --from=prod-deps --chown=node:node /app/package.json ./package.json
 # ...e por cima, só o compilado. Nenhum `src` entra na imagem.
 COPY --from=build --chown=node:node /app/packages/protocol/dist ./packages/protocol/dist
 COPY --from=build --chown=node:node /app/packages/content/dist  ./packages/content/dist
+COPY --from=build --chown=node:node /app/packages/content/data  ./packages/content/data
 COPY --from=build --chown=node:node /app/packages/sim/dist      ./packages/sim/dist
 COPY --from=build --chown=node:node /app/packages/server/dist   ./packages/server/dist
 
