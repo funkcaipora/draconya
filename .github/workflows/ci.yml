@@ -33,13 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: 'pnpm'
@@ -68,7 +68,7 @@ jobs:
       REDIS_URL: redis://localhost:6379
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Sem esta checagem, o passo "pnpm install" seria o primeiro a falhar (não há
       # package.json nem lockfile para instalar) e todo o job ficaria vermelho por um motivo
@@ -88,11 +88,11 @@ jobs:
         # Sem `version`: o package.json raiz declara "packageManager" desde o scaffold do
         # monorepo, e é dele que a action tira a versão. Declarar nos dois lugares é como as
         # duas fontes divergem sem ninguém perceber.
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Node 24
         if: steps.monorepo.outputs.exists == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: 'pnpm'
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Check Dockerfile availability
         id: docker
@@ -126,17 +126,17 @@ jobs:
 
       - name: QEMU
         if: steps.docker.outputs.exists == 'true'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Buildx
         if: steps.docker.outputs.exists == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Constrói as duas arquiteturas do ADR 0013. Não publica: o objetivo aqui é falhar
       # o PR quando alguma dependência nativa nova não tiver binário para as duas.
       - name: Build amd64 e arm64
         if: steps.docker.outputs.exists == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
