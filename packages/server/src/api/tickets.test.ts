@@ -17,14 +17,28 @@ const ISSUED: IssueResult = {
   },
 };
 
-function build(overrides: Partial<TicketRouteDependencies> = {}) {
+/**
+ * `omit` em vez de `{ authenticate: undefined }`: com `exactOptionalPropertyTypes`, passar
+ * `undefined` explícito numa propriedade opcional é outra coisa que não passá-la. O teste que
+ * exercita "sem autenticação configurada" precisa da AUSÊNCIA, que é o que a rota checa.
+ */
+function build(
+  overrides: Partial<TicketRouteDependencies> = {},
+  omit: ReadonlyArray<keyof TicketRouteDependencies> = [],
+) {
   const app = Fastify();
-  app.post('/api/tickets', createTicketHandler({
+  const deps: Record<string, unknown> = {
     tickets: { issue: async () => ISSUED },
     authenticate: async () => ({ accountId: 'a1' }),
-    withOwnedCharacter: async (_accountId, _characterId, operation) => operation(CHARACTER),
+    withOwnedCharacter: async (
+      _accountId: string,
+      _characterId: string,
+      operation: (character: typeof CHARACTER) => unknown,
+    ) => operation(CHARACTER),
     ...overrides,
-  }));
+  };
+  for (const key of omit) delete deps[key];
+  app.post('/api/tickets', createTicketHandler(deps as unknown as TicketRouteDependencies));
   return app;
 }
 
@@ -43,7 +57,7 @@ describe('POST /api/tickets', () => {
   it('refuses to serve at all while authentication is not wired', async () => {
     // Falhar fechado. Uma rota de ticket sem autenticação emite credencial para qualquer
     // personagem — é pior que a rota não existir.
-    const response = await post(build({ authenticate: undefined }), { characterId: 'p1' });
+    const response = await post(build({}, ['authenticate']), { characterId: 'p1' });
     expect(response.statusCode).toBe(501);
   });
 

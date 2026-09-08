@@ -63,6 +63,16 @@ a ser GPL. Leia como referência se quiser; não copie linha.
 - **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
   criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
   trabalho 60 vezes por segundo.
+- **Reconectar é REANEXAR** (`net/connection.ts`). Não recarrega a página, não recria
+  personagem e **não limpa o store**: pede ticket novo e volta para a mesma sessão, que nunca
+  parou de rodar. A tela continua mostrando a última coisa verdadeira até o `session-state`
+  chegar, em vez de piscar vazia. Se a reconexão parecer um login novo para o jogador, o
+  ADR 0001 vazou para a UI.
+- **A espera entre tentativas tem jitter.** Sem ele, a queda de um nó faz todos os clientes
+  daquele nó voltarem no mesmo instante e o derrubarem de novo — agora com a carga
+  concentrada num milissegundo.
+- **O estado da conexão fica na tela.** Jogo idle silencioso é indistinguível de jogo travado:
+  sem indicador, ninguém sabe se a hunt está rendendo ou se o socket caiu há dez minutos.
 - **O cliente só manda intenção** (invariante 4).
 - Predição é **só do próprio passo**, com reconciliação. Nunca preveja dano, loot, nem o passo
   dos outros.

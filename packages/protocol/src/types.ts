@@ -113,5 +113,19 @@ export const S2C_SCHEMAS = {
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;
 export type S2CProps<N extends S2CName> = z.infer<(typeof S2C_SCHEMAS)[N]>;
 
-export type C2SMessage = { [N in C2SName]: { type: N } & C2SProps<N> }[C2SName];
-export type S2CMessage = { [N in S2CName]: { type: N } & S2CProps<N> }[S2CName];
+/**
+ * Carga de uma mensagem, com o caso vazio tratado.
+ *
+ * `z.object({})` infere `Record<string, never>` — um objeto que não aceita chave NENHUMA. A
+ * interseção `{ type: 'logout' } & Record<string, never>` é impossível de satisfazer, então
+ * `logout`, `client-ready` e `session-attach` eram, na prática, **impossíveis de construir em
+ * código tipado**: o cliente não conseguia mandar nenhuma das três. Só não tinha aparecido
+ * porque ninguém tinha tentado.
+ *
+ * O teste é `string extends keyof P`: só um objeto com assinatura de índice tem `string`
+ * entre as chaves; um payload de verdade tem os nomes dos próprios campos.
+ */
+type Payload<P> = string extends keyof P ? unknown : P;
+
+export type C2SMessage = { [N in C2SName]: { type: N } & Payload<C2SProps<N>> }[C2SName];
+export type S2CMessage = { [N in S2CName]: { type: N } & Payload<S2CProps<N>> }[S2CName];

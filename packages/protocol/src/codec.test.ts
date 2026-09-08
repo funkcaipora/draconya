@@ -79,8 +79,12 @@ describe('invalid input returns null without throwing', () => {
   it('rejects unknown opcodes', () => {
     // Um frame do servidor lido como se fosse do cliente: opcodes não batem.
     const serverFrame = encodeS2C({ type: 'chat-message', channel: 'g', author: 'a', text: 't' });
+    // Recusa de verdade: `null` ou vazio. A versão anterior desta asserção também aceitava
+    // "decodificou como outra coisa", e comparava contra um nome que o tipo C2S nem tem —
+    // ou seja, era sempre verdadeira e não testava nada. Só apareceu quando os arquivos de
+    // teste passaram a ser typechecados.
     const decoded = decodeC2S(serverFrame);
-    expect(decoded === null || decoded.length === 0 || decoded[0]?.type !== 'chat-message').toBe(true);
+    expect(decoded === null || decoded.length === 0).toBe(true);
   });
 
   it('rejects properties that fail schema validation', () => {
