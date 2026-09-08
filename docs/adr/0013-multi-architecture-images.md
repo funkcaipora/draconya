@@ -51,3 +51,32 @@ via `docker buildx`. Desenvolvimento roda nativo em `arm64`; o destino de deploy
 
 Nenhum diretamente. Reforça o invariante 1: `sim/` ser puro é o que torna a arquitetura irrelevante
 onde ela mais poderia doer.
+
+## Emenda — 2026-09-08: a checagem de `arm64` no CI está suspensa
+
+**A decisão acima continua valendo.** O que foi suspenso é a forma de impor uma parte dela: o job
+de imagem do CI passou a construir só `linux/amd64`.
+
+O motivo é o custo que a seção de Consequências já previa e que virou concreto: o runner do GitHub
+é `amd64`, então o build `arm64` roda sob QEMU, e a emulação respondia por quase todos os ~5
+minutos do job — contra ~45 segundos de todo o resto do CI. Num repositório onde cada PR espera o
+CI, isso é o passo que ensina a não esperar.
+
+O que a suspensão custa de verdade é menor do que o número sugere. O desenvolvimento roda em Apple
+Silicon, então **`arm64` continua sendo construído nativamente a cada build local** — o CI passa a
+cobrir justamente a arquitetura que a máquina de quem desenvolve não cobre, e as duas juntas ainda
+cobrem as duas. O que se perde é a checagem automática, no PR, de que uma dependência nativa nova
+publica binário para `arm64`; ela passa a depender de alguém conferir, que é exatamente o tipo de
+regra que este repositório prefere não ter.
+
+Por isso a suspensão é temporária e tem gatilho escrito. **Religar antes de:**
+
+- o primeiro deploy em `arm64` — o Oracle Ampere é a rota de validação sem custo, e é ARM
+  exclusivo, então lá a imagem `arm64` deixa de ser hipótese;
+- adicionar qualquer dependência nativa nova. Hoje a única é o `uWebSockets.js`.
+
+Religar são duas linhas em `.github/workflows/ci.yml`: devolver o passo `docker/setup-qemu-action`
+e a segunda plataforma em `platforms`. O comentário no job diz isso no lugar onde alguém vai olhar.
+
+A regra do `AGENTS.md` — dependência nativa nova precisa de binário para as duas arquiteturas —
+**continua valendo**. Ela só deixou de ser verificada pelo CI, e passou a ser conferida à mão.

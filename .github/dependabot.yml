@@ -46,6 +46,16 @@ updates:
       development-minor-and-patch:
         dependency-type: development
         update-types: ['minor', 'patch']
+    ignore:
+      # Mesmo motivo do `node` no Docker, e a primeira rodada do Dependabot mostrou que a
+      # regra de lá não cobria aqui: veio um PR de `@types/node` 24 → 26. Tipo de uma versão
+      # de Node que o runtime não é descreve API que não existe, e o erro aparece em produção,
+      # não no typecheck — que é o único lugar onde este pacote atua.
+      #
+      # Anda junto com o Node maior, na mesma mudança coordenada. Só atualização de VERSÃO é
+      # ignorada; alerta de segurança continua chegando.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
 
   # --- GitHub Actions ---------------------------------------------------------------------
   #

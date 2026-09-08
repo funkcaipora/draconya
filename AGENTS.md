@@ -145,7 +145,9 @@ a cada entrega. Nunca faça push direto na `main`; execute `pnpm check` antes de
   mensagem que não menciona a versão do Node — é o tipo de meia hora perdida que não precisa
   acontecer duas vezes.
 - **Dependência nativa nova precisa de binário para `linux/amd64` e `linux/arm64`** (ADR 0013).
-  Confira antes de adicionar; o CI reprova depois.
+  **Confira à mão antes de adicionar: o CI não pega mais.** O job de imagem constrói só `amd64`
+  desde 2026-09-08, porque o build `arm64` emulado custava cinco minutos por PR — ver a emenda
+  no ADR 0013, que diz quando religar.
 
 ## Sobre este arquivo e o CLAUDE.md
 
