@@ -373,9 +373,13 @@ export class HuntRuleset implements Ruleset {
       );
 
       if (action.kind === 'step') {
-        this.#vacate(monster.position.x, monster.position.y);
-        monster.position = action.to;
-        this.#occupy(action.to.x, action.to.y);
+        // TODOS os tiles, não o primeiro (FUN-67): o acumulador já debitou os passos, e
+        // aplicar um só faz o monstro andar mais devagar quanto mais lento for o tick.
+        for (const to of action.path) {
+          this.#vacate(monster.position.x, monster.position.y);
+          monster.position = to;
+          this.#occupy(to.x, to.y);
+        }
         continue;
       }
       if (action.kind !== 'attack') continue;
@@ -383,14 +387,17 @@ export class HuntRuleset implements Ruleset {
       const character = session.participants.find((p) => p.id === action.targetId);
       if (character === undefined || !character.alive) continue;
 
-      const result = resolveDamage(
-        { power: definition.attack, kind: 'melee' },
-        this.#playerDefender(),
-        'pve',
-        this.#options.combat,
-        session.rng,
-      );
-      character.receiveDamage(result.damage);
+      // Mesma razão: `times` golpes, não um. É o que o jogador já fazia em `#actPlayers`.
+      for (let i = 0; i < action.times && character.alive; i++) {
+        const result = resolveDamage(
+          { power: definition.attack, kind: 'melee' },
+          this.#playerDefender(),
+          'pve',
+          this.#options.combat,
+          session.rng,
+        );
+        character.receiveDamage(result.damage);
+      }
       if (character.health > 0) continue;
 
       // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e

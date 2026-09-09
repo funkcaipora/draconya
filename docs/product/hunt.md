@@ -210,10 +210,19 @@ está "mais perto" muda com a granularidade do passo.
 vez, e a adjacência é conferida uma única vez no fim — eles passam mais ticks colados do que
 passariam a 10 Hz, e é enquanto estão colados que o acumulador de ataque do monstro avança.
 
-Corrigir pediria **subdividir o tick**, o que gasta exatamente o que cair para 1 Hz economiza — e
-economizar é a razão de existir do 1 Hz. Fica registrado em vez de corrigido, com um teste
-segurando o limite (menos que o dobro), e importa para a FUN-38: o balanceamento de morte em PvE
-precisa assumir o caso desanexado, não o anexado.
+A correção **não** é subdividir o tick, que gastaria exatamente o que cair para 1 Hz economiza. É
+um scheduler lógico por sessão, que processa só os eventos que vencem na janela — numa hunt
+desanexada, muito menos trabalho que 10 ticks × 40 monstros. Está na FUN-68, e 1,51x é a
+justificativa medida dela. Até lá o teste segura o limite em 1,7x, apertado em cima do medido, e
+importa para a FUN-38: o balanceamento de morte em PvE precisa assumir o caso desanexado.
+
+**Um defeito separado vivia aqui e foi corrigido na FUN-67.** O monstro aplicava UMA ação por
+tick mesmo quando o acumulador concedia várias, então ele andava e batia menos quanto mais lento
+fosse o tick. Não aparece na tabela acima porque o rato desta medição ataca a cada 2 s — mais que
+o tick lento de 1 s —, e o defeito só dispara quando o intervalo é *menor* que o tick. Com um rato
+de 500 ms a diferença medida era de **2,00x menos dano a 1 Hz**: a hunt desanexada, que é o modo
+padrão do jogo, era literalmente o dobro mais fácil. Cadência sub-segundo é normal em monstro
+forte, então este cenário passou perto sem encostar.
 
 Registro de um caminho tentado e descartado: trocar o acumulador de ataque por **timestamp
 absoluto** — que é o que `cooldown.ts` usa para ação disparada por evento — parecia resolver, e

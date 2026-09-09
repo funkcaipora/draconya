@@ -55,10 +55,12 @@ for (let tick = 0; tick < TICKS; tick++) {
     const target = prey.find((p) => p.id === monster.targetId) ?? null;
     const action = decideMonsterAction(monster, target, definition, DT_MS, blocked);
     if (action.kind === 'step') {
-      monster.position = action.to;
-      steps += 1;
+      // O caminho inteiro, como o ruleset aplica (FUN-67): contar um passo por tick mediria
+      // um monstro mais lento que o de verdade, e é justamente o custo que se quer medir.
+      for (const to of action.path) monster.position = to;
+      steps += action.path.length;
     } else if (action.kind === 'attack') {
-      attacks += 1;
+      attacks += action.times;
     }
   }
 }
