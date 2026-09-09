@@ -14,6 +14,7 @@ import { createLogger } from '../log.js';
 import type { Role } from '../role.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
+import { testContent } from '../testing/content.js';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
 
@@ -106,7 +107,7 @@ beforeAll(async () => {
   baseUrl = await app.listen({ port: 0, host: '127.0.0.1' });
   game = createGame(configuration, logger, {
     directory, tickets, contentVersion: 'integration-v1',
-    createSession: createCitySessionFactory('integration-v1'),
+    createSession: createCitySessionFactory(testContent()),
   });
   await game.start();
   await directory.heartbeat('integration-node', { sessions: 0, url: configuration.GAME_PUBLIC_URL });
@@ -261,7 +262,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     });
     const failedGame = createGame(configuration, logger, {
       tickets: new TicketService(disconnected, directory),
-      contentVersion: 'integration-v1', createSession: createCitySessionFactory('integration-v1'),
+      contentVersion: 'integration-v1', createSession: createCitySessionFactory(testContent()),
     });
     await failedGame.start();
     try {

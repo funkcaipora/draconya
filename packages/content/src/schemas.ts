@@ -116,6 +116,31 @@ export const progressionSchema = z.object({
    * atributo do personagem: quando haste e botas existirem, elas modificam ESTE número.
    */
   stepDurationMs: z.number().int().positive(),
+  /**
+   * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
+   * completar aquele level.
+   *
+   * Tabela de 500 linhas seria mais expressiva e é o caminho errado aqui. A curva vai ser
+   * rebalanceada muitas vezes, e rebalancear uma tabela é reescrever 500 linhas à mão — o que
+   * na prática significa que ela nunca é rebalanceada. Dois números mudam a curva inteira, e
+   * a forma continua legível para quem balanceia.
+   */
+  xp: z.object({
+    base: z.number().positive(),
+    exponent: z.number().positive(),
+  }),
+  /**
+   * Penalidade de morte (§26.2). Mora aqui, junto da curva, porque ela é definida COMO
+   * fração da curva — separar as duas é como as duas divergem numa rebalanceada.
+   */
+  deathPenalty: z.object({
+    /** Fração da XP necessária para completar o level atual. §26.2: 60%. */
+    fraction: z.number().min(0).max(1),
+    /** A mesma fração para quem tem Premium. §26.2: 54%. */
+    premiumFraction: z.number().min(0).max(1),
+    /** Abaixo deste level a penalidade não derruba ninguém. §26.2: 8. */
+    levelFloor: z.number().int().positive(),
+  }),
   _open: z.string().optional(),
 });
 

@@ -1,6 +1,6 @@
 # Progressão, vocações e level
 
-**Status:** não implementado
+**Status:** stats por level/vocação, curva de XP e level up implementados; skills, passivas e promoção não
 **PRD:** §4.1, §9, §43.1
 **Épico:** E2 (stats por vocação/level, skills por uso); E7 (árvore de passivas, promoção de vocação por quest)
 
@@ -26,6 +26,29 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 - Pontos de passiva são distribuídos em árvore própria por vocação (dano / suporte / sustain).
 - Respec de passivas é livre, ilimitado e restrito a PZ.
 
+## A curva de XP é fórmula, não tabela
+
+`xpToCompleteLevel(L) = round(base × L^exponent)`, e `xp` no personagem é o **total acumulado**,
+nunca "XP dentro do level".
+
+Uma tabela de 500 linhas seria mais expressiva e é o caminho errado: a curva vai ser
+rebalanceada muitas vezes, e rebalancear uma tabela é reescrever 500 linhas à mão — o que na
+prática significa que ela nunca é rebalanceada. Dois números mudam a curva inteira.
+
+Guardar o **acumulado**, e não o progresso dentro do level, é o que faz a penalidade de morte
+cascatear sozinha: tira-se XP do total e o level é recalculado. Guardar o progresso dentro do
+level exigiria um laço de "desce um level, devolve o resto" escrito à mão — exatamente onde o
+caso de cascata de dois levels passa despercebido.
+
+**Subir de level dá os pontos, não cura.** O máximo de HP e mana sobe, e o atual sobe junto na
+mesma quantidade. Curar no level up faria "subir de level" virar poção grátis, e um bot bem
+configurado morando na fronteira de um level nunca mais morreria.
+
+**O level up é autoritativo sobre os stats.** Ele recalcula `maxHealth` e `maxMana` pela tabela,
+o que significa que qualquer valor inventado na criação do personagem some no primeiro level up.
+Por isso a criação de sessão passou a derivar HP e mana da mesma tabela — antes ela usava
+números fixos, e o personagem *encolheria* ao subir de level.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -47,6 +70,9 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 | Quantidade de promoções no MVP | 1 | caminho previsto: `packages/content/vocations` |
 | Curva de ganho de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
+| Base da curva de XP | 20 `[ABERTO — valor provisório: 20]` | `packages/content/data/progression/baseline.json`, `xp.base` |
+| Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
+| Velocidade de passo do personagem | 500 ms por tile `[ABERTO — valor provisório: 500]` | `packages/content/data/progression/baseline.json`, `stepDurationMs` |
 | Referência de catálogo de magias | Tibia até ~level 120 (referência funcional; catálogo final próprio) | caminho previsto: `packages/content/spells` |
 
 ## Em aberto
@@ -55,6 +81,9 @@ O catálogo de magias do jogo usa como referência de escopo funcional as magias
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Os valores em
   `progression/baseline.json` são provisórios e estão marcados como tal no próprio arquivo.
+- A curva de XP também não está no PRD. `base: 20, exponent: 2` põe o level 8 — onde a vocação
+  é escolhida — a cerca de duas horas de Rat Cellars, cedo o bastante para a escolha não virar
+  espera.
 
 ## Decidido na implementação: a vocação não é retroativa
 

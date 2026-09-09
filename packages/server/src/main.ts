@@ -132,7 +132,7 @@ async function main(): Promise<void> {
       directory,
       tickets,
       contentVersion: content.version,
-      createSession: createCitySessionFactory(content.version),
+      createSession: createCitySessionFactory(content),
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),

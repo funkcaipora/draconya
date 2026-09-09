@@ -1,19 +1,20 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession } from '@draconya/sim';
+import { TEST_COMBAT, TEST_PROGRESSION, testContent } from '../testing/content.js';
 import type { Session } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import { createCitySessionFactory, createSessionRestorer } from './sessions.js';
 
 describe('city session factory', () => {
   it('starts from progress carried by the authenticated ticket', () => {
-    const session = createCitySessionFactory('v-test')('p1', { level: 17, xp: 93_000 });
+    const session = createCitySessionFactory(testContent())('p1', { level: 17, xp: 93_000 });
 
     expect(session.participants[0]?.level).toBe(17);
     expect(session.participants[0]?.xp).toBe(93_000);
   });
 
   it('uses new-character progress for a legacy claim without initialization', () => {
-    const session = createCitySessionFactory('v-test')('p1');
+    const session = createCitySessionFactory(testContent())('p1');
 
     expect(session.participants[0]?.level).toBe(1);
     expect(session.participants[0]?.xp).toBe(0);
@@ -21,41 +22,7 @@ describe('city session factory', () => {
 });
 
 describe('session restorer', () => {
-  // Conteúdo mínimo, montado à mão: o objetivo é o roteamento por tipo de sessão, não o
-  // carregamento de disco — que este pacote nem pode importar aqui.
-  const content = buildContent({
-    monsters: [{
-      id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1, health: 20, experience: 5,
-      attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
-    }],
-    hunts: [{
-      id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
-      difficulties: {
-        beginner: {
-          perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
-        },
-      },
-    }],
-    vocations: [],
-    progression: [{
-      id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
-      healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-      stepDurationMs: 500,
-    }],
-    combat: [{
-      id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
-      minimumDamageFraction: 0.1,
-      player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
-    }],
-    maps: [{ id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'] }],
-    routes: [{
-      id: 'arena-loop', mapId: 'arena',
-      tiles: [
-        { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
-      ],
-      spawnPoints: [{ routeIndex: 2, radius: 1 }],
-    }],
-  });
+  const content = testContent();
 
   const hunt = (): Session => {
     const session = createHuntSession({
@@ -82,13 +49,13 @@ describe('session restorer', () => {
   });
 
   it('restores a city session', () => {
-    const city = createCitySessionFactory(content.version)('p1');
+    const city = createCitySessionFactory(content)('p1');
     expect(createSessionRestorer(content)(city.snapshot(), 1)?.ruleset.type).toBe('city');
   });
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
-      progression: [content.progression], combat: [content.combat] });
+      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT] });
     expect(createSessionRestorer(empty)(hunt().snapshot(), 1)).toBeNull();
   });
 
