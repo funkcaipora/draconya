@@ -963,3 +963,150 @@ describe('máquina de estados do personagem (FUN-30)', () => {
       expect(estados.length).toBeGreaterThan(0);
     });
 });
+
+describe('sessão de repouso não segura o slot para sempre (FUN-52)', () => {
+  const resting = (): Ruleset => ({
+    // Orientada a evento, como a Cidade: sem laço nenhum.
+    type: 'city', hz: () => 0,
+    onEnter: () => {}, onTick: () => {}, onDeath: () => {}, onEnd: () => {},
+  });
+
+  const GRACE_MS = 5 * 60_000;
+
+  const releasing = () => {
+    const released: string[] = [];
+    const directory = {
+      register: async () => true,
+      release: async (characterId: string) => { released.push(characterId); },
+      releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    return { directory, released };
+  };
+
+  it('devolve o slot depois da carência, quando ninguém está olhando', async () => {
+    // O defeito: quem fechava o navegador deixava a sessão de cidade de pé para sempre, e o
+    // terceiro personagem da conta não conectava mais. Reiniciar o nó "resolvia" — o que
+    // escondia o problema em desenvolvimento e o deixava aparecer só em produção.
+    const { directory, released } = releasing();
+    let now = 0;
+    const { host } = buildHost(resting(), { directory, now: () => now });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.detach(viewer);
+
+    now += GRACE_MS + 1;
+    host.cycle(now);
+
+    await vi.waitFor(() => expect(released).toEqual(['p1']));
+    expect(host.sessionFor('p1')).toBeUndefined();
+  });
+
+  it('não recolhe dentro da carência: recarregar a página não pode custar a sessão', async () => {
+    const { directory, released } = releasing();
+    let now = 0;
+    const { host } = buildHost(resting(), { directory, now: () => now });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    host.detach(viewer);
+
+    now += GRACE_MS - 1;
+    host.cycle(now);
+
+    expect(released).toEqual([]);
+    expect(host.sessionFor('p1')).toBeDefined();
+  });
+
+  it('reconectar dentro da carência reencontra a MESMA sessão', async () => {
+    // É o ADR 0001 e o teste de integração que o codifica: desanexar não encerra nada.
+    const { directory } = releasing();
+    let now = 0;
+    const { host } = buildHost(resting(), { directory, now: () => now });
+    await host.prepare('p1', undefined, 'a1');
+    const antes = host.sessionFor('p1');
+    host.detach(host.attach(new FakeSocket(), 'p1'));
+
+    now += GRACE_MS - 1;
+    host.cycle(now);
+    host.attach(new FakeSocket(), 'p1');
+    now += GRACE_MS * 10;
+    host.cycle(now);
+
+    // Com visualizador de volta, o relógio de repouso zerou: não é recolhida nunca mais.
+    expect(host.sessionFor('p1')).toBe(antes);
+  });
+
+  it('NUNCA recolhe uma hunt desanexada, por mais tempo que passe', async () => {
+    // A linha que separa "repouso" de "progresso sem ninguém olhando". Recolher aqui seria o
+    // fim do modo idle, que é o modo PADRÃO do jogo.
+    const { directory, released } = releasing();
+    let now = 0;
+    const { ruleset } = countingRuleset(10, 1);
+    const { host } = buildHost(ruleset, { directory, now: () => now });
+    await host.prepare('p1', undefined, 'a1');
+    host.detach(host.attach(new FakeSocket(), 'p1'));
+
+    now += GRACE_MS * 100;
+    host.cycle(now);
+
+    expect(released).toEqual([]);
+    expect(host.sessionFor('p1')).toBeDefined();
+  });
+
+  it('um ticket emitido e nunca usado também não segura o slot', async () => {
+    // `prepare` cria a sessão antes de o socket subir. Se o jogador nunca conecta, a sessão
+    // nasce sem visualizador e ficaria de pé para sempre.
+    const { directory, released } = releasing();
+    let now = 0;
+    const { host } = buildHost(resting(), { directory, now: () => now });
+    await host.prepare('p1', undefined, 'a1');
+
+    now += GRACE_MS + 1;
+    host.cycle(now);
+
+    await vi.waitFor(() => expect(released).toEqual(['p1']));
+  });
+});
+
+describe('soltar a sessão credita antes de descartá-la (FUN-52)', () => {
+  it('logout dentro de uma sessão com progresso não joga a XP fora', async () => {
+    // Desde a FUN-54 o extrato é o único caminho até o banco, e o `release` apaga o snapshot
+    // logo em seguida — as duas cópias do progresso. Sem creditar antes, sair do jogo dentro
+    // de uma hunt custaria a sessão inteira.
+    const saved: Array<{ reason: string; seq: number }> = [];
+    const receipts = {
+      save: async (r: { reason: string; seq: number }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+
+    await host.release('p1');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.seq).toBe(1);
+  });
+
+  it('mas NÃO credita duas vezes quando a drenagem já creditou', async () => {
+    // A drenagem grava e depois solta. Sem a marca, o `release` gravaria de novo com um `seq`
+    // novo — que a chave única do ledger não teria como recusar, e o jogador receberia o
+    // mesmo gold duas vezes.
+    const saved: Array<{ seq: number }> = [];
+    const receipts = {
+      save: async (r: { seq: number }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+
+    await host.drainAll('drain');
+
+    expect(saved).toHaveLength(1);
+  });
+});
