@@ -7,6 +7,7 @@ export * from './log.js';
 export * from './directory.js';
 export * from './tickets.js';
 export * from './snapshots.js';
+export * from './receipts.js';
 export * from './clock.js';
 export * from './auth/service.js';
 export * from './auth/sessions.js';

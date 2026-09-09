@@ -12,6 +12,7 @@ import type { Configuration } from '../config.js';
 import type { Session, SessionSnapshot } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
+import type { ReceiptStore } from '../receipts.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
@@ -25,6 +26,7 @@ export interface GameDependencies {
   readonly contentVersion?: string;
   /** Onde a sessão é guardada para sobreviver à queda do processo (FUN-28). */
   readonly snapshots?: SnapshotStore;
+  readonly receipts?: ReceiptStore;
   readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
 }
 
@@ -58,6 +60,7 @@ export function createGame(
       logger,
       ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
       ...(dependencies.snapshots === undefined ? {} : { snapshots: dependencies.snapshots }),
+      ...(dependencies.receipts === undefined ? {} : { receipts: dependencies.receipts }),
       ...(dependencies.restoreSession === undefined
         ? {}
         : { restoreSession: dependencies.restoreSession }),
@@ -221,14 +224,27 @@ export function createGame(
       }
     },
     async drain() {
-      // FUN-29: aqui é onde a drenagem de verdade entra — parar de aceitar, snapshot
-      // final de cada sessão, encerrar creditando o progresso, notificar. O orçamento
-      // de tempo importa: drenagem interrompida no meio é pior que drenagem nenhuma.
+      // Ordem: parar de aceitar → snapshot final → encerrar creditando → avisar → sair.
       acceptingNewSessions = false;
-      logger.info({ sessions: host?.sessionCount ?? 0 }, 'Game stopped accepting new sessions');
-      // Gravar ANTES de parar os timers: o snapshot da drenagem é o que faz um deploy custar
-      // zero em vez de um intervalo inteiro de progresso.
+      const sessions = host?.sessionCount ?? 0;
+      logger.info({ sessions }, 'Game stopped accepting new sessions');
+
+      const startedAtMs = performance.now();
+      // Gravar ANTES de encerrar: se o processo morrer no meio da drenagem, o que sobra é um
+      // snapshot retomável (FUN-28) em vez de uma sessão pela metade. O que drenar com
+      // sucesso apaga o próprio snapshot logo em seguida — quem fica com ele é justamente
+      // quem NÃO conseguiu creditar.
       await host?.saveAll();
+      const ended = (await host?.drainAll('drain')) ?? 0;
+      const elapsedMs = Math.round(performance.now() - startedAtMs);
+
+      // O tempo aparece no log de propósito: é ele que decide o `terminationGracePeriod` do
+      // orquestrador. Drenagem interrompida no meio é PIOR que drenagem nenhuma — metade
+      // credita e metade some, e ninguém sabe qual metade.
+      logger.info(
+        { sessions, ended, elapsedMs, perSessionMs: ended > 0 ? elapsedMs / ended : 0 },
+        'Game drained sessions crediting progress',
+      );
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;

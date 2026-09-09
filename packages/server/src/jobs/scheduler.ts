@@ -10,12 +10,17 @@ import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
+import type { ReceiptStore } from '../receipts.js';
+import type { Database } from '../db/client.js';
 import { sweepOrphanedSessions } from './orphans.js';
+import { writePendingReceipts } from './ledger.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
   readonly directory?: SessionDirectory;
   readonly snapshots?: SnapshotStore;
+  readonly receipts?: ReceiptStore;
+  readonly database?: Database;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -40,6 +45,18 @@ export function createJobs(
       if (dependencies.tickets !== undefined) {
         const released = await dependencies.tickets.sweepAbandoned();
         if (released > 0) logger.info({ released }, 'Released abandoned character slots');
+      }
+
+      // FUN-29: extrato de sessão encerrada vira linha de ledger. Roda ANTES da varredura
+      // de órfãs: uma sessão que acabou de ser drenada tem crédito esperando, e creditar é
+      // mais urgente que arrumar índice.
+      if (dependencies.receipts !== undefined && dependencies.database !== undefined) {
+        const { written, failed } = await writePendingReceipts({
+          database: dependencies.database,
+          receipts: dependencies.receipts,
+          logger,
+        });
+        if (written > 0 || failed > 0) logger.info({ written, failed }, 'Wrote session receipts');
       }
 
       // FUN-28: sessão órfã é snapshot sem lease. Este ciclo NÃO retoma — retomar é

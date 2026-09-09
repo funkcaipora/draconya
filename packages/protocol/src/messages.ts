@@ -29,6 +29,7 @@ export const SERVER_TO_CLIENT = {
   'experience-gain': 10,
   'system-message': 11,
   'chat-message': 12,
+  'session-ended': 13,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

@@ -12,10 +12,11 @@
 // (invariante 1). Os objetos ficam aqui. A ponte entre os dois é `session.attached`, que é o
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
-import type { Session, SessionSnapshot, SessionType } from '@draconya/sim';
+import type { EndReason, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
+import type { ReceiptStore } from '../receipts.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
@@ -31,6 +32,8 @@ export interface SessionHostOptions {
   readonly directory?: SessionDirectory;
   /** Onde as sessões são guardadas para sobreviver à queda do processo (FUN-28). */
   readonly snapshots?: SnapshotStore;
+  /** Onde o extrato de uma sessão encerrada espera virar linha de ledger (FUN-29). */
+  readonly receipts?: ReceiptStore;
   /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar. */
   readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
   readonly viewer?: ViewerOptions;
@@ -349,6 +352,77 @@ export class SessionHost {
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+  }
+
+  /**
+   * Encerra TODAS as sessões creditando o progresso, e avisa quem estiver olhando (FUN-29).
+   *
+   * É o que um deploy faz: encerrar creditando, e não migrar ao vivo (ADR 0010). Sem isto,
+   * um deploy com milhares de sessões desanexadas em voo destrói progresso de gente que nem
+   * está lá para reagir — e o §38.4 é explícito que hunt AFK não pode sumir em silêncio.
+   *
+   * A ORDEM importa. O extrato é gravado ANTES de o visualizador ser avisado: se o processo
+   * morrer no meio, o jogador ficou sem a mensagem mas o crédito está no Redis esperando o
+   * `jobs`. O contrário — avisar e morrer antes de gravar — mostraria um extrato que nunca
+   * vai existir, que é a pior das duas metades.
+   */
+  async drainAll(reason: EndReason = 'drain'): Promise<number> {
+    let ended = 0;
+    for (const [characterId, sessionId] of [...this.#sessionIdByCharacter]) {
+      const hosted = this.#sessions.get(sessionId);
+      if (hosted === undefined) continue;
+      try {
+        const receipt = hosted.session.end(reason);
+        await this.#saveReceipt(characterId, hosted, receipt);
+        for (const viewer of hosted.viewers) {
+          viewer.sendNow({
+            type: 'session-ended',
+            reason: receipt.reason,
+            aggregates: receipt.aggregates,
+            notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
+          });
+        }
+        // Creditada: o snapshot e o registro no diretório TÊM que sumir.
+        //
+        // Deixar o snapshot criaria um caminho de crédito DOBRADO — a próxima conexão
+        // retomaria (FUN-28) o estado de antes do encerramento, e uma segunda drenagem
+        // creditaria os mesmos agregados de novo, com um `seq` novo que a chave única do
+        // ledger não consegue recusar. E deixar o registro no diretório apontando para um nó
+        // que já saiu é a definição de sessão órfã.
+        await this.release(characterId, 1001, 'drain');
+        ended += 1;
+      } catch (error) {
+        // Uma sessão que falha não pode impedir as outras de creditar: drenagem que para no
+        // meio é pior que drenagem nenhuma, porque metade credita e metade some.
+        //
+        // A que falhou FICA com snapshot e registro: é o caminho da FUN-28, e voltar
+        // retomável é melhor que sumir sem crédito.
+        this.#logger.error({ error, characterId, sessionId }, 'Failed to drain a session');
+      }
+    }
+    return ended;
+  }
+
+  async #saveReceipt(
+    characterId: string,
+    hosted: HostedSession,
+    receipt: Receipt,
+  ): Promise<void> {
+    const receipts = this.#options.receipts;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    if (receipts === undefined || accountId === undefined) return;
+    // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10), e
+    // é o que impede uma drenagem repetida por retry de creditar duas vezes.
+    hosted.session.ledgerSeq += 1;
+    await receipts.save({
+      sessionId: receipt.sessionId,
+      characterId,
+      accountId,
+      reason: receipt.reason,
+      seq: hosted.session.ledgerSeq,
+      aggregates: receipt.aggregates,
+      notableEvents: receipt.notableEvents,
+    });
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */

@@ -108,6 +108,18 @@ export const S2C_SCHEMAS = {
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),
   'chat-message': z.object({ channel: z.string(), author: z.string(), text: z.string() }),
+  /**
+   * O extrato: a sessão acabou, por quê, e o que rendeu (§16.2, ADR 0010).
+   *
+   * O `reason` não é enfeite. "Sua hunt foi encerrada por manutenção" é aceitável; sumir sem
+   * explicação não é — e é assim que um jogo idle perde a confiança de quem deixou o
+   * personagem rendendo.
+   */
+  'session-ended': z.object({
+    reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed']),
+    aggregates: Aggregates,
+    notableEvents: z.array(NotableEvent),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

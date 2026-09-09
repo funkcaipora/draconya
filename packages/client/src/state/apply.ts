@@ -10,6 +10,15 @@
 
 import type { S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
+
+/** Por que a sessão acabou, em palavras que o jogador entende. */
+const REASON = {
+  'manual-exit': 'Você saiu do jogo',
+  'exit-rule': 'A hunt encerrou por uma regra de saída',
+  death: 'Você morreu',
+  drain: 'Sua sessão foi encerrada por manutenção',
+  completed: 'Concluído',
+} as const;
 import { enterInstance, world, type Creature } from './world.js';
 
 export function applyMessage(message: S2CMessage, nowMs: number): void {
@@ -106,6 +115,25 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // `t` é o instante que o cliente mandou no `ping`; a volta inteira é a latência.
       hud.set((state) => ({ ...state, latencyMs: nowMs - message.t }));
       return;
+
+    case 'session-ended': {
+      // O extrato. A sessão acabou e o jogador precisa saber POR QUÊ e o que rendeu — sumir
+      // sem explicação é como o modo idle perde a confiança de quem deixou o personagem
+      // rendendo. O mundo NÃO é limpo: a última coisa verdadeira continua na tela por trás
+      // da mensagem, em vez de o canvas piscar vazio junto com a notícia.
+      const { aggregates } = message;
+      hud.set((state) => ({
+        ...state,
+        systemMessages: appendCapped(state.systemMessages, {
+          level: 'warning',
+          text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
+            + ` · ${aggregates.xpGained} XP · ${aggregates.goldGained - aggregates.goldSpent} gold`
+            + ` · ${aggregates.kills} abate(s)`,
+          atMs: nowMs,
+        }),
+      }));
+      return;
+    }
 
     case 'session-state': {
       // Estado completo SUBSTITUI o mundo; não é acumulado por cima. Mesclar deixaria uma
