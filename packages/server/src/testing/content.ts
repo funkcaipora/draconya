@@ -10,6 +10,12 @@ import type { Content } from '@draconya/content';
 
 export const TEST_MAP = { id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'] };
 
+/** A Cidade de teste: uma sala de 4×4 com ponto de entrada no meio (FUN-60). */
+export const TEST_CITY_MAP = {
+  id: 'city', z: 7, entryPoint: { x: 2, y: 2 },
+  grid: ['######', '#....#', '#....#', '#....#', '#....#', '######'],
+};
+
 export const TEST_ROUTE = {
   id: 'arena-loop', mapId: 'arena',
   tiles: [
@@ -64,6 +70,7 @@ export function testContent(): Content {
   return buildContent({
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
-    maps: [TEST_MAP], routes: [TEST_ROUTE],
+    maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
+    city: { mapId: 'city' },
   });
 }

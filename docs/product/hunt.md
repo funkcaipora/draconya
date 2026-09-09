@@ -82,6 +82,32 @@ o mais próximo numa lista dessas custa menos que montar a estrutura que um path
 **Quando** parar e retomar é decisão do bot (Fase 2). O que existe hoje é só a execução:
 avançar, parar, retomar, dar a volta.
 
+### Movimento e rota: um escritor só (FUN-69)
+
+Desde a FUN-69 **ninguém escreve posição de criatura fora de `packages/sim/src/movement.ts`**, e
+o `pnpm source-policy` reprova quem tentar. Bot, monstro e o `walk` do socket passam pelo mesmo
+caminho — `canOccupy` → `move` — e recebem a **mesma razão de recusa**: `out-of-bounds`,
+`tile-blocked`, `tile-occupied`, `not-adjacent` ou `same-tile`. É o padrão do §8 do documento
+de referência OpenTibia, e é conceitual: *validar → commit atômico → evento*.
+
+Três consequências que o jogador sente:
+
+- **A rota bloqueada por monstro segura o índice** (`RouteWalker.hold`) em vez de avançar e
+  pular o tile na volta seguinte. O trecho que o personagem existia para limpar é limpo.
+- **Um passo manual tira o personagem da rota, e o bot reentra** pelo tile mais próximo no
+  vencimento seguinte, em vez de travar segurando um índice que nunca mais fica adjacente.
+- **Todo passo produz `CreatureMoved`, haja ou não quem olhe** (§12). Quem está anexado recebe
+  `creature-move` — um por passo, com origem, destino e duração, e o cliente interpola. A hunt
+  desanexada produz exatamente os mesmos eventos e não serializa nenhum. Antes disto a hunt
+  **não transmitia mundo**: os 42,8 bytes/s medidos na FUN-45 eram handshake e `ping`.
+
+A colocação inicial passa pela mesma legalidade. O personagem nasce no `entryPoint` do mapa da
+Cidade — conteúdo, validado no boot contra `isBlocked` — e não mais no literal `(0,0)`, que é
+parede na borda de qualquer tilemap (FUN-60).
+
+A duração do passo é **uma função** (`movementDuration`), usada por humano, bot e monstro. Hoje a
+diagonal custa o mesmo que a reta; mudar isso é balanceamento, e muda num lugar só.
+
 ## Spawn: densidade é dado, composição é sorteio
 
 Os pontos de respawn são definidos por design, na rota. Quantos monstros nascem em cada ponto

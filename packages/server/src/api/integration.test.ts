@@ -270,6 +270,41 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(await directory.lookup(character.id)).toEqual(location);
   });
 
+  it('walk through the real socket moves the character, and session-state shows it (FUN-69)', async () => {
+    // A ligação socket → host → sistema de movimento, ponta a ponta. O que reprova aqui é o
+    // `walk` chegando e caindo no `default` de novo.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);                                            // welcome
+
+    // Nasceu no entryPoint da Cidade de teste — e não em (0,0), que é a FUN-60.
+    const before = receive(socket);
+    socket.send(encodeC2S({ type: 'session-attach' }));
+    // A posição vai em `world.creatures`, nunca em `self`: o cliente não decide onde está.
+    const initial = decodeS2C(await before)?.find((m) => m.type === 'session-state');
+    expect(initial).toMatchObject({ world: { creatures: [
+      expect.objectContaining({ position: { x: 2, y: 2, z: 7 } }),
+    ] } });
+
+    // INTENÇÃO: uma direção. Quem resolve o tile é o servidor (invariante 4).
+    const moved = receive(socket);
+    socket.send(encodeC2S({ type: 'walk', direction: 'east' }));
+    expect(decodeS2C(await moved)).toContainEqual(expect.objectContaining({
+      type: 'creature-move', from: { x: 2, y: 2, z: 7 }, to: { x: 3, y: 2, z: 7 },
+    }));
+
+    const after = receive(socket);
+    socket.send(encodeC2S({ type: 'session-attach' }));
+    const state = decodeS2C(await after)?.find((m) => m.type === 'session-state');
+    expect(state).toMatchObject({ world: { creatures: [
+      expect.objectContaining({ position: { x: 3, y: 2, z: 7 } }),
+    ] } });
+  });
+
   it('fails closed when the HTTP session store loses Redis', async () => {
     const owner = await login();
     const disconnected = new Redis(process.env['TEST_REDIS_URL']!, {
