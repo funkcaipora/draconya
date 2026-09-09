@@ -20,7 +20,8 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "pnpm --filter @draconya/tools content:check",
-    "bench:monster": "pnpm --filter @draconya/tools bench:monster"
+    "bench:monster": "pnpm --filter @draconya/tools bench:monster",
+    "bench:hunts": "pnpm --filter @draconya/tools bench:hunts"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
