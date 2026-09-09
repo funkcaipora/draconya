@@ -6,6 +6,7 @@ import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { Session } from '../session.js';
+import type { SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, changeDifficulty, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
@@ -482,6 +483,68 @@ describe('snapshot', () => {
       .toEqual(ruleset.monsters.map((m) => m.getState()));
     expect(retomado.aggregates).toEqual(session.aggregates);
     expect(retomado.participants[0]?.position).toEqual(session.participants[0]?.position);
+  });
+
+  it('retomada continua respawnando, e o prazo conta da retomada (FUN-70)', () => {
+    // O teste que a FUN-70 pede, e o defeito que ele guarda era TOTAL, não marginal.
+    //
+    // `SpawnSlot` guardava `respawnAtMs` como instante absoluto derivado do `performance.now()`
+    // do processo. Medido: nó A com seis horas de relógio marcava o respawn em 21.802.500; o nó
+    // B subia com 5.000 e retomava. O prazo nunca vencia — a hunt rodava, gastava CPU, queimava
+    // stamina e não gerava um único monstro, para sempre, sem erro nem log. Só voltaria a
+    // funcionar quando o nó B acumulasse ~seis horas de `performance.now()`.
+    //
+    // O `rebaseClock` do ADR 0018 resolvia metade: reposicionava `lastTickMs` para o `dtMs` não
+    // sair negativo, e deixava os instantes absolutos DENTRO do estado do ruleset na linha do
+    // tempo antiga. Com relógio lógico (FUN-68) a classe inteira sai, porque não há instante de
+    // processo em lugar nenhum — mas isso precisa de teste, não de confiança.
+    const loaded = content();
+    const { session, ruleset } = start({ loaded });
+
+    // Até o primeiro abate: é o que deixa um respawn PENDENTE quando o snapshot é tirado. Sem
+    // pendência, o teste passaria sem exercitar nada.
+    while (session.aggregates.kills === 0 && session.nowMs < 60_000) session.advanceBy(100);
+    expect(session.aggregates.kills).toBe(1);
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // Pelo JSON, porque é assim que ele atravessa o Redis: um instante que só existisse em
+    // memória passaria por aqui sem ser notado.
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const depois = retomado.ruleset as HuntRuleset;
+    expect(depois.monsters).toHaveLength(0);
+
+    // Ainda dentro dos 30 s da dificuldade: nada nasce.
+    retomado.advanceBy(29_000);
+    expect(depois.monsters).toHaveLength(0);
+
+    // Prazo cumprido: nasce. É esta linha que falhava com `0 monstros vivos` depois de dez
+    // vezes o `respawnDelayMs`.
+    retomado.advanceBy(2_000);
+    expect(depois.monsters).toHaveLength(1);
+  });
+
+  it('não sobrou instante de processo no estado do ruleset (FUN-70)', () => {
+    // A varredura que a FUN-70 pede antes de fechar: `respawnAtMs` era o único portador de
+    // instante absoluto EM USO, e o mapa `until` de `Cooldowns` era o outro, morto. Se um
+    // terceiro aparecer, ele reabre a mesma classe de defeito — e em silêncio.
+    //
+    // O que a fila da sessão guarda é relativo ao zero dela, então nada aqui pode passar do
+    // relógio lógico por mais que a hunt inteira ainda tem pela frente.
+    const { session, ruleset } = start();
+    run(session, 8000, 100);
+
+    for (const slot of (ruleset.getState()).spawner.slots) {
+      expect(Object.keys(slot).sort()).toEqual(['occupantId', 'pointIndex']);
+    }
+    expect(Object.keys(ruleset.getState().route).sort()).toEqual(['index', 'stopped']);
+    for (const monster of ruleset.getState().monsters) {
+      expect(monster.cooldowns).toEqual({ until: {} });
+    }
   });
 
   it('recusa retomar num conteúdo que não tem mais a hunt', () => {

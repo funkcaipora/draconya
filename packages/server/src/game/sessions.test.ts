@@ -1,10 +1,10 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_COMBAT, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_PROGRESSION, TEST_STAMINA, testContent,
 } from '../testing/content.js';
 import type { Progression } from '@draconya/content';
-import type { Session } from '@draconya/sim';
+import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import {
   createCitySessionFactory, createSessionBuilder, createSessionRestorer,
@@ -70,6 +70,81 @@ describe('session restorer', () => {
     // Forçar um ruleset conhecido em cima produziria uma sessão que mente sobre o que é.
     const snapshot = { ...hunt().snapshot(), type: 'boss' as const };
     expect(createSessionRestorer(content)(snapshot)).toBeNull();
+  });
+});
+
+describe('retomada num nó de relógio diferente (FUN-70)', () => {
+  const content = testContent();
+
+  /**
+   * Uma hunt com um respawn PENDENTE, avançada como o hospedeiro avança: pelo tempo decorrido
+   * desde o último avanço DELE, nunca pelo relógio da sessão.
+   */
+  const huntComRespawnPendente = (): Session => {
+    const session = createHuntSession({
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    });
+    session.enter(new CharacterRuntime({
+      id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 5_000, maxHealth: 5_000, mana: 0,
+      maxMana: 0, level: 1, xp: 0, vocationId: null, goldDelta: 0, alive: true, cooldowns: {},
+    }));
+    while (session.aggregates.kills === 0 && session.nowMs < 60_000) session.advanceBy(100);
+    return session;
+  };
+
+  it('a hunt volta a respawnar depois de retomar num processo de relógio baixo', () => {
+    // A MEDIÇÃO que abriu a issue, reproduzida:
+    //
+    //     nó A (relógio 21.600.000):  abates, respawn marcado em 21.802.500
+    //     nó B (relógio 5.000):       0 abates, 0 monstros vivos — para sempre
+    //
+    // O `respawnAtMs` do slot era instante absoluto derivado do `performance.now()` do
+    // processo, e monotônico não é comparável entre processos. A hunt retomada rodava, gastava
+    // CPU, queimava stamina e não gerava um único monstro, sem erro e sem log — o pior formato
+    // de falha que existe, porque o jogador só descobre no extrato horas depois.
+    //
+    // Com relógio lógico (FUN-68) o cenário deixa de ser expressável: o relógio do processo
+    // não entra na sessão em lugar nenhum. Este teste é o que impede a classe de voltar.
+    const noA = huntComRespawnPendente();
+    expect(noA.aggregates.kills).toBe(1);
+
+    // Seis horas de `performance.now()` no nó A não deixam marca nenhuma dentro da sessão: o
+    // relógio dela é dela, e é isto que o snapshot carrega.
+    const snapshot = JSON.parse(JSON.stringify(noA.snapshot())) as SessionSnapshot;
+    expect(snapshot.logicalNowMs).toBeLessThan(60_000);
+
+    const noB = createSessionRestorer(content)(snapshot);
+    if (noB === null) throw new Error('esperava retomar a hunt');
+    const ruleset = noB.ruleset as HuntRuleset;
+    expect(ruleset.monsters).toHaveLength(0);
+
+    // O nó B avança pelo INTERVALO decorrido nele, como `SessionHost.cycle` faz com
+    // `lastAdvancedAtMs` — e o relógio dele começa perto de zero, que é o caso que quebrava.
+    //
+    // Dez vezes o `respawnDelayMs`, que é o mesmo excesso que a medição usou para concluir que
+    // a hunt não voltaria nunca. As duas coisas que ela reportou em zero são medidas na JANELA
+    // INTEIRA: um `monsters.length` lido no fim seria frágil por acidente, porque o herói mata
+    // em um golpe e o instante final cai no prazo de respawn na maior parte das vezes.
+    let noBAgoraMs = 5_000;
+    let monstrosVistos = 0;
+    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.beginner.respawnDelayMs;
+    for (; noBAgoraMs < ateMs; noBAgoraMs += 1_000) {
+      noB.advanceBy(1_000);
+      monstrosVistos = Math.max(monstrosVistos, ruleset.monsters.length);
+    }
+
+    // As duas linhas que a issue reportou em zero.
+    expect(monstrosVistos).toBeGreaterThan(0);
+    expect(noB.aggregates.kills).toBeGreaterThan(noA.aggregates.kills);
+  });
+
+  it('o relógio do hospedeiro não entra na sessão retomada', () => {
+    // A raiz, dita diretamente: o `nowMs` do processo e o `session.nowMs` são grandezas
+    // diferentes, e comparar as duas é o que produzia o defeito. A sessão retomada continua no
+    // instante lógico em que parou, seja qual for a hora do processo que a recebeu.
+    const snapshot = huntComRespawnPendente().snapshot();
+    const retomada = createSessionRestorer(content)(snapshot);
+    expect(retomada?.nowMs).toBe(snapshot.logicalNowMs);
   });
 });
 
