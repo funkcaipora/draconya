@@ -191,7 +191,27 @@ O que faz, para o sistema indicado:
 O item 4 vale sozinho: quando alguém for balancear a hunt daqui a três meses, a pergunta vai ser
 "onde fica esse número", não "qual era a regra".
 
-### 3.5 `/delivery` — ritual de fechamento
+### 3.5 `/spec` — detalhar uma task para execução autônoma
+
+**Quando:** uma issue está rasa demais para alguém executar sem reconstruir o entendimento.
+
+Transforma a descrição da issue no Linear numa especificação executável: escopo por pacote,
+contratos, design com código real, casos de borda, testes e critérios de aceite verificáveis. A
+spec vive **na própria issue** — arquivo separado diverge dela no primeiro ajuste.
+
+Dois passos que definem a skill:
+
+- **auditar antes de escrever.** Caminho citado existe, símbolo citado existe, trecho colado foi
+  lido agora. Spec com caminho inventado é pior que nenhuma: tem aparência de autoridade;
+- **validar a premissa da issue.** Ela pode estar errada, e já esteve duas vezes — a direção que a
+  FUN-56 propunha duplicaria crédito, e o defeito da FUN-67 só existia numa condição que a issue
+  não mencionava. Premissa que não se sustenta vira relato, não spec.
+
+Mecânica de jogo consulta `docs/reference/` e declara a seção, por obrigação do ADR 0019.
+
+O critério da skill: um agente que nunca viu o repositório consegue executar sem perguntar nada.
+
+### 3.6 `/delivery` — ritual de fechamento
 
 **Quando:** uma issue está terminando.
 
@@ -336,10 +356,11 @@ packages/
 .claude/
   skills/
     adr/SKILL.md
-    modulo/SKILL.md
-    conformidade/SKILL.md
+    module/SKILL.md
+    compliance/SKILL.md
     product/SKILL.md
-    entregar/SKILL.md
+    spec/SKILL.md
+    delivery/SKILL.md
   settings.json                    hooks e permissões
 ```
 

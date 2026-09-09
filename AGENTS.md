@@ -166,5 +166,6 @@ projeto é executado por mais de uma ferramenta — Claude Code lê `CLAUDE.md`,
 perceber. Um arquivo, dois nomes.
 
 Se você estiver no Claude Code, existem skills em `.claude/skills/` que automatizam os rituais
-acima: `/adr`, `/module`, `/compliance`, `/product` e `/delivery`. Em qualquer outra ferramenta,
+acima: `/adr`, `/module`, `/compliance`, `/product`, `/spec` e `/delivery`. Em qualquer outra
+ferramenta,
 os mesmos arquivos servem como checklist legível — a regra vale igual, muda só quem executa.
