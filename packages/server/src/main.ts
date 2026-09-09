@@ -141,7 +141,7 @@ async function main(): Promise<void> {
       successor: createCitySuccessor(content),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
-      tickets, directory, snapshots, receipts,
+      tickets, directory, snapshots, receipts, progression: content.progression,
       ...(database === null ? {} : { database: database.db }),
     }),
   };

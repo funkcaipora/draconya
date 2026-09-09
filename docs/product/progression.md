@@ -49,6 +49,37 @@ o que significa que qualquer valor inventado na criação do personagem some no 
 Por isso a criação de sessão passou a derivar HP e mana da mesma tabela — antes ela usava
 números fixos, e o personagem *encolheria* ao subir de level.
 
+## A progressão volta para o banco pelo `jobs`, como delta
+
+O `game` não escreve nada durável. Ele encerra a sessão, monta o extrato e o deixa no Redis; o
+`jobs` lê, escreve a linha de ledger e, **na mesma transação**, aplica a progressão na linha do
+personagem.
+
+A escolha é deliberada: o `jobs` já lê o extrato e já escreve o ledger, e manter a escrita
+durável fora do processo stateful significa que uma falha ali não perde progresso — o extrato
+fica no Redis e a próxima varredura tenta de novo.
+
+**XP e gold entram como DELTA**, nunca como estado final. Escrever o estado final não é
+idempotente, e dois extratos do mesmo personagem processados fora de ordem se sobrescreveriam.
+Como delta, eles somam na ordem que vier.
+
+**A progressão pendura na mesma chave de idempotência do ledger** (`session_id`, `seq`): a linha
+do personagem só é tocada quando a linha de ledger foi de fato inserida. Um retry encontra o
+conflito, não insere nada, e por isso não credita nada — que é o par grava-depois-apaga do
+invariante 10 valendo para os dois de uma vez.
+
+**O level é DERIVADO da XP nova**, nunca copiado do extrato. Copiar faria um extrato antigo,
+processado fora de ordem, rebaixar um personagem que já subiu; derivar sempre bate com a XP que
+está na linha.
+
+**A stamina é a exceção, porque não é soma.** Ela vai como valor absoluto, com o instante em que
+valia, e só sobrescreve quando é mais nova — sem essa guarda, um extrato atrasado devolveria
+stamina já gasta.
+
+O piso de zero na XP é do banco, não confiança em quem chama: a penalidade de morte chega no
+extrato como número negativo, e XP negativa é um estado impossível que dá erro estranho em todo
+lugar que a lê depois.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |

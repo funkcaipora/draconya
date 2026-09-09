@@ -547,6 +547,9 @@ export class SessionHost {
     // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10), e
     // é o que impede uma drenagem repetida por retry de creditar duas vezes.
     hosted.session.ledgerSeq += 1;
+    // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
+    // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
+    const owner = hosted.session.participants.find((p) => p.id === characterId);
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
@@ -555,6 +558,9 @@ export class SessionHost {
       seq: hosted.session.ledgerSeq,
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
+      ...(owner?.staminaMs === undefined || owner.staminaMs === null
+        ? {}
+        : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
     });
   }
 
