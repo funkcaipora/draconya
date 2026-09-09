@@ -8,7 +8,9 @@ import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
-import { countLedgerRows, creditOf, writePendingReceipts } from './ledger.js';
+import {
+  countLedgerRows, creditOf, settleCharacterProgress, writePendingReceipts,
+} from './ledger.js';
 
 const logger = createLogger('silent', 'test');
 const { redis, available: redisReady } = await connectTestRedis(5);
@@ -59,6 +61,27 @@ async function seedCharacter(database: NonNullable<typeof db>): Promise<string> 
   });
   return characterId;
 }
+
+const progression: Progression = {
+  id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
+  healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
+  stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  xp: { base: 20, exponent: 2 },
+  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+};
+
+const characterRow = async (
+  database: NonNullable<typeof db>, characterId: string,
+): Promise<{ xp: number; gold: number; level: number; staminaMs: number }> => {
+  const [row] = await database.database.db
+    .select({
+      xp: characters.xp, gold: characters.gold, level: characters.level,
+      staminaMs: characters.staminaMs,
+    })
+    .from(characters)
+    .where(eq(characters.id, characterId));
+  return row as { xp: number; gold: number; level: number; staminaMs: number };
+};
 
 describe('credit of a receipt', () => {
   it('is gained minus spent', () => {
@@ -122,27 +145,6 @@ describe.runIf(ready)('receipts to the ledger', () => {
 });
 
 describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
-  const progression: Progression = {
-    id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
-    healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-    stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
-    xp: { base: 20, exponent: 2 },
-    deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
-  };
-
-  const characterRow = async (
-    database: NonNullable<typeof db>, characterId: string,
-  ): Promise<{ xp: number; gold: number; level: number; staminaMs: number }> => {
-    const [row] = await database.database.db
-      .select({
-        xp: characters.xp, gold: characters.gold, level: characters.level,
-        staminaMs: characters.staminaMs,
-      })
-      .from(characters)
-      .where(eq(characters.id, characterId));
-    return row as { xp: number; gold: number; level: number; staminaMs: number };
-  };
-
   it('grava XP, gold e o level derivado', async () => {
     // Sem isto, toda a progressão de uma hunt some na próxima conexão — e o snapshot em
     // Redis mascara o sintoma até um logout, que é o pior formato para um bug de progressão.
@@ -264,5 +266,65 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
     const row = await characterRow(database, characterId);
     expect(row.xp).toBe(900);
     expect(row.level).toBe(1);
+  });
+});
+
+describe.runIf(ready)('liquidação de um personagem só (FUN-56)', () => {
+  it('settles the character it was asked about and leaves the queue alone', async () => {
+    // A emissão de ticket não pode pagar pela fila inteira: com cinco mil sessões de pé, o
+    // trabalho de um login seria proporcional a quantas ACABARAM de encerrar.
+    const database = db as NonNullable<typeof db>;
+    const mine = await seedCharacter(database);
+    const theirs = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save(receiptOf(randomUUID(), mine));
+    await receipts.save(receiptOf(randomUUID(), theirs));
+
+    const result = await settleCharacterProgress(mine, {
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(result).toEqual({ written: 1, failed: 0 });
+    expect((await characterRow(database, mine)).xp).toBe(900);
+    expect((await characterRow(database, theirs)).xp).toBe(0);
+    expect(await receipts.pendingFor(theirs)).toHaveLength(1);
+  });
+
+  it('is the same path as the sweep, so meeting it credits once', async () => {
+    // O `jobs` e a emissão de ticket processam o mesmo extrato ao mesmo tempo o tempo todo.
+    // O segundo a chegar bate na chave única, não aplica nada, e apaga um extrato já pago.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await receipts.save(receiptOf(sessionId, characterId));
+
+    await settleCharacterProgress(characterId, {
+      database: database.database.db, receipts, logger, progression,
+    });
+    await receipts.save(receiptOf(sessionId, characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).xp).toBe(900);
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+  });
+
+  it('reports the failure instead of reporting success it did not have', async () => {
+    // É o sinal que a rota de ticket usa para RECUSAR a entrada (FUN-56): emitir ticket em
+    // cima de uma linha que o servidor sabe estar desatualizada é o defeito que ela existe
+    // para não ter.
+    const database = db as NonNullable<typeof db>;
+    const orphan = randomUUID();
+    const receipts = new ReceiptStore(redis);
+    await receipts.save(receiptOf(randomUUID(), orphan));
+
+    const result = await settleCharacterProgress(orphan, {
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(result).toEqual({ written: 0, failed: 1 });
+    expect(await receipts.pendingFor(orphan)).toHaveLength(1);
   });
 });

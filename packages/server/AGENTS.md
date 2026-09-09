@@ -178,6 +178,45 @@ precisam da exclusividade — tirá-los exigiria um marcador durável de reserva
 verificação otimista: o teste de exclusão concorrente com emissão precisa continuar passando sem
 alteração.
 
+## Progresso pendente é liquidado na emissão do ticket (FUN-56)
+
+Entre a sessão encerrar e o `jobs` varrer passam até dez segundos (`SCHEDULE_INTERVAL_MS`). Quem
+reconectava dentro dessa janela lia `level` e `xp` da tabela **antes** do delta da sessão que
+tinha acabado, e entrava com o progresso de antes — encolhido junto, porque o level up é
+autoritativo sobre HP e mana. O banco convergia sozinho, o que é o pior formato: some em dez
+segundos, ninguém reproduz de propósito, e quem reporta parece enganado.
+
+`POST /api/tickets` agora chama `settleCharacterProgress` antes de ler a linha. Quatro coisas que
+não podem mudar sem pensar duas vezes:
+
+- **É o MESMO caminho da varredura**, não um paralelo — mesma linha de ledger, mesma chave única,
+  mesma transação. É o que torna o encontro dos dois inofensivo: o segundo a chegar bate na
+  `UNIQUE (session_id, seq)`, não aplica nada, e apaga um extrato já pago.
+- **Somar o delta pendente por cima do que veio do banco é a versão errada e mais barata.** Entre
+  ler a linha e ler o Redis cabe uma varredura inteira, e o mesmo delta entra duas vezes.
+- **Roda FORA da trava de linha**, pela mesma razão que a resolução de nó (FUN-53) — mas aqui há
+  uma a mais: a liquidação PRECISA da trava para escrever, e chamá-la de dentro dela seria travar
+  contra si mesma.
+- **Falhar recusa a entrada** (503 `progress-not-settled`), em vez de deixar passar. Entrar com um
+  personagem que o servidor sabe estar desatualizado é o defeito que a rota acabou de deixar de
+  ter, e a recusa é retentável de graça: o extrato continua no Redis.
+
+Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
+`ReceiptStore` mantém `receipts:char:{characterId}` ao lado de `receipt:{sessionId}`. **Os dois
+prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do
+`MATCH` do `SCAN` da varredura, e um SET no lugar de um extrato sai do `MGET` como nada — a
+varredura pararia de ver um extrato por ciclo, sem erro em lugar nenhum.
+
+A liquidação síncrona tem teto de 50 extratos por chamada — cada um é uma transação no
+Postgres, e isto roda no caminho de uma requisição. Encostar nele significa que a varredura está
+parada há um bom tempo, e aí o certo é o login continuar rápido e o resto sair no próximo.
+
+Extrato gravado por um nó `game` antigo, durante deploy em rolagem, não tem entrada de índice:
+aquele personagem volta a esperar a varredura. Degradação, não perda.
+
+`GET /api/characters` e `POST /api/characters/:id/select` ainda leem a linha crua e mostram o
+mesmo atraso. É o mesmo defeito onde ele só afeta o que é exibido, e está na FUN-66.
+
 ## Métricas do nó de jogo (FUN-47)
 
 `/metrics` no `game`, formato Prometheus, sem autenticação — quem o esconde é a rede, e pôr
@@ -245,7 +284,7 @@ terceiro slot de personagem.
 
 ## Testes de autenticação e admissão
 
-`TEST_REDIS_URL` deve apontar para um Redis descartável; bancos 1–4 são apagados pelos testes.
+`TEST_REDIS_URL` deve apontar para um Redis descartável; bancos 1–8 são apagados pelos testes.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

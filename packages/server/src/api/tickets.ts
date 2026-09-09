@@ -22,6 +22,19 @@ export interface TicketRouteDependencies {
   readonly authenticate?: (request: FastifyRequest) => Promise<Principal | null>;
   /** Valida posse e exclusão sob o mesmo lock de linha usado pelo soft delete. */
   readonly withOwnedCharacter?: GameRepository['withOwnedCharacter'];
+  /**
+   * Liquida o extrato que a sessão anterior deixou pendente (FUN-56).
+   *
+   * Exigida junto com `withOwnedCharacter`, e não opcional por conta própria: quem sabe ler
+   * a linha do personagem tem que saber deixá-la em dia antes. Sem isso a rota emitiria
+   * ticket com o progresso de antes da última sessão, e o defeito voltaria calado.
+   */
+  readonly settleProgress?: (characterId: string) => Promise<SettlementResult>;
+}
+
+/** O que a liquidação devolve. Só `failed` interessa aqui: qualquer falha recusa a entrada. */
+export interface SettlementResult {
+  readonly failed: number;
 }
 
 const RequestBody = z.object({ characterId: z.string().min(1).max(128) });
@@ -42,8 +55,10 @@ export function createTicketHandler(
   deps: TicketRouteDependencies,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
   return async (request, reply) => {
-    const { authenticate, withOwnedCharacter } = deps;
-    if (authenticate === undefined || withOwnedCharacter === undefined) {
+    const { authenticate, withOwnedCharacter, settleProgress } = deps;
+    if (authenticate === undefined
+      || withOwnedCharacter === undefined
+      || settleProgress === undefined) {
       return reply.code(501).send({ error: 'auth-not-configured' });
     }
 
@@ -60,6 +75,41 @@ export function createTicketHandler(
     const resolution = await deps.tickets.resolveNode(body.data.characterId);
     if (!resolution.ok) {
       return reply.code(STATUS[resolution.reason]).send({ error: resolution.reason });
+    }
+
+    // O progresso pendente entra na tabela ANTES da leitura da linha (FUN-56). Sem isto,
+    // quem reconecta dentro dos dez segundos da varredura do `jobs` entra com o level e a XP
+    // de antes da sessão que acabou — e como `statsForLevel` deriva os pontos do level, o
+    // personagem também encolhe. O banco converge sozinho depois, o que é o pior formato:
+    // ninguém reproduz de propósito e quem reporta parece enganado.
+    //
+    // Fora da trava de linha, pela mesma razão que `resolveNode`: a liquidação PRECISA da
+    // trava para escrever, e chamá-la de dentro dela seria travar contra si mesma.
+    //
+    // Isso a põe ANTES da checagem de posse, e é uma escolha, não descuido: uma conta
+    // autenticada consegue disparar a liquidação de um personagem que não é dela. O que ela
+    // ganha com isso é o crédito sair dez segundos mais cedo do que a varredura o daria —
+    // nenhum valor muda, nada é devolvido na resposta (o 404 vem logo abaixo), e sem extrato
+    // pendente nem o banco é tocado. E o id é um UUID v4 que nenhuma rota mostra a quem não
+    // é dono. Fechar essa fresta custaria uma consulta de posse a mais em TODO login, o que
+    // é caro para o que se compra.
+    let settlement: SettlementResult;
+    try {
+      settlement = await settleProgress(body.data.characterId);
+    } catch (error) {
+      request.log.error({ error, characterId: body.data.characterId }, 'Settlement failed');
+      return reply.code(503).send({ error: 'progress-not-settled' });
+    }
+    // Recusar em vez de deixar passar: entrar com um personagem que o servidor SABE estar
+    // desatualizado é justamente o defeito que esta rota acabou de deixar de ter. O 503 é
+    // retentável de graça — o extrato continua no Redis, e a varredura o pega de qualquer
+    // jeito dentro de dez segundos.
+    if (settlement.failed > 0) {
+      request.log.error(
+        { characterId: body.data.characterId, failed: settlement.failed },
+        'Refusing to issue a ticket over stale character progress',
+      );
+      return reply.code(503).send({ error: 'progress-not-settled' });
     }
 
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
