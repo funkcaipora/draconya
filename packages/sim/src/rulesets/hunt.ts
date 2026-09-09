@@ -180,6 +180,7 @@ export class HuntRuleset implements Ruleset {
     // índice que nasce vazio numa retomada e deixa monstro nascer em cima de monstro.
     this.#rebuildOccupancy(session);
     this.#burnStamina(session, dtMs);
+    this.#regenerate(session, dtMs);
 
     this.#spawn(session);
     this.#actPlayers(session, dtMs);
@@ -204,6 +205,26 @@ export class HuntRuleset implements Ruleset {
       // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
       // deixou o personagem rendendo.
       session.record('stamina-exhausted', character.id);
+    }
+  }
+
+  /**
+   * Regeneração passiva, por tempo decorrido (FUN-36).
+   *
+   * Vale mesmo com stamina zerada: regenerar não é recompensa, é sobrevivência — e o §10.2 é
+   * explícito que o personagem continua podendo morrer, não que ele passa a morrer mais
+   * rápido.
+   *
+   * Morto não regenera. Sem esta linha, um personagem que caiu voltaria sozinho na hunt em
+   * que morreu, e a morte deixaria de encerrar coisa nenhuma.
+   */
+  #regenerate(session: Session, dtMs: number): void {
+    const { healthPerSecond, manaPerSecond } = this.#options.progression.regen;
+    for (const character of session.participants) {
+      if (!character.alive) continue;
+      character.heal(pointsRegenerated(character, 'health-regen', healthPerSecond, dtMs));
+      const mana = pointsRegenerated(character, 'mana-regen', manaPerSecond, dtMs);
+      character.mana = Math.min(character.maxMana, character.mana + mana);
     }
   }
 
@@ -501,6 +522,26 @@ export class HuntRuleset implements Ruleset {
 }
 
 const key = (x: number, y: number): string => `${x},${y}`;
+
+/**
+ * Quantos pontos inteiros a taxa rendeu no tempo decorrido.
+ *
+ * `r` por segundo é uma ação periódica de `1000 / r` milissegundos — e escrever assim, em vez
+ * de somar `r * dtMs / 1000` num acumulador fracionário, é o que mantém a conta exata: somar
+ * `0,1` dez vezes em ponto flutuante dá `0,9999…`, e some uma unidade a cada dez. Numa hunt
+ * de oito horas isso é regeneração faltando sem nada explicando.
+ */
+function pointsRegenerated(
+  character: CharacterRuntime,
+  key: string,
+  perSecond: number,
+  dtMs: number,
+): number {
+  // Taxa zero não é intervalo infinito: é "não regenera". Sem esta saída, o intervalo viraria
+  // `Infinity` e o laço de recuperação rodaria até o teto de catch-up a cada tick.
+  if (perSecond <= 0) return 0;
+  return character.cooldowns.timesThatFit(key, dtMs, 1000 / perSecond);
+}
 
 // --- montagem a partir de `content` ----------------------------------------------------------
 

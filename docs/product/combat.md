@@ -36,6 +36,45 @@ A ordem do cálculo, e cada passo tem um porquê:
 O bônus de Bestiário é **PvE-only por construção**: `resolveDamage` recebe o contexto, e o
 acréscimo só entra quando ele é `pve`. A Guild War não tem como herdá-lo por esquecimento.
 
+## Ação por tempo decorrido, nunca por contagem de tick
+
+O invariante 2 em forma operacional: **todo cálculo recebe `dtMs`**, e cooldown guarda tempo,
+nunca um contador decrementado. É o que faz a hunt desanexada a 1 Hz render igual à anexada a
+10 Hz — e como isso é fácil de quebrar sem perceber, `pnpm source-policy` **reprova** qualquer
+nome de contador de tick (`remainingTicks`, `cooldownTicks`, …) dentro de `packages/sim`.
+
+A checagem é por **nome**, não por operação. Procurar `--` ou `-= 1` daria falso positivo em
+todo laço do motor, e um check que grita sem motivo é um check que as pessoas aprendem a
+ignorar. Quem escreve `remainingTicks` está declarando a intenção no nome, e é a intenção que
+está proibida.
+
+São três mecanismos, e confundi-los é o erro clássico:
+
+| | guarda | para quê |
+|---|---|---|
+| ação por evento | instante absoluto de disponibilidade | poção, magia — sobrevive a snapshot e a retomada tardia |
+| ação periódica | acumulador de duração | ataque, passo — é o que faz 1 Hz e 10 Hz renderem igual |
+| grandeza contínua | **o mesmo acumulador** | regeneração e dano ao longo do tempo |
+
+O terceiro não ganhou mecanismo próprio, e isso foi uma correção: uma taxa de `r` por segundo
+**é** uma ação periódica de `1000 / r` milissegundos. O caminho que parecia natural — somar
+`r × dtMs / 1000` num acumulador fracionário — é pior: somar `0,1` dez vezes em ponto flutuante
+dá `0,9999…`, e some uma unidade a cada dez. Numa hunt de oito horas isso é regeneração faltando
+sem nada explicando. Em milissegundos a conta é exata.
+
+## Regeneração
+
+O personagem recupera vida e mana passivamente enquanto está em hunt, por tempo decorrido. Vale
+**mesmo com a stamina zerada**: regenerar não é recompensa, é sobrevivência, e o §10.2 diz que o
+personagem continua podendo morrer, não que ele passa a morrer mais rápido.
+
+Morto não regenera — sem essa linha, quem caiu voltaria sozinho na hunt em que morreu, e a morte
+deixaria de encerrar coisa nenhuma.
+
+A taxa de hoje faz um rato sozinho **não** matar um personagem de level 1: ele apanha, mata, e
+recupera durante o respawn. Três ratos ainda matam. É o balanceamento que as poções vão
+reequilibrar quando existirem.
+
 ## Regras
 
 - Ataques do jogador sempre acertam (sem rolagem de acerto ofensivo).
@@ -50,6 +89,8 @@ acréscimo só entra quando ele é `pve`. A Guild War não tem como herdá-lo po
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — corpo a corpo | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json` |
 | Efetividade da armadura — magia | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json` |
+| Regeneração de vida | 1 HP/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.healthPerSecond` |
+| Regeneração de mana | 1 mana/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.manaPerSecond` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
