@@ -25,6 +25,20 @@ set -u
 message_file="${1:-}"
 [ -n "$message_file" ] && [ -r "$message_file" ] || exit 0
 
+# Commit de merge e isento: ele nao descreve uma mudanca, descreve uma juncao. O assunto que
+# o git gera sozinho ("Merge branch 'x' into y") nunca vai bater no formato, e inventar um
+# `chore(server): merge main and ...` so para passar no hook nao acrescenta informacao a
+# ninguem -- so ensina a contornar o hook.
+#
+# A deteccao e por MERGE_HEAD, nao pelo prefixo "Merge " do assunto: assunto e texto livre e
+# qualquer commit normal pode comecar com essa palavra. MERGE_HEAD so existe entre o inicio
+# de um merge e o commit que o conclui, entao o unico commit criado com ele presente e o
+# proprio merge -- inclusive o `git commit` manual que fecha um merge com conflito. Commit
+# normal continua validado; nao existe janela em que a regra afrouxe.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  exit 0
+fi
+
 TYPES='feat|fix|refactor|perf|docs|test|chore'
 SCOPES='sim|protocol|content|server|client|tools|docs|deps'
 
