@@ -268,10 +268,28 @@ Dois pontos que evitam migração destrutiva depois (§35.3):
 
 Três camadas:
 1. **Telemetria de produto** — a lista do §40 vai para uma tabela de eventos append-only, particionada por dia.
-2. **Métricas de sistema** — sessões por nó, custo de tick por sessão, atraso do tick, mensagens/s, bytes/s, latência de reanexação.
+2. **Métricas de sistema** — sessões por nó, custo de tick por sessão, atraso do tick, mensagens/s, bytes/s, latência de reanexação. **Implementadas (FUN-47)**, em `/metrics` do nó de jogo:
+
+   | métrica | forma | por quê |
+   |---|---|---|
+   | `draconya_sessions_active{type,attached}` | gauge | recontada por ciclo, e **zera o que sumiu** — contador incremental erra devagar |
+   | `draconya_tick_duration_us{type}` | histograma | a que mais importa; **nunca média** — a cauda é o que satura o nó |
+   | `draconya_tick_lag_ms{type}` | histograma | quanto o tick passou do **período que pediu**, não o intervalo |
+   | `draconya_tick_lag_budget_exceeded_total{type}` | counter | a pergunta de alerta: "já aconteceu?" |
+   | `draconya_messages_sent_total` / `draconya_bytes_sent_total` | counters | contados **depois do lote**, que é o que saiu no fio |
+   | `draconya_reattach_duration_ms` | histograma | resolver diretório + carregar snapshot + hospedar |
+   | `draconya_active_slots_per_account` | gauge | só subir é vazamento na FUN-15, e o sintoma é "não consigo logar" |
+
+   Rótulos são só tipo de sessão (seis valores) e anexada (dois). **Nada por `characterId` ou
+   `sessionId`** — milhares de valores matam qualquer backend, e a conta chega longe de quem a
+   causou.
+
+   Falta `orphan_sessions`: quem detecta órfã é o `jobs`, e o `jobs` não tem superfície de
+   métrica. Uma gauge sempre zero seria pior que a ausência — um painel dizendo "nenhuma órfã"
+   sem nunca ter olhado.
 3. **Alertas** — atraso de tick acima do orçamento, sessão órfã, divergência de reconciliação, ledger inconsistente.
 
-A métrica que mais importa cedo: **custo de tick por instância**, porque toda a projeção de custo depende dela e ela é a única estimativa que não dá para derivar de fora.
+A métrica que mais importa cedo: **custo de tick por instância**, porque toda a projeção de custo depende dela e ela é a única estimativa que não dá para derivar de fora. Medida na FUN-46 e exposta na FUN-47.
 
 ---
 

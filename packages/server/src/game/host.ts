@@ -12,6 +12,7 @@
 // (invariante 1). Os objetos ficam aqui. A ponte entre os dois é `session.attached`, que é o
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
+import { performance } from 'node:perf_hooks';
 import type { EndReason, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
@@ -21,6 +22,7 @@ import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
+import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
 export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
@@ -59,6 +61,8 @@ export interface SessionHostOptions {
   /** Constrói a sessão de destino de uma transição — a PZ na morte, a hunt no menu. */
   readonly buildSession?: SessionBuilder;
   readonly viewer?: ViewerOptions;
+  /** Métricas do nó (FUN-47). Ausente: o host roda igual, só não conta nada. */
+  readonly metrics?: GameMetrics;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
 }
@@ -121,6 +125,9 @@ const SNAPSHOT_INTERVAL_MS = 10_000;
  */
 const RESTING_GRACE_MS = 5 * 60_000;
 
+/** Intervalo mínimo entre dois avisos de atraso. Ver `#warnLag`. */
+const LAG_WARNING_INTERVAL_MS = 60_000;
+
 export class SessionHost {
   readonly #options: SessionHostOptions;
   readonly #logger: Logger;
@@ -132,6 +139,7 @@ export class SessionHost {
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
+  #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
 
@@ -173,6 +181,22 @@ export class SessionHost {
     initialCharacter?: InitialCharacter,
     accountId?: string,
   ): Promise<PrepareResult> {
+    const startedAt = performance.now();
+    try {
+      return await this.#prepare(characterId, initialCharacter, accountId);
+    } finally {
+      // O que o jogador espera ao reconectar: resolver o diretório, carregar o snapshot e
+      // hospedar. É o número que o teste de carga cobra, e ele NÃO inclui o tempo de rede —
+      // essa metade é do cliente, e medir as duas juntas aqui esconderia qual delas piorou.
+      this.#options.metrics?.observeReattach(performance.now() - startedAt);
+    }
+  }
+
+  async #prepare(
+    characterId: string,
+    initialCharacter?: InitialCharacter,
+    accountId?: string,
+  ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
       await this.#register(characterId, existing, accountId);
@@ -209,7 +233,13 @@ export class SessionHost {
       hosted = this.#hostedSession(characterId);
     }
     if (hosted === undefined) throw new Error(`session for ${characterId} was not prepared`);
-    const viewer = new Viewer(socket, characterId, this.#options.viewer);
+    const metrics = this.#options.metrics;
+    const viewer = new Viewer(socket, characterId, {
+      ...this.#options.viewer,
+      ...(metrics === undefined
+        ? {}
+        : { onFrame: (messages, bytes) => { metrics.observeFrame(messages, bytes); } }),
+    });
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
     hosted.restingSince = null;
@@ -410,19 +440,72 @@ export class SessionHost {
         continue;
       }
       if (hosted.session.ended !== null) continue;
-      if (nowMs - hosted.session.nowMs < 1000 / hz) continue;
+      const periodMs = 1000 / hz;
+      const overdueMs = nowMs - hosted.session.nowMs;
+      if (overdueMs < periodMs) continue;
+      const startedAt = this.#options.metrics === undefined ? 0 : performance.now();
       try {
         hosted.session.tick(nowMs);
       } catch (error) {
         // Uma sessão que explode não pode derrubar as outras do nó.
         this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
       }
+      // O ATRASO é quanto o tick passou do período que ele mesmo pediu, não o intervalo. Um
+      // tick de 1 Hz que roda a cada 1000 ms está no prazo; o mesmo intervalo num tick de
+      // 10 Hz é 900 ms de atraso, e é essa diferença que diz que o nó saturou.
+      const lagMs = Math.max(0, overdueMs - periodMs);
+      this.#options.metrics?.observeTick(
+        hosted.session.ruleset.type,
+        (performance.now() - startedAt) * 1000,
+        lagMs,
+      );
+      // O alerta que a issue pede, no único lugar onde este nó consegue falar hoje. Um pico
+      // isolado não acorda ninguém — só o primeiro de uma rajada, para o log não virar a
+      // própria causa do atraso quando o nó satura de verdade.
+      if (lagMs > TICK_LAG_BUDGET_MS) this.#warnLag(hosted.session.ruleset.type, lagMs, nowMs);
       // A sessão pode ter acabado DENTRO do tick — a morte é o caso (§26.1), e ela acontece
       // com o jogador ausente na maior parte das vezes. Se a sucessão dependesse de alguém
       // estar olhando, o invariante 3 estaria quebrado.
       if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
+    this.#observeSessions();
+  }
+
+  /**
+   * Um aviso por minuto, no máximo. Um nó saturado atrasa TODAS as sessões ao mesmo tempo, e
+   * uma linha de log por sessão por ciclo transformaria o sintoma em causa.
+   */
+  #warnLag(type: SessionType, lagMs: number, nowMs: number): void {
+    if (nowMs - this.#lastLagWarningMs < LAG_WARNING_INTERVAL_MS) return;
+    this.#lastLagWarningMs = nowMs;
+    this.#logger.warn(
+      { type, lagMs: Math.round(lagMs), budgetMs: TICK_LAG_BUDGET_MS },
+      'Tick ran past its budget; the node is saturating',
+    );
+  }
+
+  /**
+   * Recontagem por ciclo, não por sessão: um contador incremental espalhado por `attach`,
+   * `detach`, `release` e `#replace` erra na primeira aresta que alguém esquecer, e erra
+   * DEVAGAR — o painel vai ficando errado sem nada quebrar.
+   */
+  #observeSessions(): void {
+    const metrics = this.#options.metrics;
+    if (metrics === undefined) return;
+
+    const counts = new Map<string, number>();
+    for (const hosted of this.#sessions.values()) {
+      const key = `${hosted.session.ruleset.type}|${hosted.viewers.size > 0}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    metrics.observeSessions(counts);
+
+    const perAccount = new Map<string, number>();
+    for (const accountId of this.#accountIdByCharacter.values()) {
+      perAccount.set(accountId, (perAccount.get(accountId) ?? 0) + 1);
+    }
+    metrics.observeSlots(perAccount.size === 0 ? 0 : Math.max(...perAccount.values()));
   }
 
   /**

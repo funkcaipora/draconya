@@ -8,6 +8,7 @@ import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import { SessionHost } from './host.js';
+import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
 
 const logger = createLogger('silent', 'test');
@@ -44,6 +45,7 @@ function buildHost(
     receipts?: ReceiptStore;
     restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
     buildSession?: (request: { to: string }, from: Session) => Session | null;
+    metrics?: GameMetrics;
   } = {},
 ) {
   const sessions: Session[] = [];
@@ -1108,5 +1110,108 @@ describe('soltar a sessão credita antes de descartá-la (FUN-52)', () => {
     await host.drainAll('drain');
 
     expect(saved).toHaveLength(1);
+  });
+});
+
+describe('o host alimenta as métricas do nó (FUN-47)', () => {
+  const observed = () => {
+    const ticks: Array<{ type: string; durationUs: number; lagMs: number }> = [];
+    const sessions: Array<ReadonlyMap<string, number>> = [];
+    const frames: Array<{ messages: number; bytes: number }> = [];
+    const reattaches: number[] = [];
+    const slots: number[] = [];
+    const metrics = {
+      observeTick: (type: string, durationUs: number, lagMs: number) => {
+        ticks.push({ type, durationUs, lagMs });
+      },
+      observeSessions: (counts: ReadonlyMap<string, number>) => { sessions.push(counts); },
+      observeFrame: (messages: number, bytes: number) => { frames.push({ messages, bytes }); },
+      observeReattach: (ms: number) => { reattaches.push(ms); },
+      observeSlots: (max: number) => { slots.push(max); },
+    };
+    return { metrics, ticks, sessions, frames, reattaches, slots };
+  };
+
+  it('mede o custo de cada tick, por tipo de sessão', async () => {
+    // É a métrica que mais importa cedo: toda a projeção de custo do projeto depende dela.
+    const seen = observed();
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      metrics: seen.metrics as never,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(1000);
+
+    expect(seen.ticks).toHaveLength(1);
+    expect(seen.ticks[0]?.type).toBe('hunt');
+    expect(seen.ticks[0]?.durationUs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('o ATRASO é o que passou do período pedido, não o intervalo', async () => {
+    // Um tick de 1 Hz a cada 1000 ms está no prazo; o mesmo intervalo a 10 Hz é 900 ms de
+    // atraso, e é essa diferença que diz que o nó saturou.
+    const seen = observed();
+    // Desanexada roda a 1 Hz: período de 1000 ms.
+    const { ruleset } = countingRuleset(10, 1);
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      metrics: seen.metrics as never,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(3000);
+
+    expect(seen.ticks[0]?.lagMs).toBe(2000);
+  });
+
+  it('reconta as sessões por ciclo, em vez de manter um contador espalhado', async () => {
+    // Um contador incremental erra na primeira aresta que alguém esquecer, e erra DEVAGAR: o
+    // painel vai ficando errado sem nada quebrar.
+    const seen = observed();
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      metrics: seen.metrics as never,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    host.attach(new FakeSocket(), 'p1');
+
+    host.cycle(1000);
+
+    expect([...(seen.sessions.at(-1) ?? [])]).toEqual([['hunt|true', 1]]);
+    expect(seen.slots.at(-1)).toBe(1);
+  });
+
+  it('conta mensagens e bytes do quadro que saiu no fio', async () => {
+    const seen = observed();
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      metrics: seen.metrics as never,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    // `welcome` sai por `sendNow`, fora da fila; o estado vai pela fila e é o que o flush manda.
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    expect(seen.frames.length).toBeGreaterThan(0);
+    expect(seen.frames.at(-1)?.bytes).toBeGreaterThan(0);
+  });
+
+  it('mede quanto custou pôr o personagem de volta numa sessão', async () => {
+    const seen = observed();
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      metrics: seen.metrics as never,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(seen.reattaches).toHaveLength(1);
+    expect(seen.reattaches[0]).toBeGreaterThanOrEqual(0);
   });
 });

@@ -19,6 +19,7 @@ import type { TicketService } from '../tickets.js';
 import {
   SessionHost, type SessionBuilder, type SessionFactory, type SessionRestorer,
 } from './host.js';
+import { GameMetrics } from './metrics.js';
 import { Viewer } from './viewer.js';
 
 export interface GameDependencies {
@@ -54,6 +55,8 @@ export function createGame(
   const nodeId = configuration.NODE_ID;
   const app = uWS.App();
 
+  const metrics = new GameMetrics(nodeId);
+
   const host = dependencies.createSession === undefined
     ? null
     : new SessionHost({
@@ -70,6 +73,7 @@ export function createGame(
       ...(dependencies.restoreSession === undefined
         ? {}
         : { restoreSession: dependencies.restoreSession }),
+      metrics,
     });
 
   app.get('/healthz', (response) => {
@@ -78,6 +82,21 @@ export function createGame(
     response.writeStatus(acceptingNewSessions ? '200 OK' : '503 Service Unavailable');
     response.writeHeader('content-type', 'application/json');
     response.end(JSON.stringify({ ok: acceptingNewSessions, role: 'game' }));
+  });
+
+  // Sem autenticação, como no `api`: `/metrics` não sai para a internet — quem o expõe é a
+  // rede, e pôr credencial aqui daria a falsa impressão de que ele pode sair.
+  app.get('/metrics', (response) => {
+    response.onAborted(() => undefined);
+    void metrics.registry.metrics().then((body) => {
+      response.cork(() => {
+        response.writeStatus('200 OK');
+        response.writeHeader('content-type', metrics.registry.contentType);
+        response.end(body);
+      });
+    }).catch(() => {
+      response.cork(() => { response.writeStatus('500 Internal Server Error').end(); });
+    });
   });
 
   app.ws<SocketData>('/*', {
