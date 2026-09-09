@@ -133,6 +133,10 @@ a cada entrega. Nunca faça push direto na `main`; execute `pnpm check` antes de
 - `docs/adr/` — uma decisão técnica por arquivo: contexto, decisão, alternativas, consequências
 - `docs/product/` — o que cada sistema faz de fato, hoje. Vivo; diverge do PRD quando a
   implementação decidiu diferente, e marca o porquê
+- `docs/reference/` — estudo de engines externas usado como **especificação de domínio**. Antes de
+  implementar mecânica de jogo nova, consulte a seção correspondente: o objetivo é não
+  redescobrir problema que outra engine já resolveu. Ver ADR 0019 — inclusive o limite de
+  licença, que não é negociável
 
 ## Ao trabalhar aqui
 
