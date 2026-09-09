@@ -64,6 +64,7 @@ export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 
 const TEST_RAT = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1, health: 20, experience: 5,
   attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
+  loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
 
 export function testContent(): Content {

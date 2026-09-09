@@ -21,7 +21,7 @@ function testRuleset(): Ruleset {
       session.scheduleIn('regen', 500, { priority: EventPriority.Upkeep, subject: character.id });
       session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
     },
-    onDeath: () => {},
+    onCreatureDied: () => {},
     onEnd: () => {},
     onEvent(session, event) {
       const p = session.participants.find((c) => c.id === event.subject);
@@ -223,7 +223,7 @@ describe('relógio lógico (FUN-68)', () => {
         type: 'hunt',
         hz: () => 1,
         onEnter: (s) => { s.scheduleIn('tick', 350); },
-        onDeath: () => {},
+        onCreatureDied: () => {},
         onEnd: () => {},
         onEvent: (s) => { seen.push(s.nowMs); s.scheduleIn('tick', 350); },
       },

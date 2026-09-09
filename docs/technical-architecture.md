@@ -406,6 +406,14 @@ com GC forçado dos dois lados, e é estável. A hipótese mais provável é que
 quatro otimizações de alocação que a própria [ADR 0020](adr/0020-logical-session-scheduler.md)
 descreve — o número de CPU foi atualizado depois delas e o de memória não.
 
+**Remedido depois da FUN-63 (morte e recompensa como pipeline):** o mesmo cenário sobe para
+**~21 µs** por tick por instância (três amostras A/B alternadas: 19,4/15,8/18,7 antes contra
+21,8/19,9/21,2 depois; ~43.000 instâncias por core a 1 Hz). O custo é a atribuição de dano
+registrada a cada golpe — `Contribution` em `Map`, mutada no lugar; um `Record` com chave
+dinâmica media ~0,6 µs a mais — e é o preço de saber quem matou, que party, boss e bestiário
+vão cobrar depois. Sem registrar golpe nenhum o número volta a ~19,7 µs, o que situa o resto
+do pipeline (sorteio de loot, crédito na morte) dentro do ruído.
+
 **A conclusão desta seção não muda: sobra.** O medido continua duas a dez vezes melhor que a
 ponta otimista da estimativa (50–200 µs, 200–500 instâncias por core), e o gargalo segue sendo
 banda e conexão.

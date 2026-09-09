@@ -6,6 +6,8 @@
 
 import type { Monster } from '@draconya/content';
 import { Cooldowns } from '../cooldown.js';
+import { Contribution } from '../death.js';
+import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
 import { distance, greedyStep, type Blocked, type GridPoint } from './step.js';
 
@@ -30,8 +32,17 @@ export interface MonsterState {
   readonly attackReady?: boolean;
   /** Milissegundos por tile, copiado da definição (FUN-69). Ausente: quem restaura repõe. */
   readonly stepDurationMs?: number;
+  /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
+  readonly contribution?: ContributionState;
   readonly cooldowns: Partial<CooldownState>;
 }
+
+/**
+ * O `subject` dos eventos de um monstro na fila da sessão: é por ele que um monstro morto leva
+ * os próprios eventos junto. A convenção mora aqui, e não em quem agenda, para o pipeline de
+ * morte cancelar sem conhecer a hunt.
+ */
+export const monsterSubject = (id: number): string => `m:${id}`;
 
 /** O que o monstro consegue enxergar de um alvo. Estreito para não arrastar o mundo junto. */
 export interface Prey {
@@ -64,6 +75,8 @@ export class MonsterRuntime {
   /** Ver `MonsterState.attackReady`. */
   attackReady: boolean;
   stepDurationMs: number;
+  /** Mutada no lugar a cada golpe — ver `recordDamage`. */
+  readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
 
   constructor(state: MonsterState) {
@@ -75,11 +88,16 @@ export class MonsterRuntime {
     this.targetId = state.targetId;
     this.attackReady = state.attackReady ?? true;
     this.stepDurationMs = state.stepDurationMs ?? 0;
+    this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
   get alive(): boolean {
     return this.health > 0;
+  }
+
+  get subject(): string {
+    return monsterSubject(this.id);
   }
 
   getState(): MonsterState {
@@ -92,6 +110,7 @@ export class MonsterRuntime {
       targetId: this.targetId,
       attackReady: this.attackReady,
       stepDurationMs: this.stepDurationMs,
+      contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
     };
   }

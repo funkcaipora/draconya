@@ -69,6 +69,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   ENGATILHADO e bate no instante do contato, não no próximo múltiplo de um relógio. A invariante
   é "engatilhado OU agendado, nunca os dois", e ela mora em `#schedulePlayerAttack` /
   `#scheduleMonsterAttack` — os dois ao mesmo tempo é o dobro do dano, e já aconteceu.
+- **Morte é pipeline, e a consequência é do ruleset** (FUN-63). `resolveDeath` em `death.ts`
+  congela a criatura, resolve o crédito (`lastHitBy`, `mostDamageBy`) e chama
+  `Ruleset.onCreatureDied`; nenhum ruleset cancela evento de morto por conta própria, e
+  nenhuma criatura decide o que a própria morte significa. `Contribution` é um `Map` mutado a
+  cada golpe — um `Record` com chave dinâmica e `delete` cai em modo dicionário — e mesmo assim
+  a atribuição custa ~2 µs por tick por instância no `pnpm bench:hunts` (18 → 21). É o preço
+  de saber quem matou; não o pague duas vezes registrando de novo em outro lugar.
+- **Loot sorteia com o `Rng` da sessão, gold antes de item, e `chance: 0` não consome
+  sorteio.** Ordem e semente são contrato: mudar qualquer um dos dois muda o que toda hunt
+  retomada rende. `Math.random` continua proibido, e `grep -rn "Math.random" src` é vazio.
 - **Um evento que se reagenda usa `session.nowMs + intervalo`**, e é exato porque `nowMs` durante
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)

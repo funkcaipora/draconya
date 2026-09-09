@@ -3,6 +3,8 @@
 
 import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
+import { Contribution } from './death.js';
+import type { ContributionState } from './death.js';
 
 export interface Point {
   readonly x: number;
@@ -50,6 +52,8 @@ export interface CharacterState {
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
+  /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
+  readonly contribution?: ContributionState;
   readonly cooldowns: Partial<CooldownState>;
 }
 
@@ -68,6 +72,8 @@ export class CharacterRuntime {
   goldDelta: number;
   alive: boolean;
   stepDurationMs: number;
+  /** Mutada no lugar a cada golpe — ver `recordDamage`. */
+  readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
 
   constructor(state: CharacterState) {
@@ -87,6 +93,7 @@ export class CharacterRuntime {
     // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
     // duração zero nunca chega ao fio — o protocolo exige duração positiva.
     this.stepDurationMs = state.stepDurationMs ?? 0;
+    this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
@@ -106,6 +113,7 @@ export class CharacterRuntime {
       stepDurationMs: this.stepDurationMs,
       goldDelta: this.goldDelta,
       alive: this.alive,
+      contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
     };
   }

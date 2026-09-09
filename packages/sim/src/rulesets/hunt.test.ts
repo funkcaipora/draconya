@@ -34,7 +34,9 @@ const rat = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
   health: 50, experience: 5, attack: 10, armor: 0,
   attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4, attackRange: 1,
-  loot: [],
+  // Gold fixo por abate: o que os testes de recompensa conferem é a CONTA, não o sorteio —
+  // o sorteio tem teste próprio em `loot.test.ts`.
+  loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
 };
 
 const hunt = {
@@ -196,6 +198,62 @@ describe('a sessão em si', () => {
     expect(session.aggregates.xpGained).toBe(hero.xp);
   });
 
+  it('credita ao matador o gold sorteado da tabela do monstro (FUN-63)', () => {
+    // Gold é DELTA no personagem e agregado na sessão, e os dois têm que bater: é o agregado
+    // que vira linha de ledger, e um delta que o extrato não leva é gold que some no deploy.
+    const { session, hero } = start();
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.goldDelta).toBe(session.aggregates.kills * 3);
+    expect(session.aggregates.goldGained).toBe(hero.goldDelta);
+  });
+
+  it('chance zero nunca credita, e o abate conta do mesmo jeito', () => {
+    const stingy = { ...rat, loot: { gold: { chance: 0, min: 1, max: 4 }, items: [] } };
+    const { session, hero } = start({ loaded: content({ monsters: [stingy] }) });
+    run(session, 20_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldGained).toBe(0);
+  });
+
+  it('a atribuição de dano atravessa o snapshot, e o abate retomado credita igual', () => {
+    // Sem a atribuição no snapshot, o abate depois de uma retomada creditaria só a quem
+    // bateu depois dela. Aqui a retomada acontece no MEIO da luta, e o resultado tem que ser
+    // o da sessão que nunca caiu.
+    const straight = start();
+    const interrupted = start();
+    // Até o primeiro golpe trocado: o monstro precisa estar ferido, não morto.
+    while (interrupted.ruleset.monsters.every((m) => m.contribution.lastHitBy === null)
+      && interrupted.session.nowMs < 30_000) {
+      straight.session.advanceBy(100);
+      interrupted.session.advanceBy(100);
+    }
+    expect(interrupted.ruleset.monsters.some((m) => m.contribution.lastHitBy === 'hero')).toBe(true);
+
+    const snapshot = interrupted.session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      new Rng(snapshot.rng),
+    );
+    run(straight.session, 20_000, 100);
+    run(resumed, 20_000, 100);
+
+    expect(resumed.aggregates.kills).toBe(straight.session.aggregates.kills);
+    expect(resumed.aggregates.goldGained).toBe(straight.session.aggregates.goldGained);
+    expect(resumed.participants[0]?.goldDelta).toBe(straight.hero.goldDelta);
+  });
+
+  it('a atribuição do personagem não cresce com os respawns', () => {
+    // Cada respawn tem id novo. Sem poda, oito horas de hunt seriam milhares de chaves no
+    // mapa do herói, serializadas a cada snapshot.
+    const { session, hero, ruleset } = start({ difficulty: 'professional' });
+    run(session, 120_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(3);
+    expect(hero.contribution.actorCount).toBeLessThanOrEqual(ruleset.monsters.length);
+  });
+
   it('não transforma cada abate em evento notável', () => {
     // `notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com
     // uma linha por rato não é lista, é log — e ninguém lê log ao voltar.
@@ -304,6 +362,9 @@ describe('stamina zero', () => {
     // O abate conta: o jogador matou, e o extrato mentiria se dissesse que não.
     expect(hero.xp).toBe(0);
     expect(session.aggregates.xpGained).toBe(0);
+    // E vale para o loot também (FUN-63): o portão do §10.2 é da recompensa inteira.
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldGained).toBe(0);
   });
 
   it('cai 1:1 com o tempo de hunt', () => {

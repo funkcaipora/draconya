@@ -74,6 +74,14 @@ que parece decidido — palpite disfarçado de decisão é o que faz ninguém le
 boot repete todos eles em `openValues`, e o `docs-check` conta os `[ABERTO]` correspondentes
 em `docs/product/`.
 
+## Loot (FUN-63)
+
+A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e
+`loot.items` é uma lista com `itemId`. Gold é campo no personagem (`character.gold`), não item —
+por isso tem lugar próprio, em vez de um `itemId: "gold-coin"` que o código teria que reconhecer
+pelo nome. `items` só aceita lista vazia enquanto não houver catálogo de itens; `buildContent`
+recusa o resto, porque creditar um item fantasma no primeiro abate é pior que não subir.
+
 ## Como testar
 
 ```

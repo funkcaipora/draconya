@@ -139,12 +139,12 @@ Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, 
 | como entra | pelo menu, com dificuldade escolhida; instância criada na entrada |
 | o que encerra | ação manual, regra automática de saída, ou morte (§14.8) |
 | o que a morte faz | encerra, cobra a penalidade de XP (§26.2) e devolve à PZ curado |
-| como a recompensa é calculada | XP por abate, com level up, bloqueada quando a stamina zera (§10.2) |
+| como a recompensa é calculada | loot (gold) e XP por abate, com level up, bloqueados quando a stamina zera (§10.2) |
 
 Se a Guild War não couber nessa mesma interface depois, ela terá sido modelada em cima de hunt —
 e descobrir isso na Fase 5 custa semanas. É por isso que a hunt **não pediu método novo** em
-`Ruleset`: tudo o que ela precisa cabe em `onEnter`, `onTick`, `onDeath`, `onEnd` e no par
-`getState`/`restore`, exatamente os mesmos que a Cidade usa.
+`Ruleset`: tudo o que ela precisa cabe em `onEnter`, `onEvent`, `onCreatureDied`, `onEnd` e no
+par `getState`/`restore`, exatamente os mesmos que a Cidade usa.
 
 **Entrar cria a instância.** Mapa, rota e spawns da dificuldade escolhida nascem na entrada, e a
 versão de conteúdo é congelada ali (invariante 7). O personagem entra no primeiro tile da rota,
@@ -168,8 +168,30 @@ densidade no meio deixaria monstros da densidade antiga vivos ao lado dos novos,
 veria uma dificuldade que não é nenhuma das duas.
 
 **Stamina zero não encerra a hunt** (§10.2). É a regra que mais parece bug para quem implementa.
-O personagem continua caçando, matando e apanhando; o que ele deixa de ganhar é XP. O abate
-continua contando no extrato — o jogador matou, e dizer que não seria mentira.
+O personagem continua caçando, matando e apanhando; o que ele deixa de ganhar é a recompensa —
+loot e XP. O abate continua contando no extrato — o jogador matou, e dizer que não seria mentira.
+
+### Morte e recompensa são um pipeline (FUN-63)
+
+Morte de monstro e morte de personagem passam pelo **mesmo** caminho, copiado do §30 da
+referência OpenTibia: `HP <= 0` → congela a criatura (os eventos dela saem da fila) → resolve
+quem matou → **consequência do ruleset** → recompensa → despawn/respawn. A consequência é do
+ruleset, nunca da criatura: a hunt encerra em PZ, a guild war vai respawnar, o boss vai variar por
+dificuldade. Antes eram dois caminhos separados dentro da hunt, e cada ruleset novo precisaria de
+mais um.
+
+**Todo golpe registra atribuição** — `damageByActor` e `lastHitBy` na criatura, serializados no
+snapshot. Hoje a recompensa vai ao **último golpe**; o maior dano fica guardado para party, boss e
+bestiário lerem depois, sem migração. Dividir entre participantes é regra de produto, e entra com
+party.
+
+**O loot cai** — em gold. A tabela do monstro separa moeda de item (`loot.gold` e `loot.items`),
+porque gold é campo no personagem e não item; `items` fica vazio até o sistema de itens existir, e
+o carregador recusa qualquer coisa nele. O sorteio usa o `Rng` da sessão — a mesma semente rende o
+mesmo loot, antes e depois de uma retomada — e uma linha com `chance: 0` não consome sorteio, para
+desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta` no personagem e
+`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem cadáver, sem
+item no chão, sem caixa de loot: o produto rejeita isso de propósito (§26 da referência).
 
 ### Abate comum não é evento notável
 
@@ -288,6 +310,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade de passo do personagem | [ABERTO — valor provisório: 500 ms por tile] | `data/progression/baseline.json`, `stepDurationMs` |
+| Loot por abate (gold: chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
 
 ## Em aberto
 
@@ -297,11 +320,11 @@ e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não
 
 ## Divergências do PRD
 
-**Loot ainda não cai.** O §14 fala em XP *e* loot por abate; hoje só o XP é creditado, com level
-up e com a penalidade de morte da FUN-37 já no lugar. Não é
-escolha de design: não existe item, nem inventário, nem capacidade — e creditar "gold" fingindo
-que a moeda é um item resolvido criaria um caminho econômico que ninguém desenharia de propósito.
-O bloqueio por stamina já está no lugar e vale para o loot no dia em que ele existir.
+**Loot é só gold, por enquanto.** O §14 fala em XP *e* loot por abate; os dois caem desde a
+FUN-63, mas o loot de **item** não existe — não há item, inventário nem capacidade — e a tabela do
+monstro recusa qualquer `items` até o catálogo existir. A moeda é creditada como campo, não como
+item: fingir que gold é um item resolvido criaria um caminho econômico que ninguém desenharia de
+propósito.
 
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
