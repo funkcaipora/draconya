@@ -80,6 +80,40 @@ O piso de zero na XP é do banco, não confiança em quem chama: a penalidade de
 extrato como número negativo, e XP negativa é um estado impossível que dá erro estranho em todo
 lugar que a lê depois.
 
+### Quem emite ticket liquida antes de ler
+
+A varredura do `jobs` roda a cada dez segundos, e quem reconectava dentro dessa janela lia
+`level` e `xp` da tabela **antes** do delta da sessão que tinha acabado. O personagem nascia com
+o progresso de antes — e como o level up é autoritativo sobre os stats, ele também *encolhia*:
+`statsForLevel` recalculava HP e mana a partir do level velho.
+
+O banco convergia sozinho, porque o que se escreve é delta. Mas para quem estava jogando era
+indistinguível de perda de dados, e sumia sozinho em dez segundos — o pior formato possível:
+ninguém reproduz de propósito, e quem reporta parece enganado.
+
+Agora `POST /api/tickets` liquida o que aquele personagem tem pendente antes de ler a linha
+dele. É o **mesmo** caminho da varredura, não um paralelo: mesma linha de ledger, mesma chave
+única, mesma transação. É isso que torna o encontro dos dois inofensivo — o `jobs` e a emissão
+podem processar o mesmo extrato ao mesmo tempo, e o segundo a chegar bate na
+`UNIQUE (session_id, seq)`, não aplica nada, e apaga um extrato já pago.
+
+Somar o delta pendente por cima do que veio do banco seria mais barato e estaria **errado**:
+entre ler a linha e ler o Redis cabe uma varredura inteira, e o mesmo delta entraria duas vezes
+na conta que o jogador vê.
+
+**Falhar ali recusa a entrada** (HTTP 503), em vez de deixar passar. Entrar com um personagem que
+o servidor sabe estar desatualizado é o defeito que a rota acabou de deixar de ter, e a recusa é
+retentável de graça: o extrato continua no Redis e a varredura o pega de qualquer jeito.
+
+Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o Redis
+guarda um índice por personagem (`receipts:char:{characterId}`) ao lado do extrato. Um extrato
+gravado por um nó `game` antigo, durante um deploy em rolagem, não tem entrada de índice e volta
+a esperar a varredura — degradação, não perda.
+
+**A tela de seleção de personagem ainda lê a linha crua** e mostra o mesmo atraso de até dez
+segundos. É o mesmo defeito num lugar onde ele só afeta o que é exibido, e está aberto na
+FUN-66.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |

@@ -1,16 +1,20 @@
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
 import { loadConfiguration } from '../config.js';
 import { DrizzleGameRepository } from '../db/repository.js';
+import { characters } from '../db/schema.js';
 import { SessionDirectory } from '../directory.js';
 import { createGame } from '../game/server.js';
 import { createCitySessionFactory } from '../game/sessions.js';
+import { settleCharacterProgress } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
+import { ReceiptStore } from '../receipts.js';
 import type { Role } from '../role.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
@@ -23,6 +27,7 @@ let database: TestDatabase;
 let redis: Redis;
 let repository: DrizzleGameRepository;
 let directory: SessionDirectory;
+let receipts: ReceiptStore;
 let app: ReturnType<typeof buildApi>;
 let game: Role;
 let baseUrl: string;
@@ -98,11 +103,20 @@ beforeAll(async () => {
   const auth = new AuthService({
     repository, sessions: new RedisAuthSessionStore(redis, 3600), devMode: true,
   });
+  receipts = new ReceiptStore(redis);
   app = buildApi(configuration, logger, {
     auth, repository, tickets,
     isCharacterActive: async (accountId, characterId) =>
       (await directory.lookup(characterId)) !== null
       || (await directory.activeSlots(accountId)).includes(characterId),
+    // A liquidação de verdade, não um stub: é ela que o ticket exige (FUN-56), e um stub
+    // aqui deixaria a suíte passar com a rota configurada de um jeito que produção não usa.
+    settleProgress: (characterId) => settleCharacterProgress(characterId, {
+      database: database.database.db,
+      receipts,
+      logger,
+      progression: testContent().progression,
+    }),
   });
   baseUrl = await app.listen({ port: 0, host: '127.0.0.1' });
   game = createGame(configuration, logger, {
@@ -189,6 +203,38 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
       ]);
       expect([[200, 409], [404, 204]]).toContainEqual([ticket.status, deletion.status]);
     }
+  });
+
+  it('settles pending progress before it hands out a ticket (FUN-56)', async () => {
+    // O caminho inteiro, pela rota HTTP de verdade: extrato no Redis, `POST /api/tickets`,
+    // linha do personagem em dia. Sem esta cobertura, tirar o `settleProgress` da composição
+    // do `buildApi` passaria calado — e o jogador voltaria a reconectar dentro dos dez
+    // segundos da varredura e ver o personagem com o progresso de antes.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await receipts.save({
+      sessionId: randomUUID(),
+      characterId: character.id,
+      accountId: owner.accountId,
+      reason: 'drain',
+      seq: 1,
+      aggregates: {
+        durationMs: 60_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+      },
+      notableEvents: [],
+    });
+
+    expect((await request('/api/tickets', 'POST', owner.cookie, {
+      characterId: character.id,
+    })).status).toBe(200);
+
+    const [row] = await database.database.db
+      .select({ xp: characters.xp, gold: characters.gold, level: characters.level })
+      .from(characters)
+      .where(eq(characters.id, character.id));
+    expect(row).toMatchObject({ xp: 900, gold: 380 });
+    expect(row?.level).toBeGreaterThan(1);
+    expect(await receipts.pendingFor(character.id)).toEqual([]);
   });
 
   it('uses a one-time ticket for a real socket, keeps the session after disconnect, and reconnects', async () => {

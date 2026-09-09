@@ -37,7 +37,7 @@ import { createGame, type GameRole } from '../game/server.js';
 import {
   createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from '../game/sessions.js';
-import { writePendingReceipts } from '../jobs/ledger.js';
+import { settleCharacterProgress, writePendingReceipts } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
 import { SnapshotStore } from '../snapshots.js';
@@ -216,6 +216,15 @@ beforeAll(async () => {
     auth, repository, tickets,
     isCharacterActive: (accountId, characterId) => directory.isActive(accountId, characterId),
     locateSession: (characterId) => directory.lookup(characterId),
+    // FUN-56: emitir ticket liquida o extrato pendente antes de ler a linha. Está aqui
+    // porque é assim que o `main.ts` monta a rota — e este teste existe para exercitar o
+    // caminho de produção, não uma versão dele.
+    settleProgress: (characterId) => settleCharacterProgress(characterId, {
+      database: (database as TestDatabase).database.db,
+      receipts,
+      logger,
+      progression: content.progression,
+    }),
   });
   baseUrl = await api.listen({ port: 0, host: '127.0.0.1' });
 }, 30_000);
@@ -307,14 +316,16 @@ describe.runIf(ready)('critério de saída da Fase 1', () => {
     expect(await snapshots.load(characterId)).toBeNull();
     expect(await directory.lookup(characterId)).toBeNull();
 
-    // DOIS extratos, e o segundo não é bug: entrar na hunt encerrou a sessão de Cidade, e
-    // toda sessão que acaba gera extrato. O da Cidade vem zerado — ela não credita nada
-    // (§37) — e vira uma linha de ledger de valor zero, que é o registro de que o personagem
-    // trocou de atividade. O que importa aqui é que exatamente UM deles rendeu.
+    // UM extrato, e o da Cidade não sumiu: ele já foi liquidado. Entrar na hunt encerrou a
+    // sessão de Cidade, e toda sessão que acaba gera extrato — o da Cidade vem zerado, que é
+    // o registro de que o personagem trocou de atividade. A reconexão do passo 6 emitiu um
+    // ticket, e emitir ticket liquida o que aquele personagem tem pendente (FUN-56): é
+    // justamente o que impede o jogador de reconectar e ver o personagem com o progresso de
+    // antes. O que sobrou aqui é o da drenagem, que aconteceu depois da última reconexão.
     const pending = await receipts.pending();
-    const withProgress = pending.filter((receipt) => receipt.aggregates.xpGained > 0);
-    expect(withProgress).toHaveLength(1);
-    expect(withProgress[0]?.reason).toBe('drain');
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.reason).toBe('drain');
+    expect(pending[0]?.aggregates.xpGained).toBeGreaterThan(0);
     // Cada sessão credita uma vez: `seq` repetido no mesmo `sessionId` seria crédito dobrado.
     expect(new Set(pending.map((r) => `${r.sessionId}:${r.seq}`)).size).toBe(pending.length);
 

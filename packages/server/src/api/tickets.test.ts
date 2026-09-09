@@ -36,6 +36,7 @@ function build(
       _characterId: string,
       operation: (character: typeof CHARACTER) => unknown,
     ) => operation(CHARACTER),
+    settleProgress: async () => ({ failed: 0 }),
     ...overrides,
     // Depois do spread, e mesclado: quase todo teste sobrescreve só o `issue`, e substituir o
     // objeto inteiro tiraria o `resolveNode` junto — que a rota chama antes.
@@ -131,6 +132,54 @@ describe('POST /api/tickets', () => {
 
     expect(response.statusCode).toBe(503);
     expect(order).toEqual([]);
+  });
+
+  it('liquida o progresso pendente ANTES de ler a linha do personagem (FUN-56)', async () => {
+    // Entre a sessão encerrar e o `jobs` varrer passam até dez segundos. Ler a linha antes
+    // de liquidar devolve o level e a XP de antes da sessão que acabou — e como
+    // `statsForLevel` deriva os pontos do level, o personagem também encolhe na tela.
+    const order: string[] = [];
+    const app = build({
+      settleProgress: async () => { order.push('settle'); return { failed: 0 }; },
+      withOwnedCharacter: (async (
+        _accountId: string,
+        _characterId: string,
+        operation: (character: typeof CHARACTER) => unknown,
+      ) => {
+        order.push('lock');
+        return operation(CHARACTER);
+      }) as never,
+    });
+
+    await post(app, { characterId: 'p1' });
+
+    // Fora da trava, e não dentro: a liquidação PRECISA da trava para escrever, e chamá-la
+    // de dentro dela seria travar contra si mesma.
+    expect(order).toEqual(['settle', 'lock']);
+  });
+
+  it('recusa a entrada quando a liquidação falha, em vez de deixar passar', async () => {
+    // Entrar com um personagem que o servidor SABE estar desatualizado é o defeito que esta
+    // rota acabou de deixar de ter. O 503 é retentável de graça: o extrato continua no
+    // Redis, e a varredura o pega dentro de dez segundos de qualquer jeito.
+    const failed = build({ settleProgress: async () => ({ failed: 1 }) });
+    const threw = build({
+      settleProgress: async () => { throw new Error('redis is down'); },
+    });
+
+    for (const app of [failed, threw]) {
+      const response = await post(app, { characterId: 'p1' });
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toEqual({ error: 'progress-not-settled' });
+    }
+  });
+
+  it('sem liquidação configurada, não emite ticket nenhum', async () => {
+    // Emitir mesmo assim traria o defeito de volta CALADO. Quem sabe ler a linha do
+    // personagem tem que saber deixá-la em dia antes.
+    const response = await post(build({}, ['settleProgress']), { characterId: 'p1' });
+
+    expect(response.statusCode).toBe(501);
   });
 
   it('rejects a malformed body', async () => {

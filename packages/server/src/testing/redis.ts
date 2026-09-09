@@ -14,6 +14,8 @@
 //   4  api/integration.test.ts
 //   5  jobs/ledger.test.ts
 //   6  snapshots.test.ts
+//   7  api/phase-one-exit.test.ts
+//   8  receipts.test.ts
 //
 // Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
 // arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;

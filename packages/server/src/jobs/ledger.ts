@@ -40,7 +40,38 @@ export function creditOf(receipt: SessionReceipt): number {
 export async function writePendingReceipts(
   options: LedgerSweepOptions,
 ): Promise<LedgerSweepResult> {
-  const pending = await options.receipts.pending();
+  return writeReceipts(await options.receipts.pending(), options);
+}
+
+/**
+ * Liquida agora o que este personagem tem pendente, em vez de esperar a varredura (FUN-56).
+ *
+ * O problema: entre a sessão encerrar e o `jobs` varrer passam até dez segundos, e quem
+ * reconecta dentro dessa janela lê `level` e `xp` da tabela — ainda sem o delta da sessão
+ * que acabou. O personagem aparece com o progresso de antes, e como `statsForLevel` deriva
+ * HP e mana do level, ele também ENCOLHE. É indistinguível de perda de dados, some sozinho
+ * em dez segundos, e ninguém consegue reproduzir de propósito.
+ *
+ * Isto é o MESMO caminho da varredura, não um paralelo: mesma linha de ledger, mesma chave
+ * única, mesma transação. É o que torna o encontro dos dois inofensivo — o `jobs` e esta
+ * chamada podem processar o mesmo extrato ao mesmo tempo, e o segundo a chegar bate na
+ * `UNIQUE (session_id, seq)`, não aplica nada e apaga um extrato já creditado.
+ *
+ * Somar o delta pendente por cima do que veio do banco, em vez de liquidar, seria mais
+ * barato e estaria errado: entre ler a linha e ler o Redis cabe uma varredura inteira, e o
+ * mesmo delta entraria duas vezes na conta que o jogador vê.
+ */
+export async function settleCharacterProgress(
+  characterId: string,
+  options: LedgerSweepOptions,
+): Promise<LedgerSweepResult> {
+  return writeReceipts(await options.receipts.pendingFor(characterId), options);
+}
+
+async function writeReceipts(
+  pending: readonly SessionReceipt[],
+  options: LedgerSweepOptions,
+): Promise<LedgerSweepResult> {
   let written = 0;
   let failed = 0;
 
@@ -79,7 +110,7 @@ export async function writePendingReceipts(
         await applyProgression(tx, receipt, options.progression);
       });
 
-      await options.receipts.remove(receipt.sessionId);
+      await options.receipts.remove(receipt.sessionId, receipt.characterId);
       written += 1;
     } catch (error) {
       // O extrato FICA no Redis. Perder o crédito em silêncio é o defeito que este arquivo

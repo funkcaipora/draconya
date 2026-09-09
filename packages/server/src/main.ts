@@ -17,6 +17,7 @@ import {
   createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
+import { settleCharacterProgress } from './jobs/ledger.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
@@ -118,20 +119,34 @@ async function main(): Promise<void> {
   );
 
   const factories: Record<RoleName, () => Role> = {
-    api: () => createApi(configuration, logger.child({ role: 'api' }), {
-      tickets,
-      ...(auth === null || repository === null
-        ? {}
-        : {
-            auth,
-            repository,
-            // Uma ida ao Redis, não duas: esta checagem roda com a transação do Postgres
-            // ABERTA, segurando a linha do personagem (FUN-53).
-            isCharacterActive: (accountId, characterId) =>
-              directory.isActive(accountId, characterId),
-            locateSession: (characterId) => directory.lookup(characterId),
-          }),
-    }),
+    api: () => {
+      const apiLogger = logger.child({ role: 'api' });
+      return createApi(configuration, apiLogger, {
+        tickets,
+        ...(auth === null || repository === null || database === null
+          ? {}
+          : {
+              auth,
+              repository,
+              // Uma ida ao Redis, não duas: esta checagem roda com a transação do Postgres
+              // ABERTA, segurando a linha do personagem (FUN-53).
+              isCharacterActive: (accountId, characterId) =>
+                directory.isActive(accountId, characterId),
+              locateSession: (characterId) => directory.lookup(characterId),
+              // O `api` escreve a linha do personagem aqui — e isso NÃO é estado quente
+              // (invariante 9): o extrato só existe depois que a sessão dona acabou, e é
+              // exatamente a mesma escrita que o `jobs` faria dez segundos depois. Sem ela,
+              // quem reconecta dentro da janela da varredura vê o personagem zerar (FUN-56).
+              settleProgress: (characterId: string) =>
+                settleCharacterProgress(characterId, {
+                  database: database.db,
+                  receipts,
+                  logger: apiLogger,
+                  progression: content.progression,
+                }),
+            }),
+      });
+    },
     game: () => createGame(configuration, logger.child({ role: 'game' }), {
       directory,
       tickets,
