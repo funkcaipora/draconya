@@ -83,6 +83,11 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   o despacho É o instante do vencimento. Não há erro a herdar, e por isso não há acumulador.
 - **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
   dentro deste pacote. É a verificação do invariante 2 que não depende de alguém lembrar.
+- **Este pacote compila sem `@types/node`.** Desde o TypeScript 6 (FUN-61) o `types` padrão é
+  vazio, e só os pacotes que usam Node o pedem no `tsconfig.json`; o `sim` não pede. `process`,
+  `setTimeout`, `Buffer` e `node:*` não existem aqui nem como tipo — é o invariante 1 imposto
+  pelo compilador, antes do lint. Se um erro "Cannot find name 'process'" aparecer neste
+  pacote, a resposta é tirar o `process`, nunca adicionar o `types`.
 - O adaptador `systemClock` vive em `server/`. Aqui ficam apenas o contrato `Clock` e o
   relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.

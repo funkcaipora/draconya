@@ -38,7 +38,15 @@ function scramble(buf: Uint8Array, key: number): void {
   }
 }
 
-function buildFrame(opcode: number, props: unknown, allowCompression: boolean): Uint8Array {
+/**
+ * Um frame é sempre `Uint8Array<ArrayBuffer>` — nasce de `new Uint8Array(n)`, nunca de uma
+ * view sobre `SharedArrayBuffer`. Dizer isso no tipo é o que deixa o frame ir direto para
+ * `WebSocket.send`, cujo `BufferSource` passou a exigir um `ArrayBuffer` de verdade
+ * (TypeScript 6). O tipo só descreve o que já era; nenhum byte muda.
+ */
+type Frame = Uint8Array<ArrayBuffer>;
+
+function buildFrame(opcode: number, props: unknown, allowCompression: boolean): Frame {
   let body = textEncoder.encode(JSON.stringify([opcode, props]));
   let flags = 0;
   if (allowCompression && body.length >= COMPRESSION_THRESHOLD) {
@@ -142,12 +150,12 @@ function readFrame<M>(
 
 // --- API pública -----------------------------------------------------------------------
 
-export function encodeC2S(msg: C2SMessage): Uint8Array {
+export function encodeC2S(msg: C2SMessage): Frame {
   const { type, ...props } = msg;
   return buildFrame(CLIENT_TO_SERVER[type], props, true);
 }
 
-export function encodeS2C(msg: S2CMessage): Uint8Array {
+export function encodeS2C(msg: S2CMessage): Frame {
   const { type, ...props } = msg;
   return buildFrame(SERVER_TO_CLIENT[type], props, true);
 }
@@ -166,7 +174,7 @@ export function decodeS2C(input: ArrayBuffer | Uint8Array): S2CMessage[] | null 
  * Empacota vários frames num só. É o que sustenta a projeção de 0,5–1,5 KB/s por jogador:
  * o `game` acumula a saída de um tick e manda um frame, não um `send` por evento.
  */
-export function packBatch(frames: readonly Uint8Array[]): Uint8Array {
+export function packBatch(frames: readonly Uint8Array[]): Frame {
   let total = 0;
   for (const f of frames) total += 4 + f.length;
   const body = new Uint8Array(total);
