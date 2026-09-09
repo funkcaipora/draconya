@@ -12,9 +12,10 @@
 // (invariante 1). Os objetos ficam aqui. A ponte entre os dois é `session.attached`, que é o
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
-import type { Session, SessionType } from '@draconya/sim';
+import type { Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
+import type { SnapshotStore } from '../snapshots.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
@@ -28,6 +29,10 @@ export interface SessionHostOptions {
   readonly createSession: SessionFactory;
   readonly logger: Logger;
   readonly directory?: SessionDirectory;
+  /** Onde as sessões são guardadas para sobreviver à queda do processo (FUN-28). */
+  readonly snapshots?: SnapshotStore;
+  /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar. */
+  readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
   readonly viewer?: ViewerOptions;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
@@ -58,6 +63,14 @@ export interface PrepareResult {
 const CYCLE_MS = 100;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
+/**
+ * Cada quanto a sessão é gravada.
+ *
+ * É exatamente o que se perde numa queda: dez segundos de XP. Aceitável para progresso,
+ * INACEITÁVEL para transação econômica — por isso o ledger é escrito à parte (invariante 10),
+ * e não depende deste intervalo.
+ */
+const SNAPSHOT_INTERVAL_MS = 10_000;
 
 export class SessionHost {
   readonly #options: SessionHostOptions;
@@ -68,9 +81,12 @@ export class SessionHost {
   readonly #sessionIdByCharacter = new Map<string, string>();
   readonly #accountIdByCharacter = new Map<string, string>();
   readonly #preparations = new Map<string, Promise<void>>();
+  /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
+  readonly #resumedGapMs = new Map<string, number>();
 
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
+  #snapshotTimer: NodeJS.Timeout | null = null;
 
   constructor(options: SessionHostOptions) {
     this.#options = options;
@@ -151,6 +167,22 @@ export class SessionHost {
       characterId,
       contentVersion: this.#options.contentVersion,
     });
+
+    // O jogador precisa SABER que houve retomada e o que se perdeu. Silenciar aqui é como o
+    // modo idle perde a confiança de quem joga: o extrato não fecha e ninguém explica.
+    const gapMs = this.#resumedGapMs.get(characterId);
+    if (gapMs !== undefined) {
+      this.#resumedGapMs.delete(characterId);
+      const minutes = Math.round(gapMs / 60_000);
+      viewer.send({
+        type: 'system-message',
+        level: 'warning',
+        text: minutes > 0
+          ? `Sessão retomada após queda do servidor. Cerca de ${minutes} min de progresso `
+            + 'não foram simulados.'
+          : 'Sessão retomada após queda do servidor, sem perda perceptível.',
+      });
+    }
     this.#logger.debug(
       { characterId, sessionId: hosted.session.id, viewers: hosted.viewers.size },
       'Viewer attached',
@@ -212,6 +244,10 @@ export class SessionHost {
     this.#sessions.delete(hosted.session.id);
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
+
+    // A sessão ACABOU: deixar o snapshot faria a próxima conexão ressuscitar uma sessão
+    // encerrada, com os agregados de antes.
+    await this.#options.snapshots?.remove(characterId).catch(() => undefined);
 
     const directory = this.#options.directory;
     if (directory === undefined) return;
@@ -303,13 +339,36 @@ export class SessionHost {
   start(): void {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
+    this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
   }
 
   stop(): void {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
+    if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
+    this.#snapshotTimer = null;
+  }
+
+  /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
+  async saveAll(): Promise<void> {
+    const snapshots = this.#options.snapshots;
+    if (snapshots === undefined) return;
+    for (const [characterId, sessionId] of this.#sessionIdByCharacter) {
+      const hosted = this.#sessions.get(sessionId);
+      const accountId = this.#accountIdByCharacter.get(characterId);
+      if (hosted === undefined || accountId === undefined) continue;
+      try {
+        await snapshots.save(
+          characterId, accountId, this.#options.nodeId, hosted.session.snapshot(),
+        );
+      } catch (error) {
+        // Falhar aqui é perder o próximo intervalo, não a sessão. Silenciar seria perder a
+        // única pista de por que uma retomada voltou mais atrasada do que devia.
+        this.#logger.error({ error, characterId }, 'Failed to save session snapshot');
+      }
+    }
   }
 
   /** Id numérico da criatura, criado na primeira vez que alguém precisa dele. */
@@ -376,9 +435,51 @@ export class SessionHost {
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
   ): Promise<void> {
-    const session = this.#options.createSession(characterId, initialCharacter);
+    const resumed = await this.#resume(characterId);
+    const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
     await this.#register(characterId, session, accountId);
     this.#createLocal(characterId, session, accountId);
+    if (resumed !== null) {
+      this.#resumedGapMs.set(characterId, resumed.gapMs);
+      this.#logger.info(
+        { characterId, sessionId: session.id, gapMs: resumed.gapMs },
+        'Session resumed from snapshot',
+      );
+    }
+  }
+
+  /**
+   * Retoma do snapshot, se houver um e se ele for reconstruível.
+   *
+   * A exclusão mútua de verdade NÃO está aqui: está no `register`, que é atômico e recusa
+   * registrar um `sessionId` diferente enquanto o lease de outro vive. Duas retomadas
+   * simultâneas produzem duas sessões locais, mas só uma consegue se registrar — e a outra
+   * levanta antes de existir para alguém. É por isso que a trava do `jobs` é contra trabalho
+   * duplicado, e não contra duas cópias rodando.
+   */
+  async #resume(characterId: string): Promise<{ session: Session; gapMs: number } | null> {
+    const snapshots = this.#options.snapshots;
+    const restore = this.#options.restoreSession;
+    if (snapshots === undefined || restore === undefined) return null;
+
+    let stored;
+    try {
+      stored = await snapshots.load(characterId);
+    } catch (error) {
+      this.#logger.error({ error, characterId }, 'Failed to load session snapshot');
+      return null;
+    }
+    if (stored === null) return null;
+
+    const session = restore(stored.snapshot, this.#now());
+    if (session === null) {
+      // Não dá para reconstruir: formato antigo, ou ruleset que este servidor não conhece.
+      // Apagar é melhor que tentar de novo a cada reconexão para sempre.
+      this.#logger.warn({ characterId }, 'Snapshot could not be restored; discarding it');
+      await snapshots.remove(characterId).catch(() => undefined);
+      return null;
+    }
+    return { session, gapMs: Math.max(0, Date.now() - stored.savedAtMs) };
   }
 
   #createLocal(characterId: string, session: Session, accountId?: string): void {

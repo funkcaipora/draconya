@@ -55,6 +55,26 @@ redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[3]))
 return 1
 `;
 
+/**
+ * Toma o lugar de um registro cujo nó morreu (FUN-28).
+ *
+ * `KEYS[3]` é o batimento do nó que consta no registro atual: se ele existe, o dono está vivo
+ * e a tomada é RECUSADA — é essa checagem que impede duas cópias da mesma sessão, que é pior
+ * que uma perdida porque dobra loot e XP.
+ *
+ * A comparação com `ARGV[2]` fecha a corrida entre duas tomadas simultâneas: quem chegar
+ * segundo vê um valor diferente do que leu e desiste.
+ */
+const TAKE_OVER_SESSION = `
+if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
+if redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
+local existing = redis.call('GET', KEYS[1])
+if existing ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[1], ARGV[3], 'PX', tonumber(ARGV[4]))
+redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[4]))
+return 1
+`;
+
 /** Renova o lease da sessão e o slot que autoriza aquela sessão como uma unidade. */
 const RENEW_SESSION = `
 if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
@@ -98,6 +118,7 @@ export class SessionDirectory {
       numberOfKeys: 2,
       lua: REGISTER_SESSION,
     });
+    this.#redis.defineCommand('takeOverSession', { numberOfKeys: 3, lua: TAKE_OVER_SESSION });
     this.#redis.defineCommand('renewReservedSession', {
       numberOfKeys: 2,
       lua: RENEW_SESSION,
@@ -135,11 +156,40 @@ export class SessionDirectory {
         ttl: string,
       ): Promise<number>;
     };
-    return (await redis.registerReservedSession(
+    const payload = JSON.stringify(location);
+    const registered = await redis.registerReservedSession(
       sessionKey(characterId),
       activeCharactersKey(accountId),
       characterId,
-      JSON.stringify(location),
+      payload,
+      String(this.#leaseMs),
+    );
+    if (registered === 1) return true;
+
+    // Recusado porque já existe um registro DIFERENTE. Se o nó dele morreu, o registro é um
+    // ponteiro para lugar nenhum, e insistir deixaria o personagem inalcançável até o lease
+    // expirar sozinho — que é exatamente o que travava a retomada depois de um `kill -9`.
+    return this.#takeOver(characterId, accountId, payload);
+  }
+
+  async #takeOver(characterId: string, accountId: string, payload: string): Promise<boolean> {
+    const stale = await this.#redis.get(sessionKey(characterId));
+    if (stale === null) return false;
+    const parsed = parseSessionLocation(stale);
+
+    const redis = this.#redis as Redis & {
+      takeOverSession(
+        session: string, active: string, heartbeat: string,
+        member: string, expected: string, payload: string, ttl: string,
+      ): Promise<number>;
+    };
+    return (await redis.takeOverSession(
+      sessionKey(characterId),
+      activeCharactersKey(accountId),
+      nodeKey(parsed.nodeId),
+      characterId,
+      stale,
+      payload,
       String(this.#leaseMs),
     )) === 1;
   }

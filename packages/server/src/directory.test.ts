@@ -104,6 +104,11 @@ describe.runIf(available)('session directory', () => {
 describe.runIf(available)('two active characters per account limit', () => {
   it('rejects a second node trying to overwrite a live character session', async () => {
     const directory = new SessionDirectory(redis);
+    // O batimento é o que torna `n1` VIVO, e a partir da FUN-28 é essa a diferença que
+    // decide: registro de nó vivo é intocável; registro de nó morto pode ser tomado, senão o
+    // personagem fica inalcançável até o lease expirar. Sem esta linha o teste descrevia um
+    // nó que não batia, ou seja, exatamente o caso oposto ao que o nome dele promete.
+    await directory.heartbeat('n1', { sessions: 1, url: 'ws://n1:7171' });
     await directory.reserveSlot('a1', 'p1');
     const original = { sessionId: 's1', nodeId: 'n1', type: 'city' };
     const competing = { sessionId: 's2', nodeId: 'n2', type: 'city' };
@@ -164,6 +169,50 @@ describe.runIf(available)('two active characters per account limit', () => {
     const directory = new SessionDirectory(redis, { activeLimit: 1 });
     expect(await directory.reserveSlot('a1', 'p1')).toBe(true);
     expect(await directory.reserveSlot('a1', 'p2')).toBe(false);
+  });
+
+  it('refuses to take over a session while the owning node still beats', async () => {
+    // Duas cópias da mesma sessão é PIOR que uma perdida: dobra loot e XP. Um nó que ainda
+    // bate pode estar só numa pausa de GC — e essa é a diferença entre pausa e morte.
+    const directory = new SessionDirectory(redis);
+    await directory.heartbeat('n1', { sessions: 1, url: 'ws://n1:7171' });
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'city' }, 'a1');
+
+    const taken = await directory.register(
+      'p1', { sessionId: 's1', nodeId: 'n2', type: 'city' }, 'a1',
+    );
+
+    expect(taken).toBe(false);
+    expect((await directory.lookup('p1'))?.nodeId).toBe('n1');
+  });
+
+  it('takes over a session whose node stopped beating', async () => {
+    // O registro do nó morto é um ponteiro para lugar nenhum. Insistir nele deixaria o
+    // personagem inalcançável até o lease expirar — o que travava a retomada após kill -9.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 's1', nodeId: 'morto', type: 'city' }, 'a1');
+    // Sem batimento de `morto`: é assim que um nó que caiu se parece.
+
+    const taken = await directory.register(
+      'p1', { sessionId: 's1', nodeId: 'n2', type: 'city' }, 'a1',
+    );
+
+    expect(taken).toBe(true);
+    expect((await directory.lookup('p1'))?.nodeId).toBe('n2');
+  });
+
+  it('refuses a take-over without the account reservation', async () => {
+    // O slot é a autorização. Sem ele, qualquer nó poderia adotar qualquer personagem.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 's1', nodeId: 'morto', type: 'city' }, 'a1');
+    await directory.releaseSlot('a1', 'p1');
+
+    expect(await directory.register(
+      'p1', { sessionId: 's1', nodeId: 'n2', type: 'city' }, 'a1',
+    )).toBe(false);
   });
 
   it('lists alive nodes with the URL each one published', async () => {

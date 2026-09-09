@@ -10,6 +10,7 @@
 //   0  livre (é o banco do desenvolvimento local)
 //   1  directory.test.ts
 //   2  tickets.test.ts
+//   4  snapshots.test.ts
 //   3  auth/sessions.test.ts
 //   4  api/integration.test.ts
 

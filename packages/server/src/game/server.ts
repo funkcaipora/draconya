@@ -9,7 +9,9 @@
 import uWS from 'uWebSockets.js';
 import { decodeC2S } from '@draconya/protocol';
 import type { Configuration } from '../config.js';
+import type { Session, SessionSnapshot } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
+import type { SnapshotStore } from '../snapshots.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
@@ -21,6 +23,9 @@ export interface GameDependencies {
   readonly tickets?: TicketService;
   readonly createSession?: SessionFactory;
   readonly contentVersion?: string;
+  /** Onde a sessão é guardada para sobreviver à queda do processo (FUN-28). */
+  readonly snapshots?: SnapshotStore;
+  readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
 }
 
 /** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */
@@ -52,6 +57,10 @@ export function createGame(
       createSession: dependencies.createSession,
       logger,
       ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
+      ...(dependencies.snapshots === undefined ? {} : { snapshots: dependencies.snapshots }),
+      ...(dependencies.restoreSession === undefined
+        ? {}
+        : { restoreSession: dependencies.restoreSession }),
     });
 
   app.get('/healthz', (response) => {
@@ -217,6 +226,9 @@ export function createGame(
       // de tempo importa: drenagem interrompida no meio é pior que drenagem nenhuma.
       acceptingNewSessions = false;
       logger.info({ sessions: host?.sessionCount ?? 0 }, 'Game stopped accepting new sessions');
+      // Gravar ANTES de parar os timers: o snapshot da drenagem é o que faz um deploy custar
+      // zero em vez de um intervalo inteiro de progresso.
+      await host?.saveAll();
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;

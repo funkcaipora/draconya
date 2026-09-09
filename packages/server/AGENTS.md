@@ -117,6 +117,30 @@ quente — 4 bytes por `creature-move`, dezenas de vezes por segundo, contra 36 
 `sim` não conhece protocolo e o cliente não pode inventar número, então a tradução mora no
 `SessionHost` e é estável enquanto a sessão viver.
 
+## Sessão que sobrevive à queda do nó (FUN-28)
+
+A sessão é gravada a cada dez segundos em `session:{characterId}:snapshot`, com TTL de 24 h. A
+chave existir **é** o índice de "isto deveria estar rodando" — não há lista separada, porque
+lista precisa ser mantida em sincronia e o dia em que ela diverge é o dia em que se perde uma
+sessão ou se ressuscita uma que já acabou.
+
+**Órfã = snapshot existe e lease do diretório não.** O lease morre com o nó, o snapshot não.
+
+Quem retoma é o **nó ao qual o jogador reconecta**, no `prepare` — retomar é hospedar, e
+hospedar é do `game`. O `jobs` não retoma: ele só devolve o slot de quem não voltou, para o
+jogador conseguir usar os outros personagens. O snapshot fica (§38.4).
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **Tomar o registro de outro nó exige que o batimento dele esteja AUSENTE**, e a troca é
+  atômica em Lua. Um nó que ainda bate pode estar só numa pausa de GC, e duas cópias da mesma
+  sessão é pior que uma perdida: dobra loot e XP. Na prática, retomar leva até um lease.
+- **O relógio é reposicionado, o intervalo NÃO é simulado** (ADR 0018). O `lastTickMs` do
+  snapshot é monotônico de outro processo: sem reposicionar, ou a sessão nunca mais avança
+  (`dtMs` negativo para sempre) ou o primeiro tick resolve horas de combate de uma vez.
+- **O jogador é avisado** ao anexar numa sessão retomada, com quanto tempo não foi simulado.
+  Silenciar é como o modo idle perde a confiança de quem joga.
+
 ## Como testar
 
 ```
