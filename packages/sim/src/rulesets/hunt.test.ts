@@ -5,7 +5,7 @@ import { CharacterRuntime } from '../character.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { Session } from '../session.js';
+import { MAX_PENDING_DOMAIN_EVENTS, Session } from '../session.js';
 import type { SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, changeDifficulty, createHuntSession, huntRulesetFromSnapshot,
@@ -655,5 +655,72 @@ describe('seleção de hunt', () => {
     const alta = { ...hunt, id: 'deep', name: 'Deep', recommendedLevel: 50 };
     expect(huntListings(content({ hunts: [alta, hunt] })).map((h) => h.id))
       .toEqual(['arena', 'deep']);
+  });
+});
+
+describe('eventos de domínio (FUN-69)', () => {
+  it('a hunt produz CreatureMoved do bot e dos monstros', () => {
+    // `creature-move` não tinha emissor nenhum antes desta issue — nem para o bot, nem para os
+    // monstros —, e é por isso que os 42,8 bytes/s medidos na FUN-45 não significavam nada: a
+    // hunt não transmitia mundo para viewer algum.
+    const { session } = start();
+    run(session, 3000, 100);
+
+    const eventos = session.drainEvents();
+    expect(eventos.length).toBeGreaterThan(0);
+    for (const evento of eventos) {
+      expect(evento.type).toBe('creature-moved');
+      expect(evento.durationMs).toBeGreaterThan(0);
+      // O andar vem do MAPA, e vai junto: quem lê isto do lado de fora precisa de `z`.
+      expect(evento.to.z).toBe(7);
+    }
+    // Os dois lados do mundo se movem, e os dois são anunciados.
+    const quemAndou = new Set(eventos.map((e) => e.creatureId));
+    expect(quemAndou.has('hero')).toBe(true);
+    expect([...quemAndou].some((id) => id.startsWith('m:'))).toBe(true);
+  });
+
+  it('desanexada produz exatamente os mesmos eventos que anexada', () => {
+    // O invariante 3 em forma de teste, e é o que o §12 exige em letra: viewer decide quem
+    // SERIALIZA, nunca o que acontece. Um `if (temViewer)` no caminho de emissão faria a hunt
+    // desanexada divergir sem ninguém ver.
+    const semObservador = start();
+    run(semObservador.session, 5000, 100);
+
+    const comObservador = start();
+    comObservador.session.attach('viewer-1');
+    run(comObservador.session, 5000, 100);
+
+    expect(comObservador.session.drainEvents()).toEqual(semObservador.session.drainEvents());
+  });
+
+  it('drenar esvazia, porque o que aconteceu não é o que a sessão é', () => {
+    const { session } = start();
+    run(session, 2000, 100);
+    expect(session.drainEvents().length).toBeGreaterThan(0);
+    expect(session.drainEvents()).toHaveLength(0);
+  });
+
+  it('não entra no snapshot — um passo reentregue viraria passo repetido na tela', () => {
+    const { session } = start();
+    run(session, 2000, 100);
+    expect(Object.keys(session.snapshot())).not.toContain('domainEvents');
+    // E a sessão retomada nasce sem nada a anunciar: o que aconteceu já aconteceu.
+    const snapshot = session.snapshot();
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    expect(retomado.drainEvents()).toHaveLength(0);
+  });
+
+  it('sessão que ninguém drena não acumula sem limite', () => {
+    // Uma hunt desanexada roda por horas. O teto é da `Session` porque o descarte precisa
+    // existir mesmo se o hospedeiro esquecer de drenar — e isto é apresentação, que é
+    // perdível. Gameplay não passa por aqui.
+    const { session } = start();
+    run(session, 600_000, 100);
+    expect(session.drainEvents().length).toBeLessThanOrEqual(MAX_PENDING_DOMAIN_EVENTS);
   });
 });

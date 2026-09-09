@@ -57,11 +57,25 @@ export type MoveRefusal =
  * lado que conhece socket e numeração de criatura do fio. A hunt desanexada produz estes
  * eventos exatamente como a anexada — o que muda é que ninguém os serializa.
  */
+/** Ponto de mundo: o andar vem do MAPA, que é quem sabe. Ver `CreatureMoved`. */
+export interface WorldPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
 export interface CreatureMoved {
   readonly type: 'creature-moved';
   readonly creatureId: string;
-  readonly from: GridPoint;
-  readonly to: GridPoint;
+  /**
+   * Com `z`, sempre — e tirado do mapa, não da criatura.
+   *
+   * O personagem carrega o próprio `z` porque atravessa protocolo e banco; o monstro não
+   * carrega, porque vive numa instância de um andar só. O evento fala para fora, onde o `z` é
+   * obrigatório, e a única fonte de verdade sobre o andar da instância é o tilemap dela.
+   */
+  readonly from: WorldPoint;
+  readonly to: WorldPoint;
   readonly durationMs: number;
 }
 
@@ -204,7 +218,7 @@ export class MovementSystem {
     const check = this.validate(creature, to);
     if (!check.ok) return check;
     const from = this.#commit(creature, to);
-    return { ok: true, event: moved(options.creatureId, from, to, options.durationMs) };
+    return { ok: true, event: this.#moved(options.creatureId, from, to, options.durationMs) };
   }
 
   /**
@@ -220,7 +234,7 @@ export class MovementSystem {
     const check = this.#tileAdmits(creature, to);
     if (!check.ok) return check;
     const from = this.#commit(creature, to);
-    return { ok: true, event: moved(options.creatureId, from, to, 0) };
+    return { ok: true, event: this.#moved(options.creatureId, from, to, 0) };
   }
 
   /**
@@ -237,6 +251,19 @@ export class MovementSystem {
     return null;
   }
 
+  #moved(
+    creatureId: string, from: GridPoint, to: GridPoint, durationMs: number,
+  ): CreatureMoved {
+    const z = this.#map.z;
+    return {
+      type: 'creature-moved',
+      creatureId,
+      from: { x: from.x, y: from.y, z },
+      to: { x: to.x, y: to.y, z },
+      durationMs,
+    };
+  }
+
   /** A criatura saiu do mundo — morreu, foi recolhida, trocou de instância. Libera o tile. */
   remove(creature: Movable<GridPoint>): void {
     const key = tileKey(creature.position.x, creature.position.y);
@@ -244,6 +271,4 @@ export class MovementSystem {
   }
 }
 
-const moved = (
-  creatureId: string, from: GridPoint, to: GridPoint, durationMs: number,
-): CreatureMoved => ({ type: 'creature-moved', creatureId, from, to, durationMs });
+

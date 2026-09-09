@@ -481,10 +481,47 @@ export class SessionHost {
       // A sessão pode ter acabado DENTRO do tick — a morte é o caso (§26.1), e ela acontece
       // com o jogador ausente na maior parte das vezes. Se a sucessão dependesse de alguém
       // estar olhando, o invariante 3 estaria quebrado.
+      // O mundo que aconteceu neste avanço vira pacote AQUI, e não dentro do `sim` — que não
+      // conhece socket nem numeração de criatura do fio (invariante 1, §12).
+      this.#presentMoves(hosted);
       if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
     this.#observeSessions();
+  }
+
+  /**
+   * Traduz os eventos de domínio do avanço em `creature-move` para quem está olhando.
+   *
+   * É o `PresentationAdapter` do §12: o `sim` produz `CreatureMoved` haja ou não visualizador,
+   * e é aqui que se decide se aquilo vira bytes. A hunt desanexada — o modo padrão do jogo —
+   * produz exatamente os mesmos eventos e não serializa nenhum.
+   *
+   * **Drena SEMPRE**, inclusive sem visualizador. O buffer é da sessão, e uma hunt que ninguém
+   * olha não pode acumular apresentação por horas; a `Session` tem teto próprio, mas depender
+   * dele seria deixar o descarte acontecer no lugar errado.
+   */
+  #presentMoves(hosted: HostedSession): void {
+    const events = hosted.session.drainEvents();
+    if (events.length === 0 || hosted.viewers.size === 0) return;
+
+    for (const event of events) {
+      // O protocolo exige duração positiva: um passo é enviado UMA vez, com origem, destino e
+      // duração, e o cliente interpola o intervalo inteiro (ADR 0001). Duração zero é
+      // colocação, não passo — aparecer no mundo é `creature-appear`, que precisa de aparência
+      // e é trabalho da M2.
+      if (event.durationMs <= 0) continue;
+      const id = this.#creatureId(hosted, event.creatureId);
+      for (const viewer of hosted.viewers) {
+        viewer.send({
+          type: 'creature-move',
+          id,
+          from: event.from,
+          to: event.to,
+          durationMs: event.durationMs,
+        });
+      }
+    }
   }
 
   /**
