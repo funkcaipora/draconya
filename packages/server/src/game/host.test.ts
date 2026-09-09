@@ -1215,3 +1215,102 @@ describe('o host alimenta as métricas do nó (FUN-47)', () => {
     expect(seen.reattaches[0]).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
+  const stored = (over: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
+    formatVersion: 2, contentVersion: 'v-test', id: 's-antiga', type: 'hunt',
+    createdAtMs: 0, lastTickMs: 60_000,
+    rng: { a: 1, b: 2, c: 3, d: 4 },
+    participants: [{
+      id: 'p1', position: { x: 1, y: 1, z: 7 }, health: 100, maxHealth: 100, mana: 0,
+      maxMana: 0, level: 4, xp: 900, vocationId: null, staminaMs: 10_000,
+      staminaUpdatedAtMs: 5, goldDelta: 0, alive: true, cooldowns: {},
+    }],
+    aggregates: {
+      durationMs: 600_000, xpGained: 900, goldGained: 40, goldSpent: 0, kills: 12, deaths: 0,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up', detail: '4' }],
+    ledgerSeq: 0, endedReason: null,
+    ...over,
+  });
+
+  const withSnapshots = (snapshot: SessionSnapshot) => {
+    const removed: string[] = [];
+    const saved: Array<{ sessionId: string; seq: number; reason: string; xpGained: number }> = [];
+    const snapshots = {
+      load: async () => ({ snapshot, savedAtMs: Date.now() }),
+      remove: async (characterId: string) => { removed.push(characterId); },
+      save: async () => {},
+    } as unknown as SnapshotStore;
+    const receipts = {
+      save: async (receipt: {
+        sessionId: string; seq: number; reason: string;
+        aggregates: { xpGained: number };
+      }) => {
+        saved.push({
+          sessionId: receipt.sessionId, seq: receipt.seq, reason: receipt.reason,
+          xpGained: receipt.aggregates.xpGained,
+        });
+      },
+    } as unknown as ReceiptStore;
+    return { snapshots, receipts, removed, saved };
+  };
+
+  it('credita o progresso do snapshot que este servidor não sabe reconstruir', async () => {
+    // Descartar em silêncio é o oposto do que o ADR 0010 decide para o mesmo problema —
+    // encerrar creditando — e o §38.4 é explícito que hunt AFK não pode sumir sem explicação.
+    const snapshot = stored();
+    const { snapshots, receipts, removed, saved } = withSnapshots(snapshot);
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots, receipts,
+      restoreSession: () => null,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(saved).toEqual([{
+      sessionId: 's-antiga', seq: 1, reason: 'drain', xpGained: 900,
+    }]);
+    // Só DEPOIS de creditar é que o snapshot some.
+    expect(removed).toEqual(['p1']);
+    // E o personagem entra numa sessão nova, em vez de ficar sem nenhuma.
+    expect(host.sessionFor('p1')).toBeDefined();
+  });
+
+  it('o `seq` sai do snapshot, e é ele que impede creditar duas vezes', async () => {
+    // Um snapshot que sobreviveu a uma drenagem parcial já tem `ledgerSeq` avançado. Ignorar
+    // isso e usar `1` faria o mesmo progresso entrar no ledger com um `seq` que a chave única
+    // não teria como recusar.
+    const { snapshots, receipts, saved } = withSnapshots(stored({ ledgerSeq: 3 }));
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots, receipts,
+      restoreSession: () => null,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(saved[0]?.seq).toBe(4);
+  });
+
+  it('se o crédito falhar, o snapshot NÃO é apagado', async () => {
+    // Perder o crédito é o defeito que este caminho existe para não ter. Falhar a conexão é
+    // recuperável — o jogador tenta de novo em segundos e o progresso continua lá.
+    const { snapshots, removed } = withSnapshots(stored());
+    const receipts = {
+      save: async () => { throw new Error('redis is down'); },
+    } as unknown as ReceiptStore;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots, receipts,
+      restoreSession: () => null,
+    });
+
+    await expect(host.prepare('p1', undefined, 'a1')).rejects.toThrow(/redis is down/);
+    expect(removed).toEqual([]);
+  });
+});
