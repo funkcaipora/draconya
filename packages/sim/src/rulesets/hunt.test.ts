@@ -71,19 +71,22 @@ const combat = {
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 
+const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+
 const raw = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-  maps: [map], routes: [route], ...over,
+  stamina: [stamina], maps: [map], routes: [route], ...over,
 });
 
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
-const character = (over: Partial<{ health: number }> = {}): CharacterRuntime => {
+const character = (over: Partial<{ health: number; staminaMs: number }> = {}): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
   return new CharacterRuntime({
     id: 'hero', position: { x: 0, y: 0, z: 7 },
     health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
     mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    staminaMs: over.staminaMs ?? stamina.maxMs, staminaUpdatedAtMs: 0,
     goldDelta: 0, alive: true, cooldowns: {},
   });
 };
@@ -96,7 +99,7 @@ interface Started {
 
 function start(
   options: { difficulty?: 'beginner' | 'professional'; exitRules?: readonly HuntExitRule[];
-    health?: number; loaded?: Content } = {},
+    health?: number; staminaMs?: number; loaded?: Content } = {},
 ): Started {
   const session = createHuntSession({
     id: 'session-1',
@@ -106,7 +109,10 @@ function start(
     createdAtMs: 0,
     ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
   });
-  const hero = character(options.health === undefined ? {} : { health: options.health });
+  const hero = character({
+    ...(options.health === undefined ? {} : { health: options.health }),
+    ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs }),
+  });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
 }
@@ -216,8 +222,7 @@ describe('stamina zero', () => {
   it('NÃO encerra a hunt, e bloqueia só a recompensa', () => {
     // A regra que mais parece bug para quem implementa (§10.2). O personagem continua
     // caçando; o que ele deixa de ganhar é XP.
-    const { session, hero, ruleset } = start({ difficulty: 'professional' });
-    ruleset.staminaExhausted = true;
+    const { session, hero } = start({ difficulty: 'professional', staminaMs: 0 });
 
     run(session, 60_000, 100);
 
@@ -226,6 +231,30 @@ describe('stamina zero', () => {
     // O abate conta: o jogador matou, e o extrato mentiria se dissesse que não.
     expect(hero.xp).toBe(0);
     expect(session.aggregates.xpGained).toBe(0);
+  });
+
+  it('cai 1:1 com o tempo de hunt', () => {
+    const { session, hero } = start();
+    run(session, 30_000, 100);
+    expect(hero.staminaMs).toBe(86_400_000 - 30_000);
+  });
+
+  it('avisa UMA vez ao zerar, e a hunt segue', () => {
+    // O cenário comum é o jogador ausente: daqui para a frente a hunt queima supply sem
+    // gerar nada. Repetir a linha a cada tick encheria a tela de retorno com ela só.
+    const { session } = start({ difficulty: 'professional', staminaMs: 5_000 });
+
+    run(session, 60_000, 100);
+
+    expect(session.ended).toBeNull();
+    expect(session.notableEvents.filter((e) => e.type === 'stamina-exhausted'))
+      .toHaveLength(1);
+  });
+
+  it('a hunt rende normalmente enquanto sobra stamina', () => {
+    const { session, hero } = start({ difficulty: 'professional' });
+    run(session, 60_000, 100);
+    expect(hero.xp).toBeGreaterThan(0);
   });
 });
 

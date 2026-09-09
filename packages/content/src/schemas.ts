@@ -184,6 +184,25 @@ export const combatSchema = z.object({
 
 export type Combat = z.infer<typeof combatSchema>;
 
+/**
+ * Stamina (§10). Dois números, e o desenho inteiro está em não haver um terceiro.
+ *
+ * Não existe taxa de consumo: dentro da hunt a stamina cai 1:1 com o tempo simulado, e fora
+ * dela sobe 1:1 com o tempo de relógio. Um multiplicador aqui viraria a tentação de "queimar
+ * mais rápido nas hunts difíceis", e aí a stamina deixaria de ser o teto de simulação que o
+ * ADR 0001 usa para projetar custo — que é a razão de ela existir antes de ser regra de jogo.
+ */
+export const staminaSchema = z.object({
+  id: z.literal('baseline'),
+  /** Teto, em milissegundos. §10: 24 horas. Aplicado na LEITURA, não só na escrita. */
+  maxMs: z.number().int().positive(),
+  /** Milissegundos recuperados por milissegundo fora de hunt. §10: 1:1. */
+  recoveryRatio: z.number().positive(),
+  _open: z.string().optional(),
+});
+
+export type Stamina = z.infer<typeof staminaSchema>;
+
 export type Monster = z.infer<typeof monsterSchema>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;

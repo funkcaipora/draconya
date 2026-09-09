@@ -31,9 +31,11 @@ const combat = {
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
+const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+
 const base = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [cellars], vocations: [knight],
-  progression: [baseline], combat: [combat], ...over,
+  progression: [baseline], combat: [combat], stamina: [stamina], ...over,
 });
 
 describe('buildContent', () => {
@@ -127,6 +129,7 @@ describe('progression baseline', () => {
     // `healthPerLevel` tem que ser editar JSON, nunca alterar lógica.
     expect(() => buildContent({
       monsters: [rat], hunts: [cellars], vocations: [knight], combat: [combat],
+      stamina: [stamina],
     })).toThrow(/progression\/baseline/);
   });
 
@@ -150,6 +153,7 @@ describe('combat baseline', () => {
     // deixar de valer no dia em que ninguém estivesse olhando.
     expect(() => buildContent({
       monsters: [rat], hunts: [cellars], vocations: [knight], progression: [baseline],
+      stamina: [stamina],
     })).toThrow(/combat\/baseline/);
   });
 
@@ -192,5 +196,22 @@ describe('a rota da hunt é apontada, não inferida', () => {
     expect(() => buildContent(base({
       maps: [map, outroMapa], routes: [route, outraRota], hunts: [cruzada],
     }))).toThrow(/rota "other-route" é do mapa "other"/);
+  });
+});
+
+
+describe('stamina baseline', () => {
+  it('refuses content without it: it is the simulation ceiling, not a detail', () => {
+    // A stamina é o principal freio de custo do projeto — o teto de simulação é
+    // `2 × contas ativas` (ADR 0001). Um default em código faria o número que sustenta a
+    // projeção de custo morar onde ninguém procura por ele.
+    expect(() => buildContent({
+      monsters: [rat], hunts: [cellars], vocations: [knight],
+      progression: [baseline], combat: [combat],
+    })).toThrow(/stamina\/baseline/);
+  });
+
+  it('is indexed on the content, ready for the simulation to read', () => {
+    expect(buildContent(base()).stamina.maxMs).toBe(86_400_000);
   });
 });

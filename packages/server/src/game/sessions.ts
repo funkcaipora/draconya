@@ -6,7 +6,8 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot, statsForLevel,
+  CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot,
+  materializeStamina, statsForLevel,
 } from '@draconya/sim';
 import type { Ruleset, SessionSnapshot } from '@draconya/sim';
 import type { Content } from '@draconya/content';
@@ -27,7 +28,10 @@ const INITIAL_RUNTIME = {
   cooldowns: {},
 } as const;
 
-export function createCitySessionFactory(content: Content): SessionFactory {
+export function createCitySessionFactory(
+  content: Content,
+  now: () => number = () => Date.now(),
+): SessionFactory {
   return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
     const id = randomUUID();
     const session = new Session({
@@ -44,7 +48,7 @@ export function createCitySessionFactory(content: Content): SessionFactory {
     // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
     // lá, todo personagem cresce pela tabela base.
     const stats = statsForLevel(initialCharacter.level, null, content.progression);
-    session.enter(new CharacterRuntime({
+    const character = new CharacterRuntime({
       id: characterId,
       ...INITIAL_RUNTIME,
       level: initialCharacter.level,
@@ -52,7 +56,16 @@ export function createCitySessionFactory(content: Content): SessionFactory {
       vocationId: null,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
-    }));
+      staminaMs: initialCharacter.staminaMs ?? null,
+      ...(initialCharacter.staminaUpdatedAtMs === undefined
+        ? {}
+        : { staminaUpdatedAtMs: initialCharacter.staminaUpdatedAtMs }),
+    });
+    // Materializa na ENTRADA (§10): o personagem esteve fora de hunt desde a última vez, e
+    // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
+    // que mantém "quanto de stamina ele tem" uma pergunta barata durante a sessão.
+    materializeStamina(character, now(), content.stamina);
+    session.enter(character);
     return session;
   };
 }
@@ -106,7 +119,10 @@ function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null
  * Quem cura é o `onEnter` da Cidade: voltar à PZ restaura HP e mana cheios (§26.1). Curar
  * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
  */
-export function createCitySuccessor(content: Content): SessionSuccessor {
+export function createCitySuccessor(
+  content: Content,
+  now: () => number = () => Date.now(),
+): SessionSuccessor {
   return (ended: Session): Session | null => {
     // A Cidade não sucede a si mesma. Uma sessão de Cidade que acaba é um `logout` ou uma
     // drenagem, e nesses casos o personagem está mesmo saindo do nó.
@@ -122,7 +138,13 @@ export function createCitySuccessor(content: Content): SessionSuccessor {
       // processo, e um `createdAtMs` de outra origem faria o primeiro `dtMs` sair absurdo.
       createdAtMs: ended.nowMs,
     });
-    for (const character of ended.participants) session.enter(character);
+    for (const character of ended.participants) {
+      // Materializa na SAÍDA da hunt (§10). Sem isto, o `staminaUpdatedAtMs` continuaria
+      // apontando para antes da hunt, e a próxima leitura devolveria como recuperação o
+      // tempo que o personagem passou justamente gastando stamina.
+      materializeStamina(character, now(), content.stamina);
+      session.enter(character);
+    }
     return session;
   };
 }

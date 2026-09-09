@@ -40,6 +40,8 @@ export const TEST_COMBAT = {
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 
+export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+
 const TEST_RAT = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1, health: 20, experience: 5,
   attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
@@ -48,7 +50,7 @@ const TEST_RAT = {
 export function testContent(): Content {
   return buildContent({
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
-    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT],
+    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
     maps: [TEST_MAP], routes: [TEST_ROUTE],
   });
 }

@@ -29,6 +29,17 @@ export interface CharacterState {
    * formato antigo continua legível e o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
    */
   readonly vocationId?: string | null;
+  /**
+   * Stamina que sobrava em `staminaUpdatedAtMs`, em milissegundos (§10). NÃO é decrementada
+   * por ninguém fora da hunt: o valor de agora é calculado na leitura (ver `stamina.ts`).
+   *
+   * `null` — e ausente — significa "sem stamina rastreada", que é o que uma sessão gravada
+   * antes da FUN-39 é. Ela roda sem teto até acabar, o que é preferível a inventar um valor
+   * e cobrar de alguém uma stamina que nunca foi medida.
+   */
+  readonly staminaMs?: number | null;
+  /** Instante de RELÓGIO (epoch) em que `staminaMs` valia. Não é o relógio da simulação. */
+  readonly staminaUpdatedAtMs?: number;
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
@@ -45,6 +56,8 @@ export class CharacterRuntime {
   level: number;
   xp: number;
   vocationId: string | null;
+  staminaMs: number | null;
+  staminaUpdatedAtMs: number;
   goldDelta: number;
   alive: boolean;
   readonly cooldowns: Cooldowns;
@@ -59,6 +72,8 @@ export class CharacterRuntime {
     this.level = state.level;
     this.xp = state.xp;
     this.vocationId = state.vocationId ?? null;
+    this.staminaMs = state.staminaMs ?? null;
+    this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
@@ -75,6 +90,8 @@ export class CharacterRuntime {
       level: this.level,
       xp: this.xp,
       vocationId: this.vocationId,
+      staminaMs: this.staminaMs,
+      staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       goldDelta: this.goldDelta,
       alive: this.alive,
       cooldowns: this.cooldowns.getState(),
