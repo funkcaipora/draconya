@@ -155,6 +155,41 @@ encerramento.
 Level up é notável justamente por contraste com o abate: é a única coisa que aconteceu numa hunt
 de oito horas que o jogador quer ver ao voltar.
 
+## Como se entra numa hunt
+
+Pelo menu, e a entrada é uma **transição de estado do personagem** (§6), não uma criação de
+sessão solta. A Cidade é o centro: sai-se dela para hunt, treino, quest, boss ou guild war, e
+qualquer uma delas volta para ela. **Não se vai de hunt direto para boss.**
+
+Permitir tudo para tudo pareceria mais flexível e custaria caro: cada par novo de estados vira
+um caminho de transição que ninguém testou, e a transição é justamente o único momento em que o
+estado quente troca de dono. Passar pela Cidade dá a cada troca um ponto de parada conhecido,
+onde o personagem está curado, sem instância e sem nada em voo.
+
+**A troca é uma operação só.** O registro no diretório muda de sessão atomicamente, então não
+existe o instante em que o personagem está em duas sessões nem o instante em que ele não está em
+nenhuma. Isso importa além da arrumação: o estado exclusivo é também o controle de concorrência
+sobre o estado quente (invariante 9) — não há lock sobre o gold porque nunca há duas fontes de
+escrita ao mesmo tempo, e essa frase só é verdade enquanto a transição for de fato exclusiva. Um
+furo aqui não apareceria como bug de sessão; apareceria meses depois como gold duplicado.
+
+**A sessão de destino é construída ANTES de a antiga ser encerrada.** Se a hunt não existe, ou
+se a dificuldade não é uma das que ela define, o personagem fica exatamente onde estava — em vez
+de ficar sem sessão porque a antiga já tinha sido fechada.
+
+**Duas transições disputadas: exatamente uma vence**, e a outra recebe uma recusa em vez de ficar
+esperando. Sem isso, as duas leriam a mesma sessão de origem e a segunda tentaria trocar um
+registro que a primeira já trocou — e o caminho de recusa da troca solta o personagem, ou seja,
+perder a corrida derrubaria o jogador do jogo.
+
+**Recusa é produto.** "Você não pode fazer isso" é a mensagem que faz alguém achar que o jogo
+travou; cada recusa diz o que fazer em seguida, e o socket não cai — o cliente pediu algo
+inválido, não algo malicioso.
+
+A dificuldade chega como texto e é validada contra o **conteúdo**, não contra uma lista no
+protocolo: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
+quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+
 ## O que muda entre 10 Hz e 1 Hz, medido
 
 A hunt roda a **10 Hz anexada e 1 Hz desanexada** (ADR 0003). A pergunta que importa é se isso

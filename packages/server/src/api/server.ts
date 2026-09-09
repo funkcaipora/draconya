@@ -16,6 +16,10 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
   readonly repository?: GameRepository;
   readonly isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>;
+  /** Onde o personagem está agora, segundo o diretório de sessões (FUN-30). */
+  readonly locateSession?: (
+    characterId: string,
+  ) => Promise<{ sessionId: string; type: string } | null>;
 }
 
 export function createApi(
@@ -107,7 +111,9 @@ export function buildApi(
   const repository = dependencies.repository;
   if (auth !== undefined) registerAuthRoutes(app, configuration, auth);
   if (auth !== undefined && repository !== undefined) {
-    registerCharacterRoutes(app, auth, repository, dependencies.isCharacterActive);
+    registerCharacterRoutes(
+      app, auth, repository, dependencies.isCharacterActive, dependencies.locateSession,
+    );
   }
 
   const tickets = dependencies.tickets;

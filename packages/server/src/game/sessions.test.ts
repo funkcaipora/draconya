@@ -7,7 +7,7 @@ import type { Progression } from '@draconya/content';
 import type { Session } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import {
-  createCitySessionFactory, createCitySuccessor, createSessionRestorer,
+  createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './sessions.js';
 
 describe('city session factory', () => {
@@ -95,7 +95,7 @@ describe('city successor (FUN-38)', () => {
     session.kill(hero);
     const xpDepoisDaPenalidade = hero.xp;
 
-    const city = createCitySuccessor(content)(session, 'death');
+    const city = createSessionBuilder(content)({ to: 'city' }, session);
 
     expect(city?.participants[0]).toBe(hero);
     expect(hero.xp).toBe(xpDepoisDaPenalidade);
@@ -109,7 +109,7 @@ describe('city successor (FUN-38)', () => {
     session.kill(hero);
     expect(hero.health).toBe(0);
 
-    createCitySuccessor(content)(session, 'death');
+    createSessionBuilder(content)({ to: 'city' }, session);
 
     expect(hero.health).toBe(hero.maxHealth);
     expect(hero.alive).toBe(true);
@@ -120,7 +120,7 @@ describe('city successor (FUN-38)', () => {
     // pode significar "ele ficou sem sessão".
     const { session } = dyingHunt();
     session.end('manual-exit');
-    expect(createCitySuccessor(content)(session, 'manual-exit')?.ruleset.type).toBe('city');
+    expect(createSessionBuilder(content)({ to: 'city' }, session)?.ruleset.type).toBe('city');
   });
 
   it('a Cidade não sucede a si mesma', () => {
@@ -128,7 +128,7 @@ describe('city successor (FUN-38)', () => {
     // saindo do nó.
     const city = createCitySessionFactory(content)('p1');
     city.end('manual-exit');
-    expect(createCitySuccessor(content)(city, 'manual-exit')).toBeNull();
+    expect(createSessionBuilder(content)({ to: 'city' }, city)).toBeNull();
   });
 });
 
@@ -177,9 +177,65 @@ describe('stamina nas fronteiras da sessão (FUN-39)', () => {
     hunt.enter(hero);
     hunt.end('manual-exit');
 
-    createCitySuccessor(content, () => 8 * HOUR)(hunt, 'manual-exit');
+    createSessionBuilder(content, () => 8 * HOUR)({ to: 'city' }, hunt);
 
     expect(hero.staminaUpdatedAtMs).toBe(8 * HOUR);
     expect(hero.staminaMs).toBe(3 * HOUR + 8 * HOUR);
+  });
+});
+
+describe('construtor de sessão de destino (FUN-30)', () => {
+  const content = testContent();
+  const build = createSessionBuilder(content);
+
+  const cityWith = (): Session => createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+
+  it('constrói a hunt pedida, com o personagem que já existia', () => {
+    const city = cityWith();
+    const hero = city.participants[0];
+
+    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city);
+
+    expect(hunt?.ruleset.type).toBe('hunt');
+    expect(hunt?.participants[0]).toBe(hero);
+    // Entrou no começo da rota, não na posição que trouxe da cidade.
+    expect(hero?.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('recusa hunt inexistente em vez de construir uma que mente sobre o que é', () => {
+    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'beginner' }, cityWith()))
+      .toBeNull();
+  });
+
+  it('recusa dificuldade que a hunt não define', () => {
+    // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um enum
+    // no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
+    expect(build({ to: 'hunt', huntId: 'arena', difficulty: 'legendary' }, cityWith()))
+      .toBeNull();
+  });
+
+  it('recusa os destinos que ainda não têm ruleset', () => {
+    // Treino, quest, boss e guild war. `null` recusa com erro claro, que é melhor que
+    // construir uma sessão que mente sobre o que é.
+    for (const to of ['training', 'quest', 'boss', 'guild-war'] as const) {
+      expect(build({ to }, cityWith())).toBeNull();
+    }
+  });
+
+  it('materializa a stamina em TODA transição, não só na volta da hunt', () => {
+    // Materializar é da fronteira, e toda transição é uma (§10). Fazer no construtor, e não
+    // dentro de cada destino, é o que garante que nenhum caminho novo esqueça.
+    const HOUR = 3_600_000;
+    const city = createCitySessionFactory(content, () => 0)('p1', {
+      level: 1, xp: 0, staminaMs: 5 * HOUR, staminaUpdatedAtMs: 0,
+    });
+    const hero = city.participants[0];
+
+    createSessionBuilder(content, () => 3 * HOUR)(
+      { to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city,
+    );
+
+    expect(hero?.staminaMs).toBe(8 * HOUR);
+    expect(hero?.staminaUpdatedAtMs).toBe(3 * HOUR);
   });
 });

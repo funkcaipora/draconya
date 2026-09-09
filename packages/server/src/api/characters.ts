@@ -17,12 +17,24 @@ export function registerCharacterRoutes(
   auth: AuthService,
   repository: GameRepository,
   isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>,
+  /**
+   * Onde o personagem está agora, segundo o diretório de sessões (FUN-30).
+   *
+   * A coluna `state` da tabela existe e NÃO é escrita por ninguém: a verdade sobre em que
+   * atividade o personagem está é a sessão, e a sessão vive no Redis (invariante 8). Ler a
+   * coluna fazia a API responder `"city"` para quem estava numa hunt havia seis horas — uma
+   * mentira quieta, do tipo que só aparece quando alguém confia nela.
+   */
+  locateSession?: (characterId: string) => Promise<{ sessionId: string; type: string } | null>,
 ): void {
   app.get('/api/characters', async (request, reply) => {
     const principal = await auth.authenticate(request);
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
     const characters = await repository.listCharacters(principal.accountId);
-    return reply.send({ characters: characters.map(toDto) });
+    const located = await Promise.all(characters.map(async (character) => toDto(
+      character, (await locateSession?.(character.id)) ?? null,
+    )));
+    return reply.send({ characters: located });
   });
 
   app.post('/api/characters', async (request, reply) => {
@@ -85,7 +97,10 @@ function validCharacterName(value: string): boolean {
   return /^\p{L}[\p{L}' -]*\p{L}$/u.test(value);
 }
 
-function toDto(character: CharacterRecord) {
+function toDto(
+  character: CharacterRecord,
+  location: { sessionId: string; type: string } | null = null,
+) {
   return {
     id: character.id,
     name: character.name,
@@ -97,8 +112,9 @@ function toDto(character: CharacterRecord) {
     premiumUntil: character.premiumUntil?.toISOString() ?? null,
     staminaMs: character.staminaMs,
     staminaUpdatedAt: character.staminaUpdatedAt.toISOString(),
-    state: character.state,
-    sessionId: character.sessionId,
+    // O diretório manda; a coluna é só o que sobrou de antes de a sessão existir.
+    state: location?.type ?? character.state,
+    sessionId: location?.sessionId ?? character.sessionId,
     createdAt: character.createdAt.toISOString(),
   };
 }

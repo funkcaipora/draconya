@@ -14,6 +14,8 @@ export const CLIENT_TO_SERVER = {
   'walk-to': 6,
   say: 7,
   logout: 8,
+  'enter-hunt': 9,
+  'leave-hunt': 10,
 } as const;
 
 export const SERVER_TO_CLIENT = {

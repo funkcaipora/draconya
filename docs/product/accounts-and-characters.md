@@ -10,6 +10,13 @@ A identidade da conta é autenticada pelo WorkOS AuthKit. No fluxo real, o `api`
 
 Em desenvolvimento, `AUTH_DEV_MODE=true` substitui o redirect por `POST /api/auth/dev-login`: qualquer e-mail sintaticamente válido cria ou recupera a conta local sem verificação externa. Esse modo é recusado no boot em produção.
 
+O estado de atividade que a API devolve (`state`, `sessionId`) vem do **diretório de sessões**,
+não da coluna do banco. A coluna existe e não é escrita por ninguém: a verdade sobre em que
+atividade o personagem está é a sessão, e a sessão vive no Redis (invariante 8). Lendo a coluna,
+a API respondia `"city"` para quem estava numa hunt havia seis horas — uma mentira quieta, do
+tipo que só aparece quando alguém confia nela. Sem sessão no diretório, o estado cai para o da
+linha, que é o personagem descansando.
+
 Uma conta pode criar personagens sem limite de quantidade. O personagem nasce no level 1, sem vocação, com a stamina cheia e no estado `city`. Coins pertencem à conta; Premium pertence ao personagem. A seleção do personagem é uma leitura autenticada, e a entrada no jogo continua sendo feita pelo ticket de sessão separado.
 
 Excluir um personagem usa soft delete para preservar identidade histórica e futura proveniência de itens/ledger. Um personagem reservado como ativo no Redis — inclusive com ticket emitido ainda não consumido — não pode ser excluído. Nomes são comparados sem diferenciar maiúsculas/minúsculas; após o soft delete, o nome volta a ficar disponível para outro personagem.
