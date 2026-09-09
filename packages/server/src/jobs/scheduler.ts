@@ -8,9 +8,14 @@ import type { Configuration } from '../config.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
+import type { SessionDirectory } from '../directory.js';
+import type { SnapshotStore } from '../snapshots.js';
+import { sweepOrphanedSessions } from './orphans.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
+  readonly directory?: SessionDirectory;
+  readonly snapshots?: SnapshotStore;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -37,9 +42,19 @@ export function createJobs(
         if (released > 0) logger.info({ released }, 'Released abandoned character slots');
       }
 
-      // FUN-28: procurar sessões órfãs (lease expirado) e decidir retomar ou creditar.
-      // Precisa de lock com fencing token — duas cópias da mesma sessão rodando é pior
-      // que uma perdida, porque dobra loot e XP.
+      // FUN-28: sessão órfã é snapshot sem lease. Este ciclo NÃO retoma — retomar é
+      // hospedar, e quem hospeda é o `game`, no `prepare` de quem reconectar. Aqui só se
+      // devolve o slot de quem não voltou, para o jogador poder usar os outros personagens.
+      if (dependencies.directory !== undefined && dependencies.snapshots !== undefined) {
+        const swept = await sweepOrphanedSessions({
+          directory: dependencies.directory,
+          snapshots: dependencies.snapshots,
+          logger,
+        });
+        if (swept.released > 0) {
+          logger.info(swept, 'Swept orphaned sessions');
+        }
+      }
     } catch (error) {
       logger.error({ error }, 'Scheduler cycle failed');
     } finally {

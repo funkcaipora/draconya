@@ -150,11 +150,15 @@ export class TicketService {
     let node;
     if (existing !== null) {
       node = await this.#directory.node(existing.nodeId);
-      // Sessão viva num nó que não bate: RECUSAR, nunca escolher outro nó. Se o nó estiver
-      // só particionado, mandar o jogador para um segundo nó cria a segunda sessão do mesmo
-      // personagem — exatamente o que o invariante 8 existe para impedir, e o defeito
-      // aparece depois como loot e XP contados duas vezes. Quem tem o direito de decidir
-      // que aquela sessão morreu é a retomada (FUN-28), com lock e fencing token.
+      // Nó que não bate há mais de um lease: o registro é um ponteiro para lugar nenhum.
+      // Rotear para um nó vivo é a RETOMADA (FUN-28) — o nó novo reconstrói a sessão a
+      // partir do snapshot, e a tomada do registro é atômica e condicionada à ausência do
+      // batimento do antigo, então duas cópias continuam impossíveis.
+      //
+      // Recusar aqui, como era antes, deixava o personagem inalcançável até o lease expirar
+      // sozinho: depois de um `kill -9` o jogador via `session-node-unavailable` por até
+      // trinta segundos, sem nada explicando.
+      if (node === null) node = await this.#leastLoadedNode();
       if (node === null) return { ok: false, reason: 'session-node-unavailable' };
     } else {
       node = await this.#leastLoadedNode();

@@ -224,6 +224,22 @@ export class Session {
     return this.#lastTickMs;
   }
 
+  /**
+   * Reposiciona o relógio da sessão SEM simular o intervalo pulado.
+   *
+   * Existe para a retomada depois de queda de nó (FUN-28). O `lastTickMs` de um snapshot foi
+   * medido pelo relógio monotônico de OUTRO processo, e monotônico não é comparável entre
+   * processos: reiniciado, o mesmo número pode estar no futuro (o próximo tick nunca acontece,
+   * porque `dtMs` sai negativo para sempre) ou muito no passado (o primeiro tick chega com um
+   * `dtMs` gigante e resolve horas de combate de uma vez).
+   *
+   * Descartar o intervalo é decisão registrada no ADR 0018, não omissão: ninguém simulou
+   * aquele tempo, e creditar progresso por ele seria inventar recompensa.
+   */
+  rebaseClock(nowMs: number): void {
+    this.#lastTickMs = nowMs;
+  }
+
   kill(character: CharacterRuntime): void {
     character.alive = false;
     character.health = 0;

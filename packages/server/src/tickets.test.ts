@@ -102,9 +102,27 @@ describe.runIf(available)('session ticket', () => {
     expect(issued.value.wsUrl).toContain('n1:7171');
   });
 
-  it('refuses when the session exists but its node stopped answering', async () => {
+  it('routes to a live node when the session node stopped answering', async () => {
+    // RETOMADA (FUN-28). O registro de um nó que parou de bater é um ponteiro para lugar
+    // nenhum; recusar aqui — como era antes — deixava o personagem inalcançável até o lease
+    // expirar sozinho, e depois de um `kill -9` isso é meio minuto de "não consigo entrar".
+    //
+    // Duas cópias continuam impossíveis: a tomada do registro é atômica e condicionada à
+    // AUSÊNCIA do batimento do nó antigo (ver directory.test.ts).
     const { directory, tickets } = build();
     await directory.heartbeat('n2', { sessions: 0, url: 'ws://n2:7171' });
+    await directory.register('p1', { sessionId: 's1', nodeId: 'dead', type: 'hunt' });
+
+    const issued = await tickets.issue('a1', 'p1');
+    expect(issued.ok).toBe(true);
+    if (!issued.ok) return;
+    expect(issued.value.nodeId).toBe('n2');
+  });
+
+  it('refuses when the session node died and there is nowhere to move it', async () => {
+    // Sem nó vivo não há retomada possível. Emitir ticket para um endereço que não existe
+    // faria o cliente tentar, falhar e recomeçar em laço, sem nada dizendo o porquê.
+    const { directory, tickets } = build();
     await directory.register('p1', { sessionId: 's1', nodeId: 'dead', type: 'hunt' });
 
     expect(await tickets.issue('a1', 'p1')).toEqual({

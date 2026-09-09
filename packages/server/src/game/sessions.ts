@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { CharacterRuntime, Rng, Session, createCityRuleset } from '@draconya/sim';
+import type { SessionSnapshot } from '@draconya/sim';
 import type { SessionFactory } from './host.js';
 
 /**
@@ -42,4 +43,25 @@ export function createCitySessionFactory(contentVersion: string): SessionFactory
     }));
     return session;
   };
+}
+
+/**
+ * Reconstrói uma sessão a partir de um snapshot guardado (FUN-28).
+ *
+ * Devolve `null` quando o snapshot não pode ser reconstruído — formato de outra versão, ou
+ * ruleset que este servidor não conhece. `null` é a resposta certa: retomar errado é pior que
+ * não retomar, e quem chama sabe encerrar creditando.
+ */
+export function restoreSession(snapshot: SessionSnapshot, nowMs: number): Session | null {
+  // Só a Cidade existe hoje. Hunt é a FUN-43; até lá, um snapshot de hunt não tem ruleset
+  // para voltar, e forçar city em cima dele produziria uma sessão que mente sobre o que é.
+  if (snapshot.type !== 'city') return null;
+  try {
+    const session = Session.fromSnapshot(snapshot, createCityRuleset(), Rng.fromSeed(snapshot.id));
+    // O relógio do snapshot é de outro processo. Ver ADR 0018.
+    session.rebaseClock(nowMs);
+    return session;
+  } catch {
+    return null;
+  }
 }

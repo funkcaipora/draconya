@@ -13,10 +13,11 @@ import { loadConfiguration } from './config.js';
 import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
-import { createCitySessionFactory } from './game/sessions.js';
+import { createCitySessionFactory, restoreSession } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
+import { SnapshotStore } from './snapshots.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
 
   const directory = new SessionDirectory(redis);
   const tickets = new TicketService(redis, directory);
+  const snapshots = new SnapshotStore(redis);
 
   // Postgres só é exigido quando o papel `api` está presente. Um nó exclusivamente `game`
   // continua sem conexão de banco no caminho quente da simulação.
@@ -125,8 +127,12 @@ async function main(): Promise<void> {
       tickets,
       contentVersion: content.version,
       createSession: createCitySessionFactory(content.version),
+      snapshots,
+      restoreSession,
     }),
-    jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), { tickets }),
+    jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
+      tickets, directory, snapshots,
+    }),
   };
 
   const roles = names.map((name) => factories[name]());

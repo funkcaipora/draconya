@@ -1,7 +1,8 @@
-import { CharacterRuntime, Rng, Session, type Ruleset } from '@draconya/sim';
+import { CharacterRuntime, Rng, Session, type Ruleset, type SessionSnapshot } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
+import type { SnapshotStore } from '../snapshots.js';
 import { SessionHost } from './host.js';
 import { FakeSocket } from './testing.js';
 
@@ -32,7 +33,12 @@ function countingRuleset(hzAttached = 10, hzDetached = 1) {
 
 function buildHost(
   ruleset: Ruleset,
-  options: { now?: () => number; directory?: SessionDirectory } = {},
+  options: {
+    now?: () => number;
+    directory?: SessionDirectory;
+    snapshots?: SnapshotStore;
+    restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+  } = {},
 ) {
   const sessions: Session[] = [];
   const host = new SessionHost({
@@ -62,6 +68,97 @@ function buildHost(
 }
 
 describe('session host', () => {
+  it('resumes from a snapshot instead of starting the character over', async () => {
+    // Sem isto, cair o processo devolveria o personagem no estado inicial — e o produto
+    // inteiro é "a sessão sobrevive". Perder o progresso em silêncio é pior que a queda.
+    const snapshot = { id: 's-antiga', type: 'city' } as unknown as SessionSnapshot;
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0',
+        savedAtMs: Date.now() - 5 * 60_000, snapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: () => restored,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(host.sessionFor('p1')?.id).toBe('s-retomada');
+    // A fábrica NÃO foi chamada: um personagem novo teria apagado a sessão retomada.
+    expect(sessions).toHaveLength(0);
+  });
+
+  it('tells the player that the session was resumed, and how much was lost', async () => {
+    // Silenciar aqui é como o modo idle perde a confiança de quem joga: o extrato não fecha
+    // e ninguém explica por quê.
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0',
+        savedAtMs: Date.now() - 7 * 60_000,
+        snapshot: { id: 's', type: 'city' } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const restored = new Session({
+      id: 's-retomada', contentVersion: 'v-test',
+      ruleset: countingRuleset().ruleset, rng: Rng.fromSeed('x'), createdAtMs: 0,
+    });
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: () => restored,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+
+    const warning = socket.received().find((m) => m.type === 'system-message');
+    expect(warning).toBeDefined();
+    if (warning?.type !== 'system-message') return;
+    expect(warning.level).toBe('warning');
+    expect(warning.text).toContain('7 min');
+  });
+
+  it('discards a snapshot it cannot rebuild instead of retrying forever', async () => {
+    // Formato antigo ou ruleset desconhecido. Tentar de novo a cada reconexão deixaria o
+    // personagem preso num laço que ninguém consegue diagnosticar.
+    let removed = false;
+    const snapshots = {
+      load: async () => ({
+        characterId: 'p1', accountId: 'a1', nodeId: 'n0', savedAtMs: Date.now(),
+        snapshot: { id: 's', type: 'hunt' } as unknown as SessionSnapshot,
+      }),
+      save: async () => {},
+      remove: async () => {
+        removed = true;
+      },
+    } as unknown as SnapshotStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, {
+      directory, snapshots, restoreSession: () => null,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(removed).toBe(true);
+    // Caiu para a criação normal: melhor um personagem no estado inicial que nenhum.
+    expect(sessions).toHaveLength(1);
+  });
+
+
   it('releases a session the handshake created but never attached', async () => {
     // Handshake abortado: o `prepare` cria e registra, o cliente some antes do upgrade, e
     // nenhum socket vai chegar para desanexar depois. Sem soltar, a sessão fica hospedada
@@ -391,12 +488,14 @@ describe('session host', () => {
     const viewer = host.attach(socket, 'p1');
 
     host.handle(viewer, { type: 'logout' });
-    await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
+    // Esperar pela ÚLTIMA coisa que a saída faz. Esperar pelo sumiço da sessão local resolve
+    // antes das chamadas ao diretório, e a asserção do slot vira corrida.
+    await vi.waitFor(() => expect(slotsReleased).toEqual([['a1', 'p1']]));
 
+    expect(host.sessionFor('p1')).toBeUndefined();
     expect(socket.ended?.code).toBe(1000);
     expect(counter.ended).toBe(1);
     expect(released).toEqual(['p1']);
-    expect(slotsReleased).toEqual([['a1', 'p1']]);
   });
 
   it('closes every tab of the character on logout, not just the one that asked', async () => {
