@@ -15,9 +15,15 @@ const cellars = {
   },
 };
 const knight = { id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25 };
+const baseline = {
+  id: 'baseline',
+  startingHealth: 150, startingMana: 0, startingCapacity: 400,
+  healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
+  vocationLevel: 8,
+};
 
 const base = (over: Partial<RawContent> = {}): RawContent =>
-  ({ monsters: [rat], hunts: [cellars], vocations: [knight], ...over });
+  ({ monsters: [rat], hunts: [cellars], vocations: [knight], progression: [baseline], ...over });
 
 describe('buildContent', () => {
   it('monta o conteúdo válido, indexado por id', () => {
@@ -100,5 +106,28 @@ describe('valores em aberto', () => {
     const druida = { ...knight, id: 'druid', name: 'Druid', _open: '§43.1 provisório' };
     expect(buildContent(base({ vocations: [knight, druida] })).openValues)
       .toEqual(['vocation/druid: §43.1 provisório']);
+  });
+});
+
+describe('progression baseline', () => {
+  it('refuses content without it, instead of inventing a default in code', () => {
+    // Todo personagem nasce SEM vocação (§7.4), então sem a base não há stats de level 1. Um
+    // default em código seria exatamente o "nada em código" que a FUN-34 proíbe: mudar
+    // `healthPerLevel` tem que ser editar JSON, nunca alterar lógica.
+    expect(() => buildContent({ monsters: [rat], hunts: [cellars], vocations: [knight] }))
+      .toThrow(/progression\/baseline/);
+  });
+
+  it('surfaces its provisional values at boot, like any other', () => {
+    // Marcar como provisório no JSON e o boot não repetir é a mesma coisa que não marcar.
+    const provisional = { ...baseline, _open: '§9.3 — base ainda não decidida' };
+    expect(buildContent(base({ progression: [provisional] })).openValues)
+      .toContain('progression/baseline: §9.3 — base ainda não decidida');
+  });
+
+  it('is indexed on the content, ready for the simulation to read', () => {
+    const content = buildContent(base());
+    expect(content.progression.startingHealth).toBe(150);
+    expect(content.progression.vocationLevel).toBe(8);
   });
 });

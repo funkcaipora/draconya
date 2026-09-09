@@ -56,6 +56,24 @@ pnpm content:check
 - Balanceamento é dado, não código. Se mudar um número exige deploy de lógica, está no lugar errado.
 - Conteúdo inválido derruba o boot. Nunca chega à simulação.
 
+## Progressão (FUN-34)
+
+`vocations/*.json` traz o incremento por level de cada vocação; `progression/baseline.json`
+traz onde o personagem começa e como cresce **antes** de escolher vocação — o personagem nasce
+sem ela e escolhe no level 8 (§7.4).
+
+**Nada disso vive em código.** Mudar quanto um Cavaleiro ganha de HP por level é editar JSON e
+reiniciar. Se um número desses aparecer em `packages/sim`, a tabela deixou de ser a fonte da
+verdade e o balanceamento virou tarefa de quem mexe em código.
+
+A base é **obrigatória**: sem ela não há stats de level 1, e um default em código seria
+exatamente o que a regra acima proíbe. O carregador recusa conteúdo sem ela.
+
+Valor ainda não decidido no PRD entra com `_open` **no próprio arquivo**, nunca como número
+que parece decidido — palpite disfarçado de decisão é o que faz ninguém lembrar de voltar. O
+boot repete todos eles em `openValues`, e o `docs-check` conta os `[ABERTO]` correspondentes
+em `docs/product/`.
+
 ## Como testar
 
 ```

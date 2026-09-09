@@ -1,0 +1,11 @@
+{
+  "id": "baseline",
+  "startingHealth": 150,
+  "startingMana": 0,
+  "startingCapacity": 400,
+  "healthPerLevel": 5,
+  "manaPerLevel": 5,
+  "capacityPerLevel": 10,
+  "vocationLevel": 8,
+  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios."
+}

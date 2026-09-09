@@ -5,8 +5,10 @@
 import { z } from 'zod';
 import { buildRoute, buildTilemap } from './map.js';
 import type { Route, Tilemap } from './map.js';
-import { huntSchema, monsterSchema, routeSchema, tilemapSchema, vocationSchema } from './schemas.js';
-import type { Hunt, Monster, Vocation } from './schemas.js';
+import {
+  huntSchema, monsterSchema, progressionSchema, routeSchema, tilemapSchema, vocationSchema,
+} from './schemas.js';
+import type { Hunt, Monster, Progression, Vocation } from './schemas.js';
 
 export interface Content {
   /**
@@ -17,6 +19,8 @@ export interface Content {
   readonly monsters: ReadonlyMap<string, Monster>;
   readonly hunts: ReadonlyMap<string, Hunt>;
   readonly vocations: ReadonlyMap<string, Vocation>;
+  /** Base de progressão: sem ela não há como saber os stats de quem ainda não tem vocação. */
+  readonly progression: Progression;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
@@ -27,6 +31,7 @@ export interface RawContent {
   readonly monsters: readonly unknown[];
   readonly hunts: readonly unknown[];
   readonly vocations: readonly unknown[];
+  readonly progression?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
 }
@@ -51,6 +56,14 @@ export function buildContent(raw: RawContent): Content {
   const monsters = parseAll('monster', raw.monsters, monsterSchema, problems);
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
+  const progressions = parseAll('progression', raw.progression ?? [], progressionSchema, problems);
+  const progression = progressions.get('baseline');
+  // Ausente é ERRO, não conjunto vazio: sem a base não há como calcular os stats de quem
+  // ainda não tem vocação, e todo personagem nasce assim (§7.4). Um default em código seria
+  // exatamente o "nada em código" que esta issue proíbe.
+  if (progression === undefined) {
+    problems.push('progression/baseline.json ausente: sem ele não há stats de level 1');
+  }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
@@ -94,15 +107,24 @@ export function buildContent(raw: RawContent): Content {
 
   if (problems.length > 0) throw new ContentError(problems);
 
-  const openValues = [...vocations.values()]
-    .filter((v) => v._open !== undefined)
-    .map((v) => `vocation/${v.id}: ${v._open ?? ''}`);
+  // Todo `_open` do conteúdo, venha de onde vier. Marcar um valor como provisório no JSON e
+  // o boot não repetir isso é a mesma coisa que não marcar — o aviso existe justamente para
+  // alguém lembrar de voltar.
+  const openValues = [
+    ...[...vocations.values()]
+      .filter((v) => v._open !== undefined)
+      .map((v) => `vocation/${v.id}: ${v._open ?? ''}`),
+    ...(progression?._open === undefined
+      ? []
+      : [`progression/${progression.id}: ${progression._open}`]),
+  ];
 
   return {
     version: computeVersion(raw),
     monsters,
     hunts,
     vocations,
+    progression: progression as Progression,
     maps,
     routes,
     openValues,
