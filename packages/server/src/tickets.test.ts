@@ -225,22 +225,34 @@ describe.runIf(available)('session ticket', () => {
   });
 
   it('reserves the active slot through the ticket grace period', async () => {
+    // Espera de RELÓGIO, sem jeito: a reserva expira por `PX` no Redis, e nenhum relógio
+    // injetado alcança isso. O que dá para escolher é a FOLGA, e ela era de 150 ms — apertada
+    // o bastante para o teste falhar quando a suíte disputava a máquina, o que já aconteceu
+    // duas vezes. Com dois segundos de folga o que ele afirma continua o mesmo: passado o
+    // prazo do ticket, a reserva SOBREVIVE pela carência.
     const directory = new SessionDirectory(redis, { leaseMs: 50 });
-    const tickets = new TicketService(redis, directory, { ttlMs: 120, graceMs: 120 });
+    const tickets = new TicketService(redis, directory, { ttlMs: 200, graceMs: 2_000 });
     await directory.heartbeat('n1', NODE);
 
     await tickets.issue('a1', 'p1');
-    await new Promise((resolve) => setTimeout(resolve, 90));
+    await new Promise((resolve) => { setTimeout(resolve, 250); });
 
     expect(await directory.activeSlots('a1')).toEqual(['p1']);
   });
 
   it('does not sweep a reservation reissued after the due list was read', async () => {
+    // A carência é longa de propósito, e o relógio injetado é empurrado além dela.
+    //
+    // Quem decide se a reserva está VENCIDA é o relógio injetado, que o teste controla; quem
+    // decide se ela ainda EXISTE é o `PX` do Redis, que ninguém controla. Com carência de
+    // 50 ms, a chave sumia sozinha em 100 ms de relógio de parede quando a suíte disputava a
+    // máquina, e o teste falhava dizendo que a reserva não voltou — quando na verdade ela
+    // nunca chegou à asserção.
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    const { directory, tickets } = build({ ttlMs: 50, graceMs: 30_000, now: () => now });
     await directory.heartbeat('n1', NODE);
     await tickets.issue('a1', 'p1');
-    now += 1_000;
+    now += 60_000;
 
     const original = redis.zrangebyscore.bind(redis);
     const mutableRedis = redis as typeof redis & {

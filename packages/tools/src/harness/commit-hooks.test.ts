@@ -43,7 +43,12 @@ const GIT_ENV = {
 
 // Teto por caso. Não é medida de desempenho: é a folga que impede um falso vermelho quando
 // a suíte inteira disputa a máquina, já que aqui cada asserção custa um processo de git.
-const TIMEOUT_MS = 15_000;
+//
+// Subiu de 15 s para 30 s quando o teste do critério de saída da Fase 1 (FUN-44) entrou na
+// suíte: este arquivo já custava ~12 s sozinho, e dois servidores de WebSocket disputando a
+// máquina ao lado passaram a estourar o teto. Falha por disputa de CPU não diz nada sobre o
+// hook — e é o pior tipo de vermelho, porque some quando alguém investiga.
+const TIMEOUT_MS = 30_000;
 
 // Duas vidas diferentes: molde dura o arquivo inteiro, cópia dura um caso.
 const templates: string[] = [];
@@ -127,11 +132,15 @@ let cleanTemplate: string;
 let divergedTemplate: string;
 let conflictedMergeTemplate: string;
 
+// O teto do HOOK é separado do teto por caso, e é ele que estourava: montar três repositórios
+// git custa dezenas de processos, e o padrão do Vitest para hook é 10 s. Falhar aqui reprova o
+// arquivo INTEIRO sem rodar caso nenhum — e a mensagem fala de hook, não de git, então parece
+// qualquer outra coisa.
 beforeAll(() => {
   cleanTemplate = buildCleanRepository();
   divergedTemplate = buildDivergedRepository();
   conflictedMergeTemplate = buildConflictedMergeRepository();
-});
+}, TIMEOUT_MS);
 
 /** Cópia descartável de um molde. O `.git/` vem junto, estado de merge inclusive. */
 function repositoryFrom(template: string): string {

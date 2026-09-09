@@ -184,6 +184,30 @@ Três regras que valem para qualquer métrica nova aqui:
 O atraso de tick é medido contra o **período que a sessão pediu**, não contra o intervalo: 1000 ms
 num tick de 1 Hz está no prazo e num de 10 Hz é 900 ms de atraso.
 
+## O critério de saída da Fase 1 (FUN-44)
+
+`src/api/phase-one-exit.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
+entrar numa hunt, fechar o navegador, render enquanto ninguém olha, voltar e reencontrar a
+sessão, matar o nó sem drenar e retomar em outro, drenar e ver o extrato virar linha de
+personagem.
+
+**É o contrato de regressão da propriedade central do projeto.** Quando ele quebrar, vai ser
+porque alguém reintroduziu acoplamento entre socket e sessão — e é para avisar antes de produção
+que ele existe.
+
+Duas regras ao mexer nele:
+
+- **O tempo é dirigido, nunca esperado.** O relógio do nó é injetado (`now` em
+  `GameDependencies`) e o teste o empurra em saltos; um teste que dorme dez minutos não roda no
+  CI, e portanto não roda nunca. Os saltos são de cinco segundos porque o acumulador de ação
+  periódica tem teto de recuperação de 32 aplicações — um salto único de dez minutos seria
+  descartado em parte.
+- **Cada passo verifica ESTADO.** "Não lançou exceção" passa com a sessão parada.
+
+`GameRole.stop()` existe para este teste e para o que ele representa: parar sem creditar nada é
+o que um `kill -9` parece de fora. Não confundir com `drain()`, que credita — trocar as duas
+seria perder exatamente o progresso que o ADR 0010 existe para preservar.
+
 ## Como testar
 
 ```

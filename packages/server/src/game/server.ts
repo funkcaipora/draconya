@@ -32,6 +32,32 @@ export interface GameDependencies {
   readonly receipts?: ReceiptStore;
   readonly restoreSession?: SessionRestorer;
   readonly buildSession?: SessionBuilder;
+  /**
+   * Relógio monotônico da simulação. Injetável porque o critério de saída da Fase 1 (FUN-44)
+   * precisa "esperar" minutos de hunt sem esperar de verdade — teste que dorme dez minutos
+   * não roda no CI, e portanto não roda nunca.
+   */
+  readonly now?: () => number;
+}
+
+/**
+ * O papel `game`, mais o que só ele tem.
+ *
+ * `host` e `stop` não entram na interface `Role` de propósito: `api` e `jobs` não hospedam
+ * sessão nenhuma, e um método que só um dos três implementa de verdade é um método que os
+ * outros dois precisam fingir.
+ */
+export interface GameRole extends Role {
+  /** As sessões deste nó. Exposto para o teste do critério de saída da Fase 1 dirigir o tempo. */
+  readonly host: SessionHost | null;
+  /**
+   * Para tudo SEM creditar nada: é o que um `kill -9` parece de fora.
+   *
+   * O snapshot que já estiver no Redis fica, e é dele que a retomada vive (FUN-28). Isto não
+   * é a drenagem — a drenagem credita, e confundir as duas seria justamente perder o
+   * progresso que o ADR 0010 existe para preservar.
+   */
+  stop(): void;
 }
 
 /** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */
@@ -47,7 +73,7 @@ export function createGame(
   configuration: Configuration,
   logger: Logger,
   dependencies: GameDependencies = {},
-): Role {
+): GameRole {
   let listeningSocket: uWS.us_listen_socket | null = null;
   let acceptingNewSessions = true;
   let heartbeatTimer: NodeJS.Timeout | null = null;
@@ -73,6 +99,7 @@ export function createGame(
       ...(dependencies.restoreSession === undefined
         ? {}
         : { restoreSession: dependencies.restoreSession }),
+      ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
       metrics,
     });
 
@@ -215,8 +242,25 @@ export function createGame(
     },
   });
 
+  function closeListener(): void {
+    if (listeningSocket === null) return;
+    uWS.us_listen_socket_close(listeningSocket);
+    listeningSocket = null;
+  }
+
   return {
     name: 'game',
+    host,
+    stop() {
+      acceptingNewSessions = false;
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      host?.stop();
+      closeListener();
+      logger.warn({ nodeId }, 'Game stopped without draining');
+    },
     async start() {
       await new Promise<void>((resolve, reject) => {
         app.listen('0.0.0.0', configuration.GAME_PORT, (socket) => {
@@ -275,10 +319,7 @@ export function createGame(
         heartbeatTimer = null;
       }
       host?.stop();
-      if (listeningSocket) {
-        uWS.us_listen_socket_close(listeningSocket);
-        listeningSocket = null;
-      }
+      closeListener();
       logger.info('Game stopped');
     },
   };
