@@ -215,6 +215,55 @@ describe.runIf(available)('two active characters per account limit', () => {
     )).toBe(false);
   });
 
+  it('succeeds a session with another one on the same node (FUN-38)', async () => {
+    // A transição Hunt → Cidade da morte. O `register` recusaria: ele existe para dois nós
+    // não brigarem pelo mesmo personagem, e aqui o registro que existe é o nosso.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 'hunt', nodeId: 'n1', type: 'hunt' }, 'a1');
+
+    const moved = await directory.succeed(
+      'p1', 'a1',
+      { sessionId: 'hunt', nodeId: 'n1', type: 'hunt' },
+      { sessionId: 'city', nodeId: 'n1', type: 'city' },
+    );
+
+    expect(moved).toBe(true);
+    expect(await directory.lookup('p1'))
+      .toEqual({ sessionId: 'city', nodeId: 'n1', type: 'city' });
+  });
+
+  it('refuses to succeed a registration that changed hands', async () => {
+    // Escrever por cima de um dono que já não somos produziria duas cópias da mesma sessão —
+    // e isso dobra XP e loot, que é pior que uma sessão perdida.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 'outra', nodeId: 'n2', type: 'hunt' }, 'a1');
+
+    const moved = await directory.succeed(
+      'p1', 'a1',
+      { sessionId: 'hunt', nodeId: 'n1', type: 'hunt' },
+      { sessionId: 'city', nodeId: 'n1', type: 'city' },
+    );
+
+    expect(moved).toBe(false);
+    expect((await directory.lookup('p1'))?.sessionId).toBe('outra');
+  });
+
+  it('refuses to succeed without the account reservation', async () => {
+    // O slot é a autorização, aqui como em todo o resto do diretório.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    await directory.register('p1', { sessionId: 'hunt', nodeId: 'n1', type: 'hunt' }, 'a1');
+    await directory.releaseSlot('a1', 'p1');
+
+    expect(await directory.succeed(
+      'p1', 'a1',
+      { sessionId: 'hunt', nodeId: 'n1', type: 'hunt' },
+      { sessionId: 'city', nodeId: 'n1', type: 'city' },
+    )).toBe(false);
+  });
+
   it('lists alive nodes with the URL each one published', async () => {
     const directory = new SessionDirectory(redis);
     await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });

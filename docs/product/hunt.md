@@ -112,7 +112,7 @@ Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, 
 |---|---|
 | como entra | pelo menu, com dificuldade escolhida; instância criada na entrada |
 | o que encerra | ação manual, regra automática de saída, ou morte (§14.8) |
-| o que a morte faz | encerra a sessão e cobra a penalidade de XP (§26.2) — devolver à PZ é a FUN-38 |
+| o que a morte faz | encerra, cobra a penalidade de XP (§26.2) e devolve à PZ curado |
 | como a recompensa é calculada | XP por abate, com level up, bloqueada com stamina zero |
 
 Se a Guild War não couber nessa mesma interface depois, ela terá sido modelada em cima de hunt —

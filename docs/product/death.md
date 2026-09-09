@@ -1,6 +1,6 @@
 # Morte
 
-**Status:** penalidade de XP implementada; devolver à PZ é a FUN-38
+**Status:** implementado (penalidade de XP e volta à PZ)
 **PRD:** §26
 **Épico:** E2
 
@@ -46,6 +46,46 @@ a perdida daria ao jogador uma XP que ele não tem.
 **Nunca perde item** (§3.8), e o teste disso é a ausência: a penalidade mexe em XP, level e stats
 derivados, e em mais nada. É o que elimina a necessidade de qualquer sistema de recuperação.
 
+## Morrer desanexado é o caso que importa
+
+O jogador não está lá quando o personagem morre numa hunt AFK — e é a maior parte das mortes.
+Se a sequência só funcionasse com alguém assistindo, o invariante 3 estaria quebrado, e o jeito
+de descobrir seria um personagem preso numa sessão encerrada até a próxima conexão.
+
+A sucessão roda no **ciclo do nó**, junto com o tick, e não numa mensagem de cliente. A ordem é
+o assunto todo, e cada troca tem consequência:
+
+1. **o extrato é gravado antes de qualquer aviso** — morrer e o processo cair em seguida deixa o
+   crédito no Redis esperando o `jobs`, que é a metade certa de perder;
+2. **o `session-ended` sai antes do estado novo** — ver a cidade aparecer e só depois descobrir
+   que morreu é a ordem errada de contar a mesma notícia;
+3. **a sessão nova é registrada no diretório antes de substituir a local** — registrar depois
+   deixaria o personagem apontando para uma sessão que o nó já esqueceu;
+4. **a cura vem com a Cidade, e a Cidade vem depois do encerramento** — restaurar HP antes de
+   encerrar gravaria no extrato uma sessão que "terminou com vida cheia".
+
+**O personagem que atravessa é o mesmo objeto**, não uma cópia reconstruída do banco. A
+penalidade já mexeu no level e na XP quando a transição acontece; reconstruir a partir de dados
+duráveis ainda não gravados devolveria o personagem de antes de morrer, e a penalidade sumiria
+sem ninguém ligar uma coisa à outra.
+
+**Quem estava olhando vai junto.** O visualizador acompanha o personagem, não a sessão: fechar o
+socket porque a hunt acabou daria uma desconexão a quem estava assistindo, em vez da volta à
+cidade.
+
+**A morte é marco de snapshot** (FUN-27), gravado na hora e não no próximo intervalo. Perder a
+transição entre dois snapshots é o pior caso possível: o jogador volta vivo, ainda na hunt, e a
+penalidade aparece do nada um pouco depois.
+
+**A troca no diretório é atômica.** Soltar e registrar de novo, em dois comandos, deixaria o
+personagem sem registro no meio — e "só por alguns milissegundos" é exatamente o tamanho da
+janela que a retomada usa para decidir que uma sessão está órfã. Se o registro trocou de dono no
+caminho, o nó **solta** em vez de insistir: escrever por cima de um dono que já não é o nosso
+produziria duas cópias da mesma sessão, o que dobra XP e loot e é pior que uma sessão perdida.
+
+**Sair da hunt também devolve à cidade**, não só morrer. Todo personagem está em exatamente uma
+sessão (invariante 8): "a hunt acabou" nunca pode significar "ficou sem sessão".
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -63,5 +103,6 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
 **A penalidade mora em `progression/baseline.json`, não num arquivo de economia.** Ela é definida
 COMO fração da curva de XP, e separar as duas é como as duas divergem numa rebalanceada.
 
-**Devolver à PZ com HP e mana cheios ainda não acontece** — é a FUN-38. Hoje a morte encerra a
-hunt com extrato e cobra a XP; o personagem ainda não é movido para a cidade.
+**O §43 segue aberto sobre o que exatamente acontece ao morrer desanexado.** A implementação
+assume o comportamento acima — encerra, credita, cobra a penalidade e devolve à PZ — e o extrato
+é a única forma de o jogador descobrir o que houve ao voltar.

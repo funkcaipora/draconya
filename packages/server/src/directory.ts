@@ -75,6 +75,27 @@ redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[4]))
 return 1
 `;
 
+/**
+ * Troca a sessão de um personagem por OUTRA no mesmo nó (FUN-38).
+ *
+ * É a transição Hunt → Cidade da morte, e ela não cabe no `REGISTER_SESSION`: aquele recusa
+ * qualquer registro diferente do que já existe, justamente para dois nós não brigarem pelo
+ * mesmo personagem. Aqui o registro que existe é o NOSSO, e trocá-lo é o comportamento certo.
+ *
+ * Soltar e registrar de novo, em dois comandos, deixaria o personagem sem registro no meio —
+ * e "só por alguns milissegundos" é exatamente o tamanho da janela que a FUN-28 usa para
+ * decidir que uma sessão está órfã. A comparação com `ARGV[2]` fecha isso: ou a troca inteira
+ * acontece, ou nada acontece.
+ */
+const SUCCEED_SESSION = `
+if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
+local existing = redis.call('GET', KEYS[1])
+if existing ~= ARGV[2] then return 0 end
+redis.call('SET', KEYS[1], ARGV[3], 'PX', tonumber(ARGV[4]))
+redis.call('PEXPIRE', KEYS[2], tonumber(ARGV[4]))
+return 1
+`;
+
 /** Renova o lease da sessão e o slot que autoriza aquela sessão como uma unidade. */
 const RENEW_SESSION = `
 if redis.call('SISMEMBER', KEYS[2], ARGV[1]) ~= 1 then return 0 end
@@ -119,6 +140,7 @@ export class SessionDirectory {
       lua: REGISTER_SESSION,
     });
     this.#redis.defineCommand('takeOverSession', { numberOfKeys: 3, lua: TAKE_OVER_SESSION });
+    this.#redis.defineCommand('succeedSession', { numberOfKeys: 2, lua: SUCCEED_SESSION });
     this.#redis.defineCommand('renewReservedSession', {
       numberOfKeys: 2,
       lua: RENEW_SESSION,
@@ -190,6 +212,43 @@ export class SessionDirectory {
       characterId,
       stale,
       payload,
+      String(this.#leaseMs),
+    )) === 1;
+  }
+
+  /**
+   * Aponta o personagem para uma sessão nova NESTE nó, atomicamente.
+   *
+   * Devolve `false` quando o registro atual não é mais o esperado — outro nó assumiu, o lease
+   * expirou, ou o slot da conta sumiu. `false` significa "não troque nada": quem chama tem
+   * que soltar a sessão em vez de insistir, porque insistir seria escrever por cima de um
+   * dono que já não somos nós.
+   */
+  async succeed(
+    characterId: string,
+    accountId: string,
+    from: SessionLocation,
+    to: SessionLocation,
+  ): Promise<boolean> {
+    const current = await this.#redis.get(sessionKey(characterId));
+    if (current === null) return false;
+    const parsed = parseSessionLocation(current);
+    if (parsed.sessionId !== from.sessionId || parsed.nodeId !== from.nodeId) return false;
+
+    const redis = this.#redis as Redis & {
+      succeedSession(
+        session: string, active: string, member: string, expected: string, payload: string,
+        ttl: string,
+      ): Promise<number>;
+    };
+    return (await redis.succeedSession(
+      sessionKey(characterId),
+      activeCharactersKey(accountId),
+      characterId,
+      // O valor CRU, não um remontado: comparar com um JSON reserializado dependeria da ordem
+      // das chaves, e um dia alguém acrescenta um campo e a troca passa a falhar em silêncio.
+      current,
+      JSON.stringify(to),
       String(this.#leaseMs),
     )) === 1;
   }

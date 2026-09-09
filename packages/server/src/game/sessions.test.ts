@@ -1,9 +1,12 @@
 import { buildContent } from '@draconya/content';
-import { CharacterRuntime, createHuntSession } from '@draconya/sim';
+import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import { TEST_COMBAT, TEST_PROGRESSION, testContent } from '../testing/content.js';
+import type { Progression } from '@draconya/content';
 import type { Session } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
-import { createCitySessionFactory, createSessionRestorer } from './sessions.js';
+import {
+  createCitySessionFactory, createCitySuccessor, createSessionRestorer,
+} from './sessions.js';
 
 describe('city session factory', () => {
   it('starts from progress carried by the authenticated ticket', () => {
@@ -63,5 +66,66 @@ describe('session restorer', () => {
     // Forçar um ruleset conhecido em cima produziria uma sessão que mente sobre o que é.
     const snapshot = { ...hunt().snapshot(), type: 'boss' as const };
     expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+  });
+});
+
+describe('city successor (FUN-38)', () => {
+  const content = testContent();
+
+  const dyingHunt = (): { session: Session; hero: CharacterRuntime } => {
+    const session = createHuntSession({
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    });
+    const hero = new CharacterRuntime({
+      id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 40, maxHealth: 200, mana: 0, maxMana: 0,
+      level: 20, xp: totalXpForLevel(20, TEST_PROGRESSION as Progression), vocationId: null,
+      goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    return { session, hero };
+  };
+
+  it('devolve o MESMO personagem, não uma cópia reconstruída', () => {
+    // A penalidade de morte (FUN-37) já mexeu no level e na XP quando isto roda. Reconstruir
+    // a partir de dados duráveis que ainda não foram gravados devolveria o personagem de
+    // antes de morrer — a penalidade sumiria, e ninguém ligaria uma coisa à outra.
+    const { session, hero } = dyingHunt();
+    session.kill(hero);
+    const xpDepoisDaPenalidade = hero.xp;
+
+    const city = createCitySuccessor(content)(session, 'death');
+
+    expect(city?.participants[0]).toBe(hero);
+    expect(hero.xp).toBe(xpDepoisDaPenalidade);
+    expect(hero.level).toBe(19);
+  });
+
+  it('a PZ cura, e cura DEPOIS do encerramento', () => {
+    // Restaurar HP antes de encerrar gravaria no extrato uma sessão que "terminou com vida
+    // cheia", o que estraga a tela de retorno e o analisador.
+    const { session, hero } = dyingHunt();
+    session.kill(hero);
+    expect(hero.health).toBe(0);
+
+    createCitySuccessor(content)(session, 'death');
+
+    expect(hero.health).toBe(hero.maxHealth);
+    expect(hero.alive).toBe(true);
+  });
+
+  it('vale para a saída manual também: sair da hunt é voltar para a cidade', () => {
+    // Todo personagem está em EXATAMENTE uma sessão (invariante 8): "a hunt acabou" nunca
+    // pode significar "ele ficou sem sessão".
+    const { session } = dyingHunt();
+    session.end('manual-exit');
+    expect(createCitySuccessor(content)(session, 'manual-exit')?.ruleset.type).toBe('city');
+  });
+
+  it('a Cidade não sucede a si mesma', () => {
+    // Uma sessão de Cidade que acaba é logout ou drenagem, e aí o personagem está mesmo
+    // saindo do nó.
+    const city = createCitySessionFactory(content)('p1');
+    city.end('manual-exit');
+    expect(createCitySuccessor(content)(city, 'manual-exit')).toBeNull();
   });
 });
