@@ -26,6 +26,41 @@ A hunt termina por ação manual do jogador, por uma regra automática de saída
 - Premium/VIP não trava acesso a hunt de loot superior no MVP.
 - Encerramento por: ação manual, regra automática de saída, morte, ou outras condições futuras de sessão.
 
+## O monstro, e por que ele é simples de propósito
+
+Comportamento previsível, inspirado no Tibia (§17.1). IA sofisticada para mob comum **não** é
+objetivo — e isso não é economia de esforço: previsível é o que deixa o jogador planejar, e é o
+que faz uma hunt AFK render sem supervisão.
+
+O movimento é **guloso** e cabe em três linhas: tenta o tile que mais aproxima do alvo;
+bloqueado, tenta os dois vizinhos daquela direção; nada, espera este tick.
+
+**Ele empaca em concavidade, e isso está certo.** É o comportamento do Tibia, os jogadores
+reconhecem como correto, e "consertar" com busca de caminho custaria o que vem a seguir: como
+o monstro **não guarda caminho**, não existe invalidação de rota — pôr uma parede no meio do
+mapa custa **zero**, porque não há nada guardado para invalidar. É isso que torna magic wall
+barato na Fase 5 ([ADR 0009](../adr/0009-fixed-hunt-route-without-pathfinding.md)).
+
+O monstro **mantém o alvo** até ele morrer ou passar do raio de desistência, em vez de
+reprocurar a cada tick. Numa instância com 48 monstros, procurar sempre é trabalho jogado fora
+dezenas de vezes por segundo — e trocar de alvo porque outro jogador passou um tile mais perto
+não é o que os jogadores esperam.
+
+### Custo medido
+
+`pnpm bench:monster`, com 48 monstros, 4 jogadores e paredes espalhadas para exercitar o desvio:
+
+| | |
+|---|---|
+| por monstro por tick | **0,081 µs** |
+| instância cheia (48 monstros) | 3,88 µs por tick |
+| a 10 Hz | 0,039 ms de CPU por segundo, por instância |
+
+Nessa ordem de grandeza, 5.000 instâncias a 10 Hz custariam cerca de 0,2 s de CPU por segundo —
+um quinto de um núcleo. É o número que a projeção de custo usa e que a FUN-46 vai cobrar de novo
+em escala; o valor aqui é a linha de base para detectar regressão de ordem de grandeza antes de
+ela virar conta de servidor.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |

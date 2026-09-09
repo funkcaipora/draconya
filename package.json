@@ -19,7 +19,8 @@
     "source-policy": "tsx scripts/source-policy.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
-    "content:check": "pnpm --filter @draconya/tools content:check"
+    "content:check": "pnpm --filter @draconya/tools content:check",
+    "bench:monster": "pnpm --filter @draconya/tools bench:monster"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
