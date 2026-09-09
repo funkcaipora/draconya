@@ -120,6 +120,7 @@ export function createTicketHandler(
       (character) => deps.tickets.issue(principal.accountId, character.id, {
         level: character.level,
         xp: character.xp,
+        name: character.name,
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
       }, resolution.node),
