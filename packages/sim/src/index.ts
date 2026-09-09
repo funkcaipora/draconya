@@ -11,4 +11,5 @@ export * from './combat/damage.js';
 export * from './monster/step.js';
 export * from './monster/monster.js';
 export * from './route/walker.js';
+export * from './hunt/spawner.js';
 export * from './rulesets/city.js';

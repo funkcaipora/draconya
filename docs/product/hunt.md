@@ -82,6 +82,28 @@ o mais próximo numa lista dessas custa menos que montar a estrutura que um path
 **Quando** parar e retomar é decisão do bot (Fase 2). O que existe hoje é só a execução:
 avançar, parar, retomar, dar a volta.
 
+## Spawn: densidade é dado, composição é sorteio
+
+Os pontos de respawn são definidos por design, na rota. Quantos monstros nascem em cada ponto
+vem da **dificuldade escolhida** e **não varia** — o §14.5 é explícito que não há variação
+aleatória de densidade no MVP.
+
+O único sorteio do spawn é **qual** monstro, dentro dos pesos da composição. Peso zero é
+permitido e significa "não sai": é como se desliga uma variante sem apagar a linha, e apagar
+linha é como se perde o histórico de balanceamento.
+
+**A posição também não sorteia.** O monstro nasce sempre no mesmo tile livre mais próximo do
+ponto. Uma hunt cujo spawn "anda" a cada respawn é uma hunt que o jogador não consegue
+planejar — e planejar é justamente o que se ganha ao tornar o monstro previsível (§17.1).
+
+O respawn tem **prazo configurável por hunt**. Instantâneo faria a rota deixar de importar: o
+personagem mataria tudo parado num ponto só. Longo demais faz ele dar voltas em mapa vazio.
+
+As quatro dificuldades — Iniciante, Profissional, Herói, Lendário — são **dados**, não código.
+Trocar `perSpawnPoint` e a composição no JSON muda densidade e variedade sem tocar em lógica;
+há teste afirmando exatamente isso, porque se uma dificuldade nova exigisse código o formato
+estaria errado.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
