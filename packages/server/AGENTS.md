@@ -130,6 +130,20 @@ Quem retoma é o **nó ao qual o jogador reconecta**, no `prepare` — retomar �
 hospedar é do `game`. O `jobs` não retoma: ele só devolve o slot de quem não voltou, para o
 jogador conseguir usar os outros personagens. O snapshot fica (§38.4).
 
+**A versão de conteúdo é condição de retomada.** Snapshot gravado numa versão e retomado noutra
+é recusado: o ruleset seria montado com o conteúdo deste processo enquanto a sessão continuaria se
+declarando na versão antiga — simulando com stats, curva de XP e coeficientes novos sob um rótulo
+velho, que é o que o invariante 7 existe para impedir. O caminho não é o deploy normal, que drena
+creditando e não deixa snapshot: é a QUEDA sem drenagem num nó cujo substituto já subiu com
+conteúdo novo.
+
+**Snapshot que não volta é CREDITADO antes de sumir.** Vale para formato antigo, ruleset
+desconhecido e versão divergente. Descartar em silêncio é o oposto do ADR 0010 — encerrar
+creditando, não jogar fora. O `seq` sai do `ledgerSeq` do próprio snapshot, e é ele que mantém a
+idempotência: um snapshot que sobreviveu a uma drenagem parcial não credita duas vezes, porque a
+chave única do ledger recusa o `seq` repetido. Se o crédito falhar, o snapshot **fica** e a
+conexão falha — o jogador tenta de novo em segundos, e o progresso continua lá.
+
 Três coisas que não podem mudar sem pensar duas vezes:
 
 - **Tomar o registro de outro nó exige que o batimento dele esteja AUSENTE**, e a troca é

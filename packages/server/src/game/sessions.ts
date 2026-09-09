@@ -84,6 +84,20 @@ export function createCitySessionFactory(
  */
 export function createSessionRestorer(content: Content): SessionRestorer {
   return (snapshot: SessionSnapshot, nowMs: number): Session | null => {
+    // A versão de conteúdo é fixada na sessão e não muda no meio dela (invariante 7).
+    //
+    // O ruleset é montado com o conteúdo DESTE processo, e a sessão retomada preserva a
+    // versão que estava no snapshot. Se as duas diferirem, ela passaria a se declarar N — no
+    // `welcome`, no extrato, no ledger — enquanto simula com os dados de N+1: stats de
+    // monstro, curva de XP, coeficientes de combate, densidade de spawn.
+    //
+    // É exatamente o que o §7 existe para impedir. O caminho não é o deploy normal, que drena
+    // creditando (ADR 0010) e não deixa snapshot para trás: é a QUEDA sem drenagem num nó
+    // cujo substituto já subiu com conteúdo novo.
+    //
+    // Recusar aqui não perde nada, porque quem chama credita antes de descartar.
+    if (snapshot.contentVersion !== content.version) return null;
+
     const ruleset = rulesetFor(snapshot, content);
     if (ruleset === null) return null;
     try {

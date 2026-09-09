@@ -239,3 +239,37 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     expect(hero?.staminaUpdatedAtMs).toBe(3 * HOUR);
   });
 });
+
+describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
+  const content = testContent();
+
+  const huntSnapshot = () => {
+    const session = createHuntSession({
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    });
+    session.enter(new CharacterRuntime({
+      id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0,
+      maxMana: 0, level: 1, xp: 0, vocationId: null, goldDelta: 0, alive: true, cooldowns: {},
+    }));
+    session.tick(1000);
+    return session.snapshot();
+  };
+
+  it('recusa retomar um snapshot de OUTRA versão de conteúdo', () => {
+    // O ruleset seria montado com o conteúdo deste processo, e a sessão continuaria se
+    // declarando na versão antiga — simulando com stats, curva de XP e coeficientes novos
+    // sob um rótulo velho. É o que o invariante 7 existe para impedir.
+    const snapshot = { ...huntSnapshot(), contentVersion: 'de-outro-deploy' };
+    expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+  });
+
+  it('retoma normalmente quando a versão bate', () => {
+    expect(createSessionRestorer(content)(huntSnapshot(), 1)?.ruleset.type).toBe('hunt');
+  });
+
+  it('vale para a Cidade também, não só para a hunt', () => {
+    const city = createCitySessionFactory(content)('p1');
+    const snapshot = { ...city.snapshot(), contentVersion: 'de-outro-deploy' };
+    expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+  });
+});
