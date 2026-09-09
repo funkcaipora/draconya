@@ -29,8 +29,24 @@ pnpm vitest run packages/tools
 
 ## Armadilhas conhecidas
 
-- O cliente de carga precisa cobrir os dois modos: anexado (mede bytes/s e atraso de tick) e
-  desanexado (abre a sessão e some). Só o segundo valida a projeção de custo do projeto.
+- O cliente de carga (`pnpm load`) cobre os dois modos: **anexado** (mantém o socket, mede
+  bytes/s e latência) e **desanexado** (entra na hunt, fecha o socket e some). Só o segundo
+  valida a projeção de custo, e ele é o modo PADRÃO do jogo, não um caso extremo.
+- **Processos worker, não threads.** O limite de descritores de arquivo é por processo, e é ele
+  que decide quantos sockets cabem — cinco mil conexões num processo só esbarram nele antes de
+  esbarrarem em CPU. Sem isso, o gargalo medido seria o do próprio cliente de carga.
+- **`process.send` é assíncrono.** Sair logo depois perde a mensagem quando ela cresce: o worker
+  mandava as amostras e chamava `process.exit` no `finally`, e quinhentas sessões anexadas
+  voltavam como *zero amostras* enquanto o servidor via as quinhentas de pé. O relatório dizia
+  "0 abertas, 0 falharam" — a pior das duas mentiras. Sai no callback do `send`.
+- **Memória por sessão do cliente de carga só vale num nó VAZIO.** Ela é o crescimento do heap
+  dividido pelas sessões novas; com sessões já rodando, o crescimento delas entra na conta e
+  infla o número (deu 168 KiB assim, contra 9 KiB limpo). O relatório avisa quando o nó não
+  estava vazio. A medida confiável de memória é o `pnpm bench:hunts`.
+- **Módulo que executa ao ser importado é armadilha.** `main.ts` é só a borda; a lógica mora em
+  `runner.ts`. A primeira versão punha a chamada no próprio módulo, e importar uma função pura
+  num teste subia os workers e esperava a duração inteira — sessenta segundos para rodar treze
+  asserções.
 - **`pnpm bench:hunts` só vale com a máquina junto.** O tick é single-thread, então quem decide é
   desempenho por core (ADR 0013); o relatório imprime plataforma, CPU e versão do Node por isso.
   Medir no laptop e extrapolar para o servidor erra.
