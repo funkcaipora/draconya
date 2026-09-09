@@ -24,6 +24,7 @@ export function loadContent(dir: string): Content {
     monsters: readJsonDir(join(dir, 'monsters')),
     hunts: readJsonDir(join(dir, 'hunts')),
     vocations: readJsonDir(join(dir, 'vocations')),
+    progression: readJsonDir(join(dir, 'progression')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
   });

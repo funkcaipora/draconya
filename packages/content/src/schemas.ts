@@ -74,6 +74,30 @@ export const vocationSchema = z.object({
   _open: z.string().optional(),
 });
 
+/**
+ * A tabela base de progressão: onde o personagem começa, e como cresce ENQUANTO NÃO TEM
+ * vocação (§7.4 — ela é escolhida no level 8).
+ *
+ * O PRD (§9.3) define só o incremento POR VOCAÇÃO. Base e níveis 1–7 não estão decididos, e
+ * é por isso que este arquivo carrega `_open`: o jogo não sobe sem esses números, mas eles
+ * não podem parecer decisão de balanceamento quando são provisório.
+ */
+export const progressionSchema = z.object({
+  id: z.literal('baseline'),
+  startingHealth: z.number().int().positive(),
+  startingMana: z.number().int().nonnegative(),
+  startingCapacity: z.number().int().positive(),
+  /** Incremento por level ATÉ a escolha de vocação. */
+  healthPerLevel: z.number().int().nonnegative(),
+  manaPerLevel: z.number().int().nonnegative(),
+  capacityPerLevel: z.number().int().nonnegative(),
+  /** Level em que a vocação é escolhida, e a partir do qual ela passa a reger o crescimento. */
+  vocationLevel: z.number().int().positive(),
+  _open: z.string().optional(),
+});
+
+export type Progression = z.infer<typeof progressionSchema>;
+
 export type Monster = z.infer<typeof monsterSchema>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;
