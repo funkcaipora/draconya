@@ -28,6 +28,8 @@ export interface ViewerOptions {
   readonly maxBufferedBytes?: number;
   /** Teto de mensagens acumuladas entre dois flushes. */
   readonly maxQueued?: number;
+  /** Chamado a cada quadro escrito, com quantas mensagens ele levou e quantos bytes (FUN-47). */
+  readonly onFrame?: (messages: number, bytes: number) => void;
 }
 
 const DEFAULT_MAX_BUFFERED_BYTES = 1024 * 1024;
@@ -40,6 +42,7 @@ export class Viewer {
   readonly #socket: ViewerSocket;
   readonly #maxBufferedBytes: number;
   readonly #maxQueued: number;
+  readonly #options: ViewerOptions;
   readonly #queue: S2CMessage[] = [];
 
   #dead = false;
@@ -50,6 +53,7 @@ export class Viewer {
     this.characterId = characterId;
     this.#maxBufferedBytes = options.maxBufferedBytes ?? DEFAULT_MAX_BUFFERED_BYTES;
     this.#maxQueued = options.maxQueued ?? DEFAULT_MAX_QUEUED;
+    this.#options = options;
   }
 
   /** `true` quando o visualizador precisa ser desanexado — a sessão nunca é afetada. */
@@ -89,6 +93,9 @@ export class Viewer {
       ? encodeS2C(messages[0] as S2CMessage)
       : packBatch(messages.map((message) => encodeS2C(message)));
     this.#write(frame);
+    // Contado DEPOIS do lote: o que importa para banda é o que saiu no fio, e contar antes
+    // reportaria mensagens que o lote comprimiu como se fossem quadros separados.
+    this.#options.onFrame?.(messages.length, frame.byteLength);
   }
 
   /** Fecha o socket. Chamar depois que o socket já caiu derruba o processo no uWS. */

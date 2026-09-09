@@ -141,6 +141,26 @@ Três coisas que não podem mudar sem pensar duas vezes:
 - **O jogador é avisado** ao anexar numa sessão retomada, com quanto tempo não foi simulado.
   Silenciar é como o modo idle perde a confiança de quem joga.
 
+## Métricas do nó de jogo (FUN-47)
+
+`/metrics` no `game`, formato Prometheus, sem autenticação — quem o esconde é a rede, e pôr
+credencial ali daria a falsa impressão de que ele pode sair para a internet.
+
+Três regras que valem para qualquer métrica nova aqui:
+
+- **Custo de tick é HISTOGRAMA, nunca média.** A média esconde a cauda, e é a cauda que satura o
+  nó: como o tick é single-thread, uma instância patológica no p99 derruba o marco de 10 Hz de
+  todas as outras do mesmo processo.
+- **Nada de rótulo por `characterId` ou `sessionId`.** São milhares de valores, e isso mata
+  qualquer backend de métrica — o custo aparece no Prometheus, longe daqui.
+- **Contagem de sessão é recontada por ciclo, com `reset`.** Um contador incremental espalhado
+  por `attach`/`detach`/`release`/`#replace` erra na primeira aresta esquecida, e erra devagar;
+  e sem o `reset` um tipo que zera fica congelado no painel, transformando "as hunts pararam" em
+  "as hunts continuam iguais".
+
+O atraso de tick é medido contra o **período que a sessão pediu**, não contra o intervalo: 1000 ms
+num tick de 1 Hz está no prazo e num de 10 Hz é 900 ms de atraso.
+
 ## Como testar
 
 ```
