@@ -389,9 +389,22 @@ trocaram o laço de tick, e o custo mudou — **em direções opostas conforme o
 | 10 Hz, anexada | 71 µs/s | **15 µs/s** — 4,7× mais barato |
 | 1 Hz, desanexada | 8,9 µs/s | 12,4 µs/s — 1,4× mais caro |
 
-No cenário frio cheio (`pnpm bench:hunts`, 5.000 hunts a 1 Hz): **18,8 µs** por tick por
-instância, **53.081** instâncias por core, **34,7 KiB** de memória e **12,6 KiB** de snapshot por
-sessão.
+No cenário frio cheio (`pnpm bench:hunts`, 5.000 hunts a 1 Hz), **três execuções** — uma delas
+com `dist` apagado, para garantir que mede o código de agora e não um build velho:
+
+| Métrica | Estimativa | Medido (3 execuções) |
+|---|---|---|
+| custo de tick por instância | 50–200 µs | **18,2 – 20,6 µs** |
+| instâncias por core (1 Hz) | 200–500 | **48.600 – 54.900** |
+| memória por sessão | a medir | **27,0 KiB** (idêntico nas três) |
+| snapshot por sessão | a medir | **12,0 KiB** (idêntico nas três) |
+| pausa de GC | a medir | 2,9–3,7 s em ~50 s de laço, **pico de 100–195 ms** |
+
+Um número anterior desta seção dizia 34,7 KiB de memória por sessão e não reproduz: três
+execuções seguidas dão 27,0 KiB. A medida é `(heap depois do primeiro tick − heap antes) / 5.000`
+com GC forçado dos dois lados, e é estável. A hipótese mais provável é que o 34,7 seja anterior às
+quatro otimizações de alocação que a própria [ADR 0020](adr/0020-logical-session-scheduler.md)
+descreve — o número de CPU foi atualizado depois delas e o de memória não.
 
 **A conclusão desta seção não muda: sobra.** O medido continua duas a dez vezes melhor que a
 ponta otimista da estimativa (50–200 µs, 200–500 instâncias por core), e o gargalo segue sendo
@@ -404,7 +417,9 @@ sub-avaliação que produzia 1,51× mais dano sofrido na hunt desanexada. Os 9,3
 simulação errada. O custo agora é proporcional ao tempo simulado e quase indiferente à taxa, que
 é o comportamento que se queria.
 
-Memória subiu porque a fila é serializada: com 5.000 sessões são ~63 MiB de Redis a mais.
+O snapshot subiu porque a fila é serializada: de 8,9 para 12,0 KiB por sessão, ou ~15 MiB de
+Redis a mais com 5.000 sessões. A memória de heap por sessão **não** subiu — 27,9 antes, 27,0
+agora, o que está dentro do ruído da medida.
 
 #### Medido com o servidor de verdade (FUN-45) — 2026-09-09, Apple M2, mesma máquina
 
