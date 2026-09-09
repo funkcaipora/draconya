@@ -378,6 +378,33 @@ simulação.
 11–15. A diferença é localidade — 22 MiB de conjunto de trabalho cabem no cache, 142 MiB não. É
 mais uma razão para medir no cenário cheio em vez de extrapolar de um pequeno.
 
+#### Medido com o servidor de verdade (FUN-45) — 2026-09-09, Apple M2, mesma máquina
+
+`pnpm load`, contra `api` + `game` + `jobs` num processo, Postgres e Redis em contêiner. Duas
+rodadas, cada uma num nó vazio.
+
+| | 1.000 desanexadas | 500 anexadas |
+|---|---|---|
+| sessões abertas / falhas | 1.000 / 0 | 500 / 0 |
+| entrada (p50 / p99) | 3,4 s / 5,1 s | 3,2 s / 4,5 s |
+| bytes/s por sessão | — (sem socket) | **42,8** |
+| latência ping→pong (p50 / p95 / p99) | — | **0,7 / 4,3 / 10,3 ms** |
+| memória por sessão | (coletor rodou entre as leituras) | **9,3 KiB** |
+| custo de tick médio, do `/metrics` | **14,6 µs** | 8,5 µs |
+
+O custo de tick medido pelo servidor **bate com o do banco de ensaio** (11–15 µs na FUN-46),
+agora que o cenário é grande o bastante para o JIT chegar ao regime. É a confirmação que faltava:
+o número não era artefato do laço isolado.
+
+**Os 42,8 bytes/s por sessão NÃO são comparáveis aos 0,5–1,5 KB/s da projeção.** Hoje a hunt não
+transmite mundo: não há `creature-move`, não há aparecer e sumir de criatura, não há delta de
+posição. O que trafega é `pong` e pouco mais. Quando a sincronização de mundo existir, este número
+sobe muito — e é para isso que ele está registrado agora, como piso conhecido.
+
+**A entrada de 3 segundos é do `api`, não do nó de jogo.** Mil sessões significam mil criações de
+conta, personagem e ticket, atravessando um pool de dez conexões no Postgres. Não é latência de
+jogo; é a rampa do cliente de carga, e some com um cenário que reaproveita contas.
+
 **Este número NÃO substitui uma medição na máquina de destino.** O tick é single-thread, então
 quem decide é desempenho por core, e um core M-series não é um OCPU Ampere nem um core de EPYC
 (ADR 0013). Medir aqui serve como linha de base e para detectar regressão de ordem de grandeza;
