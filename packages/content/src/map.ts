@@ -15,6 +15,8 @@ export interface Tilemap {
    * contíguo e a consulta em O(1) sem alocação nenhuma.
    */
   readonly blocked: Uint8Array;
+  /** Ver `tilemapSchema.entryPoint`. Ausente: este mapa não é lugar de nascer. */
+  readonly entryPoint?: { readonly x: number; readonly y: number };
 }
 
 export interface SpawnPoint {
@@ -42,7 +44,10 @@ export function buildTilemap(data: TilemapData): Tilemap {
       if (row[x] === undefined || row[x] === '#') blocked[y * width + x] = 1;
     }
   }
-  return { id: data.id, width, height, z: data.z, blocked };
+  return {
+    id: data.id, width, height, z: data.z, blocked,
+    ...(data.entryPoint === undefined ? {} : { entryPoint: data.entryPoint }),
+  };
 }
 
 export function isBlocked(map: Tilemap, x: number, y: number): boolean {

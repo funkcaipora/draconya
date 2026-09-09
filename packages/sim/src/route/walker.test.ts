@@ -68,6 +68,23 @@ describe('RouteWalker', () => {
     }
   });
 
+  it('hold undoes the last step, so a blocked tile is retried and never skipped', () => {
+    // FUN-69: o passo é decidido pelo walker e aplicado pelo sistema de movimento. Quando o
+    // tile da rota está ocupado, o índice já avançou — e sem desfazer, o personagem pularia o
+    // tile na volta seguinte. `hold` é o que faz "tentar de novo" ser de novo, e não adiante.
+    const walker = new RouteWalker(square);
+    walker.step();
+    walker.step();
+    expect(walker.index).toBe(2);
+    walker.hold();
+    expect(walker.index).toBe(1);
+    expect(walker.step()).toEqual(square.tiles[2]);
+    // E dá a volta no zero, como o laço da rota.
+    const atStart = new RouteWalker(square);
+    atStart.hold();
+    expect(atStart.index).toBe(square.tiles.length - 1);
+  });
+
   it('survives a snapshot and carries on from where it was', () => {
     // O índice entra no snapshot. Sem isso, cair o nó devolveria o personagem ao começo da
     // rota, e a retomada (FUN-28) renderia menos que a sessão que ela substitui.

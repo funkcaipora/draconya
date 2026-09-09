@@ -10,7 +10,8 @@
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
 import type { Rng, RngState } from './rng.js';
-import type { CreatureMoved } from './movement/system.js';
+import type { CreatureMoved, MoveResult } from './movement.js';
+import type { GridPoint } from './monster/step.js';
 import { Schedule } from './schedule.js';
 import type { ScheduleState, ScheduledEvent } from './schedule.js';
 
@@ -156,6 +157,16 @@ export interface Ruleset {
 
   onDeath(session: Session, character: CharacterRuntime): void;
   onEnd(session: Session, reason: EndReason): void;
+
+  /**
+   * Um jogador pediu para andar (FUN-69). INTENÇÃO, processada NA CHEGADA — nunca enfileirada
+   * para o próximo evento: enfileirar põe até 100 ms de jitter em cima do ping, irrelevante na
+   * hunt e inaceitável no PvP manual da F5.
+   *
+   * Passa pelo MESMO sistema de movimento que o bot e o monstro, e recebe a mesma razão de
+   * recusa. Ausente no ruleset significa "esta sessão não anda".
+   */
+  requestMove?(session: Session, characterId: string, to: GridPoint): MoveResult;
 
   /**
    * Estado próprio do ruleset, para entrar no snapshot. Ruleset sem estado pode omitir.

@@ -13,7 +13,7 @@
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
 import { performance } from 'node:perf_hooks';
-import type { EndReason, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
+import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -134,6 +134,9 @@ const SNAPSHOT_INTERVAL_MS = 10_000;
  * Não vale para hunt: uma sessão que rende nunca é recolhida por ausência (ADR 0001).
  */
 const RESTING_GRACE_MS = 5 * 60_000;
+
+const DIRECTION_DX = { north: 0, east: 1, south: 0, west: -1 } as const;
+const DIRECTION_DY = { north: -1, east: 0, south: 1, west: 0 } as const;
 
 /** Intervalo mínimo entre dois avisos de atraso. Ver `#warnLag`. */
 const LAG_WARNING_INTERVAL_MS = 60_000;
@@ -400,11 +403,49 @@ export class SessionHost {
         // processo reiniciar, e nem apagar o personagem funcionava.
         void this.#logout(viewer.characterId);
         return;
+      case 'walk':
+        // INTENÇÃO: direção, nunca posição resolvida (invariante 4). Processada NA CHEGADA,
+        // não enfileirada para o próximo evento — enfileirar põe até 100 ms de jitter em cima
+        // do ping, irrelevante na hunt e inaceitável no PvP manual da F5.
+        this.#requestWalk(viewer, message.direction);
+        return;
+      case 'walk-to':
+        this.#requestWalk(viewer, message.destination);
+        return;
       default:
-        // walk, walk-to, say, client-ready e authenticate ainda não têm tratamento. Ignorar
-        // em silêncio é melhor que responder errado.
+        // say, client-ready e authenticate ainda não têm tratamento (FUN-58). Ignorar em
+        // silêncio é melhor que responder errado.
         this.#logger.debug({ type: message.type }, 'Message not handled yet');
     }
+  }
+
+  /**
+   * Um passo pedido pelo jogador (FUN-69): direção ou destino, resolvidos aqui em um tile e
+   * entregues ao MESMO sistema de movimento que o bot e o monstro usam.
+   *
+   * Recusa é silenciosa de propósito: `walk` sai dezenas de vezes por segundo de um cliente
+   * segurando a tecla, e responder cada recusa geraria tráfego de volta a partir de tráfego
+   * de entrada. Morto não anda, e é decidido antes de chegar ao sistema.
+   */
+  #requestWalk(viewer: Viewer, target: 'north' | 'east' | 'south' | 'west' | GridPoint): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const session = hosted.session;
+    const ruleset = session.ruleset;
+    if (ruleset.requestMove === undefined) return;
+    const character = session.participants.find((p) => p.id === viewer.characterId);
+    if (character === undefined || !character.alive) return;
+
+    const from = character.position;
+    const to = typeof target === 'string'
+      ? { x: from.x + DIRECTION_DX[target], y: from.y + DIRECTION_DY[target] }
+      : { x: target.x, y: target.y };
+
+    const result = ruleset.requestMove(session, viewer.characterId, to);
+    if (!result.ok) return;
+    // A Cidade não tem ciclo (`hz` 0): o evento precisa virar pacote agora, senão ele fica
+    // no buffer da sessão até alguém drenar — e ninguém drena o que não tica.
+    this.#presentMoves(hosted);
   }
 
   /**
@@ -511,7 +552,7 @@ export class SessionHost {
       // colocação, não passo — aparecer no mundo é `creature-appear`, que precisa de aparência
       // e é trabalho da M2.
       if (event.durationMs <= 0) continue;
-      const id = this.#creatureId(hosted, event.creatureId);
+      const id = this.#creatureId(hosted, String(event.creatureId));
       for (const viewer of hosted.viewers) {
         viewer.send({
           type: 'creature-move',

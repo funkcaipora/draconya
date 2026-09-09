@@ -240,6 +240,13 @@ export const tilemapSchema = z.object({
   id: z.string().min(1),
   z: z.number().int(),
   grid: z.array(z.string().min(1)).min(1),
+  /**
+   * Onde um personagem nasce neste mapa (FUN-60, FUN-69). É CONTEÚDO, não código: o valor
+   * antigo era um literal `(0,0)` no servidor, que é parede na borda de qualquer tilemap. O
+   * `buildContent` valida contra `isBlocked` — ponto de entrada em parede quebra o boot, e
+   * não o jogador.
+   */
+  entryPoint: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
 });
 
 export const routeSchema = z.object({

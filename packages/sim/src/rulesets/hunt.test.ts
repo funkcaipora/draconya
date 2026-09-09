@@ -1,4 +1,4 @@
-import { buildContent } from '@draconya/content';
+import { buildContent, isBlocked } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -669,13 +669,13 @@ describe('eventos de domínio (FUN-69)', () => {
     const eventos = session.drainEvents();
     expect(eventos.length).toBeGreaterThan(0);
     for (const evento of eventos) {
-      expect(evento.type).toBe('creature-moved');
+      expect(evento.kind).toBe('creature-moved');
       expect(evento.durationMs).toBeGreaterThan(0);
       // O andar vem do MAPA, e vai junto: quem lê isto do lado de fora precisa de `z`.
       expect(evento.to.z).toBe(7);
     }
     // Os dois lados do mundo se movem, e os dois são anunciados.
-    const quemAndou = new Set(eventos.map((e) => e.creatureId));
+    const quemAndou = new Set(eventos.map((e) => String(e.creatureId)));
     expect(quemAndou.has('hero')).toBe(true);
     expect([...quemAndou].some((id) => id.startsWith('m:'))).toBe(true);
   });
@@ -723,4 +723,65 @@ describe('eventos de domínio (FUN-69)', () => {
     run(session, 600_000, 100);
     expect(session.drainEvents().length).toBeLessThanOrEqual(MAX_PENDING_DOMAIN_EVENTS);
   });
+});
+
+describe('movimento com escritor único (FUN-69)', () => {
+  it('o walk recebe as razões tipadas, pelo mesmo caminho que o bot e o monstro', () => {
+    // O ponto da FUN-69: uma regra de legalidade, três fontes. O jogador é a única fonte com
+    // porta própria (`requestMove`); bot e monstro chegam à MESMA `canOccupy` por construção —
+    // o passo de rota via `#step`, e o guloso via um `Blocked` derivado dela. O que se afirma
+    // aqui é que a porta do jogador devolve a razão certa em cada caso, e que a legalidade
+    // compartilhada vale para os monstros no teste seguinte.
+    const { session, ruleset, hero } = start();
+    session.advanceBy(100);
+    const { x, y } = hero.position;
+
+    // A parede logo ao norte: a arena tem y=0 bloqueado inteiro.
+    expect(ruleset.requestMove(session, hero.id, { x, y: 0 }))
+      .toEqual({ ok: false, reason: y === 1 ? 'tile-blocked' : 'not-adjacent' });
+    expect(ruleset.requestMove(session, hero.id, { x: x + 2, y }))
+      .toEqual({ ok: false, reason: 'not-adjacent' });
+    expect(ruleset.requestMove(session, hero.id, { x, y }))
+      .toEqual({ ok: false, reason: 'same-tile' });
+    expect(ruleset.requestMove(session, hero.id, { x: -1, y: -1 }))
+      .toEqual({ ok: false, reason: 'not-adjacent' });
+  });
+
+  it('monstros nunca acabam em parede nem dois no mesmo tile — a legalidade é compartilhada', () => {
+    // A prova de que o guloso consulta a mesma `canOccupy`: dez minutos com três ratos
+    // disputando um ponto, e nenhum instante com corpo em parede ou dois corpos num tile.
+    const loaded = content();
+    const { session, ruleset } = start({ difficulty: 'professional', loaded });
+    const map = loaded.maps.get('arena');
+    if (map === undefined) throw new Error('esperava o mapa');
+    for (let i = 0; i < 600; i++) {
+      session.advanceBy(1000);
+      const tiles = new Set<string>();
+      for (const m of ruleset.monsters) {
+        expect(isBlocked(map, m.position.x, m.position.y)).toBe(false);
+        tiles.add(`${m.position.x},${m.position.y}`);
+      }
+      expect(tiles.size).toBe(ruleset.monsters.length);
+    }
+  });
+
+  it('um passo manual sai da rota, e o bot reentra pelo tile mais próximo', () => {
+    // Sem isto o walker seguraria um índice que nunca mais fica adjacente, e o personagem
+    // ficaria parado para sempre depois do primeiro `walk` — o pior formato de falha.
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, ruleset, hero } = start({ loaded: semSpawn });
+    session.advanceBy(100);                                    // um passo de rota
+    const antes = ruleset.routeIndex;
+
+    // Para dentro da sala, fora da rota (que percorre a borda interna).
+    const manual = ruleset.requestMove(session, hero.id, { x: 2, y: 2 });
+    expect(manual.ok).toBe(true);
+    expect(hero.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    // O vencimento seguinte do passo de rota descobre e reentra, em vez de travar.
+    run(session, 1000, 100);
+    expect(ruleset.routeIndex).not.toBe(antes);
+    expect(session.drainEvents().some((e) => e.creatureId === hero.id)).toBe(true);
+  });
+
 });

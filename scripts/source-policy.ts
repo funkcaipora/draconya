@@ -87,7 +87,7 @@ const POSITION_RESTORE = /this\.position\s*=\s*state\.position\b/;
 
 /** Onde escrever posição é o trabalho, e não a violação. */
 const POSITION_WRITERS: readonly string[] = [
-  'packages/sim/src/movement/system.ts',
+  'packages/sim/src/movement.ts',
 ];
 
 /**
@@ -125,7 +125,7 @@ function main(): number {
       '\nOnly MovementSystem assigns creature position (FUN-69). Every step — player, bot and'
       + '\nmonster — goes through validate → commit → event, so tile legality and the'
       + '\nCreatureMoved event exist in exactly one place. Call movement.move() or'
-      + '\nmovement.place() instead. See packages/sim/src/movement/system.ts.',
+      + '\nmovement.place() instead. See packages/sim/src/movement.ts.',
     );
     return 1;
   }

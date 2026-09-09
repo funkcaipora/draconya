@@ -79,6 +79,19 @@ export class RouteWalker {
   }
 
   /**
+   * Desfaz o último `step`: o tile estava ocupado e o passo foi recusado (FUN-69).
+   *
+   * Sem isto o índice avançaria e o personagem "pularia" o tile ocupado na volta seguinte —
+   * o trecho da rota que ele existia para limpar ficaria sem ser limpo. Segurar é ficar no
+   * tile anterior e tentar o mesmo destino no vencimento seguinte, que é o que o passo guloso
+   * já faz ao empacar (ADR 0009).
+   */
+  hold(): void {
+    const n = this.#route.tiles.length;
+    this.#index = (this.#index - 1 + n) % n;
+  }
+
+  /**
    * Volta para a rota depois de sair dela — empurrado, teleportado, o que for.
    *
    * Busca LINEAR na lista, não A*: a rota tem dezenas de tiles, e procurar o mais próximo

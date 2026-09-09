@@ -29,6 +29,10 @@ export function loadContent(dir: string): Content {
     stamina: readJsonDir(join(dir, 'stamina')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
+    // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura
+    // do invariante 6 esperam. Obrigatório no conteúdo real: sem Cidade ninguém tem onde
+    // nascer (FUN-60); o `buildContent` é quem reclama se faltar.
+    city: readJsonDir(join(dir, 'city'))[0],
   });
 }
 

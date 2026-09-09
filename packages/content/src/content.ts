@@ -3,7 +3,7 @@
 // Quem lê arquivo é `@draconya/content/load`, e o lint impede `sim` de importar de lá.
 
 import { z } from 'zod';
-import { buildRoute, buildTilemap } from './map.js';
+import { buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema, staminaSchema,
@@ -28,6 +28,11 @@ export interface Content {
   readonly stamina: Stamina;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
+  /**
+   * O mapa da Cidade, com ponto de entrada (FUN-60). Opcional porque conteúdo de teste que só
+   * fala de hunt não precisa dele — mas o conteúdo REAL precisa, e `load.ts` exige.
+   */
+  readonly city?: Tilemap;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
   readonly openValues: readonly string[];
 }
@@ -41,7 +46,12 @@ export interface RawContent {
   readonly stamina?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
+  /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
+  readonly city?: unknown;
 }
+
+/** `data/city.json`. Explícito, e não um id mágico: o boot diz qual mapa é a Cidade. */
+const citySchema = z.object({ mapId: z.string().min(1) });
 
 export class ContentError extends Error {
   constructor(readonly problems: readonly string[]) {
@@ -90,7 +100,33 @@ export function buildContent(raw: RawContent): Content {
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
   const maps = new Map<string, Tilemap>();
-  for (const data of mapData.values()) maps.set(data.id, buildTilemap(data));
+  for (const data of mapData.values()) {
+    const map = buildTilemap(data);
+    // Ponto de entrada em parede é conteúdo quebrado, e quebra AQUI, no boot — não no
+    // primeiro personagem que tentar andar (FUN-60).
+    if (map.entryPoint !== undefined && isBlocked(map, map.entryPoint.x, map.entryPoint.y)) {
+      problems.push(
+        `mapa "${map.id}": entryPoint (${map.entryPoint.x},${map.entryPoint.y}) está fora do ` +
+          'mapa ou em parede',
+      );
+    }
+    maps.set(data.id, map);
+  }
+
+  let city: Tilemap | undefined;
+  if (raw.city !== undefined) {
+    const parsed = citySchema.safeParse(raw.city);
+    if (!parsed.success) {
+      problems.push(`city: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
+    } else {
+      city = maps.get(parsed.data.mapId);
+      if (city === undefined) {
+        problems.push(`city referencia mapa inexistente "${parsed.data.mapId}"`);
+      } else if (city.entryPoint === undefined) {
+        problems.push(`mapa da Cidade "${city.id}" não tem entryPoint — ninguém teria onde nascer`);
+      }
+    }
+  }
 
   const routes = new Map<string, Route>();
   for (const data of routeData.values()) {
@@ -168,6 +204,7 @@ export function buildContent(raw: RawContent): Content {
     maps,
     routes,
     openValues,
+    ...(city === undefined ? {} : { city }),
   };
 }
 
