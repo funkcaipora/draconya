@@ -20,7 +20,6 @@ import type {
   Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route, SpawnPoint, Stamina,
   Tilemap, Vocation,
 } from '@draconya/content';
-import { isBlocked } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
@@ -28,10 +27,12 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { MonsterRuntime, chooseTarget, decideMonsterAction } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
-import type { Blocked } from '../monster/step.js';
+import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance } from '../monster/step.js';
 import { applyDeathPenalty, grantXp } from '../progression.js';
 import { Rng } from '../rng.js';
+import { MovementSystem, movementDuration } from '../movement/system.js';
+import type { Movable } from '../movement/system.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { drainStamina, isExhausted } from '../stamina.js';
@@ -186,17 +187,14 @@ export class HuntRuleset implements Ruleset {
   #playerAttackReady = true;
 
   /**
-   * Tiles ocupados, `"x,y"`. Mantido de forma incremental: quem escreve posição passa por
-   * `#vacate` e `#occupy`.
+   * Quem escreve posição. **A hunt não escreve nenhuma** desde a FUN-69 — ela pede.
    *
-   * Era reconstruído a cada tick, e a razão era boa — uma sessão retomada de snapshot chega
-   * sem ele, porque `restore` não enxerga os participantes, que a `Session` só reconstrói
-   * depois. Mas reconstruir a cada evento seria muito pior que a cada tick: são dezenas de
-   * eventos por segundo contra um punhado de ticks. A saída é a bandeira abaixo — reconstrói
-   * UMA vez, no primeiro evento depois de nascer ou de ser restaurado, e mantém dali em
-   * diante.
+   * A ocupação de tiles mora lá dentro. Ela precisa ser remontada uma vez quando a sessão
+   * nasce ou é restaurada, porque `restore` não enxerga os participantes — a `Session` só os
+   * reconstrói depois. Daí a bandeira: remonta no primeiro evento, e mantém incremental dali
+   * em diante, porque remontar a cada evento seriam dezenas de varreduras por segundo.
    */
-  readonly #occupied = new Set<number>();
+  readonly #movement: MovementSystem;
   #occupancyStale = true;
 
   constructor(options: HuntRulesetOptions) {
@@ -211,6 +209,7 @@ export class HuntRuleset implements Ruleset {
     this.#exitRules = options.exitRules ?? [];
     this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
+    this.#movement = new MovementSystem(options.map);
   }
 
   get monsters(): readonly MonsterRuntime[] {
@@ -241,7 +240,20 @@ export class HuntRuleset implements Ruleset {
     if (session.participants.length > 1) {
       throw new Error('a hunt hospeda um personagem por instância; party é trabalho da F3');
     }
-    character.position = this.#walker.current;
+    // A colocação passa pela MESMA legalidade que um passo (FUN-69). O primeiro tile da rota
+    // é validado no carregamento do conteúdo (FUN-9), então uma recusa aqui é conteúdo
+    // quebrado — e falhar alto é melhor que entrar dentro de uma parede.
+    this.#movement.reset(session.participants);
+    const placed = this.#movement.place(character, this.#walker.current, {
+      creatureId: character.id,
+    });
+    if (!placed.ok) {
+      throw new Error(
+        `não dá para entrar na hunt "${this.#options.hunt.id}": o primeiro tile da rota ` +
+          `(${this.#walker.current.x},${this.#walker.current.y}) foi recusado — ${placed.refusal}`,
+      );
+    }
+    this.#occupancyStale = false;
     session.record('entered-hunt', `${this.#options.hunt.id}/${this.#options.difficulty}`);
 
     // A fila inicial. Tudo começa PRONTO — vencendo agora —, que é o comportamento que os
@@ -353,7 +365,7 @@ export class HuntRuleset implements Ruleset {
   }
 
   onDeath(session: Session, character: CharacterRuntime): void {
-    this.#vacate(character.position.x, character.position.y);
+    this.#movement.remove(character);
     // Morto não anda, não bate e não regenera: os eventos dele saem da fila em vez de
     // vencerem para descobrir isso.
     session.cancelEvents(character.id);
@@ -481,7 +493,9 @@ export class HuntRuleset implements Ruleset {
     });
     this.#monsters.push(monster);
     this.#monsterBySubject.set(monsterSubject(monster.id), monster);
-    this.#occupy(monster.position.x, monster.position.y);
+    // O tile já foi escolhido livre por `firstFree`; `place` é quem o marca como ocupado, e é
+    // ele que recusaria se algo tivesse mudado entre uma coisa e outra.
+    this.#movement.place(monster, request.position, { creatureId: monsterSubject(monster.id) });
     this.#spawner.occupy(request.slot, monster.id);
 
     const subjectOf = monsterSubject(monster.id);
@@ -521,9 +535,10 @@ export class HuntRuleset implements Ruleset {
     this.#walker.resume();
     const to = this.#walker.step();
     if (to === null) return;
-    this.#vacate(character.position.x, character.position.y);
-    character.position = to;
-    this.#occupy(to.x, to.y);
+    // A rota é validada no carregamento (FUN-9), mas o tile pode estar OCUPADO agora — um
+    // monstro parado em cima dele. Recusar é ficar onde está e tentar no vencimento seguinte,
+    // que é o mesmo que o passo guloso faz quando empaca.
+    this.#step(session, character, to, character.id, this.#options.player.stepDurationMs);
     this.#armPlayerAttack(session);
   }
 
@@ -619,9 +634,7 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Movement, subject,
       });
       if (action.kind === 'step') {
-        this.#vacate(monster.position.x, monster.position.y);
-        monster.position = action.to;
-        this.#occupy(action.to.x, action.to.y);
+        this.#step(session, monster, action.to, subject, definition.stepDurationMs);
       }
       // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo
       // de um relógio. É a mesma regra do personagem, do outro lado.
@@ -656,6 +669,29 @@ export class HuntRuleset implements Ruleset {
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
     // avisa o ruleset. Chamar os dois é deliberado: quem aplica dano não decide morte.
     session.kill(character);
+  }
+
+  /**
+   * Pede um passo ao `MovementSystem` e emite o que voltou.
+   *
+   * É por aqui que TODO passo da hunt passa — bot, monstro e, quando a FUN-58 chegar, o `walk`
+   * do socket. Uma recusa não é erro: o tile pode estar ocupado agora, e ficar parado até o
+   * vencimento seguinte é o mesmo que o passo guloso já fazia ao empacar (ADR 0009).
+   */
+  #step<P extends GridPoint>(
+    session: Session,
+    creature: Movable<P>,
+    to: P,
+    creatureId: string,
+    stepDurationMs: number,
+  ): boolean {
+    const outcome = this.#movement.move(creature, to, {
+      creatureId,
+      durationMs: movementDuration(stepDurationMs, creature.position, to),
+    });
+    if (!outcome.ok) return false;
+    session.emit(outcome.event);
+    return true;
   }
 
   #onExitRules(session: Session): void {
@@ -724,7 +760,7 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Spawn, subject: String(slot),
       });
     }
-    this.#vacate(monster.position.x, monster.position.y);
+    this.#movement.remove(monster);
     // Os eventos dele saem da fila junto com ele. Deixá-los vencer custaria um despacho para
     // descobrir que não há mais ninguém ali, uma vez por cadência, para sempre.
     session.cancelEvents(monsterSubject(monster.id));
@@ -775,13 +811,8 @@ export class HuntRuleset implements Ruleset {
    */
   #excludedMonster: MonsterRuntime | null = null;
 
-  readonly #blockedFn: Blocked = (x, y) => {
-    if (isBlocked(this.#options.map, x, y)) return true;
-    if (!this.#occupied.has(tileKey(x, y))) return false;
-    // O próprio monstro ocupa o tile de onde está saindo; sem esta exceção ele nunca sai.
-    const self = this.#excludedMonster;
-    return self === null || self.position.x !== x || self.position.y !== y;
-  };
+  readonly #blockedFn: Blocked = (x, y) =>
+    this.#movement.isBlockedFor(x, y, this.#excludedMonster ?? undefined);
 
   #blocked(exclude: MonsterRuntime | null = null): Blocked {
     this.#excludedMonster = exclude;
@@ -790,38 +821,13 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * Remonta a ocupação do zero. Chamado UMA vez, no primeiro evento depois de a sessão nascer
-   * ou ser restaurada — dali em diante ela é mantida por `#occupy` e `#vacate`.
+   * ou ser restaurada — dali em diante o `MovementSystem` a mantém incremental.
    */
   #rebuildOccupancy(session: Session): void {
     this.#occupancyStale = false;
-    this.#occupied.clear();
-    for (const monster of this.#monsters) {
-      if (monster.alive) this.#occupied.add(tileKey(monster.position.x, monster.position.y));
-    }
-    for (const character of session.participants) {
-      if (character.alive) {
-        this.#occupied.add(tileKey(character.position.x, character.position.y));
-      }
-    }
-  }
-
-  #occupy(x: number, y: number): void {
-    this.#occupied.add(tileKey(x, y));
-  }
-
-  #vacate(x: number, y: number): void {
-    this.#occupied.delete(tileKey(x, y));
+    this.#movement.reset([...this.#monsters, ...session.participants]);
   }
 }
-
-/**
- * Chave NUMÉRICA de tile. `\`${x},${y}\`` alocava uma string por consulta de ocupação, e o
- * passo guloso consulta até três por vencimento.
- *
- * Só é chamada com coordenada dentro do mapa: `#blockedFn` pergunta ao tilemap primeiro, e
- * fora dos limites nem chega aqui. Por isso o fator não precisa acomodar negativo.
- */
-const tileKey = (x: number, y: number): number => x * 100_000 + y;
 
 /**
  * Busca por id sem closure.

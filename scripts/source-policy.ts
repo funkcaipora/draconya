@@ -5,6 +5,7 @@
 //
 //   1. código first-party é TypeScript (ADR 0016)
 //   2. nada em `sim/` conta ticks (FUN-36, invariante 2)
+//   3. só o `MovementSystem` escreve posição de criatura (FUN-69)
 //
 // Código first-party do Draconya é TypeScript. Sem esta checagem a regra vive só na
 // documentação, e regra que vive só na documentação é seguida até o dia em que alguém tem
@@ -64,8 +65,71 @@ function tickCounters(paths: readonly string[]): string[] {
   return found;
 }
 
+/**
+ * Escrita de posição de criatura. Só o `MovementSystem` pode (FUN-69, §8 do documento de
+ * referência OpenTibia).
+ *
+ * A regra existe porque a falta dela aparecia em três lugares ao mesmo tempo: `walk` sem dono
+ * porque implementá-lo criaria um segundo escritor com regra de bloqueio própria, personagem
+ * nascendo dentro de parede porque colocação não passava por legalidade nenhuma, e
+ * `creature-move` sem emissor porque não havia um ponto por onde todo passo passasse.
+ *
+ * Casa com a ATRIBUIÇÃO A UM MEMBRO — `.position =` —, e não com o nome. `const position =` é
+ * uma variável local e passa; comparação (`===`), leitura e desestruturação também.
+ */
+const POSITION_WRITE = /\.position\s*=(?!=)/;
+
+/**
+ * Reconstrução a partir de estado serializado. Montar uma criatura não é movê-la: ela ainda
+ * não existe no mundo, não há tile a liberar, e não há passo a anunciar.
+ */
+const POSITION_RESTORE = /this\.position\s*=\s*state\.position\b/;
+
+/** Onde escrever posição é o trabalho, e não a violação. */
+const POSITION_WRITERS: readonly string[] = [
+  'packages/sim/src/movement/system.ts',
+];
+
+/**
+ * Só os lados AUTORITATIVOS. O cliente espelha o que o servidor manda — escrever posição lá é
+ * aplicar verdade recebida, não decidi-la (invariante 4) —, e `tools/` mede a função de decisão
+ * isolada, sem mundo em volta para consultar.
+ */
+const AUTHORITATIVE = ['packages/sim/src/', 'packages/server/src/'];
+
+function positionWriters(paths: readonly string[]): string[] {
+  const found: string[] = [];
+  for (const path of paths) {
+    if (!AUTHORITATIVE.some((prefix) => path.startsWith(prefix)) || !path.endsWith('.ts')) continue;
+    // Teste monta cenário, e montar não é mover.
+    if (path.endsWith('.test.ts')) continue;
+    if (POSITION_WRITERS.includes(path)) continue;
+    const lines = readFileSync(path, 'utf8').split('\n');
+    lines.forEach((line, index) => {
+      if (line.includes('POSITION_WRITE') || line.includes('POSITION_RESTORE')) return;
+      if (POSITION_RESTORE.test(line)) return;
+      if (POSITION_WRITE.test(line)) found.push(`${path}:${index + 1}`);
+    });
+  }
+  return found;
+}
+
 function main(): number {
   const tracked = trackedFiles();
+
+  const writers = positionWriters(tracked);
+  if (writers.length > 0) {
+    console.error(`source-policy: ${writers.length} creature position write(s) outside MovementSystem.\n`);
+    for (const where of writers) console.error(`  - ${where}`);
+    console.error(
+      '\nOnly MovementSystem assigns creature position (FUN-69). Every step — player, bot and'
+      + '\nmonster — goes through validate → commit → event, so tile legality and the'
+      + '\nCreatureMoved event exist in exactly one place. Call movement.move() or'
+      + '\nmovement.place() instead. See packages/sim/src/movement/system.ts.',
+    );
+    return 1;
+  }
+
   const counters = tickCounters(tracked);
   if (counters.length > 0) {
     console.error(`source-policy: ${counters.length} tick counter(s) found in packages/sim.\n`);
@@ -85,7 +149,10 @@ function main(): number {
   );
 
   if (offenders.length === 0) {
-    console.log('source-policy: passed — no first-party JavaScript, no tick counters in sim.');
+    console.log(
+      'source-policy: passed — no first-party JavaScript, no tick counters in sim,'
+      + ' no position writes outside MovementSystem.',
+    );
     return 0;
   }
 
