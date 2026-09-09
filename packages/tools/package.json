@@ -15,7 +15,8 @@
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo",
     "content:check": "tsx src/content/check.ts",
-    "bench:monster": "tsx src/bench/monster-step.ts"
+    "bench:monster": "tsx src/bench/monster-step.ts",
+    "bench:hunts": "node --expose-gc --import tsx src/bench/cold-hunts.ts"
   },
   "dependencies": {
     "@draconya/protocol": "workspace:*",

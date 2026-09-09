@@ -329,6 +329,42 @@ Cenário de referência revisado com os números do PRD: **20 mil contas ativas,
 
 Duas ou três máquinas de aplicação mais Postgres e Redis gerenciados. **O gargalo provável continua sendo banda e conexões, não CPU.**
 
+#### Medido (FUN-46) — 2026-09-09, Apple M2, macOS arm64, Node 24.14
+
+`pnpm bench:hunts`: 5.000 hunts desanexadas, 1 personagem cada, **38 monstros vivos por
+instância**, 1 Hz, 10 minutos simulados. Duas execuções.
+
+| Métrica | Estimativa | Medido |
+|---|---|---|
+| custo de tick por instância | 50–200 µs | **11,4 – 14,8 µs** |
+| instâncias por core (1 Hz) | 200–500 | **~67.000 – 88.000** |
+| memória por sessão | a medir | **27,9 KiB** |
+| snapshot por sessão | a medir | **8,9 KiB** |
+| pausa de GC | a medir | 3,1–3,8 s em ~35 s de laço, **pico de 75–105 ms** |
+
+**A projeção não estourou: sobrou.** O custo medido é três a quatro vezes menor que a ponta
+otimista da estimativa, e a conclusão da seção continua valendo com folga — o gargalo é banda e
+conexão, não CPU. Nenhuma das saídas previstas (baixar mais o tick, apertar stamina, reescrever
+o núcleo em Rust ou Go) precisa ser acionada.
+
+Memória também não é o gargalo que se temia: 5.000 sessões cabem em ~140 MiB de heap, e os
+5.000 snapshots correspondentes em ~44 MiB de Redis.
+
+**O número que merece atenção é a pausa de GC.** Um pico de 100 ms a 10 Hz significa um tick
+perdido para todas as sessões anexadas do nó ao mesmo tempo. Não é problema para hunt desanexada
+— ela recupera pelo `dtMs` do tick seguinte, por construção —, mas é exatamente o tipo de coisa
+que aparece como "travadinha" para quem está olhando, e é métrica de operação (FUN-47), não de
+simulação.
+
+**O custo por instância piora com a escala, e é medido:** 400 hunts saem a 9,3 µs, 5.000 saem a
+11–15. A diferença é localidade — 22 MiB de conjunto de trabalho cabem no cache, 142 MiB não. É
+mais uma razão para medir no cenário cheio em vez de extrapolar de um pequeno.
+
+**Este número NÃO substitui uma medição na máquina de destino.** O tick é single-thread, então
+quem decide é desempenho por core, e um core M-series não é um OCPU Ampere nem um core de EPYC
+(ADR 0013). Medir aqui serve como linha de base e para detectar regressão de ordem de grandeza;
+a conta de servidor de verdade precisa da rodada no host que vai rodar o jogo.
+
 O maior risco de custo não é técnico: é o teto de `2 × accounts`. Stamina de 24 h com regeneração 1:1 significa que um personagem pode caçar metade do tempo — isso é o freio econômico real e precisa ser monitorado como métrica de infraestrutura, não só de game design.
 
 ---

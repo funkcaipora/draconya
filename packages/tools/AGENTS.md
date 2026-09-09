@@ -31,5 +31,14 @@ pnpm vitest run packages/tools
 
 - O cliente de carga precisa cobrir os dois modos: anexado (mede bytes/s e atraso de tick) e
   desanexado (abre a sessão e some). Só o segundo valida a projeção de custo do projeto.
+- **`pnpm bench:hunts` só vale com a máquina junto.** O tick é single-thread, então quem decide é
+  desempenho por core (ADR 0013); o relatório imprime plataforma, CPU e versão do Node por isso.
+  Medir no laptop e extrapolar para o servidor erra.
+- **O aquecimento do JIT não é detalhe:** o mesmo cenário mediu 51 µs pequeno e 12 µs grande. O
+  aquecimento é contado em *ticks de sessão*, não em ticks do laço, e cenário pequeno demais sai
+  com aviso.
+- **Observador de GC é `{ type: 'gc' }`, nunca `{ entryTypes: ['gc'] }`.** A segunda forma é
+  aceita sem reclamar e não entrega entrada nenhuma no Node 24 — o relatório dizia "0 ms de GC" e
+  não media coisa alguma.
 
 Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio).
