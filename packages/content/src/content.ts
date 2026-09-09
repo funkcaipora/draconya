@@ -6,9 +6,10 @@ import { z } from 'zod';
 import { buildRoute, buildTilemap } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
-  huntSchema, monsterSchema, progressionSchema, routeSchema, tilemapSchema, vocationSchema,
+  combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema, tilemapSchema,
+  vocationSchema,
 } from './schemas.js';
-import type { Hunt, Monster, Progression, Vocation } from './schemas.js';
+import type { Combat, Hunt, Monster, Progression, Vocation } from './schemas.js';
 
 export interface Content {
   /**
@@ -21,6 +22,8 @@ export interface Content {
   readonly vocations: ReadonlyMap<string, Vocation>;
   /** Base de progressão: sem ela não há como saber os stats de quem ainda não tem vocação. */
   readonly progression: Progression;
+  /** Coeficientes de combate. O §12.1 os quer em conteúdo, nunca em código. */
+  readonly combat: Combat;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
@@ -32,6 +35,7 @@ export interface RawContent {
   readonly hunts: readonly unknown[];
   readonly vocations: readonly unknown[];
   readonly progression?: readonly unknown[];
+  readonly combat?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
 }
@@ -63,6 +67,13 @@ export function buildContent(raw: RawContent): Content {
   // exatamente o "nada em código" que esta issue proíbe.
   if (progression === undefined) {
     problems.push('progression/baseline.json ausente: sem ele não há stats de level 1');
+  }
+  const combats = parseAll('combat', raw.combat ?? [], combatSchema, problems);
+  const combat = combats.get('baseline');
+  // Mesma razão da base de progressão: sem coeficiente não há como resolver dano, e um
+  // default em código faria o §12.1 deixar de valer no dia em que ninguém estivesse olhando.
+  if (combat === undefined) {
+    problems.push('combat/baseline.json ausente: sem ele não há como resolver dano');
   }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
@@ -117,6 +128,7 @@ export function buildContent(raw: RawContent): Content {
     ...(progression?._open === undefined
       ? []
       : [`progression/${progression.id}: ${progression._open}`]),
+    ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
   ];
 
   return {
@@ -125,6 +137,7 @@ export function buildContent(raw: RawContent): Content {
     hunts,
     vocations,
     progression: progression as Progression,
+    combat: combat as Combat,
     maps,
     routes,
     openValues,

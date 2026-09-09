@@ -98,6 +98,28 @@ export const progressionSchema = z.object({
 
 export type Progression = z.infer<typeof progressionSchema>;
 
+/**
+ * Coeficientes de combate. O §12.1 é explícito: fórmula e parâmetro são CONTEÚDO, não código.
+ *
+ * O que o PRD decide (§12.2) e o que ele não decide estão separados de propósito — o que não
+ * está decidido carrega `_open`, para não passar por escolha de balanceamento.
+ */
+export const combatSchema = z.object({
+  id: z.literal('baseline'),
+  /** §12.2 DECIDIDO: dodge não zera o dano, reduz à metade. */
+  dodgeMultiplier: z.number().min(0).max(1),
+  /** Quanto da armadura do alvo é subtraído, por tipo de ataque. */
+  armorEffectiveness: z.object({
+    melee: z.number().min(0).max(1),
+    magic: z.number().min(0).max(1),
+  }),
+  /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */
+  minimumDamageFraction: z.number().min(0).max(1),
+  _open: z.string().optional(),
+});
+
+export type Combat = z.infer<typeof combatSchema>;
+
 export type Monster = z.infer<typeof monsterSchema>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;

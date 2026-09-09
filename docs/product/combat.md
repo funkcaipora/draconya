@@ -1,6 +1,6 @@
 # Combate
 
-**Status:** não implementado
+**Status:** parcial — resolução de dano implementada (FUN-35); ataque, alvo e cooldown são FUN-36/40/43
 **PRD:** §12
 **Épico:** E2
 
@@ -14,6 +14,28 @@ Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque rec
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
 
+## O que já existe
+
+`resolveDamage` em `packages/sim/src/combat/damage.ts`. Função pura a menos do RNG, que é o
+**da sessão**: semeado e determinístico (FUN-25). `Math.random()` ali tornaria "por que eu
+morri" uma pergunta sem resposta.
+
+A ordem do cálculo, e cada passo tem um porquê:
+
+1. **Rola o dodge — sempre**, mesmo contra alvo com chance zero. Pular a rolagem faria a
+   sequência do gerador depender de um atributo do alvo, e aí dar dodge a um monstro
+   deslocaria todo o loot que vem depois, num efeito que ninguém ligaria à causa.
+2. Subtrai a armadura, com efetividade **por tipo de ataque** (hoje: vale contra corpo a
+   corpo, não vale contra magia — provisório).
+3. Aplica o **piso**: nem a armadura mais alta zera um golpe. Dano zero contra alvo pesado
+   vira impasse silencioso, sem nada na tela dizendo o motivo.
+4. Se esquivou, corta pela metade.
+5. **Arredonda só no fim.** Arredondar antes do dodge faria 50% de 3 virar 2, e o jogador
+   veria uma esquiva que reduziu um terço.
+
+O bônus de Bestiário é **PvE-only por construção**: `resolveDamage` recebe o contexto, e o
+acréscimo só entra quando ele é `pve`. A Guild War não tem como herdá-lo por esquecimento.
+
 ## Regras
 
 - Ataques do jogador sempre acertam (sem rolagem de acerto ofensivo).
@@ -22,6 +44,13 @@ Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Gu
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
 
 ## Parâmetros de balanceamento
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
+| Efetividade da armadura — corpo a corpo | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json` |
+| Efetividade da armadura — magia | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json` |
+| Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
