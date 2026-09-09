@@ -110,9 +110,13 @@ guarda um índice por personagem (`receipts:char:{characterId}`) ao lado do extr
 gravado por um nó `game` antigo, durante um deploy em rolagem, não tem entrada de índice e volta
 a esperar a varredura — degradação, não perda.
 
-**A tela de seleção de personagem ainda lê a linha crua** e mostra o mesmo atraso de até dez
-segundos. É o mesmo defeito num lugar onde ele só afeta o que é exibido, e está aberto na
-FUN-66.
+`GET /api/characters` e `POST /api/characters/:id/select` liquidam pelo **mesmo caminho** antes
+de ler a linha (FUN-66), então a tela de seleção e o jogo concordam. A diferença é o que se faz
+ao falhar: o ticket recusa a entrada, porque a sessão nasce daquele número; a lista **serve o
+valor atrasado** e loga, porque ela é como se chega a qualquer lugar e um 503 nela trancaria a
+conta inteira por uma falha de ledger — o valor ali só é exibido, nada é criado a partir dele.
+Na lista, liquida-se depois de listar (os ids só se conhecem listando) e relê-se só quando algo
+foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma consulta a mais.
 
 ## Parâmetros de balanceamento
 

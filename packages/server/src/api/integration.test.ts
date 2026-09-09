@@ -237,6 +237,44 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(await receipts.pendingFor(character.id)).toEqual([]);
   });
 
+  it('the character list and select settle pending progress before reading (FUN-66)', async () => {
+    // A tela onde o jogador cai logo depois de sair de uma hunt. Ela lia a linha crua e, por
+    // até dez segundos, mostrava o level e a XP de antes — duas telas discordando na mesma
+    // sessão de uso. Mesmo caminho do ticket (FUN-56); a diferença é que aqui falhar não
+    // recusa a resposta.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await receipts.save({
+      sessionId: randomUUID(), characterId: character.id, accountId: owner.accountId,
+      reason: 'drain', seq: 1,
+      aggregates: {
+        durationMs: 60_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+      },
+      notableEvents: [],
+    });
+
+    const listed = await (await request('/api/characters', 'GET', owner.cookie)).json();
+    const dto = (listed.characters as Array<{ id: string; xp: number; gold: number; level: number }>)
+      .find((c) => c.id === character.id);
+    expect(dto).toMatchObject({ xp: 900, gold: 380 });
+    expect(dto?.level).toBeGreaterThan(1);
+    expect(await receipts.pendingFor(character.id)).toEqual([]);
+
+    // E `select`, com um segundo extrato: o id já é conhecido, liquida antes de ler.
+    await receipts.save({
+      sessionId: randomUUID(), characterId: character.id, accountId: owner.accountId,
+      reason: 'drain', seq: 1,
+      aggregates: {
+        durationMs: 1_000, xpGained: 0, goldGained: 20, goldSpent: 0, kills: 0, deaths: 0,
+      },
+      notableEvents: [],
+    });
+    const selected = await (await request(
+      `/api/characters/${character.id}/select`, 'POST', owner.cookie,
+    )).json();
+    expect(selected).toMatchObject({ id: character.id, gold: 400 });
+  });
+
   it('uses a one-time ticket for a real socket, keeps the session after disconnect, and reconnects', async () => {
     const owner = await login();
     const character = await createCharacter(owner.cookie);

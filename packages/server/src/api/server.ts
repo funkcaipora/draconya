@@ -111,9 +111,11 @@ export function buildApi(
   const repository = dependencies.repository;
   if (auth !== undefined) registerAuthRoutes(app, configuration, auth);
   if (auth !== undefined && repository !== undefined) {
-    registerCharacterRoutes(
-      app, auth, repository, dependencies.isCharacterActive, dependencies.locateSession,
-    );
+    registerCharacterRoutes(app, auth, repository, {
+      isCharacterActive: dependencies.isCharacterActive,
+      locateSession: dependencies.locateSession,
+      settleProgress: dependencies.settleProgress,
+    });
   }
 
   const tickets = dependencies.tickets;
