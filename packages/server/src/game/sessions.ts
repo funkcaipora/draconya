@@ -23,12 +23,23 @@ import type {
  * level (FUN-34). Números fixos aqui davam um personagem que subia de level e ENCOLHIA — o
  * level up recalcula o máximo pela tabela (FUN-37), e um valor inventado na criação não
  * sobrevive ao primeiro abate que importa.
+ *
+ * A POSIÇÃO também não está aqui desde a FUN-69. Ela era `(0,0)`, que é parede na borda de
+ * qualquer tilemap (FUN-60), e ninguém notava porque nada consultava posição na Cidade. Quem
+ * coloca é o `onEnter` da Cidade, pelo `entryPoint` do mapa — conteúdo, validado no boot.
  */
-const INITIAL_RUNTIME = {
-  position: { x: 0, y: 0, z: 7 },
-  goldDelta: 0, alive: true,
-  cooldowns: {},
-} as const;
+const INITIAL_FLAGS = { goldDelta: 0, alive: true, cooldowns: {} } as const;
+
+/** Onde nascer antes de o `onEnter` colocar: fora do mapa de propósito, para não ocupar tile. */
+const UNPLACED = { x: -1, y: -1, z: 0 } as const;
+
+/** O ruleset da Cidade, com o mapa e a duração de passo que o conteúdo diz. */
+function cityRulesetFor(content: Content) {
+  return createCityRuleset({
+    ...(content.city === undefined ? {} : { map: content.city }),
+    stepDurationMs: content.progression.stepDurationMs,
+  });
+}
 
 export function createCitySessionFactory(
   content: Content,
@@ -41,7 +52,7 @@ export function createCitySessionFactory(
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
       contentVersion: content.version,
-      ruleset: createCityRuleset(),
+      ruleset: cityRulesetFor(content),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),
@@ -52,7 +63,8 @@ export function createCitySessionFactory(
     const stats = statsForLevel(initialCharacter.level, null, content.progression);
     const character = new CharacterRuntime({
       id: characterId,
-      ...INITIAL_RUNTIME,
+      position: UNPLACED,
+      ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
       vocationId: null,
@@ -115,7 +127,7 @@ export function createSessionRestorer(content: Content): SessionRestorer {
 function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null {
   // Cidade e hunt são as duas que existem. Treino, quest, boss e guild war ainda não têm
   // ruleset — e forçar um conhecido em cima produziria uma sessão que mente sobre o que é.
-  if (snapshot.type === 'city') return createCityRuleset();
+  if (snapshot.type === 'city') return cityRulesetFor(content);
   if (snapshot.type === 'hunt') return huntRulesetFromSnapshot(snapshot, content);
   return null;
 }
@@ -165,7 +177,7 @@ function cityFor(content: Content, from: Session, now: () => number): Session | 
   const session = new Session({
     id,
     contentVersion: content.version,
-    ruleset: createCityRuleset(),
+    ruleset: cityRulesetFor(content),
     rng: Rng.fromSeed(id),
     // Marca de quando a sessão passou a existir, para quem investiga. Desde a FUN-68 não
     // alimenta simulação nenhuma — o relógio de dentro é lógico e nasce em zero —, então

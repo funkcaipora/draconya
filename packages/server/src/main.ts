@@ -17,6 +17,7 @@ import {
   createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
+import { JobsMetrics } from './jobs/metrics.js';
 import { settleCharacterProgress } from './jobs/ledger.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
@@ -159,6 +160,7 @@ async function main(): Promise<void> {
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
+      metrics: new JobsMetrics(configuration.NODE_ID),
       ...(database === null ? {} : { database: database.db }),
     }),
   };

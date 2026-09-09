@@ -59,6 +59,12 @@ caro e mais lento sem ganho nenhum nesta escala. Gerenciado entra quando houver 
 container sem cerimônia. O Render foi descartado porque o serviço gratuito hiberna sem tráfego —
 e hibernar é exatamente o que o `game` não pode fazer.
 
+**Portas e `/metrics`.** Cada papel expõe o próprio `/metrics` em formato Prometheus, sem
+autenticação — quem o esconde é a rede, e pôr credencial ali daria a falsa impressão de que ele
+pode sair para a internet. `api` em `API_PORT` (3000), `jobs` em `JOBS_PORT` (3001, FUN-59) e
+`game` em `GAME_PORT` (7171). Três alvos iguais são mais simples de operar que dois alvos e um
+Pushgateway, e um alvo por processo é o que faz o processo morrer aparecer como alvo sumindo.
+
 ---
 
 ## Por que o `game` não cabe em serverless

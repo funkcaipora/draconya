@@ -28,6 +28,8 @@ export interface MonsterState {
    * Ausente é `true`: uma criatura que acabou de nascer bate assim que encosta.
    */
   readonly attackReady?: boolean;
+  /** Milissegundos por tile, copiado da definição (FUN-69). Ausente: quem restaura repõe. */
+  readonly stepDurationMs?: number;
   readonly cooldowns: Partial<CooldownState>;
 }
 
@@ -61,6 +63,7 @@ export class MonsterRuntime {
   targetId: string | null;
   /** Ver `MonsterState.attackReady`. */
   attackReady: boolean;
+  stepDurationMs: number;
   readonly cooldowns: Cooldowns;
 
   constructor(state: MonsterState) {
@@ -71,6 +74,7 @@ export class MonsterRuntime {
     this.health = state.health;
     this.targetId = state.targetId;
     this.attackReady = state.attackReady ?? true;
+    this.stepDurationMs = state.stepDurationMs ?? 0;
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
@@ -87,6 +91,7 @@ export class MonsterRuntime {
       home: this.home,
       targetId: this.targetId,
       attackReady: this.attackReady,
+      stepDurationMs: this.stepDurationMs,
       cooldowns: this.cooldowns.getState(),
     };
   }

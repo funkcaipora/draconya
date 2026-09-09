@@ -17,10 +17,9 @@
 // Os nomes são em INGLÊS mesmo com a issue escrevendo-os em português: nome de métrica é
 // contrato de rede, como chave de log e coluna de banco, e o CLAUDE.md põe contrato em inglês.
 //
-// **Falta uma da lista da issue: `orphan_sessions`.** Quem detecta sessão órfã é o `jobs`
-// (snapshot sem lease), e o `jobs` não tem superfície de métrica — é um processo de fundo sem
-// servidor HTTP. Uma gauge aqui seria sempre zero, o que é pior que não ter: um painel que diz
-// "nenhuma órfã" sem nunca ter olhado. Fica para quando o `jobs` tiver por onde falar.
+// `orphan_sessions` NÃO mora aqui, e é decisão: quem detecta sessão órfã é o `jobs`, e a gauge
+// vive lá (`jobs/metrics.ts`, FUN-59). Uma cópia aqui seria sempre zero — um painel dizendo
+// "nenhuma órfã" sem nunca ter olhado.
 
 import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 import type { SessionType } from '@draconya/sim';

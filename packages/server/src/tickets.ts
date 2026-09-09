@@ -38,6 +38,12 @@ export interface InitialCharacter {
    */
   readonly staminaMs?: number;
   readonly staminaUpdatedAtMs?: number;
+  /**
+   * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
+   * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
+   * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
+   */
+  readonly name?: string;
 }
 
 export interface IssuedTicket {
@@ -385,7 +391,8 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     && typeof staminaUpdatedAtMs === 'number' && Number.isFinite(staminaUpdatedAtMs)
     ? { staminaMs, staminaUpdatedAtMs }
     : {};
-  return { level, xp, ...stamina };
+  const name = initial['name'];
+  return { level, xp, ...stamina, ...(typeof name === 'string' && name.length > 0 ? { name } : {}) };
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

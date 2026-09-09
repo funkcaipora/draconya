@@ -48,7 +48,13 @@ describe.runIf(available)('session directory', () => {
     const directory = new SessionDirectory(redis, { leaseMs: 120 });
     await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'hunt' });
     expect(await directory.lookup('p1')).not.toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Testar que a chave EXPIRA é testar o Redis (FUN-62). O que é nosso é ter mandado o
+    // prazo certo — afirmado —, e o que a ausência do lease significa — provada apagando na
+    // mão, que é o que a expiração faz, sem esperar por ela.
+    const ttl = await redis.pttl('char:p1:session');
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(120);
+    await redis.del('char:p1:session');
     expect(await directory.lookup('p1')).toBeNull();
   });
 
@@ -96,7 +102,10 @@ describe.runIf(available)('session directory', () => {
     const directory = new SessionDirectory(redis, { leaseMs: 120 });
     await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });
     expect(await directory.isNodeAlive('n1')).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    const ttl = await redis.pttl('node:n1:heartbeat');
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(120);
+    await redis.del('node:n1:heartbeat');
     expect(await directory.isNodeAlive('n1')).toBe(false);
   });
 });
@@ -161,7 +170,12 @@ describe.runIf(available)('two active characters per account limit', () => {
     await directory.reserveSlot('a1', 'p1');
     await directory.reserveSlot('a1', 'p2');
     expect(await directory.reserveSlot('a1', 'p3')).toBe(false);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // O slot tem prazo — afirmado — e, sem ele, o terceiro entra. Apagar é o que a expiração
+    // faz; esperá-la é testar o Redis.
+    const ttl = await redis.pttl('account:a1:active');
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(120);
+    await redis.del('account:a1:active');
     expect(await directory.reserveSlot('a1', 'p3')).toBe(true);
   });
 

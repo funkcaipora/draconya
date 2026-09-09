@@ -216,3 +216,31 @@ describe('stamina baseline', () => {
     expect(buildContent(base()).stamina.maxMs).toBe(86_400_000);
   });
 });
+
+describe('ponto de entrada da Cidade (FUN-60)', () => {
+  const sala = { id: 'city', z: 7, grid: ['####', '#..#', '#..#', '####'] };
+
+  it('aceita um entryPoint em chão livre e o expõe como a Cidade', () => {
+    // Sem hunt: a de base aponta o mapa `rat-cellars`, e com um mapa presente a referência
+    // cruzada passa a ser checada — o que aqui seria ruído.
+    const content = buildContent(base({
+      hunts: [], maps: [{ ...sala, entryPoint: { x: 1, y: 1 } }], city: { mapId: 'city' },
+    }));
+    expect(content.city?.entryPoint).toEqual({ x: 1, y: 1 });
+  });
+
+  it('recusa entryPoint em parede — quebra no boot, e não no jogador', () => {
+    // `(0,0)` é a borda de qualquer tilemap. Era exatamente onde todo personagem nascia, e
+    // ninguém notava porque nada consultava posição na Cidade.
+    expect(() => buildContent(base({
+      hunts: [], maps: [{ ...sala, entryPoint: { x: 0, y: 0 } }], city: { mapId: 'city' },
+    }))).toThrow(/entryPoint \(0,0\)/);
+  });
+
+  it('recusa Cidade sem entryPoint e Cidade apontando mapa inexistente', () => {
+    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'city' } })))
+      .toThrow(/não tem entryPoint/);
+    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'nowhere' } })))
+      .toThrow(/mapa inexistente "nowhere"/);
+  });
+});

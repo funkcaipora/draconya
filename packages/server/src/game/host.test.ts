@@ -10,6 +10,8 @@ import type { ReceiptStore } from '../receipts.js';
 import { SessionHost } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
+import { createCitySessionFactory } from './sessions.js';
+import { testContent } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
 
@@ -1332,5 +1334,146 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
 
     await expect(host.prepare('p1', undefined, 'a1')).rejects.toThrow(/redis is down/);
     expect(removed).toEqual([]);
+  });
+});
+
+describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
+  /** Um host com sessões de Cidade DE VERDADE — mapa, ponto de entrada e legalidade. */
+  const cityHost = () => new SessionHost({
+    nodeId: 'n1', contentVersion: 'v-test', logger,
+    createSession: createCitySessionFactory(testContent()),
+    now: () => 0,
+  });
+
+  it('move o personagem e quem está olhando recebe UM creature-move, com duração', () => {
+    // `creature-move` não tinha emissor nenhum antes desta issue. Um passo é enviado uma vez,
+    // com origem, destino e duração — o cliente interpola o intervalo inteiro (ADR 0001).
+    const host = cityHost();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    socket.frames.length = 0;
+
+    // Nasceu no entryPoint do mapa de teste, e não em (0,0) — é a FUN-60.
+    expect(host.sessionFor('p1')?.participants[0]?.position).toEqual({ x: 2, y: 2, z: 7 });
+
+    host.handle(viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+
+    const moves = socket.received().filter((m) => m.type === 'creature-move');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({
+      from: { x: 2, y: 2, z: 7 }, to: { x: 2, y: 1, z: 7 }, durationMs: 500,
+    });
+    expect(host.sessionFor('p1')?.participants[0]?.position).toEqual({ x: 2, y: 1, z: 7 });
+  });
+
+  it('recusa em silêncio: parede, teleporte por walk-to, e nada sai no lote', () => {
+    // `walk` sai dezenas de vezes por segundo de um cliente segurando a tecla. Responder
+    // cada recusa geraria tráfego de volta a partir de tráfego de entrada.
+    const host = cityHost();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.handle(viewer, { type: 'walk', direction: 'north' });   // (2,1)
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'walk', direction: 'north' });   // (2,0) é parede
+    host.handle(viewer, { type: 'walk-to', destination: { x: 4, y: 4, z: 7 } }); // dois tiles
+    host.flush();
+
+    expect(socket.received().filter((m) => m.type === 'creature-move')).toHaveLength(0);
+    expect(host.sessionFor('p1')?.participants[0]?.position).toEqual({ x: 2, y: 1, z: 7 });
+  });
+
+  it('walk-to adjacente anda; a origem é o que o SERVIDOR sabe, nunca o que o cliente diz', () => {
+    const host = cityHost();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'walk-to', destination: { x: 3, y: 3, z: 7 } });
+    host.flush();
+
+    const move = socket.received().find((m) => m.type === 'creature-move');
+    expect(move).toMatchObject({ from: { x: 2, y: 2, z: 7 }, to: { x: 3, y: 3, z: 7 } });
+  });
+});
+
+describe('say (FUN-58)', () => {
+  const quietCity = (): Ruleset => ({
+    type: 'city', hz: () => 0, onEnter: () => {}, onEvent: () => {}, onDeath: () => {}, onEnd: () => {},
+  });
+  const chatHost = () => {
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    return buildHost(quietCity(), { directory });
+  };
+  const chats = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'chat-message');
+
+  it('chega a todos os visualizadores da sessão, o autor inclusive, assinado com o nome do ticket', async () => {
+    // Duas abas do mesmo personagem são dois visualizadores da MESMA sessão. As duas recebem,
+    // e a que falou também: é o eco que confirma que a mensagem saiu.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'Hero' }, 'a1');
+    const socketA = new FakeSocket();
+    const socketB = new FakeSocket();
+    const viewerA = host.attach(socketA, 'p1');
+    host.attach(socketB, 'p1');
+
+    host.handle(viewerA, { type: 'say', channel: 'local', text: '  olá  ' });
+    host.flush();
+
+    const expected = { type: 'chat-message', channel: 'local', author: 'Hero', text: 'olá' };
+    expect(chats(socketA)).toEqual([expected]);
+    expect(chats(socketB)).toEqual([expected]);
+  });
+
+  it('não vaza para visualizador de OUTRA sessão', async () => {
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'One' }, 'a1');
+    await host.prepare('p2', { level: 1, xp: 0, name: 'Two' }, 'a2');
+    const socket1 = new FakeSocket();
+    const socket2 = new FakeSocket();
+    const viewer1 = host.attach(socket1, 'p1');
+    host.attach(socket2, 'p2');
+
+    host.handle(viewer1, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(chats(socket1)).toHaveLength(1);
+    expect(chats(socket2)).toHaveLength(0);
+  });
+
+  it('canal desconhecido, texto vazio e caractere de controle: nada sai, nem erro', async () => {
+    // Sem resposta de propósito: um cliente com bug mandando em laço não pode gerar
+    // tráfego de volta. `\u200b` (zero-width) e `\u202e` (bidi override) são como se
+    // falsifica o nome de autor na tela.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'Hero' }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'say', channel: 'global', text: 'oi' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: '   ' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: 'oi\u200b' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: '\u202eHero: oi' });
+    host.flush();
+
+    expect(socket.received().filter((m) => m.type !== 'welcome')).toHaveLength(0);
+  });
+
+  it('sem nome no ticket, assina com o id — nunca cala', async () => {
+    // Ticket de um `api` antigo, durante deploy em rolagem. Degradação, não perda.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(chats(socket)).toEqual([{ type: 'chat-message', channel: 'local', author: 'p1', text: 'oi' }]);
   });
 });

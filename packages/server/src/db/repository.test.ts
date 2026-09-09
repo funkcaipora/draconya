@@ -179,6 +179,11 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
       activeCheckCalled.resolve();
       return active;
     });
+    // A ÚNICA espera real que sobra na suíte, e com motivo (FUN-62): o que se afirma é que
+    // a exclusão está BLOQUEADA numa trava de linha do Postgres enquanto a emissão a segura, e
+    // "continua bloqueada" só se observa deixando passar tempo — não há relógio a injetar na
+    // trava do banco. 75 ms é folga sobre um `await` que, sem a trava, resolveria em menos de
+    // um; se vier a falhar sob carga, é a trava que sumiu, não o número que apertou.
     expect(await Promise.race([
       activeCheckCalled.promise.then(() => 'called'),
       delay(75).then(() => 'blocked'),

@@ -10,8 +10,30 @@
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
 import type { Rng, RngState } from './rng.js';
+import type { CreatureMoved, MoveResult } from './movement.js';
+import type { GridPoint } from './monster/step.js';
 import { Schedule } from './schedule.js';
 import type { ScheduleState, ScheduledEvent } from './schedule.js';
+
+/**
+ * Um acontecimento de GAMEPLAY, produzido haja ou não alguém olhando (§12 do documento de
+ * referência OpenTibia).
+ *
+ * Não é mensagem de protocolo. Quem traduz um destes num pacote é o servidor, que é o único
+ * lado que conhece socket — e é isso que mantém a matemática igual entre a hunt anexada e a
+ * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
+ */
+export type DomainEvent = CreatureMoved;
+
+/**
+ * Teto de eventos de domínio guardados à espera de quem os leia.
+ *
+ * O hospedeiro drena a cada ciclo, então na prática o buffer nunca passa de um avanço. O teto
+ * existe para a sessão que ninguém drena — um nó sem visualizador nenhum não pode acumular
+ * memória por horas de hunt. Estourar DESCARTA os mais antigos, e é a escolha certa: isto é
+ * apresentação, e apresentação é perdível. Gameplay não passa por aqui.
+ */
+export const MAX_PENDING_DOMAIN_EVENTS = 512;
 
 /**
  * Versão do FORMATO de snapshot — não do conteúdo, não do servidor.
@@ -137,6 +159,16 @@ export interface Ruleset {
   onEnd(session: Session, reason: EndReason): void;
 
   /**
+   * Um jogador pediu para andar (FUN-69). INTENÇÃO, processada NA CHEGADA — nunca enfileirada
+   * para o próximo evento: enfileirar põe até 100 ms de jitter em cima do ping, irrelevante na
+   * hunt e inaceitável no PvP manual da F5.
+   *
+   * Passa pelo MESMO sistema de movimento que o bot e o monstro, e recebe a mesma razão de
+   * recusa. Ausente no ruleset significa "esta sessão não anda".
+   */
+  requestMove?(session: Session, characterId: string, to: GridPoint): MoveResult;
+
+  /**
    * Estado próprio do ruleset, para entrar no snapshot. Ruleset sem estado pode omitir.
    * O serializador trata o retorno como opaco — quem entende do formato é o ruleset.
    */
@@ -151,6 +183,8 @@ export interface SessionOptions {
   readonly rng: Rng;
   readonly createdAtMs: number;
 }
+
+const EMPTY_EVENTS: readonly DomainEvent[] = [];
 
 export class Session {
   readonly id: string;
@@ -173,6 +207,7 @@ export class Session {
   /** Relógio LÓGICO. Começa em zero, anda só com `advanceBy`. Ver `SessionSnapshot`. */
   #logicalNowMs = 0;
   #schedule = new Schedule();
+  #domainEvents: DomainEvent[] = [];
   #endedReason: EndReason | null = null;
 
   /**
@@ -322,6 +357,36 @@ export class Session {
   /** Quantos eventos esperam. Existe para métrica e teste; não é regra de jogo. */
   get pendingEvents(): number {
     return this.#schedule.size;
+  }
+
+  /**
+   * Registra um acontecimento de gameplay. Sempre — nunca condicionado a haver visualizador.
+   *
+   * Um `if (temViewer)` aqui mudaria a matemática conforme alguém estivesse olhando, que é o
+   * invariante 3 quebrado e o que o §12 proíbe em letra. Viewer decide quem SERIALIZA, nunca
+   * o que acontece.
+   */
+  emit(event: DomainEvent): void {
+    this.#domainEvents.push(event);
+    // Estourou: descarta a metade mais antiga de UMA vez, e não um por push. `shift()` num
+    // vetor cheio é O(n) a cada passo, e numa sessão que ninguém drena isso é o coletor
+    // rodando o tempo todo — medido no `pnpm bench:hunts`: 18,8 → 25,5 µs por tick.
+    if (this.#domainEvents.length > MAX_PENDING_DOMAIN_EVENTS) {
+      this.#domainEvents.splice(0, MAX_PENDING_DOMAIN_EVENTS >> 1);
+    }
+  }
+
+  /**
+   * Retira e devolve o que aconteceu desde a última drenagem.
+   *
+   * NÃO entra no snapshot: é o que aconteceu, não o que a sessão é. Um evento gravado e
+   * reentregue depois de uma retomada viraria um passo repetido na tela de quem reconectou.
+   */
+  drainEvents(): readonly DomainEvent[] {
+    if (this.#domainEvents.length === 0) return EMPTY_EVENTS;
+    const drained = this.#domainEvents;
+    this.#domainEvents = [];
+    return drained;
   }
 
   kill(character: CharacterRuntime): void {

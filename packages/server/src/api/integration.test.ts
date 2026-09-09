@@ -237,6 +237,44 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(await receipts.pendingFor(character.id)).toEqual([]);
   });
 
+  it('the character list and select settle pending progress before reading (FUN-66)', async () => {
+    // A tela onde o jogador cai logo depois de sair de uma hunt. Ela lia a linha crua e, por
+    // até dez segundos, mostrava o level e a XP de antes — duas telas discordando na mesma
+    // sessão de uso. Mesmo caminho do ticket (FUN-56); a diferença é que aqui falhar não
+    // recusa a resposta.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await receipts.save({
+      sessionId: randomUUID(), characterId: character.id, accountId: owner.accountId,
+      reason: 'drain', seq: 1,
+      aggregates: {
+        durationMs: 60_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+      },
+      notableEvents: [],
+    });
+
+    const listed = await (await request('/api/characters', 'GET', owner.cookie)).json();
+    const dto = (listed.characters as Array<{ id: string; xp: number; gold: number; level: number }>)
+      .find((c) => c.id === character.id);
+    expect(dto).toMatchObject({ xp: 900, gold: 380 });
+    expect(dto?.level).toBeGreaterThan(1);
+    expect(await receipts.pendingFor(character.id)).toEqual([]);
+
+    // E `select`, com um segundo extrato: o id já é conhecido, liquida antes de ler.
+    await receipts.save({
+      sessionId: randomUUID(), characterId: character.id, accountId: owner.accountId,
+      reason: 'drain', seq: 1,
+      aggregates: {
+        durationMs: 1_000, xpGained: 0, goldGained: 20, goldSpent: 0, kills: 0, deaths: 0,
+      },
+      notableEvents: [],
+    });
+    const selected = await (await request(
+      `/api/characters/${character.id}/select`, 'POST', owner.cookie,
+    )).json();
+    expect(selected).toMatchObject({ id: character.id, gold: 400 });
+  });
+
   it('uses a one-time ticket for a real socket, keeps the session after disconnect, and reconnects', async () => {
     const owner = await login();
     const character = await createCharacter(owner.cookie);
@@ -268,6 +306,59 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     reconnected.binaryType = 'arraybuffer';
     await receive(reconnected);
     expect(await directory.lookup(character.id)).toEqual(location);
+  });
+
+  it('walk through the real socket moves the character, and session-state shows it (FUN-69)', async () => {
+    // A ligação socket → host → sistema de movimento, ponta a ponta. O que reprova aqui é o
+    // `walk` chegando e caindo no `default` de novo.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);                                            // welcome
+
+    // Nasceu no entryPoint da Cidade de teste — e não em (0,0), que é a FUN-60.
+    const before = receive(socket);
+    socket.send(encodeC2S({ type: 'session-attach' }));
+    // A posição vai em `world.creatures`, nunca em `self`: o cliente não decide onde está.
+    const initial = decodeS2C(await before)?.find((m) => m.type === 'session-state');
+    expect(initial).toMatchObject({ world: { creatures: [
+      expect.objectContaining({ position: { x: 2, y: 2, z: 7 } }),
+    ] } });
+
+    // INTENÇÃO: uma direção. Quem resolve o tile é o servidor (invariante 4).
+    const moved = receive(socket);
+    socket.send(encodeC2S({ type: 'walk', direction: 'east' }));
+    expect(decodeS2C(await moved)).toContainEqual(expect.objectContaining({
+      type: 'creature-move', from: { x: 2, y: 2, z: 7 }, to: { x: 3, y: 2, z: 7 },
+    }));
+
+    const after = receive(socket);
+    socket.send(encodeC2S({ type: 'session-attach' }));
+    const state = decodeS2C(await after)?.find((m) => m.type === 'session-state');
+    expect(state).toMatchObject({ world: { creatures: [
+      expect.objectContaining({ position: { x: 3, y: 2, z: 7 } }),
+    ] } });
+  });
+
+  it('say through the real socket comes back as chat-message, signed with the character name (FUN-58)', async () => {
+    // A ligação socket → host → visualizadores, e o nome vindo do BANCO pelo ticket — nunca
+    // do cliente, que não escolhe como aparece para os outros.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie, 'Chatter');
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);                                            // welcome
+
+    const echoed = receive(socket);
+    socket.send(encodeC2S({ type: 'say', channel: 'local', text: 'olá, sessão' }));
+    expect(decodeS2C(await echoed)).toContainEqual({
+      type: 'chat-message', channel: 'local', author: 'Chatter', text: 'olá, sessão',
+    });
   });
 
   it('fails closed when the HTTP session store loses Redis', async () => {

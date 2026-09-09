@@ -47,6 +47,13 @@ pnpm vitest run packages/tools
   `runner.ts`. A primeira versão punha a chamada no próprio módulo, e importar uma função pura
   num teste subia os workers e esperava a duração inteira — sessenta segundos para rodar treze
   asserções.
+- **Script que roda por `tsx` precisa de BUILD antes, e nada avisa.** `tsx` resolve
+  `@draconya/sim` pelo `main` do `package.json`, que aponta para `dist` — não para `src`, como o
+  alias do Vitest faz. Então a suíte inteira passa com o código novo enquanto `pnpm bench:hunts`
+  roda o código de duas semanas atrás, ou quebra com `session.advanceBy is not a function`. Foi o
+  que aconteceu na FUN-68: o `pnpm check` ficou verde e o benchmark parou de rodar. Os scripts da
+  raiz (`bench:hunts`, `bench:monster`, `load`, `content:check`) agora começam com `tsc -b`, que
+  é incremental e custa nada quando já está em dia.
 - **`pnpm bench:hunts` só vale com a máquina junto.** O tick é single-thread, então quem decide é
   desempenho por core (ADR 0013); o relatório imprime plataforma, CPU e versão do Node por isso.
   Medir no laptop e extrapolar para o servidor erra.

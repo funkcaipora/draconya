@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AuthService } from '../auth/service.js';
+import type { SettlementResult } from './tickets.js';
 import {
   CharacterNameTakenError,
   type CharacterRecord,
@@ -12,11 +13,13 @@ const CreateCharacterBody = z.object({
 });
 const CharacterParams = z.object({ id: z.string().min(1) });
 
-export function registerCharacterRoutes(
-  app: FastifyInstance,
-  auth: AuthService,
-  repository: GameRepository,
-  isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>,
+/**
+ * Dependências opcionais das rotas de personagem. Objeto, e não posicionais (FUN-66, DT-02):
+ * já eram cinco parâmetros, e a chamada de teste passava `undefined` no meio para chegar ao
+ * último. Cada campo ausente desliga a capacidade correspondente, e nada mais.
+ */
+export interface CharacterRouteOptions {
+  readonly isCharacterActive?: ((accountId: string, characterId: string) => Promise<boolean>) | undefined;
   /**
    * Onde o personagem está agora, segundo o diretório de sessões (FUN-30).
    *
@@ -25,12 +28,58 @@ export function registerCharacterRoutes(
    * coluna fazia a API responder `"city"` para quem estava numa hunt havia seis horas — uma
    * mentira quieta, do tipo que só aparece quando alguém confia nela.
    */
-  locateSession?: (characterId: string) => Promise<{ sessionId: string; type: string } | null>,
+  readonly locateSession?: ((
+    characterId: string,
+  ) => Promise<{ sessionId: string; type: string } | null>) | undefined;
+  /**
+   * Liquida o extrato que a última sessão deixou pendente antes de ler a linha (FUN-66).
+   *
+   * É o MESMO caminho da varredura e do ticket (FUN-56) — mesma linha de ledger, mesma chave
+   * única, mesma transação. Somar o pendente só para exibir seria mais barato e duplicaria a
+   * derivação de level num segundo lugar; dois lugares divergem.
+   */
+  readonly settleProgress?: ((characterId: string) => Promise<SettlementResult>) | undefined;
+}
+
+export function registerCharacterRoutes(
+  app: FastifyInstance,
+  auth: AuthService,
+  repository: GameRepository,
+  options: CharacterRouteOptions = {},
 ): void {
+  const { isCharacterActive, locateSession, settleProgress } = options;
+
+  /**
+   * Liquida e diz se ALGO foi escrito. Falhar aqui NÃO recusa a resposta, ao contrário do
+   * ticket (FUN-56). A diferença é o que se faz com o número: o ticket CRIA a sessão a partir
+   * dele, e entrar com um personagem desatualizado é durável; aqui ele só é exibido, e um 503
+   * na tela de personagens trancaria a conta inteira por uma falha de ledger. O pior aceitável
+   * é servir o valor atrasado — que é o comportamento de antes desta issue.
+   */
+  const settle = async (characterId: string, log: { error: (o: unknown, m: string) => void }) => {
+    if (settleProgress === undefined) return false;
+    try {
+      return (await settleProgress(characterId)).written > 0;
+    } catch (error) {
+      log.error({ error, characterId }, 'Settlement failed while listing characters');
+      return false;
+    }
+  };
+
   app.get('/api/characters', async (request, reply) => {
     const principal = await auth.authenticate(request);
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
-    const characters = await repository.listCharacters(principal.accountId);
+
+    let characters = await repository.listCharacters(principal.accountId);
+    // Liquidar DEPOIS de listar, porque os ids só se conhecem listando. Reler só quando alguma
+    // coisa foi de fato escrita: no caso comum — nada pendente — isto é um `SMEMBERS` por
+    // personagem e nenhuma consulta a mais ao Postgres.
+    let settled = false;
+    for (const character of characters) {
+      if (await settle(character.id, request.log)) settled = true;
+    }
+    if (settled) characters = await repository.listCharacters(principal.accountId);
+
     const located = await Promise.all(characters.map(async (character) => toDto(
       character, (await locateSession?.(character.id)) ?? null,
     )));
@@ -67,6 +116,8 @@ export function registerCharacterRoutes(
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
     const params = CharacterParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: 'invalid-character' });
+    // O caso fácil: o id já é conhecido, então liquida ANTES de ler.
+    await settle(params.data.id, request.log);
     const character = await repository.getCharacter(principal.accountId, params.data.id);
     if (character === null) return reply.code(404).send({ error: 'character-not-found' });
     return reply.send(toDto(character));

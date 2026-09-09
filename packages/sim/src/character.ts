@@ -40,6 +40,13 @@ export interface CharacterState {
   readonly staminaMs?: number | null;
   /** Instante de RELÓGIO (epoch) em que `staminaMs` valia. Não é o relógio da simulação. */
   readonly staminaUpdatedAtMs?: number;
+  /**
+   * Milissegundos por tile ao andar (FUN-69). Vem de `progression.stepDurationMs`, copiado
+   * para cá como `maxHealth` é: o sistema de movimento pergunta à criatura, e a criatura não
+   * conhece o conteúdo. Opcional porque snapshot gravado antes da FUN-69 não tem a chave;
+   * quem restaura repõe a partir do conteúdo.
+   */
+  readonly stepDurationMs?: number;
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
@@ -60,6 +67,7 @@ export class CharacterRuntime {
   staminaUpdatedAtMs: number;
   goldDelta: number;
   alive: boolean;
+  stepDurationMs: number;
   readonly cooldowns: Cooldowns;
 
   constructor(state: CharacterState) {
@@ -76,6 +84,9 @@ export class CharacterRuntime {
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
+    // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
+    // duração zero nunca chega ao fio — o protocolo exige duração positiva.
+    this.stepDurationMs = state.stepDurationMs ?? 0;
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
@@ -92,6 +103,7 @@ export class CharacterRuntime {
       vocationId: this.vocationId,
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
+      stepDurationMs: this.stepDurationMs,
       goldDelta: this.goldDelta,
       alive: this.alive,
       cooldowns: this.cooldowns.getState(),
