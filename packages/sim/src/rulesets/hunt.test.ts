@@ -120,10 +120,8 @@ function start(
 
 /** Avança `durationMs` em passos de `stepMs`. É como se controla o tempo sem esperar por ele. */
 function run(session: Session, durationMs: number, stepMs: number): void {
-  const end = session.nowMs + durationMs;
-  for (let at = session.nowMs + stepMs; at <= end && session.ended === null; at += stepMs) {
-    session.tick(at);
-  }
+  const steps = Math.floor(durationMs / stepMs);
+  for (let i = 0; i < steps && session.ended === null; i++) session.advanceBy(stepMs);
 }
 
 describe('entrada', () => {
@@ -136,7 +134,7 @@ describe('entrada', () => {
     // Entrou no começo da rota, não na posição que trouxe da cidade.
     expect(hero.position).toEqual({ x: 1, y: 1, z: 7 });
 
-    session.tick(100);
+    session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(1);
   });
 
@@ -144,7 +142,7 @@ describe('entrada', () => {
     // Trocar `perSpawnPoint` no JSON tem que mudar a hunt. Se precisasse de código, o formato
     // estaria errado — e é isso que este teste protege.
     const { session, ruleset } = start({ difficulty: 'professional' });
-    session.tick(100);
+    session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(3);
   });
 
@@ -208,13 +206,21 @@ describe('a sessão em si', () => {
 
   it('o monstro morto volta a nascer depois do prazo da hunt, não na hora', () => {
     const { session, ruleset } = start();
-    run(session, 6000, 100);
+    // Até o primeiro abate, e guarda o instante: o prazo conta a partir dele, e prender o
+    // teste a um número redondo o faria depender de quantos golpes o herói precisou dar.
+    while (session.aggregates.kills === 0 && session.nowMs < 60_000) session.advanceBy(100);
     expect(session.aggregates.kills).toBe(1);
     // Respawn instantâneo faria a rota deixar de importar: o personagem mataria tudo parado
     // num ponto só.
     expect(ruleset.monsters).toHaveLength(0);
 
-    run(session, 30_000, 100);
+    // Ainda dentro dos 30 s da dificuldade: nada nasce, e portanto nada mais morre.
+    session.advanceBy(29_000);
+    expect(ruleset.monsters).toHaveLength(0);
+    expect(session.aggregates.kills).toBe(1);
+
+    // Prazo cumprido: o evento de spawn vence dentro deste avanço.
+    session.advanceBy(1_000);
     expect(ruleset.monsters).toHaveLength(1);
   });
 });
@@ -452,7 +458,7 @@ describe('troca de dificuldade', () => {
     expect(nova.id).toBe('session-2');
     expect(nova.aggregates.kills).toBe(0);
     expect(nova.participants[0]).toBe(hero);
-    nova.tick(nova.nowMs + 100);
+    nova.advanceBy(100);
     expect((nova.ruleset as HuntRuleset).monsters).toHaveLength(3);
   });
 });
@@ -492,7 +498,7 @@ describe('snapshot', () => {
   });
 });
 
-describe('taxa de tick', () => {
+describe('taxa de avanço', () => {
   /** Dez minutos de hunt na taxa dada. Tempo controlado: nada aqui espera de verdade. */
   const tenMinutesAt = (
     hz: number, difficulty: 'beginner' | 'professional', loaded?: Content,
@@ -506,8 +512,12 @@ describe('taxa de tick', () => {
 
   it('rende exatamente o mesmo a 1, 2, 5, 10 e 20 Hz', () => {
     // O TESTE QUE DEFINE O PROJETO, agora numa sessão que de fato simula uma hunt. Se ele
-    // quebrar, alguma fórmula passou a contar ticks — e a hunt desanexada, que é o modo
-    // PADRÃO do jogo, deixou de valer o mesmo que a anexada (invariantes 2 e 3).
+    // quebrar, a hunt desanexada — que é o modo PADRÃO do jogo — deixou de valer o mesmo que
+    // a anexada (invariantes 2 e 3).
+    //
+    // Desde a FUN-68 isto é uma propriedade da ESTRUTURA, e não de cada fórmula ter sido
+    // escrita com cuidado: os eventos vencem nos mesmos instantes lógicos seja qual for o
+    // tamanho da janela em que são despachados.
     const rendimento = RATES.map((hz) => {
       const { session, hero } = tenMinutesAt(hz, 'beginner');
       return { kills: session.aggregates.kills, xp: session.aggregates.xpGained, heroXp: hero.xp };
@@ -516,56 +526,47 @@ describe('taxa de tick', () => {
     for (const resultado of rendimento) expect(resultado).toEqual(rendimento[0]);
   });
 
-  it('com vários monstros no mesmo ponto, rende quase o mesmo — e o quase é medido', () => {
-    // Um monstro por ponto dá igualdade EXATA. Com três disputando o mesmo ponto, quem está
-    // "mais perto" muda com a granularidade do passo, e daí sai uma diferença de poucos por
-    // cento. É a razão de este teste existir separado do de cima: o número acima é uma
-    // igualdade, este é um limite, e confundir os dois esconderia uma regressão de verdade.
+  it('com vários monstros disputando o mesmo ponto, rende exatamente o mesmo', () => {
+    // Este teste já foi um LIMITE de 5%, e virou igualdade na FUN-68. O motivo do limite era
+    // real: com três monstros disputando um ponto, quem está "mais perto" mudava com a
+    // granularidade do passo, porque num tick longo todos andavam vários tiles de uma vez
+    // antes de alguém reavaliar distância. Com a fila, cada passo acontece no seu instante e
+    // a vizinhança é a mesma em qualquer taxa — não sobra folga para o limite cobrir.
     const kills = RATES.map((hz) => tenMinutesAt(hz, 'professional').session.aggregates.kills);
-    const menor = Math.min(...kills);
-    const maior = Math.max(...kills);
-    expect(menor).toBeGreaterThan(0);
-    expect(maior - menor).toBeLessThanOrEqual(maior * 0.05);
+    expect(kills[0]).toBeGreaterThan(0);
+    for (const k of kills) expect(k).toBe(kills[0]);
   });
 
-  it('mas o dano SOFRIDO não é igual, e é a taxa baixa que apanha mais', () => {
-    // Medido, não suposto: a recompensa é (quase) idêntica em qualquer taxa; o dano recebido
-    // não é.
+  it('e o dano SOFRIDO também é igual, desde a FUN-68', () => {
+    // Este teste já foi um LIMITE, e virou uma igualdade. Vale guardar a história, porque ela
+    // é a justificativa da FUN-68.
     //
-    // A causa é granularidade de ESPAÇO, não de tempo. Num tick de 1 s o personagem e o rato
-    // andam dois tiles cada um de uma vez, e a adjacência é conferida UMA vez no fim: eles
-    // passam mais ticks colados do que passariam a 10 Hz, e o acumulador de ataque do rato
-    // avança justamente enquanto estão colados.
+    // A recompensa sempre foi igual entre taxas; o dano sofrido, não. Medido: 350 a 10 Hz
+    // contra 530 a 1 Hz, 1,51× — e 1 Hz é a hunt desanexada, que é o modo PADRÃO do jogo.
+    // Quem caçava AFK apanhava metade a mais.
     //
-    // Estes números NÃO mudaram com a FUN-67, e vale dizer por quê: o rato desta fixture
-    // ataca a cada 2 s, mais que o tick lento de 1 s, então o acumulador dele nunca concede
-    // duas aplicações num tick. O defeito da FUN-67 — aplicar uma ação quando o acumulador
-    // concedeu N — só dispara quando o intervalo é MENOR que o tick, e aí custa caro: num
-    // rato de 500 ms medimos 2,00x menos dano a 1 Hz. Um monstro de cadência sub-segundo é
-    // normal, então este cenário passa perto sem encostar.
+    // A causa era granularidade de ESPAÇO, não de tempo. Num tick de 1 s o personagem andava
+    // dois tiles de uma vez, o rato também, e a adjacência era conferida UMA vez no fim: eles
+    // passavam mais ticks colados do que passariam a 10 Hz, e é enquanto estão colados que o
+    // ataque avança. O tick em lote não tinha como expressar "os dois andaram em t+500 e
+    // nesse instante não estavam adjacentes".
     //
-    // O comentário anterior dizia que corrigir a granularidade "pediria subdividir o tick, o
-    // que gasta o que cair para 1 Hz economiza". Isso é uma falsa escolha: um scheduler
-    // lógico por sessão processa só os eventos que VENCEM na janela — numa hunt desanexada,
-    // muito menos que 10 ticks × 40 monstros. É a FUN-68, e 1,51x é a justificativa medida
-    // dela. Fica registrado em docs/product/hunt.md, e importa para a FUN-38.
-    // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade de
-    // tick, e um personagem que se cura enquanto apanha mede as duas coisas somadas.
+    // O comentário anterior dizia que corrigir "pediria subdividir o tick, o que gasta o que
+    // cair para 1 Hz economiza". Era uma falsa escolha: o scheduler lógico processa só os
+    // eventos que VENCEM, e é mais barato que o laço que ele substituiu.
+    //
+    // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade, e um
+    // personagem que se cura enquanto apanha mede as duas coisas somadas.
     const semRegen = content({
       progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
     });
-    const rapido = tenMinutesAt(10, 'beginner', semRegen);
-    const lento = tenMinutesAt(1, 'beginner', semRegen);
-
-    const danoRapido = rapido.hero.maxHealth - rapido.hero.health;
-    const danoLento = lento.hero.maxHealth - lento.hero.health;
-    expect(danoRapido).toBeGreaterThan(0);
-    expect(danoLento).toBeGreaterThan(danoRapido);
-    // Limite APERTADO em cima do medido (1,51x), não folgado: o limite antigo era "menos que
-    // o dobro" e foi calibrado com o defeito da FUN-67 de pé, então ele passava tanto com a
-    // divergência real quanto com uma bem maior. Um limite que aceita o dobro não reprova
-    // nada que importe.
-    expect(danoLento).toBeLessThan(danoRapido * 1.7);
+    const dano = (hz: number): number => {
+      const { hero } = tenMinutesAt(hz, 'beginner', semRegen);
+      return hero.maxHealth - hero.health;
+    };
+    // E não é vácuo: o cenário machuca de verdade nas duas pontas.
+    expect(dano(10)).toBeGreaterThan(0);
+    for (const hz of RATES) expect(dano(hz)).toBe(dano(10));
   });
 
   it('desanexada cai para 1 Hz; anexada sobe para 10 (ADR 0003)', () => {

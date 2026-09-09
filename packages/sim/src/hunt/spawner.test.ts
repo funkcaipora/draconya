@@ -43,58 +43,88 @@ describe('pickByWeight', () => {
   });
 });
 
+/**
+ * Preenche todos os lugares vagos, como o ruleset faz quando cada evento de spawn vence.
+ *
+ * A ocupação do tile fica com quem chama desde a FUN-68 — o spawner deixou de carregar um
+ * conjunto de tiles já tomados, porque o `#occupied` do ruleset já é essa informação, e duas
+ * cópias dela divergiriam.
+ */
+function fillAll(
+  spawner: Spawner,
+  difficulty: HuntDifficulty,
+  blocked: (x: number, y: number) => boolean = open,
+  seed = 'a',
+) {
+  const rng = Rng.fromSeed(seed);
+  const taken = new Set<string>();
+  const withTaken = (x: number, y: number) => blocked(x, y) || taken.has(`${x},${y}`);
+  const filled = [];
+  for (let slot = 0; slot < spawner.slots.length; slot++) {
+    const request = spawner.fill(slot, difficulty, positionOf, withTaken, rng);
+    if (request === null) continue;
+    taken.add(`${request.position.x},${request.position.y}`);
+    filled.push(request);
+  }
+  return filled;
+}
+
 describe('Spawner', () => {
   it('creates exactly the density the difficulty says, never a random one', () => {
     // §14.5: sem variação aleatória de densidade no MVP. Densidade é DADO.
     const spawner = new Spawner(points.length, beginner);
-    const requests = spawner.due(0, beginner, positionOf, open, Rng.fromSeed('a'));
-    expect(requests).toHaveLength(points.length * beginner.perSpawnPoint);
+    expect(spawner.slots).toHaveLength(points.length * beginner.perSpawnPoint);
+    expect(fillAll(spawner, beginner)).toHaveLength(points.length * beginner.perSpawnPoint);
   });
 
   it('puts the same monster in the same tile every time', () => {
     // Uma hunt cujo spawn "anda" a cada respawn é uma hunt que o jogador não consegue
     // planejar — e planejar é o que o §17.1 vende ao tornar o monstro previsível.
-    const first = new Spawner(points.length, beginner)
-      .due(0, beginner, positionOf, open, Rng.fromSeed('a'))
+    const first = fillAll(new Spawner(points.length, beginner), beginner, open, 'a')
       .map((r) => r.position);
-    const second = new Spawner(points.length, beginner)
-      .due(0, beginner, positionOf, open, Rng.fromSeed('b'))
+    const second = fillAll(new Spawner(points.length, beginner), beginner, open, 'b')
       .map((r) => r.position);
     // Semente diferente, mesmas posições: a posição não sorteia.
     expect(second).toEqual(first);
   });
 
   it('never stacks two monsters on the same tile', () => {
-    const spawner = new Spawner(points.length, { ...beginner, perSpawnPoint: 5 });
-    const requests = spawner.due(0, { ...beginner, perSpawnPoint: 5 }, positionOf, open,
-      Rng.fromSeed('a'));
-    const tiles = requests.map((r) => `${r.position.x},${r.position.y}`);
+    const dense = { ...beginner, perSpawnPoint: 5 };
+    const tiles = fillAll(new Spawner(points.length, dense), dense)
+      .map((r) => `${r.position.x},${r.position.y}`);
+    expect(tiles.length).toBeGreaterThan(0);
     expect(new Set(tiles).size).toBe(tiles.length);
   });
 
-  it('waits the configured delay before respawning', () => {
-    // Instantâneo faria a rota deixar de importar — o personagem mataria tudo parado num
-    // ponto só. Longo demais faz ele dar voltas em mapa vazio.
+  it('gives nothing for a slot that is already occupied', () => {
+    // O lugar volta a render monstro quando `release` o devolve, e não antes. Quem marca a
+    // hora do respawn é o evento agendado por quem chamou `release` (FUN-68).
     const spawner = new Spawner(1, beginner);
-    const [first] = spawner.due(0, beginner, positionOf, open, Rng.fromSeed('a'));
+    const [first] = fillAll(spawner, beginner);
     if (first === undefined) throw new Error('esperava um pedido de spawn');
     spawner.occupy(first.slot, 101);
 
-    spawner.release(101, 1_000, beginner);
-    expect(spawner.due(1_000, beginner, positionOf, open, Rng.fromSeed('a'))).toHaveLength(1);
+    expect(spawner.fill(first.slot, beginner, positionOf, open, Rng.fromSeed('a'))).toBeNull();
+    expect(spawner.release(101)).toBe(first.slot);
+    expect(spawner.fill(first.slot, beginner, positionOf, open, Rng.fromSeed('a'))).not.toBeNull();
+  });
 
-    const spawner2 = new Spawner(1, beginner);
-    const [only] = spawner2.due(0, beginner, positionOf, open, Rng.fromSeed('a'));
-    if (only === undefined) throw new Error('esperava um pedido de spawn');
-    spawner2.occupy(only.slot, 202);
-    spawner2.occupy(spawner2.slots.findIndex((s) => s.occupantId === null), 203);
-    spawner2.release(202, 1_000, beginner);
-    // Ainda no prazo: não volta.
-    expect(spawner2.due(1_000 + 29_000, beginner, positionOf, open, Rng.fromSeed('a')))
-      .toHaveLength(0);
-    // Prazo cumprido: volta.
-    expect(spawner2.due(1_000 + 30_000, beginner, positionOf, open, Rng.fromSeed('a')))
-      .toHaveLength(1);
+  it('carries no clock of its own', () => {
+    // O `respawnAtMs` saiu do estado na FUN-68. Guardar o instante aqui e na fila de eventos
+    // seria duas verdades sobre a mesma coisa, e a errada só apareceria numa retomada.
+    const spawner = new Spawner(1, beginner);
+    for (const slot of spawner.slots) {
+      expect(Object.keys(slot).sort()).toEqual(['occupantId', 'pointIndex']);
+    }
+  });
+
+  it('release tells which slot came back, and nothing for an unknown occupant', () => {
+    const spawner = new Spawner(1, beginner);
+    const [first] = fillAll(spawner, beginner);
+    if (first === undefined) throw new Error('esperava um pedido de spawn');
+    spawner.occupy(first.slot, 55);
+    expect(spawner.release(999)).toBeNull();
+    expect(spawner.release(55)).toBe(first.slot);
   });
 
   it('changing the difficulty changes density and composition, with no code touched', () => {
@@ -105,37 +135,31 @@ describe('Spawner', () => {
       composition: [{ monsterId: 'cave-rat', weight: 1 }],
       respawnDelayMs: 10_000,
     };
-    const requests = new Spawner(points.length, legendary)
-      .due(0, legendary, positionOf, open, Rng.fromSeed('a'));
+    const requests = fillAll(new Spawner(points.length, legendary), legendary);
     expect(requests).toHaveLength(points.length * 12);
     expect(requests.every((r) => r.monsterId === 'cave-rat')).toBe(true);
   });
 
   it('skips a blocked spot instead of spawning inside a wall', () => {
     const walls = (x: number) => x < 10;
-    const spawner = new Spawner(points.length, beginner);
-    const requests = spawner.due(0, beginner, positionOf, walls, Rng.fromSeed('a'));
+    const requests = fillAll(new Spawner(points.length, beginner), beginner, walls);
     // Só o segundo ponto tem espaço.
     expect(requests.every((r) => r.position.x >= 10)).toBe(true);
     expect(requests).toHaveLength(beginner.perSpawnPoint);
   });
 
-  it('round-trips its state, so a resumed session keeps its respawn timers', () => {
+  it('round-trips its state, so a resumed session keeps who is alive where', () => {
     const spawner = new Spawner(1, beginner);
-    // Ocupa TODOS os lugares: um lugar nunca preenchido também está "vencido", e deixá-lo
-    // vazio esconderia o que este teste quer ver, que é o prazo de respawn.
-    for (const [i, request] of spawner
-      .due(0, beginner, positionOf, open, Rng.fromSeed('a')).entries()) {
+    for (const [i, request] of fillAll(spawner, beginner).entries()) {
       spawner.occupy(request.slot, 7 + i);
     }
-    spawner.release(7, 5_000, beginner);
+    spawner.release(7);
 
     const restored = new Spawner(1, beginner, spawner.getState());
     expect(restored.getState()).toEqual(spawner.getState());
-    expect(restored.due(5_000, beginner, positionOf, open, Rng.fromSeed('a'))).toHaveLength(0);
-    // E o prazo continua valendo depois da retomada.
-    expect(restored.due(35_000, beginner, positionOf, open, Rng.fromSeed('a')))
-      .toHaveLength(1);
+    // O lugar devolvido continua vago do outro lado da retomada, e os ocupados continuam
+    // ocupados: é o que impede a sessão retomada de duplicar os monstros que já existem.
+    expect(restored.slots.filter((s) => s.occupantId === null)).toHaveLength(1);
   });
 });
 

@@ -45,7 +45,7 @@ export function createCitySessionFactory(
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),
-      createdAtMs: performance.now(),
+      createdAtMs: now(),
     });
     // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
     // lá, todo personagem cresce pela tabela base.
@@ -83,7 +83,7 @@ export function createCitySessionFactory(
  * certa: retomar errado é pior que não retomar, e quem chama sabe encerrar creditando.
  */
 export function createSessionRestorer(content: Content): SessionRestorer {
-  return (snapshot: SessionSnapshot, nowMs: number): Session | null => {
+  return (snapshot: SessionSnapshot): Session | null => {
     // A versão de conteúdo é fixada na sessão e não muda no meio dela (invariante 7).
     //
     // O ruleset é montado com o conteúdo DESTE processo, e a sessão retomada preserva a
@@ -101,10 +101,11 @@ export function createSessionRestorer(content: Content): SessionRestorer {
     const ruleset = rulesetFor(snapshot, content);
     if (ruleset === null) return null;
     try {
-      const session = Session.fromSnapshot(snapshot, ruleset, Rng.fromSeed(snapshot.id));
-      // O relógio do snapshot é de outro processo. Ver ADR 0018.
-      session.rebaseClock(nowMs);
-      return session;
+      // Sem rebase de relógio desde a FUN-68: o tempo da sessão é LÓGICO e é dela, então
+      // retomar é continuar de onde parou. O intervalo em que o nó esteve fora nunca chega a
+      // ser oferecido à simulação, porque quem guarda relógio de processo é o hospedeiro —
+      // o ADR 0018 deixou de precisar de uma operação para ser cumprido.
+      return Session.fromSnapshot(snapshot, ruleset, Rng.fromSeed(snapshot.id));
     } catch {
       return null;
     }
@@ -143,8 +144,8 @@ export function createSessionBuilder(
       materializeStamina(character, now(), content.stamina);
     }
 
-    if (request.to === 'city') return cityFor(content, from);
-    if (request.to === 'hunt') return huntFor(content, request, from);
+    if (request.to === 'city') return cityFor(content, from, now);
+    if (request.to === 'hunt') return huntFor(content, request, from, now);
     // Treino, quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com
     // erro claro, que é melhor que construir uma sessão que mente sobre o que é.
     return null;
@@ -158,7 +159,7 @@ export function createSessionBuilder(
  * Quem cura é o `onEnter` da Cidade — voltar à PZ restaura HP e mana cheios (§26.1). Curar
  * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
  */
-function cityFor(content: Content, from: Session): Session | null {
+function cityFor(content: Content, from: Session, now: () => number): Session | null {
   if (from.ruleset.type === 'city') return null;
   const id = randomUUID();
   const session = new Session({
@@ -166,15 +167,21 @@ function cityFor(content: Content, from: Session): Session | null {
     contentVersion: content.version,
     ruleset: createCityRuleset(),
     rng: Rng.fromSeed(id),
-    // O relógio da sessão nova continua o da antiga: elas são o mesmo personagem no mesmo
-    // processo, e um `createdAtMs` de outra origem faria o primeiro `dtMs` sair absurdo.
-    createdAtMs: from.nowMs,
+    // Marca de quando a sessão passou a existir, para quem investiga. Desde a FUN-68 não
+    // alimenta simulação nenhuma — o relógio de dentro é lógico e nasce em zero —, então
+    // aqui vale a hora de verdade, que é a que serve para ler um log.
+    createdAtMs: now(),
   });
   for (const character of from.participants) session.enter(character);
   return session;
 }
 
-function huntFor(content: Content, request: TransitionRequest, from: Session): Session | null {
+function huntFor(
+  content: Content,
+  request: TransitionRequest,
+  from: Session,
+  now: () => number,
+): Session | null {
   if (request.huntId === undefined || request.difficulty === undefined) return null;
   try {
     const session = createHuntSession({
@@ -184,7 +191,7 @@ function huntFor(content: Content, request: TransitionRequest, from: Session): S
       // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um
       // enum no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
       difficulty: request.difficulty as HuntDifficultyName,
-      createdAtMs: from.nowMs,
+      createdAtMs: now(),
     });
     for (const character of from.participants) session.enter(character);
     return session;

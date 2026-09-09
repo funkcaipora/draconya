@@ -28,7 +28,19 @@ export const TEST_HUNT = {
 };
 
 export const TEST_PROGRESSION = {
-  id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
+  // HP inicial folgado, e é DECISÃO, não número escolhido no olho.
+  //
+  // O critério de saída da Fase 1 roda seis minutos simulados de hunt, e o que ele mede é
+  // continuidade de sessão — navegador fechado, nó morto, deploy. Um personagem que morre no
+  // meio faz o teste falhar por balanceamento, que é justamente o que este arquivo existe
+  // para não amarrar.
+  //
+  // Precisou subir na FUN-68. Com o cooldown de ataque correndo em tempo de parede em vez de
+  // congelar quando não há alvo, o ciclo de encontro nesta sala de 2×2 caiu de ~5 s para
+  // ~2,25 s: o personagem mata mais rápido e, por isso, apanha mais. Medido nesta fixture —
+  // 150 de vida morre aos 90 s com 40 abates; 1.200 termina os seis minutos com 181 abates.
+  // O número é do teste; o balanceamento de verdade é `packages/content/data`.
+  id: 'baseline', startingHealth: 1_200, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },

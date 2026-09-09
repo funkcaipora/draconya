@@ -152,10 +152,10 @@ for (let i = 0; i < HUNTS; i++) {
   sessions.push(session);
 }
 
-// Um tick para povoar: os monstros nascem no primeiro, e medir antes disso mediria instâncias
-// vazias — que é o cenário que não interessa a ninguém.
+// Um avanço para povoar: os monstros nascem no primeiro, e medir antes disso mediria
+// instâncias vazias — que é o cenário que não interessa a ninguém.
 const stepMs = 1_000 / HZ;
-for (const session of sessions) session.tick(stepMs);
+for (const session of sessions) session.advanceBy(stepMs);
 
 const afterFirstTick = heapMb();
 
@@ -179,8 +179,7 @@ const warmupTicks = Math.min(
 );
 let tick = 2;
 for (; tick <= warmupTicks + 1; tick++) {
-  const at = tick * stepMs;
-  for (const session of sessions) session.tick(at);
+  for (const session of sessions) session.advanceBy(stepMs);
 }
 
 const ticks = totalTicks;
@@ -196,8 +195,7 @@ const measuredFrom = tick;
 observer.observe({ type: 'gc' });
 const startedAt = performance.now();
 for (; tick <= ticks; tick++) {
-  const at = tick * stepMs;
-  for (const session of sessions) session.tick(at);
+  for (const session of sessions) session.advanceBy(stepMs);
 }
 const elapsedMs = performance.now() - startedAt;
 const measuredTicks = ticks - measuredFrom + 1;

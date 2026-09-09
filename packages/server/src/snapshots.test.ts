@@ -23,7 +23,8 @@ const snapshotOf = (id: string): SessionSnapshot => ({
   id,
   type: 'city',
   createdAtMs: 0,
-  lastTickMs: 0,
+  logicalNowMs: 0,
+  schedule: { events: [], nextSeq: 0 },
   rng: { a: 1, b: 2, c: 3, d: 4 },
   participants: [],
   aggregates: {

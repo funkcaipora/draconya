@@ -1,49 +1,53 @@
-// Cooldowns (FUN-36, ADR 0003). São dois mecanismos diferentes, e confundi-los é o erro.
+// Cooldown de ação disparada por evento (FUN-36, ADR 0003, FUN-68).
 //
-// 1. AÇÃO DISPARADA POR EVENTO — `start` / `isReady` / `remainingMs`.
-//    Guarda TIMESTAMP ABSOLUTO. O jogador usou uma poção; ela volta em 1 s. Absoluto
-//    sobrevive a snapshot e a retomada tardia; tempo restante, não (FUN-27).
+// Guarda TIMESTAMP ABSOLUTO, no relógio LÓGICO da sessão: o jogador usou uma poção, ela volta
+// em mil milissegundos. Absoluto sobrevive a snapshot e a retomada tardia; tempo restante,
+// não (FUN-27).
 //
-// 2. AÇÃO PERIÓDICA — `timesThatFit`.
-//    Guarda ACUMULADOR DE DURAÇÃO. É o que faz 1 Hz e 10 Hz renderem o mesmo.
+// **O mecanismo periódico saiu daqui na FUN-68.** Ele era um acumulador de duração —
+// `timesThatFit(chave, dtMs, intervalo)` — e existia para responder "quantas aplicações
+// couberam neste tick". Quem responde isso agora é a fila de eventos da sessão, que não
+// precisa perguntar: cada ação acorda no instante em que vence.
 //
-// Sobre o segundo, vale registrar o erro que já foi cometido aqui: ancorar a fase no
-// primeiro tick torna o resultado dependente da taxa. A 10 Hz o primeiro ataque cai em
-// t=100 ms; a 1 Hz, em t=1000 — e a diferença de fase se propaga por toda a sessão. O
-// acumulador não tem origem, então não tem esse problema.
-
-/** Teto de aplicações num único tick. Ver `timesThatFit`. */
-export const MAX_CATCH_UP = 32;
+// Vale dizer por que ele foi embora em vez de ficar sem uso. Duas razões, e a segunda é a que
+// importa:
+//
+//   1. não sobrou chamador — passo de rota, passo e ataque de monstro, ataque do jogador e
+//      regeneração viraram eventos;
+//   2. ele é a forma exata do defeito que a FUN-68 corrige. Um acumulador devolve N aplicações
+//      de uma vez e deixa quem chama decidir o que fazer com o N — foi assim que a FUN-67
+//      nasceu, com dois dos quatro chamadores aplicando uma só. Deixá-lo disponível é deixar
+//      carregada a arma que já disparou.
+//
+// O mecanismo absoluto abaixo, ao contrário, só passou a ser SEGURO agora: o `nowMs` que ele
+// recebe é o tempo lógico da sessão, e não mais o monotônico do processo. Antes, um cooldown
+// gravado num nó e lido noutro voltava eternamente pronto ou eternamente travado — inofensivo
+// enquanto ninguém usava, e poção e magia são exatamente o que vem usá-lo.
 
 export interface CooldownState {
-  /** chave → instante absoluto em que a ação por evento fica disponível. */
+  /**
+   * chave → instante LÓGICO da sessão em que a ação fica disponível.
+   *
+   * Lógico, nunca de processo: é o que faz o valor continuar significando a mesma coisa do
+   * outro lado de um snapshot.
+   */
   readonly until: Readonly<Record<string, number>>;
-  /** chave → milissegundos já acumulados para a próxima aplicação periódica. */
-  readonly accumulated: Readonly<Record<string, number>>;
 }
 
 export class Cooldowns {
   readonly #until = new Map<string, number>();
-  readonly #accumulated = new Map<string, number>();
 
   static fromState(state: Partial<CooldownState>): Cooldowns {
     const cd = new Cooldowns();
     for (const [key, value] of Object.entries(state.until ?? {})) cd.#until.set(key, value);
-    for (const [key, value] of Object.entries(state.accumulated ?? {})) {
-      cd.#accumulated.set(key, value);
-    }
     return cd;
   }
 
   getState(): CooldownState {
-    return {
-      until: Object.fromEntries(this.#until),
-      accumulated: Object.fromEntries(this.#accumulated),
-    };
+    return { until: Object.fromEntries(this.#until) };
   }
 
-  // --- 1. ação disparada por evento -------------------------------------------------------
-
+  /** `nowMs` é o tempo LÓGICO da sessão (`session.nowMs`), nunca relógio de processo. */
   isReady(key: string, nowMs: number): boolean {
     return nowMs >= (this.#until.get(key) ?? -Infinity);
   }
@@ -56,45 +60,7 @@ export class Cooldowns {
     this.#until.set(key, nowMs + durationMs);
   }
 
-  // --- 2. ação periódica ------------------------------------------------------------------
-
-  /**
-   * Também é por aqui que passa GRANDEZA CONTÍNUA — regeneração de vida e mana, dano ao longo
-   * do tempo. Uma taxa de `r` por segundo é uma ação periódica de `1000 / r` milissegundos, e
-   * escrever assim evita o mecanismo que parecia natural e é pior: acumular a fração em ponto
-   * flutuante (`0,1` dez vezes) deriva, dá `0,9999…`, e some com uma unidade a cada dez —
-   * numa hunt de oito horas isso é regeneração faltando sem explicação. Em milissegundos a
-   * conta é exata.
-   *
- * Quantas vezes uma ação de período `intervalMs` coube nos `dtMs` decorridos.
-   *
- * Recebe o INTERVALO, não o instante: é o que torna o resultado independente da taxa de
-   * tick. A ação começa pronta, então a primeira chamada devolve pelo menos 1.
-   *
-   * O teto existe por causa da retomada de sessão (FUN-28): um intervalo de horas entre
-   * snapshot e retomada não pode virar centenas de ataques num tick só. Ao estourar, o
-   * excedente é descartado em vez de virar dívida que explodiria no tick seguinte.
-   */
-  timesThatFit(key: string, dtMs: number, intervalMs: number): number {
-    if (intervalMs <= 0) throw new Error(`intervalMs must be positive: ${intervalMs}`);
-    if (dtMs < 0) throw new Error(`dtMs cannot be negative: ${dtMs}`);
-
-    // Sem entrada anterior a ação começa pronta — daí o acumulado inicial ser o intervalo.
-    let accumulated = (this.#accumulated.get(key) ?? intervalMs) + dtMs;
-
-    let times = 0;
-    while (accumulated >= intervalMs && times < MAX_CATCH_UP) {
-      times++;
-      accumulated -= intervalMs;
-    }
-    if (times === MAX_CATCH_UP) accumulated = 0;
-
-    this.#accumulated.set(key, accumulated);
-    return times;
-  }
-
   clear(key: string): void {
     this.#until.delete(key);
-    this.#accumulated.delete(key);
   }
 }

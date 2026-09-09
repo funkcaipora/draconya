@@ -37,7 +37,7 @@ describe('session restorer', () => {
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0, maxMana: 0,
       level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
     }));
-    session.tick(2000);
+    session.advanceBy(2000);
     return session;
   };
 
@@ -45,29 +45,31 @@ describe('session restorer', () => {
     // Sem esta linha, o snapshot de uma hunt viraria `null` na retomada e a sessão seria
     // encerrada creditando — perdendo a hunt de quem estava caçando na hora do deploy.
     const original = hunt();
-    const restored = createSessionRestorer(content)(original.snapshot(), 10_000);
+    const restored = createSessionRestorer(content)(original.snapshot());
 
     expect(restored?.ruleset.type).toBe('hunt');
     expect(restored?.aggregates).toEqual(original.aggregates);
-    // Relógio reposicionado: o do snapshot é de outro processo (ADR 0018).
-    expect(restored?.nowMs).toBe(10_000);
+    // O relógio LÓGICO continua de onde parou — não há o que rebasear desde a FUN-68, porque
+    // ele nunca foi o monotônico de processo nenhum. Quem guarda relógio de processo é o
+    // hospedeiro, e é ele que faz o intervalo pulado nunca chegar aqui (ADR 0018).
+    expect(restored?.nowMs).toBe(original.nowMs);
   });
 
   it('restores a city session', () => {
     const city = createCitySessionFactory(content)('p1');
-    expect(createSessionRestorer(content)(city.snapshot(), 1)?.ruleset.type).toBe('city');
+    expect(createSessionRestorer(content)(city.snapshot())?.ruleset.type).toBe('city');
   });
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
       progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA] });
-    expect(createSessionRestorer(empty)(hunt().snapshot(), 1)).toBeNull();
+    expect(createSessionRestorer(empty)(hunt().snapshot())).toBeNull();
   });
 
   it('refuses a session type this server has no ruleset for', () => {
     // Forçar um ruleset conhecido em cima produziria uma sessão que mente sobre o que é.
     const snapshot = { ...hunt().snapshot(), type: 'boss' as const };
-    expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+    expect(createSessionRestorer(content)(snapshot)).toBeNull();
   });
 });
 
@@ -251,7 +253,7 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0,
       maxMana: 0, level: 1, xp: 0, vocationId: null, goldDelta: 0, alive: true, cooldowns: {},
     }));
-    session.tick(1000);
+    session.advanceBy(1000);
     return session.snapshot();
   };
 
@@ -260,16 +262,16 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
     // declarando na versão antiga — simulando com stats, curva de XP e coeficientes novos
     // sob um rótulo velho. É o que o invariante 7 existe para impedir.
     const snapshot = { ...huntSnapshot(), contentVersion: 'de-outro-deploy' };
-    expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+    expect(createSessionRestorer(content)(snapshot)).toBeNull();
   });
 
   it('retoma normalmente quando a versão bate', () => {
-    expect(createSessionRestorer(content)(huntSnapshot(), 1)?.ruleset.type).toBe('hunt');
+    expect(createSessionRestorer(content)(huntSnapshot())?.ruleset.type).toBe('hunt');
   });
 
   it('vale para a Cidade também, não só para a hunt', () => {
     const city = createCitySessionFactory(content)('p1');
     const snapshot = { ...city.snapshot(), contentVersion: 'de-outro-deploy' };
-    expect(createSessionRestorer(content)(snapshot, 1)).toBeNull();
+    expect(createSessionRestorer(content)(snapshot)).toBeNull();
   });
 });

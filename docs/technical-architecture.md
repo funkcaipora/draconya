@@ -378,6 +378,34 @@ simulação.
 11–15. A diferença é localidade — 22 MiB de conjunto de trabalho cabem no cache, 142 MiB não. É
 mais uma razão para medir no cenário cheio em vez de extrapolar de um pequeno.
 
+#### Remedido depois da FUN-68 — 2026-09-09, Apple M2, Node 24.12
+
+O relógio lógico e a fila de eventos ([ADR 0020](adr/0020-logical-session-scheduler.md))
+trocaram o laço de tick, e o custo mudou — **em direções opostas conforme o modo**. Por segundo
+*simulado*, que é a unidade que compara:
+
+| | tick em lote | fila de eventos |
+|---|---|---|
+| 10 Hz, anexada | 71 µs/s | **15 µs/s** — 4,7× mais barato |
+| 1 Hz, desanexada | 8,9 µs/s | 12,4 µs/s — 1,4× mais caro |
+
+No cenário frio cheio (`pnpm bench:hunts`, 5.000 hunts a 1 Hz): **18,8 µs** por tick por
+instância, **53.081** instâncias por core, **34,7 KiB** de memória e **12,6 KiB** de snapshot por
+sessão.
+
+**A conclusão desta seção não muda: sobra.** O medido continua duas a dez vezes melhor que a
+ponta otimista da estimativa (50–200 µs, 200–500 instâncias por core), e o gargalo segue sendo
+banda e conexão.
+
+O que vale entender é por que o número da hunt desanexada subiu, já que a issue previa o
+contrário. A 1 Hz o laço antigo avaliava cada monstro **uma vez por segundo**, independentemente
+da cadência real dele — menos trabalho do que a correção exige, e era exatamente essa
+sub-avaliação que produzia 1,51× mais dano sofrido na hunt desanexada. Os 9,3 µs mediam uma
+simulação errada. O custo agora é proporcional ao tempo simulado e quase indiferente à taxa, que
+é o comportamento que se queria.
+
+Memória subiu porque a fila é serializada: com 5.000 sessões são ~63 MiB de Redis a mais.
+
 #### Medido com o servidor de verdade (FUN-45) — 2026-09-09, Apple M2, mesma máquina
 
 `pnpm load`, contra `api` + `game` + `jobs` num processo, Postgres e Redis em contêiner. Duas

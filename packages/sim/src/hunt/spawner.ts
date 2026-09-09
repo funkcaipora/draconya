@@ -13,11 +13,15 @@ import type { HuntDifficulty, Point } from '@draconya/content';
 import type { Rng } from '../rng.js';
 import type { Blocked } from '../monster/step.js';
 
-/** Um lugar onde um monstro nasce. Vazio significa esperando o respawn. */
+/**
+ * Um lugar onde um monstro nasce. Vazio significa esperando o respawn.
+ *
+ * O `respawnAtMs` que morava aqui saiu na FUN-68: quem sabe a hora é o evento de spawn na fila
+ * da sessão. Guardar o instante nos dois lugares seria duas verdades sobre a mesma coisa, e a
+ * que estivesse errada só apareceria numa retomada.
+ */
 export interface SpawnSlot {
   readonly pointIndex: number;
-  /** `null` enquanto vivo; instante em que volta, quando morto. */
-  readonly respawnAtMs: number | null;
   /** Id numérico da criatura que ocupa o lugar, ou `null`. */
   readonly occupantId: number | null;
 }
@@ -86,7 +90,7 @@ export class Spawner {
     this.#slots = [];
     for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
       for (let i = 0; i < difficulty.perSpawnPoint; i++) {
-        this.#slots.push({ pointIndex, respawnAtMs: null, occupantId: null });
+        this.#slots.push({ pointIndex, occupantId: null });
       }
     }
   }
@@ -99,62 +103,63 @@ export class Spawner {
     return { slots: [...this.#slots] };
   }
 
-  /** Lugares que precisam de monstro agora: vazios e com o prazo cumprido. */
-  due(
-    nowMs: number,
+  /**
+   * O que nasce NESTE lugar, agora. `null` quando ele está ocupado ou não há tile livre.
+   *
+   * Um lugar por chamada desde a FUN-68, e não uma varredura de todos: quem chama é o evento
+   * de spawn daquele lugar, que já sabe qual é. A varredura existia porque o tick não sabia
+   * de nada e precisava perguntar a todos a cada passo — com 48 lugares, dezenas de vezes por
+   * segundo, para quase sempre não haver nada a fazer.
+   *
+   * Quem chama ocupa o tile devolvido antes de pedir o próximo; é isso que dispensa o
+   * conjunto de tiles já tomados que a varredura precisava carregar.
+   */
+  fill(
+    slotIndex: number,
     difficulty: HuntDifficulty,
     positionOf: (pointIndex: number) => Point,
     blocked: Blocked,
     rng: Rng,
-  ): SpawnRequest[] {
-    const requests: SpawnRequest[] = [];
-    const taken = new Set<string>();
-    for (const slot of this.#slots) {
-      if (slot.occupantId !== null) continue;
-      if (slot.respawnAtMs !== null && nowMs < slot.respawnAtMs) continue;
+  ): SpawnRequest | null {
+    const slot = this.#slots[slotIndex];
+    if (slot === undefined || slot.occupantId !== null) return null;
 
-      const monsterId = pickByWeight(difficulty.composition, rng);
-      if (monsterId === null) continue;
+    const monsterId = pickByWeight(difficulty.composition, rng);
+    if (monsterId === null) return null;
 
-      const position = this.#freeTile(positionOf(slot.pointIndex), blocked, taken);
-      // Sem lugar livre agora — outro monstro ocupou o ponto, ou o jogador está em cima.
-      // Tentar de novo no próximo tick é melhor que empilhar dois monstros no mesmo tile.
-      if (position === null) continue;
+    const position = this.#freeTile(positionOf(slot.pointIndex), blocked);
+    // Sem lugar livre agora — outro monstro ocupou o ponto, ou o jogador está em cima.
+    // Quem chama tenta de novo mais tarde; empilhar dois monstros no mesmo tile é pior.
+    if (position === null) return null;
 
-      taken.add(`${position.x},${position.y}`);
-      requests.push({ slot: this.#slots.indexOf(slot), monsterId, position });
-    }
-    return requests;
+    return { slot: slotIndex, monsterId, position };
   }
 
   /** Marca o lugar como ocupado pela criatura que acabou de nascer. */
   occupy(slot: number, occupantId: number): void {
     const current = this.#slots[slot];
     if (current === undefined) return;
-    this.#slots[slot] = { ...current, occupantId, respawnAtMs: null };
+    this.#slots[slot] = { ...current, occupantId };
   }
 
   /**
-   * O ocupante morreu: o lugar volta a contar o tempo.
+   * O ocupante morreu: devolve o lugar, e diz QUAL para quem chama agendar o respawn.
    *
    * Respawn instantâneo faria a rota deixar de importar — o personagem mataria tudo parado
-   * num ponto só. Longo demais faz ele dar voltas em mapa vazio. O número é da hunt.
+   * num ponto só. Longo demais faz ele dar voltas em mapa vazio. O número é da hunt, e quem
+   * o aplica agora é o evento.
    */
-  release(occupantId: number, nowMs: number, difficulty: HuntDifficulty): void {
+  release(occupantId: number): number | null {
     const index = this.#slots.findIndex((slot) => slot.occupantId === occupantId);
-    if (index < 0) return;
+    if (index < 0) return null;
     const slot = this.#slots[index] as SpawnSlot;
-    this.#slots[index] = {
-      ...slot,
-      occupantId: null,
-      respawnAtMs: nowMs + difficulty.respawnDelayMs,
-    };
+    this.#slots[index] = { ...slot, occupantId: null };
+    return index;
   }
 
-  #freeTile(center: Point, blocked: Blocked, taken: ReadonlySet<string>): Point | null {
+  #freeTile(center: Point, blocked: Blocked): Point | null {
     for (const tile of tilesAround(center, SPAWN_RADIUS)) {
       if (blocked(tile.x, tile.y)) continue;
-      if (taken.has(`${tile.x},${tile.y}`)) continue;
       return tile;
     }
     return null;
