@@ -25,7 +25,7 @@ que aquele valor valia** (`staminaUpdatedAt`), e o valor de agora é **calculado
 pergunta**. Um personagem parado três dias custa exatamente zero.
 
 Isso importa além da regra de jogo: a stamina é o principal freio de custo de infraestrutura do
-projeto, porque o teto de simulação é `2 × contas ativas` ([ADR 0001](../adr/0001-sessao-como-unidade-de-simulacao.md)).
+projeto, porque o teto de simulação é `2 × contas ativas` ([ADR 0001](../adr/0001-session-decoupled-from-connection.md)).
 Um mecanismo que custasse por personagem parado atacaria justamente o número que ele existe para
 proteger.
 
