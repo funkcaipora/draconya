@@ -87,5 +87,6 @@ escrito no lugar onde a recompensa é creditada, então os dois entram por ele q
 **Personagem sem stamina persistida roda sem teto.** É o que uma sessão gravada antes desta
 implementação é, e cobrar dela uma stamina que nunca foi medida seria inventar uma punição.
 
-**A stamina gasta ainda não volta para o banco** — como level, XP e gold. Ver
-[FUN-54](https://linear.app/funkcaipora/issue/FUN-54).
+**A stamina volta para o banco como valor absoluto, não como delta** — ela não é uma soma. Vai
+com o instante em que valia, e só sobrescreve quando é mais nova, senão um extrato atrasado
+devolveria stamina já gasta.

@@ -13,6 +13,7 @@ import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { Database } from '../db/client.js';
 import { sweepOrphanedSessions } from './orphans.js';
+import type { Progression } from '@draconya/content';
 import { writePendingReceipts } from './ledger.js';
 
 export interface JobsDependencies {
@@ -21,6 +22,8 @@ export interface JobsDependencies {
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
   readonly database?: Database;
+  /** Curva de XP, para o `jobs` derivar o level ao creditar a progressão (FUN-54). */
+  readonly progression?: Progression;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -55,6 +58,9 @@ export function createJobs(
           database: dependencies.database,
           receipts: dependencies.receipts,
           logger,
+          ...(dependencies.progression === undefined
+            ? {}
+            : { progression: dependencies.progression }),
         });
         if (written > 0 || failed > 0) logger.info({ written, failed }, 'Wrote session receipts');
       }

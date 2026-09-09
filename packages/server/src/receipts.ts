@@ -23,6 +23,15 @@ export interface SessionReceipt {
   readonly aggregates: Aggregates;
   readonly notableEvents: readonly NotableEvent[];
   readonly endedAtMs: number;
+  /**
+   * Stamina materializada no fim da sessão, e o instante de relógio em que ela valia (§10).
+   *
+   * Vai como VALOR ABSOLUTO, não como delta, porque stamina não é uma soma: ela cai dentro da
+   * hunt e sobe fora dela, e o número que interessa é o de agora. O instante é o que impede
+   * um extrato antigo, processado fora de ordem, de sobrescrever um mais novo.
+   */
+  readonly staminaMs?: number;
+  readonly staminaUpdatedAtMs?: number;
 }
 
 export interface ReceiptStoreOptions {
@@ -107,5 +116,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
       ? (value['notableEvents'] as NotableEvent[])
       : [],
     endedAtMs: typeof value['endedAtMs'] === 'number' ? value['endedAtMs'] : 0,
+    // Os dois andam juntos: valor sem instante não dá para ordenar, e instante sem valor não
+    // diz nada. Meio par é dado corrompido, e a resposta é ignorar o par inteiro.
+    ...(typeof value['staminaMs'] === 'number' && typeof value['staminaUpdatedAtMs'] === 'number'
+      ? { staminaMs: value['staminaMs'], staminaUpdatedAtMs: value['staminaUpdatedAtMs'] }
+      : {}),
   };
 }
