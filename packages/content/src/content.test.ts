@@ -22,8 +22,15 @@ const baseline = {
   vocationLevel: 8,
 };
 
-const base = (over: Partial<RawContent> = {}): RawContent =>
-  ({ monsters: [rat], hunts: [cellars], vocations: [knight], progression: [baseline], ...over });
+const combat = {
+  id: 'baseline', dodgeMultiplier: 0.5,
+  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+};
+
+const base = (over: Partial<RawContent> = {}): RawContent => ({
+  monsters: [rat], hunts: [cellars], vocations: [knight],
+  progression: [baseline], combat: [combat], ...over,
+});
 
 describe('buildContent', () => {
   it('monta o conteúdo válido, indexado por id', () => {
@@ -114,8 +121,9 @@ describe('progression baseline', () => {
     // Todo personagem nasce SEM vocação (§7.4), então sem a base não há stats de level 1. Um
     // default em código seria exatamente o "nada em código" que a FUN-34 proíbe: mudar
     // `healthPerLevel` tem que ser editar JSON, nunca alterar lógica.
-    expect(() => buildContent({ monsters: [rat], hunts: [cellars], vocations: [knight] }))
-      .toThrow(/progression\/baseline/);
+    expect(() => buildContent({
+      monsters: [rat], hunts: [cellars], vocations: [knight], combat: [combat],
+    })).toThrow(/progression\/baseline/);
   });
 
   it('surfaces its provisional values at boot, like any other', () => {
@@ -129,5 +137,21 @@ describe('progression baseline', () => {
     const content = buildContent(base());
     expect(content.progression.startingHealth).toBe(150);
     expect(content.progression.vocationLevel).toBe(8);
+  });
+});
+
+describe('combat baseline', () => {
+  it('refuses content without it: no coefficient means no damage rule', () => {
+    // O §12.1 quer fórmula e parâmetro em CONTEÚDO. Um default em código faria essa regra
+    // deixar de valer no dia em que ninguém estivesse olhando.
+    expect(() => buildContent({
+      monsters: [rat], hunts: [cellars], vocations: [knight], progression: [baseline],
+    })).toThrow(/combat\/baseline/);
+  });
+
+  it('surfaces its provisional values at boot', () => {
+    const provisional = { ...combat, _open: '§12.1 — armadura contra magia não decidida' };
+    expect(buildContent(base({ combat: [provisional] })).openValues)
+      .toContain('combat/baseline: §12.1 — armadura contra magia não decidida');
   });
 });

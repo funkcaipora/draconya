@@ -1,0 +1,7 @@
+{
+  "id": "baseline",
+  "dodgeMultiplier": 0.5,
+  "armorEffectiveness": { "melee": 1, "magic": 0 },
+  "minimumDamageFraction": 0.1,
+  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque e piso de dano são provisórios, com o Tibia como referência funcional."
+}
