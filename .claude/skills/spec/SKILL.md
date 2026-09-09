@@ -33,9 +33,27 @@ vai escrever" é metade do valor do documento.
 
 ---
 
-## Passo 1 — ler a issue e o que ela referencia
+## Passo 1 — reler a issue AGORA, e conferir se ela já tem dono
 
-Leia a issue no Linear (`get_issue`), inclusive relações — `blockedBy`, `blocks`, `relatedTo`.
+Leia a issue no Linear (`get_issue`) **imediatamente antes de escrever**, mesmo que você a tenha
+lido nesta conversa, e mesmo que você mesmo a tenha criado. Confira quatro campos antes de
+qualquer outra coisa:
+
+| Campo | O que ele impede |
+|---|---|
+| `status` | Escrever spec de coisa que já está `In Progress` ou `In Review` |
+| `assignee` | Reescrever o trabalho de outra pessoa |
+| `attachments` | Ignorar uma PR aberta que já implementa a task |
+| `blockedBy` / `blocks` | Especificar fora de ordem |
+
+**Se a issue não está em `Backlog` ou `Todo`, PARE.** Uma issue em andamento tem uma
+implementação sendo escrita contra a descrição atual; trocá-la por uma spec — mesmo uma boa —
+muda o alvo debaixo de quem está mirando. Relate ao usuário e pergunte.
+
+Isto não é hipótese. Na primeira vez que esta skill rodou, a FUN-68 foi sobrescrita com um
+rascunho de spec enquanto a PR #54 estava aberta havia dez minutos, implementando exatamente
+aquilo. A leitura tinha sido feita duas horas antes, e "eu já sei o que essa issue diz" foi o
+raciocínio inteiro. **Duas horas é tempo de sobra para uma issue mudar de dono.**
 
 Leia também, e não pule: o `AGENTS.md` raiz (os onze invariantes), o `AGENTS.md` do pacote que a
 issue toca, os ADRs que ela cita, e o `docs/product/<sistema>.md` correspondente quando houver.
@@ -84,6 +102,10 @@ Use o template abaixo. Corte seção que não se aplica — seção vazia com `N
 transformam a issue em contrato.
 
 ## Passo 5 — gravar no Linear
+
+**Releia a issue uma última vez** (`get_issue`) antes de gravar. Entre o passo 1 e aqui pode ter
+passado meia hora de auditoria, e meia hora é tempo suficiente para alguém abrir uma PR. Se
+`status`, `assignee` ou `attachments` mudaram desde o passo 1, pare e relate.
 
 Grave com `save_issue` na descrição da issue. Se a gravação for recusada por tamanho, o Design
 técnico (seção 6) desce para sub-issues, uma por pacote — nunca trunque, nunca divida a spec em
@@ -301,3 +323,6 @@ encaixa mais.
 
 **Não escreva a spec de uma ficção.** Se o passo 2 derrubou a premissa, o entregável é o relato,
 não o documento.
+
+**Issue com dono não se reescreve.** A spec existe para quem ainda vai começar. Para quem já
+começou, ela é o alvo mudando de lugar no meio do tiro.
