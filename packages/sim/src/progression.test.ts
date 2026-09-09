@@ -11,6 +11,7 @@ const baseline: Progression = {
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8,
   stepDurationMs: 500,
+  regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };

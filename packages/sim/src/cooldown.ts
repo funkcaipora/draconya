@@ -59,6 +59,13 @@ export class Cooldowns {
   // --- 2. ação periódica ------------------------------------------------------------------
 
   /**
+   * Também é por aqui que passa GRANDEZA CONTÍNUA — regeneração de vida e mana, dano ao longo
+   * do tempo. Uma taxa de `r` por segundo é uma ação periódica de `1000 / r` milissegundos, e
+   * escrever assim evita o mecanismo que parecia natural e é pior: acumular a fração em ponto
+   * flutuante (`0,1` dez vezes) deriva, dá `0,9999…`, e some com uma unidade a cada dez —
+   * numa hunt de oito horas isso é regeneração faltando sem explicação. Em milissegundos a
+   * conta é exata.
+   *
  * Quantas vezes uma ação de período `intervalMs` coube nos `dtMs` decorridos.
    *
  * Recebe o INTERVALO, não o instante: é o que torna o resultado independente da taxa de

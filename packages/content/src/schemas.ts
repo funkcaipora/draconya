@@ -117,6 +117,17 @@ export const progressionSchema = z.object({
    */
   stepDurationMs: z.number().int().positive(),
   /**
+   * Regeneração passiva, em pontos por segundo (FUN-36).
+   *
+   * Por SEGUNDO, e não por tick: `hp += taxa * dtMs / 1000`, com a fração residual guardada
+   * (ver `Cooldowns.accrue`). É o que faz a hunt desanexada a 1 Hz regenerar o mesmo que a
+   * anexada a 10 Hz.
+   */
+  regen: z.object({
+    healthPerSecond: z.number().nonnegative(),
+    manaPerSecond: z.number().nonnegative(),
+  }),
+  /**
    * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
    * completar aquele level.
    *

@@ -57,6 +57,7 @@ const progression = {
   id: 'baseline', startingHealth: 500_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   stepDurationMs: 500,
+  regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };
@@ -218,6 +219,71 @@ describe('a sessão em si', () => {
   });
 });
 
+describe('regeneração (FUN-36)', () => {
+  it('recupera por tempo decorrido, sem número por tick', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({ loaded: semSpawn, health: 100 });
+
+    run(session, 30_000, 100);
+
+    // 1 HP/s no conteúdo de teste: trinta segundos são trinta pontos, mais um do primeiro
+    // tick — os cooldowns começam PRONTOS (FUN-25), a mesma regra que faz o personagem dar o
+    // primeiro passo da rota sem esperar meio segundo parado.
+    expect(hero.health).toBe(131);
+  });
+
+  it('rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
+    // O erro que este desenho evita: somar `taxa * dtMs / 1000` num acumulador fracionário
+    // deriva em ponto flutuante e some com uma unidade a cada dez. Em milissegundos a conta
+    // é exata, e a hunt desanexada regenera igual à anexada.
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const at = (hz: number): number => {
+      const { session, hero } = start({ loaded: semSpawn, health: 100 });
+      run(session, 600_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('não passa do máximo', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({ loaded: semSpawn });
+    run(session, 60_000, 100);
+    expect(hero.health).toBe(hero.maxHealth);
+  });
+
+  it('morto não regenera', () => {
+    // Sem isso, um personagem que caiu voltaria sozinho na hunt em que morreu, e a morte
+    // deixaria de encerrar coisa nenhuma.
+    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    run(session, 60_000, 100);
+    expect(session.ended).toBe('death');
+    expect(hero.health).toBe(0);
+  });
+
+  it('vale mesmo com stamina zerada: regenerar não é recompensa', () => {
+    // O §10.2 diz que o personagem continua podendo morrer, não que ele passa a morrer mais
+    // rápido.
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({ loaded: semSpawn, health: 100, staminaMs: 0 });
+    run(session, 30_000, 100);
+    expect(hero.health).toBe(131);
+  });
+
+  it('taxa zero não regenera, e não trava o laço de recuperação', () => {
+    // Taxa zero não é intervalo infinito: é "não regenera". Sem a saída explícita, o
+    // intervalo viraria `Infinity` e o catch-up rodaria até o teto a cada tick.
+    const parado = content({
+      routes: [{ ...route, spawnPoints: [] }],
+      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    });
+    const { session, hero } = start({ loaded: parado, health: 100 });
+    run(session, 30_000, 100);
+    expect(hero.health).toBe(100);
+  });
+});
+
 describe('stamina zero', () => {
   it('NÃO encerra a hunt, e bloqueia só a recompensa', () => {
     // A regra que mais parece bug para quem implementa (§10.2). O personagem continua
@@ -339,7 +405,9 @@ describe('encerramento', () => {
   });
 
   it('por morte, com o extrato registrando a morte', () => {
-    const { session, hero } = start({ health: 12 });
+    // Três ratos, não um: com a regeneração da FUN-36 no lugar, um rato sozinho já não mata
+    // um personagem de level 1 — ele apanha, mata, e recupera durante o respawn.
+    const { session, hero } = start({ difficulty: 'professional', health: 12 });
     run(session, 60_000, 100);
 
     expect(hero.alive).toBe(false);
@@ -427,9 +495,9 @@ describe('snapshot', () => {
 describe('taxa de tick', () => {
   /** Dez minutos de hunt na taxa dada. Tempo controlado: nada aqui espera de verdade. */
   const tenMinutesAt = (
-    hz: number, difficulty: 'beginner' | 'professional',
+    hz: number, difficulty: 'beginner' | 'professional', loaded?: Content,
   ): { session: Session; hero: CharacterRuntime } => {
-    const { session, hero } = start({ difficulty });
+    const { session, hero } = start({ difficulty, ...(loaded === undefined ? {} : { loaded }) });
     run(session, 600_000, 1000 / hz);
     return { session, hero };
   };
@@ -472,8 +540,13 @@ describe('taxa de tick', () => {
     // Corrigir pediria subdividir o tick — o que gasta exatamente o que cair para 1 Hz
     // economiza, e economizar é a razão de existir do 1 Hz (ADR 0003). Fica registrado em
     // docs/product/hunt.md, e importa para a FUN-38: quem caça desanexado apanha mais.
-    const rapido = tenMinutesAt(10, 'beginner');
-    const lento = tenMinutesAt(1, 'beginner');
+    // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade de
+    // tick, e um personagem que se cura enquanto apanha mede as duas coisas somadas.
+    const semRegen = content({
+      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    });
+    const rapido = tenMinutesAt(10, 'beginner', semRegen);
+    const lento = tenMinutesAt(1, 'beginner', semRegen);
 
     const danoRapido = rapido.hero.maxHealth - rapido.hero.health;
     const danoLento = lento.hero.maxHealth - lento.hero.health;

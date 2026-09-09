@@ -56,6 +56,12 @@ Se divergir, alguma fórmula está contando ticks em vez de tempo.
 - **Ataque usa acumulador (`timesThatFit`), não timestamp absoluto**, mesmo sendo condicional. Já
   foi tentado o contrário: com timestamp os abates passam a divergir entre taxas, porque o ataque
   que fica pronto no meio do tick dispara atrasado e o resto é descartado.
+- **Grandeza contínua (regeneração, dano ao longo do tempo) também usa `timesThatFit`**: uma taxa
+  de `r` por segundo é uma ação periódica de `1000 / r` ms. Não some `r * dtMs / 1000` num
+  acumulador fracionário — somar `0,1` dez vezes em ponto flutuante dá `0,9999…` e some uma
+  unidade a cada dez. Já foi tentado e revertido.
+- **`pnpm source-policy` reprova nome de contador de tick** (`remainingTicks`, `cooldownTicks`, …)
+  dentro deste pacote. É a verificação do invariante 2 que não depende de alguém lembrar.
 - O adaptador `systemClock` vive em `server/`. Aqui ficam apenas o contrato `Clock` e o
   relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.
