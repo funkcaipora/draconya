@@ -7,6 +7,24 @@ import { z } from 'zod';
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
 const appearanceId = z.number().int().positive();
 
+/** Uma linha de loot: cai com `chance`, e quando cai vem entre `min` e `max`. */
+const lootRollSchema = z.object({
+  chance: z.number().min(0).max(1),
+  min: z.number().int().positive().default(1),
+  max: z.number().int().positive().default(1),
+}).refine((roll) => roll.min <= roll.max, { message: 'loot: min não pode passar de max' });
+
+/**
+ * A tabela de loot (FUN-63). Moeda e item são coisas DIFERENTES, e o schema diz qual é qual:
+ * gold é campo no personagem (`character.gold`), não item — por isso tem lugar próprio, em vez
+ * de um `itemId: "gold-coin"` que o código teria que reconhecer por nome.
+ */
+export const lootTableSchema = z.object({
+  gold: lootRollSchema.optional(),
+  /** Itens de verdade. Vazio até o sistema de itens existir; `buildContent` recusa o resto. */
+  items: z.array(lootRollSchema.safeExtend({ itemId: z.string().min(1) })).default([]),
+});
+
 export const monsterSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -32,14 +50,7 @@ export const monsterSchema = z.object({
   attackRange: z.number().int().positive().default(1),
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
-  loot: z.array(
-    z.object({
-      itemId: z.string().min(1),
-      chance: z.number().min(0).max(1),
-      min: z.number().int().positive().default(1),
-      max: z.number().int().positive().default(1),
-    }),
-  ).default([]),
+  loot: lootTableSchema.default({ items: [] }),
 });
 
 export const huntDifficultySchema = z.object({
@@ -215,6 +226,9 @@ export const staminaSchema = z.object({
 export type Stamina = z.infer<typeof staminaSchema>;
 
 export type Monster = z.infer<typeof monsterSchema>;
+export type LootTable = z.infer<typeof lootTableSchema>;
+/** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */
+export type LootRoll = NonNullable<LootTable['gold']>;
 export type Hunt = z.infer<typeof huntSchema>;
 export type HuntDifficulty = z.infer<typeof huntDifficultySchema>;
 export type Vocation = z.infer<typeof vocationSchema>;

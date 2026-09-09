@@ -14,7 +14,7 @@ function testRuleset(): Ruleset {
     onEnter(session, character) {
       session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
     },
-    onDeath: () => {},
+    onCreatureDied: () => {},
     onEnd: () => {},
     onEvent(session, event) {
       const p = session.participants.find((c) => c.id === event.subject);

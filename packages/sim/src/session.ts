@@ -9,6 +9,8 @@
 
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
+import { resolveDeath } from './death.js';
+import type { KillCredit, Victim } from './death.js';
 import type { Rng, RngState } from './rng.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { GridPoint } from './monster/step.js';
@@ -155,7 +157,15 @@ export interface Ruleset {
    */
   onEvent(session: Session, event: ScheduledEvent): void;
 
-  onDeath(session: Session, character: CharacterRuntime): void;
+  /**
+   * Uma criatura morreu — monstro ou personagem (FUN-63). O ruleset decide a CONSEQUÊNCIA; o
+   * pipeline (`resolveDeath`) já congelou os eventos dela e já resolveu quem matou.
+   *
+   * Hunt: monstro vira recompensa e respawn; personagem encerra a sessão em PZ. Guild War:
+   * personagem respawna pelas regras da partida. É por isso que isto não mora na criatura
+   * (§30 da referência) — e é o que substituiu o `onDeath`, que só conhecia personagem.
+   */
+  onCreatureDied(session: Session, victim: Victim, credit: KillCredit): void;
   onEnd(session: Session, reason: EndReason): void;
 
   /**
@@ -389,12 +399,16 @@ export class Session {
     return drained;
   }
 
+  /**
+   * A morte de um personagem: conta no extrato e entra no MESMO pipeline que a de um monstro.
+   * O que ela significa — encerrar, respawnar — é do ruleset, em `onCreatureDied`.
+   */
   kill(character: CharacterRuntime): void {
     character.alive = false;
     character.health = 0;
     this.aggregates.deaths++;
     this.record('death', character.id);
-    this.ruleset.onDeath(this, character);
+    resolveDeath(this, { kind: 'character', character });
   }
 
   /** Lista curta para a tela de retorno (§16.2). Não é log: guarda só o que vale contar. */

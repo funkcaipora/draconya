@@ -4,6 +4,7 @@ import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
+import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
 import { loadConfiguration } from '../config.js';
@@ -12,7 +13,7 @@ import { characters } from '../db/schema.js';
 import { SessionDirectory } from '../directory.js';
 import { createGame } from '../game/server.js';
 import { createCitySessionFactory } from '../game/sessions.js';
-import { settleCharacterProgress } from '../jobs/ledger.js';
+import { settleCharacterProgress, writePendingReceipts } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
 import type { Role } from '../role.js';
@@ -235,6 +236,45 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(row).toMatchObject({ xp: 900, gold: 380 });
     expect(row?.level).toBeGreaterThan(1);
     expect(await receipts.pendingFor(character.id)).toEqual([]);
+  });
+
+  it('gold looted in a hunt reaches character.gold through the ledger (FUN-63)', async () => {
+    // O caminho inteiro do loot: abate → `goldDelta` e agregado na sessão → extrato → linha
+    // de ledger com `(session_id, seq)` → `character.gold` no Postgres. O que reprova aqui é
+    // uma quebra entre o delta do personagem e o que o extrato leva — gold que o jogador viu
+    // cair e que some no deploy.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    const content = testContent();
+    const session = createHuntSession({
+      id: randomUUID(), content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, content.progression);
+    const hero = new CharacterRuntime({
+      id: character.id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 0, maxMana: stats.maxMana,
+      level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    while (session.aggregates.kills === 0 && session.nowMs < 60_000) session.advanceBy(100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.goldDelta).toBeGreaterThan(0);
+
+    const receipt = session.end('manual-exit');
+    expect(receipt.aggregates.goldGained).toBe(hero.goldDelta);
+    await receipts.save({
+      sessionId: session.id, characterId: character.id, accountId: owner.accountId,
+      reason: receipt.reason, seq: 1, aggregates: receipt.aggregates, notableEvents: [],
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression: content.progression,
+    });
+
+    const [row] = await database.database.db
+      .select({ gold: characters.gold })
+      .from(characters)
+      .where(eq(characters.id, character.id));
+    expect(row?.gold).toBe(hero.goldDelta);
   });
 
   it('the character list and select settle pending progress before reading (FUN-66)', async () => {

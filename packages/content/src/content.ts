@@ -142,6 +142,17 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // Loot de item aponta um catálogo de itens que ainda NÃO existe (FUN-63). Aceitar a linha
+  // creditaria um item fantasma no primeiro abate; falhar no boot é o que impede o atalho.
+  for (const monster of monsters.values()) {
+    for (const line of monster.loot.items) {
+      problems.push(
+        `monstro "${monster.id}": loot.items referencia "${line.itemId}", e não existe catálogo ` +
+          'de itens ainda — items precisa ser vazio',
+      );
+    }
+  }
+
   // Referência cruzada: validar formato não basta. Uma hunt apontando monstro inexistente
   // passa em qualquer schema e só falha quando alguém entra nela.
   for (const hunt of hunts.values()) {

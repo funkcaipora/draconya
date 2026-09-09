@@ -20,7 +20,7 @@ const definition: Monster = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
   attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 8,
-  attackRange: 1, leashRadius: 0, loot: [],
+  attackRange: 1, leashRadius: 0, loot: { items: [] },
 };
 
 // Grade com paredes espalhadas: caminho livre demais não exercita o desvio, que é o ramo

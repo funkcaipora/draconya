@@ -6,7 +6,7 @@ const rat = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
   attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
-  loot: [{ itemId: 'gold-coin', chance: 0.9, min: 1, max: 4 }],
+  loot: { gold: { chance: 0.9, min: 1, max: 4 }, items: [] },
 };
 const cellars = {
   id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
@@ -49,7 +49,35 @@ describe('buildContent', () => {
 
   it('aplica os defaults do schema', () => {
     const semLoot = { ...rat, loot: undefined };
-    expect(buildContent(base({ monsters: [semLoot] })).monsters.get('rat')?.loot).toEqual([]);
+    expect(buildContent(base({ monsters: [semLoot] })).monsters.get('rat')?.loot)
+      .toEqual({ items: [] });
+  });
+});
+
+describe('a tabela de loot (FUN-63)', () => {
+  it('separa moeda de item: gold tem lugar próprio, e items é a lista', () => {
+    const loot = buildContent(base()).monsters.get('rat')?.loot;
+    expect(loot?.gold).toEqual({ chance: 0.9, min: 1, max: 4 });
+    expect(loot?.items).toEqual([]);
+  });
+
+  it('recusa items enquanto não houver catálogo de itens', () => {
+    // Aceitar creditaria um item fantasma no primeiro abate. Falhar no boot é o que impede
+    // o atalho de "só mais um itemId" antes de existir o que ele aponta.
+    const withItem = {
+      ...rat, loot: { items: [{ itemId: 'spike-sword', chance: 0.1, min: 1, max: 1 }] },
+    };
+    expect(() => buildContent(base({ monsters: [withItem] }))).toThrow(/catálogo de itens/);
+  });
+
+  it('recusa a forma antiga, com a moeda escondida como item', () => {
+    const legacy = { ...rat, loot: [{ itemId: 'gold-coin', chance: 0.9, min: 1, max: 4 }] };
+    expect(() => buildContent(base({ monsters: [legacy] }))).toThrow(ContentError);
+  });
+
+  it('recusa min acima de max', () => {
+    const inverted = { ...rat, loot: { gold: { chance: 1, min: 5, max: 2 }, items: [] } };
+    expect(() => buildContent(base({ monsters: [inverted] }))).toThrow(ContentError);
   });
 });
 

@@ -41,7 +41,7 @@ function countingRuleset(hzAttached = 10, hzDetached = 1) {
       };
     },
     onEvent: () => {},
-    onDeath: () => {},
+    onCreatureDied: () => {},
     onEnd: () => {
       counter.ended += 1;
     },
@@ -677,7 +677,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
         const character = session.participants[0];
         if (character !== undefined && character.alive) session.kill(character);
       },
-      onDeath: (session) => {
+      onCreatureDied: (session) => {
         session.end('death');
       },
       onEnd: () => {},
@@ -698,7 +698,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
             character.alive = true;
           },
           onEvent: () => {},
-          onDeath: () => {},
+          onCreatureDied: () => {},
           onEnd: () => {},
         },
         rng: Rng.fromSeed(ended.id),
@@ -842,7 +842,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     hz: () => (type === 'city' ? 0 : 10),
     onEnter: () => {},
     onEvent: () => {},
-    onDeath: () => {},
+    onCreatureDied: () => {},
     onEnd: () => {},
   });
 
@@ -986,7 +986,7 @@ describe('sessão de repouso não segura o slot para sempre (FUN-52)', () => {
   const resting = (): Ruleset => ({
     // Orientada a evento, como a Cidade: sem laço nenhum.
     type: 'city', hz: () => 0,
-    onEnter: () => {}, onEvent: () => {}, onDeath: () => {}, onEnd: () => {},
+    onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
   });
 
   const GRACE_MS = 5 * 60_000;
@@ -1401,7 +1401,7 @@ describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
 
 describe('say (FUN-58)', () => {
   const quietCity = (): Ruleset => ({
-    type: 'city', hz: () => 0, onEnter: () => {}, onEvent: () => {}, onDeath: () => {}, onEnd: () => {},
+    type: 'city', hz: () => 0, onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
   });
   const chatHost = () => {
     const directory = {

@@ -1,6 +1,6 @@
 # Economia, supply e Market
 
-**Status:** não implementado
+**Status:** parcial — gold por abate cai e chega ao personagem pelo ledger (FUN-63); supply, Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (supply abstrato, ledger); E13 (Market, Coins por gold)
 
@@ -16,6 +16,12 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 
 ## Regras
 
+- Gold de loot é sorteado na morte do monstro, pela tabela `loot.gold` do próprio monstro, com o
+  `Rng` da sessão; vira `goldDelta` no personagem e `goldGained` no extrato, e chega à linha do
+  personagem pelo ledger com `(session_id, seq)` único — nunca por escrita direta em `gold`
+  (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
+- A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — e a lista precisa ser
+  vazia até existir catálogo de itens; o carregador recusa o resto.
 - Supplies comuns (poções, runas, munições) não existem fisicamente; uso debita gold diretamente.
 - Drop de supply por monstro credita gold, não gera pilha física.
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
@@ -28,6 +34,7 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
+| Loot de gold por monstro (chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
 | Preço de poções e runas | referência inicial: preços do Tibia (conteúdo final a definir) | caminho previsto: `packages/content/supply` |
@@ -39,4 +46,6 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+**Loot de item não cai, e a tabela recusa tentar.** O PRD assume item; o código só tem gold.
+`loot.items` existe na forma certa e aceita só lista vazia, para o dia em que houver catálogo — e
+para ninguém creditar um item fantasma antes disso.

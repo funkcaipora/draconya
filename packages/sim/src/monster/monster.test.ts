@@ -6,7 +6,7 @@ const rat: Monster = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
   attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
-  attackRange: 1, leashRadius: 0, loot: [],
+  attackRange: 1, leashRadius: 0, loot: { items: [] },
 };
 
 const monsterAt = (x: number, y: number, over: Record<string, unknown> = {}) =>

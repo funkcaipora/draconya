@@ -6,12 +6,12 @@
 //   | como entra          | pelo menu, com dificuldade escolhida; instância criada na entrada |
 //   | o que encerra       | ação manual, regra de saída, ou morte (§14.8)                     |
 //   | o que a morte faz   | encerra — devolver à PZ é a FUN-38, do lado do servidor           |
-//   | como recompensa     | XP por abate, bloqueada com stamina zero                          |
+//   | como recompensa     | loot e XP por abate, bloqueados com stamina zero                  |
 //
 // Se a Guild War não couber nessa mesma interface depois, ela foi modelada em cima de hunt —
 // e descobrir isso na F5 custa semanas. É por isso que nada aqui pede método novo em
-// `Ruleset`: tudo o que a hunt precisa cabe em `onEnter`, `onTick`, `onDeath`, `onEnd` e no
-// par `getState`/`restore`.
+// `Ruleset`: tudo o que a hunt precisa cabe em `onEnter`, `onEvent`, `onCreatureDied`, `onEnd`
+// e no par `getState`/`restore`.
 //
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
@@ -24,9 +24,14 @@ import type {
 import type { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
+import { forgetActor, recordDamage, resolveDeath } from '../death.js';
+import type { KillCredit, Victim } from '../death.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
-import { MonsterRuntime, chooseTarget, decideMonsterAction } from '../monster/monster.js';
+import { rollLoot } from '../loot.js';
+import {
+  MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
+} from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance } from '../monster/step.js';
@@ -75,8 +80,6 @@ const EXIT_RULE_INTERVAL_MS = 250;
  * ao invés de insistir é o que evita um laço quente quando o jogador acampa em cima do ponto.
  */
 const SPAWN_RETRY_MS = 1000;
-
-const monsterSubject = (id: number): string => `m:${id}`;
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
@@ -366,11 +369,17 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
-  onDeath(session: Session, character: CharacterRuntime): void {
+  /**
+   * Uma criatura morreu (FUN-63): a CONSEQUÊNCIA de hunt. O pipeline já congelou os eventos
+   * dela e já resolveu quem matou — aqui só se decide o que isso significa numa hunt.
+   */
+  onCreatureDied(session: Session, victim: Victim, credit: KillCredit): void {
+    if (victim.kind === 'character') this.#onCharacterDied(session, victim.character);
+    else this.#onMonsterDied(session, victim.monster, credit);
+  }
+
+  #onCharacterDied(session: Session, character: CharacterRuntime): void {
     this.#world.vacate(character.position.x, character.position.y);
-    // Morto não anda, não bate e não regenera: os eventos dele saem da fila em vez de
-    // vencerem para descobrir isso.
-    session.cancelEvents(character.id);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
@@ -477,7 +486,7 @@ export class HuntRuleset implements Ruleset {
     );
     if (request === null) {
       // Lugar ocupado é caso normal (o monstro está vivo) e não pede reagendamento: quem
-      // devolve o lugar é `#reap`, e é ele que marca a próxima hora.
+      // devolve o lugar é `#onMonsterDied`, e é ele que marca a próxima hora.
       if (this.#spawner.slots[slot]?.occupantId != null) return;
       session.scheduleIn(SPAWN, SPAWN_RETRY_MS, {
         priority: EventPriority.Spawn, subject,
@@ -595,7 +604,9 @@ export class HuntRuleset implements Ruleset {
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
     this.#strike(session, character, target);
-    if (!target.alive) this.#reap(session, target, character);
+    // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
+    // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
+    if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
   }
 
   /**
@@ -692,7 +703,7 @@ export class HuntRuleset implements Ruleset {
       this.#options.combat,
       session.rng,
     );
-    character.receiveDamage(result.damage);
+    recordDamage(character.contribution, subject, character.receiveDamage(result.damage));
     if (character.health > 0) return;
 
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
@@ -756,17 +767,32 @@ export class HuntRuleset implements Ruleset {
       this.#options.combat,
       session.rng,
     );
-    monster.receiveDamage(result.damage);
+    recordDamage(monster.contribution, character.id, monster.receiveDamage(result.damage));
   }
 
-  /** O monstro morreu: conta o abate, credita XP e devolve o lugar ao spawner. */
-  #reap(session: Session, monster: MonsterRuntime, killer: CharacterRuntime): void {
+  /**
+   * O monstro morreu: conta o abate, recompensa quem matou e devolve o lugar ao spawner.
+   *
+   * A recompensa vai ao ÚLTIMO GOLPE (DT-03). A atribuição inteira fica guardada em
+   * `credit.damageByActor`; a divisão entre participantes é regra de produto e entra com
+   * party — os dados já vão estar lá.
+   */
+  #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
     session.aggregates.kills++;
     const definition = this.#options.monsters.get(monster.monsterId);
+    const killer = findById(session.participants, credit.lastHitBy);
 
-    // Stamina zero bloqueia a RECOMPENSA, não a hunt (§10.2). O abate continua contando: o
+    // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, a
+    // recompensa não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt
+    // (§10.2), e vale para loot E para XP. O abate continua contando em todos os casos: o
     // jogador matou, e o extrato mentiria se dissesse que não.
-    if (definition !== undefined && !isExhausted(killer)) {
+    if (definition !== undefined && killer !== null && killer.alive && !isExhausted(killer)) {
+      // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
+      // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
+      const loot = rollLoot(definition.loot, session.rng);
+      killer.goldDelta += loot.gold;
+      session.aggregates.goldGained += loot.gold;
+
       const change = grantXp(
         killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
       );
@@ -787,10 +813,12 @@ export class HuntRuleset implements Ruleset {
       });
     }
     this.#world.vacate(monster.position.x, monster.position.y);
-    // Os eventos dele saem da fila junto com ele. Deixá-los vencer custaria um despacho para
-    // descobrir que não há mais ninguém ali, uma vez por cadência, para sempre.
-    session.cancelEvents(monsterSubject(monster.id));
-    this.#monsterBySubject.delete(monsterSubject(monster.id));
+    // Os eventos dele já saíram da fila: congelar é o primeiro estágio do pipeline. Aqui só
+    // se tira o monstro dos índices desta instância — e da atribuição de quem ele bateu, senão
+    // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
+    const subject = monster.subject;
+    for (const character of session.participants) forgetActor(character.contribution, subject);
+    this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
   }
 

@@ -62,10 +62,10 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       throw new Error('city is event-driven; it must not receive scheduled events');
     },
 
-    onDeath() {
+    onCreatureDied() {
       // Protect zone não causa dano (§37). Chegar aqui é bug de outro sistema, e falhar
       // alto é melhor que registrar uma morte impossível no extrato do jogador.
-      throw new Error('character cannot die in a protect zone');
+      throw new Error('nothing dies in a protect zone');
     },
 
     onEnd(_session: Session, _reason: EndReason) {

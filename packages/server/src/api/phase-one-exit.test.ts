@@ -367,11 +367,13 @@ describe.runIf(ready)('critério de saída da Fase 1', () => {
       progression: content.progression,
     });
     const [row] = await (database as TestDatabase).database.db
-      .select({ xp: characters.xp, level: characters.level })
+      .select({ xp: characters.xp, level: characters.level, gold: characters.gold })
       .from(characters)
       .where(eq(characters.id, characterId));
     expect(row?.xp).toBeGreaterThanOrEqual(xpBeforeDrain);
     expect(row?.level).toBeGreaterThan(1);
+    // O loot dos abates chegou à linha (FUN-63): `goldDelta` → agregado → ledger → `gold`.
+    expect(row?.gold).toBeGreaterThan(0);
 
     // Nenhuma órfã: o slot voltou, e a conta pode usar os outros personagens.
     expect(await directory.activeSlots(accountId)).toEqual([]);

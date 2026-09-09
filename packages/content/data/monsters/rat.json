@@ -10,5 +10,5 @@
   "attackIntervalMs": 2000,
   "stepDurationMs": 500,
   "aggroRadius": 4,
-  "loot": [{ "itemId": "gold-coin", "chance": 0.9, "min": 1, "max": 4 }]
+  "loot": { "gold": { "chance": 0.9, "min": 1, "max": 4 }, "items": [] }
 }

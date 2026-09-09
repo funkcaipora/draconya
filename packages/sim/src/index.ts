@@ -7,6 +7,8 @@ export * from './cooldown.js';
 export * from './schedule.js';
 export * from './movement.js';
 export * from './character.js';
+export * from './death.js';
+export * from './loot.js';
 export * from './session.js';
 export * from './progression.js';
 export * from './stamina.js';
