@@ -55,7 +55,11 @@ describe.runIf(available)('snapshot store', () => {
     await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'city' }, 'a1');
     await store.save('p1', 'a1', 'n1', snapshotOf('s1'));
 
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    // Os dois prazos, afirmados: o lease é curto, o snapshot é longo. Depois, o lease é
+    // apagado na mão — é o que a expiração faz — e o snapshot precisa continuar lá.
+    expect(await redis.pttl('char:p1:session')).toBeLessThanOrEqual(60);
+    expect(await redis.pttl('session:p1:snapshot')).toBeGreaterThan(4_000);
+    await redis.del('char:p1:session');
 
     expect(await directory.lookup('p1')).toBeNull();
     expect(await store.load('p1')).not.toBeNull();

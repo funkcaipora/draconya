@@ -61,7 +61,12 @@ describe.runIf(available)('session ticket', () => {
 
     const issued = await tickets.issue('a1', 'p1');
     if (!issued.ok) throw new Error('expected a ticket');
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // O claim expira por `PX` no Redis, e nenhum relógio injetado alcança isso (FUN-62). O que
+    // é nosso é o prazo — afirmado — e o consumo depois dele, provado apagando o claim.
+    const ttl = await redis.pttl(`ticket:${issued.value.ticket}`);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(120);
+    await redis.del(`ticket:${issued.value.ticket}`);
 
     expect(await tickets.consume(issued.value.ticket, 'n1')).toBeNull();
   });
@@ -225,31 +230,30 @@ describe.runIf(available)('session ticket', () => {
   });
 
   it('reserves the active slot through the ticket grace period', async () => {
-    // Espera de RELÓGIO, sem jeito: a reserva expira por `PX` no Redis, e nenhum relógio
-    // injetado alcança isso. O que dá para escolher é a FOLGA, e ela era de 150 ms — apertada
-    // o bastante para o teste falhar quando a suíte disputava a máquina, o que já aconteceu
-    // duas vezes. Com dois segundos de folga o que ele afirma continua o mesmo: passado o
-    // prazo do ticket, a reserva SOBREVIVE pela carência.
+    // Já foi uma espera de relógio com folga alargada duas vezes (FUN-62). O que se afirma
+    // é que a reserva SOBREVIVE ao ticket pela carência — e isso é um prazo gravado, não um
+    // prazo esperado: o claim tem o TTL do ticket, o slot tem o da carência, e apagar o claim
+    // é exatamente o que a expiração dele faria.
     const directory = new SessionDirectory(redis, { leaseMs: 50 });
     const tickets = new TicketService(redis, directory, { ttlMs: 200, graceMs: 2_000 });
     await directory.heartbeat('n1', NODE);
 
-    await tickets.issue('a1', 'p1');
-    await new Promise((resolve) => { setTimeout(resolve, 250); });
+    const issued = await tickets.issue('a1', 'p1');
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await redis.pttl(`ticket:${issued.value.ticket}`)).toBeLessThanOrEqual(200);
+    expect(await redis.pttl('account:a1:active')).toBeGreaterThan(200);
+    await redis.del(`ticket:${issued.value.ticket}`);
 
     expect(await directory.activeSlots('a1')).toEqual(['p1']);
   });
 
   it('does not sweep a reservation reissued after the due list was read', async () => {
-    // A carência é longa de propósito, e o relógio injetado é empurrado além dela.
-    //
     // Quem decide se a reserva está VENCIDA é o relógio injetado, que o teste controla; quem
-    // decide se ela ainda EXISTE é o `PX` do Redis, que ninguém controla. Com carência de
-    // 50 ms, a chave sumia sozinha em 100 ms de relógio de parede quando a suíte disputava a
-    // máquina, e o teste falhava dizendo que a reserva não voltou — quando na verdade ela
-    // nunca chegou à asserção.
+    // decide se ela ainda EXISTE é o `PX` do Redis, que ninguém controla. A carência só
+    // precisa ser maior que o tempo que o teste leva — milissegundos —, e cinco segundos é
+    // folga, não espera: nada aqui dorme (FUN-62).
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 30_000, now: () => now });
+    const { directory, tickets } = build({ ttlMs: 50, graceMs: 5_000, now: () => now });
     await directory.heartbeat('n1', NODE);
     await tickets.issue('a1', 'p1');
     now += 60_000;
