@@ -23,6 +23,15 @@ export const monsterSchema = z.object({
   stepDurationMs: z.number().int().positive(),
   /** Raio de agressão, em tiles. */
   aggroRadius: z.number().int().nonnegative(),
+  /**
+   * Até onde o monstro alcança para atacar, em tiles. `1` é corpo a corpo.
+   *
+   * Separado do raio de agressão de propósito: um monstro que persegue de longe e só bate
+   * colado é comportamento diferente de um que atira à distância, e a diferença é conteúdo.
+   */
+  attackRange: z.number().int().positive().default(1),
+  /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
+  leashRadius: z.number().int().nonnegative().default(0),
   loot: z.array(
     z.object({
       itemId: z.string().min(1),

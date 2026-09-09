@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc -b",
     "clean": "rm -rf dist *.tsbuildinfo",
-    "content:check": "tsx src/content/check.ts"
+    "content:check": "tsx src/content/check.ts",
+    "bench:monster": "tsx src/bench/monster-step.ts"
   },
   "dependencies": {
     "@draconya/protocol": "workspace:*",

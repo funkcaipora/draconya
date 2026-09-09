@@ -8,4 +8,6 @@ export * from './character.js';
 export * from './session.js';
 export * from './progression.js';
 export * from './combat/damage.js';
+export * from './monster/step.js';
+export * from './monster/monster.js';
 export * from './rulesets/city.js';

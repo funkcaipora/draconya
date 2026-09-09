@@ -41,6 +41,11 @@ Se divergir, alguma fórmula está contando ticks em vez de tempo.
 - Monstro usa **passo guloso, não A\***: tenta o tile que aproxima, bloqueado tenta o adjacente,
   senão espera. Consequência barata: campo bloqueante não invalida caminho nenhum, porque não
   existe caminho guardado. Ver ADR 0009.
+- **A escolha entre os dois desvios é fixa** (horário antes de anti-horário). Alternar exigiria
+  guardar estado por monstro, e um viés estável é preferível a um que depende de quantas vezes o
+  monstro já tentou — esse último produz movimento errático que ninguém reproduz.
+- **Custo medido: 0,081 µs por monstro por tick** (`pnpm bench:monster`). É a linha de base que
+  a FUN-46 vai cobrar em escala; uma regressão de ordem de grandeza aqui vira conta de servidor.
 - A hunt **não faz pathfinding** — a rota é uma lista fixa de tiles vinda de `content`.
 - O adaptador `systemClock` vive em `server/`. Aqui ficam apenas o contrato `Clock` e o
   relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
