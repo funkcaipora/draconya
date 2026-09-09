@@ -6,12 +6,14 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot,
-  materializeStamina, statsForLevel,
+  CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
+  huntRulesetFromSnapshot, materializeStamina, statsForLevel,
 } from '@draconya/sim';
-import type { Ruleset, SessionSnapshot } from '@draconya/sim';
+import type { HuntDifficultyName, Ruleset, SessionSnapshot } from '@draconya/sim';
 import type { Content } from '@draconya/content';
-import type { SessionFactory, SessionRestorer, SessionSuccessor } from './host.js';
+import type {
+  SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
+} from './host.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -105,46 +107,76 @@ function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null
 
 
 /**
- * Para onde o personagem vai quando a sessão dele acaba (FUN-38): a Cidade, sempre.
+ * Constrói a sessão de destino de uma transição (FUN-30, FUN-38).
  *
- * Todo personagem está em EXATAMENTE uma sessão (invariante 8), então "a hunt acabou" nunca
- * pode significar "ele ficou sem sessão". Vale para a morte e vale para a saída manual: sair
- * de uma hunt é voltar para a cidade, não sumir do mundo.
+ * É a MESMA função para a morte que devolve à cidade e para o jogador que entra numa hunt.
+ * Dois caminhos separados dariam duas chances de o estado exclusivo furar, e é o estado
+ * exclusivo que dispensa lock sobre o gold (invariante 9).
  *
- * O personagem é o MESMO objeto, não uma cópia reconstruída do banco. A penalidade de morte
- * (FUN-37) já mexeu no level e na XP dele quando isto roda, e reconstruir a partir de dados
- * duráveis que ainda não foram gravados devolveria o personagem de antes de morrer — a
- * penalidade sumiria, e ninguém ligaria uma coisa à outra.
- *
- * Quem cura é o `onEnter` da Cidade: voltar à PZ restaura HP e mana cheios (§26.1). Curar
- * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
+ * O personagem que atravessa é o MESMO objeto, não uma cópia reconstruída do banco. A
+ * penalidade de morte (FUN-37) já mexeu no level e na XP dele quando isto roda, e reconstruir
+ * a partir de dados duráveis que ainda não foram gravados devolveria o personagem de antes de
+ * morrer — a penalidade sumiria, e ninguém ligaria uma coisa à outra.
  */
-export function createCitySuccessor(
+export function createSessionBuilder(
   content: Content,
   now: () => number = () => Date.now(),
-): SessionSuccessor {
-  return (ended: Session): Session | null => {
-    // A Cidade não sucede a si mesma. Uma sessão de Cidade que acaba é um `logout` ou uma
-    // drenagem, e nesses casos o personagem está mesmo saindo do nó.
-    if (ended.ruleset.type === 'city') return null;
-
-    const id = randomUUID();
-    const session = new Session({
-      id,
-      contentVersion: content.version,
-      ruleset: createCityRuleset(),
-      rng: Rng.fromSeed(id),
-      // O relógio da sessão nova continua o da antiga: elas são o mesmo personagem no mesmo
-      // processo, e um `createdAtMs` de outra origem faria o primeiro `dtMs` sair absurdo.
-      createdAtMs: ended.nowMs,
-    });
-    for (const character of ended.participants) {
-      // Materializa na SAÍDA da hunt (§10). Sem isto, o `staminaUpdatedAtMs` continuaria
-      // apontando para antes da hunt, e a próxima leitura devolveria como recuperação o
-      // tempo que o personagem passou justamente gastando stamina.
+): SessionBuilder {
+  return (request, from): Session | null => {
+    // Materializar a stamina é da FRONTEIRA, e toda transição é uma (§10). Fazer aqui, e não
+    // dentro de cada destino, é o que garante que nenhum caminho novo esqueça.
+    for (const character of from.participants) {
       materializeStamina(character, now(), content.stamina);
-      session.enter(character);
     }
-    return session;
+
+    if (request.to === 'city') return cityFor(content, from);
+    if (request.to === 'hunt') return huntFor(content, request, from);
+    // Treino, quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com
+    // erro claro, que é melhor que construir uma sessão que mente sobre o que é.
+    return null;
   };
+}
+
+/**
+ * A Cidade não sucede a si mesma: uma sessão de Cidade que acaba é logout ou drenagem, e aí o
+ * personagem está mesmo saindo do nó.
+ *
+ * Quem cura é o `onEnter` da Cidade — voltar à PZ restaura HP e mana cheios (§26.1). Curar
+ * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
+ */
+function cityFor(content: Content, from: Session): Session | null {
+  if (from.ruleset.type === 'city') return null;
+  const id = randomUUID();
+  const session = new Session({
+    id,
+    contentVersion: content.version,
+    ruleset: createCityRuleset(),
+    rng: Rng.fromSeed(id),
+    // O relógio da sessão nova continua o da antiga: elas são o mesmo personagem no mesmo
+    // processo, e um `createdAtMs` de outra origem faria o primeiro `dtMs` sair absurdo.
+    createdAtMs: from.nowMs,
+  });
+  for (const character of from.participants) session.enter(character);
+  return session;
+}
+
+function huntFor(content: Content, request: TransitionRequest, from: Session): Session | null {
+  if (request.huntId === undefined || request.difficulty === undefined) return null;
+  try {
+    const session = createHuntSession({
+      id: randomUUID(),
+      content,
+      huntId: request.huntId,
+      // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um
+      // enum no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
+      difficulty: request.difficulty as HuntDifficultyName,
+      createdAtMs: from.nowMs,
+    });
+    for (const character of from.participants) session.enter(character);
+    return session;
+  } catch {
+    // Hunt inexistente, dificuldade que ela não define, rota que saiu do conteúdo. Recusar é
+    // a resposta certa: o personagem fica onde estava, e o jogador vê o motivo.
+    return null;
+  }
 }

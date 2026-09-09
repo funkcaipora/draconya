@@ -47,6 +47,18 @@ export const C2S_SCHEMAS = {
   'walk-to': z.object({ destination: Point }),
   say: z.object({ channel: z.string(), text: z.string().max(255) }),
   logout: z.object({}),
+  /**
+   * Entrar numa hunt (§14.3, FUN-30). INTENÇÃO, nunca resultado: o cliente diz qual hunt e
+   * qual dificuldade, e o servidor decide se a transição é válida, cria a instância e
+   * responde com o estado novo (invariante 4).
+   *
+   * A dificuldade vem como string livre e é validada contra o CONTEÚDO, não contra um enum
+   * aqui: uma hunt define as dificuldades que fazem sentido para ela, não obrigatoriamente as
+   * quatro, e repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+   */
+  'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
+  /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
+  'leave-hunt': z.object({}),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {

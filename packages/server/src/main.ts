@@ -14,7 +14,7 @@ import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  createCitySessionFactory, createCitySuccessor, createSessionRestorer,
+  createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
@@ -128,6 +128,7 @@ async function main(): Promise<void> {
             isCharacterActive: async (accountId, characterId) =>
               (await directory.lookup(characterId)) !== null
               || (await directory.activeSlots(accountId)).includes(characterId),
+            locateSession: (characterId) => directory.lookup(characterId),
           }),
     }),
     game: () => createGame(configuration, logger.child({ role: 'game' }), {
@@ -138,7 +139,7 @@ async function main(): Promise<void> {
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),
-      successor: createCitySuccessor(content),
+      buildSession: createSessionBuilder(content),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,

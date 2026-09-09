@@ -168,6 +168,42 @@ describe('character routes', () => {
     expect(response.json()).toEqual({ error: 'character-active' });
   });
 
+  it('o estado vem do DIRETÓRIO, não da coluna que ninguém escreve (FUN-30)', async () => {
+    // A coluna `state` existe e não é escrita por ninguém: a verdade sobre em que atividade o
+    // personagem está é a sessão, e a sessão vive no Redis. Lendo a coluna, a API respondia
+    // "city" para quem estava numa hunt havia seis horas.
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const created = await repository.createCharacter('a1', 'Hunting Hero');
+    const app = Fastify();
+    registerCharacterRoutes(
+      app, auth, repository, undefined,
+      async () => ({ sessionId: 's-hunt', type: 'hunt' }),
+    );
+
+    const response = await app.inject({
+      method: 'GET', url: '/api/characters', headers: { cookie: `${SESSION_COOKIE}=token` },
+    });
+
+    const [character] = response.json().characters as Array<{ state: string; sessionId: string }>;
+    expect(character?.state).toBe('hunt');
+    expect(character?.sessionId).toBe('s-hunt');
+    expect(created.state).toBe('city');
+  });
+
+  it('sem sessão no diretório, o estado cai para o da linha', async () => {
+    // Personagem que não está conectado. A coluna diz `city`, e é o que ele é.
+    const { app } = await build();
+    const response = await app.inject({
+      method: 'POST', url: '/api/characters',
+      headers: { cookie: `${SESSION_COOKIE}=token` },
+      payload: { name: 'Resting Hero' },
+    });
+    expect(response.json().state).toBe('city');
+  });
+
   it('requires authentication', async () => {
     const { app } = await build();
     expect((await app.inject({ method: 'GET', url: '/api/characters' })).statusCode).toBe(401);

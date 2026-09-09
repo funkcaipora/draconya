@@ -20,6 +20,7 @@ import type { ReceiptStore } from '../receipts.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
+import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
 export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
@@ -27,14 +28,22 @@ export type SessionFactory = (characterId: string, initialCharacter?: InitialCha
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot, nowMs: number) => Session | null;
 
+/** Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`. */
+export interface TransitionRequest {
+  readonly to: SessionType;
+  readonly huntId?: string;
+  readonly difficulty?: string;
+}
+
 /**
- * Para onde o personagem vai quando a sessão dele se encerra sozinha (FUN-38).
+ * Constrói a sessão de destino de uma transição (FUN-30, FUN-38).
  *
- * `null` significa "não vai a lugar nenhum": a sessão é solta e o personagem sai do nó. Uma
- * hunt que acaba SEMPRE devolve alguém à Cidade, porque todo personagem está em exatamente
- * uma sessão (invariante 8) — ficar sem sessão nenhuma não é um estado que exista.
+ * `null` significa "não sei construir essa": a transição é recusada, e no caminho da morte a
+ * sessão é solta. É a MESMA costura para a morte que devolve à cidade e para o jogador que
+ * entra numa hunt — dois caminhos separados dariam duas chances de o estado exclusivo furar,
+ * e é o estado exclusivo que dispensa lock sobre o gold (invariante 9).
  */
-export type SessionSuccessor = (ended: Session, reason: EndReason) => Session | null;
+export type SessionBuilder = (request: TransitionRequest, from: Session) => Session | null;
 
 export interface SessionHostOptions {
   readonly nodeId: string;
@@ -47,8 +56,8 @@ export interface SessionHostOptions {
   /** Onde o extrato de uma sessão encerrada espera virar linha de ledger (FUN-29). */
   readonly receipts?: ReceiptStore;
   readonly restoreSession?: SessionRestorer;
-  /** Para onde o personagem vai quando a sessão se encerra sozinha — a PZ, na morte (FUN-38). */
-  readonly successor?: SessionSuccessor;
+  /** Constrói a sessão de destino de uma transição — a PZ na morte, a hunt no menu. */
+  readonly buildSession?: SessionBuilder;
   readonly viewer?: ViewerOptions;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
@@ -97,6 +106,8 @@ export class SessionHost {
   readonly #sessionIdByCharacter = new Map<string, string>();
   readonly #accountIdByCharacter = new Map<string, string>();
   readonly #preparations = new Map<string, Promise<void>>();
+  /** Transições em voo, por personagem. Ver `transition`. */
+  readonly #transitions = new Map<string, Promise<void>>();
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
 
@@ -295,6 +306,18 @@ export class SessionHost {
         viewer.send(this.#sessionState(hosted, viewer.characterId));
         return;
       }
+      case 'enter-hunt':
+        // INTENÇÃO, nunca resultado (invariante 4): o cliente diz qual hunt e qual
+        // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
+        void this.#requestTransition(viewer, {
+          to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+        });
+        return;
+      case 'leave-hunt':
+        // Sair é voltar para a cidade, não ficar sem sessão: todo personagem está em
+        // exatamente uma (invariante 8).
+        void this.#requestTransition(viewer, { to: 'city' });
+        return;
       case 'logout':
         // Sair do jogo ENCERRA a sessão e devolve o slot; fechar o socket não.
         //
@@ -307,9 +330,36 @@ export class SessionHost {
         void this.#logout(viewer.characterId);
         return;
       default:
-        // walk, walk-to, say, client-ready, session-attach e authenticate chegam nas
-        // FUN-30/32/42. Ignorar em silêncio é melhor que responder errado.
+        // walk, walk-to, say, client-ready e authenticate ainda não têm tratamento. Ignorar
+        // em silêncio é melhor que responder errado.
         this.#logger.debug({ type: message.type }, 'Message not handled yet');
+    }
+  }
+
+  /**
+   * Executa a transição pedida pelo jogador e conta o que aconteceu.
+   *
+   * A recusa vira MENSAGEM, e é o produto: "você não pode fazer isso" é o texto que faz
+   * alguém achar que o jogo travou. Cada recusa diz o que fazer em seguida.
+   */
+  async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {
+    try {
+      await this.transition(viewer.characterId, request);
+    } catch (error) {
+      if (error instanceof TransitionError) {
+        viewer.send({
+          type: 'system-message', level: 'warning', text: REFUSAL_TEXT[error.refusal],
+        });
+        return;
+      }
+      // Falha inesperada: o personagem continua onde estava, que é o estado seguro.
+      this.#logger.error(
+        { error, characterId: viewer.characterId, to: request.to },
+        'Transition failed',
+      );
+      viewer.send({
+        type: 'system-message', level: 'error', text: 'Não foi possível mudar de atividade.',
+      });
     }
   }
 
@@ -382,7 +432,9 @@ export class SessionHost {
         });
       }
 
-      const next = this.#options.successor?.(hosted.session, receipt.reason) ?? null;
+      // Toda sessão que acaba sozinha devolve o personagem à Cidade (§6): "a hunt acabou"
+      // nunca pode significar "ficou sem sessão" (invariante 8).
+      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session) ?? null;
       if (next === null) {
         await this.release(characterId, 1000, receipt.reason);
         return;
@@ -397,6 +449,76 @@ export class SessionHost {
         'Failed to move the character to the next session',
       );
     }
+  }
+
+  /**
+   * Muda o personagem de atividade (FUN-30, §6).
+   *
+   * Lança `TransitionError` quando a transição não é válida — e a recusa é o produto, não um
+   * detalhe: "você não pode fazer isso" é a mensagem que faz alguém achar que o jogo travou.
+   *
+   * A ORDEM é a que falha seguro. A troca no diretório é ATÔMICA (`succeed`), então não
+   * existe o instante em que o personagem está em duas sessões nem o instante em que ele não
+   * está em nenhuma — que é o requisito difícil desta issue, e a razão de não haver aqui um
+   * "reservar depois liberar" em dois passos.
+   */
+  async transition(characterId: string, request: TransitionRequest): Promise<void> {
+    const hosted = this.#hostedSession(characterId);
+    if (hosted === undefined) throw new Error(`character ${characterId} has no session here`);
+
+    const refusal = refuseTransition(hosted.session.ruleset.type, request.to);
+    if (refusal !== null) throw refusal;
+
+    // Duas transições disputadas: exatamente UMA vence, e a outra sabe que perdeu.
+    //
+    // Sem esta trava as duas leriam a mesma sessão de origem, e a segunda tentaria trocar um
+    // registro de diretório que a primeira já trocou — a CAS recusaria, e o caminho de recusa
+    // SOLTA o personagem. Perder a corrida derrubaria o jogador do jogo.
+    if (this.#transitions.has(characterId)) {
+      throw new TransitionError(
+        'already-transitioning', `uma transição de ${characterId} já está em andamento`,
+      );
+    }
+
+    const running = this.#runTransition(characterId, hosted, request);
+    this.#transitions.set(characterId, running);
+    try {
+      await running;
+    } finally {
+      if (this.#transitions.get(characterId) === running) this.#transitions.delete(characterId);
+    }
+  }
+
+  async #runTransition(
+    characterId: string,
+    hosted: HostedSession,
+    request: TransitionRequest,
+  ): Promise<void> {
+    // Construir ANTES de encerrar: se o destino não existe — hunt que saiu do conteúdo,
+    // dificuldade que a hunt não define — o personagem fica exatamente onde estava, em vez de
+    // ficar sem sessão porque a antiga já tinha sido fechada.
+    const next = this.#options.buildSession?.(request, hosted.session) ?? null;
+    if (next === null) {
+      throw new TransitionError(
+        'unknown-destination', `este servidor não constrói uma sessão de "${request.to}"`,
+      );
+    }
+
+    const receipt = hosted.session.ended === null
+      ? hosted.session.end('manual-exit')
+      : hosted.session.receipt();
+    if (receipt !== null) {
+      await this.#saveReceipt(characterId, hosted, receipt);
+      for (const viewer of hosted.viewers) {
+        viewer.send({
+          type: 'session-ended',
+          reason: receipt.reason,
+          aggregates: receipt.aggregates,
+          notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
+        });
+      }
+    }
+    await this.#replace(characterId, hosted, next);
   }
 
   /** Troca a sessão do personagem por outra, no diretório e aqui dentro. */

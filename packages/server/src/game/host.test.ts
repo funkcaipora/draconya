@@ -43,7 +43,7 @@ function buildHost(
     snapshots?: SnapshotStore;
     receipts?: ReceiptStore;
     restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
-    successor?: (ended: Session, reason: EndReason) => Session | null;
+    buildSession?: (request: { to: string }, from: Session) => Session | null;
   } = {},
 ) {
   const sessions: Session[] = [];
@@ -666,9 +666,9 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     };
   }
 
-  /** Sucessor de mentira: uma sessão de Cidade que cura, como a de verdade faz no `onEnter`. */
-  function citySuccessor(): (ended: Session) => Session {
-    return (ended) => {
+  /** Construtor de mentira: uma sessão de Cidade que cura, como a de verdade faz no `onEnter`. */
+  function citySuccessor(): (request: { to: string }, ended: Session) => Session {
+    return (_request, ended) => {
       const session = new Session({
         id: `city-${ended.id}`,
         contentVersion: 'v-test',
@@ -704,7 +704,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       succeed: async () => true,
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, receipts, successor: citySuccessor(), now: () => 1000,
+      directory, receipts, buildSession: citySuccessor(), now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
     // Nenhum `attach`: ninguém está assistindo.
@@ -733,7 +733,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       succeed: async () => { order.push('directory'); return true; },
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, receipts, successor: citySuccessor(), now: () => 1000,
+      directory, receipts, buildSession: citySuccessor(), now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
 
@@ -746,7 +746,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       register: async () => true, succeed: async () => true,
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, successor: citySuccessor(), now: () => 1000,
+      directory, buildSession: citySuccessor(), now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
     const socket = new FakeSocket();
@@ -778,7 +778,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       register: async () => true, succeed: async () => true,
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, snapshots, successor: citySuccessor(), now: () => 1000,
+      directory, snapshots, buildSession: citySuccessor(), now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
 
@@ -796,7 +796,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       releaseSlot: async () => {},
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, successor: citySuccessor(), now: () => 1000,
+      directory, buildSession: citySuccessor(), now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
 
@@ -809,11 +809,157 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
       register: async () => true, release: async () => {}, releaseSlot: async () => {},
     } as unknown as SessionDirectory;
     const { host } = buildHost(lethalRuleset(), {
-      directory, successor: () => null, now: () => 1000,
+      directory, buildSession: () => null, now: () => 1000,
     });
     await host.prepare('p1', undefined, 'a1');
 
     host.cycle(1000);
     await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
   });
+});
+
+describe('máquina de estados do personagem (FUN-30)', () => {
+  const quiet = (type: 'city' | 'hunt'): Ruleset => ({
+    type,
+    hz: () => (type === 'city' ? 0 : 10),
+    onEnter: () => {},
+    onTick: () => {},
+    onDeath: () => {},
+    onEnd: () => {},
+  });
+
+  /** Constrói o destino, e conta quantas vezes foi chamado. */
+  const builder = (): {
+    build: (request: { to: string }, from: Session) => Session | null;
+    built: string[];
+  } => {
+    const built: string[] = [];
+    return {
+      built,
+      build: (request, from) => {
+        built.push(request.to);
+        const session = new Session({
+          id: `${request.to}-${built.length}`,
+          contentVersion: 'v-test',
+          ruleset: quiet(request.to as 'city' | 'hunt'),
+          rng: Rng.fromSeed(request.to),
+          createdAtMs: from.nowMs,
+        });
+        for (const character of from.participants) session.enter(character);
+        return session;
+      },
+    };
+  };
+
+  const cityHost = (options: Record<string, unknown> = {}) => {
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    return buildHost(quiet('city'), { directory, ...options });
+  };
+
+  it('leva o personagem da Cidade para a hunt, com sessão nova', async () => {
+    const { build } = builder();
+    const { host } = cityHost({ buildSession: build });
+    await host.prepare('p1', undefined, 'a1');
+    const antes = host.sessionFor('p1');
+
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'beginner' });
+
+    expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt');
+    expect(host.sessionFor('p1')).not.toBe(antes);
+    // O personagem é o MESMO objeto: reconstruir perderia o que a sessão anterior mudou nele.
+    expect(host.sessionFor('p1')?.participants[0]).toBe(antes?.participants[0]);
+  });
+
+  it('recusa transição inválida com erro claro, e não mexe na sessão', async () => {
+    // Não se vai de hunt direto para boss: a Cidade é o centro (§6).
+    const { build } = builder();
+    const { host } = buildHost(quiet('hunt'), {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      buildSession: build,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const antes = host.sessionFor('p1');
+
+    await expect(host.transition('p1', { to: 'boss' })).rejects.toThrow(/volte para a cidade/);
+    expect(host.sessionFor('p1')).toBe(antes);
+  });
+
+  it('recusa ir para onde já se está', async () => {
+    const { build } = builder();
+    const { host } = cityHost({ buildSession: build });
+    await host.prepare('p1', undefined, 'a1');
+
+    await expect(host.transition('p1', { to: 'city' })).rejects.toThrow(/já está/);
+  });
+
+  it('duas transições disputadas resultam em EXATAMENTE uma sessão', async () => {
+    // É o requisito difícil da issue. Sem a trava, as duas leriam a mesma sessão de origem e
+    // a segunda tentaria trocar um registro que a primeira já trocou — a CAS recusaria, e o
+    // caminho de recusa SOLTA o personagem. Perder a corrida derrubaria o jogador do jogo.
+    const { build, built } = builder();
+    const { host } = cityHost({ buildSession: build });
+    await host.prepare('p1', undefined, 'a1');
+
+    const primeira = host.transition('p1', { to: 'hunt', huntId: 'a', difficulty: 'beginner' });
+    const segunda = host.transition('p1', { to: 'hunt', huntId: 'b', difficulty: 'beginner' });
+
+    await expect(primeira).resolves.toBeUndefined();
+    await expect(segunda).rejects.toThrow(/já está em andamento/);
+    // Uma construída, uma sessão hospedada, um personagem.
+    expect(built).toEqual(['hunt']);
+    expect(host.sessionCount).toBe(1);
+    expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt');
+  });
+
+  it('destino que este servidor não constrói deixa o personagem onde estava', async () => {
+    // Construir ANTES de encerrar: se o destino não existe, a sessão antiga não pode já ter
+    // sido fechada — senão o personagem fica sem nenhuma.
+    const { host } = cityHost({ buildSession: () => null });
+    await host.prepare('p1', undefined, 'a1');
+    const antes = host.sessionFor('p1');
+
+    await expect(host.transition('p1', { to: 'hunt' })).rejects.toThrow(/não constrói/);
+    expect(host.sessionFor('p1')).toBe(antes);
+    expect(antes?.ended).toBeNull();
+  });
+
+  it('a mensagem do cliente é INTENÇÃO: a recusa volta como aviso, não como socket fechado',
+    async () => {
+      // O cliente pediu algo inválido, não algo malicioso. Derrubar o socket faria o jogador
+      // levar uma desconexão por ter clicado no botão errado.
+      const { build } = builder();
+      const { host } = cityHost({ buildSession: build });
+      await host.prepare('p1', undefined, 'a1');
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+
+      // Já está na cidade: sair da hunt não faz sentido.
+      host.handle(viewer, { type: 'leave-hunt' });
+      await vi.waitFor(() => {
+        host.flush();
+        expect(socket.received().some((m) => m.type === 'system-message')).toBe(true);
+      });
+
+      expect(socket.ended).toBeNull();
+      expect(host.sessionFor('p1')?.ruleset.type).toBe('city');
+    });
+
+  it('entrar numa hunt pela mensagem do cliente troca a sessão e manda o estado novo',
+    async () => {
+      const { build } = builder();
+      const { host } = cityHost({ buildSession: build });
+      await host.prepare('p1', undefined, 'a1');
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+
+      host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+      await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
+      host.flush();
+
+      const estados = socket.received().filter((m) => m.type === 'session-state');
+      expect(estados.length).toBeGreaterThan(0);
+    });
 });
