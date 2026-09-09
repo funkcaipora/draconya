@@ -10,9 +10,14 @@
 //   0  livre (é o banco do desenvolvimento local)
 //   1  directory.test.ts
 //   2  tickets.test.ts
-//   4  snapshots.test.ts
 //   3  auth/sessions.test.ts
 //   4  api/integration.test.ts
+//   5  jobs/ledger.test.ts
+//   6  snapshots.test.ts
+//
+// Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
+// arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;
+// teste impede.
 
 import { Redis } from 'ioredis';
 

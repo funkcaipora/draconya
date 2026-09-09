@@ -18,6 +18,7 @@ import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
+import { ReceiptStore } from './receipts.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -74,10 +75,15 @@ async function main(): Promise<void> {
   const directory = new SessionDirectory(redis);
   const tickets = new TicketService(redis, directory);
   const snapshots = new SnapshotStore(redis);
+  const receipts = new ReceiptStore(redis);
 
   // Postgres só é exigido quando o papel `api` está presente. Um nó exclusivamente `game`
   // continua sem conexão de banco no caminho quente da simulação.
-  const database = names.includes('api') ? createDatabase(configuration.DATABASE_URL) : null;
+  // `api` precisa de banco para conta e personagem; `jobs` precisa para escrever o ledger
+  // (FUN-29). Um nó exclusivamente `game` segue SEM conexão de banco — é o caminho quente da
+  // simulação, e o AGENTS.md do pacote proíbe banco ali.
+  const needsDatabase = names.includes('api') || names.includes('jobs');
+  const database = needsDatabase ? createDatabase(configuration.DATABASE_URL) : null;
   if (database !== null) await database.ping();
   const repository = database === null ? null : new DrizzleGameRepository(database.db);
   const authSessions = new RedisAuthSessionStore(redis, configuration.AUTH_SESSION_TTL_SECONDS);
@@ -128,10 +134,12 @@ async function main(): Promise<void> {
       contentVersion: content.version,
       createSession: createCitySessionFactory(content.version),
       snapshots,
+      receipts,
       restoreSession,
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
-      tickets, directory, snapshots,
+      tickets, directory, snapshots, receipts,
+      ...(database === null ? {} : { database: database.db }),
     }),
   };
 

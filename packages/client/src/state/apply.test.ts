@@ -180,3 +180,40 @@ describe('session-state', () => {
     expect(notified).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('session-ended', () => {
+  it('shows why the session ended and what it yielded', () => {
+    applyMessage({
+      type: 'session-ended',
+      reason: 'drain',
+      aggregates: {
+        durationMs: 1_800_000, xpGained: 4_200, goldGained: 900, goldSpent: 150,
+        kills: 37, deaths: 0,
+      },
+      notableEvents: [],
+    }, 0);
+
+    const line = hud.get().systemMessages.at(-1);
+    expect(line?.level).toBe('warning');
+    expect(line?.text).toContain('manutenção');
+    expect(line?.text).toContain('30 min');
+    expect(line?.text).toContain('4200 XP');
+    // Ganho MENOS gasto: é o que de fato muda o gold do personagem.
+    expect(line?.text).toContain('750 gold');
+  });
+
+  it('does not clear the world along with the notice', () => {
+    // A última coisa verdadeira fica na tela por trás da mensagem, em vez de o canvas
+    // piscar vazio junto com a notícia.
+    applyMessage(spawn(4, at(2, 2)), 0);
+    applyMessage({
+      type: 'session-ended', reason: 'death',
+      aggregates: {
+        durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 1,
+      },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.creatures.has(4)).toBe(true);
+  });
+});

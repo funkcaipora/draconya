@@ -38,6 +38,29 @@ container — validar numa VPS pequena não exige desenho diferente do de escala
 
 Em `SIGTERM`, o processo drena na ordem `api` → `jobs` → `game`, com prazo de 25 s.
 
+O `game` faz, nessa ordem: para de aceitar sessão nova → grava o snapshot de todas → **encerra
+cada uma creditando o progresso** → manda o extrato para quem estiver anexado → some com o
+snapshot e o registro no diretório de quem creditou.
+
+**Medido**, com 100 sessões ativas e socket aberto em todas:
+
+| | |
+|---|---|
+| `SIGTERM` até o processo sair | 179 ms |
+| drenagem em si | 129 ms — **1,29 ms por sessão** |
+| jogadores avisados | 100/100 |
+| extratos creditados no ledger | 100/100 |
+| sessões órfãs deixadas para trás | 0 |
+
+Nesse ritmo, 5.000 sessões drenam em cerca de 6,5 s, com folga confortável dentro dos 25 s. **O
+número que importa não é a média, é o teto**: drenagem interrompida no meio é pior que drenagem
+nenhuma, porque metade credita e metade some, e ninguém sabe qual metade. Ao configurar
+`terminationGracePeriod` no orquestrador, meça de novo com a carga real e deixe margem.
+
+Uma sessão que falha ao creditar **fica** com snapshot e registro, de propósito: ela volta pelo
+caminho de retomada (FUN-28) na próxima conexão. Voltar retomável é melhor que sumir sem
+crédito.
+
 A ordem não é arbitrária. O `api` sai primeiro para parar de emitir ticket; o `jobs` em
 seguida para não competir por sessão órfã; e o `game` por último, com o prazo inteiro, porque
 é ele que precisa **creditar progresso de quem não está olhando** (FUN-29).

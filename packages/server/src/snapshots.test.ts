@@ -6,7 +6,7 @@ import { sweepOrphanedSessions } from './jobs/orphans.js';
 import { createLogger } from './log.js';
 import { connectTestRedis } from './testing/redis.js';
 
-const { redis, available } = await connectTestRedis(4);
+const { redis, available } = await connectTestRedis(6);
 const logger = createLogger('silent', 'test');
 
 afterAll(async () => {

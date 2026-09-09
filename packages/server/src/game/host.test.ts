@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
+import type { ReceiptStore } from '../receipts.js';
 import { SessionHost } from './host.js';
 import { FakeSocket } from './testing.js';
 
@@ -37,6 +38,7 @@ function buildHost(
     now?: () => number;
     directory?: SessionDirectory;
     snapshots?: SnapshotStore;
+    receipts?: ReceiptStore;
     restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
   } = {},
 ) {
@@ -68,6 +70,89 @@ function buildHost(
 }
 
 describe('session host', () => {
+  it('drains crediting the progress and tells whoever is watching', async () => {
+    // Um deploy com milhares de sessões desanexadas em voo destrói progresso de gente que
+    // nem está lá para reagir. Encerrar creditando é o que o §38.4 permite explicitamente.
+    const saved: Array<{ sessionId: string; seq: number; reason: string }> = [];
+    const receipts = {
+      save: async (r: { sessionId: string; seq: number; reason: string }) => {
+        saved.push(r);
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset, counter } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    const ended = await host.drainAll('drain');
+
+    expect(ended).toBe(1);
+    expect(counter.ended).toBe(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.reason).toBe('drain');
+    // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10).
+    expect(saved[0]?.seq).toBe(1);
+
+    const extrato = socket.received().find((m) => m.type === 'session-ended');
+    expect(extrato).toBeDefined();
+    if (extrato?.type !== 'session-ended') return;
+    expect(extrato.reason).toBe('drain');
+  });
+
+  it('saves the receipt before telling the player', async () => {
+    // A ordem é a diferença entre as duas metades ruins. Gravado e não avisado: o jogador
+    // perdeu a mensagem, mas o crédito está no Redis esperando o `jobs`. Avisado e não
+    // gravado: um extrato que nunca vai existir — a pior das duas.
+    const order: string[] = [];
+    const receipts = {
+      save: async () => {
+        order.push('receipt');
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    const original = socket.send.bind(socket);
+    socket.send = (data) => {
+      order.push('viewer');
+      return original(data);
+    };
+    host.attach(socket, 'p1');
+    order.length = 0;
+
+    await host.drainAll('drain');
+
+    expect(order[0]).toBe('receipt');
+    expect(order).toContain('viewer');
+  });
+
+  it('keeps draining when one session fails', async () => {
+    // Drenagem interrompida no meio é PIOR que drenagem nenhuma: metade credita, metade
+    // some, e ninguém sabe qual metade.
+    let calls = 0;
+    const receipts = {
+      save: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('redis fora do ar');
+      },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    await host.prepare('p2', undefined, 'a1');
+
+    const ended = await host.drainAll('drain');
+
+    expect(calls).toBe(2);
+    expect(ended).toBe(1);
+  });
+
+
   it('resumes from a snapshot instead of starting the character over', async () => {
     // Sem isto, cair o processo devolveria o personagem no estado inicial — e o produto
     // inteiro é "a sessão sobrevive". Perder o progresso em silêncio é pior que a queda.
