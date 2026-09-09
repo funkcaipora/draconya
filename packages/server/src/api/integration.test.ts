@@ -305,6 +305,24 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     ] } });
   });
 
+  it('say through the real socket comes back as chat-message, signed with the character name (FUN-58)', async () => {
+    // A ligação socket → host → visualizadores, e o nome vindo do BANCO pelo ticket — nunca
+    // do cliente, que não escolhe como aparece para os outros.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie, 'Chatter');
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);                                            // welcome
+
+    const echoed = receive(socket);
+    socket.send(encodeC2S({ type: 'say', channel: 'local', text: 'olá, sessão' }));
+    expect(decodeS2C(await echoed)).toContainEqual({
+      type: 'chat-message', channel: 'local', author: 'Chatter', text: 'olá, sessão',
+    });
+  });
+
   it('fails closed when the HTTP session store loses Redis', async () => {
     const owner = await login();
     const disconnected = new Redis(process.env['TEST_REDIS_URL']!, {

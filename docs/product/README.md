@@ -41,6 +41,7 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Combate | [`combat.md`](./combat.md) | não implementado | E2 | §12 |
 | Bot | [`bot.md`](./bot.md) | não implementado | E4 | §13, §43.3 |
 | Hunt | [`hunt.md`](./hunt.md) | não implementado | E3 | §14 |
+| Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
 | Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | não implementado | E6 | §16, §43.10 |
 | Bestiário | [`bestiary.md`](./bestiary.md) | não implementado | E7 | §18 |
