@@ -149,6 +149,8 @@ export class SessionHost {
   readonly #sessions = new Map<string, HostedSession>();
   readonly #sessionIdByCharacter = new Map<string, string>();
   readonly #accountIdByCharacter = new Map<string, string>();
+  /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
+  readonly #nameByCharacter = new Map<string, string>();
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
@@ -345,6 +347,7 @@ export class SessionHost {
     this.#sessions.delete(hosted.session.id);
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
+    this.#nameByCharacter.delete(characterId);
 
     // A sessão ACABOU: deixar o snapshot faria a próxima conexão ressuscitar uma sessão
     // encerrada, com os agregados de antes.
@@ -412,10 +415,46 @@ export class SessionHost {
       case 'walk-to':
         this.#requestWalk(viewer, message.destination);
         return;
-      default:
-        // say, client-ready e authenticate ainda não têm tratamento (FUN-58). Ignorar em
-        // silêncio é melhor que responder errado.
-        this.#logger.debug({ type: message.type }, 'Message not handled yet');
+      case 'say':
+        // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
+        // texto de jogador dentro do motor puro só criaria estado para snapshotar sem
+        // motivo. O host roteia direto para os visualizadores da sessão (FUN-58).
+        this.#say(viewer, message.channel, message.text);
+        return;
+      case 'authenticate':
+      case 'client-ready':
+        // Vestigiais, e ignoradas de propósito. A autenticação é do handshake (FUN-12);
+        // aceitar credencial pelo socket seria um SEGUNDO caminho de autenticação, que é
+        // pior que nenhum. `client-ready` não tem consumidor: `welcome` sai no handshake e
+        // `session-state` sai no `session-attach`.
+        return;
+    }
+  }
+
+  /**
+   * `say` (FUN-58): o único canal é `local`, e o alcance é a SESSÃO inteira — quem está na
+   * mesma instância recebe, o autor inclusive, e ninguém de fora. Raio em tiles é interest
+   * management (FUN-33), e inventar um aqui seria decidir duas vezes.
+   *
+   * Toda recusa é silenciosa: um cliente com bug mandando em laço não pode gerar tráfego de
+   * volta. Canal desconhecido é recusado no servidor, e não no schema — um canal que aceita
+   * qualquer nome vira dez canais fantasma no primeiro cliente com bug.
+   */
+  #say(from: Viewer, channel: string, text: string): void {
+    if (channel !== 'local') return;
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    // Controle de caracteres fora, como no nome de personagem (FUN-11). `\p{C}` pega
+    // zero-width e bidi override, que é como se falsifica nome de autor na tela.
+    if (/\p{C}/u.test(trimmed)) return;
+
+    const hosted = this.#hostedSession(from.characterId);
+    if (hosted === undefined) return;
+    const author = this.#nameByCharacter.get(from.characterId) ?? from.characterId;
+    // ENFILEIRADO, no lote do ciclo — não `sendNow`. Chat não é `pong`: 100 ms de atraso é
+    // invisível, e furar a fila põe a mensagem na frente de deltas que já esperavam.
+    for (const viewer of hosted.viewers) {
+      viewer.send({ type: 'chat-message', channel: 'local', author, text: trimmed });
     }
   }
 
@@ -1033,6 +1072,7 @@ export class SessionHost {
     const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
     await this.#register(characterId, session, accountId);
     this.#createLocal(characterId, session, accountId);
+    if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
     if (resumed !== null) {
       this.#resumedGapMs.set(characterId, resumed.gapMs);
       this.#logger.info(

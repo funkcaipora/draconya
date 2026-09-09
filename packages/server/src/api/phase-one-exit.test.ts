@@ -168,11 +168,30 @@ class Inbox {
     type: N,
     timeoutMs = 4_000,
   ): Promise<Extract<S2CMessage, { type: N }>> {
+    return this.#waitFrom(0, type, timeoutMs);
+  }
+
+  /**
+   * Espera uma mensagem que ainda NÃO chegou. `waitFor` devolve a última já recebida, o que
+   * é certo para "chegou um welcome?" e errado para "chegou o estado que eu acabei de pedir"
+   * — ali ele devolveria o `session-state` de antes, e o teste passaria lendo dado velho.
+   */
+  async waitForNext<N extends S2CMessage['type']>(
+    type: N,
+    timeoutMs = 4_000,
+  ): Promise<Extract<S2CMessage, { type: N }>> {
+    return this.#waitFrom(this.messages.length, type, timeoutMs);
+  }
+
+  async #waitFrom<N extends S2CMessage['type']>(
+    from: number, type: N, timeoutMs: number,
+  ): Promise<Extract<S2CMessage, { type: N }>> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      const found = this.last(type);
-      if (found !== undefined) return found;
+      const found = this.messages.slice(from).reverse().find((m) => m.type === type);
+      if (found !== undefined) return found as Extract<S2CMessage, { type: N }>;
       if (Date.now() > deadline) throw new Error(`timed out waiting for ${type}`);
+      // Cedência, com prazo: a mensagem vem da rede, e não há relógio a injetar (FUN-62).
       await new Promise((resolve) => { setTimeout(resolve, 20); });
     }
   }
@@ -193,7 +212,19 @@ class Inbox {
 async function advance(totalMs: number, stepMs = 5_000): Promise<void> {
   for (let elapsed = 0; elapsed < totalMs; elapsed += stepMs) {
     clockMs += stepMs;
+    // Não é prazo, é cedência: o ciclo REAL do nó (100 ms) precisa acordar e ler o relógio
+    // empurrado. Não dá para injetar — o ciclo é o `setInterval` do host de verdade, e é
+    // justamente ele que este teste exercita (FUN-62).
     await new Promise((resolve) => { setTimeout(resolve, 25); });
+  }
+}
+
+/** Espera uma condição do nó com PRAZO, em vez de dormir um número escolhido no olho. */
+async function until(condition: () => boolean, what: string, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
   }
 }
 
@@ -256,8 +287,7 @@ describe.runIf(ready)('critério de saída da Fase 1', () => {
 
     await advance(60_000);
     inbox.send({ type: 'session-attach' });
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
-    const hunting = inbox.last('session-state');
+    const hunting = await inbox.waitForNext('session-state');
     // ESTADO, não ausência de erro: o personagem matou e ganhou XP de verdade.
     expect(hunting?.aggregates.kills).toBeGreaterThan(0);
     expect(hunting?.self.xp).toBeGreaterThan(0);
@@ -269,8 +299,7 @@ describe.runIf(ready)('critério de saída da Fase 1', () => {
 
     // --- 3. FECHAR o navegador, sem sair da hunt ----------------------------------------
     inbox.close();
-    await new Promise((resolve) => { setTimeout(resolve, 200); });
-    expect(node.host?.viewersOf(characterId)).toBe(0);
+    await until(() => node.host?.viewersOf(characterId) === 0, 'the viewer to detach');
 
     // --- 4. tempo suficiente para subir de level ----------------------------------------
     await advance(300_000);

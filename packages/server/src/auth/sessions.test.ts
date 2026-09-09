@@ -51,8 +51,9 @@ describeWithRedis('RedisAuthSessionStore', () => {
     await expect(sessions.consumeAuthorizationState(state)).resolves.toBe(false);
     const expired = 'b'.repeat(32);
     await sessions.saveAuthorizationState(expired, 60);
-    await redis.pexpire(`auth:state:${expired}`, 1);
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Não era prazo, era ORDEM: o que se afirma é que um estado que já não existe não é
+    // consumido. Apagar na mão é a ausência, sem esperar 1 ms de `PX` (FUN-62).
+    await redis.del(`auth:state:${expired}`);
     await expect(sessions.consumeAuthorizationState(expired)).resolves.toBe(false);
   });
 
@@ -71,8 +72,10 @@ describeWithRedis('RedisAuthSessionStore', () => {
     const token = await sessions.create(session);
     await redis.pexpire(`auth:session:${token}`, 50);
     expect(await sessions.get(token)).toEqual(session);
+    // A leitura NÃO renovou o TTL — é o que este teste afirma, e está afirmado no `pttl`.
+    // Que a chave suma depois é o Redis; apagá-la prova o que `get` faz com a ausência.
     expect(await redis.pttl(`auth:session:${token}`)).toBeLessThanOrEqual(50);
-    await new Promise((resolve) => setTimeout(resolve, 75));
+    await redis.del(`auth:session:${token}`);
     expect(await sessions.get(token)).toBeNull();
   });
 

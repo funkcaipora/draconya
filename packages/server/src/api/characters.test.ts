@@ -152,12 +152,9 @@ describe('character routes', () => {
     await auth.devLogin('hero@example.com');
     const created = await repository.createCharacter('a1', 'Busy Hero');
     const app = Fastify();
-    registerCharacterRoutes(
-      app,
-      auth,
-      repository,
-      async (_accountId, characterId) => characterId === created.id,
-    );
+    registerCharacterRoutes(app, auth, repository, {
+      isCharacterActive: async (_accountId, characterId) => characterId === created.id,
+    });
 
     const response = await app.inject({
       method: 'DELETE',
@@ -178,10 +175,9 @@ describe('character routes', () => {
     await auth.devLogin('hero@example.com');
     const created = await repository.createCharacter('a1', 'Hunting Hero');
     const app = Fastify();
-    registerCharacterRoutes(
-      app, auth, repository, undefined,
-      async () => ({ sessionId: 's-hunt', type: 'hunt' }),
-    );
+    registerCharacterRoutes(app, auth, repository, {
+      locateSession: async () => ({ sessionId: 's-hunt', type: 'hunt' }),
+    });
 
     const response = await app.inject({
       method: 'GET', url: '/api/characters', headers: { cookie: `${SESSION_COOKIE}=token` },
@@ -207,5 +203,79 @@ describe('character routes', () => {
   it('requires authentication', async () => {
     const { app } = await build();
     expect((await app.inject({ method: 'GET', url: '/api/characters' })).statusCode).toBe(401);
+  });
+});
+
+describe('a tela de seleção liquida antes de ler (FUN-66)', () => {
+  /** Um app com liquidação injetada, e um contador de quantas vezes a listagem foi ao repositório. */
+  async function withSettlement(
+    settleProgress: (characterId: string) => Promise<{ written: number; failed: number }>,
+  ) {
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const created = await repository.createCharacter('a1', 'Late Hero');
+    const listings = { count: 0 };
+    const original = repository.listCharacters.bind(repository);
+    repository.listCharacters = async (accountId: string) => {
+      listings.count += 1;
+      return original(accountId);
+    };
+    const app = Fastify();
+    registerCharacterRoutes(app, auth, repository, { settleProgress });
+    const cookie = `${SESSION_COOKIE}=token`;
+    return { app, repository, created, listings, cookie };
+  }
+
+  it('sem nada pendente, faz UMA listagem só', async () => {
+    // O caso comum, e é sempre. Reler incondicionalmente duplicaria a consulta.
+    const { app, listings, cookie } = await withSettlement(async () => ({ written: 0, failed: 0 }));
+    const response = await app.inject({ method: 'GET', url: '/api/characters', headers: { cookie } });
+    expect(response.statusCode).toBe(200);
+    expect(listings.count).toBe(1);
+  });
+
+  it('com extrato escrito, relê e mostra o progresso JÁ somado', async () => {
+    // A regressão exata desta issue: a tela onde o jogador cai depois de sair de uma hunt
+    // mostrava o level e a XP de antes, e o personagem aparecia certo só dentro do jogo.
+    const { app, repository, created, listings, cookie } = await withSettlement(async (id) => {
+      const character = repository.characters.get(id);
+      if (character !== undefined) Object.assign(character, { xp: character.xp + 900, level: 4 });
+      return { written: 1, failed: 0 };
+    });
+    const response = await app.inject({ method: 'GET', url: '/api/characters', headers: { cookie } });
+    const [dto] = response.json().characters as Array<{ id: string; xp: number; level: number }>;
+    expect(dto).toMatchObject({ id: created.id, xp: 900, level: 4 });
+    expect(listings.count).toBe(2);
+  });
+
+  it('select também liquida, antes de ler', async () => {
+    const { app, repository, created, cookie } = await withSettlement(async (id) => {
+      const character = repository.characters.get(id);
+      if (character !== undefined) Object.assign(character, { gold: 40 });
+      return { written: 1, failed: 0 };
+    });
+    const response = await app.inject({
+      method: 'POST', url: `/api/characters/${created.id}/select`, headers: { cookie },
+    });
+    expect(response.json()).toMatchObject({ id: created.id, gold: 40 });
+  });
+
+  it('liquidação que lança NÃO derruba a resposta: sai o valor atrasado, e o erro vai ao log', async () => {
+    // Ao contrário do ticket (FUN-56), que recusa com 503. A tela de personagens é como se
+    // chega a qualquer lugar; 503 nela trancaria a conta inteira por uma falha de ledger, e o
+    // valor aqui só é exibido.
+    const { app, created, cookie } = await withSettlement(async () => {
+      throw new Error('ledger indisponível');
+    });
+    const listed = await app.inject({ method: 'GET', url: '/api/characters', headers: { cookie } });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().characters).toHaveLength(1);
+    const selected = await app.inject({
+      method: 'POST', url: `/api/characters/${created.id}/select`, headers: { cookie },
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.json()).toMatchObject({ id: created.id, xp: 0 });
   });
 });

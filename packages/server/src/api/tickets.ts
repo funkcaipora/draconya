@@ -32,8 +32,12 @@ export interface TicketRouteDependencies {
   readonly settleProgress?: (characterId: string) => Promise<SettlementResult>;
 }
 
-/** O que a liquidação devolve. Só `failed` interessa aqui: qualquer falha recusa a entrada. */
+/**
+ * O que a liquidação devolve. Aqui só `failed` interessa — qualquer falha recusa a entrada.
+ * `written` é o que a lista de personagens usa (FUN-66) para decidir se relê a linha.
+ */
 export interface SettlementResult {
+  readonly written: number;
   readonly failed: number;
 }
 
@@ -120,6 +124,7 @@ export function createTicketHandler(
       (character) => deps.tickets.issue(principal.accountId, character.id, {
         level: character.level,
         xp: character.xp,
+        name: character.name,
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
       }, resolution.node),

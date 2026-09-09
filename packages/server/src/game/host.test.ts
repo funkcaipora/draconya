@@ -1398,3 +1398,82 @@ describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
     expect(move).toMatchObject({ from: { x: 2, y: 2, z: 7 }, to: { x: 3, y: 3, z: 7 } });
   });
 });
+
+describe('say (FUN-58)', () => {
+  const quietCity = (): Ruleset => ({
+    type: 'city', hz: () => 0, onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+  });
+  const chatHost = () => {
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    return buildHost(quietCity(), { directory });
+  };
+  const chats = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'chat-message');
+
+  it('chega a todos os visualizadores da sessão, o autor inclusive, assinado com o nome do ticket', async () => {
+    // Duas abas do mesmo personagem são dois visualizadores da MESMA sessão. As duas recebem,
+    // e a que falou também: é o eco que confirma que a mensagem saiu.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'Hero' }, 'a1');
+    const socketA = new FakeSocket();
+    const socketB = new FakeSocket();
+    const viewerA = host.attach(socketA, 'p1');
+    host.attach(socketB, 'p1');
+
+    host.handle(viewerA, { type: 'say', channel: 'local', text: '  olá  ' });
+    host.flush();
+
+    const expected = { type: 'chat-message', channel: 'local', author: 'Hero', text: 'olá' };
+    expect(chats(socketA)).toEqual([expected]);
+    expect(chats(socketB)).toEqual([expected]);
+  });
+
+  it('não vaza para visualizador de OUTRA sessão', async () => {
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'One' }, 'a1');
+    await host.prepare('p2', { level: 1, xp: 0, name: 'Two' }, 'a2');
+    const socket1 = new FakeSocket();
+    const socket2 = new FakeSocket();
+    const viewer1 = host.attach(socket1, 'p1');
+    host.attach(socket2, 'p2');
+
+    host.handle(viewer1, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(chats(socket1)).toHaveLength(1);
+    expect(chats(socket2)).toHaveLength(0);
+  });
+
+  it('canal desconhecido, texto vazio e caractere de controle: nada sai, nem erro', async () => {
+    // Sem resposta de propósito: um cliente com bug mandando em laço não pode gerar
+    // tráfego de volta. `\u200b` (zero-width) e `\u202e` (bidi override) são como se
+    // falsifica o nome de autor na tela.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0, name: 'Hero' }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'say', channel: 'global', text: 'oi' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: '   ' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: 'oi\u200b' });
+    host.handle(viewer, { type: 'say', channel: 'local', text: '\u202eHero: oi' });
+    host.flush();
+
+    expect(socket.received().filter((m) => m.type !== 'welcome')).toHaveLength(0);
+  });
+
+  it('sem nome no ticket, assina com o id — nunca cala', async () => {
+    // Ticket de um `api` antigo, durante deploy em rolagem. Degradação, não perda.
+    const { host } = chatHost();
+    await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(chats(socket)).toEqual([{ type: 'chat-message', channel: 'local', author: 'p1', text: 'oi' }]);
+  });
+});
