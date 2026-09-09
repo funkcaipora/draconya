@@ -27,10 +27,20 @@ export interface Prey {
   readonly alive: boolean;
 }
 
+/**
+ * O que o monstro faz no tempo decorrido — com a QUANTIDADE junto, sempre.
+ *
+ * O cooldown periódico devolve quantas aplicações couberam em `dtMs` e debita todas do
+ * acumulador; conceder uma só faz as outras sumirem. Num tick de 1 s, um monstro que ataca a
+ * cada 500 ms bate METADE das vezes — e 1 Hz é exatamente a taxa da hunt desanexada, que é o
+ * modo padrão do jogo (FUN-67). O tipo carrega a quantidade para não haver como esquecer.
+ */
 export type MonsterAction =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'step'; readonly to: GridPoint }
-  | { readonly kind: 'attack'; readonly targetId: string };
+  /** Os tiles na ordem em que devem ser pisados. Mais de um quando o tick foi longo. */
+  | { readonly kind: 'step'; readonly path: readonly GridPoint[] }
+  /** Quantos golpes couberam. Aplicar TODOS. */
+  | { readonly kind: 'attack'; readonly targetId: string; readonly times: number };
 
 export class MonsterRuntime {
   readonly id: number;
@@ -130,12 +140,28 @@ export function decideMonsterAction(
     // Ataque é ação periódica: o acumulador recupera o atraso de um tick lento em vez de
     // perdê-lo, que é o que mantém o dano por minuto igual a 1 Hz e a 10 Hz.
     const times = monster.cooldowns.timesThatFit('attack', dtMs, definition.attackIntervalMs);
-    return times > 0 ? { kind: 'attack', targetId: target.id } : { kind: 'idle' };
+    return times > 0 ? { kind: 'attack', targetId: target.id, times } : { kind: 'idle' };
   }
 
   const steps = monster.cooldowns.timesThatFit('step', dtMs, definition.stepDurationMs);
   if (steps === 0) return { kind: 'idle' };
 
-  const to = greedyStep(monster.position, target.position, blocked);
-  return to === null ? { kind: 'idle' } : { kind: 'step', to };
+  // UM PASSO DE CADA VEZ, reavaliado da posição nova. Pular `steps` tiles de uma vez
+  // atravessaria parede e monstro: o guloso decide olhando a vizinhança, e a vizinhança
+  // muda a cada tile. `blocked` já exclui este monstro, e nenhum outro anda enquanto isto
+  // roda, então a sequência aqui é a mesma que `steps` chamadas separadas dariam.
+  const path: GridPoint[] = [];
+  let at = monster.position;
+  for (let i = 0; i < steps; i++) {
+    const to = greedyStep(at, target.position, blocked);
+    // Empacou numa concavidade: o guloso não contorna, e é assim mesmo (ADR 0009). Os
+    // passos restantes não viram dívida — parado é parado.
+    if (to === null) break;
+    path.push(to);
+    at = to;
+    // Chegou ao alcance: PARA. Sem isto o monstro andaria por cima do alvo, que é o que a
+    // versão de um passo só evitava por acidente — ela nunca dava o segundo.
+    if (distance(at, target.position) <= definition.attackRange) break;
+  }
+  return path.length === 0 ? { kind: 'idle' } : { kind: 'step', path };
 }

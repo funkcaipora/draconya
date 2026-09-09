@@ -537,9 +537,18 @@ describe('taxa de tick', () => {
     // passam mais ticks colados do que passariam a 10 Hz, e o acumulador de ataque do rato
     // avança justamente enquanto estão colados.
     //
-    // Corrigir pediria subdividir o tick — o que gasta exatamente o que cair para 1 Hz
-    // economiza, e economizar é a razão de existir do 1 Hz (ADR 0003). Fica registrado em
-    // docs/product/hunt.md, e importa para a FUN-38: quem caça desanexado apanha mais.
+    // Estes números NÃO mudaram com a FUN-67, e vale dizer por quê: o rato desta fixture
+    // ataca a cada 2 s, mais que o tick lento de 1 s, então o acumulador dele nunca concede
+    // duas aplicações num tick. O defeito da FUN-67 — aplicar uma ação quando o acumulador
+    // concedeu N — só dispara quando o intervalo é MENOR que o tick, e aí custa caro: num
+    // rato de 500 ms medimos 2,00x menos dano a 1 Hz. Um monstro de cadência sub-segundo é
+    // normal, então este cenário passa perto sem encostar.
+    //
+    // O comentário anterior dizia que corrigir a granularidade "pediria subdividir o tick, o
+    // que gasta o que cair para 1 Hz economiza". Isso é uma falsa escolha: um scheduler
+    // lógico por sessão processa só os eventos que VENCEM na janela — numa hunt desanexada,
+    // muito menos que 10 ticks × 40 monstros. É a FUN-68, e 1,51x é a justificativa medida
+    // dela. Fica registrado em docs/product/hunt.md, e importa para a FUN-38.
     // Sem regeneração NESTE cenário, e é decisão: a comparação é sobre granularidade de
     // tick, e um personagem que se cura enquanto apanha mede as duas coisas somadas.
     const semRegen = content({
@@ -552,9 +561,11 @@ describe('taxa de tick', () => {
     const danoLento = lento.hero.maxHealth - lento.hero.health;
     expect(danoRapido).toBeGreaterThan(0);
     expect(danoLento).toBeGreaterThan(danoRapido);
-    // Limitado, e é isso que torna a diferença tolerável em vez de um buraco: menos que o
-    // dobro. Se um dia passar disso, alguma coisa mudou de natureza e vale reabrir.
-    expect(danoLento).toBeLessThan(danoRapido * 2);
+    // Limite APERTADO em cima do medido (1,51x), não folgado: o limite antigo era "menos que
+    // o dobro" e foi calibrado com o defeito da FUN-67 de pé, então ele passava tanto com a
+    // divergência real quanto com uma bem maior. Um limite que aceita o dobro não reprova
+    // nada que importe.
+    expect(danoLento).toBeLessThan(danoRapido * 1.7);
   });
 
   it('desanexada cai para 1 Hz; anexada sobe para 10 (ADR 0003)', () => {
