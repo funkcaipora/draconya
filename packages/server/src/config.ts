@@ -27,6 +27,12 @@ const EnvironmentSchema = z.object({
   API_ORIGIN: HttpOrigin.default('http://localhost:5173'),
 
   GAME_PORT: z.coerce.number().int().positive().default(7171),
+  /**
+   * Porta do `/metrics` do `jobs` (FUN-59). O `jobs` não tem outra superfície HTTP: a porta
+   * existe só para o Prometheus, e é ela que faz o alvo SUMIR quando o processo morre — que é
+   * o sinal que se quer, e o que um contador no Redis servido por outro papel não daria.
+   */
+  JOBS_PORT: z.coerce.number().int().positive().default(3001),
   GAME_PUBLIC_URL: z.string().default('ws://localhost:7171'),
 
   /**
