@@ -125,9 +125,10 @@ async function main(): Promise<void> {
         : {
             auth,
             repository,
-            isCharacterActive: async (accountId, characterId) =>
-              (await directory.lookup(characterId)) !== null
-              || (await directory.activeSlots(accountId)).includes(characterId),
+            // Uma ida ao Redis, não duas: esta checagem roda com a transação do Postgres
+            // ABERTA, segurando a linha do personagem (FUN-53).
+            isCharacterActive: (accountId, characterId) =>
+              directory.isActive(accountId, characterId),
             locateSession: (characterId) => directory.lookup(characterId),
           }),
     }),

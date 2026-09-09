@@ -11,7 +11,7 @@ export interface Principal {
 
 export interface TicketRouteDependencies {
   /** Só a emissão: a rota não consome ticket, e o tipo estreito é o que diz isso. */
-  readonly tickets: Pick<TicketService, 'issue'>;
+  readonly tickets: Pick<TicketService, 'issue' | 'resolveNode'>;
   /**
    * Quem está pedindo. A sessão HTTP é resolvida aqui e MORRE aqui: o que segue para o
    * socket é o ticket, nunca a credencial (invariante 4 aplicado à borda de entrada).
@@ -53,6 +53,15 @@ export function createTicketHandler(
     const principal = await authenticate(request);
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
 
+    // O nó é resolvido FORA da trava de linha (FUN-53). Qual nó de jogo está vivo não tem
+    // relação nenhuma com a linha do personagem, e descobrir isso é `SCAN` mais `MGET` no
+    // Redis: segurando a trava, uma lentidão do Redis vira pool do Postgres esgotado e toda
+    // rota que toca o banco parando de responder.
+    const resolution = await deps.tickets.resolveNode(body.data.characterId);
+    if (!resolution.ok) {
+      return reply.code(STATUS[resolution.reason]).send({ error: resolution.reason });
+    }
+
     // 404, e não 403: responder "existe, mas não é seu" transforma este endpoint num
     // verificador de nomes de personagem para qualquer conta autenticada.
     const issued = await withOwnedCharacter(
@@ -63,7 +72,7 @@ export function createTicketHandler(
         xp: character.xp,
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
-      }),
+      }, resolution.node),
     );
     if (issued === null) {
       return reply.code(404).send({ error: 'character-not-found' });
