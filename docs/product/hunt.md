@@ -61,6 +61,27 @@ um quinto de um núcleo. É o número que a projeção de custo usa e que a FUN-
 em escala; o valor aqui é a linha de base para detectar regressão de ordem de grandeza antes de
 ela virar conta de servidor.
 
+## A rota, e por que ela não tem pathfinding
+
+Cada hunt tem **uma** rota, fixa e predeterminada, formando um laço (§14.4). O bot não escolhe
+caminhos alternativos, e isso não é simplificação temporária: sem pathfinding, percorrer é
+avançar um índice numa lista, e é isso que torna a hunt barata o bastante para milhares delas
+rodarem desanexadas.
+
+O personagem percorre, para para lutar, e **retoma no mesmo índice**. Reiniciar do começo faria
+ele refazer o trecho já limpo, e a hunt renderia menos sem nenhuma razão visível para quem
+está olhando o extrato.
+
+O índice **entra no snapshot**: uma sessão retomada depois de queda de nó (FUN-28) continua de
+onde estava, em vez de voltar ao começo da rota e render menos que a sessão que substituiu.
+
+Se o personagem sair da rota — empurrado, teleportado, o que for —, ele volta pelo **tile mais
+próximo**, achado por busca linear na lista. Não é A*: a rota tem dezenas de tiles, e procurar
+o mais próximo numa lista dessas custa menos que montar a estrutura que um pathfinder pediria.
+
+**Quando** parar e retomar é decisão do bot (Fase 2). O que existe hoje é só a execução:
+avançar, parar, retomar, dar a volta.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
