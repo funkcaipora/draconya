@@ -28,6 +28,16 @@ export interface TicketClaim {
 export interface InitialCharacter {
   readonly level: number;
   readonly xp: number;
+  /**
+   * Stamina materializada e o instante de RELÓGIO em que ela valia (§10, FUN-39).
+   *
+   * Vem do banco pelo mesmo caminho que level e XP, e pela mesma razão: nada que o cliente
+   * manda participa da criação da sessão (invariante 4). Ausente é o personagem gravado
+   * antes da coluna existir — a sessão roda sem teto, e é melhor que cobrar uma stamina que
+   * nunca foi medida.
+   */
+  readonly staminaMs?: number;
+  readonly staminaUpdatedAtMs?: number;
 }
 
 export interface IssuedTicket {
@@ -336,7 +346,16 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     || !Number.isSafeInteger(xp)
     || xp < 0
   ) return undefined;
-  return { level, xp };
+
+  const staminaMs = initial['staminaMs'];
+  const staminaUpdatedAtMs = initial['staminaUpdatedAtMs'];
+  // Os dois andam juntos: um valor sem instante não diz nada, e um instante sem valor também
+  // não. Meio par é dado corrompido, e a resposta é ignorar o par inteiro.
+  const stamina = typeof staminaMs === 'number' && Number.isFinite(staminaMs) && staminaMs >= 0
+    && typeof staminaUpdatedAtMs === 'number' && Number.isFinite(staminaUpdatedAtMs)
+    ? { staminaMs, staminaUpdatedAtMs }
+    : {};
+  return { level, xp, ...stamina };
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

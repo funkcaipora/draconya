@@ -6,10 +6,10 @@ import { z } from 'zod';
 import { buildRoute, buildTilemap } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
-  combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema, tilemapSchema,
-  vocationSchema,
+  combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema, staminaSchema,
+  tilemapSchema, vocationSchema,
 } from './schemas.js';
-import type { Combat, Hunt, Monster, Progression, Vocation } from './schemas.js';
+import type { Combat, Hunt, Monster, Progression, Stamina, Vocation } from './schemas.js';
 
 export interface Content {
   /**
@@ -24,6 +24,8 @@ export interface Content {
   readonly progression: Progression;
   /** Coeficientes de combate. O §12.1 os quer em conteúdo, nunca em código. */
   readonly combat: Combat;
+  /** Teto e taxa de recuperação da stamina (§10). */
+  readonly stamina: Stamina;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
@@ -36,6 +38,7 @@ export interface RawContent {
   readonly vocations: readonly unknown[];
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
+  readonly stamina?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
 }
@@ -74,6 +77,14 @@ export function buildContent(raw: RawContent): Content {
   // default em código faria o §12.1 deixar de valer no dia em que ninguém estivesse olhando.
   if (combat === undefined) {
     problems.push('combat/baseline.json ausente: sem ele não há como resolver dano');
+  }
+  const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
+  const stamina = staminas.get('baseline');
+  // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
+  // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
+  // custo morar onde ninguém procura por ele.
+  if (stamina === undefined) {
+    problems.push('stamina/baseline.json ausente: sem ele não há teto de stamina');
   }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
@@ -143,6 +154,7 @@ export function buildContent(raw: RawContent): Content {
       ? []
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
+    ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
   ];
 
   return {
@@ -152,6 +164,7 @@ export function buildContent(raw: RawContent): Content {
     vocations,
     progression: progression as Progression,
     combat: combat as Combat,
+    stamina: stamina as Stamina,
     maps,
     routes,
     openValues,

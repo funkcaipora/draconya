@@ -78,7 +78,7 @@ describe('POST /api/tickets', () => {
       characterId: 'p1', level: 999, xp: 999999, accountId: 'attacker',
     });
     expect(response.statusCode).toBe(200);
-    expect(issue).toHaveBeenCalledWith('a1', 'p1', { level: 1, xp: 0 });
+    expect(issue).toHaveBeenCalledWith('a1', 'p1', expect.objectContaining({ level: 1, xp: 0 }));
   });
 
   it('rejects a malformed body', async () => {

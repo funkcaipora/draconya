@@ -1,6 +1,8 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
-import { TEST_COMBAT, TEST_PROGRESSION, testContent } from '../testing/content.js';
+import {
+  TEST_COMBAT, TEST_PROGRESSION, TEST_STAMINA, testContent,
+} from '../testing/content.js';
 import type { Progression } from '@draconya/content';
 import type { Session } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
@@ -58,7 +60,7 @@ describe('session restorer', () => {
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
-      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT] });
+      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA] });
     expect(createSessionRestorer(empty)(hunt().snapshot(), 1)).toBeNull();
   });
 
@@ -127,5 +129,57 @@ describe('city successor (FUN-38)', () => {
     const city = createCitySessionFactory(content)('p1');
     city.end('manual-exit');
     expect(createCitySuccessor(content)(city, 'manual-exit')).toBeNull();
+  });
+});
+
+describe('stamina nas fronteiras da sessão (FUN-39)', () => {
+  const content = testContent();
+  const HOUR = 3_600_000;
+
+  it('materializa na ENTRADA: o tempo fora de hunt é recuperação', () => {
+    // Ninguém decrementou nem incrementou nada nesse meio-tempo — o valor de agora é a conta
+    // feita quando alguém finalmente perguntou.
+    const session = createCitySessionFactory(content, () => 10 * HOUR)('p1', {
+      level: 1, xp: 0, staminaMs: 5 * HOUR, staminaUpdatedAtMs: 2 * HOUR,
+    });
+    const character = session.participants[0];
+
+    expect(character?.staminaMs).toBe(13 * HOUR);
+    expect(character?.staminaUpdatedAtMs).toBe(10 * HOUR);
+  });
+
+  it('respeita o teto de 24 h mesmo depois de dias parado', () => {
+    const session = createCitySessionFactory(content, () => 200 * HOUR)('p1', {
+      level: 1, xp: 0, staminaMs: 0, staminaUpdatedAtMs: 0,
+    });
+    expect(session.participants[0]?.staminaMs).toBe(24 * HOUR);
+  });
+
+  it('personagem sem stamina persistida roda sem teto, em vez de nascer zerado', () => {
+    // É o personagem gravado antes de a coluna existir. Cobrar dele uma stamina que nunca
+    // foi medida seria inventar uma punição.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.staminaMs).toBeNull();
+  });
+
+  it('materializa na SAÍDA da hunt, senão o tempo gasto viraria recuperação', () => {
+    // Sem isto, `staminaUpdatedAtMs` continuaria apontando para antes da hunt, e a próxima
+    // leitura devolveria como recuperação exatamente o tempo que o personagem passou
+    // gastando stamina.
+    const hunt = createHuntSession({
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    });
+    const hero = new CharacterRuntime({
+      id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 200, maxHealth: 200, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, staminaMs: 3 * HOUR, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {},
+    });
+    hunt.enter(hero);
+    hunt.end('manual-exit');
+
+    createCitySuccessor(content, () => 8 * HOUR)(hunt, 'manual-exit');
+
+    expect(hero.staminaUpdatedAtMs).toBe(8 * HOUR);
+    expect(hero.staminaMs).toBe(3 * HOUR + 8 * HOUR);
   });
 });

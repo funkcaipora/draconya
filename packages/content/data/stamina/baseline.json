@@ -1,0 +1,5 @@
+{
+  "id": "baseline",
+  "maxMs": 86400000,
+  "recoveryRatio": 1
+}

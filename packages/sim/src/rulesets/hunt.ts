@@ -17,8 +17,8 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import type {
-  Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route, SpawnPoint, Tilemap,
-  Vocation,
+  Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route, SpawnPoint, Stamina,
+  Tilemap, Vocation,
 } from '@draconya/content';
 import { isBlocked } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
@@ -32,6 +32,7 @@ import type { Blocked } from '../monster/step.js';
 import { distance } from '../monster/step.js';
 import { applyDeathPenalty, grantXp } from '../progression.js';
 import { Rng } from '../rng.js';
+import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
 import type { RouteState } from '../route/walker.js';
 import { Session } from '../session.js';
@@ -82,6 +83,7 @@ export interface HuntRulesetOptions {
   readonly monsters: ReadonlyMap<string, Monster>;
   readonly combat: Combat;
   readonly progression: Progression;
+  readonly stamina: Stamina;
   readonly vocations: ReadonlyMap<string, Vocation>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
@@ -99,7 +101,7 @@ export interface HuntRulesetState {
   readonly spawner: SpawnerState;
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
-  readonly staminaExhausted: boolean;
+  readonly warnedExhausted: boolean;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -114,11 +116,13 @@ export class HuntRuleset implements Ruleset {
   #nextCreatureId = 1;
 
   /**
-   * Stamina zerada NÃO encerra a hunt (§10.2). É a regra que mais parece bug para quem
-   * implementa, e a que mais precisa ser respeitada: o personagem continua caçando, matando
-   * e sendo atacado — só para de ganhar XP. Quem escreve o valor é a FUN-39.
+   * Já avisou que a stamina zerou? A notícia sai UMA vez.
+   *
+   * O cenário comum é o jogador ausente: a hunt continua andando, gastando supply e não
+   * gerando nada (§10.2). Repetir o evento a cada tick encheria a lista curta da tela de
+   * retorno com a mesma linha até ela deixar de ser lista.
    */
-  staminaExhausted = false;
+  #warnedExhausted = false;
 
   /** Tiles ocupados neste tick, `"x,y"`. Reconstruído a cada tick — ver `onTick`. */
   readonly #occupied = new Set<string>();
@@ -175,6 +179,7 @@ export class HuntRuleset implements Ruleset {
     // `Session` só reconstrói depois. Com 48 monstros o custo é ruído; a alternativa é um
     // índice que nasce vazio numa retomada e deixa monstro nascer em cima de monstro.
     this.#rebuildOccupancy(session);
+    this.#burnStamina(session, dtMs);
 
     this.#spawn(session);
     this.#actPlayers(session, dtMs);
@@ -182,6 +187,24 @@ export class HuntRuleset implements Ruleset {
     this.#actMonsters(session, dtMs);
     if (session.ended !== null) return;
     this.#applyExitRules(session);
+  }
+
+  /**
+   * Stamina cai 1:1 com o tempo de hunt, e zerar NÃO encerra nada (§10.2). É a regra que mais
+   * parece bug para quem implementa, e a que mais precisa ser respeitada: o personagem
+   * continua caçando, matando e apanhando — só para de ganhar XP.
+   */
+  #burnStamina(session: Session, dtMs: number): void {
+    for (const character of session.participants) {
+      if (!character.alive) continue;
+      const exhausted = drainStamina(character, dtMs, this.#options.stamina);
+      if (!exhausted || this.#warnedExhausted) continue;
+      this.#warnedExhausted = true;
+      // Vale a linha no extrato: daqui para a frente a hunt queima supply sem gerar nada, e
+      // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
+      // deixou o personagem rendendo.
+      session.record('stamina-exhausted', character.id);
+    }
   }
 
   onDeath(session: Session, character: CharacterRuntime): void {
@@ -223,7 +246,7 @@ export class HuntRuleset implements Ruleset {
       spawner: this.#spawner.getState(),
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
-      staminaExhausted: this.staminaExhausted,
+      warnedExhausted: this.#warnedExhausted,
     };
   }
 
@@ -249,7 +272,7 @@ export class HuntRuleset implements Ruleset {
     );
     this.#monsters = restored.monsters.map((m) => new MonsterRuntime(m));
     this.#nextCreatureId = restored.nextCreatureId;
-    this.staminaExhausted = restored.staminaExhausted;
+    this.#warnedExhausted = restored.warnedExhausted;
   }
 
   // --- tick ---------------------------------------------------------------------------------
@@ -399,7 +422,7 @@ export class HuntRuleset implements Ruleset {
 
     // Stamina zero bloqueia a RECOMPENSA, não a hunt (§10.2). O abate continua contando: o
     // jogador matou, e o extrato mentiria se dissesse que não.
-    if (definition !== undefined && !this.staminaExhausted) {
+    if (definition !== undefined && !isExhausted(killer)) {
       const change = grantXp(
         killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
       );
@@ -524,6 +547,7 @@ export function createHuntRuleset(
     monsters: content.monsters,
     combat: content.combat,
     progression: content.progression,
+    stamina: content.stamina,
     vocations: content.vocations,
     player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
     ...(exitRules === undefined ? {} : { exitRules }),
