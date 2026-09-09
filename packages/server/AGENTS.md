@@ -243,6 +243,25 @@ Três regras que valem para qualquer métrica nova aqui:
 O atraso de tick é medido contra o **período que a sessão pediu**, não contra o intervalo: 1000 ms
 num tick de 1 Hz está no prazo e num de 10 Hz é 900 ms de atraso.
 
+## Métricas do `jobs` (FUN-59)
+
+`/metrics` próprio, em `JOBS_PORT` (padrão 3001), servido por Fastify — o `jobs` não tem
+WebSocket nem caminho quente, e uWS existe no `game` porque lá o socket é o produto. Sem
+autenticação, como nos outros dois: quem esconde é a rede.
+
+Por que porta própria e não Pushgateway nem contador no Redis: um contador que sobrevive ao
+processo faz "o `jobs` parou" virar "o `jobs` não achou nada" — o mesmo defeito que a gauge
+sempre-zero de `orphan_sessions` teria no `game`. Com alvo próprio, o processo morrer é o alvo
+sumir, que é o sinal.
+
+O ciclo vive em `createJobsCycle`, separado do `setInterval`, para ser testável à mão. A
+reentrância mora nele: ciclo pulado sobe `cycles_skipped_total`, e é o primeiro sintoma de
+intervalo apertado. `last_success_timestamp_seconds` existe porque o alerta que importa é "não
+roda há N minutos", e contador que para de subir não dispara nada sozinho.
+
+`orphan_sessions` é um zero OBSERVADO — a varredura olhou e não achou —, e não o zero de uma
+gauge que ninguém escreve. Foi a pendência da FUN-47.
+
 ## O critério de saída da Fase 1 (FUN-44)
 
 `src/api/phase-one-exit.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
