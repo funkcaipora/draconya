@@ -1,8 +1,9 @@
 import { buildContent } from '@draconya/content';
-import type { Content, RawContent } from '@draconya/content';
+import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { huntListings } from '../hunt/catalogue.js';
+import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { Session } from '../session.js';
 import {
@@ -48,9 +49,16 @@ const hunt = {
 };
 
 const progression = {
-  id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
+  // HP inicial absurdo de propósito. Subir de level RECALCULA `maxHealth` pela tabela
+  // (FUN-34/FUN-37), então um herói com HP inventado no teste perderia a vida toda no
+  // primeiro level up. Dar a ele um pool enorme VINDO DA TABELA mantém tudo coerente e deixa
+  // dez minutos de hunt caberem sem morrer — o personagem ainda não regenera nada, e é isso
+  // que a FUN-38 e as poções vão resolver.
+  id: 'baseline', startingHealth: 500_000, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
   stepDurationMs: 500,
+  xp: { base: 20, exponent: 2 },
+  deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };
 
 const combat = {
@@ -70,12 +78,15 @@ const raw = (over: Partial<RawContent> = {}): RawContent => ({
 
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
-const character = (over: Partial<{ health: number; maxHealth: number }> = {}): CharacterRuntime =>
-  new CharacterRuntime({
+const character = (over: Partial<{ health: number }> = {}): CharacterRuntime => {
+  const stats = statsForLevel(1, null, progression as Progression);
+  return new CharacterRuntime({
     id: 'hero', position: { x: 0, y: 0, z: 7 },
-    health: over.health ?? 5000, maxHealth: over.maxHealth ?? 5000,
-    mana: 0, maxMana: 0, level: 1, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+    health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    goldDelta: 0, alive: true, cooldowns: {},
   });
+};
 
 interface Started {
   readonly session: Session;
@@ -215,6 +226,61 @@ describe('stamina zero', () => {
     // O abate conta: o jogador matou, e o extrato mentiria se dissesse que não.
     expect(hero.xp).toBe(0);
     expect(session.aggregates.xpGained).toBe(0);
+  });
+});
+
+describe('level up e penalidade de morte dentro da hunt', () => {
+  it('subir de level É evento notável, ao contrário do abate', () => {
+    // É a única coisa que aconteceu numa hunt de oito horas que o jogador quer ver ao voltar.
+    const { session } = start({ difficulty: 'professional' });
+    run(session, 120_000, 100);
+    expect(session.notableEvents.filter((e) => e.type === 'level-up').length)
+      .toBeGreaterThan(0);
+  });
+
+  it('morrer cobra XP, e o extrato conta a perda em vez de escondê-la', () => {
+    // O extrato é o que vira linha de ledger: creditar a XP ganha sem descontar a perdida
+    // daria ao jogador uma XP que ele não tem.
+    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    hero.level = 20;
+    hero.xp = totalXpForLevel(20, progression as Progression);
+
+    run(session, 60_000, 100);
+
+    expect(session.ended).toBe('death');
+    expect(hero.level).toBe(19);
+    expect(session.aggregates.xpGained).toBeLessThan(0);
+    expect(session.notableEvents.find((e) => e.type === 'xp-penalty')).toBeDefined();
+    expect(session.notableEvents.find((e) => e.type === 'level-down')?.detail).toBe('20 → 19');
+  });
+
+  it('Premium paga menos por morrer', () => {
+    const cobrança = (premium: boolean): number => {
+      const session = createHuntSession({
+        id: 's', content: content(), huntId: 'arena', difficulty: 'professional',
+        createdAtMs: 0, premium,
+      });
+      const hero = character({ health: 12 });
+      hero.level = 20;
+      hero.xp = totalXpForLevel(20, progression as Progression);
+      session.enter(hero);
+      run(session, 60_000, 100);
+      return Number(session.notableEvents.find((e) => e.type === 'xp-penalty')?.detail);
+    };
+    expect(cobrança(true)).toBeLessThan(cobrança(false));
+  });
+
+  it('sair ou ser encerrado por regra NÃO custa XP: quem paga é quem morre', () => {
+    const { session, hero } = start({ difficulty: 'professional' });
+    hero.level = 20;
+    hero.xp = totalXpForLevel(20, progression as Progression);
+    const antes = hero.xp;
+
+    run(session, 10_000, 100);
+    session.end('manual-exit');
+
+    expect(hero.xp).toBeGreaterThanOrEqual(antes);
+    expect(session.notableEvents.find((e) => e.type === 'xp-penalty')).toBeUndefined();
   });
 });
 

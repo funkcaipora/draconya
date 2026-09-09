@@ -112,8 +112,8 @@ Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, 
 |---|---|
 | como entra | pelo menu, com dificuldade escolhida; instância criada na entrada |
 | o que encerra | ação manual, regra automática de saída, ou morte (§14.8) |
-| o que a morte faz | encerra a sessão — devolver à PZ é a FUN-38, do lado do servidor |
-| como a recompensa é calculada | XP por abate, bloqueada com stamina zero |
+| o que a morte faz | encerra a sessão e cobra a penalidade de XP (§26.2) — devolver à PZ é a FUN-38 |
+| como a recompensa é calculada | XP por abate, com level up, bloqueada com stamina zero |
 
 Se a Guild War não couber nessa mesma interface depois, ela terá sido modelada em cima de hunt —
 e descobrir isso na Fase 5 custa semanas. É por isso que a hunt **não pediu método novo** em
@@ -148,8 +148,12 @@ continua contando no extrato — o jogador matou, e dizer que não seria mentira
 ### Abate comum não é evento notável
 
 `notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com uma linha
-por rato não é lista, é log — e ninguém lê log ao voltar. Entram ali a entrada, a morte, a troca
-de dificuldade, a regra de saída que disparou e o encerramento.
+por rato não é lista, é log — e ninguém lê log ao voltar. Entram ali a entrada, o **level up**, a
+morte, a penalidade de XP cobrada, a troca de dificuldade, a regra de saída que disparou e o
+encerramento.
+
+Level up é notável justamente por contraste com o abate: é a única coisa que aconteceu numa hunt
+de oito horas que o jogador quer ver ao voltar.
 
 ## O que muda entre 10 Hz e 1 Hz, medido
 
@@ -201,7 +205,8 @@ e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não
 
 ## Divergências do PRD
 
-**Loot ainda não cai.** O §14 fala em XP *e* loot por abate; hoje só o XP é creditado. Não é
+**Loot ainda não cai.** O §14 fala em XP *e* loot por abate; hoje só o XP é creditado, com level
+up e com a penalidade de morte da FUN-37 já no lugar. Não é
 escolha de design: não existe item, nem inventário, nem capacidade — e creditar "gold" fingindo
 que a moeda é um item resolvido criaria um caminho econômico que ninguém desenharia de propósito.
 O bloqueio por stamina já está no lugar e vale para o loot no dia em que ele existir.

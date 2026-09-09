@@ -5,7 +5,9 @@
 // sessão de Cidade, que é orientada a evento e custa perto de zero.
 
 import { randomUUID } from 'node:crypto';
-import { CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot } from '@draconya/sim';
+import {
+  CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot, statsForLevel,
+} from '@draconya/sim';
 import type { Ruleset, SessionSnapshot } from '@draconya/sim';
 import type { Content } from '@draconya/content';
 import type { SessionFactory, SessionRestorer } from './host.js';
@@ -13,34 +15,43 @@ import type { SessionFactory, SessionRestorer } from './host.js';
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
  * dado enviado pelo cliente participa da criação da sessão.
+ *
+ * HP e mana NÃO estão aqui: eles saem da tabela de progressão, como todo stat derivado de
+ * level (FUN-34). Números fixos aqui davam um personagem que subia de level e ENCOLHIA — o
+ * level up recalcula o máximo pela tabela (FUN-37), e um valor inventado na criação não
+ * sobrevive ao primeiro abate que importa.
  */
 const INITIAL_RUNTIME = {
   position: { x: 0, y: 0, z: 7 },
-  health: 185, maxHealth: 185,
-  mana: 35, maxMana: 35,
   goldDelta: 0, alive: true,
   cooldowns: {},
 } as const;
 
-export function createCitySessionFactory(contentVersion: string): SessionFactory {
+export function createCitySessionFactory(content: Content): SessionFactory {
   return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
     const id = randomUUID();
     const session = new Session({
       id,
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
-      contentVersion,
+      contentVersion: content.version,
       ruleset: createCityRuleset(),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),
       createdAtMs: performance.now(),
     });
+    // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
+    // lá, todo personagem cresce pela tabela base.
+    const stats = statsForLevel(initialCharacter.level, null, content.progression);
     session.enter(new CharacterRuntime({
       id: characterId,
       ...INITIAL_RUNTIME,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
+      vocationId: null,
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
     }));
     return session;
   };

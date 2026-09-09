@@ -18,7 +18,17 @@ export interface CharacterState {
   readonly mana: number;
   readonly maxMana: number;
   readonly level: number;
+  /** XP ACUMULADA, não o progresso dentro do level. Ver `progression.ts` (FUN-37). */
   readonly xp: number;
+  /**
+   * A vocação escolhida, ou ausente enquanto não há uma — o personagem nasce sem e escolhe no
+   * level 8 (§7.4).
+   *
+   * Opcional, e não `string | null` obrigatório, porque snapshot gravado antes da FUN-37 não
+   * tem a chave. Ausente e `null` querem dizer a mesma coisa aqui — "sem vocação" —, então o
+   * formato antigo continua legível e o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
+   */
+  readonly vocationId?: string | null;
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
@@ -34,6 +44,7 @@ export class CharacterRuntime {
   maxMana: number;
   level: number;
   xp: number;
+  vocationId: string | null;
   goldDelta: number;
   alive: boolean;
   readonly cooldowns: Cooldowns;
@@ -47,6 +58,7 @@ export class CharacterRuntime {
     this.maxMana = state.maxMana;
     this.level = state.level;
     this.xp = state.xp;
+    this.vocationId = state.vocationId ?? null;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
@@ -62,6 +74,7 @@ export class CharacterRuntime {
       maxMana: this.maxMana,
       level: this.level,
       xp: this.xp,
+      vocationId: this.vocationId,
       goldDelta: this.goldDelta,
       alive: this.alive,
       cooldowns: this.cooldowns.getState(),

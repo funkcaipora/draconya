@@ -8,5 +8,14 @@
   "capacityPerLevel": 10,
   "vocationLevel": 8,
   "stepDurationMs": 500,
-  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade de passo também."
+  "xp": {
+    "base": 20,
+    "exponent": 2
+  },
+  "deathPenalty": {
+    "fraction": 0.6,
+    "premiumFraction": 0.54,
+    "levelFloor": 8
+  },
+  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade de passo também. A curva de XP (base 20, expoente 2) também é provisória: o PRD não a define, e ela põe o level 8 a cerca de duas horas de Rat Cellars — cedo o bastante para a escolha de vocação não virar espera."
 }

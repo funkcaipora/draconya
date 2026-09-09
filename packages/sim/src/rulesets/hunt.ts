@@ -17,7 +17,8 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import type {
-  Combat, Content, Hunt, HuntDifficulty, Monster, Route, SpawnPoint, Tilemap,
+  Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route, SpawnPoint, Tilemap,
+  Vocation,
 } from '@draconya/content';
 import { isBlocked } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
@@ -29,6 +30,7 @@ import { MonsterRuntime, chooseTarget, decideMonsterAction } from '../monster/mo
 import type { MonsterState, Prey } from '../monster/monster.js';
 import type { Blocked } from '../monster/step.js';
 import { distance } from '../monster/step.js';
+import { applyDeathPenalty, grantXp } from '../progression.js';
 import { Rng } from '../rng.js';
 import { RouteWalker } from '../route/walker.js';
 import type { RouteState } from '../route/walker.js';
@@ -79,8 +81,15 @@ export interface HuntRulesetOptions {
   readonly route: Route;
   readonly monsters: ReadonlyMap<string, Monster>;
   readonly combat: Combat;
+  readonly progression: Progression;
+  readonly vocations: ReadonlyMap<string, Vocation>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
+  /**
+   * Premium reduz a penalidade de morte de 60% para 54% (§26.2). É atributo da CONTA, não do
+   * personagem, e por isso entra por aqui em vez de morar no `CharacterRuntime`.
+   */
+  readonly premium?: boolean;
 }
 
 export interface HuntRulesetState {
@@ -175,7 +184,25 @@ export class HuntRuleset implements Ruleset {
     this.#applyExitRules(session);
   }
 
-  onDeath(session: Session, _character: CharacterRuntime): void {
+  onDeath(session: Session, character: CharacterRuntime): void {
+    // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
+    const penalty = applyDeathPenalty(
+      character,
+      { premium: this.#options.premium ?? false },
+      this.#vocationOf(character),
+      this.#options.progression,
+    );
+    if (penalty.xpLost > 0) {
+      // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
+      // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
+      session.aggregates.xpGained -= penalty.xpLost;
+      session.record('xp-penalty', String(penalty.xpLost));
+    }
+    if (penalty.levelChange !== null) {
+      session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`);
+    }
+
     // Encerra quando não sobrou ninguém de pé. Com um personagem — o caso de hoje — é a
     // morte dele; escrito assim, party não vira exceção espalhada quando chegar.
     if (session.participants.some((p) => p.alive)) return;
@@ -373,8 +400,13 @@ export class HuntRuleset implements Ruleset {
     // Stamina zero bloqueia a RECOMPENSA, não a hunt (§10.2). O abate continua contando: o
     // jogador matou, e o extrato mentiria se dissesse que não.
     if (definition !== undefined && !this.staminaExhausted) {
-      killer.xp += definition.experience;
+      const change = grantXp(
+        killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
+      );
       session.aggregates.xpGained += definition.experience;
+      // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
+      // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
+      if (change !== null) session.record('level-up', String(change.to));
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
@@ -382,6 +414,13 @@ export class HuntRuleset implements Ruleset {
     this.#spawner.release(monster.id, session.nowMs, this.#difficulty);
     this.#vacate(monster.position.x, monster.position.y);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+  }
+
+  #vocationOf(character: CharacterRuntime): Vocation | null {
+    if (character.vocationId === null) return null;
+    // Vocação que saiu do conteúdo cai para a tabela base em vez de derrubar a hunt: perder
+    // stats é ruim, perder a sessão inteira de quem estava caçando é pior.
+    return this.#options.vocations.get(character.vocationId) ?? null;
   }
 
   #playerDefender(): Defender {
@@ -449,6 +488,7 @@ export interface HuntSessionOptions {
   readonly difficulty: HuntDifficultyName;
   readonly createdAtMs: number;
   readonly exitRules?: readonly HuntExitRule[];
+  readonly premium?: boolean;
 }
 
 export class HuntUnavailableError extends Error {
@@ -464,6 +504,7 @@ export function createHuntRuleset(
   huntId: string,
   difficulty: HuntDifficultyName,
   exitRules?: readonly HuntExitRule[],
+  premium?: boolean,
 ): HuntRuleset {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) throw new HuntUnavailableError(`hunt "${huntId}" não existe`);
@@ -482,8 +523,11 @@ export function createHuntRuleset(
     route,
     monsters: content.monsters,
     combat: content.combat,
+    progression: content.progression,
+    vocations: content.vocations,
     player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
     ...(exitRules === undefined ? {} : { exitRules }),
+    ...(premium === undefined ? {} : { premium }),
   });
 }
 
@@ -499,7 +543,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
     id: options.id,
     contentVersion: options.content.version,
     ruleset: createHuntRuleset(
-      options.content, options.huntId, options.difficulty, options.exitRules,
+      options.content, options.huntId, options.difficulty, options.exitRules, options.premium,
     ),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
     // que torna "por que eu morri" uma pergunta investigável.
