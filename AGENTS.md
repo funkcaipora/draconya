@@ -113,6 +113,11 @@ mente torna o campo inútil justamente no tipo de commit que mais aparece.
 não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
 commit feito fora dele (git de linha de comando ou GUI).
 
+**Commit de merge é isento.** Ele não descreve uma mudança, descreve uma junção, e o assunto que o
+git gera (`Merge branch 'x' into y`) nunca bateria no formato. Os dois hooks detectam por
+`MERGE_HEAD`, e não pelo prefixo do assunto — o assunto é texto livre e um commit normal pode
+começar com "Merge" sem ser um.
+
 **Branch:** a que o Linear já gera (`funkcaipora/fun-25-...`). Fecha o link automático entre
 commit, PR e issue sem trabalho manual.
 

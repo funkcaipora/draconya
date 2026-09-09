@@ -16,6 +16,10 @@ cliente Tibia), o cliente sintético de carga e scripts de manutenção.
   num caminho quente, mudou de pacote.
 - O cliente sintético de carga fala o **protocolo**, não o DOM. É o que permite medir 5.000 sessões
   desanexadas sem navegador.
+- `src/harness/` testa os hooks do harness (`.githooks/commit-msg`,
+  `.claude/hooks/validate-commit.sh`), que continuam morando onde o git e o Claude Code os
+  procuram. O teste mora aqui porque o vitest só coleta `packages/*/src/**/*.test.ts` e este é o
+  pacote de ferramentas de desenvolvimento — não porque os hooks pertençam a `tools/`.
 
 ## Como testar
 

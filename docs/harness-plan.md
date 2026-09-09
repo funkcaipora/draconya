@@ -227,6 +227,19 @@ entre commit, PR e issue sem trabalho manual.
 **Hook `PreToolUse` em `git commit`:** valida o formato e recusa o que não bate. É a única forma
 de o padrão valer sempre — um agente que "sabe" o padrão o esquece na quinta hora de sessão.
 
+> **Corrigido na execução.** Os dois hooks recusavam também **commit de merge**, porque o assunto
+> que o git escreve sozinho (`Merge branch 'x' into y`) não bate no formato. Apareceu ao mesclar a
+> `main` numa branch de feature: o merge com conflito foi recusado e só passou com um assunto
+> artificial (`chore(server): merge main and ...`) inventado para o hook — que é o pior resultado
+> possível, porque ensina a contornar o hook em vez de segui-lo, e ia acontecer em todo merge.
+> A convenção existe para commit de trabalho; merge não descreve uma mudança, descreve uma junção.
+> Os dois hooks agora isentam merge, detectando por `MERGE_HEAD` e não pelo prefixo "Merge " do
+> assunto — assunto é texto livre, e `MERGE_HEAD` só existe entre o início de um merge e o commit
+> que o conclui, então o único commit isento é o próprio merge. Coberto por teste em
+> `packages/tools/src/harness/commit-hooks.test.ts`, nos dois caminhos que o merge com conflito
+> oferece (`git merge --continue` e `git commit` à mão) e no caso oposto: commit normal cujo
+> assunto começa com "Merge" continua recusado.
+
 ### 4.2 Fronteiras de import como lint, não como prompt
 
 As regras de "quem pode importar quem" descritas nos `CLAUDE.md` devem existir também como

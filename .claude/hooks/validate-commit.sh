@@ -25,6 +25,11 @@
 #   linhas continuadas antes do scan corromperia corpo de heredoc que termine uma linha em
 #   `\` de proposito -- preferimos a lacuna ao dano.
 # - So o primeiro `-m`/`--message` do comando e considerado (e o que o git usa como assunto).
+# - A deteccao de merge em andamento olha o repositorio de `cwd` (o diretorio da sessao), nao
+#   um `cd` embutido no proprio comando. Um `cd outro-repo && git commit` durante um merge la
+#   dentro seria validado como commit normal. Fica de fora pelo mesmo motivo do item acima:
+#   interpretar o `cd` exigiria simular o shell, e quem pega o que escapa daqui e o
+#   .githooks/commit-msg, que roda dentro do repositorio certo por definicao.
 
 set -u
 
@@ -53,8 +58,12 @@ input="$(cat)"
 
 # --- 2. extrair tool_input.command ------------------------------------------------------
 command=""
+session_dir=""
 if command -v jq >/dev/null 2>&1; then
   command="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+  # Diretorio da sessao, usado so para achar o repositorio na checagem de merge abaixo. Sem
+  # jq ele fica vazio e a checagem cai no cwd do proprio processo, que e o mesmo diretorio.
+  session_dir="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 else
   # fallback sem jq: pega o valor bruto de "command" respeitando aspas escapadas dentro da
   # string JSON, depois desfaz o escaping. Best-effort -- se nao achar nada com confianca,
@@ -143,6 +152,21 @@ done <<< "$command"
 
 # nenhuma linha "de verdade" (fora de heredoc alheio) tinha git commit + -m/--message
 [ -n "$commit_line" ] || exit 0
+
+# --- 3.5 commit de merge e isento -------------------------------------------------------
+# Mesma regra do .githooks/commit-msg, pelo mesmo motivo: merge nao descreve uma mudanca,
+# descreve uma juncao, e o assunto que o git gera ("Merge branch 'x' into y") nunca bate no
+# formato. Detectamos por MERGE_HEAD, que so existe entre o inicio de um merge e o commit
+# que o conclui -- e nao pelo prefixo "Merge " do assunto, que qualquer commit normal pode
+# ter. O unico commit criado com MERGE_HEAD presente e o proprio merge.
+#
+# A checagem so roda depois de confirmarmos que a chamada e um `git commit`: nao vale pagar
+# um processo de git em toda chamada Bash da sessao.
+if [ -n "$session_dir" ]; then
+  git -C "$session_dir" rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+else
+  git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 && exit 0
+fi
 
 # --- 4. extrair a primeira linha da mensagem, se ainda nao veio do heredoc --------------
 if [ -n "$subject" ]; then
