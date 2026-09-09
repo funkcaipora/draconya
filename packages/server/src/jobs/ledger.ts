@@ -99,39 +99,54 @@ export async function writePendingReceipts(
  * Escreve a progressão da sessão na linha do personagem (FUN-54).
  *
  * XP e gold entram como DELTA, e o `xpGained` do extrato já é o líquido — inclui a penalidade
- * de morte como número negativo (FUN-37). O level é DERIVADO da XP nova, nunca copiado do
- * extrato: copiar faria um extrato antigo processado fora de ordem rebaixar um personagem que
- * já subiu, enquanto derivar sempre bate com a XP que está na linha.
- *
- * O piso de zero na XP é do banco, não confiança no chamador: XP negativa é um estado
- * impossível que dá erro estranho em todo lugar que a lê depois.
+ * de morte como número negativo (FUN-37). Estado final não serviria: não é idempotente, e dois
+ * extratos do mesmo personagem processados fora de ordem se sobrescreveriam.
  */
 async function applyProgression(
   tx: Parameters<Parameters<Database['transaction']>[0]>[0],
   receipt: SessionReceipt,
   progression: Progression | undefined,
 ): Promise<void> {
-  const [row] = await tx
-    .update(characters)
-    .set({
-      xp: sql`greatest(${characters.xp} + ${receipt.aggregates.xpGained}, 0)`,
-      gold: sql`greatest(${characters.gold} + ${creditOf(receipt)}, 0)`,
-      // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um
-      // extrato antigo, processado fora de ordem, não pode devolver stamina já gasta.
-      ...(receipt.staminaMs === undefined || receipt.staminaUpdatedAtMs === undefined
-        ? {}
-        : {
-          staminaMs: sql`case when ${characters.staminaUpdatedAt} <= ${new Date(receipt.staminaUpdatedAtMs)} then ${receipt.staminaMs} else ${characters.staminaMs} end`,
-          staminaUpdatedAt: sql`greatest(${characters.staminaUpdatedAt}, ${new Date(receipt.staminaUpdatedAtMs)})`,
-        }),
+  // Lê com trava de linha e decide aqui, em vez de montar `case when` no `UPDATE`.
+  //
+  // A primeira versão fazia a guarda de stamina em SQL e estava errada de um jeito que só o
+  // teste com Postgres de verdade pegou. A trava já é necessária de qualquer forma — o
+  // `jobs` é singleton, mas nada impede dois ciclos se cruzarem num deploy —, e com a linha
+  // em mãos a regra vira três linhas de TypeScript que qualquer um confere lendo.
+  const [current] = await tx
+    .select({
+      xp: characters.xp,
+      gold: characters.gold,
+      staminaUpdatedAt: characters.staminaUpdatedAt,
     })
+    .from(characters)
     .where(eq(characters.id, receipt.characterId))
-    .returning({ xp: characters.xp });
+    .for('update');
+  if (current === undefined) return;
 
-  if (row === undefined || progression === undefined) return;
+  // Piso de zero: a penalidade de morte chega como número negativo (FUN-37), e XP negativa é
+  // um estado impossível que dá erro estranho em todo lugar que a lê depois.
+  const xp = Math.max(0, current.xp + receipt.aggregates.xpGained);
+  const gold = Math.max(0, current.gold + creditOf(receipt));
+
+  // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato
+  // atrasado, processado fora de ordem, não pode devolver stamina já gasta.
+  const stamina = receipt.staminaMs !== undefined
+    && receipt.staminaUpdatedAtMs !== undefined
+    && receipt.staminaUpdatedAtMs >= current.staminaUpdatedAt.getTime()
+    ? { staminaMs: receipt.staminaMs, staminaUpdatedAt: new Date(receipt.staminaUpdatedAtMs) }
+    : {};
+
   await tx
     .update(characters)
-    .set({ level: levelForXp(row.xp, progression) })
+    .set({
+      xp,
+      gold,
+      // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
+      // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
+      ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),
+      ...stamina,
+    })
     .where(eq(characters.id, receipt.characterId));
 }
 
