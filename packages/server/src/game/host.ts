@@ -24,6 +24,9 @@ import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 /** Cria a sessão de um personagem que ainda não tem uma. */
 export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
 
+/** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
+export type SessionRestorer = (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+
 export interface SessionHostOptions {
   readonly nodeId: string;
   readonly contentVersion: string;
@@ -34,8 +37,7 @@ export interface SessionHostOptions {
   readonly snapshots?: SnapshotStore;
   /** Onde o extrato de uma sessão encerrada espera virar linha de ledger (FUN-29). */
   readonly receipts?: ReceiptStore;
-  /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar. */
-  readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+  readonly restoreSession?: SessionRestorer;
   readonly viewer?: ViewerOptions;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;

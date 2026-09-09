@@ -46,7 +46,16 @@ Se divergir, alguma fórmula está contando ticks em vez de tempo.
   monstro já tentou — esse último produz movimento errático que ninguém reproduz.
 - **Custo medido: 0,081 µs por monstro por tick** (`pnpm bench:monster`). É a linha de base que
   a FUN-46 vai cobrar em escala; uma regressão de ordem de grandeza aqui vira conta de servidor.
-- A hunt **não faz pathfinding** — a rota é uma lista fixa de tiles vinda de `content`.
+- A hunt **não faz pathfinding** — a rota é uma lista fixa de tiles vinda de `content`. O
+  personagem também não persegue: ele percorre a rota e deixa o monstro vir.
+- **A equivalência entre taxas vale para a RECOMPENSA, não para o dano sofrido.** Medido: dez
+  minutos de hunt rendem os mesmos abates a 1, 2, 5, 10 e 20 Hz, mas quem roda a 1 Hz apanha até
+  1,5× mais. A causa é granularidade de espaço — num tick de 1 s as duas criaturas andam dois
+  tiles de uma vez e a adjacência é conferida uma vez só. Corrigir pediria subdividir o tick, que
+  gasta o que o 1 Hz economiza. Ver `docs/product/hunt.md`.
+- **Ataque usa acumulador (`timesThatFit`), não timestamp absoluto**, mesmo sendo condicional. Já
+  foi tentado o contrário: com timestamp os abates passam a divergir entre taxas, porque o ataque
+  que fica pronto no meio do tick dispara atrasado e o resto é descartado.
 - O adaptador `systemClock` vive em `server/`. Aqui ficam apenas o contrato `Clock` e o
   relógio controlado de teste. O lint recusa os globais `Date` e `performance`, inclusive via
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.

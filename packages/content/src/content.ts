@@ -114,6 +114,20 @@ export function buildContent(raw: RawContent): Content {
     if (maps.size > 0 && !maps.has(hunt.mapId)) {
       problems.push(`hunt "${hunt.id}" referencia mapa inexistente "${hunt.mapId}"`);
     }
+    // A rota é o caminho inteiro que o bot percorre. Uma hunt que aponta rota inexistente
+    // passa em qualquer schema e só falha quando alguém entra nela — e aí o sintoma é "a
+    // hunt não abre", longe da causa.
+    if (routes.size > 0 && !routes.has(hunt.routeId)) {
+      problems.push(`hunt "${hunt.id}" referencia rota inexistente "${hunt.routeId}"`);
+      continue;
+    }
+    const route = routes.get(hunt.routeId);
+    if (route !== undefined && route.mapId !== hunt.mapId) {
+      problems.push(
+        `hunt "${hunt.id}" está no mapa "${hunt.mapId}" mas a rota "${hunt.routeId}" é do ` +
+          `mapa "${route.mapId}"`,
+      );
+    }
   }
 
   if (problems.length > 0) throw new ContentError(problems);

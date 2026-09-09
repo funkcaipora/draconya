@@ -7,5 +7,6 @@
   "manaPerLevel": 5,
   "capacityPerLevel": 10,
   "vocationLevel": 8,
-  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios."
+  "stepDurationMs": 500,
+  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade de passo também."
 }
