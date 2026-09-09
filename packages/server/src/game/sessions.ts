@@ -5,9 +5,10 @@
 // sessão de Cidade, que é orientada a evento e custa perto de zero.
 
 import { randomUUID } from 'node:crypto';
-import { CharacterRuntime, Rng, Session, createCityRuleset } from '@draconya/sim';
-import type { SessionSnapshot } from '@draconya/sim';
-import type { SessionFactory } from './host.js';
+import { CharacterRuntime, Rng, Session, createCityRuleset, huntRulesetFromSnapshot } from '@draconya/sim';
+import type { Ruleset, SessionSnapshot } from '@draconya/sim';
+import type { Content } from '@draconya/content';
+import type { SessionFactory, SessionRestorer } from './host.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -48,20 +49,32 @@ export function createCitySessionFactory(contentVersion: string): SessionFactory
 /**
  * Reconstrói uma sessão a partir de um snapshot guardado (FUN-28).
  *
- * Devolve `null` quando o snapshot não pode ser reconstruído — formato de outra versão, ou
- * ruleset que este servidor não conhece. `null` é a resposta certa: retomar errado é pior que
- * não retomar, e quem chama sabe encerrar creditando.
+ * Recebe o conteúdo porque uma hunt não é reconstruível sem ele: mapa, rota e composição são
+ * dados, e o ruleset precisa deles de volta antes de restaurar o estado.
+ *
+ * Devolve `null` quando o snapshot não pode ser reconstruído — formato de outra versão,
+ * ruleset que este servidor não conhece, ou hunt que saiu do conteúdo. `null` é a resposta
+ * certa: retomar errado é pior que não retomar, e quem chama sabe encerrar creditando.
  */
-export function restoreSession(snapshot: SessionSnapshot, nowMs: number): Session | null {
-  // Só a Cidade existe hoje. Hunt é a FUN-43; até lá, um snapshot de hunt não tem ruleset
-  // para voltar, e forçar city em cima dele produziria uma sessão que mente sobre o que é.
-  if (snapshot.type !== 'city') return null;
-  try {
-    const session = Session.fromSnapshot(snapshot, createCityRuleset(), Rng.fromSeed(snapshot.id));
-    // O relógio do snapshot é de outro processo. Ver ADR 0018.
-    session.rebaseClock(nowMs);
-    return session;
-  } catch {
-    return null;
-  }
+export function createSessionRestorer(content: Content): SessionRestorer {
+  return (snapshot: SessionSnapshot, nowMs: number): Session | null => {
+    const ruleset = rulesetFor(snapshot, content);
+    if (ruleset === null) return null;
+    try {
+      const session = Session.fromSnapshot(snapshot, ruleset, Rng.fromSeed(snapshot.id));
+      // O relógio do snapshot é de outro processo. Ver ADR 0018.
+      session.rebaseClock(nowMs);
+      return session;
+    } catch {
+      return null;
+    }
+  };
+}
+
+function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null {
+  // Cidade e hunt são as duas que existem. Treino, quest, boss e guild war ainda não têm
+  // ruleset — e forçar um conhecido em cima produziria uma sessão que mente sobre o que é.
+  if (snapshot.type === 'city') return createCityRuleset();
+  if (snapshot.type === 'hunt') return huntRulesetFromSnapshot(snapshot, content);
+  return null;
 }

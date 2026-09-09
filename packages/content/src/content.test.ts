@@ -9,7 +9,8 @@ const rat = {
   loot: [{ itemId: 'gold-coin', chance: 0.9, min: 1, max: 4 }],
 };
 const cellars = {
-  id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, mapId: 'rat-cellars',
+  id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
+  mapId: 'rat-cellars', routeId: 'rat-cellars',
   difficulties: {
     beginner: { perSpawnPoint: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
   },
@@ -19,12 +20,13 @@ const baseline = {
   id: 'baseline',
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-  vocationLevel: 8,
+  vocationLevel: 8, stepDurationMs: 500,
 };
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
   armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
 const base = (over: Partial<RawContent> = {}): RawContent => ({
@@ -153,5 +155,40 @@ describe('combat baseline', () => {
     const provisional = { ...combat, _open: '§12.1 — armadura contra magia não decidida' };
     expect(buildContent(base({ combat: [provisional] })).openValues)
       .toContain('combat/baseline: §12.1 — armadura contra magia não decidida');
+  });
+});
+
+describe('a rota da hunt é apontada, não inferida', () => {
+  // Uma rota por mapa hoje, e é justamente por isso que a checagem precisa existir agora:
+  // enquanto der para adivinhar, ninguém percebe que estamos adivinhando.
+  const map = { id: 'rat-cellars', z: 7, grid: ['####', '#..#', '#..#', '####'] };
+  const route = {
+    id: 'rat-cellars', mapId: 'rat-cellars',
+    tiles: [
+      { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
+    ],
+  };
+  const withMap = (over: Partial<RawContent> = {}): RawContent =>
+    base({ maps: [map], routes: [route], ...over });
+
+  it('resolve a rota apontada', () => {
+    expect(buildContent(withMap()).routes.get('rat-cellars')?.tiles).toHaveLength(4);
+  });
+
+  it('recusa hunt que aponta rota inexistente', () => {
+    // Passa em qualquer schema e só falha quando alguém entra na hunt — e aí o sintoma é
+    // "a hunt não abre", a três semanas de distância da causa.
+    const semRota = { ...cellars, routeId: 'nowhere' };
+    expect(() => buildContent(withMap({ hunts: [semRota] })))
+      .toThrow(/rota inexistente "nowhere"/);
+  });
+
+  it('recusa rota que é de outro mapa', () => {
+    const outroMapa = { ...map, id: 'other' };
+    const outraRota = { ...route, id: 'other-route', mapId: 'other' };
+    const cruzada = { ...cellars, routeId: 'other-route' };
+    expect(() => buildContent(base({
+      maps: [map, outroMapa], routes: [route, outraRota], hunts: [cruzada],
+    }))).toThrow(/rota "other-route" é do mapa "other"/);
   });
 });

@@ -1,6 +1,6 @@
 # Hunt
 
-**Status:** não implementado
+**Status:** ruleset implementado (entrada, sessão e encerramento); item e loot ainda não
 **PRD:** §14
 **Épico:** E3
 
@@ -104,18 +104,107 @@ Trocar `perSpawnPoint` e a composição no JSON muda densidade e variedade sem t
 há teste afirmando exatamente isso, porque se uma dificuldade nova exigisse código o formato
 estaria errado.
 
+## O ruleset, e por que ele é o molde dos outros cinco
+
+Um ruleset define **quatro** coisas, e são as mesmas para hunt, treino, quest, boss e guild war:
+
+| | Hunt |
+|---|---|
+| como entra | pelo menu, com dificuldade escolhida; instância criada na entrada |
+| o que encerra | ação manual, regra automática de saída, ou morte (§14.8) |
+| o que a morte faz | encerra a sessão — devolver à PZ é a FUN-38, do lado do servidor |
+| como a recompensa é calculada | XP por abate, bloqueada com stamina zero |
+
+Se a Guild War não couber nessa mesma interface depois, ela terá sido modelada em cima de hunt —
+e descobrir isso na Fase 5 custa semanas. É por isso que a hunt **não pediu método novo** em
+`Ruleset`: tudo o que ela precisa cabe em `onEnter`, `onTick`, `onDeath`, `onEnd` e no par
+`getState`/`restore`, exatamente os mesmos que a Cidade usa.
+
+**Entrar cria a instância.** Mapa, rota e spawns da dificuldade escolhida nascem na entrada, e a
+versão de conteúdo é congelada ali (invariante 7). O personagem entra no primeiro tile da rota,
+não na posição que trouxe da cidade.
+
+**O personagem não persegue.** Ele percorre a rota, para quando há monstro ao alcance, e retoma
+no mesmo índice. Quem se desloca até ele é o monstro — e é isso que dispensa pathfinding dos dois
+lados.
+
+**Uma instância hospeda um personagem, e recusa o segundo em voz alta.** Party divide a rota e
+pede um caminhante por participante; aceitar o segundo em silêncio hoje o deixaria parado no tile
+de entrada a hunt inteira, rendendo zero, sem nada explicando.
+
+**Todo encerramento produz extrato**, inclusive o que acontece sem ninguém assistindo. O extrato
+diz o motivo, e no caso de regra automática diz **qual** regra: "sua hunt encerrou por uma regra
+de saída" sem dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo
+configurou.
+
+**Trocar de dificuldade encerra e cria outra** (§14.7). Não existe alteração dinâmica: mudar a
+densidade no meio deixaria monstros da densidade antiga vivos ao lado dos novos, e o jogador
+veria uma dificuldade que não é nenhuma das duas.
+
+**Stamina zero não encerra a hunt** (§10.2). É a regra que mais parece bug para quem implementa.
+O personagem continua caçando, matando e apanhando; o que ele deixa de ganhar é XP. O abate
+continua contando no extrato — o jogador matou, e dizer que não seria mentira.
+
+### Abate comum não é evento notável
+
+`notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com uma linha
+por rato não é lista, é log — e ninguém lê log ao voltar. Entram ali a entrada, a morte, a troca
+de dificuldade, a regra de saída que disparou e o encerramento.
+
+## O que muda entre 10 Hz e 1 Hz, medido
+
+A hunt roda a **10 Hz anexada e 1 Hz desanexada** (ADR 0003). A pergunta que importa é se isso
+muda o que o jogador ganha. Dez minutos de hunt, mesmo conteúdo, mesma semente:
+
+| | 1 Hz | 2 Hz | 5 Hz | 10 Hz | 20 Hz |
+|---|---|---|---|---|---|
+| abates, um monstro por ponto | 18 | 18 | 18 | 18 | 18 |
+| abates, três monstros por ponto | 132 | 130 | 129 | 128 | 128 |
+| dano sofrido, um monstro por ponto | 530 | 530 | 350 | 350 | 350 |
+
+**A recompensa é rate-independente**: com um monstro por ponto, os abates são exatamente iguais
+em qualquer taxa. Com três disputando o mesmo ponto aparece uma diferença de ~3%, porque quem
+está "mais perto" muda com a granularidade do passo.
+
+**O dano sofrido não é igual, e quem caça desanexado apanha mais.** A causa é granularidade de
+*espaço*, não de tempo: num tick de 1 s o personagem e o monstro andam dois tiles cada um de uma
+vez, e a adjacência é conferida uma única vez no fim — eles passam mais ticks colados do que
+passariam a 10 Hz, e é enquanto estão colados que o acumulador de ataque do monstro avança.
+
+Corrigir pediria **subdividir o tick**, o que gasta exatamente o que cair para 1 Hz economiza — e
+economizar é a razão de existir do 1 Hz. Fica registrado em vez de corrigido, com um teste
+segurando o limite (menos que o dobro), e importa para a FUN-38: o balanceamento de morte em PvE
+precisa assumir o caso desanexado, não o anexado.
+
+Registro de um caminho tentado e descartado: trocar o acumulador de ataque por **timestamp
+absoluto** — que é o que `cooldown.ts` usa para ação disparada por evento — parecia resolver, e
+piorou. Com ele os abates passam a divergir entre taxas (299 a 20 Hz contra 277 a 1 Hz), porque
+um ataque que fica pronto no meio do tick dispara atrasado e o resto é descartado. O acumulador
+está certo; o que ele não cobre é a granularidade do espaço.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
-| Quantidade de dificuldades | 4 (Iniciante, Profissional, Herói, Lendário) | caminho previsto: `packages/content/hunts` |
-| Densidade de referência por ponto de spawn (Iniciante / Profissional / Herói / Lendário) | ~2 / 4 / 8 / 12 monstros (referência inicial discutida; a composição real é definida por hunt) | caminho previsto: `packages/content/hunts` |
-| Rota | lista ordenada de tiles, fixa por hunt | caminho previsto: `packages/content/hunts` |
+| Quantidade de dificuldades | 4 (Iniciante, Profissional, Herói, Lendário) | `data/hunts/*.json`, campo `difficulties` |
+| Densidade de referência por ponto de spawn (Iniciante / Profissional / Herói / Lendário) | ~2 / 4 / 8 / 12 monstros (referência inicial discutida; a composição real é definida por hunt) | `data/hunts/*.json`, campo `perSpawnPoint` |
+| Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
+| Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
+| Velocidade de passo do personagem | [ABERTO — valor provisório: 500 ms por tile] | `data/progression/baseline.json`, `stepDurationMs` |
 
 ## Em aberto
 
-Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. A densidade de referência (2/4/8/12) é explicitamente descrita como ponto de partida, não como número final — cada hunt define sua própria composição em conteúdo.
+Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Os dois da tabela acima são deste
+projeto, não do PRD: o personagem precisa de números de ataque e de velocidade para a hunt render,
+e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não existe. A densidade de referência (2/4/8/12) é explicitamente descrita como ponto de partida, não como número final — cada hunt define sua própria composição em conteúdo.
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+**Loot ainda não cai.** O §14 fala em XP *e* loot por abate; hoje só o XP é creditado. Não é
+escolha de design: não existe item, nem inventário, nem capacidade — e creditar "gold" fingindo
+que a moeda é um item resolvido criaria um caminho econômico que ninguém desenharia de propósito.
+O bloqueio por stamina já está no lugar e vale para o loot no dia em que ele existir.
+
+**A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
+personagem é erro, não silêncio.

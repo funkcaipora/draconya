@@ -16,7 +16,7 @@ import type { ReceiptStore } from '../receipts.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
-import { SessionHost, type SessionFactory } from './host.js';
+import { SessionHost, type SessionFactory, type SessionRestorer } from './host.js';
 import { Viewer } from './viewer.js';
 
 export interface GameDependencies {
@@ -27,7 +27,7 @@ export interface GameDependencies {
   /** Onde a sessão é guardada para sobreviver à queda do processo (FUN-28). */
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
-  readonly restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+  readonly restoreSession?: SessionRestorer;
 }
 
 /** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */

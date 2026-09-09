@@ -57,6 +57,15 @@ export const huntSchema = z.object({
   recommendedLevel: z.number().int().positive(),
   mapId: z.string().min(1),
   /**
+   * A rota que o bot percorre. **Apontada, não inferida.**
+   *
+   * Deduzir a rota pelo `mapId` funcionaria hoje, com uma rota por mapa, e falharia em
+   * silêncio no dia em que um mapa tivesse duas — a hunt passaria a andar por um caminho que
+   * ninguém escolheu, e nada no arquivo diria por quê. O §14.4 dá UMA rota a cada hunt; o
+   * campo diz qual.
+   */
+  routeId: z.string().min(1),
+  /**
    * `partialRecord`, e não `record`: uma hunt define as dificuldades que fazem sentido para
    * ela, não obrigatoriamente as quatro. É o que o `refine` abaixo sempre disse — exigir ao
    * menos uma só faz sentido se nem todas forem obrigatórias.
@@ -102,6 +111,11 @@ export const progressionSchema = z.object({
   capacityPerLevel: z.number().int().nonnegative(),
   /** Level em que a vocação é escolhida, e a partir do qual ela passa a reger o crescimento. */
   vocationLevel: z.number().int().positive(),
+  /**
+   * Milissegundos por tile andado. Fica aqui, e não em `combat`, porque velocidade é
+   * atributo do personagem: quando haste e botas existirem, elas modificam ESTE número.
+   */
+  stepDurationMs: z.number().int().positive(),
   _open: z.string().optional(),
 });
 
@@ -124,6 +138,22 @@ export const combatSchema = z.object({
   }),
   /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */
   minimumDamageFraction: z.number().min(0).max(1),
+  /**
+   * O personagem **desarmado**: o que ele bate e o quanto aguenta sem equipamento nenhum.
+   *
+   * Existe porque o jogo tem hunt antes de ter item. Quando o equipamento chegar, estes
+   * números continuam sendo o piso — o personagem sem nada nas mãos — e o item passa a somar
+   * em cima. É o oposto de deixar o valor em código e "trocar depois": ali ele nunca é
+   * trocado, porque ninguém encontra.
+   */
+  player: z.object({
+    attackPower: z.number().int().nonnegative(),
+    attackIntervalMs: z.number().int().positive(),
+    /** Alcance em tiles. `1` é corpo a corpo — o único que existe hoje. */
+    attackRange: z.number().int().positive().default(1),
+    armor: z.number().int().nonnegative(),
+    dodgeChance: z.number().min(0).max(1),
+  }),
   _open: z.string().optional(),
 });
 

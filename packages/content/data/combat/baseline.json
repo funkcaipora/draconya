@@ -1,7 +1,17 @@
 {
   "id": "baseline",
   "dodgeMultiplier": 0.5,
-  "armorEffectiveness": { "melee": 1, "magic": 0 },
+  "armorEffectiveness": {
+    "melee": 1,
+    "magic": 0
+  },
   "minimumDamageFraction": 0.1,
-  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque e piso de dano são provisórios, com o Tibia como referência funcional."
+  "player": {
+    "attackPower": 25,
+    "attackIntervalMs": 2000,
+    "attackRange": 1,
+    "armor": 4,
+    "dodgeChance": 0.05
+  },
+  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque e piso de dano são provisórios, com o Tibia como referência funcional. O bloco `player` é o personagem desarmado no level 1 e não vem do PRD: são os números que fazem a hunt de Rat Cellars render sem virar impasse, e saem daqui no dia em que existir equipamento."
 }

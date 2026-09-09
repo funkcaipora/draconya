@@ -3,6 +3,7 @@
   "name": "Rat Cellars",
   "recommendedLevel": 1,
   "mapId": "rat-cellars",
+  "routeId": "rat-cellars",
   "difficulties": {
     "beginner": {
       "perSpawnPoint": 2,

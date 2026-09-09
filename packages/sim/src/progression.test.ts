@@ -7,6 +7,7 @@ const baseline: Progression = {
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8,
+  stepDurationMs: 500,
 };
 const knight: Vocation = {
   id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25,
