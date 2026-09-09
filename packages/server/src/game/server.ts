@@ -16,7 +16,9 @@ import type { ReceiptStore } from '../receipts.js';
 import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
-import { SessionHost, type SessionFactory, type SessionRestorer } from './host.js';
+import {
+  SessionHost, type SessionFactory, type SessionRestorer, type SessionSuccessor,
+} from './host.js';
 import { Viewer } from './viewer.js';
 
 export interface GameDependencies {
@@ -28,6 +30,7 @@ export interface GameDependencies {
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
   readonly restoreSession?: SessionRestorer;
+  readonly successor?: SessionSuccessor;
 }
 
 /** Um terço do lease do diretório: dá duas chances de errar antes de o nó parecer morto. */
@@ -61,6 +64,7 @@ export function createGame(
       ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
       ...(dependencies.snapshots === undefined ? {} : { snapshots: dependencies.snapshots }),
       ...(dependencies.receipts === undefined ? {} : { receipts: dependencies.receipts }),
+      ...(dependencies.successor === undefined ? {} : { successor: dependencies.successor }),
       ...(dependencies.restoreSession === undefined
         ? {}
         : { restoreSession: dependencies.restoreSession }),

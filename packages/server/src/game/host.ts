@@ -27,6 +27,15 @@ export type SessionFactory = (characterId: string, initialCharacter?: InitialCha
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot, nowMs: number) => Session | null;
 
+/**
+ * Para onde o personagem vai quando a sessão dele se encerra sozinha (FUN-38).
+ *
+ * `null` significa "não vai a lugar nenhum": a sessão é solta e o personagem sai do nó. Uma
+ * hunt que acaba SEMPRE devolve alguém à Cidade, porque todo personagem está em exatamente
+ * uma sessão (invariante 8) — ficar sem sessão nenhuma não é um estado que exista.
+ */
+export type SessionSuccessor = (ended: Session, reason: EndReason) => Session | null;
+
 export interface SessionHostOptions {
   readonly nodeId: string;
   readonly contentVersion: string;
@@ -38,6 +47,8 @@ export interface SessionHostOptions {
   /** Onde o extrato de uma sessão encerrada espera virar linha de ledger (FUN-29). */
   readonly receipts?: ReceiptStore;
   readonly restoreSession?: SessionRestorer;
+  /** Para onde o personagem vai quando a sessão se encerra sozinha — a PZ, na morte (FUN-38). */
+  readonly successor?: SessionSuccessor;
   readonly viewer?: ViewerOptions;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
@@ -310,7 +321,7 @@ export class SessionHost {
    * (invariante 2).
    */
   cycle(nowMs: number = this.#now()): void {
-    for (const hosted of this.#sessions.values()) {
+    for (const hosted of [...this.#sessions.values()]) {
       const hz = hosted.session.currentHz();
       // `0` é orientada a evento: cidade e treino não têm laço nenhum.
       if (hz <= 0 || hosted.session.ended !== null) continue;
@@ -321,8 +332,128 @@ export class SessionHost {
         // Uma sessão que explode não pode derrubar as outras do nó.
         this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
       }
+      // A sessão pode ter acabado DENTRO do tick — a morte é o caso (§26.1), e ela acontece
+      // com o jogador ausente na maior parte das vezes. Se a sucessão dependesse de alguém
+      // estar olhando, o invariante 3 estaria quebrado.
+      if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
+  }
+
+  /**
+   * A sessão acabou sozinha: credita, avisa, e põe o personagem na próxima (FUN-38).
+   *
+   * A ORDEM é o assunto todo, e cada troca tem uma consequência:
+   *
+   *   1. o extrato é gravado ANTES de qualquer aviso — morrer e o processo cair em seguida
+   *      deixa o crédito no Redis esperando o `jobs`, que é a metade certa de perder;
+   *   2. o `session-ended` sai antes do estado novo, senão o jogador vê a Cidade aparecer e
+   *      só depois descobre que morreu;
+   *   3. a sessão nova é registrada no diretório ANTES de substituir a local — registrar
+   *      depois deixaria o personagem apontando para uma sessão que este nó já esqueceu;
+   *   4. a cura vem com a Cidade, e a Cidade vem DEPOIS do encerramento. Restaurar HP antes
+   *      de encerrar gravaria no extrato uma sessão que "terminou com vida cheia", o que
+   *      estraga a tela de retorno e o analisador.
+   */
+  async #succeed(hosted: HostedSession): Promise<void> {
+    const characters = this.#charactersOf(hosted.session.id);
+    const characterId = characters[0];
+    if (characterId === undefined) return;
+    if (characters.length > 1) {
+      // Party divide uma sessão, e um extrato por personagem é decisão de produto que ainda
+      // não foi tomada. Creditar o mesmo agregado N vezes seria pior que não creditar.
+      this.#logger.error(
+        { sessionId: hosted.session.id, characters: characters.length },
+        'Cannot succeed a session shared by more than one character',
+      );
+      return;
+    }
+    const receipt = hosted.session.receipt();
+    if (receipt === null) return;
+
+    try {
+      await this.#saveReceipt(characterId, hosted, receipt);
+      for (const viewer of hosted.viewers) {
+        viewer.send({
+          type: 'session-ended',
+          reason: receipt.reason,
+          aggregates: receipt.aggregates,
+          notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
+        });
+      }
+
+      const next = this.#options.successor?.(hosted.session, receipt.reason) ?? null;
+      if (next === null) {
+        await this.release(characterId, 1000, receipt.reason);
+        return;
+      }
+      await this.#replace(characterId, hosted, next);
+    } catch (error) {
+      // Falhar aqui deixa o personagem numa sessão encerrada, que o ciclo ignora — ruim, e
+      // recuperável na próxima conexão. Soltar no meio de uma falha seria pior: sem saber em
+      // que ponto parou, soltar pode significar perder o crédito que talvez tenha gravado.
+      this.#logger.error(
+        { error, characterId, sessionId: hosted.session.id },
+        'Failed to move the character to the next session',
+      );
+    }
+  }
+
+  /** Troca a sessão do personagem por outra, no diretório e aqui dentro. */
+  async #replace(characterId: string, hosted: HostedSession, next: Session): Promise<void> {
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    const directory = this.#options.directory;
+    if (directory !== undefined && accountId !== undefined) {
+      const moved = await directory.succeed(
+        characterId,
+        accountId,
+        { sessionId: hosted.session.id, nodeId: this.#options.nodeId,
+          type: hosted.session.ruleset.type },
+        { sessionId: next.id, nodeId: this.#options.nodeId, type: next.ruleset.type },
+      );
+      // O registro não é mais nosso: outro nó assumiu, ou o lease expirou. Insistir seria
+      // escrever por cima de um dono que já não somos.
+      if (!moved) {
+        this.#logger.warn({ characterId }, 'Directory entry changed hands; releasing instead');
+        await this.release(characterId, 1000, 'session-moved');
+        return;
+      }
+    }
+
+    const successor: HostedSession = { session: next, viewers: new Set(), creatureIds: new Map() };
+    this.#sessions.delete(hosted.session.id);
+    this.#sessions.set(next.id, successor);
+    this.#sessionIdByCharacter.set(characterId, next.id);
+
+    // Os visualizadores acompanham o PERSONAGEM, não a sessão. Fechar o socket porque a hunt
+    // acabou faria quem estava assistindo levar uma desconexão em vez de ver a volta à cidade.
+    for (const viewer of hosted.viewers) {
+      successor.viewers.add(viewer);
+      next.attach(viewer.id);
+      viewer.send(this.#sessionState(successor, characterId));
+    }
+    hosted.viewers.clear();
+
+    // A morte é MARCO de snapshot (FUN-27). Perder a transição por estar entre dois
+    // intervalos é o pior caso: o jogador volta vivo, na hunt, e a penalidade aparece do nada
+    // um pouco depois.
+    const snapshots = this.#options.snapshots;
+    if (snapshots !== undefined && accountId !== undefined) {
+      await snapshots.save(characterId, accountId, this.#options.nodeId, next.snapshot());
+    }
+    this.#logger.info(
+      { characterId, from: hosted.session.id, to: next.id, type: next.ruleset.type },
+      'Character moved to the next session',
+    );
+  }
+
+  /** Quem está nesta sessão. Busca linear num mapa pequeno, e só quando uma sessão acaba. */
+  #charactersOf(sessionId: string): string[] {
+    const found: string[] = [];
+    for (const [characterId, id] of this.#sessionIdByCharacter) {
+      if (id === sessionId) found.push(characterId);
+    }
+    return found;
   }
 
   /** Manda o acumulado e derruba quem não está drenando. */

@@ -263,6 +263,19 @@ export class Session {
       this.ruleset.onEnd(this, reason);
       this.record('ended', reason);
     }
+    return this.receipt() as Receipt;
+  }
+
+  /**
+   * O extrato da sessão encerrada, ou `null` enquanto ela vive.
+   *
+   * Existe porque quem encerra nem sempre é quem precisa do extrato: a morte encerra a hunt
+   * de DENTRO do ruleset (§26.1), e o servidor descobre depois, no ciclo. Sem isto ele
+   * precisaria chamar `end` de novo só para receber o extrato de volta — o que funciona, e
+   * lê como se estivesse encerrando uma sessão já encerrada.
+   */
+  receipt(): Receipt | null {
+    if (this.#endedReason === null) return null;
     return {
       sessionId: this.id,
       reason: this.#endedReason,

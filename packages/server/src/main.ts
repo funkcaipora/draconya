@@ -13,7 +13,9 @@ import { loadConfiguration } from './config.js';
 import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
-import { createCitySessionFactory, createSessionRestorer } from './game/sessions.js';
+import {
+  createCitySessionFactory, createCitySuccessor, createSessionRestorer,
+} from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
@@ -136,6 +138,7 @@ async function main(): Promise<void> {
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),
+      successor: createCitySuccessor(content),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts,

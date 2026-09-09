@@ -10,7 +10,7 @@ import {
 } from '@draconya/sim';
 import type { Ruleset, SessionSnapshot } from '@draconya/sim';
 import type { Content } from '@draconya/content';
-import type { SessionFactory, SessionRestorer } from './host.js';
+import type { SessionFactory, SessionRestorer, SessionSuccessor } from './host.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -88,4 +88,41 @@ function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null
   if (snapshot.type === 'city') return createCityRuleset();
   if (snapshot.type === 'hunt') return huntRulesetFromSnapshot(snapshot, content);
   return null;
+}
+
+
+/**
+ * Para onde o personagem vai quando a sessão dele acaba (FUN-38): a Cidade, sempre.
+ *
+ * Todo personagem está em EXATAMENTE uma sessão (invariante 8), então "a hunt acabou" nunca
+ * pode significar "ele ficou sem sessão". Vale para a morte e vale para a saída manual: sair
+ * de uma hunt é voltar para a cidade, não sumir do mundo.
+ *
+ * O personagem é o MESMO objeto, não uma cópia reconstruída do banco. A penalidade de morte
+ * (FUN-37) já mexeu no level e na XP dele quando isto roda, e reconstruir a partir de dados
+ * duráveis que ainda não foram gravados devolveria o personagem de antes de morrer — a
+ * penalidade sumiria, e ninguém ligaria uma coisa à outra.
+ *
+ * Quem cura é o `onEnter` da Cidade: voltar à PZ restaura HP e mana cheios (§26.1). Curar
+ * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
+ */
+export function createCitySuccessor(content: Content): SessionSuccessor {
+  return (ended: Session): Session | null => {
+    // A Cidade não sucede a si mesma. Uma sessão de Cidade que acaba é um `logout` ou uma
+    // drenagem, e nesses casos o personagem está mesmo saindo do nó.
+    if (ended.ruleset.type === 'city') return null;
+
+    const id = randomUUID();
+    const session = new Session({
+      id,
+      contentVersion: content.version,
+      ruleset: createCityRuleset(),
+      rng: Rng.fromSeed(id),
+      // O relógio da sessão nova continua o da antiga: elas são o mesmo personagem no mesmo
+      // processo, e um `createdAtMs` de outra origem faria o primeiro `dtMs` sair absurdo.
+      createdAtMs: ended.nowMs,
+    });
+    for (const character of ended.participants) session.enter(character);
+    return session;
+  };
 }

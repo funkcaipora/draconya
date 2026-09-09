@@ -1,4 +1,7 @@
-import { CharacterRuntime, Rng, Session, type Ruleset, type SessionSnapshot } from '@draconya/sim';
+import {
+  CharacterRuntime, Rng, Session,
+  type EndReason, type Ruleset, type SessionSnapshot,
+} from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -40,6 +43,7 @@ function buildHost(
     snapshots?: SnapshotStore;
     receipts?: ReceiptStore;
     restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+    successor?: (ended: Session, reason: EndReason) => Session | null;
   } = {},
 ) {
   const sessions: Session[] = [];
@@ -640,5 +644,176 @@ describe('session host', () => {
     expect(host.viewersOf('p1')).toBe(1);
     expect(host.sessionFor('p1')?.ended).toBeNull();
     expect(counter.ticks).toBe(1);
+  });
+});
+
+
+describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)', () => {
+  /** Ruleset que mata o personagem no primeiro tick, como uma hunt faz na morte (§26.1). */
+  function lethalRuleset(): Ruleset {
+    return {
+      type: 'hunt',
+      hz: () => 10,
+      onEnter: () => {},
+      onTick: (session) => {
+        const character = session.participants[0];
+        if (character !== undefined && character.alive) session.kill(character);
+      },
+      onDeath: (session) => {
+        session.end('death');
+      },
+      onEnd: () => {},
+    };
+  }
+
+  /** Sucessor de mentira: uma sessão de Cidade que cura, como a de verdade faz no `onEnter`. */
+  function citySuccessor(): (ended: Session) => Session {
+    return (ended) => {
+      const session = new Session({
+        id: `city-${ended.id}`,
+        contentVersion: 'v-test',
+        ruleset: {
+          type: 'city',
+          hz: () => 0,
+          onEnter: (_s, character) => {
+            character.health = character.maxHealth;
+            character.alive = true;
+          },
+          onTick: () => {},
+          onDeath: () => {},
+          onEnd: () => {},
+        },
+        rng: Rng.fromSeed(ended.id),
+        createdAtMs: ended.nowMs,
+      });
+      for (const character of ended.participants) session.enter(character);
+      return session;
+    };
+  }
+
+  it('acontece SEM ninguém olhando — é o caso que importa', async () => {
+    // O jogador não está lá quando morre numa hunt AFK. Se a sequência só funcionasse com
+    // visualizador, o invariante 3 estaria quebrado — e o jeito de descobrir seria um
+    // personagem preso numa sessão encerrada até alguém reconectar.
+    const saved: Array<{ reason: string }> = [];
+    const receipts = {
+      save: async (r: { reason: string }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true,
+      succeed: async () => true,
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, receipts, successor: citySuccessor(), now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    // Nenhum `attach`: ninguém está assistindo.
+    expect(host.viewersOf('p1')).toBe(0);
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.reason).toBe('death');
+    // Voltou à PZ com vida cheia (§26.1) — e curado DEPOIS de encerrar, não antes.
+    const character = host.sessionFor('p1')?.participants[0];
+    expect(character?.health).toBe(character?.maxHealth);
+    expect(character?.alive).toBe(true);
+  });
+
+  it('grava o extrato ANTES de trocar de sessão', async () => {
+    // Morrer e o processo cair em seguida deixa o crédito no Redis esperando o `jobs`. A
+    // troca sem o crédito seria uma morte que não custou nada e não rendeu nada.
+    const order: string[] = [];
+    const receipts = {
+      save: async () => { order.push('receipt'); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true,
+      succeed: async () => { order.push('directory'); return true; },
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, receipts, successor: citySuccessor(), now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(order).toEqual(['receipt', 'directory']));
+  });
+
+  it('leva junto quem estava olhando, em vez de derrubar o socket', async () => {
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, successor: citySuccessor(), now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+    host.flush();
+
+    const types = socket.received().map((m) => m.type);
+    // O extrato vem ANTES do estado novo: ver a cidade aparecer e só depois descobrir que
+    // morreu é a ordem errada de contar a mesma notícia.
+    expect(types.indexOf('session-ended')).toBeLessThan(types.lastIndexOf('session-state'));
+    expect(socket.ended).toBeNull();
+  });
+
+  it('a morte é marco de snapshot: grava na hora, não no próximo intervalo', async () => {
+    // Perder a transição por estar entre dois snapshots é o pior caso: o jogador volta vivo,
+    // na hunt, e a penalidade aparece do nada um pouco depois.
+    const saves: string[] = [];
+    const snapshots = {
+      save: async (_c: string, _a: string, _n: string, snapshot: SessionSnapshot) => {
+        saves.push(snapshot.type);
+      },
+      load: async () => null,
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, snapshots, successor: citySuccessor(), now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(saves).toEqual(['city']));
+  });
+
+  it('solta o personagem quando o registro no diretório trocou de dono', async () => {
+    // Insistir seria escrever por cima de um dono que já não somos nós — e duas cópias da
+    // mesma sessão dobram XP e loot, que é pior que uma sessão perdida.
+    const directory = {
+      register: async () => true,
+      succeed: async () => false,
+      release: async () => {},
+      releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, successor: citySuccessor(), now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
+  });
+
+  it('a Cidade não sucede a si mesma: sem sucessor, o personagem é solto', async () => {
+    const directory = {
+      register: async () => true, release: async () => {}, releaseSlot: async () => {},
+    } as unknown as SessionDirectory;
+    const { host } = buildHost(lethalRuleset(), {
+      directory, successor: () => null, now: () => 1000,
+    });
+    await host.prepare('p1', undefined, 'a1');
+
+    host.cycle(1000);
+    await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
   });
 });
