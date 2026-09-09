@@ -67,6 +67,19 @@ interface HostedSession {
   readonly session: Session;
   readonly viewers: Set<Viewer>;
   /**
+   * Desde quando ninguém olha, no relógio monotônico. `null` = tem visualizador.
+   *
+   * Só importa para sessão de REPOUSO — a que é orientada a evento. Uma hunt desanexada nunca
+   * é recolhida por isto, e é o ADR 0001 em uma linha.
+   */
+  restingSince: number | null;
+  /**
+   * O extrato desta sessão já virou crédito? A drenagem grava e DEPOIS solta, e sem esta
+   * marca o `release` gravaria de novo com um `seq` novo — que a chave única do ledger não
+   * teria como recusar, e o jogador receberia o mesmo gold duas vezes.
+   */
+  credited: boolean;
+  /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
    * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
@@ -96,6 +109,17 @@ const RENEW_INTERVAL_MS = 10_000;
  * e não depende deste intervalo.
  */
 const SNAPSHOT_INTERVAL_MS = 10_000;
+
+/**
+ * Quanto tempo uma sessão de REPOUSO fica de pé sem ninguém olhando (FUN-52).
+ *
+ * Cinco minutos é escolhido pelos dois lados do erro. Curto demais e recarregar a página vira
+ * sessão nova a cada vez; longo demais e quem fechou o navegador segura um dos dois slots da
+ * conta por horas — que era o defeito.
+ *
+ * Não vale para hunt: uma sessão que rende nunca é recolhida por ausência (ADR 0001).
+ */
+const RESTING_GRACE_MS = 5 * 60_000;
 
 export class SessionHost {
   readonly #options: SessionHostOptions;
@@ -188,6 +212,7 @@ export class SessionHost {
     const viewer = new Viewer(socket, characterId, this.#options.viewer);
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
+    hosted.restingSince = null;
 
     viewer.sendNow({
       type: 'welcome',
@@ -228,6 +253,7 @@ export class SessionHost {
 
     hosted.viewers.delete(viewer);
     hosted.session.detach(viewer.id);
+    if (hosted.viewers.size === 0) hosted.restingSince = this.#now();
     this.#logger.debug(
       { characterId: viewer.characterId, sessionId, viewers: hosted.viewers.size },
       'Viewer detached',
@@ -235,10 +261,9 @@ export class SessionHost {
     // A sessão FICA, mesmo sem ninguém olhando — é o ADR 0001, e há teste de integração
     // exigindo que uma reconexão reencontre a MESMA sessão.
     //
-    // O efeito colateral disso hoje é grave e está registrado na FUN-52: como nada mais
-    // solta um slot de personagem ativo, duas sessões criadas alguma vez neste nó esgotam o
-    // teto de dois até o processo reiniciar. Resolver exige decidir se "ativo" é "tem sessão
-    // hospedada" ou "tem alguém jogando", e essa decisão é da FUN-30, não deste detach.
+    // O que muda com a FUN-52 é só a sessão de REPOUSO: a de cidade, orientada a evento, é
+    // recolhida depois de um prazo de carência (ver `#collectResting`). Uma hunt desanexada
+    // nunca é — ela é o modo padrão do jogo.
   }
 
   async #logout(characterId: string): Promise<void> {
@@ -268,6 +293,12 @@ export class SessionHost {
     hosted.viewers.clear();
 
     if (hosted.session.ended === null) hosted.session.end('manual-exit');
+    // Creditar ANTES de soltar. Sem isto, sair do jogo dentro de uma hunt jogaria fora a XP
+    // da sessão inteira: desde a FUN-54 o extrato é o único caminho até o banco, e logo
+    // abaixo o snapshot — a outra cópia do progresso — é apagado.
+    const receipt = hosted.session.receipt();
+    if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+
     this.#sessions.delete(hosted.session.id);
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
@@ -374,7 +405,11 @@ export class SessionHost {
     for (const hosted of [...this.#sessions.values()]) {
       const hz = hosted.session.currentHz();
       // `0` é orientada a evento: cidade e treino não têm laço nenhum.
-      if (hz <= 0 || hosted.session.ended !== null) continue;
+      if (hz <= 0) {
+        this.#collectResting(hosted, nowMs);
+        continue;
+      }
+      if (hosted.session.ended !== null) continue;
       if (nowMs - hosted.session.nowMs < 1000 / hz) continue;
       try {
         hosted.session.tick(nowMs);
@@ -542,7 +577,11 @@ export class SessionHost {
       }
     }
 
-    const successor: HostedSession = { session: next, viewers: new Set(), creatureIds: new Map() };
+    const successor: HostedSession = {
+      session: next, viewers: new Set(), creatureIds: new Map(),
+      restingSince: hosted.viewers.size > 0 ? null : this.#now(),
+      credited: false,
+    };
     this.#sessions.delete(hosted.session.id);
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -576,6 +615,44 @@ export class SessionHost {
       if (id === sessionId) found.push(characterId);
     }
     return found;
+  }
+
+  /**
+   * Recolhe a sessão de REPOUSO que ninguém está olhando há tempo demais (FUN-52).
+   *
+   * O problema que isto resolve: quem fecha o navegador e não volta deixava a sessão de
+   * cidade hospedada e renovada para sempre, segurando um dos dois slots da conta. O sintoma
+   * aparecia longe da causa — o terceiro personagem não conectava, e o primeiro não podia ser
+   * apagado. Reiniciar o nó "resolvia", o que escondia o problema em desenvolvimento e o
+   * deixava aparecer só em produção, onde o processo fica de pé por dias.
+   *
+   * **Só a sessão orientada a evento é recolhida.** Uma hunt desanexada roda a 1 Hz e nunca
+   * passa por aqui — desconectar não pode encerrar nada, ou a hunt AFK deixa de existir
+   * (ADR 0001). É essa linha que separa "repouso" de "progresso sem ninguém olhando".
+   *
+   * E o invariante 8 continua de pé na leitura que importa: a Cidade é o estado de REPOUSO, e
+   * repouso não precisa de nó. Sem sessão hospedada o personagem continua na cidade, pela
+   * coluna `characters.state` — o que a API já reporta assim (FUN-30).
+   *
+   * A carência existe para reconexão não virar rotatividade: recarregar a página, trocar de
+   * rede ou perder o Wi-Fi por um instante não pode custar uma sessão nova.
+   */
+  #collectResting(hosted: HostedSession, nowMs: number): void {
+    if (hosted.viewers.size > 0 || hosted.restingSince === null) return;
+    if (nowMs - hosted.restingSince < RESTING_GRACE_MS) return;
+
+    const characterId = this.#charactersOf(hosted.session.id)[0];
+    if (characterId === undefined) return;
+    // Marca antes de soltar: `release` é assíncrono, e o ciclo seguinte não pode tentar de
+    // novo enquanto o primeiro ainda está no meio do caminho.
+    hosted.restingSince = null;
+    this.#logger.info(
+      { characterId, sessionId: hosted.session.id },
+      'Collecting a resting session nobody is watching',
+    );
+    void this.release(characterId).catch((error: unknown) => {
+      this.#logger.error({ error, characterId }, 'Failed to collect a resting session');
+    });
   }
 
   /** Manda o acumulado e derruba quem não está drenando. */
@@ -666,6 +743,11 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
     if (receipts === undefined || accountId === undefined) return;
+    // Uma sessão credita UMA vez. A drenagem grava e depois solta, e sem esta guarda o
+    // `release` gravaria de novo com um `seq` novo — que a chave única do ledger não teria
+    // como recusar, e o jogador receberia o mesmo gold duas vezes.
+    if (hosted.credited) return;
+    hosted.credited = true;
     // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10), e
     // é o que impede uma drenagem repetida por retry de creditar duas vezes.
     hosted.session.ledgerSeq += 1;
@@ -818,7 +900,15 @@ export class SessionHost {
   }
 
   #createLocal(characterId: string, session: Session, accountId?: string): void {
-    const hosted: HostedSession = { session, viewers: new Set(), creatureIds: new Map() };
+    const hosted: HostedSession = {
+      session,
+      viewers: new Set(),
+      creatureIds: new Map(),
+      // Nasce em repouso: um ticket emitido e nunca usado deixaria a sessão de pé para
+      // sempre, segurando um slot que ninguém está usando.
+      restingSince: this.#now(),
+      credited: false,
+    };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
     if (accountId !== undefined) this.#accountIdByCharacter.set(characterId, accountId);

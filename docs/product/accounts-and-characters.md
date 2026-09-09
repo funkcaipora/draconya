@@ -10,6 +10,15 @@ A identidade da conta é autenticada pelo WorkOS AuthKit. No fluxo real, o `api`
 
 Em desenvolvimento, `AUTH_DEV_MODE=true` substitui o redirect por `POST /api/auth/dev-login`: qualquer e-mail sintaticamente válido cria ou recupera a conta local sem verificação externa. Esse modo é recusado no boot em produção.
 
+Um personagem só ocupa um dos dois slots ativos da conta enquanto tem sessão hospedada. Quem
+fecha o navegador e não volta deixa de ocupar depois de **cinco minutos** de repouso: a sessão de
+cidade é orientada a evento, não rende nada, e recolhê-la devolve o slot. Uma **hunt desanexada
+nunca é recolhida** — desconectar não pode encerrar nada, ou o modo idle deixa de existir
+(ADR 0001). A carência existe para reconexão não virar rotatividade: recarregar a página ou
+perder o Wi-Fi por um instante não custa a sessão.
+
+Sem sessão hospedada, o personagem continua **na cidade** — repouso não precisa de nó.
+
 O estado de atividade que a API devolve (`state`, `sessionId`) vem do **diretório de sessões**,
 não da coluna do banco. A coluna existe e não é escrita por ninguém: a verdade sobre em que
 atividade o personagem está é a sessão, e a sessão vive no Redis (invariante 8). Lendo a coluna,
