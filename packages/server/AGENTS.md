@@ -220,8 +220,12 @@ parada há um bom tempo, e aí o certo é o login continuar rápido e o resto sa
 Extrato gravado por um nó `game` antigo, durante deploy em rolagem, não tem entrada de índice:
 aquele personagem volta a esperar a varredura. Degradação, não perda.
 
-`GET /api/characters` e `POST /api/characters/:id/select` ainda leem a linha crua e mostram o
-mesmo atraso. É o mesmo defeito onde ele só afeta o que é exibido, e está na FUN-66.
+`GET /api/characters` e `POST /api/characters/:id/select` liquidam pelo mesmo caminho antes de
+ler (FUN-66). **Ali falhar NÃO recusa a resposta:** a lista sai com o valor atrasado e o erro
+vai ao log. A tela de personagens é como se chega a qualquer lugar, e um 503 nela trancaria a
+conta inteira por uma falha de ledger — o valor ali só é exibido, nada é criado a partir dele.
+Na lista, liquida-se DEPOIS de listar (os ids só se conhecem listando) e relê-se só quando algo
+foi escrito; sem pendência é um `SMEMBERS` por personagem e nenhuma consulta a mais.
 
 ## Métricas do nó de jogo (FUN-47)
 
