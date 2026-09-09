@@ -155,7 +155,10 @@ for (let i = 0; i < HUNTS; i++) {
 // Um avanço para povoar: os monstros nascem no primeiro, e medir antes disso mediria
 // instâncias vazias — que é o cenário que não interessa a ninguém.
 const stepMs = 1_000 / HZ;
-for (const session of sessions) session.advanceBy(stepMs);
+for (const session of sessions) {
+  session.advanceBy(stepMs);
+  session.drainEvents();
+}
 
 const afterFirstTick = heapMb();
 
@@ -179,7 +182,10 @@ const warmupTicks = Math.min(
 );
 let tick = 2;
 for (; tick <= warmupTicks + 1; tick++) {
-  for (const session of sessions) session.advanceBy(stepMs);
+  for (const session of sessions) {
+    session.advanceBy(stepMs);
+    session.drainEvents();
+  }
 }
 
 const ticks = totalTicks;
@@ -194,8 +200,14 @@ const measuredFrom = tick;
 // ótimo resultado, medindo coisa nenhuma.
 observer.observe({ type: 'gc' });
 const startedAt = performance.now();
+// Drena a cada avanço, como `SessionHost.cycle` faz haja ou não visualizador (FUN-69). Sem
+// isto o bench mede um buffer de eventos que enche e descarta — cenário que produção não
+// tem, porque o hospedeiro drena sempre.
 for (; tick <= ticks; tick++) {
-  for (const session of sessions) session.advanceBy(stepMs);
+  for (const session of sessions) {
+    session.advanceBy(stepMs);
+    session.drainEvents();
+  }
 }
 const elapsedMs = performance.now() - startedAt;
 const measuredTicks = ticks - measuredFrom + 1;

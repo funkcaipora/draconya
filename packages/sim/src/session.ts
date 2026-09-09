@@ -368,7 +368,12 @@ export class Session {
    */
   emit(event: DomainEvent): void {
     this.#domainEvents.push(event);
-    if (this.#domainEvents.length > MAX_PENDING_DOMAIN_EVENTS) this.#domainEvents.shift();
+    // Estourou: descarta a metade mais antiga de UMA vez, e não um por push. `shift()` num
+    // vetor cheio é O(n) a cada passo, e numa sessão que ninguém drena isso é o coletor
+    // rodando o tempo todo — medido no `pnpm bench:hunts`: 18,8 → 25,5 µs por tick.
+    if (this.#domainEvents.length > MAX_PENDING_DOMAIN_EVENTS) {
+      this.#domainEvents.splice(0, MAX_PENDING_DOMAIN_EVENTS >> 1);
+    }
   }
 
   /**
