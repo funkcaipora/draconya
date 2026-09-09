@@ -15,7 +15,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import type { SessionDirectory } from './directory.js';
+import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
   readonly accountId: string;
@@ -46,6 +46,11 @@ export interface IssuedTicket {
   readonly nodeId: string;
   readonly expiresAtMs: number;
 }
+
+/** O nó resolvido, ou por que não deu. Ver `resolveNode`. */
+export type NodeResolution =
+  | { readonly ok: true; readonly node: NodeStatus }
+  | { readonly ok: false; readonly reason: IssueFailure };
 
 export type IssueFailure =
   /** A conta já tem o teto de personagens ativos (§7.1, FUN-15). */
@@ -150,29 +155,54 @@ export class TicketService {
     });
   }
 
+  /**
+   * Para qual nó este personagem vai — resolvido ANTES da trava de linha (FUN-53).
+   *
+   * Qual nó de jogo está vivo não tem relação nenhuma com a linha do personagem, e descobrir
+   * isso custa `SCAN` mais `MGET` no Redis. Segurando a trava enquanto isso acontece, uma
+   * lentidão do Redis vira linha travada por segundos, pool do Postgres esgotado e TODA rota
+   * que toca o banco parando de responder — por um problema que não tem nada a ver com a
+   * linha travada.
+   *
+   * A janela que separar as duas abre — o nó escolhido morrer entre a resolução e a emissão —
+   * já é tratada: o `consume` recusa o ticket se o nó não bater, e o jogador reconecta.
+   */
+  async resolveNode(characterId: string): Promise<NodeResolution> {
+    const existing = await this.#directory.lookup(characterId);
+
+    if (existing === null) {
+      const node = await this.#leastLoadedNode();
+      return node === null ? { ok: false, reason: 'no-node-available' } : { ok: true, node };
+    }
+
+    let node = await this.#directory.node(existing.nodeId);
+    // Nó que não bate há mais de um lease: o registro é um ponteiro para lugar nenhum.
+    // Rotear para um nó vivo é a RETOMADA (FUN-28) — o nó novo reconstrói a sessão a
+    // partir do snapshot, e a tomada do registro é atômica e condicionada à ausência do
+    // batimento do antigo, então duas cópias continuam impossíveis.
+    //
+    // Recusar aqui, como era antes, deixava o personagem inalcançável até o lease expirar
+    // sozinho: depois de um `kill -9` o jogador via `session-node-unavailable` por até
+    // trinta segundos, sem nada explicando.
+    if (node === null) node = await this.#leastLoadedNode();
+    return node === null ? { ok: false, reason: 'session-node-unavailable' } : { ok: true, node };
+  }
+
+  /**
+   * Emite o ticket. Recebe o nó já resolvido quando quem chama o resolveu fora da trava
+   * (FUN-53); sem ele, resolve aqui — é o caminho de quem não tem transação aberta.
+   */
   async issue(
     accountId: string,
     characterId: string,
     initialCharacter?: InitialCharacter,
+    resolved?: NodeStatus,
   ): Promise<IssueResult> {
-    const existing = await this.#directory.lookup(characterId);
-
-    let node;
-    if (existing !== null) {
-      node = await this.#directory.node(existing.nodeId);
-      // Nó que não bate há mais de um lease: o registro é um ponteiro para lugar nenhum.
-      // Rotear para um nó vivo é a RETOMADA (FUN-28) — o nó novo reconstrói a sessão a
-      // partir do snapshot, e a tomada do registro é atômica e condicionada à ausência do
-      // batimento do antigo, então duas cópias continuam impossíveis.
-      //
-      // Recusar aqui, como era antes, deixava o personagem inalcançável até o lease expirar
-      // sozinho: depois de um `kill -9` o jogador via `session-node-unavailable` por até
-      // trinta segundos, sem nada explicando.
-      if (node === null) node = await this.#leastLoadedNode();
-      if (node === null) return { ok: false, reason: 'session-node-unavailable' };
-    } else {
-      node = await this.#leastLoadedNode();
-      if (node === null) return { ok: false, reason: 'no-node-available' };
+    let node: NodeStatus | undefined = resolved;
+    if (node === undefined) {
+      const resolution = await this.resolveNode(characterId);
+      if (!resolution.ok) return resolution;
+      node = resolution.node;
     }
 
     const token = randomBytes(32).toString('base64url');

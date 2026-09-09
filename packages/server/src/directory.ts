@@ -373,6 +373,28 @@ export class SessionDirectory {
   async activeSlots(accountId: string): Promise<string[]> {
     return this.#redis.smembers(activeCharactersKey(accountId));
   }
+
+  /**
+   * O personagem está em jogo: tem sessão registrada, ou tem slot reservado (FUN-53).
+   *
+   * Uma ida ao Redis, não duas. Esta pergunta é feita com uma TRANSAÇÃO DO POSTGRES ABERTA
+   * segurando a linha do personagem — é ela que impede apagar quem acabou de receber um
+   * ticket —, e cada viagem extra é tempo de linha travada. Numa lentidão do Redis, isso vira
+   * pool esgotado e toda rota que toca o banco parando de responder.
+   *
+   * O par continua sendo lido no mesmo instante: `pipeline` não é transação, mas os dois
+   * comandos vão juntos e voltam juntos, e a exclusividade que importa aqui vem da trava de
+   * linha do Postgres, não da atomicidade entre estas duas leituras.
+   */
+  async isActive(accountId: string, characterId: string): Promise<boolean> {
+    const results = await this.#redis
+      .pipeline()
+      .exists(sessionKey(characterId))
+      .sismember(activeCharactersKey(accountId), characterId)
+      .exec();
+    if (results === null) return false;
+    return results.some(([error, value]) => error === null && Number(value) === 1);
+  }
 }
 
 const sessionKey = (characterId: string): string => `char:${characterId}:session`;

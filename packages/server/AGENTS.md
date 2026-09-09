@@ -141,6 +141,29 @@ Três coisas que não podem mudar sem pensar duas vezes:
 - **O jogador é avisado** ao anexar numa sessão retomada, com quanto tempo não foi simulado.
   Silenciar é como o modo idle perde a confiança de quem joga.
 
+## Nada de rede fora do Postgres sob trava de linha (FUN-53)
+
+Emissão de ticket e exclusão de personagem se excluem mutuamente por uma trava de linha
+(`SELECT … FOR UPDATE`), e isso é certo. **O problema nunca foi travar, é o que acontece dentro
+da trava.**
+
+O cliente Redis está em `commandTimeout: 3000` e o pool do Postgres em `max: 10`. Uma lentidão do
+Redis dentro da trava segura a linha por segundos, logins concorrentes esgotam o pool, e **toda
+rota que toca o banco para de responder** — por um problema de Redis que não tem nada a ver com
+a linha travada.
+
+- **A resolução de nó ficou FORA da transação.** Qual nó de jogo está vivo não tem relação
+  nenhuma com a linha do personagem, e descobrir isso é `SCAN` mais `MGET`. A janela que isso
+  abre — o nó morrer entre a resolução e a emissão — já era tratada: o `consume` recusa o ticket
+  se o nó não bater.
+- **A checagem de "está em jogo" é UMA ida ao Redis**, não duas (`directory.isActive`).
+
+O que ainda roda sob a trava: o script atômico de emissão, e a checagem do `delete`. Os dois
+precisam da exclusividade — tirá-los exigiria um marcador durável de reserva no Postgres, para o
+`delete` decidir sem perguntar ao Redis. Isso é trabalho à parte, e não vale trocar a trava por
+verificação otimista: o teste de exclusão concorrente com emissão precisa continuar passando sem
+alteração.
+
 ## Métricas do nó de jogo (FUN-47)
 
 `/metrics` no `game`, formato Prometheus, sem autenticação — quem o esconde é a rede, e pôr

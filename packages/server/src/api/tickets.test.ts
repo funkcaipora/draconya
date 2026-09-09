@@ -10,6 +10,8 @@ const CHARACTER: CharacterRecord = {
   state: 'city', sessionId: null, createdAt: new Date(),
 };
 
+const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
+
 const ISSUED: IssueResult = {
   ok: true,
   value: {
@@ -28,7 +30,6 @@ function build(
 ) {
   const app = Fastify();
   const deps: Record<string, unknown> = {
-    tickets: { issue: async () => ISSUED },
     authenticate: async () => ({ accountId: 'a1' }),
     withOwnedCharacter: async (
       _accountId: string,
@@ -36,6 +37,13 @@ function build(
       operation: (character: typeof CHARACTER) => unknown,
     ) => operation(CHARACTER),
     ...overrides,
+    // Depois do spread, e mesclado: quase todo teste sobrescreve só o `issue`, e substituir o
+    // objeto inteiro tiraria o `resolveNode` junto — que a rota chama antes.
+    tickets: {
+      issue: async () => ISSUED,
+      resolveNode: async () => ({ ok: true, node: NODE }),
+      ...(overrides.tickets ?? {}),
+    },
   };
   for (const key of omit) delete deps[key];
   app.post('/api/tickets', createTicketHandler(deps as unknown as TicketRouteDependencies));
@@ -74,11 +82,55 @@ describe('POST /api/tickets', () => {
 
   it('uses persisted attributes instead of client supplied progress', async () => {
     const issue = vi.fn(async () => ISSUED);
-    const response = await post(build({ tickets: { issue } }), {
+    const response = await post(build({ tickets: { issue } as never }), {
       characterId: 'p1', level: 999, xp: 999999, accountId: 'attacker',
     });
     expect(response.statusCode).toBe(200);
-    expect(issue).toHaveBeenCalledWith('a1', 'p1', expect.objectContaining({ level: 1, xp: 0 }));
+    expect(issue).toHaveBeenCalledWith(
+      'a1', 'p1', expect.objectContaining({ level: 1, xp: 0 }), NODE,
+    );
+  });
+
+  it('resolve o nó ANTES de abrir a trava de linha (FUN-53)', async () => {
+    // Qual nó de jogo está vivo não tem relação nenhuma com a linha do personagem, e
+    // descobrir isso é `SCAN` mais `MGET` no Redis. Segurando a trava enquanto isso acontece,
+    // uma lentidão do Redis vira pool do Postgres esgotado e toda rota que toca o banco
+    // parando de responder — por um problema que não tem a ver com a linha travada.
+    const order: string[] = [];
+    const app = build({
+      tickets: {
+        resolveNode: async () => { order.push('resolve-node'); return { ok: true, node: NODE }; },
+        issue: async () => { order.push('issue'); return ISSUED; },
+      } as never,
+      withOwnedCharacter: (async (
+        _accountId: string,
+        _characterId: string,
+        operation: (character: typeof CHARACTER) => unknown,
+      ) => {
+        order.push('lock');
+        return operation(CHARACTER);
+      }) as never,
+    });
+
+    await post(app, { characterId: 'p1' });
+
+    expect(order).toEqual(['resolve-node', 'lock', 'issue']);
+  });
+
+  it('nó indisponível responde sem sequer travar a linha', async () => {
+    const order: string[] = [];
+    const app = build({
+      tickets: {
+        resolveNode: async () => ({ ok: false, reason: 'no-node-available' }),
+        issue: async () => ISSUED,
+      } as never,
+      withOwnedCharacter: (async () => { order.push('lock'); return null; }) as never,
+    });
+
+    const response = await post(app, { characterId: 'p1' });
+
+    expect(response.statusCode).toBe(503);
+    expect(order).toEqual([]);
   });
 
   it('rejects a malformed body', async () => {
@@ -91,7 +143,7 @@ describe('POST /api/tickets', () => {
     ['no-node-available', 503],
     ['session-node-unavailable', 503],
   ] as const)('maps %s to HTTP %i', async (reason, status) => {
-    const app = build({ tickets: { issue: async () => ({ ok: false, reason }) } });
+    const app = build({ tickets: { issue: async () => ({ ok: false, reason }) } as never });
     const response = await post(app, { characterId: 'p1' });
     expect(response.statusCode).toBe(status);
     expect(response.json()).toEqual({ error: reason });

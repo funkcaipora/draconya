@@ -264,6 +264,32 @@ describe.runIf(available)('two active characters per account limit', () => {
     )).toBe(false);
   });
 
+  it('responde "em jogo" numa ida só, com sessão OU com slot (FUN-53)', async () => {
+    // Esta pergunta é feita com uma transação do Postgres ABERTA, segurando a linha do
+    // personagem. Cada viagem extra ao Redis é tempo de linha travada, e numa lentidão do
+    // Redis isso vira pool esgotado e toda rota que toca o banco parando de responder.
+    const directory = new SessionDirectory(redis);
+
+    expect(await directory.isActive('a1', 'p1')).toBe(false);
+
+    // Só o slot reservado, ainda sem sessão: é o ticket emitido e não usado.
+    await directory.reserveSlot('a1', 'p1');
+    expect(await directory.isActive('a1', 'p1')).toBe(true);
+
+    // Só a sessão, sem o slot da conta: é o caminho sem conta do host local.
+    const directoryDois = new SessionDirectory(redis);
+    await directoryDois.register('p2', { sessionId: 's2', nodeId: 'n1', type: 'hunt' });
+    expect(await directoryDois.isActive('a2', 'p2')).toBe(true);
+  });
+
+  it('personagem de OUTRA conta não conta como ativo nesta', async () => {
+    // O slot é por conta. Confundir as duas deixaria uma conta impedir a exclusão de um
+    // personagem da outra.
+    const directory = new SessionDirectory(redis);
+    await directory.reserveSlot('a1', 'p1');
+    expect(await directory.isActive('a2', 'p1')).toBe(false);
+  });
+
   it('lists alive nodes with the URL each one published', async () => {
     const directory = new SessionDirectory(redis);
     await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });
