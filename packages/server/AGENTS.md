@@ -149,9 +149,15 @@ Três coisas que não podem mudar sem pensar duas vezes:
 - **Tomar o registro de outro nó exige que o batimento dele esteja AUSENTE**, e a troca é
   atômica em Lua. Um nó que ainda bate pode estar só numa pausa de GC, e duas cópias da mesma
   sessão é pior que uma perdida: dobra loot e XP. Na prática, retomar leva até um lease.
-- **O relógio é reposicionado, o intervalo NÃO é simulado** (ADR 0018). O `lastTickMs` do
-  snapshot é monotônico de outro processo: sem reposicionar, ou a sessão nunca mais avança
-  (`dtMs` negativo para sempre) ou o primeiro tick resolve horas de combate de uma vez.
+- **O intervalo NÃO é simulado** (ADR 0018), e desde a FUN-68 isso é cumprido por construção. O
+  relógio da sessão é LÓGICO, começa em zero e é dela; quem guarda relógio de processo é o
+  hospedeiro, em `HostedSession.lastAdvancedAtMs`. Uma sessão retomada nasce com essa marca no
+  agora do processo novo, então o buraco nunca chega a ser oferecido à simulação — `rebaseClock`
+  deixou de existir porque deixou de ter o que rebasear. Ver ADR 0020.
+- **Nunca compare `nowMs` do hospedeiro com `session.nowMs`.** São grandezas diferentes: uma é
+  monotônico de processo, a outra é tempo lógico da sessão. O ciclo mede o atraso contra
+  `lastAdvancedAtMs`, e trocar isso faria uma hunt com dez minutos de relógio lógico parecer dez
+  minutos atrasada no primeiro ciclo depois de retomada.
 - **O jogador é avisado** ao anexar numa sessão retomada, com quanto tempo não foi simulado.
   Silenciar é como o modo idle perde a confiança de quem joga.
 

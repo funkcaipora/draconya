@@ -17,6 +17,17 @@ export interface MonsterState {
   /** De onde ele saiu. É para onde volta quando desiste do alvo. */
   readonly home: GridPoint;
   readonly targetId: string | null;
+  /**
+   * O golpe está ENGATILHADO, esperando alguém entrar no alcance?
+   *
+   * Um cooldown de ataque não corre no vazio: quem passou o intervalo inteiro sem alvo bate no
+   * instante em que um aparece, e não no próximo múltiplo de um relógio. Antes da FUN-68 isso
+   * saía de graça, porque o acumulador só era consultado quando havia alvo — e ele congelava
+   * sozinho no resto do tempo. Com a fila, o estado precisa ser dito em voz alta.
+   *
+   * Ausente é `true`: uma criatura que acabou de nascer bate assim que encosta.
+   */
+  readonly attackReady?: boolean;
   readonly cooldowns: Partial<CooldownState>;
 }
 
@@ -28,19 +39,18 @@ export interface Prey {
 }
 
 /**
- * O que o monstro faz no tempo decorrido — com a QUANTIDADE junto, sempre.
+ * O que o monstro faz NESTE instante — uma ação, nunca uma quantidade.
  *
- * O cooldown periódico devolve quantas aplicações couberam em `dtMs` e debita todas do
- * acumulador; conceder uma só faz as outras sumirem. Num tick de 1 s, um monstro que ataca a
- * cada 500 ms bate METADE das vezes — e 1 Hz é exatamente a taxa da hunt desanexada, que é o
- * modo padrão do jogo (FUN-67). O tipo carrega a quantidade para não haver como esquecer.
+ * A FUN-67 foi um defeito de quantidade: o acumulador concedia N aplicações e dois dos quatro
+ * chamadores aplicavam uma só, jogando o resto fora. A hunt desanexada sofria metade do dano
+ * que devia. Desde a FUN-68 quem decide a hora é o evento, cada vencimento vale exatamente uma
+ * ação, e a quantidade sai do tipo — o defeito deixa de ser possível de escrever.
  */
 export type MonsterAction =
   | { readonly kind: 'idle' }
-  /** Os tiles na ordem em que devem ser pisados. Mais de um quando o tick foi longo. */
-  | { readonly kind: 'step'; readonly path: readonly GridPoint[] }
-  /** Quantos golpes couberam. Aplicar TODOS. */
-  | { readonly kind: 'attack'; readonly targetId: string; readonly times: number };
+  /** O tile a pisar. Um por vencimento. */
+  | { readonly kind: 'step'; readonly to: GridPoint }
+  | { readonly kind: 'attack'; readonly targetId: string };
 
 export class MonsterRuntime {
   readonly id: number;
@@ -49,6 +59,8 @@ export class MonsterRuntime {
   position: GridPoint;
   health: number;
   targetId: string | null;
+  /** Ver `MonsterState.attackReady`. */
+  attackReady: boolean;
   readonly cooldowns: Cooldowns;
 
   constructor(state: MonsterState) {
@@ -58,6 +70,7 @@ export class MonsterRuntime {
     this.home = state.home;
     this.health = state.health;
     this.targetId = state.targetId;
+    this.attackReady = state.attackReady ?? true;
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
@@ -73,6 +86,7 @@ export class MonsterRuntime {
       health: this.health,
       home: this.home,
       targetId: this.targetId,
+      attackReady: this.attackReady,
       cooldowns: this.cooldowns.getState(),
     };
   }
@@ -124,44 +138,24 @@ export function chooseTarget(
  * O que o monstro faz neste instante. Decide, não aplica: quem move e quem tira vida é a
  * sessão, que é a dona do estado (invariante 9).
  *
- * Tudo por tempo decorrido, nunca por contagem de tick (invariante 2) — é o que permite a
- * hunt desanexada rodar a 1 Hz com o mesmo resultado.
+ * Não recebe `dtMs` e não consulta cooldown nenhum: QUANDO agir é a fila de eventos que sabe
+ * (FUN-68). Aqui só se responde "o que, agora" — e é o que torna a função pura de tempo,
+ * testável com um instante e nada mais.
  */
 export function decideMonsterAction(
   monster: MonsterRuntime,
   target: Prey | null,
   definition: Monster,
-  dtMs: number,
   blocked: Blocked,
 ): MonsterAction {
   if (!monster.alive || target === null || !target.alive) return { kind: 'idle' };
 
   if (distance(monster.position, target.position) <= definition.attackRange) {
-    // Ataque é ação periódica: o acumulador recupera o atraso de um tick lento em vez de
-    // perdê-lo, que é o que mantém o dano por minuto igual a 1 Hz e a 10 Hz.
-    const times = monster.cooldowns.timesThatFit('attack', dtMs, definition.attackIntervalMs);
-    return times > 0 ? { kind: 'attack', targetId: target.id, times } : { kind: 'idle' };
+    return { kind: 'attack', targetId: target.id };
   }
 
-  const steps = monster.cooldowns.timesThatFit('step', dtMs, definition.stepDurationMs);
-  if (steps === 0) return { kind: 'idle' };
-
-  // UM PASSO DE CADA VEZ, reavaliado da posição nova. Pular `steps` tiles de uma vez
-  // atravessaria parede e monstro: o guloso decide olhando a vizinhança, e a vizinhança
-  // muda a cada tile. `blocked` já exclui este monstro, e nenhum outro anda enquanto isto
-  // roda, então a sequência aqui é a mesma que `steps` chamadas separadas dariam.
-  const path: GridPoint[] = [];
-  let at = monster.position;
-  for (let i = 0; i < steps; i++) {
-    const to = greedyStep(at, target.position, blocked);
-    // Empacou numa concavidade: o guloso não contorna, e é assim mesmo (ADR 0009). Os
-    // passos restantes não viram dívida — parado é parado.
-    if (to === null) break;
-    path.push(to);
-    at = to;
-    // Chegou ao alcance: PARA. Sem isto o monstro andaria por cima do alvo, que é o que a
-    // versão de um passo só evitava por acidente — ela nunca dava o segundo.
-    if (distance(at, target.position) <= definition.attackRange) break;
-  }
-  return path.length === 0 ? { kind: 'idle' } : { kind: 'step', path };
+  const to = greedyStep(monster.position, target.position, blocked);
+  // Empacou numa concavidade: o guloso não contorna, e é assim mesmo (ADR 0009). O passo
+  // perdido não vira dívida — parado é parado, e o próximo vencimento tenta de novo.
+  return to === null ? { kind: 'idle' } : { kind: 'step', to };
 }

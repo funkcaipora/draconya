@@ -17,17 +17,28 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Ruleset instrumentado: conta ticks e muda de taxa com a presença de visualizador. */
+/**
+ * Ruleset instrumentado: conta AVANÇOS e muda de taxa com a presença de visualizador.
+ *
+ * O que estes testes verificam é o hospedeiro — com que cadência ele avança cada sessão, e se
+ * ele perde ou repete tempo ao trocar de taxa. Isso não é observável por um evento agendado,
+ * que só vence quando a regra de jogo manda: a instrumentação entra no `advanceBy` da própria
+ * sessão, que é exatamente a fronteira que se quer medir.
+ */
 function countingRuleset(hzAttached = 10, hzDetached = 1) {
-  const counter = { ticks: 0, elapsedMs: 0, ended: 0 };
+  const counter = { advances: 0, elapsedMs: 0, ended: 0 };
   const ruleset: Ruleset = {
     type: 'hunt',
     hz: (attached) => (attached ? hzAttached : hzDetached),
-    onEnter: () => {},
-    onTick: (_session, dtMs) => {
-      counter.ticks += 1;
-      counter.elapsedMs += dtMs;
+    onEnter: (session) => {
+      const advance = session.advanceBy.bind(session);
+      (session as unknown as { advanceBy: (dtMs: number) => void }).advanceBy = (dtMs) => {
+        counter.advances += 1;
+        counter.elapsedMs += dtMs;
+        advance(dtMs);
+      };
     },
+    onEvent: () => {},
     onDeath: () => {},
     onEnd: () => {
       counter.ended += 1;
@@ -43,7 +54,7 @@ function buildHost(
     directory?: SessionDirectory;
     snapshots?: SnapshotStore;
     receipts?: ReceiptStore;
-    restoreSession?: (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+    restoreSession?: (snapshot: SessionSnapshot) => Session | null;
     buildSession?: (request: { to: string }, from: Session) => Session | null;
     metrics?: GameMetrics;
   } = {},
@@ -413,9 +424,9 @@ describe('session host', () => {
 
     now = 1_000;
     host.cycle();
-    const ticksBefore = counter.ticks;
+    const advancesBefore = counter.advances;
     const elapsedBefore = counter.elapsedMs;
-    expect(ticksBefore).toBe(1);
+    expect(advancesBefore).toBe(1);
 
     viewerA.markClosed();
     host.detach(viewerA);
@@ -429,7 +440,7 @@ describe('session host', () => {
     expect(session?.ended).toBeNull();
     expect(counter.ended).toBe(0);
     // A simulação seguiu, e não perdeu nem repetiu tempo na saída do visualizador.
-    expect(counter.ticks).toBe(ticksBefore + 1);
+    expect(counter.advances).toBe(advancesBefore + 1);
     expect(counter.elapsedMs).toBe(elapsedBefore + 1_000);
     expect(session?.aggregates.durationMs).toBe(2_000);
   });
@@ -449,7 +460,7 @@ describe('session host', () => {
 
     expect(host.viewersOf('p1')).toBe(0);
     expect(host.sessionFor('p1')?.attached).toBe(false);
-    expect(counter.ticks).toBe(1);
+    expect(counter.advances).toBe(1);
   });
 
   it('slows down when detached and speeds up when attached, without losing time', () => {
@@ -463,7 +474,7 @@ describe('session host', () => {
       now = i * 100;
       host.cycle();
     }
-    expect(counter.ticks).toBe(10);
+    expect(counter.advances).toBe(10);
 
     viewer.markClosed();
     host.detach(viewer);
@@ -472,7 +483,7 @@ describe('session host', () => {
       host.cycle();
     }
     // A 1 Hz, dez ciclos de 100 ms viram UM tick — com o mesmo tempo simulado dentro.
-    expect(counter.ticks).toBe(11);
+    expect(counter.advances).toBe(11);
     expect(counter.elapsedMs).toBe(2_000);
   });
 
@@ -487,7 +498,7 @@ describe('session host', () => {
     host.attach(new FakeSocket(), 'p1');
     now = 10_000;
     expect(() => host.cycle()).not.toThrow();
-    expect(counter.ticks).toBe(0);
+    expect(counter.advances).toBe(0);
   });
 
   it('greets the connection with the content version pinned to the session', () => {
@@ -645,7 +656,7 @@ describe('session host', () => {
     expect(slow.ended?.code).toBe(1013);
     expect(host.viewersOf('p1')).toBe(1);
     expect(host.sessionFor('p1')?.ended).toBeNull();
-    expect(counter.ticks).toBe(1);
+    expect(counter.advances).toBe(1);
   });
 });
 
@@ -656,8 +667,11 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     return {
       type: 'hunt',
       hz: () => 10,
-      onEnter: () => {},
-      onTick: (session) => {
+      onEnter: (session) => {
+        // Mata no primeiro evento, como uma hunt faz na morte (§26.1).
+        session.scheduleIn('lethal', 0);
+      },
+      onEvent: (session) => {
         const character = session.participants[0];
         if (character !== undefined && character.alive) session.kill(character);
       },
@@ -681,7 +695,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
             character.health = character.maxHealth;
             character.alive = true;
           },
-          onTick: () => {},
+          onEvent: () => {},
           onDeath: () => {},
           onEnd: () => {},
         },
@@ -712,7 +726,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     // Nenhum `attach`: ninguém está assistindo.
     expect(host.viewersOf('p1')).toBe(0);
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
 
     expect(saved).toHaveLength(1);
@@ -739,7 +753,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     });
     await host.prepare('p1', undefined, 'a1');
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(order).toEqual(['receipt', 'directory']));
   });
 
@@ -754,7 +768,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     const socket = new FakeSocket();
     host.attach(socket, 'p1');
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
     host.flush();
 
@@ -784,7 +798,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     });
     await host.prepare('p1', undefined, 'a1');
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(saves).toEqual(['city']));
   });
 
@@ -802,7 +816,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     });
     await host.prepare('p1', undefined, 'a1');
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
   });
 
@@ -815,7 +829,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     });
     await host.prepare('p1', undefined, 'a1');
 
-    host.cycle(1000);
+    host.cycle(1100);
     await vi.waitFor(() => expect(host.sessionFor('p1')).toBeUndefined());
   });
 });
@@ -825,7 +839,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     type,
     hz: () => (type === 'city' ? 0 : 10),
     onEnter: () => {},
-    onTick: () => {},
+    onEvent: () => {},
     onDeath: () => {},
     onEnd: () => {},
   });
@@ -970,7 +984,7 @@ describe('sessão de repouso não segura o slot para sempre (FUN-52)', () => {
   const resting = (): Ruleset => ({
     // Orientada a evento, como a Cidade: sem laço nenhum.
     type: 'city', hz: () => 0,
-    onEnter: () => {}, onTick: () => {}, onDeath: () => {}, onEnd: () => {},
+    onEnter: () => {}, onEvent: () => {}, onDeath: () => {}, onEnd: () => {},
   });
 
   const GRACE_MS = 5 * 60_000;
@@ -1139,10 +1153,14 @@ describe('o host alimenta as métricas do nó (FUN-47)', () => {
     const { host } = buildHost(ruleset, {
       directory: { register: async () => true } as unknown as SessionDirectory,
       metrics: seen.metrics as never,
+      // Relógio dirigido. O hospedeiro conta o atraso desde o último avanço DESTA sessão
+      // (FUN-68), então a hora em que ela foi criada faz parte da conta — com o relógio real,
+      // o quanto o processo já tinha rodado entraria no resultado.
+      now: () => 0,
     });
     await host.prepare('p1', undefined, 'a1');
 
-    host.cycle(1000);
+    host.cycle(1100);
 
     expect(seen.ticks).toHaveLength(1);
     expect(seen.ticks[0]?.type).toBe('hunt');
@@ -1158,9 +1176,11 @@ describe('o host alimenta as métricas do nó (FUN-47)', () => {
     const { host } = buildHost(ruleset, {
       directory: { register: async () => true } as unknown as SessionDirectory,
       metrics: seen.metrics as never,
+      now: () => 0,
     });
     await host.prepare('p1', undefined, 'a1');
 
+    // Criada em 0, avançada em 3000, período de 1000: dois segundos de atraso.
     host.cycle(3000);
 
     expect(seen.ticks[0]?.lagMs).toBe(2000);
@@ -1178,7 +1198,7 @@ describe('o host alimenta as métricas do nó (FUN-47)', () => {
     await host.prepare('p1', undefined, 'a1');
     host.attach(new FakeSocket(), 'p1');
 
-    host.cycle(1000);
+    host.cycle(1100);
 
     expect([...(seen.sessions.at(-1) ?? [])]).toEqual([['hunt|true', 1]]);
     expect(seen.slots.at(-1)).toBe(1);
@@ -1219,7 +1239,7 @@ describe('o host alimenta as métricas do nó (FUN-47)', () => {
 describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
   const stored = (over: Partial<SessionSnapshot> = {}): SessionSnapshot => ({
     formatVersion: 2, contentVersion: 'v-test', id: 's-antiga', type: 'hunt',
-    createdAtMs: 0, lastTickMs: 60_000,
+    createdAtMs: 0, logicalNowMs: 60_000, schedule: { events: [], nextSeq: 0 },
     rng: { a: 1, b: 2, c: 3, d: 4 },
     participants: [{
       id: 'p1', position: { x: 1, y: 1, z: 7 }, health: 100, maxHealth: 100, mana: 0,

@@ -28,7 +28,7 @@ import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
 
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
-export type SessionRestorer = (snapshot: SessionSnapshot, nowMs: number) => Session | null;
+export type SessionRestorer = (snapshot: SessionSnapshot) => Session | null;
 
 /** Para onde o personagem quer ir. `huntId` e `difficulty` só valem para `to: 'hunt'`. */
 export interface TransitionRequest {
@@ -77,6 +77,16 @@ interface HostedSession {
    * é recolhida por isto, e é o ADR 0001 em uma linha.
    */
   restingSince: number | null;
+  /**
+   * Quando esta sessão foi avançada pela última vez, no relógio monotônico DESTE processo.
+   *
+   * O relógio do processo mora aqui desde a FUN-68, e não mais dentro da `Session`: lá dentro
+   * o tempo é lógico, começa em zero e é da sessão. É o que aposentou o `rebaseClock` — uma
+   * sessão retomada de snapshot nasce com esta marca no agora do processo novo, então o
+   * primeiro avanço dela é de milissegundos, e o intervalo em que o nó esteve fora nunca
+   * chega a ser oferecido à simulação (ADR 0018).
+   */
+  lastAdvancedAtMs: number;
   /**
    * O extrato desta sessão já virou crédito? A drenagem grava e DEPOIS solta, e sem esta
    * marca o `release` gravaria de novo com um `seq` novo — que a chave única do ledger não
@@ -441,11 +451,16 @@ export class SessionHost {
       }
       if (hosted.session.ended !== null) continue;
       const periodMs = 1000 / hz;
-      const overdueMs = nowMs - hosted.session.nowMs;
+      // Contra a marca DESTE processo, e não contra o relógio da sessão: desde a FUN-68 o
+      // tempo lá dentro é lógico, começa em zero, e comparar os dois compararia grandezas
+      // diferentes — uma hunt com dez minutos de relógio lógico pareceria dez minutos
+      // atrasada no primeiro ciclo depois de retomada.
+      const overdueMs = nowMs - hosted.lastAdvancedAtMs;
       if (overdueMs < periodMs) continue;
+      hosted.lastAdvancedAtMs = nowMs;
       const startedAt = this.#options.metrics === undefined ? 0 : performance.now();
       try {
-        hosted.session.tick(nowMs);
+        hosted.session.advanceBy(overdueMs);
       } catch (error) {
         // Uma sessão que explode não pode derrubar as outras do nó.
         this.#logger.error({ error, sessionId: hosted.session.id }, 'Session tick failed');
@@ -663,6 +678,7 @@ export class SessionHost {
     const successor: HostedSession = {
       session: next, viewers: new Set(), creatureIds: new Map(),
       restingSince: hosted.viewers.size > 0 ? null : this.#now(),
+      lastAdvancedAtMs: this.#now(),
       credited: false,
     };
     this.#sessions.delete(hosted.session.id);
@@ -974,7 +990,7 @@ export class SessionHost {
     }
     if (stored === null) return null;
 
-    const session = restore(stored.snapshot, this.#now());
+    const session = restore(stored.snapshot);
     if (session === null) {
       // Não dá para reconstruir: formato antigo, ruleset desconhecido, ou versão de conteúdo
       // diferente da deste nó (invariante 7).
@@ -1047,6 +1063,9 @@ export class SessionHost {
       // Nasce em repouso: um ticket emitido e nunca usado deixaria a sessão de pé para
       // sempre, segurando um slot que ninguém está usando.
       restingSince: this.#now(),
+      // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
+      // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
+      lastAdvancedAtMs: this.#now(),
       credited: false,
     };
     this.#sessions.set(session.id, hosted);

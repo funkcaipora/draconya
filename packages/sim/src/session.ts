@@ -10,6 +10,8 @@
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
 import type { Rng, RngState } from './rng.js';
+import { Schedule } from './schedule.js';
+import type { ScheduleState, ScheduledEvent } from './schedule.js';
 
 /**
  * Versão do FORMATO de snapshot — não do conteúdo, não do servidor.
@@ -17,8 +19,28 @@ import type { Rng, RngState } from './rng.js';
  * Existe desde o primeiro snapshot de propósito: sem ela, o primeiro deploy que mudar o
  * formato descarta em silêncio milhares de sessões em voo, e ninguém liga uma coisa à outra.
  * Mudou o formato, sobe o número e decide explicitamente entre migrar e descartar.
+ *
+ * **3 (FUN-68):** `lastTickMs` — relógio de processo — deu lugar a `logicalNowMs` e à fila de
+ * eventos. Um snapshot de formato 2 não é migrável: os acumuladores de cooldown que ele grava
+ * não dizem quando cada ação vence, só quanto já esperou, e inventar vencimento a partir
+ * disso é inventar simulação. Quem lê recusa e credita, que é o caminho que o ADR 0018 já
+ * mandava seguir.
  */
-export const SNAPSHOT_FORMAT_VERSION = 2;
+export const SNAPSHOT_FORMAT_VERSION = 3;
+
+/**
+ * Teto de eventos num único `advanceBy`.
+ *
+ * O sucessor do `MAX_CATCH_UP` dos cooldowns, e existe pela mesma razão: uma engasgada de
+ * processo — GC longo, depurador, máquina suspensa — não pode virar horas de combate
+ * resolvidas de uma vez. Ao estourar, o que venceu é empurrado para o alvo e o atraso é
+ * DESCARTADO, nunca acumulado (ADR 0018).
+ *
+ * O número é folgado de propósito: uma hunt cheia carrega ~100 eventos com cadência de
+ * centenas de milissegundos, então isto só é alcançado por volta de quinze segundos de
+ * intervalo num único avanço. O ciclo do nó é de 100 ms.
+ */
+export const MAX_EVENTS_PER_ADVANCE = 4096;
 
 export interface SessionSnapshot {
   readonly formatVersion: number;
@@ -26,7 +48,16 @@ export interface SessionSnapshot {
   readonly id: string;
   readonly type: SessionType;
   readonly createdAtMs: number;
-  readonly lastTickMs: number;
+  /**
+   * Relógio LÓGICO da sessão: começa em zero e só anda com `advanceBy`.
+   *
+   * É o que torna a retomada trivial. O `lastTickMs` de antes era o monotônico do processo que
+   * morreu, e monotônico não é comparável entre processos — daí o `rebaseClock`, que existia
+   * só para consertar isso. Um relógio que nasce em zero e é próprio da sessão não tem o que
+   * rebasear: retomar é continuar de onde parou, e o intervalo pulado nunca chega a existir.
+   */
+  readonly logicalNowMs: number;
+  readonly schedule: ScheduleState;
   readonly rng: RngState;
   readonly participants: readonly CharacterState[];
   readonly aggregates: Aggregates;
@@ -77,17 +108,31 @@ export interface Ruleset {
   readonly type: SessionType;
 
   /**
-   * Taxa de tick desejada, em Hz. `0` significa orientada a evento — sem laço.
+   * Com que frequência o HOSPEDEIRO avança esta sessão, em Hz. `0` significa orientada a
+   * evento — sem laço.
    *
    * A política do ADR 0003 mora aqui, e não num `switch` em outro lugar: cada ruleset conhece
    * o próprio custo. Cidade e treino devolvem 0; hunt cai de 10 para 1–2 ao desanexar; quest,
    * boss e guild war ficam em 10 mesmo desanexados, porque o §6.2 mantém o personagem no mapa
    * e vulnerável.
+   *
+   * Desde a FUN-68 isto é uma taxa de ATUALIZAÇÃO, não de simulação: quem decide quando cada
+   * ação acontece é a fila de eventos, e o resultado é idêntico em qualquer taxa. O que cai
+   * ao desanexar é a granularidade com que o mundo é observado — e não há ninguém observando.
    */
   hz(attached: boolean): number;
 
   onEnter(session: Session, character: CharacterRuntime): void;
-  onTick(session: Session, dtMs: number): void;
+
+  /**
+   * Um evento venceu. `session.nowMs` É o instante do vencimento — não "algum ponto do tick".
+   *
+   * Quem quiser repetir reagenda a partir daqui (`session.nowMs + intervalo`), e é isso que
+   * dispensa acumulador: o evento roda no instante exato em que era devido, então a próxima
+   * data não herda erro nenhum.
+   */
+  onEvent(session: Session, event: ScheduledEvent): void;
+
   onDeath(session: Session, character: CharacterRuntime): void;
   onEnd(session: Session, reason: EndReason): void;
 
@@ -125,7 +170,9 @@ export class Session {
   ledgerSeq = 0;
 
   #viewers = new Set<string>();
-  #lastTickMs: number;
+  /** Relógio LÓGICO. Começa em zero, anda só com `advanceBy`. Ver `SessionSnapshot`. */
+  #logicalNowMs = 0;
+  #schedule = new Schedule();
   #endedReason: EndReason | null = null;
 
   /**
@@ -153,7 +200,8 @@ export class Session {
       rng,
       createdAtMs: snapshot.createdAtMs,
     });
-    session.#lastTickMs = snapshot.lastTickMs;
+    session.#logicalNowMs = snapshot.logicalNowMs;
+    session.#schedule = Schedule.fromState(snapshot.schedule);
     session.#endedReason = snapshot.endedReason;
     session.ledgerSeq = snapshot.ledgerSeq;
     Object.assign(session.aggregates, snapshot.aggregates);
@@ -170,8 +218,9 @@ export class Session {
     this.contentVersion = options.contentVersion;
     this.ruleset = options.ruleset;
     this.rng = options.rng;
+    // Instante do HOSPEDEIRO, guardado para quem investiga — não é o relógio da simulação, e
+    // desde a FUN-68 nada aqui dentro o consulta. A simulação começa em zero.
     this.createdAtMs = options.createdAtMs;
-    this.#lastTickMs = options.createdAtMs;
   }
 
   get attached(): boolean {
@@ -203,41 +252,76 @@ export class Session {
   }
 
   /**
-   * Avança a simulação até `nowMs`.
+   * Avança a simulação em `dtMs`, processando só os eventos que VENCEM na janela.
    *
-   * Recebe o INSTANTE, não o intervalo, de propósito: o `dtMs` é derivado do último tick, então
-   * uma troca de taxa (anexar ou desanexar) não perde nem ganha tempo. Passar o intervalo
-   * nominal da taxa nova faria a sessão derivar a cada troca — e trocar de taxa acontece o dia
-   * inteiro, então o erro acumula até virar diferença visível de XP.
+   * Recebe o INTERVALO, não o instante: o relógio é da sessão, e quem hospeda não tem como
+   * saber que horas são aqui dentro. Foi a troca que a FUN-68 fez, e é o que aposenta o
+   * `rebaseClock` — o relógio do processo agora mora no hospedeiro, junto do dado que é dele.
+   *
+   * Antes de cada evento o relógio é posto EXATAMENTE no vencimento dele. É essa linha que faz
+   * dez `advanceBy(100)` e um `advanceBy(1000)` produzirem o mesmo estado, e não uma
+   * aproximação dele: os dois despacham os mesmos eventos, nos mesmos instantes, na mesma
+   * ordem. A equivalência entre taxas deixou de depender de fórmula nenhuma ser escrita com
+   * cuidado.
    */
-  tick(nowMs: number): void {
+  advanceBy(dtMs: number): void {
+    if (dtMs < 0) throw new Error(`dtMs cannot be negative: ${dtMs}`);
     if (this.#endedReason) return;
-    const dtMs = nowMs - this.#lastTickMs;
-    if (dtMs <= 0) return;
-    this.#lastTickMs = nowMs;
-    this.aggregates.durationMs += dtMs;
-    this.ruleset.onTick(this, dtMs);
-  }
+    if (dtMs === 0) return;
 
-  /** Instante do último tick. É o "agora" da simulação — não use relógio de parede aqui. */
-  get nowMs(): number {
-    return this.#lastTickMs;
+    const targetMs = this.#logicalNowMs + dtMs;
+    this.aggregates.durationMs += dtMs;
+
+    let processed = 0;
+    for (;;) {
+      const next = this.#schedule.peek();
+      if (next === undefined || next.dueAtMs > targetMs) break;
+      if (processed >= MAX_EVENTS_PER_ADVANCE) {
+        // Engasgada: o que venceu vai para o alvo e o atraso morre aqui. Ver
+        // `MAX_EVENTS_PER_ADVANCE` e o ADR 0018 — intervalo pulado é descartado, não devido.
+        this.#schedule.deferOverdue(targetMs);
+        this.record('advance-truncated', String(dtMs));
+        break;
+      }
+      this.#schedule.pop();
+      processed++;
+      // Nunca para trás: dois eventos podem vencer no mesmo instante, e um evento agendado
+      // com atraso (vencimento já no passado) roda agora, não no passado.
+      if (next.dueAtMs > this.#logicalNowMs) this.#logicalNowMs = next.dueAtMs;
+      this.ruleset.onEvent(this, next);
+      // Encerrou no meio: os eventos restantes não acontecem num mundo que acabou.
+      if (this.#endedReason !== null) break;
+    }
+
+    this.#logicalNowMs = targetMs;
   }
 
   /**
-   * Reposiciona o relógio da sessão SEM simular o intervalo pulado.
-   *
-   * Existe para a retomada depois de queda de nó (FUN-28). O `lastTickMs` de um snapshot foi
-   * medido pelo relógio monotônico de OUTRO processo, e monotônico não é comparável entre
-   * processos: reiniciado, o mesmo número pode estar no futuro (o próximo tick nunca acontece,
-   * porque `dtMs` sai negativo para sempre) ou muito no passado (o primeiro tick chega com um
-   * `dtMs` gigante e resolve horas de combate de uma vez).
-   *
-   * Descartar o intervalo é decisão registrada no ADR 0018, não omissão: ninguém simulou
-   * aquele tempo, e creditar progresso por ele seria inventar recompensa.
+   * O "agora" da simulação, em tempo lógico. Durante o despacho de um evento é o instante em
+   * que ele venceu. Não é relógio de parede e não serve para exibir data.
    */
-  rebaseClock(nowMs: number): void {
-    this.#lastTickMs = nowMs;
+  get nowMs(): number {
+    return this.#logicalNowMs;
+  }
+
+  /** Agenda para daqui a `delayMs`. É a forma que quase todo reagendamento usa. */
+  scheduleIn(
+    kind: string,
+    delayMs: number,
+    options: { readonly priority?: number; readonly subject?: string } = {},
+  ): ScheduledEvent {
+    if (delayMs < 0) throw new Error(`delayMs cannot be negative: ${delayMs}`);
+    return this.#schedule.schedule(kind, this.#logicalNowMs + delayMs, options);
+  }
+
+  /** Cancela os eventos de um subject — o que um monstro que morre leva junto. */
+  cancelEvents(subject: string): number {
+    return this.#schedule.cancelSubject(subject);
+  }
+
+  /** Quantos eventos esperam. Existe para métrica e teste; não é regra de jogo. */
+  get pendingEvents(): number {
+    return this.#schedule.size;
   }
 
   kill(character: CharacterRuntime): void {
@@ -252,8 +336,8 @@ export class Session {
   record(type: string, detail?: string): void {
     this.notableEvents.push(
       detail === undefined
-        ? { atMs: this.#lastTickMs, type }
-        : { atMs: this.#lastTickMs, type, detail },
+        ? { atMs: this.#logicalNowMs, type }
+        : { atMs: this.#logicalNowMs, type, detail },
     );
   }
 
@@ -302,7 +386,8 @@ export class Session {
       id: this.id,
       type: this.ruleset.type,
       createdAtMs: this.createdAtMs,
-      lastTickMs: this.#lastTickMs,
+      logicalNowMs: this.#logicalNowMs,
+      schedule: this.#schedule.getState(),
       rng: this.rng.getState(),
       participants: this.participants.map((p) => p.getState()),
       aggregates: { ...this.aggregates },

@@ -9,31 +9,26 @@
 // combate morar no lugar onde mora a geometria.
 
 import type { Point, Route } from '@draconya/content';
-import { Cooldowns } from '../cooldown.js';
-import type { CooldownState } from '../cooldown.js';
 import { distance } from '../monster/step.js';
 
 export interface RouteState {
   /** Onde na lista de tiles. Entra no snapshot: sessão retomada continua daqui. */
   readonly index: number;
   readonly stopped: boolean;
-  readonly cooldowns: Partial<CooldownState>;
 }
 
-export const INITIAL_ROUTE_STATE: RouteState = { index: 0, stopped: false, cooldowns: {} };
+export const INITIAL_ROUTE_STATE: RouteState = { index: 0, stopped: false };
 
 export class RouteWalker {
   readonly #route: Route;
   #index: number;
   #stopped: boolean;
-  readonly cooldowns: Cooldowns;
 
   constructor(route: Route, state: RouteState = INITIAL_ROUTE_STATE) {
     if (route.tiles.length === 0) throw new Error(`rota ${route.id} não tem tiles`);
     this.#route = route;
     this.#index = ((state.index % route.tiles.length) + route.tiles.length) % route.tiles.length;
     this.#stopped = state.stopped;
-    this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
 
   get index(): number {
@@ -50,7 +45,7 @@ export class RouteWalker {
   }
 
   getState(): RouteState {
-    return { index: this.#index, stopped: this.#stopped, cooldowns: this.cooldowns.getState() };
+    return { index: this.#index, stopped: this.#stopped };
   }
 
   stop(): void {
@@ -68,22 +63,18 @@ export class RouteWalker {
   }
 
   /**
-   * Avança quantos tiles couberem no tempo decorrido, e devolve o destino.
+   * Avança UM tile e devolve o destino. `null` quando está parado.
    *
-   * `null` quando está parado ou quando ainda não passou tempo suficiente. Por tempo
-   * decorrido, nunca por contagem de tick (invariante 2): é o que faz a hunt desanexada a
-   * 1 Hz andar o mesmo tanto que a anexada a 10 Hz.
+   * Um por chamada, e não "quantos couberem no tempo decorrido", desde a FUN-68: quando é o
+   * evento de passo que decide a hora, cada vencimento vale exatamente um tile. A versão
+   * anterior pulava vários de uma vez num tick longo — o personagem atravessava o mapa em
+   * saltos, e a adjacência com os monstros era conferida uma vez só, no fim. É de onde saía
+   * o 1,51× de dano sofrido a mais na hunt desanexada.
    */
-  advance(dtMs: number, stepDurationMs: number): Point | null {
-    // Nota sobre a PRIMEIRA chamada: os cooldowns começam prontos (FUN-25), então ela já
-    // anda, mesmo com `dtMs` zero. É deliberado — entrar numa hunt e ficar meio segundo
-    // parado antes do primeiro passo seria um atraso sem explicação na tela.
-
+  step(): Point | null {
     if (this.#stopped) return null;
-    const steps = this.cooldowns.timesThatFit('route-step', dtMs, stepDurationMs);
-    if (steps === 0) return null;
     // Dá a volta: a rota é um laço fechado (§14.4), validado no carregamento (FUN-9).
-    this.#index = (this.#index + steps) % this.#route.tiles.length;
+    this.#index = (this.#index + 1) % this.#route.tiles.length;
     return this.current;
   }
 

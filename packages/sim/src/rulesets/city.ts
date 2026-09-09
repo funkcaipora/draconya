@@ -23,11 +23,11 @@ export function createCityRuleset(): Ruleset {
       session.record('entered-city', character.id);
     },
 
-    onTick() {
-      // Nunca deveria ser chamado: `hz` é 0. Se for, alguém agendou tick para a cidade e
-      // está queimando CPU no único espaço compartilhado do jogo — justamente onde o
-      // custo por jogador precisa ficar perto de zero.
-      throw new Error('city is event-driven; it must not receive ticks');
+    onEvent() {
+      // Nunca deveria ser chamado: `hz` é 0 e a cidade não agenda nada. Se for, alguém pôs
+      // um evento na fila da cidade e está queimando CPU no único espaço compartilhado do
+      // jogo — justamente onde o custo por jogador precisa ficar perto de zero.
+      throw new Error('city is event-driven; it must not receive scheduled events');
     },
 
     onDeath() {

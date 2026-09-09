@@ -3,26 +3,27 @@ import { CharacterRuntime } from './character.js';
 import { Rng } from './rng.js';
 import { Session, SNAPSHOT_FORMAT_VERSION } from './session.js';
 import type { Ruleset } from './session.js';
+import { EventPriority } from './schedule.js';
 import { createCityRuleset } from './rulesets/city.js';
 
-/** Mesmo ruleset do teste de equivalência: contínuo, periódico e sorteio. */
+/** Mesmo ruleset do teste de equivalência: periódico, com sorteio. */
 function testRuleset(): Ruleset {
   return {
     type: 'hunt',
     hz: (attached) => (attached ? 10 : 1),
-    onEnter: () => {},
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
     onDeath: () => {},
     onEnd: () => {},
-    onTick(session, dtMs) {
-      for (const p of session.participants) {
-        p.mana = Math.min(p.maxMana, p.mana + (2 * dtMs) / 1000);
-        const attacks = p.cooldowns.timesThatFit('attack', dtMs, 350);
-        for (let i = 0; i < attacks; i++) {
-          session.aggregates.xpGained += session.rng.integer(10, 20);
-          session.aggregates.kills++;
-          if (session.rng.chance(0.1)) session.aggregates.goldGained += session.rng.integer(1, 50);
-        }
-      }
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      p.mana = Math.min(p.maxMana, p.mana + 1);
+      session.aggregates.xpGained += session.rng.integer(10, 20);
+      session.aggregates.kills++;
+      if (session.rng.chance(0.1)) session.aggregates.goldGained += session.rng.integer(1, 50);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
     },
   };
 }
@@ -50,14 +51,14 @@ describe('snapshot fidelity', () => {
     // drenagem em deploy (FUN-29) passam a perder estado sem ninguém perceber — e o que
     // se perde aparece como XP e loot faltando no extrato de quem não estava olhando.
     const uninterrupted = newSession();
-    for (let t = 1000; t <= 60_000; t += 1000) uninterrupted.tick(t);
+    for (let t = 0; t < 60; t++) uninterrupted.advanceBy(1000);
 
     const interrupted = newSession();
-    for (let t = 1000; t <= 30_000; t += 1000) interrupted.tick(t);
+    for (let t = 0; t < 30; t++) interrupted.advanceBy(1000);
     const snap = interrupted.snapshot();
 
     const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
-    for (let t = 31_000; t <= 60_000; t += 1000) resumed.tick(t);
+    for (let t = 0; t < 30; t++) resumed.advanceBy(1000);
 
     expect({ ...resumed.aggregates }).toEqual({ ...uninterrupted.aggregates });
     expect(resumed.getRngState()).toEqual(uninterrupted.getRngState());
@@ -65,13 +66,14 @@ describe('snapshot fidelity', () => {
 
   it('preserves cooldowns and active timers', () => {
     const session = newSession('cd');
-    // Para no meio de um período de 350 ms, com acumulado parcial.
-    session.tick(500);
+    // Para no meio de um período de 350 ms: o próximo ataque vence em 700, e o snapshot
+    // precisa levar essa data — não "quanto falta", que é o que um acumulador guardava.
+    session.advanceBy(500);
     const snap = session.snapshot();
     const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
 
-    session.tick(1000);
-    resumed.tick(1000);
+    session.advanceBy(1000);
+    resumed.advanceBy(1000);
     expect({ ...resumed.aggregates }).toEqual({ ...session.aggregates });
   });
 
@@ -79,7 +81,7 @@ describe('snapshot fidelity', () => {
     const session = newSession('metadata');
     session.ledgerSeq = 7;
     session.record('level-up', '21');
-    session.tick(1000);
+    session.advanceBy(1000);
 
     const snap = session.snapshot();
     const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
@@ -106,11 +108,11 @@ describe('snapshot fidelity', () => {
 
   it('round trips through JSON for Redis storage', () => {
     const session = newSession('json');
-    session.tick(5000);
+    session.advanceBy(5000);
     const throughJson = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
     const resumed = Session.fromSnapshot(throughJson, testRuleset(), new Rng(throughJson.rng));
-    session.tick(10_000);
-    resumed.tick(10_000);
+    session.advanceBy(5000);
+    resumed.advanceBy(5000);
     expect({ ...resumed.aggregates }).toEqual({ ...session.aggregates });
   });
 });
@@ -170,11 +172,28 @@ describe('city ruleset uses the generic session interface', () => {
     expect(() => session.kill(p)).toThrow(/protect zone/);
   });
 
-  it('rejects simulation ticks', () => {
+  it('costs nothing to advance, because it schedules nothing', () => {
+    // A cidade é o único espaço COMPARTILHADO do jogo, e é onde o custo por jogador precisa
+    // ficar perto de zero. Com a fila, isso deixou de depender de o hospedeiro lembrar de não
+    // chamar: sem evento agendado, avançar não despacha nada e não custa nada.
     const session = new Session({
       id: 'c1', contentVersion: 'v1', ruleset: createCityRuleset(),
       rng: Rng.fromSeed('c'), createdAtMs: 0,
     });
-    expect(() => session.tick(1000)).toThrow(/event-driven/);
+    session.enter(character());
+    expect(session.pendingEvents).toBe(0);
+    expect(() => session.advanceBy(60_000)).not.toThrow();
+  });
+
+  it('refuses a scheduled event, loudly', () => {
+    // Um evento na fila da cidade significa que alguém pôs simulação no espaço compartilhado.
+    // Falhar alto é melhor que queimar CPU em silêncio por milhares de jogadores parados.
+    const session = new Session({
+      id: 'c1', contentVersion: 'v1', ruleset: createCityRuleset(),
+      rng: Rng.fromSeed('c'), createdAtMs: 0,
+    });
+    session.enter(character());
+    session.scheduleIn('anything', 10);
+    expect(() => session.advanceBy(1000)).toThrow(/event-driven/);
   });
 });

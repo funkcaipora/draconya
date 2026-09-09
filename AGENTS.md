@@ -19,8 +19,10 @@ pode morar (ver `docs/harness-plan.md` §1).
    Por quê: é o que permite testar a simulação sem infraestrutura, rodar num cliente sintético de
    carga, e trocar a camada de servidor sem reescrever a lógica de jogo.
 
-2. **Nada é escrito "por tick"** — todo cálculo recebe `dtMs`. É o que permite rodar a 1 Hz
-   desanexado com resultado idêntico.
+2. **Nada é escrito "por tick"** — quem recebe `dtMs` é `Session.advanceBy`, e cada cálculo é um
+   evento da fila que roda no instante exato em que vence. É o que permite rodar a 1 Hz
+   desanexado com resultado idêntico — e desde o ADR 0020 isso é propriedade da estrutura, não
+   de cada fórmula ter sido escrita com cuidado.
 
 3. **O resultado da simulação não depende de haver alguém assistindo.** Cai a apresentação, nunca
    a matemática.

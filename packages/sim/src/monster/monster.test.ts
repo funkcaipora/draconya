@@ -60,88 +60,58 @@ describe('chooseTarget', () => {
 
 describe('decideMonsterAction', () => {
   it('attacks when the target is inside reach', () => {
-    const monster = monsterAt(0, 0);
-    // Dois, e não um: o cooldown começa pronto (FUN-25), então o instante zero e o instante
-    // 2000 são os dois golpes que cabem na janela. A 10 Hz saem os mesmos dois.
-    expect(decideMonsterAction(monster, prey('p', 1, 0), rat, 2_000, open))
-      .toEqual({ kind: 'attack', targetId: 'p', times: 2 });
+    // Uma ação, sem quantidade: quem sabe quantas vezes o ataque vence numa janela é a fila
+    // de eventos (FUN-68). Aqui a pergunta é só "deste tile, o que dá para fazer".
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 1, 0), rat, open))
+      .toEqual({ kind: 'attack', targetId: 'p' });
   });
 
-  it('devolve TODOS os golpes que couberam, não um por chamada (FUN-67)', () => {
-    // O acumulador debita as N aplicações; devolver uma faz as outras sumirem. Num tick de
-    // 1 s — a taxa da hunt desanexada, que é o modo PADRÃO do jogo — um monstro de 500 ms
-    // bateria metade das vezes de um anexado a 10 Hz.
-    const monster = monsterAt(0, 0);
-    const fast = { ...rat, attackIntervalMs: 500 };
-    // Começa pronto, então 1000 ms de tick cabem: o pronto inicial mais dois intervalos.
-    expect(decideMonsterAction(monster, prey('p', 1, 0), fast, 1_000, open))
-      .toEqual({ kind: 'attack', targetId: 'p', times: 3 });
+  it('steps ONE tile toward a target that is out of reach', () => {
+    // Um tile por decisão. A versão anterior devolvia o caminho inteiro que coubesse no tick,
+    // e era de lá que vinha a divergência de dano entre 1 Hz e 10 Hz: o monstro atravessava
+    // vários tiles de uma vez e a adjacência era conferida uma vez só, no fim (FUN-68).
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 5, 0), rat, open))
+      .toEqual({ kind: 'step', to: { x: 1, y: 0 } });
   });
 
-  it('devolve TODOS os passos que couberam, um tile de cada vez (FUN-67)', () => {
-    // Um por chamada faria o monstro andar mais devagar quanto mais lento o tick — e o
-    // caminho é reavaliado tile a tile, senão ele atravessaria parede num salto.
-    const monster = monsterAt(0, 0);
-    const action = decideMonsterAction(monster, prey('p', 9, 0), rat, 1_000, open);
-    expect(action).toEqual({ kind: 'step', path: [{ x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }] });
+  it('prefers to strike over stepping when it is already in reach', () => {
+    // A decisão é uma só, e é ela que os dois eventos — passo e ataque — consultam. Dois
+    // lugares decidindo alcance divergiriam na terceira mudança.
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 1, 0), rat, open).kind).toBe('attack');
+    expect(decideMonsterAction(monsterAt(0, 0), prey('p', 2, 0), rat, open).kind).toBe('step');
   });
 
-  it('para de andar ao encostar no alvo, em vez de passar por cima dele', () => {
-    // A versão de um passo só nunca precisou disto — ela nunca dava o segundo.
-    const monster = monsterAt(0, 0);
-    const action = decideMonsterAction(monster, prey('p', 2, 0), rat, 10_000, open);
-    expect(action).toEqual({ kind: 'step', path: [{ x: 1, y: 0 }] });
+  it('carries no quantity, so the FUN-67 defect cannot be written', () => {
+    // A FUN-67 foi um defeito de quantidade: o acumulador concedia N aplicações e o chamador
+    // aplicava uma, jogando o resto fora — a hunt desanexada sofria metade do dano devido.
+    // Sem `times` e sem `path` no tipo, não há resto para esquecer.
+    const attack = decideMonsterAction(monsterAt(0, 0), prey('p', 1, 0), rat, open);
+    const step = decideMonsterAction(monsterAt(0, 0), prey('p', 5, 0), rat, open);
+    expect(Object.keys(attack).sort()).toEqual(['kind', 'targetId']);
+    expect(Object.keys(step).sort()).toEqual(['kind', 'to']);
   });
 
-  it('holds the attack until the interval has elapsed', () => {
+  it('decides the same thing however often it is asked', () => {
+    // Sem acumulador, a decisão passou a ser pura: não há estado de tempo dentro dela, então
+    // perguntar dez vezes do mesmo tile dá dez vezes a mesma resposta. É o que permite os
+    // eventos de passo e de ataque consultarem a mesma função sem um consumir o outro.
     const monster = monsterAt(0, 0);
-    decideMonsterAction(monster, prey('p', 1, 0), rat, 2_000, open);
-    expect(decideMonsterAction(monster, prey('p', 1, 0), rat, 500, open).kind).toBe('idle');
-    expect(decideMonsterAction(monster, prey('p', 1, 0), rat, 1_500, open).kind).toBe('attack');
-  });
-
-  it('deals the same damage per minute at 1 Hz and at 10 Hz', () => {
-    // Invariante 2. É o que permite a hunt desanexada cair para 1 Hz sem render menos — e
-    // sem render mais, que seria pior ainda.
-    //
-    // Este teste JÁ EXISTIA e passava com o defeito da FUN-67 de pé, por duas razões que
-    // valem mais que o teste: ele contava CHAMADAS que devolveram `attack` em vez de golpes,
-    // e a fixture usava um intervalo de 2 s — mais longo que o tick lento de 1 s, então o
-    // caso de duas aplicações num tick nunca acontecia. Um teste de equivalência de taxa
-    // precisa de um intervalo MENOR que o tick mais lento, senão ele não mede nada.
-    const attacks = (dtMs: number, ticks: number, definition = rat) => {
-      const monster = monsterAt(0, 0);
-      let count = 0;
-      for (let i = 0; i < ticks; i++) {
-        const action = decideMonsterAction(monster, prey('p', 1, 0), definition, dtMs, open);
-        if (action.kind === 'attack') count += action.times;
-      }
-      return count;
-    };
-    expect(attacks(100, 600)).toBe(attacks(1_000, 60));
-    const fast = { ...rat, attackIntervalMs: 500 };
-    expect(attacks(100, 600, fast)).toBe(attacks(1_000, 60, fast));
-    // E não é vácuo: com 500 ms de intervalo em sessenta segundos são cento e vinte golpes.
-    expect(attacks(1_000, 60, fast)).toBe(121);
-  });
-
-  it('steps toward a target that is out of reach', () => {
-    const monster = monsterAt(0, 0);
-    expect(decideMonsterAction(monster, prey('p', 5, 0), rat, 500, open))
-      .toEqual({ kind: 'step', path: [{ x: 1, y: 0 }, { x: 2, y: 0 }] });
+    const answers = Array.from({ length: 10 }, () =>
+      decideMonsterAction(monster, prey('p', 1, 0), rat, open));
+    for (const answer of answers) expect(answer).toEqual(answers[0]);
   });
 
   it('waits, without erroring, when it is walled in', () => {
     // Guloso empaca em concavidade. É esperado.
     const monster = monsterAt(1, 1);
     const walls = (x: number, y: number) => !(x === 1 && y === 1);
-    expect(decideMonsterAction(monster, prey('p', 5, 1), rat, 500, walls).kind).toBe('idle');
+    expect(decideMonsterAction(monster, prey('p', 5, 1), rat, walls).kind).toBe('idle');
   });
 
   it('does nothing when dead or without a target', () => {
-    expect(decideMonsterAction(monsterAt(0, 0), null, rat, 1_000, open).kind).toBe('idle');
+    expect(decideMonsterAction(monsterAt(0, 0), null, rat, open).kind).toBe('idle');
     const dead = monsterAt(0, 0, { health: 0 });
-    expect(decideMonsterAction(dead, prey('p', 1, 0), rat, 1_000, open).kind).toBe('idle');
+    expect(decideMonsterAction(dead, prey('p', 1, 0), rat, open).kind).toBe('idle');
   });
 });
 

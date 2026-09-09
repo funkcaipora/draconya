@@ -197,38 +197,60 @@ muda o que o jogador ganha. Dez minutos de hunt, mesmo conteúdo, mesma semente:
 
 | | 1 Hz | 2 Hz | 5 Hz | 10 Hz | 20 Hz |
 |---|---|---|---|---|---|
-| abates, um monstro por ponto | 18 | 18 | 18 | 18 | 18 |
-| abates, três monstros por ponto | 132 | 130 | 129 | 128 | 128 |
-| dano sofrido, um monstro por ponto | 530 | 530 | 350 | 350 | 350 |
+| abates, um monstro por ponto | 19 | 19 | 19 | 19 | 19 |
+| abates, três monstros por ponto | 142 | 142 | 142 | 142 | 142 |
+| dano sofrido, um monstro por ponto | 370 | 370 | 370 | 370 | 370 |
 
-**A recompensa é rate-independente**: com um monstro por ponto, os abates são exatamente iguais
-em qualquer taxa. Com três disputando o mesmo ponto aparece uma diferença de ~3%, porque quem
-está "mais perto" muda com a granularidade do passo.
+**Nada muda.** Desde a FUN-68 as três linhas são idênticas nas cinco taxas, e isso deixou de ser
+uma propriedade que cada fórmula precisa preservar para virar uma propriedade da estrutura: quem
+decide quando cada ação acontece é a fila de eventos da sessão, e o tamanho da janela em que os
+eventos são despachados não muda quais eventos vencem, nem em que instante, nem em que ordem.
 
-**O dano sofrido não é igual, e quem caça desanexado apanha mais.** A causa é granularidade de
-*espaço*, não de tempo: num tick de 1 s o personagem e o monstro andam dois tiles cada um de uma
-vez, e a adjacência é conferida uma única vez no fim — eles passam mais ticks colados do que
-passariam a 10 Hz, e é enquanto estão colados que o acumulador de ataque do monstro avança.
+Vale guardar de onde se veio, porque é a justificativa da FUN-68 e porque as duas linhas de baixo
+eram limites, não igualdades:
 
-A correção **não** é subdividir o tick, que gastaria exatamente o que cair para 1 Hz economiza. É
-um scheduler lógico por sessão, que processa só os eventos que vencem na janela — numa hunt
-desanexada, muito menos trabalho que 10 ticks × 40 monstros. Está na FUN-68, e 1,51x é a
-justificativa medida dela. Até lá o teste segura o limite em 1,7x, apertado em cima do medido, e
-importa para a FUN-38: o balanceamento de morte em PvE precisa assumir o caso desanexado.
+| medida | antes (1 Hz → 10 Hz) | agora |
+|---|---|---|
+| abates, três por ponto | 132 → 128, ~3% de folga | igualdade exata |
+| dano sofrido | 530 → 350, **1,51x** | igualdade exata |
 
-**Um defeito separado vivia aqui e foi corrigido na FUN-67.** O monstro aplicava UMA ação por
-tick mesmo quando o acumulador concedia várias, então ele andava e batia menos quanto mais lento
-fosse o tick. Não aparece na tabela acima porque o rato desta medição ataca a cada 2 s — mais que
-o tick lento de 1 s —, e o defeito só dispara quando o intervalo é *menor* que o tick. Com um rato
-de 500 ms a diferença medida era de **2,00x menos dano a 1 Hz**: a hunt desanexada, que é o modo
-padrão do jogo, era literalmente o dobro mais fácil. Cadência sub-segundo é normal em monstro
-forte, então este cenário passou perto sem encostar.
+O dano sofrido era o pior dos dois: quem caçava desanexado — o modo **padrão** do jogo — apanhava
+metade a mais. A causa era granularidade de *espaço*, não de tempo. Num tick de 1 s o personagem
+andava dois tiles de uma vez, o monstro também, e a adjacência era conferida uma única vez no
+fim: eles passavam mais ticks colados do que passariam a 10 Hz, e é enquanto estão colados que o
+ataque avança. O tick em lote não tinha como expressar "os dois andaram em t+500 e nesse instante
+não estavam adjacentes".
 
-Registro de um caminho tentado e descartado: trocar o acumulador de ataque por **timestamp
-absoluto** — que é o que `cooldown.ts` usa para ação disparada por evento — parecia resolver, e
-piorou. Com ele os abates passam a divergir entre taxas (299 a 20 Hz contra 277 a 1 Hz), porque
-um ataque que fica pronto no meio do tick dispara atrasado e o resto é descartado. O acumulador
-está certo; o que ele não cobre é a granularidade do espaço.
+O comentário que vivia aqui dizia que corrigir "pediria subdividir o tick, o que gasta o que cair
+para 1 Hz economiza". Era uma falsa escolha, e a FUN-68 mediu os dois lados — ver
+[ADR 0020](../adr/0020-logical-session-scheduler.md).
+
+**Dois defeitos separados viveram aqui e foram corrigidos.**
+
+A **FUN-67**: o monstro aplicava UMA ação por tick mesmo quando o acumulador concedia várias, e
+andava e batia menos quanto mais lento fosse o tick. Com um rato de 500 ms a diferença medida era
+de **2,00x menos dano a 1 Hz**. Não é mais representável: a decisão do monstro devolve uma ação,
+sem quantidade, e a quantidade saiu do tipo.
+
+A **FUN-68**, além da granularidade: o cooldown de ataque **congelava enquanto não havia alvo**,
+porque o acumulador só era consultado quando havia um. Na prática o personagem era punido pelo
+tempo entre um monstro e o outro, e o ciclo de encontro ficava mais longo do que o intervalo de
+ataque explica. Agora o cooldown corre em tempo de parede e o golpe fica *engatilhado*: quem
+passou o intervalo inteiro sem alvo bate no instante em que um entra no alcance, e não no próximo
+múltiplo de um relógio.
+
+**Isto mexe no balanceamento, e o número está medido.** Na sala de teste do critério de saída da
+Fase 1 — 2×2 tiles, respawn de 1 s, rato de 20 de vida morto em um golpe — o ciclo de encontro
+caiu de ~5 s para ~2,25 s. O personagem mata mais rápido *e* apanha mais, porque enfrenta mais
+monstros por minuto. Em `packages/content/data` a Rat Cellars segue confortável para um level 1
+(seis minutos, 91 abates, vida praticamente cheia), mas o número a vigiar quando a curva de
+dificuldade for desenhada é este, e ele importa para a FUN-38.
+
+Registro de um caminho tentado e descartado, que continua valendo como aviso: trocar o acumulador
+de ataque por **timestamp absoluto** dentro do modelo de tick parecia resolver e piorava — os
+abates passavam a divergir entre taxas (299 a 20 Hz contra 277 a 1 Hz), porque um ataque que
+ficava pronto no meio do tick disparava atrasado e o resto era descartado. O que resolveu não foi
+trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 
 ## Parâmetros de balanceamento
 
