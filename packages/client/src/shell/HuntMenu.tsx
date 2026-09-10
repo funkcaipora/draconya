@@ -53,7 +53,7 @@ function Hunt({ hunt, level }: { hunt: HuntListing; level: number }) {
 }
 
 export function HuntMenu() {
-  const hunts = useHudSlice((state) => state.hunts);
+  const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
   const [open, setOpen] = useState(false);
 
@@ -87,11 +87,11 @@ export function HuntMenu() {
       </header>
 
       {open && (
-        hunts.length === 0
+        catalogue === null
           ? <p className="quiet">Carregando…</p>
           : (
             <ul className="hunt-list">
-              {hunts.map((hunt) => (
+              {catalogue.hunts.map((hunt) => (
                 <Hunt key={hunt.id} hunt={hunt} level={level} />
               ))}
             </ul>

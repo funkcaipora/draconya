@@ -46,12 +46,17 @@ export type Aggregates = S2CProps<'session-state'>['aggregates'];
 export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
 
 /**
- * Uma hunt como a tela de seleção a mostra (§14.3, FUN-79).
+ * O que este servidor tem: hunts (FUN-79) e vocabulário do bot (FUN-89).
  *
- * Sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe no
- * protocolo. Ver o comentário de `hunt-catalogue` lá.
+ * Uma coisa só porque chega numa mensagem só — as duas telas perguntam "o que existe aqui", e
+ * mudam pela mesma razão: a versão de conteúdo, fixada na sessão (invariante 7).
+ *
+ * A hunt vem sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe
+ * no protocolo. Ver o comentário de `catalogue` lá.
  */
-export type HuntListing = S2CProps<'hunt-catalogue'>['hunts'][number];
+export type Catalogue = S2CProps<'catalogue'>;
+export type HuntListing = Catalogue['hunts'][number];
+export type BotVocabulary = Catalogue['bot'];
 
 /**
  * O analisador (§16.1, §16.2, FUN-83).
@@ -110,11 +115,14 @@ export interface HudState {
   readonly analyzer: AnalyzerState;
 
   /**
-   * O que existe para caçar (FUN-79). Chega uma vez, logo depois do `welcome`.
+   * O que existe para caçar e para configurar (FUN-79, FUN-89). Chega uma vez, depois do
+   * `welcome`.
    *
-   * Vazio até chegar — e a tela mostra isso como "carregando", não como "não há hunt".
+   * `null` até chegar — e as telas mostram isso como "carregando", não como "não há nada".
+   * Vazio e ausente são coisas diferentes, e colapsá-los faria a tela mentir durante o
+   * primeiro segundo de toda conexão.
    */
-  readonly hunts: readonly HuntListing[];
+  readonly catalogue: Catalogue | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -129,7 +137,7 @@ export const INITIAL_HUD: HudState = {
   chat: [],
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
-  hunts: [],
+  catalogue: null,
 };
 
 /**

@@ -136,3 +136,11 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   à mesma sessão (ADR 0001): o que se perde é o clique, não o estado.
 - **O catálogo de hunts SUBSTITUI a lista, nunca acumula.** Reconectar reenvia a mesma lista, e
   concatenar daria hunts duplicadas a cada queda de rede.
+- **A UI do bot não tem lista de opções em código** (FUN-89). Categorias, slots, magias e
+  supplies vêm do catálogo (`state/hud.ts`, `catalogue`). Divergir do servidor faz o jogador
+  configurar o que o bot recusa — e descobrir pelo extrato que não fecha.
+- **Salvar é intenção, e a recusa NÃO descarta o rascunho.** Apagar o que o jogador escreveu é a
+  pior resposta a "corrija isto". `bot-config-result` é tipado justamente para a tela não ter de
+  casar com o texto de um `system-message`.
+- **A ordem dos slots É a prioridade** (§13.4). A lista viaja como está; reordenar na hora de
+  mandar mudaria o comportamento sem o jogador ter pedido.

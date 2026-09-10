@@ -134,3 +134,46 @@ body {
   padding: 2px 6px; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
 }
 .hunt-difficulties button:hover:not(:disabled) { border-color: #3a3a48; }
+
+/* A configuração do bot (FUN-89). Densa de propósito: são cinco categorias na mesma coluna. */
+.panel-left { display: flex; flex-direction: column; gap: 8px; }
+.bot-panel { border: 1px solid #2a2a35; border-radius: 4px; }
+/* Sobreposição: a linha de regra não cabe nos 200px da coluna, e configurar o bot é o caso de
+   uso do celular (§5.1). Uma tela só serve aos dois. */
+.bot-overlay {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(6, 6, 10, 0.86);
+  display: grid; place-items: start center; padding: 16px; overflow-y: auto;
+}
+.bot-body {
+  width: 100%; max-width: 520px;
+  background: #0f0f14; border: 1px solid #2a2a35; border-radius: 6px;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.bot-title { display: flex; justify-content: space-between; align-items: baseline; }
+.bot-category-head { display: flex; justify-content: space-between; align-items: baseline; }
+.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
+.bot-rule { display: flex; align-items: center; gap: 2px; }
+.bot-rule-order { display: flex; flex-direction: column; }
+.bot-rule-order button {
+  background: none; border: none; padding: 0; line-height: 1;
+  color: #6a6a78; font-size: 9px; cursor: pointer;
+}
+.bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
+/* No celular a linha quebra em vez de espremer: seis caixinhas de 30px não são configuráveis
+   com o dedo. */
+@media (max-width: 520px) {
+  .bot-rule { flex-wrap: wrap; }
+  .bot-rule select[aria-label="ação"] { flex-basis: 100%; }
+}
+.bot-rule select, .bot-rule input {
+  background: #131319; border: 1px solid #2a2a35; border-radius: 3px;
+  padding: 1px 2px; color: inherit; font: inherit; font-size: 11px; min-width: 0;
+}
+.bot-rule select[aria-label="ação"] { flex: 1 1 auto; }
+.bot-rule input { width: 52px; }
+.bot-add, .bot-actions button {
+  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 3px;
+  padding: 2px 8px; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
+}
+.bot-actions { display: flex; gap: 6px; }

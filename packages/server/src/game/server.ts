@@ -47,8 +47,8 @@ export interface GameDependencies {
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
   /** Onde a Caixa de Loot da Sessão é guardada (FUN-88). */
   readonly lootBoxes?: SessionHostOptions['lootBoxes'];
-  /** O catálogo que a tela de seleção de hunt mostra (FUN-79). */
-  readonly huntCatalogue?: SessionHostOptions['huntCatalogue'];
+  /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
+  readonly catalogue?: SessionHostOptions['catalogue'];
 }
 
 /**
@@ -120,9 +120,9 @@ export function createGame(
       ...(dependencies.itemCatalog === undefined
         ? {}
         : { itemCatalog: dependencies.itemCatalog }),
-      ...(dependencies.huntCatalogue === undefined
+      ...(dependencies.catalogue === undefined
         ? {}
-        : { huntCatalogue: dependencies.huntCatalogue }),
+        : { catalogue: dependencies.catalogue }),
       ...(dependencies.lootBoxes === undefined
         ? {}
         : { lootBoxes: dependencies.lootBoxes }),

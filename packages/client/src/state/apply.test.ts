@@ -2,6 +2,7 @@ import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
+import { INITIAL_BOT, bot } from '../bot/store.js';
 import { interpolate, world } from './world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
@@ -315,29 +316,43 @@ describe('a derivada por hora (FUN-83, §16.1)', () => {
   });
 });
 
-describe('o catálogo de hunts (FUN-79)', () => {
+describe('o catálogo (FUN-79, FUN-89)', () => {
+  const vocabulary = {
+    vocabularyVersion: 1, advancedFromLevel: 50,
+    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal' }],
+    supplies: [{ id: 'hp', name: 'Poção', price: 45, effect: 'heal' }],
+  };
   const catalogue = (hunts: readonly unknown[]): S2CMessage => ({
-    type: 'hunt-catalogue', hunts,
-  } as S2CMessage);
+    type: 'catalogue', hunts, bot: vocabulary,
+  } as unknown as S2CMessage);
 
-  it('chega e vira a lista da tela', () => {
+  it('chega e vira o que as duas telas oferecem', () => {
     applyMessage(catalogue([
       { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
     ]), 0);
 
-    expect(hud.get().hunts).toEqual([
-      { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
-    ]);
+    expect(hud.get().catalogue?.hunts).toHaveLength(1);
+    expect(hud.get().catalogue?.bot.slots).toEqual(vocabulary.slots);
+  });
+
+  it('ausente e vazio são coisas DIFERENTES', () => {
+    // `null` é "ainda não chegou" e as telas mostram "carregando". Colapsar os dois faria a
+    // tela dizer "não há hunt nenhuma" durante o primeiro segundo de toda conexão.
+    expect(hud.get().catalogue).toBeNull();
+    applyMessage(catalogue([]), 0);
+    expect(hud.get().catalogue?.hunts).toEqual([]);
   });
 
   it('SUBSTITUI em vez de acumular', () => {
-    // Reconectar reenvia a mesma lista. Concatenar daria hunts duplicadas na tela a cada
+    // Reconectar reenvia o mesmo catálogo. Concatenar daria hunts duplicadas na tela a cada
     // queda de rede — e a segunda cópia pareceria uma hunt diferente com o mesmo nome.
     const uma = [{ id: 'a', name: 'A', recommendedLevel: 1, difficulties: ['beginner'] }];
     applyMessage(catalogue(uma), 0);
     applyMessage(catalogue(uma), 1_000);
 
-    expect(hud.get().hunts).toHaveLength(1);
+    expect(hud.get().catalogue?.hunts).toHaveLength(1);
   });
 
   it('não avisa quem assina outra fatia', () => {
@@ -351,5 +366,28 @@ describe('o catálogo de hunts (FUN-79)', () => {
     ]), 0);
 
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('a resposta do bot (FUN-89)', () => {
+  beforeEach(() => { bot.set(() => INITIAL_BOT); });
+
+  it('confirmação marca salvo', () => {
+    applyMessage({ type: 'bot-config-result', ok: true }, 0);
+    expect(bot.get()).toMatchObject({ save: 'saved', reason: null });
+  });
+
+  it('recusa guarda o MOTIVO e NÃO descarta o rascunho', () => {
+    // Descartar seria a pior resposta a "corrija isto": apagar justamente o que precisa ser
+    // corrigido. O jogador acabou de escrever aquilo.
+    bot.set((state) => ({ ...state, draft: { ...state.draft, exit: [{ kind: 'out-of-gold' }] } }));
+
+    applyMessage({
+      type: 'bot-config-result', ok: false, reason: 'bot avançado exige level 50',
+    }, 0);
+
+    expect(bot.get().save).toBe('refused');
+    expect(bot.get().reason).toContain('level 50');
+    expect(bot.get().draft.exit).toEqual([{ kind: 'out-of-gold' }]);
   });
 });

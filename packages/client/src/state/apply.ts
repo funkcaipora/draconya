@@ -10,6 +10,7 @@
 
 import type { S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
+import { botResult } from '../bot/store.js';
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
@@ -111,11 +112,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
-    case 'hunt-catalogue':
-      // Uma vez por sessão: a versão de conteúdo é fixada (invariante 7), então a lista não
-      // muda enquanto ela vive. Substituir, e não acumular — reconectar reenvia a mesma lista,
-      // e concatenar daria hunts duplicadas na tela a cada queda de rede.
-      hud.set((state) => ({ ...state, hunts: message.hunts }));
+    case 'catalogue':
+      // Uma vez por sessão: a versão de conteúdo é fixada (invariante 7), então o catálogo não
+      // muda enquanto ela vive. SUBSTITUI, e não acumula — reconectar reenvia o mesmo, e
+      // concatenar daria hunts duplicadas na tela a cada queda de rede.
+      hud.set((state) => ({ ...state, catalogue: { hunts: message.hunts, bot: message.bot } }));
+      return;
+
+    case 'bot-config-result':
+      // A resposta é da TELA do bot, não do chat: ela precisa saber se o que o jogador escreveu
+      // virou verdade, e uma recusa não pode descartar o que ele digitou.
+      botResult(message.ok, message.reason ?? null);
       return;
 
     case 'pong':
