@@ -279,6 +279,25 @@ async function advance(totalMs: number, stepMs = 5_000): Promise<void> {
   }
 }
 
+/**
+ * Encerra os nós vivos e APAGA o batimento deles.
+ *
+ * `drain` para o temporizador, mas a chave de batimento fica no Redis até o TTL vencer — e o
+ * ticket é emitido para um nó que o diretório ainda vê vivo. O sintoma é o pior tipo: passa na
+ * máquina rápida e falha no CI, com "timed out waiting for welcome", que não aponta para nada.
+ *
+ * É a mesma limpeza que o teste da F1 faz ao matar um nó, pela mesma razão.
+ */
+async function retireNodes(): Promise<void> {
+  for (const game of games) {
+    await game.drain().catch(() => undefined);
+    games.delete(game);
+  }
+  for (const id of ['phase-two-a', 'phase-two-b', 'phase-two-c']) {
+    await redis.del(`node:${id}:heartbeat`);
+  }
+}
+
 /** Espera uma condição do nó com PRAZO, em vez de dormir um número escolhido no olho. */
 async function until(condition: () => boolean, what: string, timeoutMs = 2_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -406,6 +425,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const [node] = [...games];
     await node?.drain();
     games.delete(node as GameRole);
+    await redis.del('node:phase-two-a:heartbeat');
 
     const pending = await receipts.pending();
     const drained = pending.find((receipt) => receipt.reason === 'drain');
@@ -437,6 +457,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
   }, 120_000);
 
   it('stamina zero PARA de render, e a hunt continua', async () => {
+    await retireNodes();
     // §10.2: stamina zerada bloqueia XP e loot, e NÃO encerra a hunt. As duas metades importam
     // — encerrar sozinho seria o jogo decidindo por quem deixou o personagem rendendo, e
     // continuar rendendo seria a stamina não existir.
@@ -486,6 +507,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
   }, 120_000);
 
   it('a morte encerra a hunt e devolve à Cidade, com o extrato', async () => {
+    await retireNodes();
     // §26.1: morrer é o outro fim do loop. O que ele NÃO pode ser é sumir em silêncio — o
     // extrato sai, e o personagem volta vivo para a praça, curado (§26.1).
     await startNode('phase-two-c');
