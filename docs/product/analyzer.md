@@ -1,7 +1,9 @@
 # Analisador de hunt
 
 **Status:** parcial — os agregados existem, atravessam snapshot e extrato, e saem em
-`session-state` (FUN-32, FUN-78); a janela no cliente é M10
+`session-state` (FUN-32, FUN-78); a **janela no cliente** existe, minimizável, com "por hora"
+derivado local (FUN-83); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
+qualquer notificação fora do jogo
 **PRD:** §16, §43.10
 **Épico:** E6
 
@@ -64,6 +66,41 @@ Este sistema não define parâmetros numéricos de balanceamento — é uma espe
 |---|---|---|
 | Lista de métricas mínimas do painel | ver seção "Regras" acima | caminho previsto: `packages/content/analisador` (ou definição fixa em `protocol/`, a decidir na implementação) |
 | Lista de eventos notáveis do snapshot | subiu de level, item raro, quase morreu, morreu, saiu por qual regra (recomendação da arquitetura, não fechada como obrigatória) | caminho previsto: `packages/content/analisador` |
+
+## A janela (FUN-83)
+
+Mora no painel da direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
+mundo em canvas. Nada nela toca `world`.
+
+**Nasce minimizada** (§16.1). Uma hunt idle não precisa dela aberta ocupando a tela, e a linha do
+cabeçalho já diz há quanto tempo a sessão roda. Ao encerrar ela abre sozinha: aí o extrato é a
+notícia, e escondê-lo seria a sessão sumir em silêncio.
+
+**Uma janela, duas telas.** Durante a hunt mostra o que está rendendo; ao voltar de um período
+offline mostra o mesmo, mais a lista curta de eventos notáveis (§16.2). São a mesma pergunta em
+dois momentos, e duas janelas divergiriam na terceira mudança.
+
+**Só o TEMPO anda entre duas atualizações.** O "por hora" é uma divisão, e o denominador é um
+relógio local que corre desde o instante em que o último `session-state` chegou. XP, gold e abates
+são sempre o último número que o servidor mandou — extrapolar qualquer um mostraria progresso que
+talvez não tenha acontecido, e o jogador veria o valor ANDAR PARA TRÁS na atualização seguinte.
+
+A consequência assumida é que a taxa cai devagar entre duas atualizações, porque o numerador está
+parado e o denominador anda. É o lado certo para errar: uma taxa levemente pessimista que se
+corrige é melhor que uma otimista inventada no cliente.
+
+**Encerrada, o relógio para.** O extrato é definitivo; continuar contando faria o "por hora"
+derreter na frente de quem está lendo.
+
+**Campo que o servidor não mandou aparece como "—", nunca como zero.** Os agregados da FUN-78 são
+opcionais no protocolo: um nó `game` antigo, em deploy em rolagem, manda sem eles. Zero é uma
+afirmação, e ele não afirmou nada.
+
+A janela **não pede `session-state`** para se atualizar. Os deltas chegam pelo lote do ciclo e ela
+lê a store; pedir em laço seria tráfego de volta gerado por tráfego de entrada.
+
+Ela não aparece na Cidade: a praça não credita nada (§37), e uma janela de "0 XP, 0 gold" ali é
+ruído com aparência de informação.
 
 ## Em aberto
 
