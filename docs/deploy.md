@@ -89,6 +89,82 @@ Em VPS x86 a plataforma do build é `linux/amd64`; no Oracle Ampere, `linux/arm6
 **O Postgres não publica porta.** Só é alcançável pela rede interna do compose — publicar a 5432
 numa VPS é como a maioria dos bancos vaza.
 
+## Coolify
+
+Use o Build Pack **Docker Compose**, base `/` e arquivo `/compose.coolify.yml`. O
+[ADR 0022](adr/0022-coolify-same-origin-deployment.md) registra a topologia. O repositório
+privado precisa de GitHub App autorizado ou chave de deploy somente de leitura.
+
+Configure estas variáveis no recurso do Coolify:
+
+| Variável | Valor |
+|---|---|
+| `POSTGRES_PASSWORD` | Senha aleatória em hexadecimal, compatível com a URL de conexão |
+| `APP_ORIGIN` | Origem HTTPS do cliente, sem barra final |
+| `GAME_PUBLIC_URL` | A mesma origem com `wss://`, terminando em `/ws` |
+| `WORKOS_API_KEY` | Chave do ambiente WorkOS |
+| `WORKOS_CLIENT_ID` | Client ID do mesmo ambiente WorkOS |
+
+Associe somente o serviço `web`, porta interna 80, ao domínio HTTPS de `APP_ORIGIN`.
+Autorize `<APP_ORIGIN>/api/auth/callback` como redirect URI no WorkOS. As credenciais ficam
+somente no runtime do `app`; não habilite sua injeção como argumentos de build.
+
+O cliente usa a API da mesma origem; `/ws` preserva o upgrade WebSocket até o `game`.
+PostgreSQL e Redis não publicam portas. O `app` aplica as migrações versionadas antes de
+iniciar e mantém `stop_grace_period: 40s`. Use uma única réplica do `app` nesta topologia.
+
+Verifique o status saudável dos quatro serviços, a abertura do cliente por HTTPS e as rotas
+`/api/auth/me` (401 sem login) e `/api/auth/login` (redirect WorkOS). `/healthz` no endereço
+público verifica o Nginx; o healthcheck interno de `app` verifica o servidor.
+
+O frontend atual é a casca do jogo: a seleção de personagem ainda vem de `?character=<id>`.
+As telas de login e seleção de personagem não fazem parte deste deploy.
+
+Referência operacional: [Docker Compose no Coolify](https://coolify.io/docs/applications/build-packs/docker-compose).
+
+### Staging
+
+O primeiro ambiente remoto é **staging**, no projeto Draconya do Coolify. Sua origem é
+`https://draconya-staging.179-197-227-14.sslip.io`. O processo mantém `NODE_ENV=production`
+para cookies seguros e validação de configuração; esse valor é o modo do runtime Node,
+não o nome do ambiente de implantação.
+
+No GitHub, o environment `staging` guarda `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` e
+`POSTGRES_PASSWORD` em **Secrets**. `APP_ORIGIN` e `GAME_PUBLIC_URL` ficam em **Variables**.
+O job `deploy staging` de `.github/workflows/ci.yml` sincroniza esses valores no Coolify
+antes de cada deploy. O GitHub é a fonte dessa configuração; alterações manuais no Coolify
+serão sobrescritas na próxima execução.
+
+O environment também guarda o Secret `COOLIFY_API_TOKEN` e as Variables `COOLIFY_URL` e
+`COOLIFY_APP_UUID`. O token dedicado tem permissões `read`, `write` e `deploy`, sem `root`
+nem leitura de dados sensíveis. Ele expira em um ano; sua renovação exige atualizar esse
+Secret. O token é limitado pelo time no Coolify, não pelo recurso.
+
+Após push na `main`, o deploy aguarda os três checks (`docs`, `code` e `image`). PRs nunca
+recebem os secrets do job de deploy. O job fixa `git_commit_sha` no SHA aprovado, desativa
+o auto-deploy por webhook, sincroniza a configuração e aguarda o resultado do Coolify.
+Ele só passa depois de confirmar o SHA publicado, estado saudável e rotas HTTPS.
+Execuções de deploy são serializadas; uma execução cujo SHA já não é o topo da `main`
+é ignorada para impedir que um CI antigo reverta o staging.
+
+Para reaplicar secrets sem commit novo, execute **Actions → CI → Run workflow → main**.
+Esse caminho também repete os checks antes do deploy. Alterar um Secret sozinho não dispara
+o workflow. A senha de um PostgreSQL já inicializado não muda com `POSTGRES_PASSWORD`:
+uma rotação exige alterar a senha do usuário no banco e atualizar o Secret de forma coordenada.
+Não apague o volume para trocar a senha.
+
+Em falha, consulte o job e a execução correspondente no Coolify. Não há rollback automático
+de banco. Um timeout no GitHub não cancela um build remoto já iniciado; confira seu estado
+antes de tentar novamente.
+
+A injeção automática de argumentos de build fica desativada no Coolify; a chave WorkOS e a
+senha PostgreSQL ficam disponíveis somente no runtime. Nenhum segredo entra no Git ou no
+build estático do cliente.
+
+O Coolify interpreta o Compose com um arquivo de variáveis de build separado. Por isso,
+as duas credenciais de runtime aceitam interpolação vazia nessa etapa. Isso não libera o
+boot sem credenciais: a validação do servidor exige WorkOS, e o PostgreSQL exige senha.
+
 ## Backup
 
 ```bash

@@ -1,0 +1,68 @@
+# Build Pack Docker Compose no Coolify; publique somente o serviço web, porta 80, via HTTPS.
+# A origem pública (sem barra final) também deve estar autorizada no WorkOS.
+services:
+  web:
+    build:
+      context: .
+      target: client
+      args:
+        VITE_API_URL: ''
+    restart: unless-stopped
+    expose: ['80']
+    depends_on:
+      app: { condition: service_healthy }
+
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    # Migrações terminam antes de aceitar conexões; exec preserva node como PID 1.
+    command: ['sh', '-c', 'node packages/server/dist/db/migrate.js && exec node packages/server/dist/main.js']
+    environment:
+      NODE_ENV: production
+      PROCESSES: api,game,jobs
+      # O Coolify interpreta este arquivo também no build, sem secrets de runtime.
+      # Valor vazio permite construir; PostgreSQL e a validação do servidor recusam o boot.
+      DATABASE_URL: postgres://draconya:${POSTGRES_PASSWORD:-}@postgres:5432/draconya
+      REDIS_URL: redis://redis:6379
+      API_ORIGIN: ${APP_ORIGIN:?configure APP_ORIGIN with an HTTPS origin}
+      GAME_PUBLIC_URL: ${GAME_PUBLIC_URL:?configure GAME_PUBLIC_URL with a WSS URL ending in /ws}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:?configure WORKOS_CLIENT_ID}
+      WORKOS_REDIRECT_URI: ${APP_ORIGIN}/api/auth/callback
+      AUTH_DEV_MODE: 'false'
+      LOG_LEVEL: info
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    stop_grace_period: 40s
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: draconya
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: draconya
+    volumes: ['pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U draconya -d draconya']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes: ['redisdata:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:

@@ -45,6 +45,11 @@ RUN pnpm exec tsc -b
 # Falha cedo e alto se o build não emitiu: sem isto, a imagem sobe e só quebra ao rodar.
 RUN test -f packages/server/dist/main.js || (echo 'ERRO: tsc -b não emitiu dist/main.js' && exit 1)
 
+# Cliente para o deploy integrado no Coolify. URL vazia usa a mesma origem do navegador.
+FROM build AS client-build
+ARG VITE_API_URL=
+RUN pnpm --filter @draconya/client build
+
 # --- dependências de produção -------------------------------------------------------------
 # Estágio NOVO, não derivado de `deps`: instalar --prod sobre um node_modules completo não
 # limpa o que já está na store, e typescript, vitest, eslint e drizzle-kit continuariam na
@@ -70,9 +75,16 @@ RUN pnpm install --frozen-lockfile --prod
 RUN find node_modules -name 'uws_darwin_*.node' -delete \
  && find node_modules -name 'uws_win32_*.node' -delete
 
-# O cliente é servido como estático pelo Cloudflare Pages; pixi e react não têm o que fazer
-# na imagem do servidor.
+# O cliente é servido como estático, em imagem própria ou CDN; pixi e react não têm o que
+# fazer na imagem do servidor.
 RUN rm -rf node_modules/.pnpm/pixi.js@* node_modules/.pnpm/react@* node_modules/.pnpm/react-dom@*
+
+# --- cliente e proxy interno --------------------------------------------------------------
+FROM nginx:stable-alpine AS client
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=client-build /app/packages/client/dist /usr/share/nginx/html
+HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
 
 # --- runtime -----------------------------------------------------------------------------
 FROM node:24-trixie-slim AS runtime
@@ -90,6 +102,7 @@ COPY --from=build --chown=node:node /app/packages/content/dist  ./packages/conte
 COPY --from=build --chown=node:node /app/packages/content/data  ./packages/content/data
 COPY --from=build --chown=node:node /app/packages/sim/dist      ./packages/sim/dist
 COPY --from=build --chown=node:node /app/packages/server/dist   ./packages/server/dist
+COPY --from=build --chown=node:node /app/packages/server/migrations ./packages/server/migrations
 
 # ...e os DADOS de conteúdo, que não são compilados e não estão em `dist` nenhum. O nó carrega
 # `content` no boot e fixa a versão em cada sessão (invariante 7); sem esta linha a imagem
