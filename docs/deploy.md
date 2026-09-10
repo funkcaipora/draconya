@@ -89,6 +89,39 @@ Em VPS x86 a plataforma do build é `linux/amd64`; no Oracle Ampere, `linux/arm6
 **O Postgres não publica porta.** Só é alcançável pela rede interna do compose — publicar a 5432
 numa VPS é como a maioria dos bancos vaza.
 
+## Coolify
+
+Use o Build Pack **Docker Compose**, base `/` e arquivo `/compose.coolify.yml`. O
+[ADR 0021](adr/0021-coolify-same-origin-deployment.md) registra a topologia. O repositório
+privado precisa de GitHub App autorizado ou chave de deploy somente de leitura.
+
+Configure estas variáveis no recurso do Coolify:
+
+| Variável | Valor |
+|---|---|
+| `POSTGRES_PASSWORD` | Senha aleatória em hexadecimal, compatível com a URL de conexão |
+| `APP_ORIGIN` | Origem HTTPS do cliente, sem barra final |
+| `GAME_PUBLIC_URL` | A mesma origem com `wss://`, terminando em `/ws` |
+| `WORKOS_API_KEY` | Chave do ambiente WorkOS |
+| `WORKOS_CLIENT_ID` | Client ID do mesmo ambiente WorkOS |
+
+Associe somente o serviço `web`, porta interna 80, ao domínio HTTPS de `APP_ORIGIN`.
+Autorize `<APP_ORIGIN>/api/auth/callback` como redirect URI no WorkOS. As credenciais ficam
+somente no runtime do `app`; não habilite sua injeção como argumentos de build.
+
+O cliente usa a API da mesma origem; `/ws` preserva o upgrade WebSocket até o `game`.
+PostgreSQL e Redis não publicam portas. O `app` aplica as migrações versionadas antes de
+iniciar e mantém `stop_grace_period: 40s`. Use uma única réplica do `app` nesta topologia.
+
+Verifique o status saudável dos quatro serviços, a abertura do cliente por HTTPS e as rotas
+`/api/auth/me` (401 sem login) e `/api/auth/login` (redirect WorkOS). `/healthz` no endereço
+público verifica o Nginx; o healthcheck interno de `app` verifica o servidor.
+
+O frontend atual é a casca do jogo: a seleção de personagem ainda vem de `?character=<id>`.
+As telas de login e seleção de personagem não fazem parte deste deploy.
+
+Referência operacional: [Docker Compose no Coolify](https://coolify.io/docs/applications/build-packs/docker-compose).
+
 ## Backup
 
 ```bash
