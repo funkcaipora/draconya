@@ -294,9 +294,14 @@ describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 
   const ring = (over: Record<string, unknown> = {}) =>
     botRingSwapSchema.safeParse({ itemId: 'life-ring', equipBelow: 40, removeAbove: 70, ...over });
 
-  it('o lure exige um intervalo, e um intervalo invertido não é intervalo', () => {
+  it('o lure aceita limiares iguais, e recusa o intervalo invertido', () => {
     // `max` abaixo de `min` deixaria a máquina sem estado alcançável: ela sairia de "correndo"
     // ao chegar no máximo e voltaria na mesma avaliação, por estar abaixo do mínimo.
+    //
+    // Iguais, porém, VALEM — e é aqui que o lure difere do anel de propósito. Lá os limiares
+    // comparam HP, que muda a cada golpe; aqui comparam uma contagem, que só muda quando
+    // alguém morre ou nasce. `{ min: 1, max: 1 }` é o comportamento de quem não configurou
+    // lure, escrito como configuração.
     expect(botLureSchema.safeParse({ min: 2, max: 5 }).success).toBe(true);
     expect(botLureSchema.safeParse({ min: 5, max: 5 }).success).toBe(true);
     expect(botLureSchema.safeParse({ min: 5, max: 2 }).success).toBe(false);

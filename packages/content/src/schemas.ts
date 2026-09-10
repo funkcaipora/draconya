@@ -496,8 +496,14 @@ export const botExitRuleSchema = z.discriminatedUnion('kind', [
  * Abaixo de `min` o personagem volta a percorrer a rota acumulando inimigos; ao chegar em `max`
  * ele para e limpa o grupo; e volta a correr quando cai abaixo de `min`.
  *
- * **Dois limiares, e não um**, pela mesma razão do ring swap: com um só, a contagem oscilando
- * em torno dele faria o personagem alternar entre correr e parar a cada monstro que morre.
+ * **`max` igual a `min` é permitido**, diferente do ring swap — e a diferença não é descuido.
+ * Ali os limiares comparam HP, que muda a cada golpe: iguais, o anel trocaria sem parar. Aqui
+ * eles comparam uma CONTAGEM de monstros, que só muda quando alguém morre ou nasce, e "manter
+ * exatamente N ao meu redor" é uma política coerente — `{ min: 1, max: 1 }` é o comportamento
+ * de quem não configurou lure, escrito como configuração.
+ *
+ * O que a validação recusa é `max` ABAIXO de `min`: aí a máquina sairia de "correndo" ao chegar
+ * no máximo e voltaria na mesma avaliação, por estar abaixo do mínimo.
  */
 export const botLureSchema = z.object({
   min: z.number().int().positive(),
