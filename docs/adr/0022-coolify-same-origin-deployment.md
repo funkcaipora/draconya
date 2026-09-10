@@ -25,6 +25,18 @@ PostgreSQL e Redis usam volumes nomeados, sem portas publicadas no host. Credenc
 são variáveis do Coolify, nunca conteúdo da imagem. Logs de acesso de `/api/` e `/ws` ficam
 desligados no Nginx para não registrar código de autenticação ou ticket na query string.
 
+### Automação de staging (2026-09-10)
+
+O GitHub Actions coordena o deploy após os três checks na `main`. O job fixa o commit
+validado no Coolify, sincroniza Secrets e Variables do environment `staging`, aguarda o
+build e verifica SHA, saúde e HTTPS. O webhook de auto-deploy fica desligado, evitando
+publicação antes do CI. Uma fila de deploy por ambiente e a checagem do topo da `main`
+impedem que execuções antigas publiquem depois das novas. Reexecução manual passa pelo CI.
+
+O token usa `read`, `write` e `deploy`; o Coolify limita tokens ao time, portanto a credencial
+fica apenas no job de staging e não é oferecida a PRs. Rotação da senha PostgreSQL exige
+coordenação com o banco persistente, e falha de migração não provoca rollback destrutivo.
+
 ## Alternativas
 
 - Cliente em Cloudflare Pages: continua possível, mas exigiria um segundo provedor para este

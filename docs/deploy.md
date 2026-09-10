@@ -131,8 +131,31 @@ não o nome do ambiente de implantação.
 
 No GitHub, o environment `staging` guarda `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` e
 `POSTGRES_PASSWORD` em **Secrets**. `APP_ORIGIN` e `GAME_PUBLIC_URL` ficam em **Variables**.
-O runtime do Coolify recebe os mesmos valores. Não existe sincronização automática desses
-valores: ao trocar uma credencial, atualize os dois destinos antes de redeployar.
+O job `deploy staging` de `.github/workflows/ci.yml` sincroniza esses valores no Coolify
+antes de cada deploy. O GitHub é a fonte dessa configuração; alterações manuais no Coolify
+serão sobrescritas na próxima execução.
+
+O environment também guarda o Secret `COOLIFY_API_TOKEN` e as Variables `COOLIFY_URL` e
+`COOLIFY_APP_UUID`. O token dedicado tem permissões `read`, `write` e `deploy`, sem `root`
+nem leitura de dados sensíveis. Ele expira em um ano; sua renovação exige atualizar esse
+Secret. O token é limitado pelo time no Coolify, não pelo recurso.
+
+Após push na `main`, o deploy aguarda os três checks (`docs`, `code` e `image`). PRs nunca
+recebem os secrets do job de deploy. O job fixa `git_commit_sha` no SHA aprovado, desativa
+o auto-deploy por webhook, sincroniza a configuração e aguarda o resultado do Coolify.
+Ele só passa depois de confirmar o SHA publicado, estado saudável e rotas HTTPS.
+Execuções de deploy são serializadas; uma execução cujo SHA já não é o topo da `main`
+é ignorada para impedir que um CI antigo reverta o staging.
+
+Para reaplicar secrets sem commit novo, execute **Actions → CI → Run workflow → main**.
+Esse caminho também repete os checks antes do deploy. Alterar um Secret sozinho não dispara
+o workflow. A senha de um PostgreSQL já inicializado não muda com `POSTGRES_PASSWORD`:
+uma rotação exige alterar a senha do usuário no banco e atualizar o Secret de forma coordenada.
+Não apague o volume para trocar a senha.
+
+Em falha, consulte o job e a execução correspondente no Coolify. Não há rollback automático
+de banco. Um timeout no GitHub não cancela um build remoto já iniciado; confira seu estado
+antes de tentar novamente.
 
 A injeção automática de argumentos de build fica desativada no Coolify; a chave WorkOS e a
 senha PostgreSQL ficam disponíveis somente no runtime. Nenhum segredo entra no Git ou no

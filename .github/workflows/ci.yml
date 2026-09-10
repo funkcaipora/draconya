@@ -1,6 +1,6 @@
 # .github/workflows/ci.yml — CI do harness do Draconya (docs/harness-plan.md §4.4).
 #
-# Três jobs independentes, que rodam em paralelo:
+# Três checks independentes, em paralelo, seguidos pelo deploy de staging na main:
 #
 #   - docs: valida a documentação estrutural e a política de linguagem do repositório.
 #     Chama os scripts pelo NOME no package.json, nunca o arquivo direto: assim, como um
@@ -22,12 +22,47 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # Padrão de menor privilégio: nenhum job aqui escreve de volta no repositório ou em release.
 permissions:
   contents: read
 
 jobs:
+  deploy-staging:
+    name: deploy staging
+    needs: [docs, code, image]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: ${{ vars.APP_ORIGIN }}
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Sync configuration, deploy and verify staging
+        run: node scripts/deploy-staging.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+          COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+          WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          GAME_PUBLIC_URL: ${{ vars.GAME_PUBLIC_URL }}
+
   docs:
     name: docs-check
     runs-on: ubuntu-latest
