@@ -64,3 +64,37 @@ Nenhum. A autenticação fica fora do modelo de sessão e do caminho de simulaç
 O risco sobre modo headless foi verificado antes da implementação: a documentação atual do WorkOS confirma que a Authentication API permite construir UI própria, além do Hosted AuthKit. O MVP mantém o Hosted AuthKit porque é o caminho de menor superfície, mas a decisão não fica presa a essa UI.
 
 A sessão do aplicativo é deliberadamente local: depois da troca do authorization code, o `api` grava uma capability opaca no Redis e envia somente o token em cookie httpOnly. Isso preserva a consequência desejada desta ADR — indisponibilidade transitória do WorkOS não invalida requests de uma sessão Draconya já criada. Logout remove a sessão local e, quando existe `sid` no token retornado na autenticação, também fornece a URL de logout do WorkOS.
+
+## Confirmação — 2026-09-10 (FUN-64)
+
+A emenda acima verificou que o modo headless *existe*. A FUN-64 perguntou a pergunta seguinte,
+que é de produto e não de API: **vale gastar a costura agora?** A resposta é não, e este registro
+existe para que ela não seja reaberta por esquecimento.
+
+O que foi confirmado, com endpoint e não com impressão:
+
+| Caminho | Como se faz | O que custa |
+|---|---|---|
+| **Hosted AuthKit** (hoje) | `GET /user_management/authorize` → redirect → troca do code | Uma costura visível, no primeiro login |
+| **Headless com senha** | `authenticateWithPassword` | Tela própria, recuperação de senha, e a senha em texto claro **transitando pelo nosso `api`** |
+| **Headless com Magic Auth** | `createMagicAuth` + `authenticateWithMagicAuth`, código de seis dígitos por e-mail | Tela própria, e o jogador abre o e-mail toda vez que o cookie expira |
+
+**A decisão fica como está: Hosted AuthKit no MVP.** Três razões, em ordem de peso:
+
+1. **Não existe jogador para impressionar ainda.** A costura é real e aparece no pior momento —
+   mas o pior momento ainda não chegou, e adiar não o torna mais caro.
+2. **Trocar depois é aditivo.** `IdentityProvider` (`packages/server/src/auth/workos.ts`) já é uma
+   interface, e o `api` já grava sessão local própria. Virar headless é acrescentar um método e
+   uma tela; não é reescrever o fluxo nem migrar identidade.
+3. **O headless com senha reintroduz o que esta decisão delegou.** A senha não seria armazenada,
+   mas passaria pela memória do nosso processo — a uma linha de log de distância do disco. Se um
+   dia formos para headless, o caminho preferido é o **Magic Auth**, porque nele a senha não
+   existe: não há o que vazar de um processo que nunca a recebe.
+
+**O que reabre isto:** a costura medir alguma coisa. Abandono na tela de login, ou reclamação de
+"parece outro site". Enquanto o sinal for estético e não medido, a resposta continua sendo esta.
+
+O ADR 0012 segue **aceito**, sem alteração na decisão. O risco em aberto que ele mesmo declarou
+("a API de User Management permite modo headless; se ela não cobrir o que o produto quer, esta
+decisão precisa ser reaberta") está **fechado**: ela cobre, de duas maneiras, e nenhuma delas é
+urgente.
