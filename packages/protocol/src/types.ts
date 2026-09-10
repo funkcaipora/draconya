@@ -29,7 +29,25 @@ const Aggregates = z.object({
   goldSpent: z.number(),
   kills: z.number().int(),
   deaths: z.number().int(),
+  /**
+   * O que a FUN-78 acrescentou. **Opcionais**, e isso é sobre deploy em rolagem: um nó `game`
+   * antigo manda os agregados sem estes campos, e um cliente novo que os exigisse recusaria a
+   * mensagem inteira — em SILÊNCIO, porque `decodeS2C` devolve `null` sem erro. O jogador
+   * veria a tela de retorno vazia e ninguém ligaria uma coisa à outra.
+   */
+  itemsLooted: z.number().int().optional(),
+  suppliesUsed: z.number().int().optional(),
+  bestBasicHit: z.number().optional(),
+  bestSpellHit: z.number().optional(),
 });
+
+/**
+ * **Não existe campo "por hora" aqui, e é decisão** (§16.1, FUN-78).
+ *
+ * Por hora é `valor / durationMs`, e quem divide é o cliente. Mandar a divisão pela rede é
+ * mandar o mesmo número duas vezes — e os dois divergem na primeira pausa entre calcular e
+ * enviar, com o servidor dizendo uma coisa e a conta do jogador dizendo outra.
+ */
 
 /** Lista CURTA para a tela de retorno. Não é log: guarda só o que vale contar. */
 const NotableEvent = z.object({

@@ -130,6 +130,12 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
   arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como
   todo mundo começa — quem sabe quanto o punho bate é o conteúdo.
+- **Agregado é escrito onde o FATO acontece** (FUN-78), pela sessão dona: o maior hit no golpe,
+  o loot no abate, o supply no uso. Reconstruir por varredura é contar de novo o que já foi
+  contado, e é assim que dois números que deveriam bater param de bater. E `Receipt.aggregates`
+  é o MESMO objeto da sessão — duas cópias divergiriam.
+- **O maior hit guarda o dano RESOLVIDO, não o aplicado.** `receiveDamage` devolve
+  `min(dano, vida)`, então o aplicado faria o recorde depender de quão morto o alvo já estava.
 - **A sessão NUNCA escreve `item_instance`.** Ela registra o layout; o extrato leva e o `jobs`
   aplica (invariante 10). O mesmo caminho de XP, gold e skill.
 - **Magia em área colhe TODOS os alvos antes de aplicar dano nenhum** (FUN-92). Resolver morte

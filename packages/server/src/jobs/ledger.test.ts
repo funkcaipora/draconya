@@ -46,6 +46,7 @@ const receiptOf = (sessionId: string, characterId: string, overrides = {}): Omit
   seq: 1,
   aggregates: {
     durationMs: 600_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
   },
   notableEvents: [{ atMs: 1_000, type: 'level-up' }],
   ...overrides,
@@ -217,6 +218,7 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
       reason: 'death',
       aggregates: {
         durationMs: 1000, xpGained: -5000, goldGained: 0, goldSpent: 0, kills: 0, deaths: 1,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
       },
     }));
 

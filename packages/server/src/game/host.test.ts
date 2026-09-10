@@ -1260,6 +1260,7 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
     }],
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 40, goldSpent: 0, kills: 12, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
     },
     notableEvents: [{ atMs: 1_000, type: 'level-up', detail: '4' }],
     ledgerSeq: 0, endedReason: null,
