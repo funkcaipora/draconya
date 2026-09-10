@@ -191,6 +191,49 @@ export function place<P extends GridPoint>(
 }
 
 /**
+ * Tiles ao redor de um ponto, do mais próximo ao mais distante, em ordem fixa.
+ *
+ * Ordem fixa é o que torna a posição reproduzível: mesma hunt, mesmo respawn, mesmo tile. Sem
+ * isso, dois servidores com o mesmo snapshot desenhariam mapas diferentes.
+ *
+ * Mora aqui, e não no spawner, porque tem dois donos desde a FUN-71: o respawn da hunt e a
+ * chegada na praça compartilhada. Geometria de tile não é assunto de hunt.
+ */
+export function* tilesAround<P extends GridPoint>(center: P, radius: number): Generator<P> {
+  yield center;
+  for (let ring = 1; ring <= radius; ring++) {
+    for (let dy = -ring; dy <= ring; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        yield { ...center, x: center.x + dx, y: center.y + dy };
+      }
+    }
+  }
+}
+
+/**
+ * Coloca no tile pedido, ou no LIVRE mais próximo dele.
+ *
+ * Existe porque o ponto de entrada da Cidade é um tile só e a praça passou a ser compartilhada
+ * (FUN-71): o segundo jogador a chegar encontra o primeiro parado exatamente ali, `place`
+ * recusa, e o personagem fica fora do mapa — invisível, sem andar, sem nada explicando.
+ *
+ * Devolve a última recusa quando nem o anel inteiro serve. Isso é a praça cheia, e quem chama
+ * decide o que fazer — que é assunto do teto de população, na FUN-33.
+ */
+export function placeNear<P extends GridPoint>(
+  world: MovementWorld, mover: Movable<P>, at: P, radius: number,
+): MoveRejection | null {
+  let last: MoveRejection = 'out-of-bounds';
+  for (const tile of tilesAround(at, radius)) {
+    const rejection = place(world, mover, tile);
+    if (rejection === null) return null;
+    last = rejection;
+  }
+  return last;
+}
+
+/**
  * Chave numérica de tile. String (`\`${x},${y}\``) alocaria por consulta, e a ocupação é
  * consultada até três vezes por passo de cada criatura. Só é chamada com coordenada dentro
  * do mapa — `tileAdmits` pergunta ao tilemap antes.

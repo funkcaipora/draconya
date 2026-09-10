@@ -33,7 +33,9 @@ reavaliar quando houver o terceiro canal.
 ## Regras
 
 - O alcance é a **sessão inteira**, não raio em tiles. Interest management é a FUN-33, e inventar
-  raio agora seria decidir duas vezes.
+  raio agora seria decidir duas vezes. Na Cidade isso passou a significar a praça inteira só na
+  FUN-71: antes dela cada personagem tinha a própria cópia da Cidade, e "sessão inteira" era uma
+  pessoa. Ver [`city.md`](./city.md).
 - Toda recusa é **silenciosa**: canal desconhecido, texto vazio ou só espaço, texto com caractere
   de controle (`\p{C}` — zero-width e bidi override falsificam o nome do autor na tela). Um cliente
   com bug mandando em laço não pode gerar tráfego de volta. Texto acima de 255 já é recusado pelo

@@ -1,7 +1,7 @@
 import type { HuntDifficulty, Point } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
-import { Spawner, pickByWeight, tilesAround } from './spawner.js';
+import { Spawner, pickByWeight } from './spawner.js';
 
 const beginner: HuntDifficulty = {
   perSpawnPoint: 2,
@@ -160,16 +160,5 @@ describe('Spawner', () => {
     // O lugar devolvido continua vago do outro lado da retomada, e os ocupados continuam
     // ocupados: é o que impede a sessão retomada de duplicar os monstros que já existem.
     expect(restored.slots.filter((s) => s.occupantId === null)).toHaveLength(1);
-  });
-});
-
-describe('tilesAround', () => {
-  it('walks outward from the centre, in a fixed order', () => {
-    // Ordem fixa é o que torna a posição reproduzível: sem isso, dois servidores com o mesmo
-    // snapshot desenhariam mapas diferentes.
-    const tiles = [...tilesAround({ x: 0, y: 0, z: 7 }, 1)];
-    expect(tiles[0]).toEqual({ x: 0, y: 0, z: 7 });
-    expect(tiles).toHaveLength(9);
-    expect([...tilesAround({ x: 0, y: 0, z: 7 }, 1)]).toEqual(tiles);
   });
 });

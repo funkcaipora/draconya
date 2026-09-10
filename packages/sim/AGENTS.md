@@ -172,3 +172,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **`luring` e `ringReplaced` viajam no snapshot.** Sem o primeiro, a hunt retomada volta
   correndo e junta por cima do bando que já estava junto; sem o segundo, ela esquece qual anel
   era do jogador e termina com o dedo vazio.
+- **`Session.leave` existe para o SHARD, e só para ele** (FUN-71, ADR 0023). Numa sessão privada
+  sair é encerrar; num shard, sair é sair, e quem fica não perde nada. `Ruleset.shared` é quem
+  diz de qual dos dois se trata, e ausente é `false` — a sessão de sempre.
+- **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
+  acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
+  `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
+  da praça usando coordenada de outro mapa, em cima de quem estivesse parado ali. É o defeito da
+  FUN-72 entrando pela mesma porta.
+- **Chegar na praça é `placeNear`, não `place`.** O ponto de entrada é um tile só e tile é
+  exclusivo; um `place` seco deixaria o segundo a chegar fora do mapa — invisível, sem andar,
+  com o log dizendo que ele entrou.
+- **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
+  respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.

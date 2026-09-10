@@ -11,7 +11,7 @@ import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
-import { createCitySessionFactory } from './sessions.js';
+import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { testContent } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
@@ -58,7 +58,7 @@ function buildHost(
     snapshots?: SnapshotStore;
     receipts?: ReceiptStore;
     restoreSession?: (snapshot: SessionSnapshot) => Session | null;
-    buildSession?: (request: { to: string }, from: Session) => Session | null;
+    buildSession?: NonNullable<SessionHostOptions['buildSession']>;
     metrics?: GameMetrics;
     // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
@@ -702,6 +702,9 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
         contentVersion: 'v-test',
         ruleset: {
           type: 'city',
+          // Como a Cidade de verdade desde a FUN-71: um duplo que não fosse shard faria estes
+          // testes exercitarem um caminho que a produção não tem mais.
+          shared: true,
           hz: () => 0,
           onEnter: (_s, character) => {
             character.health = character.maxHealth;
@@ -791,16 +794,21 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     expect(socket.ended).toBeNull();
   });
 
-  it('a morte é marco de snapshot: grava na hora, não no próximo intervalo', async () => {
-    // Perder a transição por estar entre dois snapshots é o pior caso: o jogador volta vivo,
-    // na hunt, e a penalidade aparece do nada um pouco depois.
-    const saves: string[] = [];
+  it('a morte APAGA o snapshot da hunt, em vez de deixá-lo de pé', async () => {
+    // A morte é marco de snapshot, e a Cidade é um shard, que não tem snapshot (ADR 0023). As
+    // duas coisas juntas dão UMA obrigação: apagar.
+    //
+    // Não apagar é o defeito silencioso — quem morre volta para a praça, o snapshot da hunt
+    // já creditada fica no Redis, e a próxima conexão RETOMA a hunt encerrada, creditando de
+    // novo. Antes da FUN-71 o `save` da Cidade cobria essa linha por acidente; com o shard,
+    // não há mais o que salvar por cima.
+    const acts: string[] = [];
     const snapshots = {
       save: async (_c: string, _a: string, _n: string, snapshot: SessionSnapshot) => {
-        saves.push(snapshot.type);
+        acts.push(`save:${snapshot.type}`);
       },
       load: async () => null,
-      remove: async () => {},
+      remove: async (characterId: string) => { acts.push(`remove:${characterId}`); },
     } as unknown as SnapshotStore;
     const directory = {
       register: async () => true, succeed: async () => true,
@@ -811,7 +819,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
     await host.prepare('p1', undefined, 'a1');
 
     host.cycle(1100);
-    await vi.waitFor(() => expect(saves).toEqual(['city']));
+    await vi.waitFor(() => expect(acts).toEqual(['remove:p1']));
   });
 
   it('solta o personagem quando o registro no diretório trocou de dono', async () => {
@@ -1688,5 +1696,203 @@ describe('equipar pelo socket (FUN-82)', () => {
 
     expect(hero.inventory.equippedAt('hand')).toBeNull();
     expect(mensagens(socket)).toHaveLength(1);
+  });
+});
+
+describe('a praça compartilhada, vista pelo hospedeiro (FUN-71, ADR 0023)', () => {
+  /** Um host com a Cidade DE VERDADE — mapa, ponto de entrada e legalidade de tile. */
+  const praca = (now: () => number = () => 0) => {
+    const content = testContent();
+    const shard = new CityShard(content, now);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(content, now, shard),
+      buildSession: createSessionBuilder(content, now, shard),
+      now,
+    });
+    const enter = (characterId: string) => {
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, characterId);
+      return { socket, viewer };
+    };
+    return { host, enter };
+  };
+
+  it('dois personagens ficam na MESMA sessão', () => {
+    // O critério da issue. Antes disto a praça existia N vezes, vazia em todas.
+    const { host, enter } = praca();
+    enter('p1');
+    enter('p2');
+
+    expect(host.sessionFor('p1')).toBe(host.sessionFor('p2'));
+    expect(host.sessionFor('p1')?.participants.map((p) => p.id)).toEqual(['p1', 'p2']);
+    expect(host.sessionCount).toBe(1);
+  });
+
+  it('o passo de um chega ao outro como creature-move', () => {
+    // p1 fica no ponto de entrada (2,2) e p2 entra no livre mais próximo, (1,1). p2 anda para
+    // o sul, que é (1,2) — dentro do mapa e livre.
+    const { host, enter } = praca();
+    const primeiro = enter('p1');
+    const segundo = enter('p2');
+    expect(host.sessionFor('p2')?.participants[1]?.position).toEqual({ x: 1, y: 1, z: 7 });
+    primeiro.socket.frames.length = 0;
+
+    host.handle(segundo.viewer, { type: 'walk', direction: 'south' });
+    host.flush();
+
+    const moves = primeiro.socket.received().filter((m) => m.type === 'creature-move');
+    expect(moves).toHaveLength(1);
+    expect(moves[0]).toMatchObject({ from: { x: 1, y: 1, z: 7 }, to: { x: 1, y: 2, z: 7 } });
+  });
+
+  it('o say de um chega ao outro — o alcance "sessão inteira" da FUN-58 passa a alcançar', () => {
+    // A FUN-58 especificou "quem está na mesma instância recebe". Na Cidade privada isso
+    // alcançava só o autor, e o teste dela passava porque o autor É alguém da sessão.
+    const { host, enter } = praca();
+    const primeiro = enter('p1');
+    const segundo = enter('p2');
+    primeiro.socket.frames.length = 0;
+
+    host.handle(segundo.viewer, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(primeiro.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'chat-message', text: 'oi' }),
+    );
+  });
+
+  it('quem já estava recebe creature-appear de quem chega', () => {
+    // Sem isto o novo só apareceria no primeiro passo que desse — e ficaria invisível
+    // enquanto estivesse parado, que é o estado normal de quem acabou de entrar.
+    const { host, enter } = praca();
+    const primeiro = enter('p1');
+    primeiro.socket.frames.length = 0;
+
+    const segundo = enter('p2');
+    host.flush();
+
+    const appears = primeiro.socket.received().filter((m) => m.type === 'creature-appear');
+    expect(appears).toHaveLength(1);
+    expect(appears[0]).toMatchObject({ name: 'p2' });
+    // E quem chegou não recebe o próprio aparecimento: ele já vem no `session-state`.
+    expect(segundo.socket.received().some((m) => m.type === 'creature-appear')).toBe(false);
+  });
+
+  it('quem fica recebe creature-disappear de quem sai', async () => {
+    // Esquecer isto deixa fantasma na tela do cliente: um boneco parado para sempre, que não
+    // corresponde a ninguém. É o sintoma clássico, e o chato de achar.
+    const { host, enter } = praca();
+    const primeiro = enter('p1');
+    enter('p2');
+    primeiro.socket.frames.length = 0;
+
+    await host.release('p2');
+    host.flush();
+
+    expect(primeiro.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-disappear' }),
+    );
+  });
+
+  it('sair NÃO encerra nem recolhe a sessão de quem ficou', async () => {
+    // O motivo de `Session.leave` existir. Antes, "sair" só sabia ser `end` — e um jogador
+    // fechando o jogo na praça levaria a praça junto.
+    const { host, enter } = praca();
+    enter('p1');
+    enter('p2');
+    const session = host.sessionFor('p1');
+
+    await host.release('p2');
+
+    expect(host.sessionFor('p1')).toBe(session);
+    expect(session?.ended).toBeNull();
+    expect(session?.participants.map((p) => p.id)).toEqual(['p1']);
+    expect(host.sessionFor('p2')).toBeUndefined();
+  });
+
+  it('a cópia some do hospedeiro quando o ÚLTIMO sai', async () => {
+    const { host, enter } = praca();
+    enter('p1');
+
+    await host.release('p1');
+
+    expect(host.sessionCount).toBe(0);
+  });
+
+  it('o repouso é por PERSONAGEM: quem desconectou é recolhido, quem ficou não', async () => {
+    // A carência da FUN-52 era por SESSÃO. Numa praça compartilhada isso quer dizer o
+    // contrário do que ela pretende: bastaria UM jogador olhando para segurar todo mundo na
+    // memória do nó para sempre — e é essa a metade que um teste frouxo deixa passar.
+    let agora = 0;
+    const { host, enter } = praca(() => agora);
+    enter('p1');
+    const segundo = enter('p2');
+    const session = host.sessionFor('p1');
+
+    host.detach(segundo.viewer);
+    agora = 10 * 60_000;
+    host.cycle(agora);
+
+    // p2 é recolhido...
+    await vi.waitFor(() => { expect(host.sessionFor('p2')).toBeUndefined(); });
+    // ...e p1, que continua olhando, fica na MESMA praça, que não acabou.
+    expect(host.sessionFor('p1')).toBe(session);
+    expect(session?.ended).toBeNull();
+    expect(session?.participants.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('caçar leva UM personagem — o que PEDIU —, não a praça inteira', () => {
+    // `SessionBuilder` recebia só a sessão de origem. Com duzentas pessoas nela, "quem está
+    // transicionando" viraria "todo mundo" — e como a hunt recusa o segundo participante, o
+    // sintoma era a transição falhar para todo mundo sempre que houvesse mais alguém.
+    //
+    // Quem caça é o SEGUNDO da lista, de propósito: com o primeiro, um construtor que
+    // ignorasse o `characterId` e pegasse `participants[0]` passaria por acidente.
+    const { host, enter } = praca();
+    enter('p1');
+    const segundo = enter('p2');
+    const praçaSession = host.sessionFor('p1');
+
+    host.handle(segundo.viewer, {
+      type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner',
+    });
+
+    return vi.waitFor(() => {
+      expect(host.sessionFor('p2')?.ruleset.type).toBe('hunt');
+      expect(host.sessionFor('p2')?.participants.map((p) => p.id)).toEqual(['p2']);
+      expect(host.sessionFor('p1')).toBe(praçaSession);
+      expect(praçaSession?.participants.map((p) => p.id)).toEqual(['p1']);
+    });
+  });
+});
+
+describe('a praça não tem snapshot (FUN-71, ADR 0023)', () => {
+  it('saveAll pula o shard: não há progresso a guardar, e ele guardaria a praça inteira', async () => {
+    // Com duzentos na praça, salvar por participante grava o MESMO estado duzentas vezes a
+    // cada dez segundos — e o que ele guardaria não tem dono: a Cidade não credita nada (§37).
+    const saves: string[] = [];
+    const snapshots = {
+      save: async (characterId: string) => { saves.push(characterId); },
+      load: async () => null,
+      remove: async () => {},
+    } as unknown as SnapshotStore;
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    // Com diretório e conta: sem `accountId` o `saveAll` pula por outro motivo, e o teste
+    // passaria mesmo com a regra do shard removida.
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, snapshots, directory,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    await host.prepare('p2', undefined, 'a2');
+    expect(host.sessionFor('p1')).toBe(host.sessionFor('p2'));
+
+    await host.saveAll();
+
+    expect(saves).toEqual([]);
   });
 });

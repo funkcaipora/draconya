@@ -394,3 +394,20 @@ terceiro slot de personagem.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
+- **A Cidade é UMA sessão com muitos personagens** (FUN-71, ADR 0023). `#sessions` é indexado por
+  sessão e `#sessionIdByCharacter` por personagem: com o shard, N personagens apontam para o
+  mesmo `HostedSession`. Todo caminho que fazia "esta sessão = este personagem" precisa escolher
+  de qual dos dois está falando — `release`, `#replace`, `#collectResting`, `saveAll` e
+  `drainAll` já escolheram, e o próximo também precisa.
+- **`#createLocal` REAPROVEITA o `HostedSession` quando a sessão já está hospedada.** Montar um
+  novo jogaria fora os visualizadores e os ids de criatura de quem já estava na praça — e o
+  sintoma seria o primeiro jogador parar de receber tudo no instante em que o segundo entrasse.
+- **`SessionBuilder` recebe o `characterId`, e não é redundante com a sessão de origem.** Com
+  duzentas pessoas na praça, "quem está transicionando" viraria "todo mundo" — e como a hunt
+  recusa o segundo participante, o sintoma é a transição falhar para todo mundo sempre que
+  houver mais alguém lá.
+- **Voltar para o shard APAGA o snapshot, não apenas deixa de gravar um novo.** Shard não tem
+  snapshot (ADR 0023); se o da hunt encerrada ficar de pé, a próxima conexão retoma uma hunt já
+  creditada. Antes da FUN-71, o `save` da Cidade cobria essa linha por acidente.
+- **Repouso (FUN-52) é por PERSONAGEM.** Por sessão, um jogador com o navegador aberto seguraria
+  a praça inteira na memória do nó para sempre.

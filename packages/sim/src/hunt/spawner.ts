@@ -12,6 +12,7 @@
 import type { HuntDifficulty, Point } from '@draconya/content';
 import type { Rng } from '../rng.js';
 import type { Blocked } from '../monster/step.js';
+import { tilesAround } from '../movement.js';
 
 /**
  * Um lugar onde um monstro nasce. Vazio significa esperando o respawn.
@@ -55,24 +56,6 @@ export function pickByWeight(
     if (roll < 0) return entry.monsterId;
   }
   return composition[composition.length - 1]?.monsterId ?? null;
-}
-
-/**
- * Tiles ao redor de um ponto, do mais próximo ao mais distante, em ordem fixa.
- *
- * Ordem fixa é o que torna a posição reproduzível: mesma hunt, mesmo respawn, mesmo tile. Sem
- * isso, dois servidores com o mesmo snapshot desenhariam mapas diferentes.
- */
-export function* tilesAround(center: Point, radius: number): Generator<Point> {
-  yield center;
-  for (let ring = 1; ring <= radius; ring++) {
-    for (let dy = -ring; dy <= ring; dy++) {
-      for (let dx = -ring; dx <= ring; dx++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
-        yield { x: center.x + dx, y: center.y + dy, z: center.z };
-      }
-    }
-  }
 }
 
 export class Spawner {

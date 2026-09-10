@@ -8,7 +8,7 @@ import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import {
-  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
   createSessionRestorer,
 } from './sessions.js';
 
@@ -178,7 +178,7 @@ describe('city successor (FUN-38)', () => {
     session.kill(hero);
     const xpDepoisDaPenalidade = hero.xp;
 
-    const city = createSessionBuilder(content)({ to: 'city' }, session);
+    const city = createSessionBuilder(content)({ to: 'city' }, session, 'p1');
 
     expect(city?.participants[0]).toBe(hero);
     expect(hero.xp).toBe(xpDepoisDaPenalidade);
@@ -192,7 +192,7 @@ describe('city successor (FUN-38)', () => {
     session.kill(hero);
     expect(hero.health).toBe(0);
 
-    createSessionBuilder(content)({ to: 'city' }, session);
+    createSessionBuilder(content)({ to: 'city' }, session, 'p1');
 
     expect(hero.health).toBe(hero.maxHealth);
     expect(hero.alive).toBe(true);
@@ -203,7 +203,7 @@ describe('city successor (FUN-38)', () => {
     // pode significar "ele ficou sem sessão".
     const { session } = dyingHunt();
     session.end('manual-exit');
-    expect(createSessionBuilder(content)({ to: 'city' }, session)?.ruleset.type).toBe('city');
+    expect(createSessionBuilder(content)({ to: 'city' }, session, 'p1')?.ruleset.type).toBe('city');
   });
 
   it('a Cidade não sucede a si mesma', () => {
@@ -211,7 +211,7 @@ describe('city successor (FUN-38)', () => {
     // saindo do nó.
     const city = createCitySessionFactory(content)('p1');
     city.end('manual-exit');
-    expect(createSessionBuilder(content)({ to: 'city' }, city)).toBeNull();
+    expect(createSessionBuilder(content)({ to: 'city' }, city, 'p1')).toBeNull();
   });
 });
 
@@ -281,7 +281,7 @@ describe('stamina nas fronteiras da sessão (FUN-39)', () => {
     hunt.enter(hero);
     hunt.end('manual-exit');
 
-    createSessionBuilder(content, () => 8 * HOUR)({ to: 'city' }, hunt);
+    createSessionBuilder(content, () => 8 * HOUR)({ to: 'city' }, hunt, 'p1');
 
     expect(hero.staminaUpdatedAtMs).toBe(8 * HOUR);
     expect(hero.staminaMs).toBe(3 * HOUR + 8 * HOUR);
@@ -298,7 +298,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const city = cityWith();
     const hero = city.participants[0];
 
-    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city);
+    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1');
 
     expect(hunt?.ruleset.type).toBe('hunt');
     expect(hunt?.participants[0]).toBe(hero);
@@ -307,14 +307,14 @@ describe('construtor de sessão de destino (FUN-30)', () => {
   });
 
   it('recusa hunt inexistente em vez de construir uma que mente sobre o que é', () => {
-    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'beginner' }, cityWith()))
+    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'beginner' }, cityWith(), 'p1'))
       .toBeNull();
   });
 
   it('recusa dificuldade que a hunt não define', () => {
     // A dificuldade chega como string do cliente e é validada pelo CONTEÚDO, não por um enum
     // no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
-    expect(build({ to: 'hunt', huntId: 'arena', difficulty: 'legendary' }, cityWith()))
+    expect(build({ to: 'hunt', huntId: 'arena', difficulty: 'legendary' }, cityWith(), 'p1'))
       .toBeNull();
   });
 
@@ -322,7 +322,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     // Treino, quest, boss e guild war. `null` recusa com erro claro, que é melhor que
     // construir uma sessão que mente sobre o que é.
     for (const to of ['training', 'quest', 'boss', 'guild-war'] as const) {
-      expect(build({ to }, cityWith())).toBeNull();
+      expect(build({ to }, cityWith(), 'p1')).toBeNull();
     }
   });
 
@@ -336,7 +336,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const hero = city.participants[0];
 
     createSessionBuilder(content, () => 3 * HOUR)(
-      { to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city,
+      { to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1',
     );
 
     expect(hero?.staminaMs).toBe(8 * HOUR);
@@ -468,5 +468,109 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     // abaixo do level 50.
     expect(content.bot.advancedOnly.conditions).toEqual([]);
     expect(content.bot.advancedOnly.postures).toEqual([]);
+  });
+});
+
+describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023)', () => {
+  const content = testContent();
+  const entrar = (shard: CityShard, ...ids: readonly string[]) => {
+    const factory = createCitySessionFactory(content, () => 0, shard);
+    return ids.map((id) => factory(id, { level: 1, xp: 0 }));
+  };
+
+  it('dois personagens entram na MESMA sessão, e cada um enxerga o outro', () => {
+    // É o critério da issue. Antes disto a praça existia N vezes, vazia em todas: dois
+    // jogadores no mesmo lugar do mundo, cada um numa cópia particular dele.
+    const [primeira, segunda] = entrar(new CityShard(content, () => 0), 'p1', 'p2');
+
+    expect(segunda).toBe(primeira);
+    expect(primeira?.participants.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('cada um chega num tile PRÓPRIO, e nenhum fica fora do mapa', () => {
+    // Tile é exclusivo, e o ponto de entrada é um só. Um `place` seco recusaria o segundo, e
+    // ele ficaria em (-1,-1) — invisível, sem andar, com o log dizendo que entrou.
+    const [session] = entrar(new CityShard(content, () => 0), 'p1', 'p2', 'p3');
+    const posicoes = session?.participants.map((p) => `${p.position.x},${p.position.y}`) ?? [];
+
+    expect(posicoes).toHaveLength(3);
+    expect(new Set(posicoes).size).toBe(3);
+    expect(posicoes.some((tile) => tile === '-1,-1')).toBe(false);
+  });
+
+  it('sair NÃO encerra a sessão de quem ficou', () => {
+    // O motivo de `Session.leave` existir. Antes, "sair" só sabia ser `end`, e um jogador
+    // saindo da praça encerraria a praça.
+    const [session] = entrar(new CityShard(content, () => 0), 'p1', 'p2');
+    if (session === undefined) throw new Error('a praça não foi criada');
+
+    expect(session.leave('p1')?.id).toBe('p1');
+    expect(session.ended).toBeNull();
+    expect(session.participants.map((p) => p.id)).toEqual(['p2']);
+  });
+
+  it('quem sai libera o tile, e o próximo a chegar pode usá-lo', () => {
+    // Sem isto sobra um bloqueio invisível no meio da praça: ninguém consegue pisar ali,
+    // ninguém está ali, e nada na tela explica.
+    const shard = new CityShard(content, () => 0);
+    const [session] = entrar(shard, 'p1', 'p2');
+    if (session === undefined) throw new Error('a praça não foi criada');
+    const vago = session.participants.find((p) => p.id === 'p1')?.position;
+
+    session.leave('p1');
+    const [depois] = entrar(shard, 'p3');
+
+    expect(depois).toBe(session);
+    expect(session.participants.find((p) => p.id === 'p3')?.position).toEqual(vago);
+  });
+
+  it('a cópia VAZIA é esquecida, e a próxima entrada cria outra', () => {
+    // Reaproveitar a praça vazia parece economia e é armadilha: a versão de conteúdo é fixada
+    // na criação (invariante 7), então uma praça que ninguém frequenta e atravessa três
+    // deploys continuaria rodando a versão do primeiro.
+    const shard = new CityShard(content, () => 0);
+    const [primeira] = entrar(shard, 'p1');
+    primeira?.leave('p1');
+    expect(shard.population).toBe(0);
+
+    const [outra] = entrar(shard, 'p2');
+    expect(outra).not.toBe(primeira);
+  });
+
+  it('voltar de uma hunt é chegar na praça em que os outros estão', () => {
+    // O caminho da morte e o do encerramento de hunt passam pelo `SessionBuilder`, não pela
+    // fábrica. Uma `CityShard` diferente nos dois lados daria duas praças que nunca se veem —
+    // e o defeito ficaria invisível até alguém tentar encontrar um amigo.
+    const shard = new CityShard(content, () => 0);
+    const [praca] = entrar(shard, 'p1', 'p2');
+    if (praca === undefined) throw new Error('a praça não foi criada');
+    const builder = createSessionBuilder(content, () => 0, shard);
+
+    // p1 sai para caçar; p2 fica na praça. É a ordem real do hospedeiro: constrói o destino,
+    // e só então tira quem saiu da sessão anterior.
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    if (hunt === null) throw new Error('a hunt não foi construída');
+    praca.leave('p1');
+    expect(praca.participants.map((p) => p.id)).toEqual(['p2']);
+
+    expect(builder({ to: 'city' }, hunt, 'p1')).toBe(praca);
+    expect(praca.participants.map((p) => p.id)).toEqual(['p2', 'p1']);
+  });
+
+  it('quem volta de uma hunt com a praça VAZIA recebe uma cópia nova, não a de antes', () => {
+    // Coerente com o descarte da cópia vazia: a praça que ele deixou não sobreviveu à saída
+    // dele, e ressuscitá-la traria de volta a versão de conteúdo em que ela nasceu.
+    const shard = new CityShard(content, () => 0);
+    const [praca] = entrar(shard, 'p1');
+    if (praca === undefined) throw new Error('a praça não foi criada');
+    const builder = createSessionBuilder(content, () => 0, shard);
+
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    if (hunt === null) throw new Error('a hunt não foi construída');
+    praca.leave('p1');
+
+    const volta = builder({ to: 'city' }, hunt, 'p1');
+    expect(volta).not.toBe(praca);
+    expect(volta?.participants.map((p) => p.id)).toEqual(['p1']);
   });
 });

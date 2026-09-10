@@ -55,7 +55,18 @@ export interface TransitionRequest {
  * entra numa hunt — dois caminhos separados dariam duas chances de o estado exclusivo furar,
  * e é o estado exclusivo que dispensa lock sobre o gold (invariante 9).
  */
-export type SessionBuilder = (request: TransitionRequest, from: Session) => Session | null;
+/**
+ * Constrói a sessão de destino de uma transição, para UM personagem.
+ *
+ * O `characterId` não é redundante com `from`: desde a FUN-71 a Cidade é compartilhada, e uma
+ * sessão de origem pode ter duzentas pessoas. Sem ele, "quem está transicionando" viraria
+ * "todo mundo que está nesta sessão" — e um jogador clicando em caçar levaria a praça junto.
+ */
+export type SessionBuilder = (
+  request: TransitionRequest,
+  from: Session,
+  characterId: string,
+) => Session | null;
 
 export interface SessionHostOptions {
   readonly nodeId: string;
@@ -150,13 +161,6 @@ interface HostedSession {
   readonly session: Session;
   readonly viewers: Set<Viewer>;
   /**
-   * Desde quando ninguém olha, no relógio monotônico. `null` = tem visualizador.
-   *
-   * Só importa para sessão de REPOUSO — a que é orientada a evento. Uma hunt desanexada nunca
-   * é recolhida por isto, e é o ADR 0001 em uma linha.
-   */
-  restingSince: number | null;
-  /**
    * Quando esta sessão foi avançada pela última vez, no relógio monotônico DESTE processo.
    *
    * O relógio do processo mora aqui desde a FUN-68, e não mais dentro da `Session`: lá dentro
@@ -245,6 +249,19 @@ export class SessionHost {
   #lastLagWarningMs = Number.NEGATIVE_INFINITY;
   /** Quanto tempo a retomada pulou, esperando o primeiro visualizador para ser contado. */
   readonly #resumedGapMs = new Map<string, number>();
+  /**
+   * `characterId` → desde quando ninguém olha para ELE, no relógio monotônico. `null` = tem
+   * visualizador.
+   *
+   * Por PERSONAGEM, e não por sessão, desde a FUN-71: num shard, o jogador que fecha o
+   * navegador não pode recolher a praça em que os outros estão. Numa sessão privada os dois
+   * jeitos dão o mesmo número, porque lá o único personagem é o dono de todos os
+   * visualizadores.
+   *
+   * Só importa para sessão de REPOUSO — a orientada a evento. Uma hunt desanexada nunca é
+   * recolhida por isto, e é o ADR 0001 em uma linha.
+   */
+  readonly #restingSince = new Map<string, number | null>();
 
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
@@ -345,7 +362,7 @@ export class SessionHost {
     });
     hosted.viewers.add(viewer);
     hosted.session.attach(viewer.id);
-    hosted.restingSince = null;
+    this.#restingSince.set(characterId, null);
 
     viewer.sendNow({
       type: 'welcome',
@@ -386,7 +403,11 @@ export class SessionHost {
 
     hosted.viewers.delete(viewer);
     hosted.session.detach(viewer.id);
-    if (hosted.viewers.size === 0) hosted.restingSince = this.#now();
+    // Repouso é do PERSONAGEM: a outra aba dele ainda pode estar olhando, e num shard os
+    // outros jogadores da praça certamente estão.
+    if (this.#watchers(hosted, viewer.characterId) === 0) {
+      this.#restingSince.set(viewer.characterId, this.#now());
+    }
     this.#logger.debug(
       { characterId: viewer.characterId, sessionId, viewers: hosted.viewers.size },
       'Viewer detached',
@@ -419,24 +440,34 @@ export class SessionHost {
     const hosted = this.#hostedSession(characterId);
     if (hosted === undefined) return;
     const accountId = this.#accountIdByCharacter.get(characterId);
+    const shared = hosted.session.ruleset.shared === true;
 
-    if (closeCode !== undefined) {
-      for (const viewer of [...hosted.viewers]) viewer.close(closeCode, closeReason ?? '');
+    this.#dropViewers(hosted, characterId, closeCode, closeReason);
+
+    if (shared) {
+      // Num shard, sair é SAIR — não encerrar (FUN-71, ADR 0023). O jogador que fecha o jogo
+      // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
+      // progresso (§37).
+      hosted.session.leave(characterId);
+      this.#announceDeparture(hosted, characterId);
+      // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
+      // conteúdo do momento — ver `CityShard.admit`.
+      if (hosted.session.participants.length === 0) this.#sessions.delete(hosted.session.id);
+    } else {
+      if (hosted.session.ended === null) hosted.session.end('manual-exit');
+      // Creditar ANTES de soltar. Sem isto, sair do jogo dentro de uma hunt jogaria fora a XP
+      // da sessão inteira: desde a FUN-54 o extrato é o único caminho até o banco, e logo
+      // abaixo o snapshot — a outra cópia do progresso — é apagado.
+      const receipt = hosted.session.receipt();
+      if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
+      this.#sessions.delete(hosted.session.id);
     }
-    hosted.viewers.clear();
 
-    if (hosted.session.ended === null) hosted.session.end('manual-exit');
-    // Creditar ANTES de soltar. Sem isto, sair do jogo dentro de uma hunt jogaria fora a XP
-    // da sessão inteira: desde a FUN-54 o extrato é o único caminho até o banco, e logo
-    // abaixo o snapshot — a outra cópia do progresso — é apagado.
-    const receipt = hosted.session.receipt();
-    if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
-
-    this.#sessions.delete(hosted.session.id);
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
     this.#botByCharacter.delete(characterId);
+    this.#restingSince.delete(characterId);
 
     // A sessão ACABOU: deixar o snapshot faria a próxima conexão ressuscitar uma sessão
     // encerrada, com os agregados de antes.
@@ -912,7 +943,8 @@ export class SessionHost {
 
       // Toda sessão que acaba sozinha devolve o personagem à Cidade (§6): "a hunt acabou"
       // nunca pode significar "ficou sem sessão" (invariante 8).
-      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session) ?? null;
+      const next = this.#options.buildSession?.({ to: 'city' }, hosted.session, characterId)
+        ?? null;
       if (next === null) {
         await this.release(characterId, 1000, receipt.reason);
         return;
@@ -975,25 +1007,31 @@ export class SessionHost {
     // Construir ANTES de encerrar: se o destino não existe — hunt que saiu do conteúdo,
     // dificuldade que a hunt não define — o personagem fica exatamente onde estava, em vez de
     // ficar sem sessão porque a antiga já tinha sido fechada.
-    const next = this.#options.buildSession?.(request, hosted.session) ?? null;
+    const next = this.#options.buildSession?.(request, hosted.session, characterId) ?? null;
     if (next === null) {
       throw new TransitionError(
         'unknown-destination', `este servidor não constrói uma sessão de "${request.to}"`,
       );
     }
 
-    const receipt = hosted.session.ended === null
-      ? hosted.session.end('manual-exit')
-      : hosted.session.receipt();
-    if (receipt !== null) {
-      await this.#saveReceipt(characterId, hosted, receipt);
-      for (const viewer of hosted.viewers) {
-        viewer.send({
-          type: 'session-ended',
-          reason: receipt.reason,
-          aggregates: receipt.aggregates,
-          notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
-        });
+    // Sair de um SHARD não encerra nada e não credita nada (FUN-71, ADR 0023): a praça fica
+    // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
+    // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
+    if (hosted.session.ruleset.shared !== true) {
+      const receipt = hosted.session.ended === null
+        ? hosted.session.end('manual-exit')
+        : hosted.session.receipt();
+      if (receipt !== null) {
+        await this.#saveReceipt(characterId, hosted, receipt);
+        for (const viewer of hosted.viewers) {
+          if (viewer.characterId !== characterId) continue;
+          viewer.send({
+            type: 'session-ended',
+            reason: receipt.reason,
+            aggregates: receipt.aggregates,
+            notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
+          });
+        }
       }
     }
     await this.#replace(characterId, hosted, next);
@@ -1020,31 +1058,63 @@ export class SessionHost {
       }
     }
 
-    const successor: HostedSession = {
+    // Os visualizadores acompanham o PERSONAGEM, não a sessão. Fechar o socket porque a hunt
+    // acabou faria quem estava assistindo levar uma desconexão em vez de ver a volta à cidade.
+    //
+    // Só os DELE: num shard os outros continuam na sessão anterior, e levá-los junto seria
+    // arrastar a praça inteira para dentro da hunt de um jogador.
+    const following = [...hosted.viewers].filter((v) => v.characterId === characterId);
+    for (const viewer of following) {
+      hosted.viewers.delete(viewer);
+      hosted.session.detach(viewer.id);
+    }
+
+    // Sai da anterior. Num shard isso é `leave`; numa sessão privada ela já foi encerrada por
+    // quem chamou, e some daqui inteira.
+    if (hosted.session.ruleset.shared === true) {
+      hosted.session.leave(characterId);
+      this.#announceDeparture(hosted, characterId);
+    }
+    if (hosted.session.ruleset.shared !== true || hosted.session.participants.length === 0) {
+      this.#sessions.delete(hosted.session.id);
+    }
+
+    // A próxima pode JÁ estar hospedada — voltar da hunt é chegar na praça em que os outros
+    // estão (FUN-71). Montar um `HostedSession` novo aqui jogaria fora os visualizadores e os
+    // ids de criatura de quem já estava lá.
+    const existing = this.#sessions.get(next.id);
+    const successor: HostedSession = existing ?? {
       session: next, viewers: new Set(), creatureIds: new Map(),
-      restingSince: hosted.viewers.size > 0 ? null : this.#now(),
       lastAdvancedAtMs: this.#now(),
       credited: false,
     };
-    this.#sessions.delete(hosted.session.id);
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
+    if (existing !== undefined) this.#announceArrival(successor, characterId);
 
-    // Os visualizadores acompanham o PERSONAGEM, não a sessão. Fechar o socket porque a hunt
-    // acabou faria quem estava assistindo levar uma desconexão em vez de ver a volta à cidade.
-    for (const viewer of hosted.viewers) {
+    for (const viewer of following) {
       successor.viewers.add(viewer);
       next.attach(viewer.id);
       viewer.send(this.#sessionState(successor, characterId));
     }
-    hosted.viewers.clear();
+    this.#restingSince.set(characterId, following.length > 0 ? null : this.#now());
 
     // A morte é MARCO de snapshot (FUN-27). Perder a transição por estar entre dois
     // intervalos é o pior caso: o jogador volta vivo, na hunt, e a penalidade aparece do nada
     // um pouco depois.
+    //
+    // Shard não tem snapshot (ADR 0023): não há progresso a guardar, e o que ele guardaria
+    // seria a praça inteira, uma cópia por participante. Mas o snapshot da sessão ANTERIOR
+    // precisa sumir — ele é apagado, não simplesmente não reescrito.
+    //
+    // Não fazer as duas coisas é o defeito silencioso: quem morre volta para a praça, o
+    // snapshot da hunt encerrada fica em pé no Redis, e a próxima conexão RETOMA a hunt que
+    // já foi creditada. Antes desta issue o `save` da Cidade cobria essa linha por acidente.
     const snapshots = this.#options.snapshots;
     if (snapshots !== undefined && accountId !== undefined) {
-      await snapshots.save(characterId, accountId, this.#options.nodeId, next.snapshot());
+      await (next.ruleset.shared === true
+        ? snapshots.remove(characterId)
+        : snapshots.save(characterId, accountId, this.#options.nodeId, next.snapshot()));
     }
     this.#logger.info(
       { characterId, from: hosted.session.id, to: next.id, type: next.ruleset.type },
@@ -1082,21 +1152,54 @@ export class SessionHost {
    * rede ou perder o Wi-Fi por um instante não pode custar uma sessão nova.
    */
   #collectResting(hosted: HostedSession, nowMs: number): void {
-    if (hosted.viewers.size > 0 || hosted.restingSince === null) return;
-    if (nowMs - hosted.restingSince < RESTING_GRACE_MS) return;
+    // Um por um, e não a sessão inteira (FUN-71): num shard, cada personagem tem o próprio
+    // relógio de repouso, e recolher pelo estado da sessão tiraria da praça quem está ali
+    // jogando junto de quem fechou o navegador.
+    for (const characterId of this.#charactersOf(hosted.session.id)) {
+      const since = this.#restingSince.get(characterId);
+      if (since === undefined || since === null) continue;
+      if (this.#watchers(hosted, characterId) > 0) continue;
+      if (nowMs - since < RESTING_GRACE_MS) continue;
 
-    const characterId = this.#charactersOf(hosted.session.id)[0];
-    if (characterId === undefined) return;
-    // Marca antes de soltar: `release` é assíncrono, e o ciclo seguinte não pode tentar de
-    // novo enquanto o primeiro ainda está no meio do caminho.
-    hosted.restingSince = null;
-    this.#logger.info(
-      { characterId, sessionId: hosted.session.id },
-      'Collecting a resting session nobody is watching',
-    );
-    void this.release(characterId).catch((error: unknown) => {
-      this.#logger.error({ error, characterId }, 'Failed to collect a resting session');
-    });
+      // Marca antes de soltar: `release` é assíncrono, e o ciclo seguinte não pode tentar de
+      // novo enquanto o primeiro ainda está no meio do caminho.
+      this.#restingSince.set(characterId, null);
+      this.#logger.info(
+        { characterId, sessionId: hosted.session.id },
+        'Collecting a resting character nobody is watching',
+      );
+      void this.release(characterId).catch((error: unknown) => {
+        this.#logger.error({ error, characterId }, 'Failed to collect a resting character');
+      });
+    }
+  }
+
+  /**
+   * Tira da sessão os visualizadores DESTE personagem, fechando-os se houver código.
+   *
+   * Só os dele: num shard os outros continuam olhando a mesma sessão, e limpar a lista
+   * inteira desconectaria a praça porque um jogador saiu. Fecha TODAS as abas dele, porém —
+   * sair do jogo é do personagem, não da aba.
+   */
+  #dropViewers(
+    hosted: HostedSession,
+    characterId: string,
+    closeCode?: number,
+    closeReason?: string,
+  ): void {
+    for (const viewer of [...hosted.viewers]) {
+      if (viewer.characterId !== characterId) continue;
+      if (closeCode !== undefined) viewer.close(closeCode, closeReason ?? '');
+      hosted.viewers.delete(viewer);
+      hosted.session.detach(viewer.id);
+    }
+  }
+
+  /** Quantos visualizadores estão olhando ESTE personagem. Abas contam separado. */
+  #watchers(hosted: HostedSession, characterId: string): number {
+    let count = 0;
+    for (const viewer of hosted.viewers) if (viewer.characterId === characterId) count += 1;
+    return count;
   }
 
   /** Manda o acumulado e derruba quem não está drenando. */
@@ -1148,15 +1251,21 @@ export class SessionHost {
       const hosted = this.#sessions.get(sessionId);
       if (hosted === undefined) continue;
       try {
-        const receipt = hosted.session.end(reason);
-        await this.#saveReceipt(characterId, hosted, receipt);
-        for (const viewer of hosted.viewers) {
-          viewer.sendNow({
-            type: 'session-ended',
-            reason: receipt.reason,
-            aggregates: receipt.aggregates,
-            notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
-          });
+        // Shard não credita e não encerra por personagem (FUN-71, ADR 0023): a praça não gera
+        // progresso (§37), e chamar `end` uma vez por participante mandaria o mesmo extrato
+        // zerado para duzentas pessoas. Sair basta, e `release` faz isso logo abaixo.
+        if (hosted.session.ruleset.shared !== true) {
+          const receipt = hosted.session.end(reason);
+          await this.#saveReceipt(characterId, hosted, receipt);
+          for (const viewer of hosted.viewers) {
+            if (viewer.characterId !== characterId) continue;
+            viewer.sendNow({
+              type: 'session-ended',
+              reason: receipt.reason,
+              aggregates: receipt.aggregates,
+              notableEvents: receipt.notableEvents.map((event) => ({ ...event })),
+            });
+          }
         }
         // Creditada: o snapshot e o registro no diretório TÊM que sumir.
         //
@@ -1245,6 +1354,10 @@ export class SessionHost {
       const hosted = this.#sessions.get(sessionId);
       const accountId = this.#accountIdByCharacter.get(characterId);
       if (hosted === undefined || accountId === undefined) continue;
+      // Shard não tem snapshot (FUN-71, ADR 0023). Não há progresso a guardar na praça, e o
+      // que seria guardado é a praça INTEIRA — uma cópia por participante, duzentas vezes o
+      // mesmo estado a cada dez segundos.
+      if (hosted.session.ruleset.shared === true) continue;
       try {
         await snapshots.save(
           characterId, accountId, this.#options.nodeId, hosted.session.snapshot(),
@@ -1428,13 +1541,15 @@ export class SessionHost {
   }
 
   #createLocal(characterId: string, session: Session, accountId?: string): void {
-    const hosted: HostedSession = {
+    // A sessão pode JÁ estar hospedada: num shard (FUN-71), o segundo personagem a entrar
+    // recebe a mesma `Session` que o primeiro. Criar um `HostedSession` novo aqui jogaria fora
+    // os visualizadores e os ids de criatura de quem já estava lá — e o sintoma seria o
+    // primeiro jogador parar de receber tudo no instante em que o segundo entrasse.
+    const existing = this.#sessions.get(session.id);
+    const hosted: HostedSession = existing ?? {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
-      // Nasce em repouso: um ticket emitido e nunca usado deixaria a sessão de pé para
-      // sempre, segurando um slot que ninguém está usando.
-      restingSince: this.#now(),
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
@@ -1443,11 +1558,50 @@ export class SessionHost {
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
     if (accountId !== undefined) this.#accountIdByCharacter.set(characterId, accountId);
+    // Nasce em repouso: um ticket emitido e nunca usado deixaria a sessão de pé para sempre,
+    // segurando um slot que ninguém está usando. O repouso é por PERSONAGEM desde a FUN-71 —
+    // num shard, um jogador fechando o navegador não pode recolher a praça dos outros.
+    this.#restingSince.set(characterId, this.#now());
+
+    // Quem já estava na praça precisa VER quem chegou. Sem isto, o novo só apareceria no
+    // primeiro passo que ele desse — e ficaria invisível enquanto estivesse parado.
+    if (existing !== undefined) this.#announceArrival(hosted, characterId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },
-      'Session created',
+      existing === undefined ? 'Session created' : 'Character joined a shared session',
     );
+  }
+
+  /** Avisa quem já está na sessão de que alguém chegou (FUN-71). */
+  #announceArrival(hosted: HostedSession, characterId: string): void {
+    const arrival = hosted.session.participants.find((p) => p.id === characterId);
+    if (arrival === undefined) return;
+    const message = {
+      type: 'creature-appear',
+      id: this.#creatureId(hosted, characterId),
+      position: arrival.position,
+      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
+      appearanceId: 1,
+      name: this.#nameByCharacter.get(characterId) ?? characterId,
+      health: arrival.health,
+      maxHealth: arrival.maxHealth,
+    } as const;
+    for (const viewer of hosted.viewers) {
+      if (viewer.characterId === characterId) continue;
+      viewer.send(message);
+    }
+  }
+
+  /** Avisa quem ficou de que alguém saiu (FUN-71). */
+  #announceDeparture(hosted: HostedSession, characterId: string): void {
+    const id = hosted.creatureIds.get(characterId);
+    if (id === undefined) return;
+    hosted.creatureIds.delete(characterId);
+    for (const viewer of hosted.viewers) {
+      if (viewer.characterId === characterId) continue;
+      viewer.send({ type: 'creature-disappear', id });
+    }
   }
 
   async #register(

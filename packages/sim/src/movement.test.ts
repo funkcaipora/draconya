@@ -1,6 +1,8 @@
 import { buildTilemap } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
-import { TileOccupancy, canOccupy, move, movementDuration, place } from './movement.js';
+import {
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
+} from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
 
 // Uma sala de 4×3 com uma parede no meio. Pequena de propósito: num mapa assim dá para dizer,
@@ -237,5 +239,65 @@ describe('movementDuration', () => {
     const mover = at(1, 1);
     expect(movementDuration(mover, to(1, 1), to(2, 1))).toBe(500);
     expect(movementDuration(mover, to(1, 1), to(2, 2))).toBe(500);
+  });
+});
+
+describe('tilesAround', () => {
+  it('walks outward from the centre, in a fixed order', () => {
+    // Ordem fixa é o que torna a posição reproduzível: sem isso, dois servidores com o mesmo
+    // snapshot desenhariam mapas diferentes.
+    const tiles = [...tilesAround({ x: 0, y: 0, z: 7 }, 1)];
+    expect(tiles[0]).toEqual({ x: 0, y: 0, z: 7 });
+    expect(tiles).toHaveLength(9);
+    expect([...tilesAround({ x: 0, y: 0, z: 7 }, 1)]).toEqual(tiles);
+  });
+});
+
+describe('placeNear (FUN-71)', () => {
+  it('usa o tile pedido quando ele está livre', () => {
+    const world = new TileOccupancy(map);
+    const mover = at(3, 3);
+    expect(placeNear(world, mover, to(1, 1), 2)).toBeNull();
+    expect(mover.position).toEqual(to(1, 1));
+  });
+
+  it('desvia para o mais PRÓXIMO quando o pedido está ocupado', () => {
+    // É o caso da praça compartilhada: o segundo a chegar encontra o primeiro no ponto de
+    // entrada. Um `place` seco recusaria, e o personagem ficaria fora do mapa — invisível,
+    // parado, com o log dizendo que ele entrou.
+    const world = new TileOccupancy(map);
+    const primeiro = at(3, 3);
+    place(world, primeiro, to(1, 1));
+
+    const segundo = at(3, 3);
+    expect(placeNear(world, segundo, to(1, 1), 2)).toBeNull();
+    expect(segundo.position).not.toEqual(to(1, 1));
+    // Anel 1 em volta de (1,1): dentro da sala, e nunca em cima de quem já estava lá.
+    expect(Math.max(
+      Math.abs(segundo.position.x - 1), Math.abs(segundo.position.y - 1),
+    )).toBe(1);
+    expect(world.occupied(1, 1)).toBe(true);
+  });
+
+  it('não pisa em parede ao desviar', () => {
+    // (2,2) é parede. Procurar tile livre não pode virar "qualquer coordenada serve".
+    const world = new TileOccupancy(map);
+    const ocupante = at(3, 3);
+    place(world, ocupante, to(2, 1));
+
+    // Anel 1 em volta de (2,1): a linha de cima é toda parede, (2,2) é a parede do meio, e o
+    // primeiro livre na ordem fixa é (1,1).
+    const chegando = at(3, 3);
+    expect(placeNear(world, chegando, to(2, 1), 1)).toBeNull();
+    expect(chegando.position).toEqual(to(1, 1));
+  });
+
+  it('devolve a recusa quando o anel inteiro está cheio', () => {
+    // A praça cheia. Quem chama decide o que fazer — e o teto de população é da FUN-33.
+    const world = new TileOccupancy(map);
+    for (const tile of tilesAround(to(1, 1), 1)) place(world, at(3, 3), tile);
+
+    const chegando = at(3, 3);
+    expect(placeNear(world, chegando, to(1, 1), 1)).not.toBeNull();
   });
 });

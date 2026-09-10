@@ -44,23 +44,74 @@ function cityRulesetFor(content: Content) {
   });
 }
 
-export function createCitySessionFactory(
-  content: Content,
-  now: () => number = () => Date.now(),
-): SessionFactory {
-  return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
+/**
+ * A cópia da Cidade deste nó — o SHARD (FUN-71, ADR 0023).
+ *
+ * Uma cópia, muitos personagens. Antes disto cada personagem tinha a própria Cidade e ninguém
+ * via ninguém: a praça existia N vezes, vazia em todas.
+ *
+ * **Uma cópia por nó, e é assim que "Cidade 2" nasce.** Dois nós de jogo já são duas cópias,
+ * sem nada a mais; o teto de população por cópia e a escolha de qual entrar são da FUN-33.
+ *
+ * A cópia vazia é ESQUECIDA. Mantê-la de pé é custo puro — e, pior, ela envelheceria: a versão
+ * de conteúdo é fixada na criação (invariante 7), então uma praça que atravessa três deploys
+ * continuaria rodando a versão do primeiro.
+ */
+export class CityShard {
+  readonly #content: Content;
+  readonly #now: () => number;
+  #session: Session | null = null;
+
+  constructor(content: Content, now: () => number = () => Date.now()) {
+    this.#content = content;
+    this.#now = now;
+  }
+
+  /**
+   * Põe o personagem na cópia deste nó, criando-a se a de agora não servir mais.
+   *
+   * **Cópia vazia não é reaproveitada**, e não é economia perdida: a versão de conteúdo é
+   * fixada na criação (invariante 7), então uma praça que ninguém frequenta e atravessa três
+   * deploys continuaria rodando a versão do primeiro. Vazia, ela não custa nada a ninguém
+   * para ser refeita — e o hospedeiro já a esqueceu quando o último saiu.
+   */
+  admit(character: CharacterRuntime): Session {
+    const current = this.#session;
+    if (current === null || current.ended !== null || current.participants.length === 0) {
+      this.#session = this.#create();
+    }
+    const session = this.#session as Session;
+    session.enter(character);
+    return session;
+  }
+
+  /** Quantos personagens estão na praça agora. É o número que a FUN-33 vai limitar. */
+  get population(): number {
+    return this.#session?.participants.length ?? 0;
+  }
+
+  #create(): Session {
     const id = randomUUID();
-    const session = new Session({
+    return new Session({
       id,
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
-      contentVersion: content.version,
-      ruleset: cityRulesetFor(content),
+      contentVersion: this.#content.version,
+      ruleset: cityRulesetFor(this.#content),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),
-      createdAtMs: now(),
+      createdAtMs: this.#now(),
     });
+  }
+}
+
+export function createCitySessionFactory(
+  content: Content,
+  now: () => number = () => Date.now(),
+  shard: CityShard = new CityShard(content, now),
+): SessionFactory {
+  return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
     // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
     // lá, todo personagem cresce pela tabela base.
     const stats = statsForLevel(initialCharacter.level, null, content.progression);
@@ -94,8 +145,8 @@ export function createCitySessionFactory(
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
     // que mantém "quanto de stamina ele tem" uma pergunta barata durante a sessão.
     materializeStamina(character, now(), content.stamina);
-    session.enter(character);
-    return session;
+    // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
+    return shard.admit(character);
   };
 }
 
@@ -163,16 +214,22 @@ function rulesetFor(snapshot: SessionSnapshot, content: Content): Ruleset | null
 export function createSessionBuilder(
   content: Content,
   now: () => number = () => Date.now(),
+  shard: CityShard = new CityShard(content, now),
 ): SessionBuilder {
-  return (request, from): Session | null => {
+  return (request, from, characterId): Session | null => {
+    // Quem atravessa é UM personagem, mesmo quando a origem tem duzentos (FUN-71). Mover
+    // `from.participants` inteiro faria um jogador clicando em caçar levar a praça junto — e
+    // a hunt recusa o segundo participante, então o sintoma seria a transição falhar para
+    // todo mundo sempre que houvesse mais alguém na praça.
+    const character = from.participants.find((p) => p.id === characterId);
+    if (character === undefined) return null;
+
     // Materializar a stamina é da FRONTEIRA, e toda transição é uma (§10). Fazer aqui, e não
     // dentro de cada destino, é o que garante que nenhum caminho novo esqueça.
-    for (const character of from.participants) {
-      materializeStamina(character, now(), content.stamina);
-    }
+    materializeStamina(character, now(), content.stamina);
 
-    if (request.to === 'city') return cityFor(content, from, now);
-    if (request.to === 'hunt') return huntFor(content, request, from, now);
+    if (request.to === 'city') return cityFor(shard, from, character);
+    if (request.to === 'hunt') return huntFor(content, request, character, now);
     // Treino, quest, boss e guild war ainda não têm ruleset. `null` recusa a transição com
     // erro claro, que é melhor que construir uma sessão que mente sobre o que é.
     return null;
@@ -186,27 +243,17 @@ export function createSessionBuilder(
  * Quem cura é o `onEnter` da Cidade — voltar à PZ restaura HP e mana cheios (§26.1). Curar
  * aqui duplicaria a regra em dois lugares, e um dia só um dos dois mudaria.
  */
-function cityFor(content: Content, from: Session, now: () => number): Session | null {
+function cityFor(shard: CityShard, from: Session, character: CharacterRuntime): Session | null {
   if (from.ruleset.type === 'city') return null;
-  const id = randomUUID();
-  const session = new Session({
-    id,
-    contentVersion: content.version,
-    ruleset: cityRulesetFor(content),
-    rng: Rng.fromSeed(id),
-    // Marca de quando a sessão passou a existir, para quem investiga. Desde a FUN-68 não
-    // alimenta simulação nenhuma — o relógio de dentro é lógico e nasce em zero —, então
-    // aqui vale a hora de verdade, que é a que serve para ler um log.
-    createdAtMs: now(),
-  });
-  for (const character of from.participants) session.enter(character);
-  return session;
+  // A MESMA cópia em que os outros estão (FUN-71). Voltar da hunt é chegar na praça, não
+  // abrir uma praça nova — que é o que uma sessão por personagem fazia.
+  return shard.admit(character);
 }
 
 function huntFor(
   content: Content,
   request: TransitionRequest,
-  from: Session,
+  character: CharacterRuntime,
   now: () => number,
 ): Session | null {
   if (request.huntId === undefined || request.difficulty === undefined) return null;
@@ -223,7 +270,7 @@ function huntFor(
       // ou ao ler o ticket. Aqui ela só é compilada — e é a hunt que a guarda no snapshot.
       ...(request.botConfig === undefined ? {} : { botConfig: request.botConfig }),
     });
-    for (const character of from.participants) session.enter(character);
+    session.enter(character);
     return session;
   } catch {
     // Hunt inexistente, dificuldade que ela não define, rota que saiu do conteúdo. Recusar é

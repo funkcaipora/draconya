@@ -362,28 +362,39 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     socket.binaryType = 'arraybuffer';
     await receive(socket);                                            // welcome
 
-    // Nasceu no entryPoint da Cidade de teste — e não em (0,0), que é a FUN-60.
+    // Nasceu PERTO do entryPoint da Cidade de teste — e não em (0,0), que é a FUN-60, nem
+    // fora do mapa, que seria a praça compartilhada sem lugar para ele (FUN-71).
+    //
+    // "Perto" e não "em cima": a praça é uma cópia só (FUN-71), então o tile de entrada pode
+    // estar ocupado por quem chegou antes, e o personagem entra no livre mais próximo. Achar
+    // a PRÓPRIA criatura pelo `self.creatureId` é o que mantém este teste falando do
+    // personagem deste teste, e não de quem mais estiver na praça.
     const before = receive(socket);
     socket.send(encodeC2S({ type: 'session-attach' }));
     // A posição vai em `world.creatures`, nunca em `self`: o cliente não decide onde está.
     const initial = decodeS2C(await before)?.find((m) => m.type === 'session-state');
-    expect(initial).toMatchObject({ world: { creatures: [
-      expect.objectContaining({ position: { x: 2, y: 2, z: 7 } }),
-    ] } });
+    if (initial?.type !== 'session-state') throw new Error('não veio session-state');
+    const mine = initial.world.creatures.find((c) => c.id === initial.self.creatureId);
+    if (mine === undefined) throw new Error('o personagem não está no próprio session-state');
+    expect(mine.position.z).toBe(7);
+    expect(Math.max(
+      Math.abs(mine.position.x - 2), Math.abs(mine.position.y - 2),
+    )).toBeLessThanOrEqual(2);
 
     // INTENÇÃO: uma direção. Quem resolve o tile é o servidor (invariante 4).
+    const from = mine.position;
     const moved = receive(socket);
     socket.send(encodeC2S({ type: 'walk', direction: 'east' }));
     expect(decodeS2C(await moved)).toContainEqual(expect.objectContaining({
-      type: 'creature-move', from: { x: 2, y: 2, z: 7 }, to: { x: 3, y: 2, z: 7 },
+      type: 'creature-move', from, to: { ...from, x: from.x + 1 },
     }));
 
     const after = receive(socket);
     socket.send(encodeC2S({ type: 'session-attach' }));
     const state = decodeS2C(await after)?.find((m) => m.type === 'session-state');
-    expect(state).toMatchObject({ world: { creatures: [
-      expect.objectContaining({ position: { x: 3, y: 2, z: 7 } }),
-    ] } });
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    expect(state.world.creatures.find((c) => c.id === state.self.creatureId)?.position)
+      .toEqual({ ...from, x: from.x + 1 });
   });
 
   it('say through the real socket comes back as chat-message, signed with the character name (FUN-58)', async () => {
