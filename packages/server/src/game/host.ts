@@ -21,6 +21,7 @@ import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult }
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
+import type { BoxedItem, LootBoxStore } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
@@ -95,6 +96,11 @@ export interface SessionHostOptions {
    * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
+  /**
+   * Onde a Caixa de Loot da Sessão é guardada (FUN-88). Ausente: o que não coube se perde no
+   * encerramento, e o log diz. Degradação, não falha.
+   */
+  readonly lootBoxes?: LootBoxStore;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -113,6 +119,18 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'wrong-vocation': 'Esse item é de outra vocação.',
   'stack-too-large': 'Essa pilha é grande demais.',
 };
+
+/**
+ * Os itens que ESTA sessão criou e que estão na mochila (FUN-88).
+ *
+ * O id determinístico (`sessionId:n`) é o que permite reconhecê-los sem guardar uma lista à
+ * parte: item com o prefixo desta sessão nasceu nela. O que veio de sessões anteriores já tem
+ * linha no banco e não precisa ser inserido de novo.
+ */
+function acquiredBy(character: CharacterRuntime, sessionId: string): BoxedItem[] {
+  const prefix = `${sessionId}:`;
+  return character.inventory.backpack.filter((item) => item.instanceId.startsWith(prefix));
+}
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
 function equipmentOf(character: CharacterRuntime): Record<string, string> {
@@ -1197,7 +1215,26 @@ export class SessionHost {
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
+      // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
+      // coube vira Caixa de Loot da Sessão.
+      ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
+      ...(owner === undefined || owner.lootBox.length === 0
+        ? {}
+        : { lootBox: owner.lootBox }),
     });
+
+    // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
+    // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
+    // `jobs` faria o prazo começar até dez segundos depois, e por acaso.
+    if (owner !== undefined && owner.lootBox.length > 0) {
+      await this.#options.lootBoxes?.save(receipt.sessionId, owner.lootBox)
+        .catch((error: unknown) => {
+          this.#logger.error(
+            { error, characterId, sessionId: receipt.sessionId },
+            'Failed to save the session loot box',
+          );
+        });
+    }
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */

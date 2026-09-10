@@ -40,6 +40,7 @@ export class JobsMetrics {
   readonly #cycleDuration: Histogram;
   readonly #cycleFailures: Counter;
   readonly #cyclesSkipped: Counter;
+  readonly #lootBoxes: Gauge;
   readonly #lastSuccess: Gauge;
   readonly #lockHeld: Gauge;
 
@@ -52,6 +53,11 @@ export class JobsMetrics {
     this.#orphans = new Gauge({
       name: 'draconya_orphan_sessions',
       help: 'Snapshots without a directory lease, as of the last sweep',
+      registers: [this.registry],
+    });
+    this.#lootBoxes = new Gauge({
+      name: 'draconya_loot_boxes_pending',
+      help: 'Session loot boxes still within their 30-minute window, as of the last cycle',
       registers: [this.registry],
     });
     this.#slotsReleased = new Counter({
@@ -127,6 +133,23 @@ export class JobsMetrics {
 
   observeSkipped(): void {
     this.#cyclesSkipped.inc();
+  }
+
+  /**
+   * Quantas Caixas de Loot ainda estão dentro do prazo (FUN-88).
+   *
+   * **Quem expira é o TTL do Redis, não este ciclo** — e é por isso que a métrica é uma gauge
+   * de pendentes, e não um contador de expiradas. Contar expiração exigiria alguém observando
+   * o instante em que a chave some, e ninguém observa: ela some sozinha. O que dá para saber
+   * é quantas existem agora, e é essa a pergunta útil — uma pilha que só cresce é jogador
+   * ganhando item que não consegue resgatar.
+   *
+   * Zero aqui é um zero OBSERVADO — o ciclo olhou e não achou. A distinção não aparece no
+   * scrape (`prom-client` expõe a gauge como zero desde a construção); ela vive no fato de o
+   * ciclo escrever o número toda vez que olha, e o alerta útil é a pilha CRESCENDO.
+   */
+  observeLootBoxes(pending: number): void {
+    this.#lootBoxes.set(pending);
   }
 
   /**

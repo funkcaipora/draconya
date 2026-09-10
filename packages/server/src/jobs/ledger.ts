@@ -177,6 +177,29 @@ async function applyProgression(
     ? {}
     : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
 
+  // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
+  // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
+  if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
+    await tx
+      .insert(itemInstances)
+      .values(receipt.acquired.map((item) => ({
+        id: item.instanceId,
+        itemId: item.itemId,
+        ownerCharacterId: receipt.characterId,
+        quantity: item.quantity,
+        origin: 'loot',
+      })))
+      // O id vem do `sim` e é determinístico (`sessionId:n`), então inserir de novo é inserir
+      // a mesma chave primária.
+      //
+      // **A proteção principal contra extrato repetido é outra**: a `UNIQUE (session_id, seq)`
+      // do ledger, na mesma transação, que faz o segundo processamento inteiro virar operação
+      // nula. Isto aqui é o que torna a INSERÇÃO segura por conta própria — sem ele, um item
+      // que já existisse derrubaria o extrato inteiro, e gold, XP e skills se perderiam junto
+      // com ele. Identidade previsível é o que permite essa segurança sem conferência.
+      .onConflictDoNothing();
+  }
+
   // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
   // um extrato não move item de outra pessoa nem que traga o id dela.
   if (receipt.equipment !== undefined) {

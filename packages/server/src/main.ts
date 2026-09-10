@@ -26,6 +26,7 @@ import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
+import { LootBoxStore } from './loot-box.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
 import { DrizzleGameRepository } from './db/repository.js';
@@ -122,6 +123,8 @@ async function main(): Promise<void> {
     'Content loaded',
   );
 
+  const lootBoxes = new LootBoxStore(redis);
+
   const factories: Record<RoleName, () => Role> = {
     api: () => {
       const apiLogger = logger.child({ role: 'api' });
@@ -170,6 +173,9 @@ async function main(): Promise<void> {
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,
+      // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
+      // expirar precisa significar que o item nunca existiu.
+      lootBoxes,
       // A ÚNICA escrita de banco do `game`, e ela é uma instrução só. Sem banco configurado,
       // a configuração vale na sessão e some no logout — degradação, não falha.
       ...(repository === null
@@ -179,6 +185,7 @@ async function main(): Promise<void> {
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
+      lootBoxes,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
       // no mesmo host compartilham o `NODE_ID`, renovariam o lock um do outro, e os dois se

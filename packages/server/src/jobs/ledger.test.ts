@@ -539,3 +539,104 @@ describe.runIf(ready)('o equipamento é liquidado pelo extrato (FUN-82)', () => 
     expect((await slotsOf(database, alheio)).get(id)).toBeNull();
   });
 });
+
+describe.runIf(ready)('o item que caiu vira instância pelo extrato (FUN-88)', () => {
+  const rowsOf = async (database: NonNullable<typeof db>, characterId: string) =>
+    database.database.db
+      .select({ id: itemInstances.id, itemId: itemInstances.itemId, origin: itemInstances.origin })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+
+  it('insere o que a sessão criou, com a origem certa', async () => {
+    // O `sim` NUNCA escreve `item_instance` — ele registra o que caiu, e o `jobs` insere na
+    // mesma transação da linha de ledger (invariante 10).
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      acquired: [
+        { instanceId: `${sessionId}:0`, itemId: 'spike-sword', quantity: 1 },
+        { instanceId: `${sessionId}:1`, itemId: 'arrow', quantity: 20 },
+      ],
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const rows = await rowsOf(database, characterId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.origin === 'loot')).toBe(true);
+  });
+
+  it('o mesmo item chegando de novo não duplica NEM faz o extrato falhar', async () => {
+    // Duas afirmações, e a segunda é a que importa — a primeira versão deste teste só olhava a
+    // contagem de linhas, e passava com ou sem `ON CONFLICT DO NOTHING`: sem ele o `INSERT`
+    // estoura, `writePendingReceipts` conta o extrato como FALHO e nada é gravado. A contagem
+    // fica em 1 pelos dois caminhos, e o extrato inteiro — gold, XP, skills — se perde no
+    // caminho errado.
+    //
+    // O que distingue os dois é `failed`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const acquired = [{ instanceId: `${sessionId}:0`, itemId: 'spike-sword', quantity: 1 }];
+
+    await receipts.save({ ...receiptOf(sessionId, characterId), acquired });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    // O mesmo item chegando por outro extrato. Não é o caminho comum — a chave única do ledger
+    // já barra o extrato repetido —, mas é o que torna a inserção segura de retentar por conta
+    // própria, que é o que uma identidade determinística compra.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, acquired });
+    const segunda = await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(segunda).toEqual({ written: 1, failed: 0 });
+    expect(await rowsOf(database, characterId)).toHaveLength(1);
+  });
+
+  it('item que caiu E foi equipado na mesma sessão existe antes de o layout apontá-lo', async () => {
+    // A ordem dentro da transação importa: o layout de equipamento aponta ids, e um id sem
+    // linha não seria vestido por ninguém. Inserir antes é o que torna as duas metades
+    // coerentes num extrato só.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const instanceId = `${sessionId}:0`;
+
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      acquired: [{ instanceId, itemId: 'spike-sword', quantity: 1 }],
+      equipment: { hand: instanceId },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const [row] = await database.database.db
+      .select({ slot: itemInstances.equippedSlot })
+      .from(itemInstances)
+      .where(eq(itemInstances.id, instanceId));
+    expect(row?.slot).toBe('hand');
+  });
+
+  it('extrato SEM itens não toca a tabela', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save(receiptOf(randomUUID(), characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect(await rowsOf(database, characterId)).toHaveLength(0);
+  });
+});
