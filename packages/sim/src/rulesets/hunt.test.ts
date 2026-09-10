@@ -1,4 +1,4 @@
-import { buildContent, isBlocked } from '@draconya/content';
+import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
@@ -33,7 +33,7 @@ const route = {
 };
 
 const rat = {
-  id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
+  id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 50, experience: 5, attack: 10, armor: 0,
   attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4, attackRange: 1,
   // Gold fixo por abate: o que os testes de recompensa conferem é a CONTA, não o sorteio —
@@ -130,30 +130,37 @@ const skills = [
 // teste consegue medir a diferença sem depender de sorteio.
 const items = [
   {
-    id: 'life-ring', name: 'Life Ring', appearanceId: 3052, kind: 'ring', slot: 'finger',
+    id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
     weight: 1, armor: 2,
   },
   {
-    id: 'other-ring', name: 'Other Ring', appearanceId: 3053, kind: 'ring', slot: 'finger',
+    id: 'other-ring', name: 'Other Ring', kind: 'ring', slot: 'finger',
     weight: 1, armor: 1,
   },
   {
-    id: 'sword', name: 'Sword', appearanceId: 3264, kind: 'weapon', slot: 'hand',
+    id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
     weight: 50, attack: 200,
   },
   {
-    id: 'plate', name: 'Plate Armor', appearanceId: 3357, kind: 'armor', slot: 'chest',
+    id: 'plate', name: 'Plate Armor', kind: 'armor', slot: 'chest',
     weight: 80, armor: 9,
   },
 ];
 
-const raw = (over: Partial<RawContent> = {}): RawContent => ({
-  monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-  stamina: [stamina], spells, supplies, skills, items,
-  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-  bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], maps: [map], routes: [route], ...over,
-});
+// A aparência é DERIVADA (FUN-94). Estes testes falam de combate, rota, loot e bot; a arte não
+// muda nenhum resultado, e escrevê-la à mão obrigaria toda fixture nova de monstro a inventar
+// um número que ninguém lê.
+const raw = (over: Partial<RawContent> = {}): RawContent => {
+  const base: RawContent = {
+    monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
+    stamina: [stamina], spells, supplies, skills, items,
+    // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
+    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
+    maps: [map], routes: [route], ...over,
+  };
+  return { appearances: [placeholderAppearances(base)], ...base };
+};
 
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
@@ -2819,7 +2826,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
 // escrever — sem isso, provar histerese exigiria orquestrar dano real em valores exatos, e o
 // teste passaria a medir a fórmula de combate em vez dos dois limiares.
 const relogio = {
-  id: 'clock', name: 'Relógio', outfitId: 21, recommendedLevel: 1,
+  id: 'clock', name: 'Relógio', recommendedLevel: 1,
   health: 1_000_000, experience: 0, attack: 0, armor: 0,
   attackIntervalMs: 100, stepDurationMs: 100, aggroRadius: 8, attackRange: 1,
   loot: { items: [] },

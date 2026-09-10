@@ -48,9 +48,10 @@ pnpm content:check
 
 ## Invariantes locais
 
-- **Nunca contém arte** (invariante 6). Um item declara `appearanceId`, um monstro declara
-  `outfitId` — nunca um caminho de arquivo de sprite. É o que mantém a troca do pacote de assets
-  como remapeamento de ids em vez de reescrita de conteúdo. Ver ADR 0008.
+- **Nunca contém arte** (invariante 6), e o id de aparência **não mora na entidade** (FUN-94):
+  ele vive em `data/appearances/baseline.json`, uma linha por id de conteúdo, e `buildContent`
+  resolve `appearanceId`/`outfitId` a partir dela no boot. Nunca um caminho de arquivo de sprite,
+  em lugar nenhum. Ver ADR 0008 e a seção "A tabela de aparências", abaixo.
 - **A versão de conteúdo é fixada na sessão** (invariante 7). Uma hunt iniciada na versão N termina
   na versão N. Este pacote expõe a versão; quem cria sessão a congela.
 - Balanceamento é dado, não código. Se mudar um número exige deploy de lógica, está no lugar errado.
@@ -73,6 +74,37 @@ Valor ainda não decidido no PRD entra com `_open` **no próprio arquivo**, nunc
 que parece decidido — palpite disfarçado de decisão é o que faz ninguém lembrar de voltar. O
 boot repete todos eles em `openValues`, e o `docs-check` conta os `[ABERTO]` correspondentes
 em `docs/product/`.
+
+## A tabela de aparências (FUN-94)
+
+```
+data/appearances/baseline.json     # id de conteúdo → id de aparência
+```
+
+```jsonc
+{
+  "id": "baseline",
+  "pack": "tibia-1332",            // de qual pacote vieram estes números
+  "monsters": { "rat": 21 },       // → outfitId
+  "items": { "spike-sword": 3271 } // → appearanceId
+}
+```
+
+**Trocar de pacote de assets é editar ESTE arquivo**, e mais nenhum. É o que o ADR 0008 já
+prometia; antes da FUN-94 os ids viviam inline em cada entidade, e a promessa valia na letra
+— nenhum caminho de arte em `content/` — mas não no efeito.
+
+Separada **por tipo**, e não um mapa achatado: id é único dentro de um tipo, não entre eles. No
+dia em que existir o item `rat` e o monstro `rat`, um mapa achatado sobrescreveria o outro em
+silêncio, no arquivo que existe justamente para ninguém conferir arte à mão.
+
+`buildContent` reclama dos **dois lados**: entidade sem linha na tabela, e linha na tabela
+apontando entidade que não existe. A segunda é o defeito que a tabela INTRODUZ — com o id inline,
+apagar a entidade levava o id junto; com a tabela, a linha fica para trás.
+
+**Fixture não escreve tabela à mão.** `placeholderAppearances(raw)` deriva uma com ids
+sequenciais, e o nome diz o que ela é: um teste de combate não fala de arte, e os números dela
+não apontam aparência que exista em pacote nenhum.
 
 ## Loot (FUN-63)
 
@@ -111,7 +143,8 @@ vez de ser um campo `points` só.
 ## Itens (FUN-76)
 
 `items/*.json` é a DEFINIÇÃO; a instância é linha no Postgres (`item_instance`), e a divisão é o
-ponto. Aqui ficam id, `appearanceId`, tipo, slot, peso, atributos, requisitos e se empilha.
+ponto. Aqui ficam id, tipo, slot, peso, atributos, requisitos e se empilha — a aparência não,
+desde a FUN-94.
 
 **Atributos base são fixos** (§21.2). Não há rolagem por instância: duas espadas do mesmo id são
 idênticas, e item melhor é item **diferente**. Isso apaga toda a matemática de variação por
@@ -139,6 +172,11 @@ entre arquivos resolvem.
 - **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
   moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
   configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.
+- **`itemSchema` e `monsterSchema` são `strictObject`, e os outros não.** Zod DESCARTA chave
+  desconhecida em silêncio, e depois da FUN-94 é exatamente o que aconteceria com um
+  `appearanceId` escrito no item por hábito: o arquivo pareceria certo, o número não iria a
+  lugar nenhum, e o item apareceria com a arte de outro sem nada acusar. `load.test.ts` varre
+  `data/` pela mesma coisa, porque a mensagem do schema não diz PARA ONDE o campo foi.
 - **O `.refine` de `botRingSwapSchema` é regra de jogo, não de forma.** `removeAbove` maior que
   `equipBelow` é o que garante a faixa morta da histerese — limiares iguais parseiam como número
   válido e trocam o anel a cada golpe. Recusar aqui é mais barato que descobrir pelo extrato.

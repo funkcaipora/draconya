@@ -60,3 +60,40 @@ persistente em IndexedDB/Cache Storage.
 ## Invariantes afetados
 
 6 (`content/` nunca contém arte — só `appearanceId` e `outfitId`).
+
+## Emenda — 2026-09-10 (FUN-94): a tabela existe
+
+Esta decisão sempre disse *"trocar o pacote de assets no futuro é remapear `appearanceId`/
+`outfitId` numa tabela, não reescrever `content/`"*. **A tabela não existia.** Os ids viviam
+inline em cada entidade:
+
+```jsonc
+// data/monsters/rat.json — antes
+{ "id": "rat", "outfitId": 21, ... }
+```
+
+Isso cumpria a letra do invariante 6 — nenhum caminho de arte em `content/` — e não cumpria o
+efeito: trocar de pacote era editar todo arquivo de conteúdo, exatamente o que a alternativa
+descartada ("`content/` referenciando diretamente arquivos de sprite") custaria.
+
+Agora existe `data/appearances/baseline.json`, uma linha por id de conteúdo, e `buildContent`
+resolve a aparência de cada monstro e item a partir dela no boot. A troca de pacote é o diff de
+um arquivo.
+
+**A tabela é separada por tipo** (`monsters`, `items`) e não um mapa achatado: id é único dentro
+de um tipo, não entre eles, e um dia existe o item "rat" ao lado do monstro "rat".
+
+**O custo que a tabela cobra**, e que a decisão aceita: a aparência órfã. Com o id inline, apagar
+a entidade levava o id junto; com a tabela, a linha fica para trás e ninguém percebe. Por isso a
+referência cruzada reclama dos dois lados — entidade sem aparência **e** aparência sem entidade —
+e por isso `itemSchema`/`monsterSchema` são `strictObject`: Zod descarta chave desconhecida em
+silêncio, e um `appearanceId` escrito na entidade por hábito não iria a lugar nenhum sem nada
+acusar.
+
+**A versão de conteúdo inclui a tabela.** Trocar de pacote muda a versão, e o invariante 7 faz o
+resto: uma hunt que começou com o pacote antigo termina com ele, em vez de trocar de arte no meio
+de milhares de sessões desanexadas.
+
+Nada disso muda a decisão nem o risco jurídico que ela assume — é a mitigação técnica passando a
+funcionar como estava escrito. Validar que cada id existe no pacote CARREGADO continua sendo a
+metade da FUN-21 que depende do pacote, e continua aberta.

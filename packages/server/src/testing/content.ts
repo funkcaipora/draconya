@@ -5,7 +5,7 @@
 // cada teste de sessão ao balanceamento do jogo — mudar o HP inicial no JSON quebraria testes
 // que não falam de HP nenhum.
 
-import { buildContent } from '@draconya/content';
+import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, RawContent } from '@draconya/content';
 
 export const TEST_MAP = { id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'] };
@@ -62,7 +62,7 @@ export const TEST_COMBAT = {
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 
 const TEST_RAT = {
-  id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1, health: 20, experience: 5,
+  id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
   attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
   loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
@@ -94,7 +94,9 @@ export const TEST_ADVANCED_POLICY = 'lowest-hp';
  * interest management ali passaria sem exercitar nada.
  */
 export function rawTestContent(): RawContent {
-  return {
+  // A aparência é DERIVADA (FUN-94): nenhum teste de servidor fala de arte, e a tabela real é
+  // `packages/content/data/appearances/baseline.json`, escrita à mão.
+  const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
     spells: [TEST_SPELL], supplies: [TEST_SUPPLY],
@@ -105,6 +107,7 @@ export function rawTestContent(): RawContent {
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
     city: { mapId: 'city' },
   };
+  return { ...raw, appearances: [placeholderAppearances(raw)] };
 }
 
 export function testContent(): Content {

@@ -1,7 +1,6 @@
 {
   "id": "rat",
   "name": "Rat",
-  "outfitId": 21,
   "recommendedLevel": 1,
   "health": 20,
   "experience": 5,

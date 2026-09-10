@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildContent, computeVersion, ContentError } from './content.js';
+import { buildContent, computeVersion, ContentError, placeholderAppearances } from './content.js';
 import type { RawContent } from './content.js';
 
 const rat = {
-  id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
+  id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
   attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
   loot: { gold: { chance: 0.9, min: 1, max: 4 }, items: [] },
@@ -34,13 +34,20 @@ const combat = {
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 
-const base = (over: Partial<RawContent> = {}): RawContent => ({
-  monsters: [rat], hunts: [cellars], vocations: [knight],
-  progression: [baseline], combat: [combat], stamina: [stamina],
- // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
- bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], ...over,
-});
+// A aparência é DERIVADA aqui (FUN-94): estes testes falam de loot, rota e referência cruzada,
+// e escrever a tabela à mão em cada um faria trinta fixtures carregarem um dado que nenhuma
+// delas usa. Quem exercita a tabela em si passa uma explícita — ver o bloco da FUN-94.
+const base = (over: Partial<RawContent> = {}): RawContent => {
+  const raw: RawContent = {
+    monsters: [rat], hunts: [cellars], vocations: [knight],
+    progression: [baseline], combat: [combat], stamina: [stamina],
+    // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
+    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
+    ...over,
+  };
+  return { appearances: [placeholderAppearances(raw)], ...raw };
+};
 
 describe('buildContent', () => {
   it('monta o conteúdo válido, indexado por id', () => {
@@ -279,9 +286,85 @@ describe('ponto de entrada da Cidade (FUN-60)', () => {
   });
 });
 
+describe('a tabela de aparências (FUN-94)', () => {
+  const tabela = (over: Record<string, unknown> = {}) => [{
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {}, ...over,
+  }];
+
+  it('resolve a aparência da entidade a partir da tabela, e não do arquivo dela', () => {
+    // O ponto inteiro da issue: `rat.json` não tem outfitId nenhum, e o monstro montado tem.
+    const content = buildContent(base({ appearances: tabela() }));
+    expect(content.monsters.get('rat')?.outfitId).toBe(21);
+  });
+
+  it('recusa a entidade que a tabela não cobre, e diz qual linha falta', () => {
+    // Sem isto, o monstro chegaria à sessão sem aparência e o cliente desenharia o quê?
+    expect(() => buildContent(base({ appearances: tabela({ monsters: {} }) })))
+      .toThrow(/monstro "rat" não tem aparência: falta a linha "rat" em appearances\.monsters/);
+  });
+
+  it('recusa a aparência ÓRFÃ — a linha que sobrou de uma entidade apagada', () => {
+    // É o defeito que a tabela introduz, e o motivo de a checagem cruzada existir dos dois
+    // lados: com o id inline, apagar o monstro levava o id junto; com a tabela, a linha fica.
+    expect(() => buildContent(base({ appearances: tabela({ monsters: { rat: 21, dragon: 39 } }) })))
+      .toThrow(/appearances\.monsters mapeia monstro "dragon", que não existe no conteúdo/);
+  });
+
+  it('recusa a tabela ausente quando há o que mapear', () => {
+    const { appearances: _ignorada, ...semTabela } = base();
+    expect(() => buildContent(semTabela)).toThrow(/appearances\/baseline\.json ausente/);
+  });
+
+  it('DISPENSA a tabela quando não há monstro nem item', () => {
+    // Conteúdo que só fala de mapa não tem arte para mapear, e exigir dele um arquivo vazio
+    // seria burocracia sem nada do outro lado.
+    const { appearances: _ignorada, ...semTabela } = base({ monsters: [], hunts: [] });
+    expect(() => buildContent(semTabela)).not.toThrow();
+  });
+
+  it('a aparência é um ID, nunca um caminho — o invariante 6, agora na tabela', () => {
+    expect(() => buildContent(base({
+      appearances: tabela({ monsters: { rat: 'sprites/rat.png' } }),
+    }))).toThrow(ContentError);
+  });
+
+  it('uma tabela sem `pack` é recusada: número sem origem não se remapeia', () => {
+    const [semPack] = tabela();
+    delete (semPack as Record<string, unknown>)['pack'];
+    expect(() => buildContent(base({ appearances: [semPack] }))).toThrow(ContentError);
+  });
+
+  it('trocar de pacote MUDA a versão do conteúdo', () => {
+    // Invariante 7: a versão é fixada na sessão. Uma hunt que começou com o pacote antigo
+    // termina com ele — o remapeamento não pode trocar a arte no meio de milhares de sessões
+    // desanexadas. Isso só vale se a tabela entrar no hash, e é o que este teste prende.
+    expect(computeVersion(base({ appearances: tabela() })))
+      .not.toBe(computeVersion(base({ appearances: tabela({ monsters: { rat: 22 } }) })));
+  });
+
+  it('o remapeamento inteiro cabe num arquivo — é a razão de a tabela existir', () => {
+    // O critério do ADR 0008: *"trocar o pacote de assets no futuro é remapear numa tabela,
+    // não reescrever content/"*. O teste dele é este: os MESMOS monstros e itens, aparências
+    // completamente diferentes, e nenhum arquivo de entidade tocado.
+    const espadaLocal = {
+      id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand',
+      weight: 50, attack: 24,
+    };
+    const outroPacote = buildContent(base({
+      items: [espadaLocal],
+      appearances: [{
+        id: 'baseline', pack: 'outro', monsters: { rat: 900 }, items: { 'spike-sword': 901 },
+      }],
+    }));
+    expect(outroPacote.monsters.get('rat')?.outfitId).toBe(900);
+    expect(outroPacote.items.get('spike-sword')?.appearanceId).toBe(901);
+    expect(outroPacote.monsters.get('rat')?.health).toBe(20);
+  });
+});
+
 describe('catálogo de itens (FUN-76)', () => {
   const espada = {
-    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
     slot: 'hand', weight: 50, attack: 24, requires: { level: 15 },
   };
 
@@ -295,11 +378,12 @@ describe('catálogo de itens (FUN-76)', () => {
     expect(item?.charges).toBeUndefined();
   });
 
-  it('a aparência é um ID, nunca um caminho — e o schema recusa o resto', () => {
-    // Invariante 6 imposto pelo schema, além do teste que varre os arquivos. `appearanceId` é
-    // a única ligação com arte, e é o que mantém a troca de pacote como remapeamento de ids.
-    const comCaminho = { ...espada, appearanceId: 'sprites/spike-sword.png' };
-    expect(() => buildContent(base({ items: [comCaminho] }))).toThrow(ContentError);
+  it('a aparência NÃO mora mais no item — escrevê-la ali é recusado, não ignorado', () => {
+    // Antes da FUN-94 este campo vivia aqui. Depois dela, Zod DESCARTARIA a chave desconhecida
+    // em silêncio: o arquivo pareceria certo, o número não iria a lugar nenhum, e o item
+    // apareceria com a arte de outro sem nada acusar. É o que `strictObject` impede.
+    const comAparencia = { ...espada, appearanceId: 3271 };
+    expect(() => buildContent(base({ items: [comAparencia] }))).toThrow(ContentError);
   });
 
   it('recusa slot que o personagem não tem', () => {
@@ -311,11 +395,11 @@ describe('catálogo de itens (FUN-76)', () => {
 
   it('item empilhável e item com carga cabem no mesmo schema', () => {
     const flecha = {
-      id: 'arrow', name: 'Arrow', appearanceId: 3447, kind: 'ammunition', slot: 'ammo',
+      id: 'arrow', name: 'Arrow', kind: 'ammunition', slot: 'ammo',
       weight: 0.7, stackable: true, attack: 7,
     };
     const anel = {
-      id: 'time-ring', name: 'Time Ring', appearanceId: 3050, kind: 'ring', slot: 'finger',
+      id: 'time-ring', name: 'Time Ring', kind: 'ring', slot: 'finger',
       weight: 1, durationMs: 600_000,
     };
     const content = buildContent(base({ items: [flecha, anel] }));
@@ -327,7 +411,7 @@ describe('catálogo de itens (FUN-76)', () => {
 
 describe('loot de item, agora que existe catálogo (FUN-76)', () => {
   const espada = {
-    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+    id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
     slot: 'hand', weight: 50, attack: 24,
   };
   const comLoot = (itemId: string) => ({

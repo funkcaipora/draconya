@@ -4,8 +4,12 @@ import type { Item } from '@draconya/content';
 import { Inventory, MAX_STACK } from './inventory.js';
 import type { CarriedItem, Wearer } from './inventory.js';
 
-const define = (over: Record<string, unknown>): Item => itemSchema.parse({
-  id: 'x', name: 'X', appearanceId: 1, kind: 'other', weight: 10, ...over,
+// A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
+// então o schema não a produz e ela entra aqui à mão. O que este teste exercita é peso, slot e
+// empilhamento — arte não muda nenhum dos três.
+const define = (over: Record<string, unknown>): Item => ({
+  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, ...over }),
+  appearanceId: 1,
 });
 
 const catalog = new Map<string, Item>([

@@ -28,8 +28,9 @@ import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
-import { buildContent } from '@draconya/content';
+import { buildContent, placeholderAppearances } from '@draconya/content';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import type { RawContent } from '@draconya/content';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
 import { loadConfiguration } from '../config.js';
@@ -66,10 +67,10 @@ const base = rawTestContent();
 const baseProgression = base.progression?.[0];
 if (baseProgression === undefined) throw new Error('conteúdo de teste sem progressão');
 
-const content = buildContent({
+const raw: RawContent = {
   ...base,
   items: [{
-    id: 'rat-tooth', name: 'Dente de Rato', appearanceId: 3030, kind: 'other', weight: 1,
+    id: 'rat-tooth', name: 'Dente de Rato', kind: 'other', weight: 1,
   }],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num
@@ -84,12 +85,12 @@ const content = buildContent({
     },
   }],
   monsters: [{
-    id: 'reaper', name: 'Ceifador', outfitId: 22, recommendedLevel: 1,
+    id: 'reaper', name: 'Ceifador', recommendedLevel: 1,
     health: 100_000, experience: 0, attack: 400, armor: 0,
     attackIntervalMs: 1_000, stepDurationMs: 500, aggroRadius: 8,
     loot: { items: [] },
   }, {
-    id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1, health: 20, experience: 5,
+    id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
     attack: 6, armor: 0, attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
     // Chance 1 tira o sorteio da conta: o que este teste mede é o caminho do loot até o
     // banco, não a distribuição.
@@ -104,7 +105,10 @@ const content = buildContent({
     // F1: um personagem que morre no meio faz o teste falhar por balanceamento.
     startingMana: 200,
   }],
-});
+};
+// A aparência é derivada DEPOIS da troca de monstros e itens (FUN-94): a tabela que veio de
+// `rawTestContent` só conhece o rato, e o Ceifador e o dente entram aqui.
+const content = buildContent({ ...raw, appearances: [placeholderAppearances(raw)] });
 const { redis, available: redisReady } = await connectTestRedis(11);
 let database: TestDatabase | null = null;
 let ready = false;

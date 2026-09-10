@@ -7,6 +7,35 @@ import { z } from 'zod';
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
 const appearanceId = z.number().int().positive();
 
+/**
+ * A TABELA de aparências (FUN-94), o mapa único que o ADR 0008 já previa: *"trocar o pacote de
+ * assets no futuro é remapear `appearanceId`/`outfitId` numa tabela, não reescrever
+ * `content/`"*.
+ *
+ * Antes da FUN-94 os ids viviam inline em cada entidade, e o ADR valia na letra — nenhum
+ * caminho de arte em `content/` — mas não no efeito: trocar de pacote era editar todo arquivo
+ * de conteúdo. Aqui é um arquivo, e o diff da troca é o remapeamento inteiro numa tela.
+ *
+ * **Separada por tipo, e não um mapa achatado.** Id é único DENTRO de um tipo, não entre eles:
+ * um dia existe o item "rat" e o monstro "rat", e num mapa achatado um sobrescreveria o outro
+ * em silêncio — no arquivo que existe justamente para ninguém precisar conferir arte à mão.
+ *
+ * `pack` não é lido por código nenhum, e é o campo mais importante do arquivo para quem for
+ * trocar: sem ele, os números são ids sem origem, e a primeira pergunta de quem abre o arquivo
+ * ("de qual pacote são estes?") não teria resposta em lugar nenhum.
+ */
+export const appearancesSchema = z.object({
+  id: z.string().min(1),
+  /** De qual pacote de assets estes ids vieram. Documentação, para o humano que remapear. */
+  pack: z.string().min(1),
+  /** `id de monstro → outfitId`. */
+  monsters: z.record(z.string().min(1), appearanceId).default({}),
+  /** `id de item → appearanceId`. */
+  items: z.record(z.string().min(1), appearanceId).default({}),
+});
+
+export type Appearances = z.infer<typeof appearancesSchema>;
+
 /** Uma linha de loot: cai com `chance`, e quando cai vem entre `min` e `max`. */
 const lootRollSchema = z.object({
   chance: z.number().min(0).max(1),
@@ -43,17 +72,22 @@ export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 /**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
+ * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
+ * silêncio, e é justamente o que aconteceria com um `appearanceId` escrito aqui por hábito
+ * depois de a aparência ter mudado de lugar: o arquivo pareceria certo, o campo não iria a
+ * lugar nenhum, e o item apareceria com a arte errada sem nada acusar. O mesmo vale para o
+ * monstro e o `outfitId`.
+ *
+ *
  * **Atributos base são FIXOS.** Não há rolagem aleatória: duas espadas do mesmo id são
  * idênticas, e item melhor é item DIFERENTE. É a decisão do §21.2, e ela apaga toda a
  * matemática de variação por instância — junto com a pergunta "por que a minha é pior".
  *
  * O que distingue uma instância da outra é identidade e proveniência, não número.
  */
-export const itemSchema = z.object({
+export const itemSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
-  /** A ÚNICA ligação com arte (invariante 6, ADR 0008). Nunca um caminho de arquivo. */
-  appearanceId,
   kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'ammunition', 'other']),
   slot: z.enum(ITEM_SLOTS).optional(),
   /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
@@ -84,12 +118,21 @@ export const itemSchema = z.object({
   _open: z.string().optional(),
 });
 
-export type Item = z.infer<typeof itemSchema>;
+/** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
+export type ItemDefinition = z.infer<typeof itemSchema>;
 
-export const monsterSchema = z.object({
+/**
+ * O item pronto para uso, com a aparência já resolvida por `buildContent`.
+ *
+ * A resolução acontece no boot e não no ponto de uso: quem desenha um item nunca precisa
+ * saber que existe uma tabela, e a entidade sem aparência morre na montagem do conteúdo — não
+ * no primeiro jogador que abrir a mochila.
+ */
+export type Item = ItemDefinition & { readonly appearanceId: number };
+
+export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
-  outfitId: appearanceId,
   recommendedLevel: z.number().int().positive(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),
@@ -729,7 +772,11 @@ export const supplySchema = z.object({
 export type Spell = z.infer<typeof spellSchema>;
 export type Supply = z.infer<typeof supplySchema>;
 
-export type Monster = z.infer<typeof monsterSchema>;
+/** O monstro como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
+export type MonsterDefinition = z.infer<typeof monsterSchema>;
+
+/** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
+export type Monster = MonsterDefinition & { readonly outfitId: number };
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */
 export type LootRoll = NonNullable<LootTable['gold']>;
