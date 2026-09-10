@@ -11,6 +11,7 @@
   "dependencies": {
     "@draconya/content": "workspace:*",
     "@draconya/protocol": "workspace:*",
+    "lzma-web": "^4.0.0",
     "pixi.js": "^8.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
