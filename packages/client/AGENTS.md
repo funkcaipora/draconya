@@ -68,7 +68,9 @@ assets/catalog.ts      o índice: qual folha tem qual id, e onde dentro dela
 assets/sheet.ts        CIP → LZMA → BMP → RGBA. PURO: entra Uint8Array, sai Uint8Array
 assets/sheet-worker.ts a casca de doze linhas que põe `sheet.ts` num worker
 assets/sheet-loader.ts o lado do thread principal: fila, id por pedido, encerramento
-assets/sprites.ts      id global → folha → recorte → ImageBitmap, com LRU por BYTES
+assets/sprites.ts      id global → folha → recorte → ImageBitmap
+assets/outfit.ts       a paleta de 133 cores e a colorização por 4 canais
+assets/bitmap-budget.ts o LRU por BYTES que sprites.ts e outfit.ts compartilham
 assets/cache.ts        a POLÍTICA: chave, teto de bytes, despejo LRU, degradação
 assets/indexeddb.ts    o ARMAZENAMENTO: transação, cursor, clone estruturado
 assets/testing.ts      encoder de protobuf, só para fixture
@@ -120,6 +122,10 @@ container), `node-liblzma` (binding nativo — o ADR 0013 exige binário para do
 o jogo desenha uns poucos por vez — guardar a folha como bitmap gastaria memória de GPU com
 143 quadros que ninguém está olhando.
 
+**O orçamento vive em `bitmap-budget.ts`, compartilhado com o compositor de outfit.** As duas
+regras dele são fáceis de errar sozinhas, e duplicá-las é como uma das duas para de fechar os
+bitmaps e vaza sem ninguém notar.
+
 **O orçamento é em BYTES, nunca em contagem.** Um 64×64 ocupa quatro vezes um 32×32; contar
 itens faria o teto real variar por um fator de quatro conforme o que estivesse em cena, e o
 estouro chegaria numa hunt cheia de monstros grandes — justamente quando não se pode engasgar.
@@ -132,6 +138,28 @@ razão — trocar de mapa sem ele vaza a tela anterior inteira.
 **Duas deduplicações, e são coisas diferentes:** por ID em voo (dez criaturas iguais entrando
 em cena criam um bitmap, não dez) e por FOLHA em voo (dez quadros da mesma folha a baixam e
 descomprimem uma vez). Sem a primeira, nove bitmaps vazam porque só um fica no cache.
+
+## Colorização de outfit (FUN-20)
+
+Um outfit tem a camada BASE e uma camada TEMPLATE em que cada cor marca uma região:
+**amarelo é cabeça, vermelho é corpo, verde é pernas, azul é pés**, e a composição é
+**multiplicação** sobre a base. A regra vem de `src/client/creature.cpp` de
+`opentibiabr/otclient` (MIT); lemos de lá o formato e a fórmula, não o código.
+
+**Multiplicar, e não substituir.** A base já traz o sombreado do desenho; substituir a cor
+devolveria um boneco chapado. E o **alfa não é multiplicado**: fazê-lo deixaria o personagem
+semitransparente quando a cor fosse escura, apagando a silhueta.
+
+**A paleta é FÓRMULA, não tabela** — 19 matizes × 7 valores = 133 cores. Guardar 133 tuplas RGB
+seria guardar o resultado de uma conta de trinta linhas, e a primeira mão que mexesse numa
+delas faria a paleta divergir da do pacote sem nada acusar.
+
+**A conferência dela é o teste mais importante deste módulo.** `outfit.test.ts` guarda as 133
+cores geradas por uma **transliteração literal** do original, em Python, sem refatorar nada —
+e é ela que prova a fórmula. A versão daqui é um refactor (sextantes no lugar de cinco `if`
+encadeados), e refactor de fórmula é onde erro de borda mora: **ela pegou um**. Sete cores de
+matiz vermelho puro saíam magenta, porque a última faixa do original é a continuação da quinta
+e não um sexto sextante. Nenhum teste de "a paleta tem 133 cores" pegaria isso.
 
 ## O cache persistente (FUN-19)
 
