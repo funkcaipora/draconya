@@ -1,7 +1,7 @@
 // A ponte para o React, e a única que existe (FUN-22).
 
 import { useCallback, useRef, useSyncExternalStore } from 'react';
-import { hud, subscribeSlice, type HudState, type SliceOptions } from './hud.js';
+import { hud, subscribeSlice, type HudState, type SliceOptions, type Store } from './hud.js';
 
 /**
  * Assina uma fatia do HUD.
@@ -14,6 +14,19 @@ import { hud, subscribeSlice, type HudState, type SliceOptions } from './hud.js'
  * criatura, a resposta é que ele não precisa: isso é canvas.
  */
 export function useHudSlice<S>(select: (state: HudState) => S, options: SliceOptions = {}): S {
+  return useStoreSlice(hud, select, options);
+}
+
+/**
+ * O mesmo, para qualquer store fora do React — a conta (FUN-97) usa a sua.
+ *
+ * Genérico porque a divisão do ADR 0007 é sobre `world` NÃO ter assinatura, e não sobre existir
+ * uma store só: separar conta de HUD é o mesmo motivo de separar HUD de mundo, um nível acima —
+ * a lista de personagens não pode redesenhar porque a mana mexeu.
+ */
+export function useStoreSlice<T, S>(
+  store: Store<T>, select: (state: T) => S, options: SliceOptions = {},
+): S {
   const selectRef = useRef(select);
   selectRef.current = select;
 
@@ -22,9 +35,9 @@ export function useHudSlice<S>(select: (state: HudState) => S, options: SliceOpt
   // `getSnapshot` é chamado a cada render E a cada checagem do React. Devolver valor novo toda
   // vez faz o React entrar em laço infinito, então o resultado é memoizado por estado: mesmo
   // objeto de estado, mesma referência de volta.
-  const cache = useRef<{ state: HudState; value: S } | null>(null);
+  const cache = useRef<{ state: T; value: S } | null>(null);
   const getSnapshot = useCallback((): S => {
-    const state = hud.get();
+    const state = store.get();
     const cached = cache.current;
     if (cached !== null && cached.state === state) return cached.value;
 
@@ -41,8 +54,8 @@ export function useHudSlice<S>(select: (state: HudState) => S, options: SliceOpt
 
   const subscribe = useCallback(
     (onStoreChange: () => void) =>
-      subscribeSlice(hud, (state) => selectRef.current(state), onStoreChange, { throttleMs }),
-    [throttleMs],
+      subscribeSlice(store, (state) => selectRef.current(state), onStoreChange, { throttleMs }),
+    [store, throttleMs],
   );
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);

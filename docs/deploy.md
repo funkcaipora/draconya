@@ -117,8 +117,9 @@ Verifique o status saudável dos quatro serviços, a abertura do cliente por HTT
 `/api/auth/me` (401 sem login) e `/api/auth/login` (redirect WorkOS). `/healthz` no endereço
 público verifica o Nginx; o healthcheck interno de `app` verifica o servidor.
 
-O frontend atual é a casca do jogo: a seleção de personagem ainda vem de `?character=<id>`.
-As telas de login e seleção de personagem não fazem parte deste deploy.
+O frontend serve a entrada: abrir a origem leva à tela de login, e depois dela à lista de
+personagens, com criação e escolha (FUN-97). `?character=<id>` continua funcionando como atalho
+de desenvolvimento — o critério de saída da F1 e o cliente sintético de carga entram sem tela.
 
 Referência operacional: [Docker Compose no Coolify](https://coolify.io/docs/applications/build-packs/docker-compose).
 
