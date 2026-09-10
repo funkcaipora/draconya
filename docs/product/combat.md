@@ -1,6 +1,6 @@
 # Combate
 
-**Status:** parcial — resolução de dano implementada (FUN-35); ataque, alvo e cooldown são FUN-36/40/43
+**Status:** parcial — resolução de dano (FUN-35), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92) e skills por uso (FUN-75) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -117,6 +117,39 @@ alcança de onde o corpo a corpo não alcança.
 O cooldown de magia guarda **instante absoluto no relógio lógico da sessão**, que é a primeira
 das três linhas da tabela acima. É o que faz o mesmo cooldown valer igual a 1 Hz e a 10 Hz, e o
 que o mantém correto do outro lado de um snapshot.
+
+### Magia em área (FUN-92)
+
+Uma magia de dano pode declarar `area: { radius }`, em tiles a partir do **alvo** — distância de
+Chebyshev, a mesma métrica da grade. Raio 1 pega o alvo mais os oito vizinhos.
+
+Três coisas que a área traz e o alvo único não tinha:
+
+- **Uma rolagem por alvo, e a ordem é contrato.** Cada alvo consome um sorteio do RNG da sessão,
+  e trocar a ordem troca qual sorteio cai em quem — a mesma semente passaria a render uma hunt
+  diferente. A ordem é a da lista de monstros, que é a de nascimento.
+- **Colher todos os alvos antes de aplicar qualquer dano.** Resolver morte no meio da varredura
+  seria varrer um array que está sendo substituído (`#onMonsterDied` filtra `#monsters`), e os
+  alvos depois do que morreu ficariam de fora.
+- **Só o alvo principal é conferido contra o alcance.** Quem foi pego pela área está lá porque
+  cai dentro do raio, não porque o lançador o alcança — conferir cada um faria a área encolher
+  para o alcance.
+
+O custo de mana é da **magia**, não do número de alvos: cobrar por alvo faria o jogador pagar
+mais por lançar no lugar certo, que é o inverso do que uma magia de área quer ensinar.
+
+**Área centrada no LANÇADOR não existe**, e é decisão: uma magia centrada em quem lança não
+precisa de alvo nenhum, e isso muda o portão inteiro — some a recusa por "sem alvo", some a
+conferência de alcance. É outra forma de magia, não um parâmetro desta.
+
+### Requisito de vocação (§9.2)
+
+Uma magia pode declarar `vocationId`. Quem não a tem recebe `wrong-vocation`, e a recusa **não
+tem prazo de retentativa** — esperar não faz ninguém virar druida, e reagendar por isso seria um
+evento por segundo para redescobrir a mesma coisa.
+
+O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
+inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
 ## Em aberto
 

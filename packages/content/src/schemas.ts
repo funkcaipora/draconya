@@ -556,8 +556,15 @@ export const spellSchema = z.object({
   manaCost: z.number().int().nonnegative(),
   /** Tempo até poder lançar de novo. Evento na fila, nunca acumulador (ADR 0020). */
   cooldownMs: z.number().int().positive(),
-  /** Level mínimo. Vocação é `[ABERTO]` até o §7.4 existir — o personagem nasce sem uma. */
+  /** Level mínimo. */
   minLevel: z.number().int().positive().default(1),
+  /**
+   * Vocação exigida (§9.2, FUN-92). Ausente é magia que qualquer um lança.
+   *
+   * O personagem nasce SEM vocação e escolhe no level 8 (§7.4), então uma magia com requisito
+   * é inacessível até lá — por construção, não por regra escrita em outro lugar.
+   */
+  vocationId: z.string().min(1).optional(),
   effect: z.discriminatedUnion('kind', [
     /** Cura o próprio lançador. Alcance não se aplica. */
     z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
@@ -569,6 +576,18 @@ export const spellSchema = z.object({
       kind: z.literal('damage'),
       power: z.number().int().positive(),
       range: z.number().int().positive(),
+      /**
+       * A ÁREA atingida, centrada no alvo (FUN-92). Ausente é alvo único.
+       *
+       * Centrada no ALVO, e não no lançador: uma magia centrada em quem lança não precisa de
+       * alvo nenhum, e isso muda o portão inteiro — some a recusa por `no-target`, some a
+       * conferência de alcance. É outra forma de magia, não um parâmetro desta, e entra quando
+       * o §4.1 disser que ela existe.
+       *
+       * `radius` é distância de Chebyshev, a mesma da grade: raio 1 pega os oito vizinhos do
+       * alvo mais ele.
+       */
+      area: z.object({ radius: z.number().int().positive() }).optional(),
     }),
   ]),
   _open: z.string().optional(),

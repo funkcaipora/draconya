@@ -23,7 +23,7 @@ import type {
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
-import type { CastResult, SpellTarget } from '../casting.js';
+import type { CastResult, SpellAim, SpellTarget } from '../casting.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -388,11 +388,20 @@ export class HuntRuleset implements Ruleset {
   readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
 
   /**
-   * O alvo de magia, reaproveitado pela mesma razão que `#botView`.
+   * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
    *
-   * Mutável de propósito: `castSpell` só lê, e quem escreve é `#castSpell`, num lugar só.
+   * Três vetores que andam juntos e são limpos a cada lançamento: os alvos como `castSpell` os
+   * enxerga, os monstros correspondentes — quem leva o dano — e o objeto de mira. Uma magia
+   * por segundo por personagem, vezes 5.000 instâncias, é alocação que dá para não fazer.
+   *
+   * Mutáveis de propósito: `castSpell` só lê, e quem escreve é `#aimAt`, num lugar só.
    */
-  readonly #spellTarget: MutableSpellTarget = { armor: 0, dodgeChance: 0, distance: 0 };
+  readonly #spellTargets: MutableSpellTarget[] = [];
+  /** Os monstros na mesma ordem de `#spellTargets`: é quem leva o dano de cada rolagem. */
+  readonly #spellHits: MonsterRuntime[] = [];
+  readonly #aim: { distance: number; targets: readonly SpellTarget[] } = {
+    distance: 0, targets: [],
+  };
 
   /**
    * Quem escreve posição. **A hunt não escreve nenhuma** desde a FUN-69 — ela pede.
@@ -1030,35 +1039,85 @@ export class HuntRuleset implements Ruleset {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
-    let monster: MonsterRuntime | null = null;
-    let target: SpellTarget | null = null;
-    if (spell.effect.kind === 'damage') {
-      monster = this.#attackTarget(character);
-      if (monster !== null) {
-        // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual
-        // para magia. Escrever `0` aqui e lá é o mesmo dado em dois lugares; quando esquiva
-        // de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
-        this.#spellTarget.armor = this.#options.monsters.get(monster.monsterId)?.armor ?? 0;
-        this.#spellTarget.dodgeChance = 0;
-        this.#spellTarget.distance = distance(character.position, monster.position);
-        target = this.#spellTarget;
-      }
-    }
+    const aim = spell.effect.kind === 'damage'
+      ? this.#aimAt(character, spell.effect.range, spell.effect.area?.radius ?? 0)
+      : null;
 
     const result = castSpell(
-      character, spell, target, session.nowMs, this.#options.combat, session.rng,
+      character, spell, aim, session.nowMs, this.#options.combat, session.rng,
       // A skill de magia escala o poder, como a de arma escala o golpe (FUN-75).
       this.#scaledPower(character, 'spell-cast', 1),
     );
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
     // não gastou mana, não praticou.
     if (result.ok) this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
-    if (!result.ok || monster === null) return result;
+    if (!result.ok || aim === null) return result;
 
-    // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
-    recordDamage(monster.contribution, character.id, monster.receiveDamage(result.damage));
-    if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+    // Aplicar depois de colher TODOS os alvos, e não durante (FUN-92).
+    //
+    // `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
+    // meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
+    // alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
+    // Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço do raio —,
+    // então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
+    // `alive` aqui seria código que nenhum teste alcança.
+    for (let i = 0; i < this.#spellHits.length; i += 1) {
+      const monster = this.#spellHits[i] as MonsterRuntime;
+      const damage = result.hits[i] ?? 0;
+      // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
+      recordDamage(monster.contribution, character.id, monster.receiveDamage(damage));
+      if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+    }
     return result;
+  }
+
+  /**
+   * Colhe quem a magia atinge: o alvo principal primeiro, depois quem cai no raio (FUN-92).
+   *
+   * `radius` zero é alvo único — um caso do mesmo caminho, e não um ramo à parte. Área é
+   * distância de Chebyshev a partir do ALVO, a mesma métrica da grade.
+   *
+   * A ordem é CONTRATO: cada alvo consome uma rolagem do `Rng` da sessão, e ela é a ordem da
+   * lista de monstros, que é a de nascimento. Trocar a ordem troca qual sorteio cai em quem, e
+   * a mesma semente passa a render uma hunt diferente.
+   *
+   * Os dois vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`: uma magia por
+   * segundo por personagem, vezes 5.000 instâncias, é alocação que dá para não fazer.
+   */
+  #aimAt(character: CharacterRuntime, range: number, radius: number): SpellAim | null {
+    // Alcance da MAGIA, não o da arma — e isto era um defeito desde a FUN-74, que só apareceu
+    // quando o teste de área foi escrito. `#attackTarget` para no alcance do golpe, então uma
+    // magia de alcance 3 nunca alcançava além de 1: a conferência de alcance dentro de
+    // `castSpell` jamais era a restrição que mordia, porque a seleção já tinha mordido antes.
+    const primary = selectTarget(this.#targeting, this.#monsters, character.position, range);
+    if (primary === null) return null;
+
+    this.#spellHits.length = 0;
+    this.#spellTargets.length = 0;
+    this.#collect(primary);
+
+    if (radius > 0) {
+      for (const monster of this.#monsters) {
+        if (monster === primary || !monster.alive) continue;
+        if (distance(primary.position, monster.position) > radius) continue;
+        this.#collect(monster);
+      }
+    }
+
+    this.#aim.distance = distance(character.position, primary.position);
+    this.#aim.targets = this.#spellTargets;
+    return this.#aim;
+  }
+
+  /** Põe o monstro na mira, com a armadura que o conteúdo dá a ele. */
+  #collect(monster: MonsterRuntime): void {
+    this.#spellHits.push(monster);
+    // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
+    // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
+    this.#spellTargets.push({
+      armor: this.#options.monsters.get(monster.monsterId)?.armor ?? 0,
+      dodgeChance: 0,
+    });
   }
 
   /** Usa o supply e leva o gasto ao extrato. O débito em si é do `useSupply`. */

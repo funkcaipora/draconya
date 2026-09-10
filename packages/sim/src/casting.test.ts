@@ -43,7 +43,11 @@ const hero = (over: Partial<{
   alive: true, cooldowns: {},
 });
 
-const near = { armor: 0, dodgeChance: 0, distance: 1 };
+/** Uma mira de alvo único, que é o caso mais comum. */
+const near = (over: Partial<{ armor: number; dodgeChance: number; distance: number }> = {}) => ({
+  distance: over.distance ?? 1,
+  targets: [{ armor: over.armor ?? 0, dodgeChance: over.dodgeChance ?? 0 }],
+});
 const rng = () => Rng.fromSeed('casting');
 
 describe('castSpell — o portão, na ordem em que ele custa a descobrir', () => {
@@ -80,7 +84,7 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
   it('magia de dano sem alvo é recusada, e fora de alcance também', () => {
     const caster = hero();
     expect(castSpell(caster, strike, null, 0, combat, rng()).ok).toBe(false);
-    expect(castSpell(caster, strike, { ...near, distance: 4 }, 0, combat, rng()))
+    expect(castSpell(caster, strike, near({ distance: 4 }), 0, combat, rng()))
       .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
     // Nenhuma das duas cobrou nada: nem mana, nem cooldown.
     expect(caster.mana).toBe(100);
@@ -91,7 +95,7 @@ describe('castSpell — o portão, na ordem em que ele custa a descobrir', () =>
     // Descontar antes de saber se o alvo estava ao alcance é como se perde mana sem lançar
     // nada — o defeito que o jogador nota e não consegue explicar.
     const caster = hero({ mana: 15 });
-    expect(castSpell(caster, strike, { ...near, distance: 9 }, 0, combat, rng()).ok).toBe(false);
+    expect(castSpell(caster, strike, near({ distance: 9 }), 0, combat, rng()).ok).toBe(false);
     expect(caster.mana).toBe(15);
   });
 
@@ -119,10 +123,10 @@ describe('castSpell — o efeito', () => {
     // atribuição escrita em dois lugares, e o `AGENTS.md` deste pacote é explícito: não pague
     // duas vezes por saber quem matou.
     const caster = hero();
-    const result = castSpell(caster, strike, { armor: 10, dodgeChance: 0, distance: 3 }, 0, combat, rng());
+    const result = castSpell(caster, strike, near({ armor: 10, distance: 3 }), 0, combat, rng());
 
     // 40 de poder, 10 de armadura, efetividade mágica 1 neste conteúdo de teste.
-    expect(result).toMatchObject({ ok: true, damage: 30, healed: 0 });
+    expect(result).toMatchObject({ ok: true, damage: 30, hits: [30], healed: 0 });
     expect(caster.mana).toBe(85);
   });
 });
@@ -165,5 +169,119 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
     const user = hero({ gold: 45 });
     expect(useSupply(user, potion).ok).toBe(true);
     expect(balanceOf(user)).toBe(0);
+  });
+});
+
+describe('magia em ÁREA (FUN-92)', () => {
+  const blast = {
+    id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
+    effect: { kind: 'damage' as const, power: 30, range: 4, area: { radius: 1 } },
+  };
+  const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
+    ({ distance, targets });
+
+  it('resolve uma rolagem POR ALVO, e devolve o dano de cada um em ordem', () => {
+    const caster = hero();
+    const result = castSpell(
+      caster, blast, aim([{ armor: 0, dodgeChance: 0 }, { armor: 10, dodgeChance: 0 }]),
+      0, combat, rng(),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Armaduras diferentes, danos diferentes — e na mesma ordem em que os alvos entraram.
+    expect(result.hits).toEqual([30, 20]);
+    expect(result.damage).toBe(50);
+  });
+
+  it('a ordem dos alvos é CONTRATO: ela decide qual sorteio cai em quem', () => {
+    // Cada alvo consome uma rolagem do RNG da sessão. Trocar a ordem troca o resultado, e é
+    // por isso que quem colhe os alvos tem de fazê-lo sempre na mesma ordem.
+    const esquiva = [{ armor: 0, dodgeChance: 0.5 }, { armor: 0, dodgeChance: 0 }];
+    const direto = castSpell(hero(), blast, aim(esquiva), 0, combat, rng());
+    const trocado = castSpell(hero(), blast, aim([...esquiva].reverse()), 0, combat, rng());
+
+    if (!direto.ok || !trocado.ok) throw new Error('esperava dois lançamentos');
+    expect(direto.hits).not.toEqual([...trocado.hits].reverse());
+  });
+
+  it('a mesma mira, com a mesma semente, dá o MESMO resultado', () => {
+    const alvos = [
+      { armor: 0, dodgeChance: 0.5 }, { armor: 2, dodgeChance: 0.5 },
+      { armor: 4, dodgeChance: 0.5 },
+    ];
+    const uma = castSpell(hero(), blast, aim(alvos), 0, combat, rng());
+    const outra = castSpell(hero(), blast, aim(alvos), 0, combat, rng());
+    if (!uma.ok || !outra.ok) throw new Error('esperava dois lançamentos');
+    expect(uma.hits).toEqual(outra.hits);
+  });
+
+  it('custa a mesma mana batendo em um ou em cinco', () => {
+    // O custo é da MAGIA, não do número de alvos. Cobrar por alvo faria o jogador pagar mais
+    // por lançar no lugar certo, que é o inverso do que uma magia de área quer ensinar.
+    const um = hero();
+    const cinco = hero();
+    castSpell(um, blast, aim([{ armor: 0, dodgeChance: 0 }]), 0, combat, rng());
+    castSpell(
+      cinco, blast,
+      aim(Array.from({ length: 5 }, () => ({ armor: 0, dodgeChance: 0 }))),
+      0, combat, rng(),
+    );
+    expect(um.mana).toBe(cinco.mana);
+  });
+
+  it('mira vazia é recusada como "sem alvo"', () => {
+    expect(castSpell(hero(), blast, aim([]), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'no-target', retryInMs: 0 });
+  });
+
+  it('só o alvo PRINCIPAL é conferido contra o alcance', () => {
+    // Quem foi pego pela área está lá porque cai dentro do raio, não porque o lançador o
+    // alcança. Conferir cada um contra o alcance faria a área encolher para o alcance.
+    const dentro = castSpell(
+      hero(), blast, aim([{ armor: 0, dodgeChance: 0 }], 4), 0, combat, rng(),
+    );
+    expect(dentro.ok).toBe(true);
+    expect(castSpell(hero(), blast, aim([{ armor: 0, dodgeChance: 0 }], 5), 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'out-of-range', retryInMs: 0 });
+  });
+});
+
+describe('requisito de VOCAÇÃO (FUN-92)', () => {
+  const druidica = { ...heal, id: 'nature-heal', vocationId: 'druid' };
+
+  it('recusa quem não tem a vocação, e nada é cobrado', () => {
+    const cavaleiro = hero({ level: 20 });
+    cavaleiro.vocationId = 'knight';
+    expect(castSpell(cavaleiro, druidica, null, 0, combat, rng()))
+      .toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+    expect(cavaleiro.mana).toBe(100);
+  });
+
+  it('quem TEM a vocação lança normalmente', () => {
+    const druida = hero({ level: 20, health: 50 });
+    druida.vocationId = 'druid';
+    expect(castSpell(druida, druidica, null, 0, combat, rng()).ok).toBe(true);
+  });
+
+  it('personagem SEM vocação não lança magia de vocação — e é por construção', () => {
+    // O personagem nasce sem vocação e escolhe no level 8 (§7.4). Uma magia com requisito é
+    // inacessível até lá sem nenhuma regra escrita em outro lugar.
+    const novato = hero({ level: 1 });
+    expect(novato.vocationId).toBeNull();
+    expect(castSpell(novato, druidica, null, 0, combat, rng()).ok).toBe(false);
+  });
+
+  it('magia SEM requisito continua valendo para todo mundo', () => {
+    const novato = hero({ health: 50 });
+    expect(castSpell(novato, heal, null, 0, combat, rng()).ok).toBe(true);
+  });
+
+  it('a recusa por vocação NÃO tem prazo — esperar não faz ninguém virar druida', () => {
+    const cavaleiro = hero();
+    cavaleiro.vocationId = 'knight';
+    const recusa = castSpell(cavaleiro, druidica, null, 0, combat, rng());
+    expect(recusa.ok).toBe(false);
+    if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
   });
 });
