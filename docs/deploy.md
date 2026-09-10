@@ -122,6 +122,26 @@ As telas de login e seleção de personagem não fazem parte deste deploy.
 
 Referência operacional: [Docker Compose no Coolify](https://coolify.io/docs/applications/build-packs/docker-compose).
 
+### Staging
+
+O primeiro ambiente remoto é **staging**, no projeto Draconya do Coolify. Sua origem é
+`https://draconya-staging.179-197-227-14.sslip.io`. O processo mantém `NODE_ENV=production`
+para cookies seguros e validação de configuração; esse valor é o modo do runtime Node,
+não o nome do ambiente de implantação.
+
+No GitHub, o environment `staging` guarda `WORKOS_API_KEY`, `WORKOS_CLIENT_ID` e
+`POSTGRES_PASSWORD` em **Secrets**. `APP_ORIGIN` e `GAME_PUBLIC_URL` ficam em **Variables**.
+O runtime do Coolify recebe os mesmos valores. Não existe sincronização automática desses
+valores: ao trocar uma credencial, atualize os dois destinos antes de redeployar.
+
+A injeção automática de argumentos de build fica desativada no Coolify; a chave WorkOS e a
+senha PostgreSQL ficam disponíveis somente no runtime. Nenhum segredo entra no Git ou no
+build estático do cliente.
+
+O Coolify interpreta o Compose com um arquivo de variáveis de build separado. Por isso,
+as duas credenciais de runtime aceitam interpolação vazia nessa etapa. Isso não libera o
+boot sem credenciais: a validação do servidor exige WorkOS, e o PostgreSQL exige senha.
+
 ## Backup
 
 ```bash
