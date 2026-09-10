@@ -10,7 +10,12 @@ const env = {
   WORKOS_API_KEY: 'workos-test', WORKOS_CLIENT_ID: 'client-test',
 };
 
-function fixture(options: { head?: string; commit?: string; status?: string; envStatus?: number } = {}) {
+function fixture(options: {
+  head?: string; commit?: string; status?: string; envStatus?: number;
+  /** Quantas vezes `/` responde 503 antes de subir. É a troca de contêiner do proxy. */
+  flaky?: number;
+} = {}) {
+  let flaky = options.flaky ?? 0;
   const calls: { url: string; init: RequestInit | undefined }[] = [];
   const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -29,6 +34,10 @@ function fixture(options: { head?: string; commit?: string; status?: string; env
     if (url.includes('/deployments/')) return Response.json({ status: options.status ?? 'finished', commit: options.commit ?? sha });
     if (url.includes('/applications/')) return Response.json({ status: 'running:healthy' });
     if (url.endsWith('/api/auth/me')) return new Response('', { status: 401 });
+    if (url === env.APP_ORIGIN + '/' && flaky > 0) {
+      flaky -= 1;
+      return new Response('', { status: 503 });
+    }
     if (url.endsWith('/api/auth/login')) {
       return new Response(null, { status: 302, headers: {
         location: `https://api.workos.com/user_management/authorize?redirect_uri=${encodeURIComponent(env.APP_ORIGIN + '/api/auth/callback')}`,
@@ -100,5 +109,23 @@ describe('staging deployment', () => {
     const { dependencies } = fixture({ status: 'in_progress' });
     await expect(deployStaging(env, dependencies)).rejects.toThrow('Timed out waiting');
     expect(dependencies.sleep).toHaveBeenCalledTimes(180);
+  });
+});
+
+describe('a troca de contêiner (FUN-98)', () => {
+  it('espera a rota pública subir em vez de reprovar o deploy que deu certo', async () => {
+    // "Saudável" é a visão do Coolify sobre o contêiner; o proxy reverso ainda pode estar
+    // trocando o upstream, e nesse instante a rota devolve 503. Reprovar por isso pinta de
+    // vermelho uma entrega que funcionou — e pipeline vermelho sem motivo é pipeline que
+    // ninguém mais lê.
+    const { dependencies } = fixture({ flaky: 3 });
+    await expect(deployStaging(env, dependencies)).resolves.toBeUndefined();
+  });
+
+  it('mas desiste, e o motivo é o ÚLTIMO status — não "falhou"', async () => {
+    // Esperar não pode virar esperar para sempre: uma rota que nunca sobe é um deploy que não
+    // serve, e quem lê o log precisa do número para saber onde procurar.
+    const { dependencies } = fixture({ flaky: 999 });
+    await expect(deployStaging(env, dependencies)).rejects.toThrow('HTTP 503');
   });
 });
