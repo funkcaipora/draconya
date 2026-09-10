@@ -39,6 +39,8 @@ export interface SpriteCacheOptions {
     pixels: Uint8ClampedArray, width: number, height: number,
   ) => Promise<Sprite>;
   readonly now?: () => number;
+  /** Ver `BitmapBudgetOptions.onEvict`: quem construiu textura sobre o bitmap precisa saber. */
+  readonly onEvict?: (spriteId: number, sprite: Sprite) => void;
 }
 
 export class SpriteCache {
@@ -53,7 +55,10 @@ export class SpriteCache {
   constructor(catalog: Catalog, options: SpriteCacheOptions) {
     this.#catalog = catalog;
     this.#options = options;
-    this.#budget = new BitmapBudget(options.maxBytes, options.now ?? (() => Date.now()));
+    this.#budget = new BitmapBudget(options.maxBytes, {
+      now: options.now ?? (() => Date.now()),
+      ...(options.onEvict === undefined ? {} : { onEvict: options.onEvict }),
+    });
   }
 
   /** Quanto o cache está segurando, em bytes. Existe para o teste poder afirmar o teto. */

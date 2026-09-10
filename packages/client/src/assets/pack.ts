@@ -43,6 +43,21 @@ export interface PackOptions {
   /** O cache persistente da FUN-19. Ausente é degradação: paga-se o LZMA toda sessão. */
   readonly store?: SheetStore;
   readonly maxBytes?: number;
+  /**
+   * Avisa que um bitmap vai ser fechado. O viewport constrói `Texture` sobre ele, e uma
+   * textura cuja fonte fechou é textura inválida — ver `BitmapBudgetOptions.onEvict`.
+   */
+  readonly onEvict?: (spriteId: number, sprite: Sprite) => void;
+}
+
+/**
+ * Quantas fases um grupo de quadros tem. UMA conta, usada por `#frame` e por `framesOf`:
+ * duplicada, ela diverge no primeiro outfit com `layers > 1`.
+ */
+function framesIn(group: Appearance['frameGroups'][number]): number {
+  if (group.phases.length === 0) return 1;
+  const perFrame = group.patternWidth * group.patternHeight * group.patternDepth * group.layers;
+  return perFrame === 0 ? 1 : Math.max(1, Math.floor(group.spriteIds.length / perFrame));
 }
 
 export class AssetPack {
@@ -89,6 +104,7 @@ export class AssetPack {
     const sprites = new SpriteCache(catalog, {
       maxBytes: options.maxBytes ?? SPRITE_BUDGET_BYTES,
       createBitmap: options.createBitmap,
+      ...(options.onEvict === undefined ? {} : { onEvict: options.onEvict }),
       loadSheet: async (file) => {
         const key = sheetKey(version, file);
         const cached = await cache?.get(key);
@@ -127,12 +143,29 @@ export class AssetPack {
    * é parado (uma fase), o 1 é andando (várias). Pedir sempre o 0 dá um monstro que desliza
    * pelo chão sem mexer as patas — que é o defeito clássico de quem liga sprite antes de ligar
    * `frameGroups`.
+   *
+   * `moving` é ESTADO da criatura, não um número de fase. A primeira versão usava `phase === 0`
+   * como sinônimo de "parado", e o custo era o primeiro quadro do ciclo de caminhada nunca ser
+   * desenhado — oito fases viravam "parado + sete andando", com um soluço a cada passo.
    */
-  async outfit(outfitId: number, direction: Direction, phase: number): Promise<Sprite | null> {
+  async outfit(
+    outfitId: number, direction: Direction, phase: number, moving = false,
+  ): Promise<Sprite | null> {
     const appearance = this.#appearances.outfit.get(outfitId);
-    const walking = appearance?.frameGroups[1];
-    const group = walking === undefined || phase === 0 ? 0 : 1;
+    const group = moving && appearance?.frameGroups[1] !== undefined ? 1 : 0;
     return this.#frame(appearance, group, DIRECTIONS.indexOf(direction), phase);
+  }
+
+  /**
+   * Em quantas fases o ciclo de caminhada se divide, para o viewport mapear o progresso do
+   * passo em quadro. `1` quando a criatura não anima — e aí qualquer fase cai no mesmo quadro.
+   */
+  framesOf(outfitId: number, moving: boolean): number {
+    const appearance = this.#appearances.outfit.get(outfitId);
+    const group = moving && appearance?.frameGroups[1] !== undefined
+      ? appearance.frameGroups[1]
+      : appearance?.frameGroups[0];
+    return group === undefined ? 1 : framesIn(group);
   }
 
   /**
@@ -151,11 +184,8 @@ export class AssetPack {
     // O resto da divisão, e não um erro: uma criatura com menos direções do que pedimos existe
     // (efeito, missile), e recusar deixaria buraco na tela onde cabia o primeiro quadro.
     const column = group.patternWidth === 0 ? 0 : x % group.patternWidth;
-    const frames = group.phases.length === 0
-      ? 1
-      : group.spriteIds.length / (group.patternWidth * group.patternHeight * group.patternDepth
-        * group.layers);
-    const step = frames <= 1 ? 0 : phase % Math.floor(frames);
+    const frames = framesIn(group);
+    const step = frames <= 1 ? 0 : phase % frames;
     const index = (step * group.patternWidth + column) * group.layers;
 
     const spriteId = group.spriteIds[index] ?? group.spriteIds[0];

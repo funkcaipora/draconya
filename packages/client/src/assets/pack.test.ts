@@ -88,19 +88,51 @@ describe('AssetPack (FUN-23)', () => {
     expect(DIRECTIONS).toEqual(['north', 'east', 'south', 'west']);
   });
 
-  it('fase 0 usa o grupo PARADO; fase > 0 usa o grupo ANDANDO', async () => {
-    // Pedir sempre o grupo 0 dá um monstro que desliza pelo chão sem mexer as patas — o
-    // defeito clássico de ligar sprite antes de ligar `frameGroups`.
-    const decode = vi.fn(async () => ({
-      width: 384, height: 384, pixels: new Uint8ClampedArray(384 * 384 * 4),
-    }));
-    const { pack } = await build({ decode });
-    const parado = await pack.outfit(21, 'north', 0);
-    const andando = await pack.outfit(21, 'north', 1);
+  it('`moving` escolhe o grupo ANDANDO, e a fase 0 dele é um quadro de verdade', async () => {
+    // Pedir sempre o grupo parado dá um monstro que desliza sem mexer as patas. E usar
+    // "fase 0" como sinônimo de parado — a primeira versão fazia isso — perdia o primeiro
+    // quadro do ciclo: oito fases viravam "parado + sete andando", com soluço a cada passo.
+    const { pack } = await build();
+    const parado = await pack.outfit(21, 'north', 0, false);
+    const andandoFase0 = await pack.outfit(21, 'north', 0, true);
+    const andandoFase1 = await pack.outfit(21, 'north', 1, true);
     expect(parado).not.toBeNull();
-    expect(andando).not.toBeNull();
-    // Quadros diferentes, e não o mesmo bitmap servido duas vezes.
-    expect(parado).not.toBe(andando);
+    expect(andandoFase0).not.toBeNull();
+    // Três quadros DIFERENTES: parado, andando-0 e andando-1.
+    expect(new Set([parado, andandoFase0, andandoFase1]).size).toBe(3);
+  });
+
+  it('framesOf diz em quantas fases dividir o passo', async () => {
+    // Sem isto o viewport não tem como mapear o progresso do passo em quadro; o `% frames`
+    // dentro da caixa acontece tarde demais.
+    const { pack } = await build();
+    expect(pack.framesOf(21, true)).toBe(3);
+    expect(pack.framesOf(21, false)).toBe(1);
+    expect(pack.framesOf(99_999, true)).toBe(1);
+  });
+
+  it('avisa por onEvict ANTES de fechar o bitmap despejado', async () => {
+    // O viewport constrói Texture sobre o bitmap; se ele fecha sem aviso, a textura vira
+    // inválida por baixo e desenha lixo. O aviso tem que chegar com o bitmap ainda vivo.
+    const avisos: Array<{ id: number; closedAtNotice: boolean }> = [];
+    const fetched = (async (url: string | URL | Request) => {
+      const name = String(url).split('/').pop() ?? '';
+      if (name === 'catalog-content.json') return new Response(JSON.stringify(CATALOG));
+      if (name === 'app.dat') return new Response(DAT.buffer as ArrayBuffer);
+      return new Response(new ArrayBuffer(8));
+    }) as unknown as typeof fetch;
+    const pack = await AssetPack.load({
+      baseUrl: 'https://exemplo/things/1332', fetch: fetched,
+      // Cabe UM quadro de 32×32: o segundo despeja o primeiro.
+      maxBytes: 32 * 32 * 4,
+      loader: { decode: async () => ({ width: 384, height: 384, pixels: new Uint8ClampedArray(384 * 384 * 4) }) },
+      createBitmap: async (_p, w, h) => new FakeBitmap(w, h),
+      onEvict: (id, sprite) => { avisos.push({ id, closedAtNotice: (sprite as FakeBitmap).closed }); },
+    });
+    await pack.outfit(21, 'north', 0, false);
+    await pack.outfit(21, 'east', 0, false);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]?.closedAtNotice).toBe(false);
   });
 
   it('devolve null para aparência que não existe', async () => {
