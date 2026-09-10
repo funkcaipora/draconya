@@ -319,6 +319,33 @@ Duas regras ao mexer nele:
 o que um `kill -9` parece de fora. Não confundir com `drain()`, que credita — trocar as duas
 seria perder exatamente o progresso que o ADR 0010 existe para preservar.
 
+## A configuração do bot é a ÚNICA escrita de banco do `game` (FUN-81, ADR 0021)
+
+Até aqui a divisão era limpa: `api` e `jobs` falam com o Postgres, o `game` não. A configuração
+do bot quebra isso — ela é dado durável do personagem **e** é editada com o jogador conectado,
+e quem tem a conexão é o `game`.
+
+O que a mantém segura, e o que não pode mudar sem pensar duas vezes:
+
+- **Uma instrução, sem `SELECT` antes.** "O jogador salvou isto" é última-escrita-vence por
+  natureza: a configuração é substituída inteira, nunca mesclada. Sem read-modify-write não há
+  corrida entre duas abas do mesmo jogador.
+- **Não participa da trava de linha** da emissão de ticket nem da exclusão (FUN-53): não abre
+  transação, não segura a linha, não depende de nada que esteja nela.
+- **O `game` não recebe o repositório nem o `Content`** — recebe `saveBotConfig` e
+  `acceptBotConfig`, funções estreitas, do mesmo jeito que o `api` recebe `settleProgress`.
+- **A ordem é aceitar → aplicar → persistir.** Aplicar antes de gravar faz a hunt em curso usar a
+  regra nova na hora; falhar ao gravar não desfaz o que já vale. Há teste afirmando isso.
+- **Sem banco configurado o `game` roda igual**, e a configuração vale na sessão e some no
+  logout. Degradação, não falha.
+
+O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo **ticket**, que
+o `api` monta lendo a linha — mesmo caminho de level, XP e gold, e pela mesma razão (invariante 4).
+
+Se um dia aparecer uma segunda escrita no `game`, o ADR 0021 deixa de valer como precedente:
+duas escritas já são um repositório, e aí a pergunta é se a divisão de processos ainda descreve
+o sistema.
+
 ## Como testar
 
 ```

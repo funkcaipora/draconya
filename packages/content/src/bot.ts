@@ -101,6 +101,36 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
   return problems;
 }
 
+/**
+ * Quais recursos do bot AVANÇADO esta configuração usa (§13.2, FUN-81).
+ *
+ * Lista vazia é "cabe no bot básico". Devolve NOMES, não um booleano, pela mesma razão que
+ * `validateBotConfig` devolve motivos: "seu bot exige level 50" sem dizer o quê deixa o
+ * jogador procurando qual das trinta regras dele é a culpada.
+ *
+ * Separada de `validateBotConfig` de propósito: aquela responde "esta configuração é válida",
+ * que não depende de quem a salvou; esta responde "este PERSONAGEM pode usá-la", que depende
+ * do level. Juntar as duas obrigaria toda validação a carregar um level, inclusive as que
+ * acontecem sem personagem nenhum na mão.
+ */
+export function advancedFeaturesUsed(config: BotConfig, limits: BotLimits): string[] {
+  const { advancedOnly } = limits;
+  const used = new Set<string>();
+
+  for (const category of BOT_CATEGORIES) {
+    for (const rule of config[category]) {
+      if (advancedOnly.conditions.includes(rule.when.kind)) used.add(`condição "${rule.when.kind}"`);
+    }
+  }
+  if (advancedOnly.targetPolicies.includes(config.targeting.policy)) {
+    used.add(`alvo "${config.targeting.policy}"`);
+  }
+  if (advancedOnly.postures.includes(config.targeting.posture.kind)) {
+    used.add(`postura "${config.targeting.posture.kind}"`);
+  }
+  return [...used];
+}
+
 /** Quantas regras cabem numa categoria, para o cliente desenhar os slots vazios. */
 export function slotsFor(category: BotCategory, limits: BotLimits): number {
   return limits.slots[category];

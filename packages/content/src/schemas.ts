@@ -254,6 +254,10 @@ const botOperator = z.enum(['<', '<=', '>', '>=']);
  * "nenhuma das N variantes casou", que não diz qual campo está errado — e o critério desta
  * issue é que regra fora do vocabulário seja **recusada com motivo**, nunca ignorada.
  */
+/** Os quatro tipos de condição, como lista — é o que o gate do bot básico nomeia (FUN-81). */
+export const BOT_CONDITION_KINDS = ['hp', 'mana', 'targets', 'target-hp'] as const;
+export type BotConditionKind = (typeof BOT_CONDITION_KINDS)[number];
+
 export const botConditionSchema = z.discriminatedUnion('kind', [
   /** HP do personagem, em percentual do máximo. */
   z.object({
@@ -409,6 +413,26 @@ export const botSchema = z.object({
   categoryCooldownMs: z.number().int().positive(),
   /** A partir de qual level o bot avançado abre. §13.2: 50. */
   advancedFromLevel: z.number().int().positive(),
+  /**
+   * O que só o bot AVANÇADO pode usar (§13.2, FUN-81).
+   *
+   * O gate é por LEVEL: abaixo de `advancedFromLevel` a configuração é recusada se usar
+   * qualquer coisa listada aqui. Uma lista de exceções, e não uma lista do que o básico
+   * permite, porque o básico é a regra e o avançado é o recorte — descrever a regra por
+   * enumeração faria toda adição ao vocabulário exigir uma edição aqui para continuar
+   * funcionando, e esquecer essa edição travaria o recurso novo para todo mundo abaixo do 50.
+   *
+   * **Vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]` no PRD
+   * §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
+   * ainda não existe (FUN-87). Inventar um recorte aqui seria decidir balanceamento por conta
+   * própria e disfarçá-lo de implementação. O mecanismo entra agora; o recorte entra quando o
+   * PRD o decidir, editando dado.
+   */
+  advancedOnly: z.object({
+    conditions: z.array(z.enum(BOT_CONDITION_KINDS)).default([]),
+    targetPolicies: z.array(botTargetPolicySchema).default([]),
+    postures: z.array(z.enum(['stand', 'follow', 'keep-distance'])).default([]),
+  }).default(() => ({ conditions: [], targetPolicies: [], postures: [] })),
   /**
    * Até que distância, em tiles, o bot ENXERGA um alvo (FUN-85).
    *

@@ -50,6 +50,17 @@ export interface InitialCharacter {
    */
   readonly gold?: number;
   /**
+   * A configuração do bot, crua e ainda NÃO validada (FUN-81).
+   *
+   * Vem do banco pelo mesmo caminho que level, XP e gold — o `api` lê a linha, e nada que o
+   * cliente manda entra aqui (invariante 4). Chega como `unknown` de propósito: quem valida
+   * contra o vocabulário é o `game`, com `botConfigSchema`, no instante de compilar.
+   *
+   * O ticket é o caminho de LEITURA da configuração; a escrita vai pelo socket, e as duas não
+   * se cruzam. Ausente é personagem sem bot, que é o normal até ele configurar um.
+   */
+  readonly botConfig?: unknown;
+  /**
    * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
    * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
@@ -412,6 +423,12 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // Gold inválido vira AUSENTE, não zero implícito com cara de valor: o resultado é o mesmo
     // saldo zero, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
     ...(typeof gold === 'number' && Number.isSafeInteger(gold) && gold >= 0 ? { gold } : {}),
+    // A configuração do bot passa OPACA. Validar aqui exigiria o vocabulário dentro do
+    // serviço de ticket, e o dono da validação é quem vai compilar — o `game`. O que este
+    // parse garante é só que existe algo, não o quê.
+    ...(initial['botConfig'] === undefined || initial['botConfig'] === null
+      ? {}
+      : { botConfig: initial['botConfig'] }),
   };
 }
 

@@ -24,6 +24,12 @@ export interface CharacterRecord {
   readonly staminaUpdatedAt: Date;
   readonly state: string;
   readonly sessionId: string | null;
+  /**
+   * A configuração do bot, como veio do banco (FUN-81). `unknown` de propósito: quem valida
+   * contra o vocabulário é `botConfigSchema`, e o repositório não é lugar de conhecer regra de
+   * jogo. `null` é personagem que nunca configurou.
+   */
+  readonly botConfig: unknown;
   readonly createdAt: Date;
 }
 
@@ -49,6 +55,17 @@ export interface GameRepository {
     characterId: string,
     isCharacterActive?: CharacterActiveCheck,
   ): Promise<DeleteCharacterResult>;
+  /**
+   * Grava a configuração do bot (FUN-81).
+   *
+   * Escrita CEGA, sem ler antes: "o jogador salvou isto" é última-escrita-vence por natureza,
+   * e um read-modify-write aqui criaria uma corrida entre duas abas do mesmo jogador para
+   * resolver um conflito que não existe — a configuração é substituída inteira, nunca mesclada.
+   *
+   * Por isso também não participa da trava de linha da emissão de ticket (FUN-53): é um
+   * `UPDATE` de uma instrução, que não segura a linha nem depende de nada que esteja nela.
+   */
+  saveBotConfig(characterId: string, config: unknown): Promise<void>;
 }
 
 export class DrizzleGameRepository implements GameRepository {
@@ -140,6 +157,19 @@ export class DrizzleGameRepository implements GameRepository {
     });
   }
 
+  /**
+   * Grava a configuração do bot. Ver o contrato em `GameRepository.saveBotConfig`.
+   *
+   * Só atualiza personagem NÃO apagado: gravar num soft-deleted seria escrever num personagem
+   * que já não existe para o resto do sistema.
+   */
+  async saveBotConfig(characterId: string, config: unknown): Promise<void> {
+    await this.#db
+      .update(characters)
+      .set({ botConfig: config })
+      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)));
+  }
+
   async softDeleteCharacter(
     accountId: string,
     characterId: string,
@@ -221,6 +251,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     staminaUpdatedAt: row.staminaUpdatedAt,
     state: row.state,
     sessionId: row.sessionId,
+    botConfig: row.botConfig,
     createdAt: row.createdAt,
   };
 }

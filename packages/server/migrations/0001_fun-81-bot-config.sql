@@ -1,0 +1,13 @@
+-- FUN-81: a configuração do bot é dado do JOGADOR, e sobrevive à sessão.
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default de conteúdo. Personagem
+-- gravado antes disto lê `null` e entra na hunt sem bot — que é exatamente o que ele já fazia.
+--
+-- `jsonb` e não `json`: a configuração é lida a cada emissão de ticket e escrita a cada vez que
+-- o jogador salva. `jsonb` guarda a forma já parseada, então a leitura não paga o parse de novo.
+--
+-- A VERSÃO do vocabulário vai dentro do próprio documento (`config.version`), e não numa coluna
+-- ao lado. Um segundo lugar para a versão é um segundo lugar para ela divergir do documento que
+-- ela descreve — e a divergência só apareceria no dia da migração de vocabulário, que é o pior
+-- dia possível para descobrir que a coluna dizia uma coisa e o JSON outra.
+ALTER TABLE character ADD COLUMN bot_config jsonb;

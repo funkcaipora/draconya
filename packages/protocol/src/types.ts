@@ -59,6 +59,17 @@ export const C2S_SCHEMAS = {
   'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
+  /**
+   * Salvar a configuração do bot (§13, FUN-81). INTENÇÃO: o jogador manda as REGRAS, e quem
+   * decide se elas valem — vocabulário, slots, catálogo e gate de level — é o servidor
+   * (invariante 4). Nada aqui é resultado: não há dano, cura nem gold nesta mensagem.
+   *
+   * A carga vem como objeto OPACO de propósito. O schema de verdade é `botConfigSchema`, em
+   * `@draconya/content`, e ele é a fonte única do vocabulário — repetir a forma aqui criaria
+   * um segundo lugar para ela divergir, que é exatamente o que o invariante 5 evita para
+   * opcode. O servidor faz o `parse` com o schema real e recusa com `system-message`.
+   */
+  'bot-config': z.object({ config: z.unknown() }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {
