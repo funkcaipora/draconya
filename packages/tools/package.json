@@ -17,11 +17,13 @@
     "content:check": "tsx src/content/check.ts",
     "bench:monster": "tsx src/bench/monster-step.ts",
     "bench:hunts": "node --expose-gc --import tsx src/bench/cold-hunts.ts",
-    "load": "tsx src/load/main.ts"
+    "load": "tsx src/load/main.ts",
+    "bench:city": "tsx src/bench/city-broadcast.ts"
   },
   "dependencies": {
     "@draconya/protocol": "workspace:*",
     "@draconya/content": "workspace:*",
-    "@draconya/sim": "workspace:*"
+    "@draconya/sim": "workspace:*",
+    "@draconya/server": "workspace:*"
   }
 }

@@ -24,6 +24,7 @@ import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
 import type { Logger } from '../log.js';
 import type { InitialCharacter } from '../tickets.js';
+import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
@@ -112,6 +113,15 @@ export interface SessionHostOptions {
    * encerramento, e o log diz. Degradação, não falha.
    */
   readonly lootBoxes?: LootBoxStore;
+  /**
+   * Ligar o interest management por célula nas sessões compartilhadas (FUN-33). Padrão: sim.
+   *
+   * Existe desligável por duas razões, e nenhuma é "por precaução": é o GRUPO DE CONTROLE da
+   * medição — `pnpm bench:city` roda os dois lados e é assim que "não cresce
+   * quadraticamente" vira número —, e é a saída se um dia a AOI esconder quem não devia. Sem
+   * ela, a praça volta a mandar tudo para todos: caro, e visivelmente correto.
+   */
+  readonly areaOfInterest?: boolean;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -184,6 +194,13 @@ interface HostedSession {
    * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
    */
   readonly creatureIds: Map<string, number>;
+  /**
+   * Quem enxerga quem, por célula (FUN-33). `null` na sessão privada.
+   *
+   * Só o SHARD precisa: numa hunt de um personagem, "todos os visualizadores" já são os dele, e
+   * manter índice de célula ali seria custo puro no caminho quente das 5.000 instâncias.
+   */
+  readonly aoi: AreaOfInterest | null;
 }
 
 /** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
@@ -285,6 +302,19 @@ export class SessionHost {
   sessionFor(characterId: string): Session | undefined {
     const sessionId = this.#sessionIdByCharacter.get(characterId);
     return sessionId === undefined ? undefined : this.#sessions.get(sessionId)?.session;
+  }
+
+  /**
+   * Quem enxerga este personagem no campo de visão (FUN-33). Vazio na sessão privada, que não
+   * tem AOI — lá "quem enxerga" é a pergunta errada, porque só há um personagem.
+   *
+   * Existe para MEDIR: `pnpm bench:city` conta vizinhos com isto, e é esse número que decide se
+   * a AOI cortou o que veio cortar. Ler daqui é ler a estrutura de verdade, não uma reprodução
+   * dela no medidor — que passaria a poder concordar com um defeito.
+   */
+  interestOf(characterId: string): readonly string[] {
+    const hosted = this.#hostedSession(characterId);
+    return hosted?.aoi?.visibleTo(characterId) ?? [];
   }
 
   viewersOf(characterId: string): number {
@@ -589,10 +619,22 @@ export class SessionHost {
     const hosted = this.#hostedSession(from.characterId);
     if (hosted === undefined) return;
     const author = this.#nameByCharacter.get(from.characterId) ?? from.characterId;
+    const message = {
+      type: 'chat-message', channel: 'local', author, text: trimmed,
+    } as const;
     // ENFILEIRADO, no lote do ciclo — não `sendNow`. Chat não é `pong`: 100 ms de atraso é
     // invisível, e furar a fila põe a mensagem na frente de deltas que já esperavam.
-    for (const viewer of hosted.viewers) {
-      viewer.send({ type: 'chat-message', channel: 'local', author, text: trimmed });
+    //
+    // O alcance é o CAMPO DE VISÃO (FUN-33), e é o que `local` sempre quis dizer. Até aqui era
+    // a sessão inteira, com o `docs/product/chat.md` registrando que o raio era desta issue —
+    // e numa praça de duzentos "local" alcançando duzentos é o canal global com outro nome.
+    if (hosted.aoi === null) {
+      for (const viewer of hosted.viewers) viewer.send(message);
+      return;
+    }
+    this.#sendToViewersOf(hosted, from.characterId, message);
+    for (const other of hosted.aoi.visibleTo(from.characterId)) {
+      this.#sendToViewersOf(hosted, other, message);
     }
   }
 
@@ -847,20 +889,95 @@ export class SessionHost {
     for (const event of events) {
       // O protocolo exige duração positiva: um passo é enviado UMA vez, com origem, destino e
       // duração, e o cliente interpola o intervalo inteiro (ADR 0001). Duração zero é
-      // colocação, não passo — aparecer no mundo é `creature-appear`, que precisa de aparência
-      // e é trabalho da M2.
+      // colocação, não passo — aparecer no mundo é `creature-appear`.
       if (event.durationMs <= 0) continue;
-      const id = this.#creatureId(hosted, String(event.creatureId));
-      for (const viewer of hosted.viewers) {
-        viewer.send({
-          type: 'creature-move',
-          id,
-          from: event.from,
-          to: event.to,
-          durationMs: event.durationMs,
-        });
+      const subject = String(event.creatureId);
+      const message = {
+        type: 'creature-move',
+        id: this.#creatureId(hosted, subject),
+        from: event.from,
+        to: event.to,
+        durationMs: event.durationMs,
+      } as const;
+
+      const aoi = hosted.aoi;
+      if (aoi === null) {
+        // Sessão privada: os visualizadores já são todos do mesmo personagem.
+        for (const viewer of hosted.viewers) viewer.send(message);
+        continue;
+      }
+
+      // No shard, o passo vai para quem TEM ele no campo (FUN-33) — não para a praça. É esta
+      // linha que troca O(N²) por O(vizinhos), e vizinhos não crescem com a população: o mapa
+      // é o mesmo, e tile é exclusivo.
+      const change = aoi.move(subject, event.to);
+      this.#applyVisibility(hosted, subject, change);
+      this.#sendToViewersOf(hosted, subject, message);
+      for (const other of aoi.visibleTo(subject)) {
+        // Quem ACABOU de vê-lo já recebeu `creature-appear`, com a posição de chegada. Mandar
+        // o passo também faria o cliente animar uma caminhada a partir de um tile em que a
+        // criatura nunca esteve, para ele.
+        if (change.appeared.includes(other)) continue;
+        this.#sendToViewersOf(hosted, other, message);
       }
     }
+  }
+
+  /** Esta sessão tem campo de visão por célula? Só shard, e só com a opção ligada (FUN-33). */
+  #interestManaged(session: Session): boolean {
+    return session.ruleset.shared === true && this.#options.areaOfInterest !== false;
+  }
+
+  /** Manda para todos os visualizadores de UM personagem. Abas contam separado. */
+  #sendToViewersOf(hosted: HostedSession, characterId: string, message: S2CMessage): void {
+    for (const viewer of hosted.viewers) {
+      if (viewer.characterId === characterId) viewer.send(message);
+    }
+  }
+
+  /**
+   * Traduz uma mudança de campo de visão em `creature-appear` e `creature-disappear` (FUN-33).
+   *
+   * **Os dois lados**, porque a visibilidade é simétrica: quem apareceu para mim é exatamente
+   * quem eu passei a enxergar. Mandar só um lado deixa um dos dois com um fantasma na tela —
+   * um boneco parado que não corresponde a ninguém — ou com um vizinho invisível.
+   */
+  #applyVisibility(
+    hosted: HostedSession,
+    subject: string,
+    change: { readonly appeared: readonly string[]; readonly vanished: readonly string[] },
+  ): void {
+    for (const other of change.appeared) {
+      this.#sendToViewersOf(hosted, other, this.#appearance(hosted, subject));
+      this.#sendToViewersOf(hosted, subject, this.#appearance(hosted, other));
+    }
+    for (const other of change.vanished) {
+      // O id numérico NÃO é reciclado aqui: sumir de vista não é sair da sessão, e um id novo
+      // no reaparecimento deixaria o sprite antigo parado para sempre na tela do cliente.
+      const gone = hosted.creatureIds.get(subject);
+      const theirs = hosted.creatureIds.get(other);
+      if (gone !== undefined) {
+        this.#sendToViewersOf(hosted, other, { type: 'creature-disappear', id: gone });
+      }
+      if (theirs !== undefined) {
+        this.#sendToViewersOf(hosted, subject, { type: 'creature-disappear', id: theirs });
+      }
+    }
+  }
+
+  /** O `creature-appear` de um personagem, como quem está por perto precisa vê-lo. */
+  #appearance(hosted: HostedSession, characterId: string): S2CMessage {
+    const character = hosted.session.participants.find((p) => p.id === characterId);
+    return {
+      type: 'creature-appear',
+      id: this.#creatureId(hosted, characterId),
+      position: character?.position ?? { x: 0, y: 0, z: 0 },
+      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
+      appearanceId: 1,
+      name: this.#nameByCharacter.get(characterId) ?? characterId,
+      health: character?.health ?? 0,
+      maxHealth: character?.maxHealth ?? 0,
+    };
   }
 
   /**
@@ -1085,12 +1202,13 @@ export class SessionHost {
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
       session: next, viewers: new Set(), creatureIds: new Map(),
+      aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: false,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
-    if (existing !== undefined) this.#announceArrival(successor, characterId);
+    this.#announceArrival(successor, characterId);
 
     for (const viewer of following) {
       successor.viewers.add(viewer);
@@ -1391,12 +1509,22 @@ export class SessionHost {
     const { session } = hosted;
     const self = session.participants.find((participant) => participant.id === characterId);
 
-    const creatures = session.participants.map((participant) => ({
+    // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
+    // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
+    // ela não tem como desenhar, porque está fora da câmera.
+    //
+    // Sessão privada não tem AOI: ali "todos os participantes" já é a resposta certa.
+    const visible = hosted.aoi === null
+      ? session.participants
+      : session.participants.filter((participant) => participant.id === characterId
+        || hosted.aoi?.visibleTo(characterId).includes(participant.id) === true);
+
+    const creatures = visible.map((participant) => ({
       id: this.#creatureId(hosted, participant.id),
       position: participant.position,
       // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
       appearanceId: 1,
-      name: participant.id,
+      name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
     }));
@@ -1550,6 +1678,8 @@ export class SessionHost {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
+      // Só o shard tem AOI (FUN-33): numa hunt de um personagem ela seria índice para nada.
+      aoi: this.#interestManaged(session) ? new AreaOfInterest() : null,
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
@@ -1565,7 +1695,10 @@ export class SessionHost {
 
     // Quem já estava na praça precisa VER quem chegou. Sem isto, o novo só apareceria no
     // primeiro passo que ele desse — e ficaria invisível enquanto estivesse parado.
-    if (existing !== undefined) this.#announceArrival(hosted, characterId);
+    //
+    // Vale também para o PRIMEIRO a chegar, que não avisa ninguém: é ele entrando no índice de
+    // células, e sem isso quem chegasse depois não teria como encontrá-lo.
+    this.#announceArrival(hosted, characterId);
 
     this.#logger.info(
       { characterId, sessionId: session.id, type: session.ruleset.type },
@@ -1573,35 +1706,30 @@ export class SessionHost {
     );
   }
 
-  /** Avisa quem já está na sessão de que alguém chegou (FUN-71). */
+  /**
+   * Alguém chegou na sessão (FUN-71), e quem está POR PERTO precisa saber (FUN-33).
+   *
+   * "Por perto" e não "todo mundo": numa praça de duzentos, avisar a praça inteira de cada
+   * entrada é o mesmo O(N²) que a AOI existe para cortar, só que no evento mais barulhento do
+   * dia — todo login passa por aqui.
+   */
   #announceArrival(hosted: HostedSession, characterId: string): void {
     const arrival = hosted.session.participants.find((p) => p.id === characterId);
     if (arrival === undefined) return;
-    const message = {
-      type: 'creature-appear',
-      id: this.#creatureId(hosted, characterId),
-      position: arrival.position,
-      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
-      appearanceId: 1,
-      name: this.#nameByCharacter.get(characterId) ?? characterId,
-      health: arrival.health,
-      maxHealth: arrival.maxHealth,
-    } as const;
-    for (const viewer of hosted.viewers) {
-      if (viewer.characterId === characterId) continue;
-      viewer.send(message);
-    }
+    const aoi = hosted.aoi;
+    if (aoi === null) return;
+    this.#applyVisibility(hosted, characterId, aoi.enter(characterId, arrival.position));
   }
 
-  /** Avisa quem ficou de que alguém saiu (FUN-71). */
+  /** Alguém saiu da sessão (FUN-71). Some da tela de quem o enxergava, e só dela. */
   #announceDeparture(hosted: HostedSession, characterId: string): void {
-    const id = hosted.creatureIds.get(characterId);
-    if (id === undefined) return;
-    hosted.creatureIds.delete(characterId);
-    for (const viewer of hosted.viewers) {
-      if (viewer.characterId === characterId) continue;
-      viewer.send({ type: 'creature-disappear', id });
+    const aoi = hosted.aoi;
+    if (aoi !== null) {
+      this.#applyVisibility(hosted, characterId, aoi.leave(characterId));
     }
+    // O id numérico é liberado AQUI, e só aqui: sumir de vista é reversível, sair da sessão
+    // não. Reciclar no primeiro caso deixaria o sprite antigo parado para sempre na tela.
+    hosted.creatureIds.delete(characterId);
   }
 
   async #register(

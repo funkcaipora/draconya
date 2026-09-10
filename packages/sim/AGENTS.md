@@ -182,6 +182,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   FUN-72 entrando pela mesma porta.
 - **Chegar na praça é `placeNear`, não `place`.** O ponto de entrada é um tile só e tile é
   exclusivo; um `place` seco deixaria o segundo a chegar fora do mapa — invisível, sem andar,
-  com o log dizendo que ele entrou.
+  com o log dizendo que ele entrou. O raio de 16 vem do TETO DE POPULAÇÃO por cópia (200, na
+  FUN-33): com 289 tiles ao redor da entrada, duzentas pessoas ficariam ombro a ombro.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.

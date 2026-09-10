@@ -142,6 +142,9 @@ importers:
       '@draconya/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@draconya/server':
+        specifier: workspace:*
+        version: link:../server
       '@draconya/sim':
         specifier: workspace:*
         version: link:../sim

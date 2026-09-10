@@ -37,57 +37,106 @@ const INITIAL_FLAGS = { goldDelta: 0, alive: true, cooldowns: {} } as const;
 const UNPLACED = { x: -1, y: -1, z: 0 } as const;
 
 /** O ruleset da Cidade, com o mapa e a duração de passo que o conteúdo diz. */
-function cityRulesetFor(content: Content) {
+function cityRulesetFor(content: Content, entryRadius?: number) {
   return createCityRuleset({
     ...(content.city === undefined ? {} : { map: content.city }),
     stepDurationMs: content.progression.stepDurationMs,
+    ...(entryRadius === undefined ? {} : { entryRadius }),
   });
 }
 
 /**
- * A cópia da Cidade deste nó — o SHARD (FUN-71, ADR 0023).
+ * Teto de população por cópia da Cidade (FUN-33, §13 do documento técnico).
  *
- * Uma cópia, muitos personagens. Antes disto cada personagem tinha a própria Cidade e ninguém
- * via ninguém: a praça existia N vezes, vazia em todas.
+ * Duzentos é o número da issue, e ele não sai de medição nossa: é o ponto em que "todo mundo
+ * junto" deixa de ser sensação de mundo vivo e vira multidão ilegível — mais gente na praça do
+ * que cabe na tela, várias vezes.
  *
- * **Uma cópia por nó, e é assim que "Cidade 2" nasce.** Dois nós de jogo já são duas cópias,
- * sem nada a mais; o teto de população por cópia e a escolha de qual entrar são da FUN-33.
+ * **É configuração de NÓ, não conteúdo.** Não descreve balanceamento de jogo; descreve quanto
+ * um processo aguenta hospedar junto. Por isso mora aqui, e não em `packages/content`.
+ */
+export const CITY_SHARD_CAPACITY = 200;
+
+/**
+ * As cópias da Cidade deste nó — os SHARDS (FUN-71, ADR 0023; teto na FUN-33).
+ *
+ * Uma cópia, muitos personagens. Antes da FUN-71 cada personagem tinha a própria Cidade e
+ * ninguém via ninguém: a praça existia N vezes, vazia em todas.
+ *
+ * **A cópia enche e abre outra** — é a "Cidade 2" do §13. Duas defesas contra o custo de N
+ * jogadores no mesmo lugar, e esta é a mais barata das duas: mesmo com interest management, uma
+ * cópia sem teto acumula estado, snapshot e varredura sem limite. A outra defesa é a AOI, em
+ * `game/aoi.ts`.
+ *
+ * **Enche na ORDEM**, e não espalha. Espalhar daria praças pela metade, e praça pela metade é
+ * pior que praça cheia: o valor de estar na Cidade é haver gente nela.
  *
  * A cópia vazia é ESQUECIDA. Mantê-la de pé é custo puro — e, pior, ela envelheceria: a versão
  * de conteúdo é fixada na criação (invariante 7), então uma praça que atravessa três deploys
  * continuaria rodando a versão do primeiro.
  */
+export interface CityShardOptions {
+  /** Teto de população por cópia. Padrão: `CITY_SHARD_CAPACITY`. */
+  readonly capacity?: number;
+  /**
+   * Até onde procurar tile livre ao chegar, em tiles.
+   *
+   * A Cidade de hoje tem um ponto de entrada e mais nada, então todo mundo fica no mesmo
+   * punhado de tiles. Quando ela tiver loja, depósito e ruas, as pessoas se espalham — e é esse
+   * cenário que `pnpm bench:city` reproduz alargando isto.
+   */
+  readonly entryRadius?: number;
+}
+
 export class CityShard {
   readonly #content: Content;
   readonly #now: () => number;
-  #session: Session | null = null;
+  readonly #capacity: number;
+  readonly #entryRadius: number | undefined;
+  #copies: Session[] = [];
 
-  constructor(content: Content, now: () => number = () => Date.now()) {
+  constructor(
+    content: Content,
+    now: () => number = () => Date.now(),
+    options: CityShardOptions = {},
+  ) {
+    const capacity = options.capacity ?? CITY_SHARD_CAPACITY;
+    if (!Number.isInteger(capacity) || capacity < 1) {
+      throw new Error(`city shard capacity must be a positive integer: ${capacity}`);
+    }
     this.#content = content;
     this.#now = now;
+    this.#capacity = capacity;
+    this.#entryRadius = options.entryRadius;
   }
 
   /**
-   * Põe o personagem na cópia deste nó, criando-a se a de agora não servir mais.
+   * Põe o personagem numa cópia com vaga, criando outra se todas estiverem cheias.
    *
    * **Cópia vazia não é reaproveitada**, e não é economia perdida: a versão de conteúdo é
    * fixada na criação (invariante 7), então uma praça que ninguém frequenta e atravessa três
-   * deploys continuaria rodando a versão do primeiro. Vazia, ela não custa nada a ninguém
-   * para ser refeita — e o hospedeiro já a esqueceu quando o último saiu.
+   * deploys continuaria rodando a versão do primeiro. Vazia, ela não custa nada a ninguém para
+   * ser refeita — e o hospedeiro já a esqueceu quando o último saiu.
    */
   admit(character: CharacterRuntime): Session {
-    const current = this.#session;
-    if (current === null || current.ended !== null || current.participants.length === 0) {
-      this.#session = this.#create();
-    }
-    const session = this.#session as Session;
+    this.#copies = this.#copies.filter(
+      (copy) => copy.ended === null && copy.participants.length > 0,
+    );
+    const room = this.#copies.find((copy) => copy.participants.length < this.#capacity);
+    const session = room ?? this.#create();
+    if (room === undefined) this.#copies.push(session);
     session.enter(character);
     return session;
   }
 
-  /** Quantos personagens estão na praça agora. É o número que a FUN-33 vai limitar. */
+  /** Quantos personagens estão na Cidade deste nó, somando as cópias. */
   get population(): number {
-    return this.#session?.participants.length ?? 0;
+    return this.#copies.reduce((total, copy) => total + copy.participants.length, 0);
+  }
+
+  /** Quantas cópias existem agora. Uma praça cheia abre a segunda; é o que este número mostra. */
+  get copies(): number {
+    return this.#copies.length;
   }
 
   #create(): Session {
@@ -97,7 +146,7 @@ export class CityShard {
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
       contentVersion: this.#content.version,
-      ruleset: cityRulesetFor(this.#content),
+      ruleset: cityRulesetFor(this.#content, this.#entryRadius),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),

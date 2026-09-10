@@ -411,6 +411,19 @@ terceiro slot de personagem.
   creditada. Antes da FUN-71, o `save` da Cidade cobria essa linha por acidente.
 - **Repouso (FUN-52) é por PERSONAGEM.** Por sessão, um jogador com o navegador aberto seguraria
   a praça inteira na memória do nó para sempre.
+- **No shard, "todos os visualizadores da sessão" está QUASE sempre errado** (FUN-33). O passo, o
+  `creature-appear`, o `session-state` e o `say` vão para quem tem o tile no campo de visão —
+  `hosted.aoi`. Quem escrever o próximo caminho de saída precisa escolher entre os dois, e o
+  default seguro é o campo, não a sessão: mandar demais é O(N²) de volta, e o teste que pega isso
+  é `o passo de quem está LONGE não chega`.
+- **O id numérico de criatura NÃO é reciclado quando alguém sai de vista.** Sumir do campo é
+  reversível; sair da sessão não. Reciclar no primeiro caso deixaria o sprite antigo parado para
+  sempre na tela do cliente — e o id novo no reaparecimento não teria como apagá-lo.
+- **Quem acabou de aparecer não recebe o passo daquele mesmo instante.** O `creature-appear` já
+  leva a posição de chegada; mandar o `creature-move` junto faria o cliente animar uma caminhada
+  a partir de um tile em que a criatura nunca esteve, para ele.
+- **A AOI só existe no shard.** Numa hunt de um personagem ela seria índice para nada, no caminho
+  quente das 5.000 instâncias que a FUN-46 mediu.
 
 ## Testes de autenticação e admissão
 

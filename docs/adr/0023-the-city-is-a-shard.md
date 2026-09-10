@@ -75,6 +75,51 @@ onde vai, e `TileOccupancy` guarda coordenada, não dono: liberar por `character
 liberaria um tile da praça usando coordenada de outro mapa, em cima de quem estivesse parado ali.
 É o defeito que a FUN-72 corrigiu no `place`, entrando pela mesma porta.
 
+### Interest management por célula (2026-09-10, FUN-33)
+
+Com a praça compartilhada, a transmissão passou a existir — e a crescer com o quadrado da
+população: cada passo de cada um ia para todos os outros. **Medido**, com 500 jogadores
+espalhados num mapa de 313×313: 4,96 milhões de mensagens contra 96 mil com interest management.
+
+O campo de visão é por **célula de 10 tiles**, e o número vem da câmera: `VIEW_WIDTH` é 18 e
+`visibleTiles` acrescenta uma tile de margem de cada lado, então a tela alcança 9,5 tiles para os
+lados. O que o servidor manda e o que a tela mostra precisam ser a mesma coisa — menos, e aparece
+buraco onde deveria haver criatura; muito mais, e paga-se banda por invisível.
+
+Três decisões dentro dela:
+
+- **Vive no `server`, não no `sim`.** É apresentação: o `sim` produz o evento haja ou não alguém
+  olhando (invariante 3), e quem decide se aquilo vira bytes é o hospedeiro. AOI dentro do `sim`
+  faria o resultado depender de quem está assistindo.
+- **A visibilidade é SIMÉTRICA.** Se eu te enxergo, você me enxerga. Assimetria seria um jogador
+  aparecendo na tela de alguém que não aparece na dele, e a primeira consequência é combate
+  contra quem não se vê. A simetria também torna "quem recebe este passo" uma leitura de
+  conjunto, sem consulta de célula no caminho quente.
+- **Dois limiares, com faixa morta.** O par passa a se enxergar a uma célula e só deixa de se
+  enxergar passando de três. Com um limiar só, dois jogadores oscilando em torno do limite geram
+  um par `creature-appear`/`creature-disappear` por passo — mais tráfego do que a AOI economizou.
+  É a mesma máquina do lure e do ring swap do bot (FUN-87), no eixo da distância.
+
+**Só o shard tem AOI.** Numa hunt de um personagem, "todos os visualizadores" já são os dele, e
+manter índice de célula ali seria custo puro no caminho quente das 5.000 instâncias.
+
+O `say` de canal `local` passou a ter o mesmo alcance. Numa praça de duzentos, "local" alcançando
+duzentos é o canal global com outro nome — e o raio em tiles era desta issue desde a FUN-58.
+
+A AOI é **desligável** (`areaOfInterest: false`). Não é precaução: é o grupo de controle da
+medição — `pnpm bench:city` roda os dois lados — e a saída se um dia ela esconder quem não devia.
+
+### Teto de população por cópia (2026-09-10, FUN-33)
+
+**200 por cópia**, o número do §13; encheu, abre a Cidade 2. É configuração de **nó**, não
+conteúdo: não descreve balanceamento de jogo, descreve quanto um processo aguenta hospedar junto.
+
+Encher na ordem, e não espalhar: praça pela metade é pior que praça cheia, porque o valor de
+estar na Cidade é haver gente nela.
+
+O teto obrigou a alargar o raio de chegada de 8 para 16 tiles. Com 289 tiles ao redor da entrada,
+duzentas pessoas ficariam ombro a ombro e ninguém conseguiria andar — tile é exclusivo.
+
 ## Alternativas
 
 - **Manter uma sessão por personagem e sincronizar entre elas.** É reimplementar sessão
@@ -94,16 +139,14 @@ liberaria um tile da praça usando coordenada de outro mapa, em cima de quem est
 O `say` de alcance "sessão inteira" passa a alcançar a praça inteira — que é o que a FUN-58
 especificava e o que a Cidade privada silenciosamente não fazia.
 
-A transmissão da Cidade passa a existir, e a **FUN-33 passa a ter o que cortar**: cada passo vai
-para todos os visualizadores da cópia. É a premissa que faltava para AOI por célula e para o teto
-de população por cópia.
+A transmissão da Cidade passou a existir, e a FUN-33 passou a ter o que cortar — ver a emenda
+acima, que é onde ela foi cortada.
 
 Um personagem desconectado continua de pé na praça durante a carência de repouso (FUN-52), agora
 visível para os outros. É o mesmo comportamento de antes, com testemunhas.
 
-O teto de população por cópia **não entra aqui**. Uma cópia por nó é o que esta decisão entrega;
-escolher o número e distribuir entre cópias é a FUN-33, e fixá-lo agora seria inventar
-balanceamento.
+O teto de população por cópia não entrou nesta decisão; entrou na emenda da FUN-33, no mesmo dia,
+depois que a praça compartilhada existiu e deu o que medir.
 
 ## Invariantes afetados
 

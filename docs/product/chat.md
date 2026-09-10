@@ -32,10 +32,13 @@ reavaliar quando houver o terceiro canal.
 
 ## Regras
 
-- O alcance é a **sessão inteira**, não raio em tiles. Interest management é a FUN-33, e inventar
-  raio agora seria decidir duas vezes. Na Cidade isso passou a significar a praça inteira só na
-  FUN-71: antes dela cada personagem tinha a própria cópia da Cidade, e "sessão inteira" era uma
-  pessoa. Ver [`city.md`](./city.md).
+- O alcance na Cidade é o **campo de visão** (FUN-33): quem está por perto recebe, quem está do
+  outro lado da praça não. Numa praça de duzentos, "local" alcançando duzentos é o canal global com
+  outro nome. Nas demais sessões continua sendo a sessão inteira, que é o mesmo conjunto — hunt,
+  quest e boss são instanciadas por quem entra. Ver [`city.md`](./city.md).
+- O caminho até aqui: a FUN-58 escreveu "sessão inteira" porque raio em tiles seria decidir duas
+  vezes; a FUN-71 fez a Cidade ser compartilhada, e aí "sessão inteira" virou a praça; a FUN-33
+  trouxe o raio.
 - Toda recusa é **silenciosa**: canal desconhecido, texto vazio ou só espaço, texto com caractere
   de controle (`\p{C}` — zero-width e bidi override falsificam o nome do autor na tela). Um cliente
   com bug mandando em laço não pode gerar tráfego de volta. Texto acima de 255 já é recusado pelo
