@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { levelForXp } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { accounts, characters, itemInstances } from '../db/schema.js';
+import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
 import { DrizzleGameRepository } from '../db/repository.js';
@@ -270,6 +270,113 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
     const row = await characterRow(database, characterId);
     expect(row.xp).toBe(900);
     expect(row.level).toBe(1);
+  });
+});
+
+describe.runIf(ready)('a coluna `gold` bate com o ledger (FUN-57)', () => {
+  /**
+   * O gold do personagem é PROJEÇÃO: a verdade é a soma do ledger (invariante 10), e a coluna
+   * existe para não somar linhas a cada leitura. Projeção que ninguém confere é projeção que
+   * diverge, e o sintoma chega como "meu gold está errado" — sem nada no log, e sem ninguém
+   * conseguindo dizer qual dos dois números mentiu.
+   *
+   * O que reconstrói a coluna NÃO é `SUM(delta)`, e a diferença é o valor deste teste: o
+   * crédito tem PISO DE ZERO (`Math.max(0, ...)` em `applyProgress`). Uma sessão que gasta mais
+   * do que o personagem tinha grava o delta negativo cheio no ledger e trunca a coluna em zero.
+   * A projeção é a soma DOBRADA no piso, linha a linha, na ordem em que entraram.
+   */
+  const foldLedger = async (
+    database: NonNullable<typeof db>, characterId: string,
+  ): Promise<number> => {
+    const rows = await database.database.db
+      .select({ delta: ledger.delta })
+      .from(ledger)
+      .where(eq(ledger.characterId, characterId))
+      .orderBy(asc(ledger.createdAt), asc(ledger.seq));
+    // Começa em zero, que é o default da coluna: criar personagem não é movimentação de valor
+    // e por isso não tem linha de ledger. Se um dia alguém nascer com gold, este zero é a
+    // primeira coisa que precisa mudar — e este teste é quem avisa.
+    return rows.reduce((acc, row) => Math.max(0, acc + row.delta), 0);
+  };
+
+  it('depois de três extratos, a coluna é exatamente a soma dobrada no piso', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    // Três sessões com saldos diferentes, incluindo uma NEGATIVA — gastou mais do que ganhou,
+    // que é a hunt em que o supply custou mais que o loot. Sem uma negativa no meio, o teste
+    // não distinguiria soma de soma-com-piso, e passaria dos dois jeitos.
+    for (const [gained, spent] of [[500, 120], [200, 900], [1_000, 50]]) {
+      await receipts.save(receiptOf(randomUUID(), characterId, {
+        aggregates: {
+          durationMs: 1_000, xpGained: 0, goldGained: gained, goldSpent: spent,
+          kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+        },
+      }));
+      // Um extrato por varredura: a ordem entre eles é o que o piso torna significativo.
+      await writePendingReceipts({
+        database: database.database.db, receipts, logger, progression,
+      });
+    }
+
+    const row = await characterRow(database, characterId);
+    expect(row.gold).toBe(await foldLedger(database, characterId));
+    // E o número, escrito à mão, para o teste não passar com os dois lados quebrados juntos:
+    // 380, depois 380−700 truncado em 0, depois 950.
+    expect(row.gold).toBe(950);
+  });
+
+  it('o piso é a ÚNICA divergência: sem ele, coluna e soma crua seriam a mesma coisa', async () => {
+    // Um personagem que nunca passou do piso. Aqui `SUM(delta)` basta, e é isso que diz que a
+    // diferença do teste acima vem do piso e não de uma escrita perdida.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    for (const [gained, spent] of [[500, 120], [300, 80]]) {
+      await receipts.save(receiptOf(randomUUID(), characterId, {
+        aggregates: {
+          durationMs: 1_000, xpGained: 0, goldGained: gained, goldSpent: spent,
+          kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+        },
+      }));
+      await writePendingReceipts({
+        database: database.database.db, receipts, logger, progression,
+      });
+    }
+
+    const rows = await database.database.db
+      .select({ delta: ledger.delta })
+      .from(ledger)
+      .where(eq(ledger.characterId, characterId));
+    const cru = rows.reduce((acc, row) => acc + row.delta, 0);
+
+    expect((await characterRow(database, characterId)).gold).toBe(cru);
+    expect(cru).toBe(600);
+  });
+
+  it('gold escrito na coluna SEM linha de ledger é detectável', async () => {
+    // A classe de defeito que este bloco existe para pegar: um caminho novo que credita o
+    // personagem e esquece o ledger. Aqui ele é simulado com um UPDATE cru, porque nenhum
+    // caminho do código faz isso hoje — e a conferência precisa reprovar no dia em que fizer.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save(receiptOf(randomUUID(), characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    expect((await characterRow(database, characterId)).gold)
+      .toBe(await foldLedger(database, characterId));
+
+    await database.database.db
+      .update(characters)
+      .set({ gold: 999_999 })
+      .where(eq(characters.id, characterId));
+
+    expect((await characterRow(database, characterId)).gold)
+      .not.toBe(await foldLedger(database, characterId));
   });
 });
 

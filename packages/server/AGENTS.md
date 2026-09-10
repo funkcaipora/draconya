@@ -18,6 +18,13 @@ Persistência, diretório de sessão e roteamento.
   bug de protocolo, não recurso.
 - **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único (invariante 10).
   Retry nunca duplica. Ver ADR 0006.
+  **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
+  existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
+  a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
+  `applyProgress`), então uma sessão que gasta mais do que o personagem tinha grava o delta
+  negativo cheio e trunca a coluna. A projeção é a soma DOBRADA NO PISO, linha a linha, na
+  ordem em que entraram — e `ledger.test.ts`, "a coluna `gold` bate com o ledger", é quem
+  confere. Quem escrever um caminho novo que credita gold sem linha de ledger reprova ali.
 - **Nenhuma leitura ou escrita de banco no caminho crítico de uma ação.** A simulação vive em
   memória; persistência é write-behind. Postgres no meio do tick mata o tempo de resposta.
 - Sessão de hunt sobrevive ao socket e ao restart. Deploy **drena encerrando com crédito**, não
