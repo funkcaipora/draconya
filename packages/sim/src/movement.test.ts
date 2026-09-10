@@ -158,11 +158,12 @@ describe('commit', () => {
 
 describe('colocação (FUN-60)', () => {
   it('não exige adjacência, mas exige a mesma legalidade', () => {
+    // Quem chega não está neste mundo ainda: `world()` nasce vazio, e a posição que o herói
+    // carrega é de onde ele estava antes. Distância nenhuma importa — só o tile de destino.
     const hero = at(1, 1);
-    const w = world(hero);
+    const w = world();
     expect(place(w, hero, to(4, 3))).toBeNull();
     expect(hero.position).toEqual({ x: 4, y: 3, z: 7 });
-    expect(w.occupied(1, 1)).toBe(false);
     expect(w.occupied(4, 3)).toBe(true);
   });
 
@@ -174,6 +175,25 @@ describe('colocação (FUN-60)', () => {
     const w = world(novo);
     expect(place(w, novo, to(0, 0))).toBe('tile-blocked');
     expect(novo.position).toEqual({ x: 1, y: 1, z: 7 });
+  });
+
+  it('NÃO libera o tile da posição anterior, que pode ser de outro mundo (FUN-72)', () => {
+    // `place` é ENTRADA no mundo. A posição que o mover traz vem de outra sessão, de outro
+    // mapa, ou de um valor que nunca foi ocupado aqui — liberá-la é liberar um tile que
+    // pertence a outra criatura desta instância, e aí duas acabam no mesmo lugar. É o estado
+    // que o commit atômico do `move` existe para impedir, entrando pela porta dos fundos.
+    const morador = at(2, 1);
+    const w = world(morador);
+    // O recém-chegado traz `(2,1)` de onde estava antes — coincidência de coordenada entre
+    // dois mapas diferentes, que é o caso normal e não o raro.
+    const chegando = at(2, 1);
+
+    expect(place(w, chegando, to(3, 3))).toBeNull();
+
+    expect(chegando.position).toEqual({ x: 3, y: 3, z: 7 });
+    // O tile do morador continua ocupado — ele não saiu de lugar nenhum.
+    expect(w.occupied(2, 1)).toBe(true);
+    expect(w.occupied(3, 3)).toBe(true);
   });
 
   it('recusa nascer em cima de quem já está lá', () => {

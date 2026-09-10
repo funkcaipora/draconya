@@ -167,14 +167,24 @@ export function move<P extends GridPoint>(
  * Nascer, entrar numa hunt, reentrar na rota. A distância não importa; o tile importa. Um
  * personagem colocado em `(0,0)` — que é a borda de qualquer tilemap, bloqueada por
  * construção — é recusado aqui em vez de descoberto quando alguém tentar andar.
+ *
+ * **NÃO libera o tile da posição anterior** (FUN-72), e a diferença é a razão de `place` e
+ * `move` serem funções separadas. `place` é ENTRADA no mundo: a posição que o mover traz vem
+ * de outra sessão, de outro mapa, ou de um valor que nunca foi ocupado aqui. Liberá-la é
+ * liberar um tile que pertence a **outra** criatura desta instância — e aí duas acabam no
+ * mesmo lugar, que é exatamente o estado que o commit atômico do `move` existe para impedir,
+ * entrando pela porta dos fundos.
+ *
+ * Quem já está NESTE mundo e precisa saltar — teleporte, reentrada na rota, respawn de Guild
+ * War — precisa liberar a origem, e isso é outra função. Ela não existe porque ainda não há
+ * chamador; escrevê-la agora seria adivinhar a assinatura sem o caso de uso. **Não faça `place`
+ * virar as duas coisas com um parâmetro booleano:** foi o que este comentário custou.
  */
 export function place<P extends GridPoint>(
   world: MovementWorld, mover: Movable<P>, at: P,
 ): MoveRejection | null {
   const rejection = tileAdmits(world, at);
   if (rejection !== null) return rejection;
-  const from = mover.position;
-  world.vacate(from.x, from.y);
   mover.position = at;
   world.occupy(at.x, at.y);
   return null;

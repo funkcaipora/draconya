@@ -247,7 +247,11 @@ export class HuntRuleset implements Ruleset {
     // A colocação passa pela MESMA legalidade que um passo (FUN-69). O primeiro tile da rota
     // é validado no carregamento do conteúdo (FUN-9), então uma recusa aqui é conteúdo
     // quebrado — e falhar alto é melhor que entrar dentro de uma parede.
-    this.#world.reset(session.participants);
+    // A ocupação nasce com quem JÁ está no mundo desta instância — e o personagem que está
+    // entrando não está. A posição que ele traz é da sessão anterior, num mapa que não é
+    // este; contá-la aqui marcaria como ocupado um tile da hunt por uma coordenada de
+    // cidade. Antes da FUN-72 isso era limpo por acidente, porque `place` liberava a origem.
+    this.#world.reset(session.participants.filter((p) => p !== character));
     // A duração do passo vem do CONTEÚDO e é copiada para a criatura, como `maxHealth` é: o
     // sistema de movimento pergunta a quem anda, e quem anda não conhece o conteúdo.
     character.stepDurationMs = this.#options.player.stepDurationMs;
