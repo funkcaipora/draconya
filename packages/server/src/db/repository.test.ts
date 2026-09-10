@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
@@ -193,6 +194,81 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     await expect(issuance).resolves.toBe('issued');
     await expect(deletion).resolves.toBe('active');
     expect(await repository.getCharacter(account.id, character.id)).not.toBeNull();
+  });
+
+  describe('instância de item (FUN-76)', () => {
+    const seed = async () => {
+      const account = await repository.ensureAccount({
+        externalAuthId: `user_${randomUUID()}`, email: `${randomUUID()}@example.com`,
+      });
+      return repository.createCharacter(account.id, `Hero ${randomUUID().slice(0, 8)}`);
+    };
+
+    it('cada instância nasce com IDENTIDADE própria e proveniência', async () => {
+      // §9 da arquitetura: sem identidade, lendário não tem proveniência. Duas espadas do
+      // mesmo id são duas linhas, e cada uma sabe de onde veio — a alternativa (um contador
+      // por tipo) é barata até o dia em que alguém pergunta, e nesse dia a resposta não existe
+      // para item nenhum, retroativamente.
+      const character = await seed();
+      const uma = await repository.createItemInstance({
+        itemId: 'spike-sword', ownerCharacterId: character.id, origin: 'loot',
+      });
+      const outra = await repository.createItemInstance({
+        itemId: 'spike-sword', ownerCharacterId: character.id, origin: 'boss',
+      });
+
+      expect(uma.id).not.toBe(outra.id);
+      expect(uma.origin).toBe('loot');
+      expect(outra.origin).toBe('boss');
+      expect(uma.quantity).toBe(1);
+    });
+
+    it('item empilhável guarda a quantidade na mesma linha', async () => {
+      const character = await seed();
+      const flechas = await repository.createItemInstance({
+        itemId: 'arrow', ownerCharacterId: character.id, origin: 'market', quantity: 100,
+      });
+      expect(flechas.quantity).toBe(100);
+    });
+
+    it('quantidade zero é recusada pelo BANCO, não só por código', async () => {
+      // A restrição mora no schema: uma linha com quantidade zero é um item que existe e não
+      // existe ao mesmo tempo, e a checagem no banco é a que continua valendo quando alguém
+      // escrever um caminho novo de inserção.
+      const character = await seed();
+      await expect(repository.createItemInstance({
+        itemId: 'arrow', ownerCharacterId: character.id, origin: 'loot', quantity: 0,
+      })).rejects.toThrow();
+    });
+
+    it('lista o que é do personagem, em ordem estável, e só o dele', async () => {
+      // Sem ordem estável, duas aberturas do inventário desenham a mesma coisa em ordens
+      // diferentes e o jogador vê os itens dançando sem ter mexido em nada.
+      const meu = await seed();
+      const outro = await seed();
+      await repository.createItemInstance({
+        itemId: 'spike-sword', ownerCharacterId: meu.id, origin: 'loot',
+      });
+      await repository.createItemInstance({
+        itemId: 'leather-armor', ownerCharacterId: meu.id, origin: 'quest',
+      });
+      await repository.createItemInstance({
+        itemId: 'arrow', ownerCharacterId: outro.id, origin: 'market',
+      });
+
+      const meus = await repository.listItemInstances(meu.id);
+      expect(meus.map((i) => i.itemId)).toEqual(['spike-sword', 'leather-armor']);
+      expect(await repository.listItemInstances(meu.id)).toEqual(meus);
+      expect(await repository.listItemInstances(outro.id)).toHaveLength(1);
+    });
+
+    it('recusa instância de personagem que não existe', async () => {
+      // A chave estrangeira é sobre o DONO, não sobre o item: o catálogo é conteúdo e não tem
+      // tabela para apontar.
+      await expect(repository.createItemInstance({
+        itemId: 'spike-sword', ownerCharacterId: randomUUID(), origin: 'loot',
+      })).rejects.toThrow();
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import type {
   AccountRecord,
   CharacterRecord,
   GameRepository,
+  ItemInstanceRecord,
 } from '../db/repository.js';
 import { loadConfiguration } from '../config.js';
 import { registerAuthRoutes } from './auth.js';
@@ -36,6 +37,19 @@ class MemorySessions implements AuthSessionStore {
 
 class MemoryRepository implements GameRepository {
   readonly accounts = new Map<string, AccountRecord>();
+  async createItemInstance(instance: {
+    itemId: string; ownerCharacterId: string; origin: string; quantity?: number;
+  }): Promise<ItemInstanceRecord> {
+    // Item não passa por este arquivo. Um `throw` seria pior que um valor: ele transformaria
+    // um método nunca chamado numa falha em teste de outra coisa.
+    return {
+      id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
+      quantity: instance.quantity ?? 1, origin: instance.origin, createdAt: new Date(0),
+    };
+  }
+  async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
   async saveBotConfig(): Promise<void> {
     // Este arquivo é sobre autenticação. A configuração do bot não passa por aqui.
   }

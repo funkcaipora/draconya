@@ -65,10 +65,14 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
           }
           return;
         case 'item':
-          // Catálogo de ITEM continua sendo M8. Recusar tudo é o mesmo que `buildContent` faz
-          // com `loot.items`: melhor um slot recusado no boot que um crédito fantasma.
+          // O catálogo existe desde a FUN-76, e a referência é conferida — mas USAR um item
+          // exige inventário, que é a FUN-82. Aceitar a regra agora faria o bot escolhê-la e o
+          // atuador recusá-la em silêncio a cada avaliação: um slot morto que o jogador não
+          // consegue explicar, que é o formato exato que este vocabulário existe para impedir.
           problems.push(
-            `${where}: item "${rule.do.itemId}" — não existe catálogo de itens ainda`,
+            content.items.has(rule.do.itemId)
+              ? `${where}: usar item exige inventário, que ainda não existe`
+              : `${where}: item "${rule.do.itemId}" não existe`,
           );
       }
     });

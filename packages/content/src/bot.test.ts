@@ -57,6 +57,10 @@ const content = buildContent({
     id: 'health-potion', name: 'Poção de Vida', price: 45,
     effect: { kind: 'heal', amount: 80 },
   }],
+  items: [{
+    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+    slot: 'hand', weight: 50, attack: 24,
+  }],
 });
 
 const rule = (percent: number) => ({
@@ -199,9 +203,11 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
     )).toHaveLength(1);
   });
 
-  it('recusa item SEMPRE, porque catálogo de itens ainda não existe', () => {
-    // Mesma escolha de `buildContent` com `loot.items`: melhor um slot recusado no boot que
-    // uma regra que aponta para o nada e falha calada meses depois.
+  it('recusa item SEMPRE — o catálogo existe, mas usar item exige inventário', () => {
+    // Desde a FUN-76 o catálogo existe, então a recusa mudou de motivo: não é mais "não há
+    // catálogo", é "não há inventário" (FUN-82). Aceitar a regra faria o bot escolhê-la e o
+    // atuador recusá-la em silêncio a cada avaliação — um slot morto que o jogador não
+    // consegue explicar.
     const problems = validateBotConfig(
       config({
         support: [{
@@ -212,7 +218,24 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
       content,
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('catálogo de itens');
+    expect(problems[0]).toContain('inventário');
+  });
+
+  it('e o item que nem existe no catálogo é recusado por OUTRO motivo', () => {
+    // A distinção importa para quem lê: "não existe" manda corrigir o id; "exige inventário"
+    // manda esperar. Uma mensagem só para os dois casos faria o jogador procurar um erro de
+    // digitação que não está lá.
+    const problems = validateBotConfig(
+      config({
+        support: [{
+          when: { kind: 'targets', op: '>=', count: 2 },
+          do: { kind: 'item', itemId: 'excalibur' },
+        }],
+      }),
+      content,
+    );
+    expect(problems[0]).toContain('não existe');
+    expect(problems[0]).not.toContain('inventário');
   });
 });
 

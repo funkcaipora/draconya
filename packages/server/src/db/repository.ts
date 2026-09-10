@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters } from './schema.js';
+import { accounts, characters, itemInstances } from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -32,6 +32,21 @@ export interface CharacterRecord {
   readonly botConfig: unknown;
   /** Skills que sobem por uso (§9.4, FUN-75). A coluna já existia; o que faltava era quem a usasse. */
   readonly skills: unknown;
+  readonly createdAt: Date;
+}
+
+/**
+ * Uma instância de item no banco (FUN-76).
+ *
+ * `itemId` é do CATÁLOGO, que é conteúdo — o repositório não sabe o que uma espada faz, só que
+ * esta linha existe e é de alguém.
+ */
+export interface ItemInstanceRecord {
+  readonly id: string;
+  readonly itemId: string;
+  readonly ownerCharacterId: string;
+  readonly quantity: number;
+  readonly origin: string;
   readonly createdAt: Date;
 }
 
@@ -68,6 +83,22 @@ export interface GameRepository {
    * `UPDATE` de uma instrução, que não segura a linha nem depende de nada que esteja nela.
    */
   saveBotConfig(characterId: string, config: unknown): Promise<void>;
+  /**
+   * Cria uma instância de item para um personagem (FUN-76).
+   *
+   * **Nada no jogo chama isto ainda**, e é deliberado: loot de item, inventário e caixa de loot
+   * são as issues seguintes do marco. O que existe aqui é a identidade — e ela precisa existir
+   * antes de a primeira instância nascer, porque proveniência que começa tarde não vale para o
+   * que veio antes.
+   */
+  createItemInstance(instance: {
+    itemId: string;
+    ownerCharacterId: string;
+    origin: string;
+    quantity?: number;
+  }): Promise<ItemInstanceRecord>;
+  /** O que este personagem tem. É a consulta que o índice por dono existe para servir. */
+  listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]>;
 }
 
 export class DrizzleGameRepository implements GameRepository {
@@ -157,6 +188,35 @@ export class DrizzleGameRepository implements GameRepository {
       const character = rows[0];
       return character === undefined ? null : operation(toCharacter(character));
     });
+  }
+
+  async createItemInstance(instance: {
+    itemId: string;
+    ownerCharacterId: string;
+    origin: string;
+    quantity?: number;
+  }): Promise<ItemInstanceRecord> {
+    const [row] = await this.#db
+      .insert(itemInstances)
+      .values({
+        id: randomUUID(),
+        itemId: instance.itemId,
+        ownerCharacterId: instance.ownerCharacterId,
+        origin: instance.origin,
+        ...(instance.quantity === undefined ? {} : { quantity: instance.quantity }),
+      })
+      .returning();
+    return row as ItemInstanceRecord;
+  }
+
+  async listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]> {
+    return this.#db
+      .select()
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId))
+      // Ordem estável: sem ela, duas aberturas do inventário desenham a mesma coisa em ordens
+      // diferentes, e o jogador vê os itens dançando sem ter mexido em nada.
+      .orderBy(asc(itemInstances.createdAt), asc(itemInstances.id));
   }
 
   /**
