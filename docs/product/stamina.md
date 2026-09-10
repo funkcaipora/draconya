@@ -1,6 +1,7 @@
 # Stamina
 
-**Status:** implementado (cálculo, consumo em hunt e bloqueio de XP); loot e Bestiário não existem ainda
+**Status:** implementado — cálculo, consumo em hunt e bloqueio de XP **e de loot** (FUN-63).
+Bestiário não existe ainda; quando existir, o portão já está no lugar certo
 **PRD:** §10
 **Épico:** E2 (stamina como função do tempo decorrido, sem tick); E3 (bloqueio de XP, loot e Bestiário com stamina zero)
 

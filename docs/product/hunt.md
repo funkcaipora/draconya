@@ -1,6 +1,8 @@
 # Hunt
 
-**Status:** ruleset implementado (entrada, sessão e encerramento); item e loot ainda não
+**Status:** parcial — ruleset (entrada, sessão, encerramento), movimento com escritor único
+(FUN-69) e **loot de gold por abate** (FUN-63) implementados; loot de ITEM depende do
+catálogo de itens, que é a M8
 **PRD:** §14
 **Épico:** E3
 
