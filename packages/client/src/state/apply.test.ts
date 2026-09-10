@@ -314,3 +314,42 @@ describe('a derivada por hora (FUN-83, §16.1)', () => {
     expect(perHour(10, -1)).toBe(0);
   });
 });
+
+describe('o catálogo de hunts (FUN-79)', () => {
+  const catalogue = (hunts: readonly unknown[]): S2CMessage => ({
+    type: 'hunt-catalogue', hunts,
+  } as S2CMessage);
+
+  it('chega e vira a lista da tela', () => {
+    applyMessage(catalogue([
+      { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
+    ]), 0);
+
+    expect(hud.get().hunts).toEqual([
+      { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
+    ]);
+  });
+
+  it('SUBSTITUI em vez de acumular', () => {
+    // Reconectar reenvia a mesma lista. Concatenar daria hunts duplicadas na tela a cada
+    // queda de rede — e a segunda cópia pareceria uma hunt diferente com o mesmo nome.
+    const uma = [{ id: 'a', name: 'A', recommendedLevel: 1, difficulties: ['beginner'] }];
+    applyMessage(catalogue(uma), 0);
+    applyMessage(catalogue(uma), 1_000);
+
+    expect(hud.get().hunts).toHaveLength(1);
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // O catálogo chegando não pode redesenhar as barras de HP.
+    applyMessage(catalogue([]), 0);
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.chat, notified);
+
+    applyMessage(catalogue([
+      { id: 'b', name: 'B', recommendedLevel: 8, difficulties: ['hero'] },
+    ]), 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});

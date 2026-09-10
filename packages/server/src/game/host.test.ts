@@ -2072,3 +2072,68 @@ describe('a praça não manda tudo para todos (FUN-33)', () => {
     );
   });
 });
+
+describe('o catálogo de hunts chega ao cliente (FUN-79)', () => {
+  const hunts = [
+    { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
+  ];
+  const withCatalogue = () => {
+    const content = testContent();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(content),
+      huntCatalogue: () => hunts,
+      now: () => 0,
+    });
+    return host;
+  };
+
+  it('vai pela FILA, e não furando a fila como o welcome', () => {
+    // `welcome` é `sendNow` porque é resposta ao handshake. O catálogo não é resposta a nada:
+    // furar a fila o poria na frente de deltas que já esperavam, pela mesma razão que o
+    // `session-state` não fura (FUN-32).
+    //
+    // A asserção é ANTES do flush, e é o que a torna discriminante: trocar `send` por
+    // `sendNow` faz o catálogo aparecer aqui. Afirmar só a ordem depois do flush não provaria
+    // nada — `sendNow` escreve na hora, então o `welcome` viria primeiro de qualquer jeito.
+    const host = withCatalogue();
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    const antesDoFlush = socket.received();
+    expect(antesDoFlush.some((m) => m.type === 'welcome')).toBe(true);
+    expect(antesDoFlush.some((m) => m.type === 'hunt-catalogue')).toBe(false);
+
+    host.flush();
+    expect(socket.received().some((m) => m.type === 'hunt-catalogue')).toBe(true);
+  });
+
+  it('sai uma vez por conexão, com o que a tela mostra', () => {
+    // A versão de conteúdo é fixada na sessão (invariante 7): o catálogo não muda enquanto ela
+    // vive, então mandá-lo de novo seria repetir o mesmo pacote sem motivo.
+    const host = withCatalogue();
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+
+    const catalogue = socket.received().filter((m) => m.type === 'hunt-catalogue');
+    expect(catalogue).toHaveLength(1);
+    expect(catalogue[0]).toMatchObject({ hunts });
+  });
+
+  it('sem catálogo injetado, o host não inventa um', () => {
+    // O host não conhece conteúdo (FUN-81): sem a função, ele não tem o que mandar — e mandar
+    // uma lista vazia diria ao cliente que não há hunt nenhuma, que é diferente de "não sei".
+    const content = testContent();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(content),
+      now: () => 0,
+    });
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+
+    expect(socket.received().some((m) => m.type === 'hunt-catalogue')).toBe(false);
+  });
+});

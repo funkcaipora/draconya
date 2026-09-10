@@ -14,7 +14,7 @@
 
 import { performance } from 'node:perf_hooks';
 import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
-import type { C2SMessage, S2CMessage } from '@draconya/protocol';
+import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { BotConfig, Item, ItemSlot } from '@draconya/content';
 import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult } from '@draconya/sim';
@@ -122,6 +122,14 @@ export interface SessionHostOptions {
    * ela, a praça volta a mandar tudo para todos: caro, e visivelmente correto.
    */
   readonly areaOfInterest?: boolean;
+  /**
+   * O catálogo de hunts que a tela de seleção mostra (FUN-79).
+   *
+   * Função, e não o `Content`: o host não precisa conhecer balanceamento para mandar uma lista,
+   * pela mesma razão que ele recebe `acceptBotConfig` em vez do conteúdo inteiro. Calculada uma
+   * vez no boot — a versão de conteúdo é fixada e não muda enquanto o processo vive.
+   */
+  readonly huntCatalogue?: () => S2CProps<'hunt-catalogue'>['hunts'];
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -399,6 +407,14 @@ export class SessionHost {
       characterId,
       contentVersion: this.#options.contentVersion,
     });
+
+    // O catálogo vem logo depois do `welcome`, e uma vez só: a versão de conteúdo é fixada na
+    // sessão (invariante 7), então ele não muda enquanto ela vive. Mensagem própria, e não um
+    // campo do `welcome`, porque são assuntos diferentes — quem sou eu, e o que existe para
+    // jogar. Vai pela FILA, não por `sendNow`: não é resposta a nada, e furar a fila o poria
+    // na frente de deltas que já esperavam.
+    const catalogue = this.#options.huntCatalogue;
+    if (catalogue !== undefined) viewer.send({ type: 'hunt-catalogue', hunts: catalogue() });
 
     // O jogador precisa SABER que houve retomada e o que se perdeu. Silenciar aqui é como o
     // modo idle perde a confiança de quem joga: o extrato não fecha e ninguém explica.

@@ -111,6 +111,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
+    case 'hunt-catalogue':
+      // Uma vez por sessão: a versão de conteúdo é fixada (invariante 7), então a lista não
+      // muda enquanto ela vive. Substituir, e não acumular — reconectar reenvia a mesma lista,
+      // e concatenar daria hunts duplicadas na tela a cada queda de rede.
+      hud.set((state) => ({ ...state, hunts: message.hunts }));
+      return;
+
     case 'pong':
       // `t` é o instante que o cliente mandou no `ping`; a volta inteira é a latência.
       hud.set((state) => ({ ...state, latencyMs: nowMs - message.t }));

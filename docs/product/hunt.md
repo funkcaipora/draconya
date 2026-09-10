@@ -1,8 +1,8 @@
 # Hunt
 
 **Status:** parcial — ruleset (entrada, sessão, encerramento), movimento com escritor único
-(FUN-69) e **loot de gold por abate** (FUN-63) implementados; loot de ITEM depende do
-catálogo de itens, que é a M8
+(FUN-69), loot de gold e de item por abate (FUN-63, FUN-88) e a **seleção de hunt no cliente**
+(FUN-79) implementados
 **PRD:** §14
 **Épico:** E3
 
@@ -15,6 +15,27 @@ Cada hunt tem uma rota única, fixa e predeterminada — o bot nunca escolhe cam
 Existem quatro dificuldades — Iniciante, Profissional, Herói e Lendário — cada uma aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
 
 A hunt termina por ação manual do jogador, por uma regra automática de saída configurada no bot, por morte, ou por outras condições de sessão que venham a ser adicionadas depois. Stamina chegando a zero, isoladamente, não encerra a hunt (ver `stamina.md`).
+
+## Escolher a hunt (FUN-79)
+
+O menu fica no painel da esquerda, e mostra por hunt: nome, **level recomendado** e as
+dificuldades que ELA define — não obrigatoriamente as quatro.
+
+**Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
+estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
+pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por
+engano. Um número oficial de XP/h vira a métrica pela qual toda hunt é julgada, e a partir daí só
+existe uma hunt boa — o jogo passa a ter uma escolha, não quatro.
+
+**Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
+continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
+Esconder o botão transformaria um conselho em regra que ninguém escreveu.
+
+**Não existe "trocar de dificuldade".** Existe sair e existe entrar: trocar encerra a instância e
+cria outra (§14.7), então a tela oferece as duas ações que de fato acontecem.
+
+O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
+fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
 
 ## Regras
 
