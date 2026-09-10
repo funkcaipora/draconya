@@ -45,6 +45,14 @@ export interface Content {
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
+   * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23): o `game` lê o
+   * outfit padrão do jogador, e o cliente lê chão e parede por mapa. Monstro e item NÃO se
+   * consultam por aqui — eles já saem resolvidos em `monsters` e `items`.
+   *
+   * `undefined` só em conteúdo de teste sem monstro nem item, que dispensa a tabela.
+   */
+  readonly appearances?: Appearances;
+  /**
    * O mapa da Cidade, com ponto de entrada (FUN-60). Opcional porque conteúdo de teste que só
    * fala de hunt não precisa dele — mas o conteúdo REAL precisa, e `load.ts` exige.
    */
@@ -307,6 +315,7 @@ export function buildContent(raw: RawContent): Content {
     routes,
     openValues,
     ...(city === undefined ? {} : { city }),
+    ...(appearances === undefined ? {} : { appearances }),
   };
 }
 

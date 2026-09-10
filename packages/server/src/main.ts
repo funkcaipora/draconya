@@ -187,6 +187,12 @@ async function main(): Promise<void> {
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,
+      // Nome e outfit de quem nasce na hunt (FUN-103). Mesmo raciocínio do catálogo de itens:
+      // o host recebe o mapa, não o `Content` — e o mapa é do conteúdo fixado no boot.
+      monsterCatalog: content.monsters,
+      ...(content.appearances?.characters === undefined
+        ? {}
+        : { playerOutfitId: content.appearances.characters.default }),
       // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
       // expirar precisa significar que o item nunca existiu.
       lootBoxes,

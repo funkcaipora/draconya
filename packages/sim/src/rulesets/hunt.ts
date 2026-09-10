@@ -475,6 +475,14 @@ export class HuntRuleset implements Ruleset {
     return this.#monsters;
   }
 
+  /**
+   * O andar da instância. Monstro vive numa grade 2D; o `z` é do mapa, e quem monta o
+   * `session-state` precisa dele para pôr o monstro no mesmo andar do personagem (FUN-103).
+   */
+  get floor(): number {
+    return this.#world.map.z;
+  }
+
   get routeIndex(): number {
     return this.#walker.index;
   }
@@ -818,6 +826,15 @@ export class HuntRuleset implements Ruleset {
     this.#spawner.occupy(request.slot, monster.id);
 
     const subjectOf = monsterSubject(monster.id);
+    // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
+    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    session.emit({
+      kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
+      // O `z` é do mapa, como o passo faz em `move()`: monstro vive numa grade 2D e o andar é
+      // propriedade da instância, não da criatura.
+      position: { ...monster.position, z: this.#world.map.z },
+      health: monster.health, maxHealth: definition.health,
+    });
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
@@ -1125,6 +1142,7 @@ export class HuntRuleset implements Ruleset {
       session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       recordDamage(monster.contribution, character.id, monster.receiveDamage(damage));
+      this.#emitHealth(session, monster);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
     return result;
@@ -1473,6 +1491,20 @@ export class HuntRuleset implements Ruleset {
     return result;
   }
 
+  /**
+   * A vida do monstro mudou — uma vez por golpe (FUN-103).
+   *
+   * `creature-health` existia no protocolo sem emissor nenhum: o monstro aparecia, andava e
+   * morria com a barra cheia o tempo todo, e o sintoma parecia bug do cliente.
+   */
+  #emitHealth(session: Session, monster: MonsterRuntime): void {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    session.emit({
+      kind: 'creature-health-changed', creatureId: monster.subject,
+      health: monster.health, maxHealth: definition?.health ?? monster.health,
+    });
+  }
+
   #onExitRules(session: Session): void {
     session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
       priority: EventPriority.Housekeeping,
@@ -1514,6 +1546,7 @@ export class HuntRuleset implements Ruleset {
     );
     const applied = monster.receiveDamage(result.damage);
     recordDamage(monster.contribution, character.id, applied);
+    this.#emitHealth(session, monster);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
@@ -1626,6 +1659,9 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) forgetActor(character.contribution, subject);
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+    // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
+    // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
+    session.emit({ kind: 'creature-vanished', creatureId: subject });
   }
 
   /**

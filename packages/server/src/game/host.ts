@@ -13,10 +13,12 @@
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
 import { performance } from 'node:perf_hooks';
-import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
+import type {
+  EndReason, GridPoint, PresenceEvent, Receipt, Session, SessionSnapshot, SessionType,
+} from '@draconya/sim';
 import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { BotConfig, Item, ItemSlot } from '@draconya/content';
+import type { BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
 import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -108,6 +110,23 @@ export interface SessionHostOptions {
    * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
+  /**
+   * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
+   *
+   * O `sim` não conhece nome nem arte: o evento de nascimento traz só o `monsterId`, e é aqui
+   * que ele vira algo desenhável. Ausente: o monstro aparece sem nome e com outfit 0 — a hunt
+   * continua, mas a tela mostra um buraco onde deveria ter um rato. Lido do conteúdo fixado na
+   * sessão (invariante 7): é um mapa carregado no boot, não uma consulta por criatura.
+   */
+  readonly monsterCatalog?: ReadonlyMap<string, Monster>;
+  /**
+   * O outfit de TODO personagem, enquanto ninguém escolhe o seu (FUN-103, §7.4 pendente).
+   *
+   * `CharacterRuntime` não tem outfit e o ticket não carrega um. Até isso existir, todo jogador
+   * veste o mesmo — e o número vem do conteúdo, não de uma constante aqui, porque é arte e arte
+   * não mora em código (invariante 6).
+   */
+  readonly playerOutfitId?: number;
   /**
    * Onde a Caixa de Loot da Sessão é guardada (FUN-88). Ausente: o que não coube se perde no
    * encerramento, e o log diz. Degradação, não falha.
@@ -209,6 +228,14 @@ interface HostedSession {
    * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
    */
   readonly creatureIds: Map<string, number>;
+  /**
+   * O próximo id numérico a distribuir. MONOTÔNICO, nunca `size + 1` (FUN-103).
+   *
+   * `size + 1` recicla depois de um `delete`: com {a:1, b:2, c:3}, remover b faz o próximo
+   * receber 3 — e c já é 3. Com personagem isso é raro; com monstro morrendo e renascendo
+   * é rotina, e o cliente passa a desenhar o morto no lugar do vivo.
+   */
+  nextCreatureId: number;
   /**
    * Quem enxerga quem, por célula (FUN-33). `null` na sessão privada.
    *
@@ -956,6 +983,12 @@ export class SessionHost {
     if (events.length === 0 || hosted.viewers.size === 0) return;
 
     for (const event of events) {
+      // Discriminar por `kind` ANTES de tocar em qualquer campo: a união cresceu na FUN-103, e
+      // um cast em vez de um switch aqui leria um nascimento como se fosse um passo.
+      if (event.kind !== 'creature-moved') {
+        this.#presentPresence(hosted, event);
+        continue;
+      }
       // O protocolo exige duração positiva: um passo é enviado UMA vez, com origem, destino e
       // duração, e o cliente interpola o intervalo inteiro (ADR 0001). Duração zero é
       // colocação, não passo — aparecer no mundo é `creature-appear`.
@@ -990,6 +1023,49 @@ export class SessionHost {
         this.#sendToViewersOf(hosted, other, message);
       }
     }
+  }
+
+  /**
+   * Nascimento, sumiço e vida de MONSTRO viram `creature-appear`, `creature-disappear` e
+   * `creature-health` (FUN-103).
+   *
+   * Vai para TODOS os visualizadores da sessão, e não pelo campo de visão: monstro só existe em
+   * hunt, e hunt é privada — `hosted.aoi` é `null` ali, e "todos" já é a resposta certa. Se um
+   * dia um monstro viver num shard, é `#applyVisibility` que precisa aprender a lidar com
+   * criatura sem visualizador, e não este método que precisa de um `if`.
+   *
+   * O `sim` manda só o `monsterId`; nome e `outfitId` saem do catálogo fixado na sessão. Sem
+   * catálogo o monstro ainda aparece — sem nome, outfit 0 —, porque sumir com ele esconderia
+   * de quem olha que a simulação está de pé.
+   */
+  #presentPresence(hosted: HostedSession, event: PresenceEvent): void {
+    const key = String(event.creatureId);
+    let message: S2CMessage;
+    if (event.kind === 'creature-appeared') {
+      const definition = this.#options.monsterCatalog?.get(event.monsterId);
+      message = {
+        type: 'creature-appear',
+        id: this.#creatureId(hosted, key),
+        position: event.position,
+        appearanceId: definition?.outfitId ?? 0,
+        name: definition?.name ?? event.monsterId,
+        health: event.health,
+        maxHealth: event.maxHealth,
+      };
+    } else if (event.kind === 'creature-vanished') {
+      const id = hosted.creatureIds.get(key);
+      // Nunca anunciado — morreu antes de alguém olhar. Não há o que retirar da tela.
+      if (id === undefined) return;
+      message = { type: 'creature-disappear', id };
+      // O número NÃO é reaproveitado (ver `nextCreatureId`); só a chave sai do mapa, senão
+      // ele cresce um item por respawn até o fim da hunt.
+      hosted.creatureIds.delete(key);
+    } else {
+      const id = hosted.creatureIds.get(key);
+      if (id === undefined) return;
+      message = { type: 'creature-health', id, health: event.health, maxHealth: event.maxHealth };
+    }
+    for (const viewer of hosted.viewers) viewer.send(message);
   }
 
   /** Esta sessão tem campo de visão por célula? Só shard, e só com a opção ligada (FUN-33). */
@@ -1041,8 +1117,7 @@ export class SessionHost {
       type: 'creature-appear',
       id: this.#creatureId(hosted, characterId),
       position: character?.position ?? { x: 0, y: 0, z: 0 },
-      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
-      appearanceId: 1,
+      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
@@ -1270,7 +1345,7 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(),
+      session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: false,
@@ -1558,12 +1633,19 @@ export class SessionHost {
     }
   }
 
-  /** Id numérico da criatura, criado na primeira vez que alguém precisa dele. */
-  #creatureId(hosted: HostedSession, characterId: string): number {
-    const existing = hosted.creatureIds.get(characterId);
+  /**
+   * Id numérico da criatura, criado na primeira vez que alguém precisa dele.
+   *
+   * A chave é o `characterId` do personagem ou o `subject` do monstro (`m:<n>`): os dois
+   * moram no mesmo mapa porque o cliente numera criatura num espaço só. Ver `nextCreatureId`
+   * para por que o contador nunca volta.
+   */
+  #creatureId(hosted: HostedSession, key: string): number {
+    const existing = hosted.creatureIds.get(key);
     if (existing !== undefined) return existing;
-    const assigned = hosted.creatureIds.size + 1;
-    hosted.creatureIds.set(characterId, assigned);
+    const assigned = hosted.nextCreatureId;
+    hosted.nextCreatureId += 1;
+    hosted.creatureIds.set(key, assigned);
     return assigned;
   }
 
@@ -1592,12 +1674,28 @@ export class SessionHost {
     const creatures = visible.map((participant) => ({
       id: this.#creatureId(hosted, participant.id),
       position: participant.position,
-      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
-      appearanceId: 1,
+      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
     }));
+
+    // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
+    // ver o que já está lá, e não só o que nascer depois. O getter vem do ruleset pelo mesmo
+    // cast que `#applyBotConfig` usa — sessão sem monstro devolve `undefined`, e é o normal.
+    const ruleset = session.ruleset as Partial<HuntRuleset>;
+    for (const monster of ruleset.monsters ?? []) {
+      if (!monster.alive) continue;
+      const definition = this.#options.monsterCatalog?.get(monster.monsterId);
+      creatures.push({
+        id: this.#creatureId(hosted, monster.subject),
+        position: { ...monster.position, z: ruleset.floor ?? 0 },
+        appearanceId: definition?.outfitId ?? 0,
+        name: definition?.name ?? monster.monsterId,
+        health: monster.health,
+        maxHealth: definition?.health ?? monster.health,
+      });
+    }
 
     return {
       type: 'session-state',
@@ -1748,6 +1846,7 @@ export class SessionHost {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
+      nextCreatureId: 1,
       // Só o shard tem AOI (FUN-33): numa hunt de um personagem ela seria índice para nada.
       aoi: this.#interestManaged(session) ? new AreaOfInterest() : null,
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a

@@ -1,5 +1,5 @@
 import {
-  CharacterRuntime, Rng, Session,
+  CharacterRuntime, Rng, Session, createHuntSession,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -2235,5 +2235,200 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
 
     expect(socket.received().some((m) => m.type === 'system-message')).toBe(true);
     expect(socket.received().some((m) => m.type === 'inventory')).toBe(false);
+  });
+});
+
+describe('o monstro chega ao cliente (FUN-103)', () => {
+  /**
+   * Um host cuja sessão é uma HUNT DE VERDADE, com o `HuntRuleset` do `sim` e o conteúdo de
+   * teste. É a primeira vez que este arquivo tem uma: todos os outros testes usam ruleset de
+   * contagem ou a Cidade, e por isso nenhum deles jamais viu um monstro — que era exatamente
+   * o defeito.
+   */
+  /**
+   * Uma arena de 8×8 com o herói num canto e o spawn no oposto.
+   *
+   * A arena comum tem interior 2×2: o rato nasce COLADO no herói, e aí ninguém anda — o herói
+   * para para lutar, o rato já está ao alcance. Para ver passo de monstro é preciso distância,
+   * e um rato com raio de agressão bastante para ir buscá-la.
+   */
+  function wideArena(): Record<string, unknown> {
+    const raw = rawTestContent();
+    const grid = ['########', '#......#', '#......#', '#......#', '#......#', '#......#', '#......#', '########'];
+    // O anel interno, no sentido horário a partir de (1,1): 20 tiles, fechando um laço.
+    const tiles: Array<{ x: number; y: number; z: number }> = [];
+    for (let x = 1; x <= 6; x++) tiles.push({ x, y: 1, z: 7 });
+    for (let y = 2; y <= 6; y++) tiles.push({ x: 6, y, z: 7 });
+    for (let x = 5; x >= 1; x--) tiles.push({ x, y: 6, z: 7 });
+    for (let y = 5; y >= 2; y--) tiles.push({ x: 1, y, z: 7 });
+    return {
+      ...raw,
+      maps: [{ id: 'arena', z: 7, grid }, ...(raw.maps ?? []).filter((m) =>
+        (m as { id: string }).id !== 'arena')],
+      // O spawn no índice 10 é (6,6): o canto oposto ao herói em (1,1).
+      routes: [{ id: 'arena-loop', mapId: 'arena', tiles, spawnPoints: [{ routeIndex: 10, radius: 1 }] }],
+      monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+        m['id'] === 'rat' ? { ...m, health: 100_000, aggroRadius: 10 } : m),
+    };
+  }
+
+  function hunt(over: Partial<{
+    monsterCatalog: boolean; playerOutfitId: number;
+    /** Um rato que aguenta: o herói de teste mata o comum num golpe, e aí não há o que ver. */
+    tanky: boolean;
+    /** A arena larga, para haver passo de monstro. Implica `tanky`. */
+    wide: boolean;
+  }> = {}) {
+    const raw = rawTestContent();
+    const content = over.wide === true
+      ? buildContent(wideArena() as Parameters<typeof buildContent>[0])
+      : over.tanky === true
+        ? buildContent({
+          ...raw,
+          monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+            m['id'] === 'rat' ? { ...m, health: 100_000 } : m),
+        })
+        : testContent();
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      now: () => now,
+      ...(over.monsterCatalog === false ? {} : { monsterCatalog: content.monsters }),
+      ...(over.playerOutfitId === undefined ? {} : { playerOutfitId: over.playerOutfitId }),
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner',
+          createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    /** Avança o relógio do host em passos, drenando eventos a cada um. */
+    const runFor = (ms: number, step = 100) => {
+      for (let t = 0; t < ms; t += step) { now += step; host.cycle(); }
+      host.flush();
+    };
+    /** O `session-state` é PEDIDO pelo cliente (`session-attach`), não vem no attach. */
+    const stateOf = (sock: FakeSocket, who: ReturnType<typeof host.attach>) => {
+      host.handle(who, { type: 'session-attach' });
+      host.flush();
+      return sock.received().filter((m) => m.type === 'session-state').at(-1) as
+        { world: { creatures: Array<{ name: string; appearanceId: number; position: { z: number } }> } }
+        | undefined;
+    };
+    return { host, socket, viewer, runFor, stateOf, received: () => socket.received() };
+  }
+
+  it('o monstro que nasce vira creature-appear, com nome e outfit do catálogo', () => {
+    // Antes disto o passo do monstro atravessava o fio com um id que ninguém tinha anunciado,
+    // e o cliente descartava em silêncio — a hunt rodava inteira e a tela ficava vazia.
+    const { runFor, received } = hunt();
+    runFor(300);
+
+    const appears = received().filter((m) => m.type === 'creature-appear');
+    expect(appears.length).toBeGreaterThan(0);
+    // Nome e outfit saem do CATÁLOGO, não do `sim` — que não conhece nem um nem outro.
+    expect(appears[0]).toMatchObject({ name: 'Rat', health: 20, maxHealth: 20 });
+    expect((appears[0] as { appearanceId: number }).appearanceId).toBeGreaterThan(0);
+    // E o andar vem junto: o cliente desenha por `z`.
+    expect((appears[0] as { position: { z: number } }).position.z).toBe(7);
+  });
+
+  it('NENHUM passo chega com id que não foi anunciado', () => {
+    // Era exatamente o defeito: o passo do monstro atravessava o fio com um id que ninguém
+    // tinha anunciado, e o cliente descartava em silêncio. Agora todo id de `creature-move`
+    // ou é o do herói (que vem no `session-state`) ou foi apresentado por `creature-appear`.
+    const { runFor, received, stateOf, socket, viewer } = hunt({ wide: true });
+    const eu = stateOf(socket, viewer);
+    const heroi = (eu as unknown as { self: { creatureId: number } } | undefined)?.self.creatureId;
+    runFor(5_000);
+
+    const anunciados = new Set(received().filter((m) => m.type === 'creature-appear')
+      .map((m) => (m as { id: number }).id));
+    const passos = received().filter((m) => m.type === 'creature-move')
+      .map((m) => (m as { id: number }).id);
+    expect(passos.length).toBeGreaterThan(0);
+    for (const id of passos) expect(id === heroi || anunciados.has(id)).toBe(true);
+    // E o monstro de fato andou: ao menos um passo é de um id anunciado.
+    expect(passos.some((id) => anunciados.has(id))).toBe(true);
+  });
+
+  it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {
+    // `creature-health` existia no protocolo sem emissor nenhum: o monstro aparecia, andava e
+    // morria com a barra cheia o tempo todo — e o sintoma parecia bug do cliente.
+    const { host, runFor, received } = hunt();
+    runFor(60_000);
+
+    const session = host.sessionFor('hero');
+    expect(session?.aggregates.kills).toBeGreaterThan(0);
+
+    const healths = received().filter((m) => m.type === 'creature-health');
+    const gone = received().filter((m) => m.type === 'creature-disappear');
+    expect(healths.length).toBeGreaterThan(0);
+    expect(gone).toHaveLength(session?.aggregates.kills ?? -1);
+    // O ÚLTIMO creature-health de quem sumiu chegou a zero, e o máximo é o do catálogo.
+    for (const g of gone) {
+      const dele = healths.filter((h) => (h as { id: number }).id === (g as { id: number }).id);
+      expect(dele.length).toBeGreaterThan(0);
+      expect(dele[dele.length - 1]).toMatchObject({ health: 0, maxHealth: 20 });
+    }
+  });
+
+  it('o id numérico NUNCA se repete depois de um ciclo de morte e respawn', () => {
+    // `size + 1` reciclava: com {a:1, b:2, c:3}, remover b faz o próximo receber 3 — e com
+    // respawn constante o cliente desenhava o morto no lugar do vivo. É invisível em qualquer
+    // cenário só de personagem, e por isso nenhum teste antigo pegava.
+    const { runFor, received } = hunt();
+    runFor(90_000);
+
+    const appears = received().filter((m) => m.type === 'creature-appear')
+      .map((m) => (m as { id: number }).id);
+    const gone = received().filter((m) => m.type === 'creature-disappear');
+    // Houve morte E renascimento — senão o teste não exercita a reciclagem.
+    expect(gone.length).toBeGreaterThan(1);
+    expect(appears.length).toBeGreaterThan(1);
+    expect(new Set(appears).size).toBe(appears.length);
+  });
+
+  it('quem reanexa no meio vê os monstros VIVOS no session-state', () => {
+    // Não só o que nascer depois: o que já está lá também. Sem isto, reconectar mostraria uma
+    // adega vazia até o próximo respawn.
+    const { host, runFor, stateOf } = hunt({ tanky: true });
+    runFor(500);
+
+    const late = new FakeSocket();
+    const lateViewer = host.attach(late, 'hero');
+    const state = stateOf(late, lateViewer);
+    const ratos = state?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
+    expect(ratos.length).toBeGreaterThan(0);
+    expect(ratos[0]?.appearanceId).toBeGreaterThan(0);
+    expect(ratos[0]?.position.z).toBe(7);
+  });
+
+  it('o personagem veste o outfit padrão do conteúdo, e não o `1` fixo', () => {
+    // Outfit 1 no pacote 1332 é um ícone amarelo de 32×32 — não um humanoide. Ligar os sprites
+    // sem mexer aqui trocaria "retângulo verde" por "blob amarelo".
+    const { stateOf, socket, viewer } = hunt({ playerOutfitId: 128 });
+    const state = stateOf(socket, viewer);
+    const eu = state?.world.creatures.find((c) => c.name === 'hero');
+    expect(eu?.appearanceId).toBe(128);
+  });
+
+  it('sem catálogo o monstro AINDA aparece — sem nome, outfit 0', () => {
+    // Sumir com ele esconderia de quem olha que a simulação está de pé. Degradação visível é
+    // melhor que tela vazia sem causa.
+    const { runFor, received } = hunt({ monsterCatalog: false });
+    runFor(300);
+    const appears = received().filter((m) => m.type === 'creature-appear');
+    expect(appears.length).toBeGreaterThan(0);
+    expect(appears[0]).toMatchObject({ name: 'rat', appearanceId: 0 });
   });
 });

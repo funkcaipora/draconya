@@ -4,6 +4,9 @@
   "monsters": {
     "rat": 21
   },
+  "characters": {
+    "default": 128
+  },
   "items": {
     "arrow": 3447,
     "leather-armor": 3361,
