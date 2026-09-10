@@ -32,6 +32,21 @@ export const appearancesSchema = z.object({
   monsters: z.record(z.string().min(1), appearanceId).default({}),
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
+  /**
+   * `id de mapa → aparência do chão e da parede` (FUN-23).
+   *
+   * O tilemap é grade de caracteres (`#` bloqueia, o resto é livre) e não guarda id de arte
+   * nenhum — nem deveria, pelo invariante 6. Aqui é onde o `#` vira uma laje de pedra e o `.`
+   * vira terra batida.
+   *
+   * **Por MAPA, e não um par global.** Uma adega e uma praça não têm o mesmo chão, e um par
+   * único faria a Cidade parecer o porão do rato — que é o tipo de coisa que ninguém escreve
+   * de propósito e todo mundo vê na primeira tela.
+   */
+  maps: z.record(z.string().min(1), z.object({
+    floor: appearanceId,
+    wall: appearanceId,
+  })).default({}),
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;

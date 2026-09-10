@@ -155,6 +155,20 @@ export function buildContent(raw: RawContent): Content {
         + 'pacote de assets voltaria a ser reescrever conteúdo (ADR 0008)',
     );
   }
+  // Todo mapa precisa saber de que é feito (FUN-23), e a tabela não pode citar mapa que não
+  // existe — a mesma checagem dos dois lados que monstro e item já têm. Sem a primeira, o
+  // mundo desenha buraco preto; sem a segunda, a linha órfã sobrevive a três trocas de pacote.
+  if (appearances !== undefined) {
+    for (const id of mapData.keys()) {
+      if (appearances.maps[id] !== undefined) continue;
+      problems.push(`mapa "${id}" não tem chão nem parede: falta a linha "${id}" em appearances.maps`);
+    }
+    for (const id of Object.keys(appearances.maps)) {
+      if (mapData.has(id)) continue;
+      problems.push(`appearances.maps mapeia mapa "${id}", que não existe no conteúdo`);
+    }
+  }
+
   const monsters: ReadonlyMap<string, Monster> = resolveAppearance(
     'monstro', 'monsters', monsterDefinitions, appearances?.monsters, 'outfitId', problems);
   const items: ReadonlyMap<string, Item> = resolveAppearance(
@@ -320,6 +334,12 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
     items: sequential(raw.items),
+    maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
+      typeof entry === 'object' && entry !== null && 'id' in entry
+        ? String((entry as { id: unknown }).id)
+        : `#${index}`,
+      { floor: index * 2 + 1, wall: index * 2 + 2 },
+    ])),
   };
 }
 
