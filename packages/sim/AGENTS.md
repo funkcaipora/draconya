@@ -156,3 +156,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `goldDelta` e `goldGained`. O extrato leva os dois ao ledger; escrever só um faz a conta do
   jogador divergir da linha do banco. O saldo é `gold + goldDelta`, e nunca fica negativo —
   o débito é recusado antes, não corrigido depois.
+- **Lure e ring swap são MÁQUINAS DE DOIS LIMIARES, e a faixa morta é o produto** (FUN-87). Um
+  limiar só faz a decisão oscilar em cima do número: o personagem alterna entre correr e parar a
+  cada monstro que morre, e o anel troca a cada golpe. `botRingSwapSchema` recusa `removeAbove <=
+  equipBelow` na entrada porque limiares iguais apagam justamente a faixa em que nada acontece.
+- **O lure decide PARAR, não atacar.** Ele entra em `#onPlayerStep` na condição de parar para
+  lutar; `#armPlayerAttack` continua no fim do passo. Um personagem que corre sem atacar junta um
+  bando que nunca começa a limpar.
+- **O `min` do lure só é reavaliado com alguém ao alcance.** `#luring` fica atrás do `&&` de
+  `#attackTarget`, então a volta para "correndo" acontece no instante em que a contagem cai com
+  um monstro ainda colado — e, se todos morrerem de uma vez, no primeiro contato seguinte. Tirar
+  o curto-circuito custaria uma contagem por passo em toda hunt que nunca configurou lure.
+- **`manaFloor` desativa o ring swap INTEIRO, e derruba o anel já equipado.** Desativar pela
+  metade — não equipar, mas manter o que está — gastaria mana exatamente quando ela é escassa.
+- **`luring` e `ringReplaced` viajam no snapshot.** Sem o primeiro, a hunt retomada volta
+  correndo e junta por cima do bando que já estava junto; sem o segundo, ela esquece qual anel
+  era do jogador e termina com o dedo vazio.
