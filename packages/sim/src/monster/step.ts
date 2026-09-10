@@ -61,6 +61,21 @@ export function greedyStep(from: GridPoint, target: GridPoint, blocked: Blocked)
   return null;
 }
 
+/**
+ * Um passo AFASTANDO da ameaça (FUN-85), para a postura "manter distância".
+ *
+ * É o passo guloso com o alvo ESPELHADO: refletir a ameaça para o outro lado do personagem dá
+ * exatamente a direção oposta, e daí em diante valem as mesmas três tentativas — a direção que
+ * mais afasta, depois as duas vizinhas. Escrever um segundo algoritmo de fuga seria a mesma
+ * regra de desvio em dois lugares, divergindo na terceira mudança.
+ *
+ * Empacado devolve `null`, como o guloso: recuar até a parede e ficar lá é o comportamento
+ * certo, não um caso a consertar.
+ */
+export function fleeStep(from: GridPoint, threat: GridPoint, blocked: Blocked): GridPoint | null {
+  return greedyStep(from, { x: 2 * from.x - threat.x, y: 2 * from.y - threat.y }, blocked);
+}
+
 /** Distância de Chebyshev: um passo diagonal custa o mesmo que um reto, como na grade. */
 export function distance(a: GridPoint, b: GridPoint): number {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));

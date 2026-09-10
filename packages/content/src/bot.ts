@@ -73,6 +73,23 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
       }
     });
   }
+  // Targeting (FUN-85): os ids de `prioritize` e `ignore` são de MONSTRO, e valem contra o
+  // catálogo inteiro — não contra a composição de uma hunt. A configuração é do personagem e
+  // sobrevive à troca de hunt; recusar "priorize dragão" porque a hunt de ratos não tem dragão
+  // seria a configuração deixar de valer ao mudar de lugar.
+  //
+  // Um id que não existe em catálogo nenhum, porém, é slot morto: a preferência nunca dispara
+  // e nada diz por quê. É a mesma razão de recusar magia inexistente.
+  for (const [field, ids] of [
+    ['prioritize', config.targeting.prioritize],
+    ['ignore', config.targeting.ignore],
+  ] as const) {
+    for (const id of ids) {
+      if (content.monsters.has(id)) continue;
+      problems.push(`targeting.${field}: monstro "${id}" não existe`);
+    }
+  }
+
   return problems;
 }
 

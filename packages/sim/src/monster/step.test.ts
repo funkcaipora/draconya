@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distance, greedyStep, isAdjacent } from './step.js';
+import { distance, fleeStep, greedyStep, isAdjacent } from './step.js';
 
 /** Mapa de teste como grade de caracteres: `#` bloqueia. Mesmo formato do `content`. */
 function grid(rows: readonly string[]) {
@@ -82,5 +82,39 @@ describe('distance', () => {
     expect(isAdjacent({ x: 1, y: 1 }, { x: 2, y: 2 })).toBe(true);
     expect(isAdjacent({ x: 1, y: 1 }, { x: 1, y: 1 })).toBe(false);
     expect(isAdjacent({ x: 1, y: 1 }, { x: 3, y: 1 })).toBe(false);
+  });
+});
+
+describe('fleeStep (FUN-85)', () => {
+  const open = () => false;
+
+  it('anda na direção OPOSTA à ameaça, incluindo diagonal', () => {
+    // Espelhar a ameaça é o algoritmo inteiro: o guloso então mira o lado de lá e o resultado
+    // é a direção contrária. Um segundo algoritmo de fuga seria a mesma regra em dois lugares.
+    expect(fleeStep({ x: 5, y: 5 }, { x: 4, y: 5 }, open)).toEqual({ x: 6, y: 5 });
+    expect(fleeStep({ x: 5, y: 5 }, { x: 5, y: 4 }, open)).toEqual({ x: 5, y: 6 });
+    expect(fleeStep({ x: 5, y: 5 }, { x: 4, y: 4 }, open)).toEqual({ x: 6, y: 6 });
+  });
+
+  it('desvia pelos vizinhos quando a saída direta está bloqueada', () => {
+    //     0 1 2 3 4
+    //   0 . . . . .
+    //   1 . a . # .
+    //   2 . . . . .
+    // A ameaça está em (1,1) e o personagem em (2,1): fugir seria para (3,1), que é parede.
+    // O primeiro vizinho no sentido horário resolve, e é a mesma ordem fixa do guloso.
+    const blocked = grid(['.....', '.a.#.', '.....']);
+    expect(fleeStep({ x: 2, y: 1 }, { x: 1, y: 1 }, blocked)).toEqual({ x: 3, y: 2 });
+  });
+
+  it('encurralado devolve null, e ficar parado é o comportamento certo', () => {
+    // Recuar até a parede e ficar lá não é um caso a consertar: é o que um personagem
+    // acuado faz. `null` é o mesmo "espera" que o guloso já devolve ao empacar.
+    const canto = grid(['###', '#a#', '###']);
+    expect(fleeStep({ x: 1, y: 1 }, { x: 1, y: 0 }, canto)).toBeNull();
+  });
+
+  it('em cima da ameaça devolve null: não há direção oposta a lugar nenhum', () => {
+    expect(fleeStep({ x: 2, y: 2 }, { x: 2, y: 2 }, open)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BotConfig, Content } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
 import { compileBot } from './bot.js';
 import type { BotView } from './bot.js';
 import { CharacterRuntime } from './character.js';
@@ -19,11 +19,15 @@ const view = (over: Partial<BotView> = {}): BotView => ({
   self: hero(100), targetCount: 0, target: null, ...over,
 });
 
-const config = (over: Partial<BotConfig> = {}): BotConfig => ({
-  version: BOT_VOCABULARY_VERSION,
-  heal: [], potion: [], attack: [], rune: [], support: [],
-  ...over,
-});
+const config = (over: Partial<BotConfig> = {}): BotConfig =>
+  // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
+  // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
+  // que é trabalho que o parse já faz — e do jeito que a produção faz.
+  botConfigSchema.parse({
+    version: BOT_VOCABULARY_VERSION,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
 
 const heal = (percent: number, spellId: string) => ({
   when: { kind: 'hp' as const, op: '<=' as const, percent },

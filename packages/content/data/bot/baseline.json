@@ -3,6 +3,7 @@
   "vocabularyVersion": 1,
   "categoryCooldownMs": 1000,
   "advancedFromLevel": 50,
+  "targetSearchRadius": 8,
   "slots": { "heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10 },
-  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código."
+  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código. targetSearchRadius (8 tiles) é provisório: é o quanto o bot enxerga ao decidir para onde ir, e o número certo depende do tamanho das hunts reais."
 }

@@ -93,6 +93,17 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.
 - O motor de bot é compilado ao entrar na sessão, para um vetor de predicados. Interpretar JSON a
   cada avaliação é o caminho fácil e errado. Ver ADR 0002.
+- **Escolher alvo e alcançar alvo são buscas SEPARADAS** (`targeting.ts`, FUN-85). `#attackTarget`
+  usa o alcance da arma; `#approachTarget` usa o raio de visão do conteúdo. Enquanto as duas eram
+  a mesma busca — o antigo `#nearestMonster` —, a postura "seguir o alvo" era impossível de
+  expressar: quem já está ao alcance não precisa ser seguido.
+- **O desempate de alvo é CONTRATO.** Priorizado antes da política, política antes da ordem de
+  nascimento, e a comparação é estrita — o campeão só cai para quem ganha de verdade. Trocar por
+  `<=` faz duas execuções da mesma semente divergirem assim que dois monstros empatarem, que é o
+  caso comum: monstro recém-nascido tem sempre a vida cheia.
+- **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
+  posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
+  guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
 - **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
   de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
   regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
