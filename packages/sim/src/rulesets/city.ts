@@ -20,15 +20,22 @@ export interface CityRulesetOptions {
   readonly map?: Tilemap;
   /** Milissegundos por tile ao andar na Cidade. Vem de `progression.stepDurationMs`. */
   readonly stepDurationMs?: number;
+  /** Até onde procurar tile livre ao chegar. Ver `ENTRY_RADIUS`. */
+  readonly entryRadius?: number;
 }
 
 /**
  * Até onde procurar tile livre ao chegar na praça, em tiles.
  *
- * Oito dá 289 tiles ao redor do ponto de entrada — folga para o teto de população por cópia
- * que a FUN-33 vai definir, sem virar uma varredura do mapa inteiro quando a praça enche.
+ * Dezesseis dá 1.089 tiles ao redor do ponto de entrada, e o número vem do TETO DE POPULAÇÃO
+ * por cópia (200, na FUN-33): com 289 tiles — o raio 8 de antes — duzentas pessoas ficariam
+ * ombro a ombro e ninguém conseguiria andar, porque tile é exclusivo.
+ *
+ * Não é um raio de espalhamento: a busca é do mais próximo para o mais distante, então quem
+ * chega numa praça vazia entra no tile de entrada. O raio só é usado de verdade quando os tiles
+ * perto estão ocupados — que é exatamente quando ele precisa existir.
  */
-const ENTRY_RADIUS = 8;
+const ENTRY_RADIUS = 16;
 
 export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
   const world = options.map === undefined ? null : new TileOccupancy(options.map);
@@ -68,7 +75,7 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
         // exatamente no ponto de entrada, e um `place` seco recusaria — o personagem ficaria
         // fora do mapa, invisível e sem andar, com o log dizendo que ele entrou.
         placeNear(world, character, { ...options.map.entryPoint, z: options.map.z },
-          ENTRY_RADIUS);
+          options.entryRadius ?? ENTRY_RADIUS);
       }
       session.record('entered-city', character.id);
     },

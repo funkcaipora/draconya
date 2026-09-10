@@ -3,6 +3,7 @@ import {
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildContent } from '@draconya/content';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -12,7 +13,7 @@ import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
 import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
-import { testContent } from '../testing/content.js';
+import { TEST_MAP, rawTestContent, testContent } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
 
@@ -1894,5 +1895,180 @@ describe('a praça não tem snapshot (FUN-71, ADR 0023)', () => {
     await host.saveAll();
 
     expect(saves).toEqual([]);
+  });
+});
+
+describe('a praça não manda tudo para todos (FUN-33)', () => {
+  /**
+   * Um host de Cidade com mapa GRANDE: no mapa de 6×6 do conteúdo de teste todo mundo está a
+   * dois tiles de todo mundo, e uma AOI ali não teria o que cortar.
+   */
+  const cidade = (options: { areaOfInterest?: boolean } = {}) => {
+    const size = 64;
+    const content = buildContent({
+      ...rawTestContent(),
+      maps: [TEST_MAP, {
+        id: 'city', z: 7, entryPoint: { x: 2, y: 2 },
+        grid: Array.from({ length: size }, (_, y) =>
+          Array.from({ length: size }, (_, x) =>
+            (x === 0 || y === 0 || x === size - 1 || y === size - 1 ? '#' : '.')).join('')),
+      }],
+      city: { mapId: 'city' },
+    });
+    const shard = new CityShard(content, () => 0);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      now: () => 0,
+      ...options,
+    });
+    /** Entra e caminha até `to`, um tile por vez. Sem isto todos nascem colados na entrada. */
+    const enter = (characterId: string, to: { x: number; y: number }) => {
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, characterId);
+      const character = host.sessionFor(characterId)?.participants
+        .find((p) => p.id === characterId);
+      for (let step = 0; step < size * 4 && character !== undefined; step++) {
+        const { x, y } = character.position;
+        if (x === to.x && y === to.y) break;
+        const dx = Math.sign(to.x - x);
+        const dy = Math.sign(to.y - y);
+        // Diagonal primeiro, eixos como saída: o caminho até o destino passa por onde os
+        // outros já estão parados, e tile é exclusivo. Sem as alternativas, um teste falha
+        // porque alguém ficou no caminho — que é ruído, não o assunto.
+        for (const [sx, sy] of [[dx, dy], [dx, 0], [0, dy]] as const) {
+          if (sx === 0 && sy === 0) continue;
+          host.handle(viewer, {
+            type: 'walk-to', destination: { x: x + sx, y: y + sy, z: 7 },
+          });
+          if (character.position.x !== x || character.position.y !== y) break;
+        }
+      }
+      if (character !== undefined && (character.position.x !== to.x
+        || character.position.y !== to.y)) {
+        throw new Error(`${characterId} não chegou em (${to.x},${to.y})`);
+      }
+      socket.frames.length = 0;
+      return { socket, viewer };
+    };
+    /**
+     * Esvazia a FILA e limpa o que já foi escrito.
+     *
+     * Zerar só os quadros não basta: o visualizador acumula mensagens até o `flush` do ciclo,
+     * e as que a caminhada até o destino gerou chegariam no primeiro `flush` da asserção — um
+     * teste que mede o passo de agora lendo o barulho da preparação.
+     */
+    const quiet = (...sockets: readonly FakeSocket[]): void => {
+      host.flush();
+      for (const socket of sockets) socket.frames.length = 0;
+    };
+    return { host, enter, quiet };
+  };
+
+  it('o passo de quem está LONGE não chega', () => {
+    // É a issue em uma asserção. Sem AOI, cada passo de cada um vai para todos os outros — a
+    // conta que a justifica é 2.000 jogadores × 2 passos/s × 2.000 destinatários.
+    const { host, enter, quiet } = cidade();
+    const perto = enter('perto', { x: 10, y: 10 });
+    enter('longe', { x: 55, y: 55 });
+    const distante = enter('outro-longe', { x: 54, y: 55 });
+    quiet(perto.socket);
+
+    host.handle(distante.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+
+    expect(perto.socket.received()).toEqual([]);
+  });
+
+  it('o passo de quem está PERTO chega', () => {
+    // O outro lado: uma AOI que não entrega nada é fácil de escrever e inútil.
+    const { host, enter, quiet } = cidade();
+    const perto = enter('perto', { x: 10, y: 10 });
+    const vizinho = enter('vizinho', { x: 12, y: 10 });
+    quiet(perto.socket);
+
+    host.handle(vizinho.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+
+    expect(perto.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-move' }),
+    );
+  });
+
+  it('aproximar-se vira creature-appear, e afastar-se vira creature-disappear', () => {
+    // O cuidado que a issue nomeia: esquecer o `disappear` deixa fantasma na tela do cliente,
+    // um boneco parado que não corresponde a ninguém.
+    const { host, enter, quiet } = cidade();
+    const parado = enter('parado', { x: 10, y: 10 });
+    const andarilho = enter('andarilho', { x: 55, y: 10 });
+    quiet(parado.socket);
+
+    for (let step = 0; step < 60; step++) {
+      host.handle(andarilho.viewer, { type: 'walk', direction: 'west' });
+    }
+    host.flush();
+    expect(parado.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-appear', name: 'andarilho' }),
+    );
+
+    quiet(parado.socket);
+    for (let step = 0; step < 60; step++) {
+      host.handle(andarilho.viewer, { type: 'walk', direction: 'east' });
+    }
+    host.flush();
+    expect(parado.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-disappear' }),
+    );
+  });
+
+  it('o session-state lista quem está no CAMPO, não a praça inteira', () => {
+    // Numa praça de duzentos, o `session-state` completo seria o pior pacote do jogo — e
+    // mandaria para a tela gente que ela não tem como desenhar, porque está fora da câmera.
+    const { host, enter, quiet } = cidade();
+    const perto = enter('perto', { x: 10, y: 10 });
+    enter('vizinho', { x: 12, y: 10 });
+    enter('longe', { x: 55, y: 55 });
+    quiet(perto.socket);
+
+    host.handle(perto.viewer, { type: 'session-attach' });
+    host.flush();
+
+    const state = perto.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    expect(state.world.creatures.map((c) => c.name).sort()).toEqual(['perto', 'vizinho']);
+  });
+
+  it('o say tem ALCANCE, e é o mesmo campo de visão', () => {
+    // "local" alcançando a praça inteira é o canal global com outro nome. O raio era desta
+    // issue desde a FUN-58, e `docs/product/chat.md` registrava a espera.
+    const { host, enter, quiet } = cidade();
+    const perto = enter('perto', { x: 10, y: 10 });
+    const vizinho = enter('vizinho', { x: 12, y: 10 });
+    const longe = enter('longe', { x: 55, y: 55 });
+    quiet(perto.socket, longe.socket);
+
+    host.handle(vizinho.viewer, { type: 'say', channel: 'local', text: 'oi' });
+    host.flush();
+
+    expect(perto.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'chat-message', text: 'oi' }),
+    );
+    expect(longe.socket.received()).toEqual([]);
+  });
+
+  it('desligar a AOI devolve o comportamento anterior — é o grupo de controle da medição', () => {
+    // `pnpm bench:city` roda os dois lados, e é assim que "não cresce quadraticamente" vira
+    // número em vez de afirmação.
+    const { host, enter, quiet } = cidade({ areaOfInterest: false });
+    const perto = enter('perto', { x: 10, y: 10 });
+    const longe = enter('longe', { x: 55, y: 55 });
+    quiet(perto.socket);
+
+    host.handle(longe.viewer, { type: 'walk', direction: 'north' });
+    host.flush();
+
+    expect(perto.socket.received()).toContainEqual(
+      expect.objectContaining({ type: 'creature-move' }),
+    );
   });
 });

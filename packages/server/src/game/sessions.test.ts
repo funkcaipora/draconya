@@ -8,8 +8,8 @@ import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import {
-  CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
-  createSessionRestorer,
+  CITY_SHARD_CAPACITY, CityShard, createBotConfigValidator, createCitySessionFactory,
+  createSessionBuilder, createSessionRestorer,
 } from './sessions.js';
 
 describe('city session factory', () => {
@@ -572,5 +572,56 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
     const volta = builder({ to: 'city' }, hunt, 'p1');
     expect(volta).not.toBe(praca);
     expect(volta?.participants.map((p) => p.id)).toEqual(['p1']);
+  });
+});
+
+describe('teto de população por cópia, e a Cidade 2 (FUN-33)', () => {
+  const content = testContent();
+  const entrar = (shard: CityShard, quantos: number): Session[] => {
+    const factory = createCitySessionFactory(content, () => 0, shard);
+    return Array.from({ length: quantos }, (_, i) => factory(`p${i}`, { level: 1, xp: 0 }));
+  };
+
+  it('enche uma cópia antes de abrir a próxima', () => {
+    // Espalhar daria praças pela metade, e praça pela metade é pior que praça cheia: o valor
+    // de estar na Cidade é haver gente nela.
+    const shard = new CityShard(content, () => 0, { capacity: 3 });
+    const sessoes = entrar(shard, 3);
+
+    expect(new Set(sessoes).size).toBe(1);
+    expect(shard.copies).toBe(1);
+    expect(shard.population).toBe(3);
+  });
+
+  it('a cópia cheia abre a Cidade 2, e ninguém é recusado', () => {
+    // O teto é do NÓ, não do jogo: ele diz quanto um processo aguarda hospedar junto, e a
+    // resposta a "encheu" é abrir outra cópia, nunca negar a entrada.
+    const shard = new CityShard(content, () => 0, { capacity: 2 });
+    const sessoes = entrar(shard, 5);
+
+    expect(shard.copies).toBe(3);
+    expect(shard.population).toBe(5);
+    expect(sessoes[0]).toBe(sessoes[1]);
+    expect(sessoes[2]).not.toBe(sessoes[0]);
+    expect(sessoes[4]).not.toBe(sessoes[2]);
+  });
+
+  it('quem sai abre vaga, e o próximo entra NA MESMA cópia', () => {
+    // Sem isto, uma praça que encheu uma vez ficaria marcada como cheia para sempre, e a
+    // Cidade 2 continuaria enchendo enquanto a 1 esvaziava.
+    const shard = new CityShard(content, () => 0, { capacity: 2 });
+    const [primeira] = entrar(shard, 2);
+    if (primeira === undefined) throw new Error('a praça não foi criada');
+    primeira.leave('p0');
+
+    const [voltando] = entrar(shard, 1);
+    expect(voltando).toBe(primeira);
+    expect(shard.copies).toBe(1);
+  });
+
+  it('o teto padrão é o do §13, e ele é conferido na construção', () => {
+    expect(CITY_SHARD_CAPACITY).toBe(200);
+    expect(() => new CityShard(content, () => 0, { capacity: 0 })).toThrow(/positive integer/);
+    expect(() => new CityShard(content, () => 0, { capacity: 1.5 })).toThrow(/positive integer/);
   });
 });

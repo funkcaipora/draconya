@@ -6,7 +6,7 @@
 // que não falam de HP nenhum.
 
 import { buildContent } from '@draconya/content';
-import type { Content } from '@draconya/content';
+import type { Content, RawContent } from '@draconya/content';
 
 export const TEST_MAP = { id: 'arena', z: 7, grid: ['####', '#..#', '#..#', '####'] };
 
@@ -86,8 +86,15 @@ export const TEST_SUPPLY = {
  */
 export const TEST_ADVANCED_POLICY = 'lowest-hp';
 
-export function testContent(): Content {
-  return buildContent({
+/**
+ * O conteúdo de teste ANTES de virar `Content`, para quem precisa trocar uma peça.
+ *
+ * Existe porque o mapa de Cidade daqui é 6×6, e num mapa desse tamanho todo mundo está a dois
+ * tiles de todo mundo — o campo de visão da FUN-33 não teria o que cortar, e um teste de
+ * interest management ali passaria sem exercitar nada.
+ */
+export function rawTestContent(): RawContent {
+  return {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
     spells: [TEST_SPELL], supplies: [TEST_SUPPLY],
@@ -97,5 +104,9 @@ export function testContent(): Content {
     advancedOnly: { targetPolicies: [TEST_ADVANCED_POLICY] } }],
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
     city: { mapId: 'city' },
-  });
+  };
+}
+
+export function testContent(): Content {
+  return buildContent(rawTestContent());
 }
