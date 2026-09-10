@@ -17,7 +17,8 @@ import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import type { TicketService } from '../tickets.js';
 import {
-  SessionHost, type SessionBuilder, type SessionFactory, type SessionRestorer,
+  SessionHost, type SessionBuilder, type SessionFactory, type SessionHostOptions,
+  type SessionRestorer,
 } from './host.js';
 import { GameMetrics } from './metrics.js';
 import { Viewer } from './viewer.js';
@@ -38,6 +39,12 @@ export interface GameDependencies {
    * não roda no CI, e portanto não roda nunca.
    */
   readonly now?: () => number;
+  /** Aceita ou recusa uma configuração de bot (FUN-81). Ver `SessionHostOptions`. */
+  readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
+  /** Persiste a configuração aceita. A única escrita de banco do `game`. */
+  readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
+  /** O catálogo de itens, para as regras de equipar (FUN-82). */
+  readonly itemCatalog?: SessionHostOptions['itemCatalog'];
 }
 
 /**
@@ -100,6 +107,15 @@ export function createGame(
         ? {}
         : { restoreSession: dependencies.restoreSession }),
       ...(dependencies.now === undefined ? {} : { now: dependencies.now }),
+      ...(dependencies.acceptBotConfig === undefined
+        ? {}
+        : { acceptBotConfig: dependencies.acceptBotConfig }),
+      ...(dependencies.saveBotConfig === undefined
+        ? {}
+        : { saveBotConfig: dependencies.saveBotConfig }),
+      ...(dependencies.itemCatalog === undefined
+        ? {}
+        : { itemCatalog: dependencies.itemCatalog }),
       metrics,
     });
 

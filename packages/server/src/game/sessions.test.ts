@@ -1,13 +1,15 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_ADVANCED_POLICY, TEST_COMBAT, TEST_HUNT, TEST_PROGRESSION, TEST_STAMINA, testContent,
 } from '../testing/content.js';
+import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
 import {
-  createCitySessionFactory, createSessionBuilder, createSessionRestorer,
+  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  createSessionRestorer,
 } from './sessions.js';
 
 describe('city session factory', () => {
@@ -213,6 +215,27 @@ describe('city successor (FUN-38)', () => {
   });
 });
 
+describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {
+  const content = testContent();
+
+  it('o saldo persistido chega ao personagem da sessão', () => {
+    // Invariante 4: nada que o cliente manda participa da criação da sessão. Um saldo vindo
+    // do socket seria poção de graça, e não haveria como distinguir isso de um jogador rico.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, gold: 4_200 });
+
+    expect(session.participants[0]?.gold).toBe(4_200);
+    // O que a sessão movimenta é o DELTA. O saldo de entrada é leitura.
+    expect(session.participants[0]?.goldDelta).toBe(0);
+  });
+
+  it('ticket sem gold entra com zero, e zero recusa gasto', () => {
+    // É o ticket emitido por um `api` antigo, durante deploy em rolagem. Degradar para zero
+    // erra para o lado seguro: não gastar o que não se sabe ter.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.gold).toBe(0);
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;
@@ -352,5 +375,83 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
     const city = createCitySessionFactory(content)('p1');
     const snapshot = { ...city.snapshot(), contentVersion: 'de-outro-deploy' };
     expect(createSessionRestorer(content)(snapshot)).toBeNull();
+  });
+});
+
+describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
+  const content = testContent();
+  const accept = createBotConfigValidator(content);
+  const base = (over: Record<string, unknown> = {}) => ({
+    version: BOT_VOCABULARY_VERSION,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
+
+  it('aceita uma configuração válida e devolve a versão PARSEADA, com defaults', () => {
+    // Devolver o parseado, e não o cru, é o que garante que quem compila recebe `targeting` e
+    // `exit` preenchidos — o cliente não precisa mandar campo que ele não usa.
+    const decision = accept(base(), 1);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) {
+      expect(decision.config.targeting.policy).toBe('nearest');
+      expect(decision.config.exit).toEqual([]);
+    }
+  });
+
+  it('recusa forma fora do vocabulário, dizendo ONDE', () => {
+    // "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir de configurar
+    // o bot. O caminho do campo vai no texto porque ele vai direto para o jogador.
+    const decision = accept(base({
+      heal: [{ when: { kind: 'gold', op: '<', amount: 100 }, do: { kind: 'spell', spellId: 'heal' } }],
+    }), 1);
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.reason).toContain('heal');
+  });
+
+  it('recusa magia que não existe no catálogo DESTE nó', () => {
+    const decision = accept(base({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'nao-existe' },
+      }],
+    }), 1);
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.reason).toContain('nao-existe');
+  });
+
+  it('recusa mais regras que slots', () => {
+    const regra = {
+      when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
+    };
+    const decision = accept(base({ heal: [regra, regra, regra, regra] }), 1);
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.reason).toContain('heal');
+  });
+
+  it('o GATE de level: recurso avançado abaixo do 50 é recusado, dizendo qual', () => {
+    // §13.2. "Seu bot exige level 50" sem dizer o quê deixa o jogador procurando qual das
+    // trinta regras dele é a culpada.
+    const avancada = base({ targeting: { policy: TEST_ADVANCED_POLICY } });
+    const recusado = accept(avancada, 49);
+    expect(recusado.ok).toBe(false);
+    if (!recusado.ok) {
+      expect(recusado.reason).toContain('50');
+      expect(recusado.reason).toContain(TEST_ADVANCED_POLICY);
+    }
+
+    expect(accept(avancada, 50).ok).toBe(true);
+  });
+
+  it('o gate não atrapalha quem não usa nada avançado', () => {
+    expect(accept(base({ targeting: { policy: 'nearest' } }), 1).ok).toBe(true);
+  });
+
+  it('o conteúdo REAL não gateia nada — o recorte do §13.2 ainda é [ABERTO]', () => {
+    // Este teste é o comentário virando obrigação. No dia em que alguém preencher
+    // `advancedOnly` em `bot/baseline.json`, ele falha — e a mudança tem de ser deliberada,
+    // com o PRD tendo decidido, em vez de um palpite que trava o recurso para todo mundo
+    // abaixo do level 50.
+    expect(content.bot.advancedOnly.conditions).toEqual([]);
+    expect(content.bot.advancedOnly.postures).toEqual([]);
   });
 });

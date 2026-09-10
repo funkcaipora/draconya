@@ -13,9 +13,13 @@
 // magia (M7) e o de supply (M8), por uma interface — não por um `if` aqui dentro que cresce a
 // cada categoria nova.
 
-import type { BotAction, BotCategory, BotCondition, BotConfig, Content } from '@draconya/content';
+import type {
+  BotAction, BotCategory, BotCondition, BotConfig, BotExitRule,
+} from '@draconya/content';
 import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
+import { compileTargeting } from './targeting.js';
+import type { Targeting } from './targeting.js';
 
 /**
  * O que uma condição enxerga.
@@ -62,6 +66,22 @@ export interface CompiledRule {
 
 export interface CompiledBot {
   readonly categories: ReadonlyMap<BotCategory, readonly CompiledRule[]>;
+  /**
+   * Alvo e postura (FUN-85), compilados da MESMA configuração.
+   *
+   * Aqui, e não num segundo parâmetro do ruleset, porque é uma configuração só: quem tem o bot
+   * tem a política de alvo dele, e separar os dois criaria o estado em que uma sessão roda com
+   * as regras de um jogador e o targeting de outro.
+   */
+  readonly targeting: Targeting;
+  /**
+   * As regras de saída, ainda CRUAS (FUN-86).
+   *
+   * As outras duas peças saem daqui compiladas, e esta não: o predicado de uma regra de saída
+   * lê a `HuntView`, que é do ruleset de hunt — e `bot.ts` não conhece ruleset nenhum, nem
+   * pode, porque o mesmo bot vai valer para quest e boss. Quem compila é quem tem a view.
+   */
+  readonly exit: readonly BotExitRule[];
   /**
    * A primeira regra válida da categoria, ou `null` (§13.4).
    *
@@ -135,13 +155,15 @@ function compare(left: number, op: BotCondition['op'], right: number): boolean {
 /**
  * Compila a configuração inteira, uma vez, na entrada da sessão.
  *
- * `content` entra para a referência cruzada de magia e supply. Os catálogos são M7 e M8 e
- * ainda não existem — quando existirem, **a recusa é aqui**, na compilação, e a hunt não abre.
- * Falhar alto na entrada é melhor que um slot morto que o jogador não consegue explicar: uma
- * regra que aponta magia inexistente e só falha ao ser disparada é o bot que para de curar sem
- * ninguém ligar uma coisa à outra.
+ * **Não recebe `Content`, e recebia** (FUN-81). O parâmetro existia para a referência cruzada
+ * de magia e supply, que a FUN-74 acabou pondo em `validateBotConfig` — o lugar certo, porque
+ * a recusa precisa chegar ao jogador com motivo, e a compilação acontece quando a hunt já vai
+ * abrir. O parâmetro ficou sem uso, e sem uso ele passou a ATRAPALHAR: `restore` recompila a
+ * configuração vinda do snapshot e não tem conteúdo na mão.
+ *
+ * A ordem continua sendo: valida com `validateBotConfig` (que tem o conteúdo), compila depois.
  */
-export function compileBot(config: BotConfig, _content: Content): CompiledBot {
+export function compileBot(config: BotConfig): CompiledBot {
   const categories = new Map<BotCategory, readonly CompiledRule[]>();
   for (const category of BOT_CATEGORIES) {
     categories.set(
@@ -152,6 +174,8 @@ export function compileBot(config: BotConfig, _content: Content): CompiledBot {
 
   return {
     categories,
+    targeting: compileTargeting(config.targeting),
+    exit: config.exit,
     select(category, view) {
       const rules = categories.get(category);
       if (rules === undefined) return null;

@@ -1,0 +1,9 @@
+{
+  "id": "melee",
+  "name": "Corpo a Corpo",
+  "startingLevel": 10,
+  "curve": { "base": 50, "factor": 1.1 },
+  "gain": { "on": "melee-hit", "points": 1 },
+  "damagePerLevel": 0.02,
+  "_open": "Curva e contribuição de dano provisórias. O §9.4 decide que skill sobe por uso, e não os números — o Tibia é referência funcional, e o balanceamento real depende de quanto tempo uma hunt rende, que ainda não foi medido."
+}

@@ -8,6 +8,27 @@
       "when": 1788865203412,
       "tag": "0000_fun-11-accounts-and-characters",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0001_fun-81-bot-config",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789100000000,
+      "tag": "0002_fun-76-item-instance",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789200000000,
+      "tag": "0003_fun-82-equipped-slot",
+      "breakpoints": true
     }
   ]
 }

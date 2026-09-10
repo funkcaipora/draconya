@@ -9,8 +9,11 @@ import {
   CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
   huntRulesetFromSnapshot, materializeStamina, statsForLevel,
 } from '@draconya/sim';
-import type { HuntDifficultyName, Ruleset, SessionSnapshot } from '@draconya/sim';
-import type { Content } from '@draconya/content';
+import type {
+  HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
+} from '@draconya/sim';
+import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
+import type { BotConfig, Content } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
@@ -70,6 +73,18 @@ export function createCitySessionFactory(
       vocationId: null,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
+      capacity: stats.capacity,
+      // O saldo de entrada vem do TICKET (invariante 4). Ausente é zero, e zero recusa gasto —
+      // é o lado seguro do erro: não gastar o que não se sabe ter.
+      gold: initialCharacter.gold ?? 0,
+      // Skills vêm do ticket porque escalam o dano DURANTE a hunt (FUN-75). Ausentes, toda
+      // skill vale o nível inicial do conteúdo — que é onde um personagem novo começa.
+      ...(isSkillsState(initialCharacter.skills) ? { skills: initialCharacter.skills } : {}),
+      // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
+      // quebrada vira "sem item", não sessão que não abre.
+      ...(isInventoryState(initialCharacter.inventory)
+        ? { inventory: initialCharacter.inventory }
+        : {}),
       staminaMs: initialCharacter.staminaMs ?? null,
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}
@@ -204,6 +219,9 @@ function huntFor(
       // enum no protocolo: uma hunt define as dificuldades que fazem sentido para ela.
       difficulty: request.difficulty as HuntDifficultyName,
       createdAtMs: now(),
+      // A configuração do bot já vem VALIDADA (FUN-81): quem a aceitou foi o host, no socket
+      // ou ao ler o ticket. Aqui ela só é compilada — e é a hunt que a guarda no snapshot.
+      ...(request.botConfig === undefined ? {} : { botConfig: request.botConfig }),
     });
     for (const character of from.participants) session.enter(character);
     return session;
@@ -212,4 +230,100 @@ function huntFor(
     // a resposta certa: o personagem fica onde estava, e o jogador vê o motivo.
     return null;
   }
+}
+
+/**
+ * Aceita — ou recusa com motivo — uma configuração de bot que chegou de fora (FUN-81).
+ *
+ * Função estreita injetada no host, e não o `Content` inteiro: o host não precisa conhecer o
+ * vocabulário para rotear uma mensagem, e dar a ele o conteúdo todo seria dar acesso a
+ * balanceamento a quem cuida de socket. É a mesma forma do `settleProgress` que o `api` recebe.
+ *
+ * As três checagens, na ordem em que custam a descobrir:
+ *
+ *   1. **forma** — `botConfigSchema` recusa condição fora do vocabulário, operador que não
+ *      existe, percentual fora de 0–100;
+ *   2. **conteúdo** — slots, versão de vocabulário e referência cruzada de magia, supply e
+ *      monstro, tudo contra o `content` deste nó;
+ *   3. **level** — §13.2: o bot avançado abre no 50, e o recorte é dado (`advancedOnly`).
+ *
+ * A recusa devolve TEXTO, não booleano, porque ele vai direto para o jogador num
+ * `system-message`. "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir
+ * de configurar o bot.
+ */
+export type BotConfigDecision =
+  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: false; readonly reason: string };
+
+export function createBotConfigValidator(
+  content: Content,
+): (raw: unknown, level: number) => BotConfigDecision {
+  return (raw, level) => {
+    const parsed = botConfigSchema.safeParse(raw);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const where = first === undefined || first.path.length === 0
+        ? ''
+        : ` em "${first.path.join('.')}"`;
+      return { ok: false, reason: `configuração fora do vocabulário${where}` };
+    }
+
+    const problems = validateBotConfig(parsed.data, content);
+    if (problems.length > 0) {
+      // Só o primeiro problema vai para o socket. A lista inteira é da UI (M10), que consegue
+      // apontar slot por slot; numa linha de chat, cinco motivos viram ruído.
+      return { ok: false, reason: problems[0] as string };
+    }
+
+    const advanced = advancedFeaturesUsed(parsed.data, content.bot);
+    if (advanced.length > 0 && level < content.bot.advancedFromLevel) {
+      return {
+        ok: false,
+        reason: `bot avançado exige level ${content.bot.advancedFromLevel}: `
+          + advanced.join(', '),
+      };
+    }
+    return { ok: true, config: parsed.data };
+  };
+}
+
+/**
+ * A forma mínima de `SkillsState` vinda do banco (FUN-75).
+ *
+ * Checagem estrutural e não schema Zod: o formato é do `sim`, e importar um validador de
+ * domínio aqui só para conferir dois números seria mais acoplamento que garantia. O que
+ * importa é não deixar lixo virar `NaN` dentro do motor — entrada quebrada vira "sem skills",
+ * e o personagem começa no nível inicial em vez de a sessão não abrir.
+ */
+function isSkillsState(value: unknown): value is SkillsState {
+  if (typeof value !== 'object' || value === null) return false;
+  return Object.values(value).every((entry) => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const skill = entry as { level?: unknown; points?: unknown };
+    return Number.isFinite(skill.level) && Number.isFinite(skill.points);
+  });
+}
+
+/**
+ * A forma mínima de `InventoryState` vinda do banco (FUN-82).
+ *
+ * Mesma escolha de `isSkillsState`: checagem estrutural, não schema. Entrada quebrada vira
+ * "sem item" e o personagem entra de mãos vazias, em vez de a sessão não abrir por um JSON
+ * torto — perder o inventário de uma hunt é ruim, não conseguir entrar é pior.
+ */
+function isInventoryState(value: unknown): value is InventoryState {
+  if (typeof value !== 'object' || value === null) return false;
+  const state = value as { backpack?: unknown; equipped?: unknown };
+  if (!Array.isArray(state.backpack)) return false;
+  if (typeof state.equipped !== 'object' || state.equipped === null) return false;
+  return state.backpack.every(isCarried)
+    && Object.values(state.equipped).every((item) => item === undefined || isCarried(item));
+}
+
+function isCarried(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as { instanceId?: unknown; itemId?: unknown; quantity?: unknown };
+  return typeof item.instanceId === 'string'
+    && typeof item.itemId === 'string'
+    && Number.isInteger(item.quantity);
 }

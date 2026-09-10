@@ -1,4 +1,4 @@
-# 0021 — Deploy integrado no Coolify com origem única
+# 0022 — Deploy integrado no Coolify com origem única
 
 **Status:** aceito
 **Data:** 2026-09-09

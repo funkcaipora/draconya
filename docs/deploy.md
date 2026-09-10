@@ -92,7 +92,7 @@ numa VPS é como a maioria dos bancos vaza.
 ## Coolify
 
 Use o Build Pack **Docker Compose**, base `/` e arquivo `/compose.coolify.yml`. O
-[ADR 0021](adr/0021-coolify-same-origin-deployment.md) registra a topologia. O repositório
+[ADR 0022](adr/0022-coolify-same-origin-deployment.md) registra a topologia. O repositório
 privado precisa de GitHub App autorizado ou chave de deploy somente de leitura.
 
 Configure estas variáveis no recurso do Coolify:

@@ -15,7 +15,8 @@ import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  createCitySessionFactory, createSessionBuilder, createSessionRestorer,
+  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
@@ -140,6 +141,10 @@ async function main(): Promise<void> {
               // (invariante 9): o extrato só existe depois que a sessão dona acabou, e é
               // exatamente a mesma escrita que o `jobs` faria dez segundos depois. Sem ela,
               // quem reconecta dentro da janela da varredura vê o personagem zerar (FUN-56).
+              // A mochila do personagem viaja no ticket (FUN-82): é assim que ela chega ao
+              // `game`, que não fala com o Postgres.
+              listItemInstances: (characterId: string) =>
+                repository.listItemInstances(characterId),
               settleProgress: (characterId: string) =>
                 settleCharacterProgress(characterId, {
                   database: database.db,
@@ -159,6 +164,18 @@ async function main(): Promise<void> {
       receipts,
       restoreSession: createSessionRestorer(content),
       buildSession: createSessionBuilder(content),
+      // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
+      // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
+      acceptBotConfig: createBotConfigValidator(content),
+      // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
+      // de balanceamento para decidir se uma espada cabe num slot.
+      itemCatalog: content.items,
+      // A ÚNICA escrita de banco do `game`, e ela é uma instrução só. Sem banco configurado,
+      // a configuração vale na sessão e some no logout — degradação, não falha.
+      ...(repository === null
+        ? {}
+        : { saveBotConfig: (characterId: string, config: unknown) =>
+            repository.saveBotConfig(characterId, config) }),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,

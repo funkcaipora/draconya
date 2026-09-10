@@ -93,3 +93,60 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.
 - O motor de bot é compilado ao entrar na sessão, para um vetor de predicados. Interpretar JSON a
   cada avaliação é o caminho fácil e errado. Ver ADR 0002.
+- **Escolher alvo e alcançar alvo são buscas SEPARADAS** (`targeting.ts`, FUN-85). `#attackTarget`
+  usa o alcance da arma; `#approachTarget` usa o raio de visão do conteúdo. Enquanto as duas eram
+  a mesma busca — o antigo `#nearestMonster` —, a postura "seguir o alvo" era impossível de
+  expressar: quem já está ao alcance não precisa ser seguido.
+- **O desempate de alvo é CONTRATO.** Priorizado antes da política, política antes da ordem de
+  nascimento, e a comparação é estrita — o campeão só cai para quem ganha de verdade. Trocar por
+  `<=` faz duas execuções da mesma semente divergirem assim que dois monstros empatarem, que é o
+  caso comum: monstro recém-nascido tem sempre a vida cheia.
+- **Skill é acumulador de USO, e isso não briga com o invariante 2** (FUN-75). O que a regra
+  proíbe é grandeza dependente do TEMPO somada por tick; o que se soma aqui é uso, e uso é
+  evento na fila — um golpe que vence, uma magia que sai. A 1 Hz e a 10 Hz acontecem os mesmos
+  usos nos mesmos instantes lógicos.
+- **O custo de um nível de skill é INTEIRO** (`Math.round` em `pointsForLevel`). `50 * 1.1` é
+  `55.000000000000007`, e o resto que sobra ao fechar um nível carregaria esse lixo para o
+  próximo — a mesma armadilha do acumulador fracionário registrada acima, por outra porta.
+- **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
+  torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
+  nada, e não é preciso guardar instante como a stamina guarda.
+- **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
+  `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
+  `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.
+- **`out-of-gold` olha o SALDO, nunca o delta.** Delta negativo é qualquer um que gastou uma
+  poção; saldo zero é quem não consegue comprar a próxima. E `hp-below` compara ESTRITO: com
+  `<=`, "sair abaixo de 100%" encerraria a hunt de quem entrou de vida cheia.
+- **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
+  posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
+  guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
+- **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
+  de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
+  regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
+  que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
+- **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
+  Descontar primeiro é como se perde mana sem lançar nada.
+- **Capacidade é PESO, e o equipado conta** (`inventory.ts`, FUN-82). Sem contar o equipado, a
+  estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
+  arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como
+  todo mundo começa — quem sabe quanto o punho bate é o conteúdo.
+- **A sessão NUNCA escreve `item_instance`.** Ela registra o layout; o extrato leva e o `jobs`
+  aplica (invariante 10). O mesmo caminho de XP, gold e skill.
+- **Magia em área colhe TODOS os alvos antes de aplicar dano nenhum** (FUN-92). Resolver morte
+  no meio da varredura é varrer um array que está sendo trocado — `#onMonsterDied` substitui
+  `#monsters` por um filtrado —, e os alvos depois do que morreu ficariam de fora.
+- **A ordem dos alvos de uma área é contrato**, como semente e ordem de sorteio do loot: cada
+  alvo consome uma rolagem, e trocar a ordem troca qual sorteio cai em quem.
+- **O alcance de uma magia é o DELA, não o da arma.** A mira usa `selectTarget` com
+  `spell.effect.range`; usar `#attackTarget` fazia uma magia de alcance 3 se comportar como uma
+  de alcance 1, porque a seleção mordia antes da conferência. Foi um defeito real da FUN-74.
+- **`castSpell` devolve o dano RESOLVIDO, não aplicado.** Quem aplica é quem tem o alvo, porque
+  aplicar é também `recordDamage` e `resolveDeath` — e a atribuição não pode ser paga duas vezes.
+- **O cooldown de magia é `Cooldowns`, com instante ABSOLUTO no relógio lógico.** Não é
+  acumulador e não é evento próprio na fila: a categoria do bot já é o evento, e um segundo
+  evento por magia seria a mesma cadência escrita duas vezes. Absoluto é o que o mantém correto
+  do outro lado de um snapshot.
+- **Gold gasto é `goldDelta` no personagem E `aggregates.goldSpent` na sessão**, como o loot é
+  `goldDelta` e `goldGained`. O extrato leva os dois ao ledger; escrever só um faz a conta do
+  jogador divergir da linha do banco. O saldo é `gold + goldDelta`, e nunca fica negativo —
+  o débito é recusado antes, não corrigido depois.

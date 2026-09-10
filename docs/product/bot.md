@@ -1,7 +1,10 @@
 # Bot
 
-**Status:** parcial — vocabulário fechado e versionado (FUN-73) e compilador de regras
-(FUN-80) implementados; nada **executa** ação ainda, porque magia é M7 e supply é M8
+**Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
+cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77), targeting
+configurável (FUN-85), regras de saída do jogador (FUN-86) e configuração pelo socket com
+persistência e gate de level (FUN-81) implementados; falta a UI (M10), o bot avançado (FUN-87) e
+o catálogo de itens (M8)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -61,14 +64,16 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 
 | `kind` | Campo | Catálogo |
 |---|---|---|
-| `spell` | `spellId` | M7 — ainda não existe |
-| `supply` | `supplyId` | M8 — ainda não existe |
-| `item` | `itemId` | M8 — ainda não existe |
+| `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) |
+| `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
 
-A forma é validada agora; **a referência cruzada entra quando o catálogo existir**, e entra na
-validação, não na execução. Uma regra que aponta magia inexistente e só falha ao ser disparada é
-o bot que para de curar sem explicação — o formato exato que este vocabulário existe para
-impedir. É o mesmo mecanismo que `buildContent` já usa em `loot.items`.
+A referência cruzada acontece na **validação**, nunca na execução: `validateBotConfig` confere
+cada `spellId` e `supplyId` contra o catálogo e devolve o problema com a categoria e o número do
+slot. Uma regra que aponta magia inexistente e só falha ao ser disparada é o bot que para de
+curar sem explicação — o formato exato que este vocabulário existe para impedir. É o mesmo
+mecanismo que `buildContent` já usa em `loot.items`, e `item` segue recusado pela mesma razão que
+`loot.items` só aceita lista vazia.
 
 ### Exemplo
 
@@ -91,8 +96,8 @@ impedir. É o mesmo mecanismo que `buildContent` já usa em `loot.items`.
 do bot avançado. Em conteúdo e não em código, porque é balanceamento: um designer precisa
 alcançá-lo sem deploy.
 
-**Nada aqui executa regra.** Isto é o contrato; a avaliação é a FUN-80, e a configuração pelo
-socket é a FUN-81.
+Isto é o contrato. A avaliação é a FUN-80, a execução é a FUN-74/FUN-77, e a configuração pelo
+socket segue sendo a FUN-81 — até ela existir, nenhum personagem tem bot configurado.
 
 ## Como a regra vira decisão (FUN-80)
 
@@ -114,10 +119,46 @@ Três propriedades que o compilador garante, e que têm teste:
 **Sem alvo, `target-hp` é falsa** — não é erro. "Ataque quando o alvo estiver abaixo de 30%" não
 vale quando não há alvo, e lançar ali derrubaria a sessão por uma regra escrita corretamente.
 
-Quem **executa** a ação escolhida é o motor de magia (M7) e o de supply (M8), por uma interface
-(`BotActuator`) — não por um `if` dentro do compilador que cresce a cada categoria nova. Ela
-devolve `false` quando a ação não aconteceu, porque uma categoria não pode gastar o cooldown de
-uma ação que não aconteceu: seria o bot parando um segundo por ter tentado curar sem mana.
+Quem **executa** a ação escolhida não é o compilador, e sim uma interface (`BotActuator`) — não
+um `if` lá dentro que cresce a cada categoria nova. Ela devolve `false` quando a ação não
+aconteceu, porque uma categoria não pode gastar o cooldown de uma ação que não aconteceu: seria
+o bot parando um segundo por ter tentado curar sem mana.
+
+## A cadência: cinco categorias, cinco relógios (FUN-84)
+
+Cada categoria é um **evento independente** na fila da sessão. Não existe prioridade global
+(§13.4): uma cura que executa não atrasa o ataque, porque são vencimentos separados.
+
+Uma categoria está sempre num de dois estados, e nunca nos dois:
+
+| Estado | Quando | Custo |
+|---|---|---|
+| **agendada** | executou uma ação; volta no cooldown da categoria | um evento por cooldown |
+| **engatilhada** | nenhuma regra valeu, ou o atuador recusou | **zero** até o mundo mudar |
+
+Engatilhar em vez de reagendar no vazio é o que faz um bot configurado e sem nada a fazer custar
+nada. Reavaliar é imediato quando o personagem **leva dano** — esperar o próximo múltiplo de um
+relógio para curar quem está caindo custa a vida do personagem, e é a mesma perda que o golpe
+engatilhado da FUN-68 corrigiu do outro lado.
+
+**Atuador que recusa não consome o cooldown.** Sem mana ou sem gold, a ação não aconteceu — e a
+categoria não pode ficar um segundo parada por ter tentado.
+
+**A recusa por cooldown é a exceção, e ela reagenda** (FUN-74). "Sem mana" e "sem gold" não
+melhoram com o tempo passar, então engatilhar é certo: a categoria volta quando o mundo mudar.
+"Em cooldown" melhora, e só com o tempo — uma categoria engatilhada por isso ficaria dormindo
+até alguém bater no personagem, e um personagem parado, sangrando, com a cura em cooldown,
+simplesmente nunca curaria. Por isso a recusa carrega o **prazo** (`retryInMs`), e a categoria é
+reagendada para o vencimento dele.
+
+**Categoria sem regra não entra na fila**, e personagem sem bot configurado não agenda nada. Os
+cinco eventos por segundo por hunt que isto orça só existem para quem configurou — e até a
+FUN-81 não existe configuração, então o custo medido é zero: `pnpm bench:hunts` deu 17,1 µs por
+tick contra 21,0 µs na `main`, diferença dentro da variância entre execuções.
+
+O estado de "agendada" entra no **snapshot**. Sem ele, uma sessão retomada acharia a categoria
+engatilhada com um evento já na fila, e ela agiria duas vezes por cooldown — a mesma invariante
+que o golpe do personagem protege, e que já quebrou uma vez lá.
 
 ## Parâmetros de balanceamento
 
@@ -142,3 +183,195 @@ uma ação que não aconteceu: seria o bot parando um segundo por ter tentado cu
 ## Divergências do PRD
 
 Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+
+## Quem executa: magia e supply (FUN-74, FUN-77)
+
+O atuador embutido é a **própria hunt**, e não uma classe à parte. Tudo o que ele precisa já está
+lá: o alvo mais próximo, o RNG semeado da sessão, o relógio lógico e o pipeline de morte. Uma
+classe separada receberia os quatro por parâmetro e não ganharia nada em troca.
+
+O que ele faz, por tipo de ação:
+
+| Ação | O que acontece | Recusa quando |
+|---|---|---|
+| `spell` com efeito `heal` | repõe HP do lançador, debita mana, inicia o cooldown da magia | level insuficiente, cooldown, mana |
+| `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no monstro mais próximo e **atribui** (`recordDamage`) | level, cooldown, sem alvo, fora de alcance, mana |
+| `supply` | repõe HP ou mana e **debita gold** | gold insuficiente |
+| `item` | nada | sempre — não há catálogo |
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **A mana sai por último.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
+  Descontar primeiro é como se perde mana sem lançar nada, e esse é o defeito que o jogador nota
+  e não consegue explicar.
+- **O cooldown da magia é dela, e é diferente do cooldown da categoria.** Uma cura de 4 s numa
+  categoria de 1 s sai a cada 4 s, não a cada 1 s. Os dois valores são conteúdo, e o maior manda.
+- **O dano sai do motor de magia RESOLVIDO, não aplicado.** Quem aplica é quem tem o alvo, porque
+  aplicar é também registrar a atribuição e resolver a morte — e a atribuição não pode ser paga
+  duas vezes.
+
+O saldo que a sessão enxerga é **o gold de entrada mais o delta da sessão**: o loot desta hunt já
+dá para virar poção sem passar pelo banco. O saldo nunca fica negativo, e a garantia é a ordem —
+o débito é recusado antes, não corrigido depois.
+
+## Alvo e postura (FUN-85)
+
+§13.6. Até aqui a hunt tinha **uma** política, escrita no motor: o monstro mais próximo dentro do
+alcance da arma. Ela continua sendo o padrão — e agora é um caso de uma política que vem da
+configuração.
+
+### Escolher o alvo
+
+| Campo | Valores | O que faz |
+|---|---|---|
+| `policy` | `nearest`, `lowest-hp`, `highest-hp` | mais perto, termina quem está quase morto, ou bate no mais gordo |
+| `prioritize` | ids de monstro | um priorizado ganha de qualquer não-priorizado |
+| `ignore` | ids de monstro | nunca é alvo, e **não conta** na condição `targets` |
+
+A ordem de decisão é contrato, e é o que faz duas execuções da mesma semente escolherem o mesmo
+monstro:
+
+1. **priorizado ganha antes da política** — senão "mate o mago primeiro" só valeria quando o mago
+   já estivesse mais perto, que é justamente quando não faz diferença;
+2. dentro da mesma faixa, a política;
+3. empate fica com quem **nasceu antes**. A varredura é na ordem da lista, e a comparação é
+   estrita: o campeão só é trocado por quem ganha de verdade.
+
+`ignore` vence `prioritize` quando o mesmo id está nas duas listas. É configuração contraditória
+do jogador, e "não ataque" é a leitura conservadora — a outra ordem faria o bot atacar exatamente
+quem foi mandado deixar em paz.
+
+Os ids são validados contra o **catálogo inteiro** de monstros, não contra a composição da hunt:
+a configuração é do personagem e sobrevive à troca de hunt.
+
+### Se posicionar
+
+| `posture` | O que o personagem faz |
+|---|---|
+| `stand` (padrão) | percorre a rota e deixa o monstro vir — o comportamento de sempre (ADR 0009) |
+| `follow` | sai da rota e persegue até chegar ao alcance da arma |
+| `keep-distance` | mira a distância configurada: aproxima se está longe, **recua** se está perto |
+
+É o primeiro caso em que o personagem **anda fora da rota por decisão própria**. Três coisas que
+não podem mudar sem pensar duas vezes:
+
+- **Escolher alvo e alcançar alvo são buscas diferentes.** Em quem bater é limitado pelo alcance
+  da arma; atrás de quem andar é limitado pelo raio de visão (`targetSearchRadius`, em
+  `bot/baseline.json`). Enquanto as duas eram a mesma busca, "seguir o alvo" não tinha como ser
+  expresso — quem já está ao alcance não precisa ser seguido.
+- **O passo sai pelo mesmo sistema de movimento.** `movement.ts` é o único escritor de posição
+  (FUN-69), e a postura não é exceção. Perseguir usa o mesmo passo guloso do monstro; recuar usa
+  o guloso com a ameaça espelhada, que dá a direção oposta sem um segundo algoritmo.
+- **Já estar na distância pedida é ficar parado**, não voltar a percorrer a rota. Voltar faria o
+  personagem oscilar entre manter distância e seguir o laço, e de fora isso parece o bot travado.
+
+Quando o alvo morre, a postura deixa de mandar e o passo volta a ser o da rota: o `rejoinNearest`
+do walker reentra pelo tile mais próximo. É o mesmo caminho de quem foi empurrado para fora.
+
+`keep-distance` só faz sentido com arma de alcance maior que 1, **que ainda não existe**. A
+postura entra por interface agora para a geometria já ter teste, e passa a valer no dia em que
+houver arco ou varinha.
+
+### Por que a versão do vocabulário NÃO subiu
+
+Todo campo de `targeting` tem default, e o bloco inteiro tem: uma configuração salva antes desta
+issue continua válida e ganha `nearest` + `stand`, que é o que ela já fazia. Subir
+`BOT_VOCABULARY_VERSION` invalidaria configuração de jogador para acrescentar um campo que ela nem
+precisa ter — o oposto do que o versionamento existe para proteger.
+
+## Quando a hunt encerra sozinha (FUN-86)
+
+§13.9. A configuração tem uma lista `exit`, com teto de 4 slots em `bot/baseline.json` — regra de
+saída não age, ela **encerra**, e por isso vive fora das cinco categorias. O teto existe pela
+mesma razão que o das categorias: a lista é avaliada a cada 250 ms, e nada no schema impediria
+mil regras salvas.
+
+| `kind` | Dispara quando | Hoje |
+|---|---|---|
+| `hp-below` | o HP do personagem cai **abaixo** de `percent` | vale |
+| `out-of-gold` | o saldo (entrada + delta) chega a zero | vale |
+| `party-member-lost` | um companheiro saiu ou morreu | **inerte** — party é F3 |
+
+Quatro coisas que não podem mudar sem pensar duas vezes:
+
+- **A comparação de HP é estrita.** Com `<=`, quem configurasse "sair abaixo de 100%" veria a
+  hunt encerrar no instante em que entrasse, de vida cheia, sem ter tomado um golpe.
+- **`out-of-gold` olha o SALDO, não o delta.** Delta negativo é qualquer um que gastou uma poção;
+  saldo zero é quem não consegue comprar a próxima. Olhar o delta encerraria a hunt de quem tem
+  mil de gold e gastou um.
+- **`party-member-lost` ignora o próprio personagem**, mesmo morto. Sem isso, quem morre sozinho
+  encerraria por "companheiro caiu" em vez de por morte — e o motivo é o que o jogador lê ao
+  voltar.
+- **Encerra por `exit-rule`, nunca por `manual-exit`.** O jogador não pediu para sair; a regra
+  dele decidiu. Trocar os dois é o extrato mentindo sobre quem encerrou.
+
+O extrato registra **qual** regra disparou, e `hp-below` carrega o percentual no id
+(`hp-below-30`): duas regras de HP com limites diferentes precisam ser distinguíveis na tela de
+retorno. "Sua hunt encerrou por uma regra de saída", sem dizer qual, é a mensagem que faz o
+jogador desconfiar do bot que ele mesmo configurou.
+
+Sem a regra `out-of-gold`, gold zerado **não** encerra: o personagem fica, não paga o supply e
+pode morrer. São as duas metades do §20.3, e a diferença entre elas é uma linha na configuração.
+
+### Onde o predicado é compilado, e por quê ali
+
+`compileExitRules` mora em `rulesets/hunt.ts`, não no compilador do bot. O predicado lê a
+`HuntView`, e `bot.ts` não conhece ruleset nenhum — nem pode, porque o mesmo bot vai valer para
+quest e boss, que terão outra view. O compilador entrega a regra crua; quem tem a view é quem
+sabe fechar a closure.
+
+## Como a configuração chega, e onde ela mora (FUN-81)
+
+O jogador monta o bot na Cidade, entra na hunt, fecha o navegador — e a hunt roda com ele. Isso
+exige que a configuração seja **durável** e que o processo que hospeda a sessão a tenha na mão.
+
+| | quem | como |
+|---|---|---|
+| escrever | `game` | mensagem `bot-config` no socket → `UPDATE character SET bot_config` |
+| ler | `api` | lê a linha ao emitir o ticket; a configuração viaja em `InitialCharacter` |
+
+Os dois caminhos não se cruzam, e a decisão está no [ADR 0021](../adr/0021-the-game-process-writes-the-bot-configuration.md).
+A escrita é uma instrução só, sem `SELECT` antes: "o jogador salvou isto" é última-escrita-vence
+por natureza, a configuração é substituída inteira e nunca mesclada.
+
+**A ordem no servidor é aceitar → aplicar → persistir.** Aplicar antes de gravar é decisão: a
+hunt em curso usa a regra nova na hora, e uma falha do Postgres não deixa o jogador sem a cura
+que acabou de configurar. O preço é a configuração valer nesta sessão e não voltar na próxima —
+o lado certo para errar.
+
+**Mudar no meio da hunt vale na hora.** A configuração é dado puro, então recompilar não tem
+risco; quem recompila é a própria sessão (invariante 9), nunca outro processo. As regras de saída
+vão junto: deixar as antigas valendo faria a hunt encerrar por uma regra que o jogador acabou de
+apagar.
+
+**A configuração viaja no snapshot.** Uma hunt retomada em outro nó volta com o bot que estava
+rodando — antes disto ela voltava sem nenhum, e o sintoma era o pior possível: a hunt seguia
+andando e matando com o ataque básico, então nada parecia quebrado. O que sumia era a cura.
+
+O banco é a fonte para **começar** uma hunt; o snapshot é a fonte para **continuar** a que já
+estava rodando. Não é duplicação — são dois instantes da mesma coisa, e a sessão é a dona
+enquanto roda.
+
+### O gate de level (§13.2)
+
+Até o level 49 vale o bot **básico**; do 50 em diante, o avançado. O recorte é **dado**, em
+`bot/baseline.json`, como uma lista do que só o avançado pode usar — e não como uma lista do que
+o básico permite: descrever a regra por enumeração faria toda adição ao vocabulário exigir uma
+edição ali para continuar funcionando, e esquecer essa edição travaria o recurso novo para todo
+mundo abaixo do 50.
+
+**A lista está vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]`
+no PRD §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
+ainda não existe (FUN-87). Preencher a lista agora seria decidir balanceamento por conta própria
+e disfarçá-lo de implementação. O mecanismo está pronto e tem teste; o recorte entra editando
+dado, quando o PRD o decidir.
+
+A recusa diz **o quê**, não só que recusou: "bot avançado exige level 50: alvo lowest-hp". Um
+aviso genérico deixa o jogador procurando qual das trinta regras dele é a culpada.
+
+### Configuração salva que deixou de valer
+
+Conteúdo muda: uma magia é renomeada, um vocabulário sobe de versão. Uma configuração guardada
+que não passa mais na validação é **ignorada com aviso no log**, nunca fatal — derrubar a conexão
+por isso trancaria o personagem fora do jogo por um arquivo de balanceamento. Ele entra sem bot,
+que é degradação, e pode salvar outra.

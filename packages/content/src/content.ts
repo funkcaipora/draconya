@@ -8,11 +8,11 @@ import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  staminaSchema,
+  itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  BotLimits, Combat, Hunt, Monster, Progression, Stamina, Vocation,
+  BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 
 export interface Content {
@@ -32,6 +32,14 @@ export interface Content {
   readonly stamina: Stamina;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
+  /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
+  readonly spells: ReadonlyMap<string, Spell>;
+  /** Catálogo de supplies (§20.1). Poção e runa debitam gold; não são itens físicos. */
+  readonly supplies: ReadonlyMap<string, Supply>;
+  /** Skills que sobem por uso (§9.4). Vazio é um jogo em que nada sobe por fazer. */
+  readonly skills: ReadonlyMap<string, Skill>;
+  /** Catálogo de itens (§21.2). Atributos base fixos: item melhor é item diferente. */
+  readonly items: ReadonlyMap<string, Item>;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
@@ -51,6 +59,10 @@ export interface RawContent {
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
   readonly bot?: readonly unknown[];
+  readonly spells?: readonly unknown[];
+  readonly supplies?: readonly unknown[];
+  readonly skills?: readonly unknown[];
+  readonly items?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -118,6 +130,10 @@ export function buildContent(raw: RawContent): Content {
         + `entende ${BOT_VOCABULARY_VERSION}`,
     );
   }
+  const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
+  const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
+  const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
+  const items = parseAll('item', raw.items ?? [], itemSchema, problems);
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
@@ -164,13 +180,15 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
-  // Loot de item aponta um catálogo de itens que ainda NÃO existe (FUN-63). Aceitar a linha
-  // creditaria um item fantasma no primeiro abate; falhar no boot é o que impede o atalho.
+  // Loot de item agora tem catálogo (FUN-76), e a referência é conferida — o que continua sendo
+  // recusado é o item FANTASMA. Aceitar a linha creditaria no primeiro abate um item que nunca
+  // vai poder ser desenhado, equipado nem vendido, e o sintoma chegaria dias depois.
   for (const monster of monsters.values()) {
     for (const line of monster.loot.items) {
+      if (items.has(line.itemId)) continue;
       problems.push(
-        `monstro "${monster.id}": loot.items referencia "${line.itemId}", e não existe catálogo ` +
-          'de itens ainda — items precisa ser vazio',
+        `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
+          + 'no catálogo',
       );
     }
   }
@@ -224,11 +242,19 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...openOf('spell', spells),
+    ...openOf('supply', supplies),
+    ...openOf('skill', skills),
+    ...openOf('item', items),
   ];
 
   return {
     version: computeVersion(raw),
     bot: bot as BotLimits,
+    spells,
+    supplies,
+    skills,
+    items,
     monsters,
     hunts,
     vocations,
@@ -240,6 +266,17 @@ export function buildContent(raw: RawContent): Content {
     openValues,
     ...(city === undefined ? {} : { city }),
   };
+}
+
+/** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */
+function openOf(
+  kind: string, catalog: ReadonlyMap<string, { readonly _open?: string | undefined }>,
+): string[] {
+  const open: string[] = [];
+  for (const [id, entry] of catalog) {
+    if (entry._open !== undefined) open.push(`${kind}/${id}: ${entry._open}`);
+  }
+  return open;
 }
 
 function parseAll<S extends z.ZodType<{ id: string }>>(

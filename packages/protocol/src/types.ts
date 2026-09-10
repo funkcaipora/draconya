@@ -59,6 +59,32 @@ export const C2S_SCHEMAS = {
   'enter-hunt': z.object({ huntId: z.string().min(1), difficulty: z.string().min(1) }),
   /** Sair da hunt por ação manual (§14.8). Encerra com extrato e devolve à cidade. */
   'leave-hunt': z.object({}),
+  /**
+   * Salvar a configuração do bot (§13, FUN-81). INTENÇÃO: o jogador manda as REGRAS, e quem
+   * decide se elas valem — vocabulário, slots, catálogo e gate de level — é o servidor
+   * (invariante 4). Nada aqui é resultado: não há dano, cura nem gold nesta mensagem.
+   *
+   * A carga vem como objeto OPACO de propósito. O schema de verdade é `botConfigSchema`, em
+   * `@draconya/content`, e ele é a fonte única do vocabulário — repetir a forma aqui criaria
+   * um segundo lugar para ela divergir, que é exatamente o que o invariante 5 evita para
+   * opcode. O servidor faz o `parse` com o schema real e recusa com `system-message`.
+   */
+  'bot-config': z.object({ config: z.unknown() }),
+  /**
+   * Vestir um item (§21.4, FUN-82). INTENÇÃO: o cliente diz QUAL item, e quem decide se ele
+   * cabe, se o level basta e em que slot vai é o servidor (invariante 4).
+   *
+   * `instanceId`, e não `itemId`: o que se veste é ESTE item, o da linha de `item_instance`,
+   * não "um item deste tipo". Mandar o id de catálogo deixaria o servidor escolher qual das
+   * duas espadas do jogador equipar — e a que ele escolhesse não seria a que o jogador clicou.
+   */
+  equip: z.object({ instanceId: z.string().min(1) }),
+  /**
+   * Tirar o que está num slot. O slot vem como string livre e é validado contra o CONTEÚDO,
+   * como a dificuldade de hunt: repetir a lista aqui criaria um segundo lugar para ela
+   * divergir.
+   */
+  unequip: z.object({ slot: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {

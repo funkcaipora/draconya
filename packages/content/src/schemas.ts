@@ -21,9 +21,70 @@ const lootRollSchema = z.object({
  */
 export const lootTableSchema = z.object({
   gold: lootRollSchema.optional(),
-  /** Itens de verdade. Vazio até o sistema de itens existir; `buildContent` recusa o resto. */
+  /** Itens de verdade. `buildContent` confere cada `itemId` contra o catálogo (FUN-76). */
   items: z.array(lootRollSchema.safeExtend({ itemId: z.string().min(1) })).default([]),
 });
+
+/**
+ * Onde um item se equipa. Ausente no item = ele não se equipa (§21.3).
+ *
+ * Lista fechada porque o personagem tem um slot de cada: um item que declara um slot que o
+ * personagem não tem é conteúdo quebrado, e o boot é o lugar de descobrir isso.
+ */
+export const ITEM_SLOTS = [
+  'head', 'neck', 'chest', 'legs', 'feet', 'hand', 'shield', 'finger', 'ammo',
+] as const;
+export type ItemSlot = (typeof ITEM_SLOTS)[number];
+
+/** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
+export const ITEM_ORIGINS = ['loot', 'boss', 'quest', 'market', 'admin'] as const;
+export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
+
+/**
+ * A DEFINIÇÃO de um item (§21.2, FUN-76).
+ *
+ * **Atributos base são FIXOS.** Não há rolagem aleatória: duas espadas do mesmo id são
+ * idênticas, e item melhor é item DIFERENTE. É a decisão do §21.2, e ela apaga toda a
+ * matemática de variação por instância — junto com a pergunta "por que a minha é pior".
+ *
+ * O que distingue uma instância da outra é identidade e proveniência, não número.
+ */
+export const itemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** A ÚNICA ligação com arte (invariante 6, ADR 0008). Nunca um caminho de arquivo. */
+  appearanceId,
+  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'ammunition', 'other']),
+  slot: z.enum(ITEM_SLOTS).optional(),
+  /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
+  weight: z.number().nonnegative(),
+  /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
+  stackable: z.boolean().default(false),
+  attack: z.number().int().nonnegative().default(0),
+  armor: z.number().int().nonnegative().default(0),
+  /**
+   * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
+   *
+   * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
+   * escolhe no level 8, então item de vocação é inacessível até lá por construção.
+   */
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+    vocationId: z.string().min(1).optional(),
+  }).default(() => ({})),
+  /**
+   * Cargas e duração (§21.3). **Declarados, e ainda não consumidos por ninguém.**
+   *
+   * Equipamento comum não tem durabilidade; anel gasta por TEMPO e colar por CARGA. A forma
+   * entra agora para o catálogo não mudar quando a mecânica existir — e o dia em que ela
+   * existir, quem a implementar acha os campos onde eles já estavam.
+   */
+  charges: z.number().int().positive().optional(),
+  durationMs: z.number().int().positive().optional(),
+  _open: z.string().optional(),
+});
+
+export type Item = z.infer<typeof itemSchema>;
 
 export const monsterSchema = z.object({
   id: z.string().min(1),
@@ -254,6 +315,53 @@ const botOperator = z.enum(['<', '<=', '>', '>=']);
  * "nenhuma das N variantes casou", que não diz qual campo está errado — e o critério desta
  * issue é que regra fora do vocabulário seja **recusada com motivo**, nunca ignorada.
  */
+/**
+ * Uma skill que sobe pelo USO (§9.4 **[DECIDIDO]**, FUN-75).
+ *
+ * Paradigma do Tibia: skill não vem de level, vem de fazer. Quem a alimenta, quanto cada uso
+ * rende, quantos pontos custa cada nível e quanto ela acrescenta ao golpe — tudo é conteúdo.
+ * Se algum desses números aparecesse em `sim`, mudar a curva viraria deploy de lógica.
+ *
+ * **Quais skills existem também é dado.** A lista mínima é a que o combate atual precisa: uma
+ * de arma e uma de magia. Distância e defesa entram quando houver arma de alcance e bloqueio.
+ */
+export const skillSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Onde ela começa. Um personagem novo nasce aqui, e daqui o dano é o de base. */
+  startingLevel: z.number().int().nonnegative(),
+  /**
+   * Pontos para sair do nível N: `base * factor^(N - startingLevel)`.
+   *
+   * Fórmula, e não tabela, pela mesma razão que a curva de XP é fórmula: uma tabela precisa
+   * ter fim, e o fim vira o teto acidental que ninguém decidiu.
+   */
+  curve: z.object({
+    base: z.number().positive(),
+    factor: z.number().min(1),
+  }),
+  /**
+   * O que a alimenta, e quanto.
+   *
+   * `spell-cast` rende por MANA GASTA, não por lançamento — é o modelo do Tibia, e ele existe
+   * por um motivo que vale copiar: sem ele, a forma ótima de subir magia é lançar mil vezes a
+   * magia mais barata, e o jogo vira macro de spam.
+   */
+  gain: z.discriminatedUnion('on', [
+    z.object({ on: z.literal('melee-hit'), points: z.number().positive() }),
+    z.object({ on: z.literal('spell-cast'), pointsPerMana: z.number().positive() }),
+  ]),
+  /** Fração acrescentada ao poder por nível ACIMA do inicial. `0` é skill que não bate. */
+  damagePerLevel: z.number().nonnegative().default(0),
+  _open: z.string().optional(),
+});
+
+export type Skill = z.infer<typeof skillSchema>;
+
+/** Os quatro tipos de condição, como lista — é o que o gate do bot básico nomeia (FUN-81). */
+export const BOT_CONDITION_KINDS = ['hp', 'mana', 'targets', 'target-hp'] as const;
+export type BotConditionKind = (typeof BOT_CONDITION_KINDS)[number];
+
 export const botConditionSchema = z.discriminatedUnion('kind', [
   /** HP do personagem, em percentual do máximo. */
   z.object({
@@ -287,6 +395,99 @@ export const botActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
 ]);
 
+/**
+ * Como o bot ESCOLHE o alvo (§13.6).
+ *
+ * Fechado como o resto do vocabulário: o compilador só transforma em política o que conhece.
+ * `nearest` é o padrão e é o que a hunt sempre fez — as outras duas existem porque "termine o
+ * que está quase morto" e "bata no mais gordo primeiro" são estratégias diferentes, e escolher
+ * entre elas é do jogador.
+ */
+export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp']);
+
+/**
+ * Como o personagem se POSICIONA em relação ao alvo (§13.6).
+ *
+ * `stand` é o padrão e é o comportamento de hoje: o personagem percorre a rota e deixa o
+ * monstro vir (ADR 0009). As outras duas são o primeiro caso em que ele sai da rota por
+ * decisão própria — e é por isso que a postura é dado do jogador, não constante do motor.
+ *
+ * `keep-distance` só faz sentido com arma de alcance maior que 1, que ainda não existe: a
+ * postura entra por interface agora para a geometria já ter teste, e passa a valer no dia em
+ * que houver arco ou varinha.
+ */
+export const botPostureSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('stand') }),
+  z.object({ kind: z.literal('follow') }),
+  z.object({ kind: z.literal('keep-distance'), tiles: z.number().int().positive() }),
+]);
+
+/**
+ * A política de alvo inteira.
+ *
+ * **Não sobe `BOT_VOCABULARY_VERSION`.** Todo campo tem default, então uma configuração salva
+ * antes desta issue continua válida e ganha o comportamento de sempre — `nearest` + `stand`.
+ * Subir a versão invalidaria configuração de jogador para acrescentar um campo que ela nem
+ * precisa ter, que é o oposto do que o versionamento existe para proteger.
+ */
+export const botTargetingSchema = z.object({
+  policy: botTargetPolicySchema.default('nearest'),
+  /**
+   * Ids de monstro preferidos. Priorizado ganha de não-priorizado ANTES da política — é o que
+   * faz "mate o mago primeiro" valer mesmo quando o mago está mais longe.
+   */
+  prioritize: z.array(z.string().min(1)).default([]),
+  /** Ids de monstro que o bot não ataca, e que também não contam em `targets`. */
+  ignore: z.array(z.string().min(1)).default([]),
+  posture: botPostureSchema.default({ kind: 'stand' }),
+});
+
+export type BotExitRule = z.infer<typeof botExitRuleSchema>;
+export type BotTargetPolicy = z.infer<typeof botTargetPolicySchema>;
+export type BotPosture = z.infer<typeof botPostureSchema>;
+export type BotTargeting = z.infer<typeof botTargetingSchema>;
+
+/**
+ * O padrão, escrito por extenso.
+ *
+ * Zod exige a forma de SAÍDA num `.default`, então `{}` não serve mesmo com todo campo tendo
+ * default próprio. Escrever à mão tem uma vantagem: o comportamento herdado por quem nunca
+ * configurou targeting fica legível num lugar, em vez de espalhado por quatro `.default()`.
+ *
+ * FUNÇÃO, e não constante: um objeto só, entregue por referência a toda configuração parseada,
+ * é uma configuração mutando a de todo mundo no dia em que alguém escrever nele.
+ */
+const defaultTargeting = (): BotTargeting => ({
+  policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' },
+});
+
+/**
+ * Quando a hunt encerra sozinha (§13.9, §14.8).
+ *
+ * Encerrar é diferente de agir: uma regra de saída não escolhe magia nem alvo, ela decide que a
+ * sessão acabou. Por isso mora numa lista própria e não numa das cinco categorias — e por isso
+ * o extrato registra QUAL regra disparou, em vez de um "encerrou por regra" que faz o jogador
+ * desconfiar do bot que ele mesmo configurou.
+ *
+ * `hp-below` é a mais óbvia para quem caça ausente, e é a única das três que o §13.9 não cita:
+ * ela entra porque `HuntView` já a suporta e porque sem ela a única defesa contra morrer AFK é
+ * a poção nunca falhar.
+ */
+export const botExitRuleSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('hp-below'), percent: z.number().int().min(1).max(100) }),
+  /**
+   * §20.3: sem esta regra o personagem FICA na hunt sem conseguir pagar supply, e pode morrer.
+   * Com ela, sai — e sai por `exit-rule`, nunca por `manual-exit`: o extrato tem que dizer a
+   * verdade sobre quem encerrou.
+   */
+  z.object({ kind: z.literal('out-of-gold') }),
+  /**
+   * §13.9. Party é F3, então esta regra é INERTE numa hunt de um — e entra agora para a
+   * configuração salva não mudar de forma quando party existir.
+   */
+  z.object({ kind: z.literal('party-member-lost') }),
+]);
+
 /** Uma linha de slot: a condição e o que fazer quando ela vale. */
 export const botRuleSchema = z.object({
   when: botConditionSchema,
@@ -316,6 +517,38 @@ export const botSchema = z.object({
   categoryCooldownMs: z.number().int().positive(),
   /** A partir de qual level o bot avançado abre. §13.2: 50. */
   advancedFromLevel: z.number().int().positive(),
+  /**
+   * O que só o bot AVANÇADO pode usar (§13.2, FUN-81).
+   *
+   * O gate é por LEVEL: abaixo de `advancedFromLevel` a configuração é recusada se usar
+   * qualquer coisa listada aqui. Uma lista de exceções, e não uma lista do que o básico
+   * permite, porque o básico é a regra e o avançado é o recorte — descrever a regra por
+   * enumeração faria toda adição ao vocabulário exigir uma edição aqui para continuar
+   * funcionando, e esquecer essa edição travaria o recurso novo para todo mundo abaixo do 50.
+   *
+   * **Vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]` no PRD
+   * §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
+   * ainda não existe (FUN-87). Inventar um recorte aqui seria decidir balanceamento por conta
+   * própria e disfarçá-lo de implementação. O mecanismo entra agora; o recorte entra quando o
+   * PRD o decidir, editando dado.
+   */
+  advancedOnly: z.object({
+    conditions: z.array(z.enum(BOT_CONDITION_KINDS)).default([]),
+    targetPolicies: z.array(botTargetPolicySchema).default([]),
+    postures: z.array(z.enum(['stand', 'follow', 'keep-distance'])).default([]),
+  }).default(() => ({ conditions: [], targetPolicies: [], postures: [] })),
+  /**
+   * Até que distância, em tiles, o bot ENXERGA um alvo (FUN-85).
+   *
+   * Não é o alcance de ataque: é o quanto ele considera ao escolher para onde ir. Só importa
+   * com postura `follow` ou `keep-distance` — com `stand` o personagem nunca sai da rota, e
+   * quem ele bate continua sendo limitado pelo alcance da arma.
+   *
+   * Balanceamento, e por isso mora aqui: um raio grande faz o bot atravessar a hunt atrás de
+   * um monstro e voltar sem ter limpado nada. Tem default para configuração e conteúdo
+   * gravados antes desta issue continuarem válidos.
+   */
+  targetSearchRadius: z.number().int().positive().default(8),
   /** Slots por categoria. §13.3: cura 3, poção 4, ataque 10, runa 10, suporte 10. */
   slots: z.object({
     heal: z.number().int().nonnegative(),
@@ -323,6 +556,15 @@ export const botSchema = z.object({
     attack: z.number().int().nonnegative(),
     rune: z.number().int().nonnegative(),
     support: z.number().int().nonnegative(),
+    /**
+     * Quantas regras de SAÍDA cabem (FUN-86). Não é categoria — regra de saída não age, ela
+     * encerra —, mas precisa de teto pela mesma razão que as outras: a lista é avaliada a cada
+     * 250 ms, e nada no schema impediria mil regras salvas.
+     *
+     * Quatro: os três tipos do vocabulário mais folga. Tem default para o conteúdo gravado
+     * antes desta issue continuar válido.
+     */
+    exit: z.number().int().nonnegative().default(4),
   }),
   _open: z.string().optional(),
 });
@@ -336,6 +578,13 @@ export const botSchema = z.object({
  */
 export const botConfigSchema = z.object({
   version: z.number().int().positive(),
+  /** Alvo e postura (FUN-85). Ausente é `nearest` + `stand`, o comportamento de sempre. */
+  targeting: botTargetingSchema.default(defaultTargeting),
+  /**
+   * Regras de saída (FUN-86). Lista vazia é a hunt que só encerra por morte ou por ação do
+   * jogador — o comportamento de antes desta issue, e o default para quem não configurou.
+   */
+  exit: z.array(botExitRuleSchema).default(() => []),
   heal: z.array(botRuleSchema),
   potion: z.array(botRuleSchema),
   attack: z.array(botRuleSchema),
@@ -349,6 +598,83 @@ export type BotAction = z.infer<typeof botActionSchema>;
 export type BotRule = z.infer<typeof botRuleSchema>;
 export type BotLimits = z.infer<typeof botSchema>;
 export type BotConfig = z.infer<typeof botConfigSchema>;
+
+/**
+ * Uma magia (FUN-74, §4.1, §9.2).
+ *
+ * Tudo em CONTEÚDO: custo, cooldown, alcance e efeito. O motor não sabe quanto cura nem quanto
+ * custa — ele sabe *que* cura e *que* custa. É a mesma regra que vale para monstro e progressão,
+ * e é o que permite balancear sem deploy.
+ *
+ * O `kind` do efeito é fechado como o do bot, e pela mesma razão: o `sim` só executa o que
+ * conhece, e uma magia com efeito desconhecido é recusada no boot em vez de virar uma linha
+ * morta que ninguém explica.
+ */
+export const spellSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
+  manaCost: z.number().int().nonnegative(),
+  /** Tempo até poder lançar de novo. Evento na fila, nunca acumulador (ADR 0020). */
+  cooldownMs: z.number().int().positive(),
+  /** Level mínimo. */
+  minLevel: z.number().int().positive().default(1),
+  /**
+   * Vocação exigida (§9.2, FUN-92). Ausente é magia que qualquer um lança.
+   *
+   * O personagem nasce SEM vocação e escolhe no level 8 (§7.4), então uma magia com requisito
+   * é inacessível até lá — por construção, não por regra escrita em outro lugar.
+   */
+  vocationId: z.string().min(1).optional(),
+  effect: z.discriminatedUnion('kind', [
+    /** Cura o próprio lançador. Alcance não se aplica. */
+    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    /**
+     * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
+     * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor.
+     */
+    z.object({
+      kind: z.literal('damage'),
+      power: z.number().int().positive(),
+      range: z.number().int().positive(),
+      /**
+       * A ÁREA atingida, centrada no alvo (FUN-92). Ausente é alvo único.
+       *
+       * Centrada no ALVO, e não no lançador: uma magia centrada em quem lança não precisa de
+       * alvo nenhum, e isso muda o portão inteiro — some a recusa por `no-target`, some a
+       * conferência de alcance. É outra forma de magia, não um parâmetro desta, e entra quando
+       * o §4.1 disser que ela existe.
+       *
+       * `radius` é distância de Chebyshev, a mesma da grade: raio 1 pega os oito vizinhos do
+       * alvo mais ele.
+       */
+      area: z.object({ radius: z.number().int().positive() }).optional(),
+    }),
+  ]),
+  _open: z.string().optional(),
+});
+
+/**
+ * Um supply (FUN-77, §20.1 **[DECIDIDO]**).
+ *
+ * Poção e runa **não são itens físicos**: usar debita gold direto. Por isso supply tem preço e
+ * não tem peso, slot nem instância — e por isso ele mora aqui, e não no catálogo de itens que
+ * ainda não existe.
+ */
+export const supplySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
+  price: z.number().int().nonnegative(),
+  effect: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+  ]),
+  _open: z.string().optional(),
+});
+
+export type Spell = z.infer<typeof spellSchema>;
+export type Supply = z.infer<typeof supplySchema>;
 
 export type Monster = z.infer<typeof monsterSchema>;
 export type LootTable = z.infer<typeof lootTableSchema>;

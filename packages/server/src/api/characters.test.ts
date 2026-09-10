@@ -7,6 +7,7 @@ import {
   type AccountRecord,
   type CharacterRecord,
   type GameRepository,
+  type ItemInstanceRecord,
 } from '../db/repository.js';
 import { registerCharacterRoutes } from './characters.js';
 
@@ -20,6 +21,27 @@ class MemorySessions implements AuthSessionStore {
 class MemoryRepository implements GameRepository {
   readonly characters = new Map<string, CharacterRecord>();
   next = 0;
+  async applyEquipment(): Promise<void> {
+    // Equipamento não passa por este arquivo.
+  }
+  async createItemInstance(instance: {
+    itemId: string; ownerCharacterId: string; origin: string; quantity?: number;
+  }): Promise<ItemInstanceRecord> {
+    // Item não passa por este arquivo. Um `throw` seria pior que um valor: ele transformaria
+    // um método nunca chamado numa falha em teste de outra coisa.
+    return {
+      id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
+      quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
+      createdAt: new Date(0),
+    };
+  }
+  async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
+  async saveBotConfig(characterId: string, config: unknown): Promise<void> {
+    const character = this.characters.get(characterId);
+    if (character !== undefined) this.characters.set(characterId, { ...character, botConfig: config });
+  }
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
@@ -31,7 +53,7 @@ class MemoryRepository implements GameRepository {
     const character: CharacterRecord = {
       id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
-      state: 'city', sessionId: null, createdAt: now,
+      state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: now,
     };
     this.characters.set(character.id, character);
     return character;

@@ -5,6 +5,10 @@ import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
+import { Inventory } from './inventory.js';
+import type { InventoryState } from './inventory.js';
+import { Skills } from './skills.js';
+import type { SkillsState } from './skills.js';
 
 export interface Point {
   readonly x: number;
@@ -49,9 +53,41 @@ export interface CharacterState {
    * quem restaura repõe a partir do conteúdo.
    */
   readonly stepDurationMs?: number;
+  /**
+   * Gold que o personagem TINHA ao entrar na sessão (FUN-77). Vem do ticket, nunca do cliente
+   * (invariante 4), e não é escrito aqui: o que a sessão movimenta é `goldDelta`.
+   *
+   * Existe porque gastar exige saber o saldo, e o saldo é `gold + goldDelta`. Sem ele, uma
+   * poção de 45 seria comprada por quem tem 10 e o delta ficaria negativo — o ledger
+   * corrigiria depois, com o jogador já tendo bebido.
+   *
+   * Opcional: snapshot gravado antes desta issue não tem a chave, e ausente vira zero. A
+   * degradação erra para o lado seguro — quem retoma uma sessão antiga não consegue gastar,
+   * em vez de gastar o que não tem.
+   */
+  readonly gold?: number;
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
+  /**
+   * Skills que sobem por uso (§9.4, FUN-75). Ausente é snapshot ou personagem anterior a
+   * elas — e aí toda skill vale o nível inicial do conteúdo, que é onde um personagem novo
+   * começa. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
+   */
+  readonly skills?: SkillsState;
+  /**
+   * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
+   *
+   * Opcional: personagem e snapshot anteriores ao inventário não têm a chave, e zero seria
+   * "não carrega nada" — o que travaria a mochila de quem já jogava. Quem restaura repõe a
+   * partir do conteúdo, como faz com `stepDurationMs`.
+   */
+  readonly capacity?: number;
+  /**
+   * Mochila e equipamento (FUN-82). Ausente é personagem sem item nenhum, que é o normal até a
+   * primeira issue que DÁ item a alguém.
+   */
+  readonly inventory?: InventoryState;
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
   readonly cooldowns: Partial<CooldownState>;
@@ -69,9 +105,16 @@ export class CharacterRuntime {
   vocationId: string | null;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
+  /** Saldo de entrada. Ver `CharacterState.gold` — a sessão lê, nunca escreve. */
+  readonly gold: number;
   goldDelta: number;
   alive: boolean;
   stepDurationMs: number;
+  /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
+  readonly skills: Skills;
+  capacity: number;
+  /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
+  readonly inventory: Inventory;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
@@ -88,11 +131,15 @@ export class CharacterRuntime {
     this.vocationId = state.vocationId ?? null;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
+    this.gold = state.gold ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
     // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
     // duração zero nunca chega ao fio — o protocolo exige duração positiva.
     this.stepDurationMs = state.stepDurationMs ?? 0;
+    this.skills = Skills.fromState(state.skills);
+    this.capacity = state.capacity ?? 0;
+    this.inventory = Inventory.fromState(state.inventory);
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
@@ -111,8 +158,12 @@ export class CharacterRuntime {
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       stepDurationMs: this.stepDurationMs,
+      gold: this.gold,
       goldDelta: this.goldDelta,
       alive: this.alive,
+      skills: this.skills.getState(),
+      capacity: this.capacity,
+      inventory: this.inventory.getState(),
       contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
     };

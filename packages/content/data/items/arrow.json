@@ -1,0 +1,11 @@
+{
+  "id": "arrow",
+  "name": "Arrow",
+  "appearanceId": 3447,
+  "kind": "ammunition",
+  "slot": "ammo",
+  "weight": 0.7,
+  "stackable": true,
+  "attack": 7,
+  "_open": "Munição é o caso de item EMPILHÁVEL, e existe no catálogo antes de haver arma de alcance para disparar. O preço dela é [ABERTO] no §20.2, junto com o resto da munição."
+}

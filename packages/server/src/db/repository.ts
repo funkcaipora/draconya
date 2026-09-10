@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters } from './schema.js';
+import { accounts, characters, itemInstances } from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -24,6 +24,31 @@ export interface CharacterRecord {
   readonly staminaUpdatedAt: Date;
   readonly state: string;
   readonly sessionId: string | null;
+  /**
+   * A configuração do bot, como veio do banco (FUN-81). `unknown` de propósito: quem valida
+   * contra o vocabulário é `botConfigSchema`, e o repositório não é lugar de conhecer regra de
+   * jogo. `null` é personagem que nunca configurou.
+   */
+  readonly botConfig: unknown;
+  /** Skills que sobem por uso (§9.4, FUN-75). A coluna já existia; o que faltava era quem a usasse. */
+  readonly skills: unknown;
+  readonly createdAt: Date;
+}
+
+/**
+ * Uma instância de item no banco (FUN-76).
+ *
+ * `itemId` é do CATÁLOGO, que é conteúdo — o repositório não sabe o que uma espada faz, só que
+ * esta linha existe e é de alguém.
+ */
+export interface ItemInstanceRecord {
+  readonly id: string;
+  readonly itemId: string;
+  readonly ownerCharacterId: string;
+  readonly quantity: number;
+  readonly origin: string;
+  /** Em que slot está vestida, ou `null` para "na mochila" (FUN-82). */
+  readonly equippedSlot: string | null;
   readonly createdAt: Date;
 }
 
@@ -49,6 +74,44 @@ export interface GameRepository {
     characterId: string,
     isCharacterActive?: CharacterActiveCheck,
   ): Promise<DeleteCharacterResult>;
+  /**
+   * Grava a configuração do bot (FUN-81).
+   *
+   * Escrita CEGA, sem ler antes: "o jogador salvou isto" é última-escrita-vence por natureza,
+   * e um read-modify-write aqui criaria uma corrida entre duas abas do mesmo jogador para
+   * resolver um conflito que não existe — a configuração é substituída inteira, nunca mesclada.
+   *
+   * Por isso também não participa da trava de linha da emissão de ticket (FUN-53): é um
+   * `UPDATE` de uma instrução, que não segura a linha nem depende de nada que esteja nela.
+   */
+  saveBotConfig(characterId: string, config: unknown): Promise<void>;
+  /**
+   * Cria uma instância de item para um personagem (FUN-76).
+   *
+   * **Nada no jogo chama isto ainda**, e é deliberado: loot de item, inventário e caixa de loot
+   * são as issues seguintes do marco. O que existe aqui é a identidade — e ela precisa existir
+   * antes de a primeira instância nascer, porque proveniência que começa tarde não vale para o
+   * que veio antes.
+   */
+  createItemInstance(instance: {
+    itemId: string;
+    ownerCharacterId: string;
+    origin: string;
+    quantity?: number;
+  }): Promise<ItemInstanceRecord>;
+  /** O que este personagem tem. É a consulta que o índice por dono existe para servir. */
+  listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]>;
+  /**
+   * Aplica o layout de equipamento que a sessão registrou (FUN-82).
+   *
+   * `equipped` é `slot → instanceId`, ABSOLUTO: o que não está nele volta para a mochila. É a
+   * mesma forma das skills, e pela mesma razão — a sessão sabe o estado final, e mandar delta
+   * exigiria que os dois lados concordassem sobre o inicial.
+   *
+   * Tudo escopado por `ownerCharacterId`: um extrato não move item de outra pessoa nem que
+   * traga o id dela.
+   */
+  applyEquipment(characterId: string, equipped: Readonly<Record<string, string>>): Promise<void>;
 }
 
 export class DrizzleGameRepository implements GameRepository {
@@ -140,6 +203,77 @@ export class DrizzleGameRepository implements GameRepository {
     });
   }
 
+  async createItemInstance(instance: {
+    itemId: string;
+    ownerCharacterId: string;
+    origin: string;
+    quantity?: number;
+  }): Promise<ItemInstanceRecord> {
+    const [row] = await this.#db
+      .insert(itemInstances)
+      .values({
+        id: randomUUID(),
+        itemId: instance.itemId,
+        ownerCharacterId: instance.ownerCharacterId,
+        origin: instance.origin,
+        ...(instance.quantity === undefined ? {} : { quantity: instance.quantity }),
+      })
+      .returning();
+    return row as ItemInstanceRecord;
+  }
+
+  async listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]> {
+    return this.#db
+      .select()
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId))
+      // Ordem estável: sem ela, duas aberturas do inventário desenham a mesma coisa em ordens
+      // diferentes, e o jogador vê os itens dançando sem ter mexido em nada.
+      .orderBy(asc(itemInstances.createdAt), asc(itemInstances.id));
+  }
+
+  async applyEquipment(
+    characterId: string, equipped: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    const wanted = new Map(Object.entries(equipped).map(([slot, id]) => [id, slot]));
+    await this.#db.transaction(async (tx) => {
+      const owned = await tx
+        .select({ id: itemInstances.id, equippedSlot: itemInstances.equippedSlot })
+        .from(itemInstances)
+        .where(eq(itemInstances.ownerCharacterId, characterId));
+
+      // DESEQUIPA PRIMEIRO, e a ordem é a razão de isto ser uma transação com dois passos em
+      // vez de um `update` por linha: o índice único recusa duas peças no mesmo slot, e trocar
+      // A por B esbarraria nele se B entrasse antes de A sair.
+      for (const row of owned) {
+        if (row.equippedSlot === null || wanted.get(row.id) === row.equippedSlot) continue;
+        await tx.update(itemInstances)
+          .set({ equippedSlot: null })
+          .where(eq(itemInstances.id, row.id));
+      }
+      for (const row of owned) {
+        const slot = wanted.get(row.id);
+        if (slot === undefined || slot === row.equippedSlot) continue;
+        await tx.update(itemInstances)
+          .set({ equippedSlot: slot })
+          .where(eq(itemInstances.id, row.id));
+      }
+    });
+  }
+
+  /**
+   * Grava a configuração do bot. Ver o contrato em `GameRepository.saveBotConfig`.
+   *
+   * Só atualiza personagem NÃO apagado: gravar num soft-deleted seria escrever num personagem
+   * que já não existe para o resto do sistema.
+   */
+  async saveBotConfig(characterId: string, config: unknown): Promise<void> {
+    await this.#db
+      .update(characters)
+      .set({ botConfig: config })
+      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)));
+  }
+
   async softDeleteCharacter(
     accountId: string,
     characterId: string,
@@ -221,6 +355,8 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     staminaUpdatedAt: row.staminaUpdatedAt,
     state: row.state,
     sessionId: row.sessionId,
+    botConfig: row.botConfig,
+    skills: row.skills,
     createdAt: row.createdAt,
   };
 }

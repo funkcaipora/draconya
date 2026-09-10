@@ -8,6 +8,7 @@ import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import { SessionHost } from './host.js';
+import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
 import { createCitySessionFactory } from './sessions.js';
@@ -59,14 +60,23 @@ function buildHost(
     restoreSession?: (snapshot: SessionSnapshot) => Session | null;
     buildSession?: (request: { to: string }, from: Session) => Session | null;
     metrics?: GameMetrics;
+    // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
+    // desse tipo é o que `exactOptionalPropertyTypes` recusa.
+    acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
+    itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
+    saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
+    level?: number;
   } = {},
 ) {
   const sessions: Session[] = [];
+  // `level` é do PERSONAGEM de teste, não do host: tirar do espalhamento é o que impede
+  // `exactOptionalPropertyTypes` de recusar uma chave que `SessionHostOptions` não tem.
+  const { level, ...hostOptions } = options;
   const host = new SessionHost({
     nodeId: 'n1',
     contentVersion: 'v-test',
     logger,
-    ...options,
+    ...hostOptions,
     createSession: (characterId) => {
       const session = new Session({
         id: `s-${characterId}`,
@@ -79,7 +89,7 @@ function buildHost(
         id: characterId,
         position: { x: 0, y: 0, z: 7 },
         health: 100, maxHealth: 100, mana: 10, maxMana: 10,
-        level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        level: level ?? 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
       }));
       sessions.push(session);
       return session;
@@ -1475,5 +1485,207 @@ describe('say (FUN-58)', () => {
     host.flush();
 
     expect(chats(socket)).toEqual([{ type: 'chat-message', channel: 'local', author: 'p1', text: 'oi' }]);
+  });
+});
+
+describe('configuração do bot pelo socket (FUN-81)', () => {
+  const CONFIG = {
+    version: 1,
+    heal: [{
+      when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
+    }],
+    potion: [], attack: [], rune: [], support: [],
+  };
+
+  /** Um validador de teste: aceita o que tiver `version`, recusa o resto com motivo. */
+  const accepting: NonNullable<SessionHostOptions['acceptBotConfig']> = (raw, level) => {
+    const config = raw as { version?: number; avancado?: boolean };
+    if (config?.version !== 1) return { ok: false, reason: 'configuração fora do vocabulário' };
+    if (config.avancado === true && level < 50) {
+      return { ok: false, reason: 'bot avançado exige level 50' };
+    }
+    return { ok: true, config: config as never };
+  };
+
+  const mensagens = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+
+  it('aceita, confirma ao jogador e PERSISTE', () => {
+    const saved: Array<{ characterId: string; config: unknown }> = [];
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      acceptBotConfig: accepting,
+      saveBotConfig: async (characterId, config) => { saved.push({ characterId, config }); },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    host.flush();
+
+    expect(saved).toEqual([{ characterId: 'p1', config: CONFIG }]);
+    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'info'))
+      .toBe(true);
+  });
+
+  it('recusa com o MOTIVO, e não persiste nada', () => {
+    // O jogador precisa saber o que corrigir. E uma configuração recusada que fosse gravada
+    // voltaria na próxima conexão para ser recusada de novo, para sempre.
+    const saved: unknown[] = [];
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      acceptBotConfig: accepting,
+      saveBotConfig: async (_id, config) => { saved.push(config); },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'bot-config', config: { version: 99 } });
+    host.flush();
+
+    expect(saved).toHaveLength(0);
+    const aviso = mensagens(socket).find((m) => m.type === 'system-message' && m.level === 'warning');
+    expect(aviso?.type === 'system-message' && aviso.text).toContain('vocabulário');
+  });
+
+  it('o gate de level recusa o bot avançado, e o mesmo config passa no 50', () => {
+    // §13.2 pelo caminho de verdade: o level vem do personagem da sessão, nunca da mensagem.
+    const { ruleset } = countingRuleset();
+    const baixo = buildHost(ruleset, { acceptBotConfig: accepting, level: 49 });
+    const socketBaixo = new FakeSocket();
+    const viewerBaixo = baixo.host.attach(socketBaixo, 'p1');
+    baixo.host.handle(viewerBaixo, { type: 'bot-config', config: { version: 1, avancado: true } });
+    baixo.host.flush();
+    const aviso = mensagens(socketBaixo)
+      .find((m) => m.type === 'system-message' && m.level === 'warning');
+    expect(aviso?.type === 'system-message' && aviso.text).toContain('level 50');
+
+    const alto = buildHost(ruleset, { acceptBotConfig: accepting, level: 50 });
+    const socketAlto = new FakeSocket();
+    const viewerAlto = alto.host.attach(socketAlto, 'p1');
+    alto.host.handle(viewerAlto, { type: 'bot-config', config: { version: 1, avancado: true } });
+    alto.host.flush();
+    expect(mensagens(socketAlto).some((m) => m.type === 'system-message' && m.level === 'info'))
+      .toBe(true);
+  });
+
+  it('falha ao PERSISTIR não desfaz o que já vale para o jogador', () => {
+    // Aplicar antes de gravar é deliberado: uma falha do Postgres não pode fazer o jogador
+    // ficar sem a cura que acabou de configurar. O preço é a configuração não voltar na
+    // próxima conexão, e esse é o lado certo para errar.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      acceptBotConfig: accepting,
+      saveBotConfig: async () => { throw new Error('postgres caiu'); },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    expect(() => host.handle(viewer, { type: 'bot-config', config: CONFIG })).not.toThrow();
+    host.flush();
+    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'info'))
+      .toBe(true);
+  });
+
+  it('host montado SEM validador avisa, em vez de aceitar em silêncio', () => {
+    // Aceitar sem julgar seria pior que recusar: o jogador acharia que configurou.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+
+    host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    host.flush();
+
+    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'error'))
+      .toBe(true);
+  });
+});
+
+describe('equipar pelo socket (FUN-82)', () => {
+  const catalogo = new Map([
+    ['sword', {
+      id: 'sword', name: 'Sword', appearanceId: 1, kind: 'weapon' as const, slot: 'hand' as const,
+      weight: 10, stackable: false, attack: 20, armor: 0,
+      requires: { level: 20 },
+    }],
+  ]);
+  const mensagens = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+
+  const comItem = (level: number) => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { itemCatalog: catalogo, level });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+    return { host, viewer, socket, hero };
+  };
+
+  it('veste, e o sucesso NÃO vira mensagem', () => {
+    // Confirmar cada clique com uma linha de chat entulharia a tela. O que o jogador vê é o
+    // item no lugar — e isso é a UI (M10), não uma mensagem de sistema.
+    const { host, viewer, socket, hero } = comItem(20);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('i1');
+    expect(mensagens(socket)).toHaveLength(0);
+  });
+
+  it('recusa por level com o MOTIVO, e o item continua na mochila', () => {
+    // A recusa do `sim` é tipada justamente para virar uma frase; "não foi possível" é o que
+    // faz alguém abrir um chamado.
+    const { host, viewer, socket, hero } = comItem(19);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(hero.inventory.backpack).toHaveLength(1);
+    const aviso = mensagens(socket)[0];
+    expect(aviso?.type === 'system-message' && aviso.text).toContain('level');
+  });
+
+  it('recusa slot que não existe, sem tocar em nada', () => {
+    // O slot chega como string do cliente e é conferido contra o CONTEÚDO, como a dificuldade
+    // de hunt: repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+    const { host, viewer, socket } = comItem(20);
+
+    host.handle(viewer, { type: 'unequip', slot: 'rabo' });
+    host.flush();
+
+    expect(mensagens(socket)).toHaveLength(1);
+  });
+
+  it('desequipar devolve para a mochila', () => {
+    const { host, viewer, hero } = comItem(20);
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.handle(viewer, { type: 'unequip', slot: 'hand' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(hero.inventory.backpack.map((i) => i.instanceId)).toEqual(['i1']);
+  });
+
+  it('host montado SEM catálogo recusa em vez de vestir no escuro', () => {
+    // Um host sem conteúdo não sabe o que é uma espada. Vestir mesmo assim daria atributo de
+    // item que ele não conhece.
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(mensagens(socket)).toHaveLength(1);
   });
 });

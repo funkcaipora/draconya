@@ -39,6 +39,45 @@ export interface InitialCharacter {
   readonly staminaMs?: number;
   readonly staminaUpdatedAtMs?: number;
   /**
+   * Gold da tabela, para a sessão saber o saldo antes de gastar (FUN-77).
+   *
+   * Vem do banco pelo mesmo caminho que level e XP, e pela mesma razão: nada que o cliente
+   * manda participa da criação da sessão (invariante 4). Um saldo vindo do socket seria poção
+   * de graça, e não haveria como distinguir isso de um jogador rico.
+   *
+   * Ausente é ticket emitido por um `api` antigo, durante deploy em rolagem: a sessão entra
+   * com zero e recusa gasto. Degrada para o lado seguro — não gastar o que não se sabe ter.
+   */
+  readonly gold?: number;
+  /**
+   * A configuração do bot, crua e ainda NÃO validada (FUN-81).
+   *
+   * Vem do banco pelo mesmo caminho que level, XP e gold — o `api` lê a linha, e nada que o
+   * cliente manda entra aqui (invariante 4). Chega como `unknown` de propósito: quem valida
+   * contra o vocabulário é o `game`, com `botConfigSchema`, no instante de compilar.
+   *
+   * O ticket é o caminho de LEITURA da configuração; a escrita vai pelo socket, e as duas não
+   * se cruzam. Ausente é personagem sem bot, que é o normal até ele configurar um.
+   */
+  readonly botConfig?: unknown;
+  /**
+   * As skills do personagem (§9.4, FUN-75), cruas.
+   *
+   * Precisam entrar na sessão, e não só sair dela: a skill escala o dano DURANTE a hunt, e um
+   * personagem que entrasse sempre no nível inicial bateria errado a hunt inteira.
+   *
+   * `unknown` porque a forma é do `sim`; o serviço de ticket não é lugar de conhecer domínio.
+   */
+  readonly skills?: unknown;
+  /**
+   * O que o personagem tem (§21.4, FUN-82), cru.
+   *
+   * Precisa entrar na sessão porque a arma equipada decide o dano e a mochila decide o que
+   * cabe. Um personagem que entrasse de mãos vazias bateria com o desarmado a hunt inteira,
+   * carregando uma espada que o banco diz que ele tem.
+   */
+  readonly inventory?: unknown;
+  /**
    * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
    * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
@@ -392,7 +431,28 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ? { staminaMs, staminaUpdatedAtMs }
     : {};
   const name = initial['name'];
-  return { level, xp, ...stamina, ...(typeof name === 'string' && name.length > 0 ? { name } : {}) };
+  const gold = initial['gold'];
+  return {
+    level,
+    xp,
+    ...stamina,
+    ...(typeof name === 'string' && name.length > 0 ? { name } : {}),
+    // Gold inválido vira AUSENTE, não zero implícito com cara de valor: o resultado é o mesmo
+    // saldo zero, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
+    ...(typeof gold === 'number' && Number.isSafeInteger(gold) && gold >= 0 ? { gold } : {}),
+    // A configuração do bot passa OPACA. Validar aqui exigiria o vocabulário dentro do
+    // serviço de ticket, e o dono da validação é quem vai compilar — o `game`. O que este
+    // parse garante é só que existe algo, não o quê.
+    ...(initial['botConfig'] === undefined || initial['botConfig'] === null
+      ? {}
+      : { botConfig: initial['botConfig'] }),
+    ...(typeof initial['skills'] === 'object' && initial['skills'] !== null
+      ? { skills: initial['skills'] }
+      : {}),
+    ...(typeof initial['inventory'] === 'object' && initial['inventory'] !== null
+      ? { inventory: initial['inventory'] }
+      : {}),
+  };
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

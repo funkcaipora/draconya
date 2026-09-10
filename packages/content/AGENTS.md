@@ -82,6 +82,47 @@ por isso tem lugar próprio, em vez de um `itemId: "gold-coin"` que o código te
 pelo nome. `items` só aceita lista vazia enquanto não houver catálogo de itens; `buildContent`
 recusa o resto, porque creditar um item fantasma no primeiro abate é pior que não subir.
 
+## Magia e supply (FUN-74, FUN-77)
+
+`spells/*.json` e `supplies/*.json` são catálogos como os outros: **a engine é dona do
+mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura e
+quanto custa em gold — nada disso mora em `sim`.
+
+O `effect` é uma união discriminada por `kind`, fechada como o vocabulário do bot e pela mesma
+razão: o `sim` só executa o que conhece, e uma magia com efeito desconhecido é recusada no boot
+em vez de virar um slot morto que ninguém explica.
+
+**Supply não é item** (§20.1). Ele tem `price` e não tem peso, slot nem instância — usar debita
+gold direto. É por isso que ele tem pasta própria em vez de esperar o catálogo de itens, que é
+M8. `validateBotConfig` cruza `spellId` e `supplyId` contra estes dois catálogos; `itemId` é
+sempre recusado, pela mesma razão que `loot.items` só aceita lista vazia.
+
+## Skills (FUN-75)
+
+`skills/*.json` diz quais skills existem, o que alimenta cada uma, quanto custa cada nível e
+quanto ela acrescenta ao golpe. §9.4 decide que skill sobe por USO; os números não vêm do PRD e
+entram com `_open`.
+
+Uma coisa aqui é **mecanismo, não número**: `spell-cast` rende por **mana gasta**, não por
+lançamento. Por lançamento, a forma ótima de subir magia seria lançar mil vezes a magia mais
+barata. É por isso que o Tibia faz assim, e é por isso que a união de `gain` é discriminada em
+vez de ser um campo `points` só.
+
+## Itens (FUN-76)
+
+`items/*.json` é a DEFINIÇÃO; a instância é linha no Postgres (`item_instance`), e a divisão é o
+ponto. Aqui ficam id, `appearanceId`, tipo, slot, peso, atributos, requisitos e se empilha.
+
+**Atributos base são fixos** (§21.2). Não há rolagem por instância: duas espadas do mesmo id são
+idênticas, e item melhor é item **diferente**. Isso apaga toda a matemática de variação por
+instância — junto com a pergunta "por que a minha é pior".
+
+`loot.items` do monstro é conferido contra este catálogo. Antes ele era recusado por princípio
+porque catálogo não existia; agora o que decide é a referência existir.
+
+`charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
+para o catálogo não mudar quando a mecânica existir.
+
 ## Como testar
 
 ```

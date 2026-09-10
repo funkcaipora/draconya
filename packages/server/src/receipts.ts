@@ -17,7 +17,7 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import type { Aggregates, EndReason, NotableEvent } from '@draconya/sim';
+import type { Aggregates, EndReason, NotableEvent, SkillsState } from '@draconya/sim';
 
 export interface SessionReceipt {
   readonly sessionId: string;
@@ -38,6 +38,28 @@ export interface SessionReceipt {
    */
   readonly staminaMs?: number;
   readonly staminaUpdatedAtMs?: number;
+  /**
+   * As skills no fim da sessão (§9.4, FUN-75).
+   *
+   * Valor ABSOLUTO, como a stamina — e sem precisar de guarda de instante, porque skill é
+   * monotônica: o ledger funde ficando com o maior de cada uma, e um extrato antigo
+   * processado fora de ordem não tem como rebaixar nada.
+   *
+   * Absoluto e não delta porque a sessão já entrou com o valor de verdade (ele vem no
+   * ticket): somar delta por cima do que está no banco daria o mesmo número, com uma chance a
+   * mais de contar duas vezes.
+   */
+  readonly skills?: SkillsState;
+  /**
+   * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
+   *
+   * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
+   * lados concordassem sobre o inicial. O que não estiver aqui volta para a mochila.
+   *
+   * **Item não muda de dono pela sessão** — não há troca nem venda dentro da hunt. O que muda é
+   * onde ele está, e é só isso que atravessa.
+   */
+  readonly equipment?: Readonly<Record<string, string>>;
 }
 
 export interface ReceiptStoreOptions {
@@ -196,6 +218,17 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // diz nada. Meio par é dado corrompido, e a resposta é ignorar o par inteiro.
     ...(typeof value['staminaMs'] === 'number' && typeof value['staminaUpdatedAtMs'] === 'number'
       ? { staminaMs: value['staminaMs'], staminaUpdatedAtMs: value['staminaUpdatedAtMs'] }
+      : {}),
+    // Skills (FUN-75). Esta função é lista de PERMISSÃO — reconstrói campo a campo em vez de
+    // espalhar o que veio —, e campo novo que não entra aqui some no caminho de volta sem
+    // erro nenhum. Foi o que aconteceu na primeira vez que escrevi isto.
+    ...(typeof value['skills'] === 'object' && value['skills'] !== null
+      ? { skills: value['skills'] as SkillsState }
+      : {}),
+    // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
+    // de volta sem erro nenhum. Já aconteceu com as skills.
+    ...(typeof value['equipment'] === 'object' && value['equipment'] !== null
+      ? { equipment: value['equipment'] as Record<string, string> }
       : {}),
   };
 }
