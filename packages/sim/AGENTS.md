@@ -101,6 +101,12 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   nascimento, e a comparação é estrita — o campeão só cai para quem ganha de verdade. Trocar por
   `<=` faz duas execuções da mesma semente divergirem assim que dois monstros empatarem, que é o
   caso comum: monstro recém-nascido tem sempre a vida cheia.
+- **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
+  `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
+  `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.
+- **`out-of-gold` olha o SALDO, nunca o delta.** Delta negativo é qualquer um que gastou uma
+  poção; saldo zero é quem não consegue comprar a próxima. E `hp-below` compara ESTRITO: com
+  `<=`, "sair abaixo de 100%" encerraria a hunt de quem entrou de vida cheia.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.

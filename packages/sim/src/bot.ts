@@ -13,7 +13,9 @@
 // magia (M7) e o de supply (M8), por uma interface — não por um `if` aqui dentro que cresce a
 // cada categoria nova.
 
-import type { BotAction, BotCategory, BotCondition, BotConfig, Content } from '@draconya/content';
+import type {
+  BotAction, BotCategory, BotCondition, BotConfig, BotExitRule, Content,
+} from '@draconya/content';
 import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { compileTargeting } from './targeting.js';
@@ -72,6 +74,14 @@ export interface CompiledBot {
    * as regras de um jogador e o targeting de outro.
    */
   readonly targeting: Targeting;
+  /**
+   * As regras de saída, ainda CRUAS (FUN-86).
+   *
+   * As outras duas peças saem daqui compiladas, e esta não: o predicado de uma regra de saída
+   * lê a `HuntView`, que é do ruleset de hunt — e `bot.ts` não conhece ruleset nenhum, nem
+   * pode, porque o mesmo bot vai valer para quest e boss. Quem compila é quem tem a view.
+   */
+  readonly exit: readonly BotExitRule[];
   /**
    * A primeira regra válida da categoria, ou `null` (§13.4).
    *
@@ -163,6 +173,7 @@ export function compileBot(config: BotConfig, _content: Content): CompiledBot {
   return {
     categories,
     targeting: compileTargeting(config.targeting),
+    exit: config.exit,
     select(category, view) {
       const rules = categories.get(category);
       if (rules === undefined) return null;

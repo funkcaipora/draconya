@@ -73,6 +73,14 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
       }
     });
   }
+  // Regra de saída também tem teto (FUN-86). Ela não é categoria — não age, encerra —, mas a
+  // lista é avaliada a cada 250 ms e nada no schema impediria mil regras salvas.
+  if (config.exit.length > limits.slots.exit) {
+    problems.push(
+      `${config.exit.length} regras de saída e só ${limits.slots.exit} slots`,
+    );
+  }
+
   // Targeting (FUN-85): os ids de `prioritize` e `ignore` são de MONSTRO, e valem contra o
   // catálogo inteiro — não contra a composição de uma hunt. A configuração é do personagem e
   // sobrevive à troca de hunt; recusar "priorize dragão" porque a hunt de ratos não tem dragão

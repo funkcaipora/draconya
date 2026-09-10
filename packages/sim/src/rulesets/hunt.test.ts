@@ -8,9 +8,9 @@ import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, Session } from '../session.js';
 import type { SessionSnapshot } from '../session.js';
 import {
-  HuntRuleset, changeDifficulty, createHuntSession, huntRulesetFromSnapshot,
+  HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
-import type { HuntExitRule } from './hunt.js';
+import type { HuntExitRule, HuntView } from './hunt.js';
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
 // num mapa assim dá para dizer, olhando, onde cada criatura está — e um teste de simulação
@@ -871,7 +871,9 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 import { compileBot } from '../bot.js';
 import type { BotAction, BotConfig } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION, botConfigSchema, botTargetingSchema } from '@draconya/content';
+import {
+  BOT_VOCABULARY_VERSION, botConfigSchema, botExitRuleSchema, botTargetingSchema,
+} from '@draconya/content';
 
 const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
   // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
@@ -1507,5 +1509,206 @@ describe('a equivalência entre taxas vale para a postura também', () => {
     // E o cenário exercitou o que diz exercitar: um empate de zeros passaria por equivalência
     // sem provar nada, que foi como a FUN-67 atravessou um teste vazio.
     expect(rapido.kills).toBeGreaterThan(0);
+  });
+});
+
+// --- regras de saída do jogador (FUN-86) -----------------------------------------------------
+
+/** Uma hunt sem monstro nenhum: aqui o assunto é quando ela ENCERRA, não o que acontece nela. */
+const withExit = (
+  exit: readonly Record<string, unknown>[],
+  over: { health?: number; gold?: number; goldDelta?: number } = {},
+) => {
+  const loaded = buildContent(raw({
+    routes: [{ ...route, spawnPoints: [] }],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+  }));
+  const session = createHuntSession({
+    id: 'saida', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    // Pelo schema, como a configuração do jogador chega: é ele que valida o percentual e
+    // recusa um `kind` que o vocabulário não conhece.
+    bot: compileBot(botConfig({ exit: exit.map((r) => botExitRuleSchema.parse(r)) }), loaded),
+  });
+  const stats = statsForLevel(1, null, loaded.progression);
+  const hero = new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: over.gold ?? 500, goldDelta: over.goldDelta ?? 0, alive: true, cooldowns: {},
+  });
+  session.enter(hero);
+  return { session, hero };
+};
+
+/** O motivo que o extrato registrou, ou `null`. É a resposta a "por que minha hunt acabou?". */
+const motivo = (session: Session): string | null =>
+  session.notableEvents.find((e) => e.type === 'exit-rule')?.detail ?? null;
+
+describe('regras de saída (FUN-86)', () => {
+  it('sem regra nenhuma, a hunt não encerra sozinha', () => {
+    // O default é lista vazia, e lista vazia tem que ser o comportamento de antes desta issue.
+    const { session } = withExit([], { health: 1 });
+    run(session, 10_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('hp-below encerra por `exit-rule`, e o extrato diz QUAL regra foi', () => {
+    // "Sua hunt encerrou por uma regra de saída", sem dizer qual, é a mensagem que faz o
+    // jogador desconfiar do bot que ele mesmo configurou.
+    const { session } = withExit([{ kind: 'hp-below', percent: 50 }], { health: 100 });
+
+    run(session, 5_000, 100);
+
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('hp-below-50');
+  });
+
+  it('o percentual entra no id: duas regras de HP são distinguíveis no extrato', () => {
+    const { session } = withExit([{ kind: 'hp-below', percent: 20 }], { health: 100 });
+    run(session, 5_000, 100);
+    expect(motivo(session)).toBe('hp-below-20');
+  });
+
+  it('hp-below NÃO dispara acima do limite', () => {
+    // 60% de vida contra uma regra de 50%: a hunt continua. O `<` estrito importa — com `<=`,
+    // uma regra de 100% encerraria a hunt de quem está com a vida cheia.
+    const stats = statsForLevel(1, null, buildContent(raw()).progression);
+    const { session } = withExit(
+      [{ kind: 'hp-below', percent: 50 }], { health: Math.round(stats.maxHealth * 0.6) },
+    );
+    run(session, 5_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('out-of-gold encerra quando o saldo zera — e é SALDO, não delta', () => {
+    // Entrou com 40 e gastou 40 na sessão: o delta é -40 e o saldo é zero. Olhar só para o
+    // delta faria a regra disparar em quem tem mil de gold e gastou um.
+    const { session } = withExit([{ kind: 'out-of-gold' }], { gold: 40, goldDelta: -40 });
+    run(session, 5_000, 100);
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('out-of-gold');
+  });
+
+  it('out-of-gold não dispara com saldo positivo, mesmo tendo gastado', () => {
+    const { session } = withExit([{ kind: 'out-of-gold' }], { gold: 500, goldDelta: -400 });
+    run(session, 5_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('SEM a regra, gold zerado deixa a hunt correr — é o §20.3 da FUN-77', () => {
+    // As duas metades do §20.3 num teste só: sem a regra o personagem fica, sem conseguir
+    // pagar supply, e pode morrer. Com ela (teste acima), sai.
+    const { session } = withExit([], { gold: 0, goldDelta: 0 });
+    run(session, 10_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('party-member-lost é INERTE numa hunt de um, e nunca dispara sozinha', () => {
+    // Party é F3. A regra entra no vocabulário agora para a configuração salva não mudar de
+    // forma depois — e um jogador que a marque hoje não pode ver a hunt encerrar por causa
+    // dela. É o teste que a issue pede explicitamente.
+    const { session } = withExit([{ kind: 'party-member-lost' }], { health: 1 });
+    run(session, 30_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('a primeira regra que vale encerra, e é a dela que vai para o extrato', () => {
+    const { session } = withExit(
+      [{ kind: 'out-of-gold' }, { kind: 'hp-below', percent: 90 }],
+      { health: 10, gold: 0 },
+    );
+    run(session, 5_000, 100);
+    expect(motivo(session)).toBe('out-of-gold');
+  });
+
+  it('encerra por `exit-rule`, nunca por `manual-exit` — o extrato tem que dizer a verdade', () => {
+    // O jogador não pediu para sair; a regra dele decidiu. Trocar os dois é o extrato mentindo
+    // sobre quem encerrou, e é o que a issue proíbe em letra.
+    const { session } = withExit([{ kind: 'hp-below', percent: 99 }], { health: 1 });
+    run(session, 5_000, 100);
+    expect(session.ended).toBe('exit-rule');
+  });
+});
+
+describe('os predicados de saída, isolados (FUN-86)', () => {
+  // Testar a closure direto é o que permite montar casos que a hunt inteira não produz — um
+  // participante morto ao lado de um vivo, por exemplo, que numa hunt de um é impossível
+  // porque a morte do único personagem encerra a sessão antes.
+  const view = (participants: readonly CharacterRuntime[]): HuntView => ({
+    elapsedMs: 0,
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    participants,
+    monstersAlive: 0,
+  });
+
+  const alguem = (over: Partial<{
+    id: string; health: number; maxHealth: number; gold: number; goldDelta: number; alive: boolean;
+  }> = {}): CharacterRuntime => new CharacterRuntime({
+    id: over.id ?? 'hero', position: { x: 1, y: 1, z: 7 },
+    health: over.health ?? 100, maxHealth: over.maxHealth ?? 100,
+    mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+    staminaMs: null, staminaUpdatedAtMs: 0,
+    gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
+    alive: over.alive ?? true, cooldowns: {},
+  });
+
+  const only = (rule: Record<string, unknown>) =>
+    (compileExitRules([botExitRuleSchema.parse(rule)])[0] as HuntExitRule);
+
+  it('hp-below compara ESTRITAMENTE: 100% de vida não dispara uma regra de 100%', () => {
+    // Com `<=`, quem configurasse "sair abaixo de 100%" veria a hunt encerrar no instante em
+    // que entrasse — de vida cheia, sem ter tomado um golpe.
+    const cheio = only({ kind: 'hp-below', percent: 100 });
+    expect(cheio.when(view([alguem({ health: 100, maxHealth: 100 })]))).toBe(false);
+    expect(cheio.when(view([alguem({ health: 99, maxHealth: 100 })]))).toBe(true);
+  });
+
+  it('hp-below no limite exato não dispara', () => {
+    const meio = only({ kind: 'hp-below', percent: 50 });
+    expect(meio.when(view([alguem({ health: 50, maxHealth: 100 })]))).toBe(false);
+    expect(meio.when(view([alguem({ health: 49, maxHealth: 100 })]))).toBe(true);
+  });
+
+  it('hp-below não dispara sobre personagem morto — a morte já encerrou por conta dela', () => {
+    // Sem isto, a mesma sessão registraria morte E regra de saída, e o extrato teria dois
+    // motivos para um encerramento só.
+    const meio = only({ kind: 'hp-below', percent: 50 });
+    expect(meio.when(view([alguem({ health: 0, alive: false })]))).toBe(false);
+  });
+
+  it('hp-below com maxHealth zero não divide por zero — devolve falso', () => {
+    const meio = only({ kind: 'hp-below', percent: 50 });
+    expect(meio.when(view([alguem({ health: 0, maxHealth: 0 })]))).toBe(false);
+  });
+
+  it('out-of-gold olha o SALDO — entrada mais delta —, nunca só o delta', () => {
+    const semGold = only({ kind: 'out-of-gold' });
+    // Gastou 400 de 500: delta negativo, saldo positivo. Não é hora de sair.
+    expect(semGold.when(view([alguem({ gold: 500, goldDelta: -400 })]))).toBe(false);
+    // Gastou tudo: saldo zero.
+    expect(semGold.when(view([alguem({ gold: 400, goldDelta: -400 })]))).toBe(true);
+    // Ganhou na hunt: saldo positivo mesmo tendo entrado sem nada.
+    expect(semGold.when(view([alguem({ gold: 0, goldDelta: 30 })]))).toBe(false);
+  });
+
+  it('party-member-lost ignora o PRÓPRIO personagem, mesmo morto', () => {
+    // O laço começa no segundo participante de propósito. Sem isso, o personagem que morre
+    // sozinho encerraria por "membro da party morreu" em vez de por morte — o extrato daria o
+    // motivo errado, e ele é o que o jogador lê ao voltar.
+    const semParty = only({ kind: 'party-member-lost' });
+    expect(semParty.when(view([alguem({ alive: false })]))).toBe(false);
+    expect(semParty.when(view([alguem()]))).toBe(false);
+  });
+
+  it('party-member-lost dispara quando um COMPANHEIRO cai — o dia em que party existir', () => {
+    const semParty = only({ kind: 'party-member-lost' });
+    const eu = alguem({ id: 'hero' });
+    const amigo = alguem({ id: 'friend', alive: false });
+    expect(semParty.when(view([eu, amigo]))).toBe(true);
+  });
+
+  it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
+    expect(compileExitRules([])).toEqual([]);
   });
 });
