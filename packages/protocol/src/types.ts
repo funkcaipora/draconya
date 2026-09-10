@@ -167,6 +167,27 @@ export const S2C_SCHEMAS = {
    * `reason` já vem em palavras que o jogador entende — quem recusa é quem sabe por quê
    * (FUN-73), e traduzir código no cliente espalharia a mesma explicação por dois lugares.
    */
+  /**
+   * O que o personagem carrega e veste (§21.5, FUN-90).
+   *
+   * **Peso e capacidade vêm daqui, calculados pelo servidor.** O cliente não soma peso: ele
+   * mostra. Somar aqui daria dois lugares para a mesma conta divergir, e a versão do cliente
+   * seria a errada — quem sabe o que cabe é quem recusa.
+   *
+   * As instâncias levam só o que MUDA: id, quantidade e onde estão. Nome, peso e aparência são
+   * atributo base, fixo por id (§21.2), e vêm no catálogo.
+   */
+  inventory: z.object({
+    backpack: z.array(z.object({
+      instanceId: z.string().min(1),
+      itemId: z.string().min(1),
+      quantity: z.number().int().positive(),
+    })),
+    /** `slot` → `instanceId` do que está vestido ali. */
+    equipped: z.record(z.string(), z.string()),
+    /** Peso carregado e o teto. O teto sobe com o level (§9.3). */
+    capacity: z.object({ used: z.number(), total: z.number() }),
+  }),
   'bot-config-result': z.object({
     ok: z.boolean(),
     reason: z.string().optional(),
@@ -230,6 +251,21 @@ export const S2C_SCHEMAS = {
         effect: z.string().min(1),
       })),
     }),
+    /**
+     * As DEFINIÇÕES de item (§21.2, FUN-90). Nome, peso, onde veste e a aparência.
+     *
+     * Aqui, e não em cada instância do inventário: atributo base é fixo (duas espadas do mesmo
+     * id são idênticas), então repeti-lo por instância mandaria o mesmo texto dezenas de vezes
+     * a cada loot. A mensagem de inventário leva só o que muda — id, quantidade e onde está.
+     */
+    items: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      appearanceId: z.number().int().positive(),
+      weight: z.number().nonnegative(),
+      /** Onde ele veste, ou `null` quando não veste em lugar nenhum. */
+      slot: z.string().nullable(),
+    })),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   'player-stats': z.object({

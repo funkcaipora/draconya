@@ -47,6 +47,7 @@ export const SERVER_TO_CLIENT = {
    */
   catalogue: 14,
   'bot-config-result': 15,
+  inventory: 16,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

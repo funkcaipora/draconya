@@ -3,7 +3,7 @@ import {
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildContent } from '@draconya/content';
+import { buildContent, itemSchema } from '@draconya/content';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -535,6 +535,9 @@ describe('session host', () => {
     const { host } = buildHost(ruleset);
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
+    // Esvazia o que anexar já enfileirou — catálogo e inventário (FUN-79, FUN-90). O que este
+    // teste mede é o `session-state` esperar a fila, não quantas mensagens existem.
+    host.flush();
     socket.frames.length = 0;
 
     host.handle(viewer, { type: 'session-attach' });
@@ -576,6 +579,9 @@ describe('session host', () => {
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
 
+    // A fila é esvaziada primeiro: anexar já enfileira o catálogo e o inventário (FUN-79,
+    // FUN-90), e o que este teste mede é o `ping` NÃO passar por ela.
+    host.flush();
     host.handle(viewer, { type: 'ping', t: 99 });
 
     expect(socket.received()).toContainEqual({ type: 'pong', t: 99 });
@@ -1476,13 +1482,18 @@ describe('say (FUN-58)', () => {
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
 
+    // O que anexar já mandou não é resposta ao `say`: o teste mede o que as quatro linhas
+    // recusadas produzem, e a resposta é NADA.
+    host.flush();
+    socket.frames.length = 0;
+
     host.handle(viewer, { type: 'say', channel: 'global', text: 'oi' });
     host.handle(viewer, { type: 'say', channel: 'local', text: '   ' });
     host.handle(viewer, { type: 'say', channel: 'local', text: 'oi\u200b' });
     host.handle(viewer, { type: 'say', channel: 'local', text: '\u202eHero: oi' });
     host.flush();
 
-    expect(socket.received().filter((m) => m.type !== 'welcome')).toHaveLength(0);
+    expect(socket.received()).toHaveLength(0);
   });
 
   it('sem nome no ticket, assina com o id — nunca cala', async () => {
@@ -2132,5 +2143,94 @@ describe('o catálogo chega ao cliente (FUN-79, FUN-89)', () => {
     host.flush();
 
     expect(socket.received().some((m) => m.type === 'catalogue')).toBe(false);
+  });
+});
+
+describe('o inventário chega ao cliente (FUN-90)', () => {
+  // Pelo SCHEMA, e não por literal: `Item` tem campos com default (`requires`, entre eles), e
+  // uma fixture escrita à mão diverge do que `buildContent` produz — aqui isso explodia dentro
+  // do `equip`, num erro que não tem nada a ver com o que o teste mede.
+  const catalogo = new Map([['sword', itemSchema.parse({
+    id: 'sword', name: 'Sword', appearanceId: 3264, kind: 'weapon',
+    slot: 'hand', weight: 50, attack: 20,
+  })]]);
+  const comMochila = () => {
+    const content = testContent();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: (characterId) => {
+        const session = createCitySessionFactory(content)(characterId);
+        const character = session.participants[0];
+        if (character !== undefined) {
+          character.inventory.add(
+            { instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, character,
+          );
+        }
+        return session;
+      },
+      itemCatalog: catalogo,
+      now: () => 0,
+    });
+    return host;
+  };
+
+  it('sai ao ANEXAR, e não só depois do primeiro equipar', () => {
+    // Uma mochila que abre vazia até alguém mexer nela mente — e o jogador conclui que o loot
+    // não caiu.
+    const host = comMochila();
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+
+    const sent = socket.received().filter((m) => m.type === 'inventory');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+    });
+  });
+
+  it('o PESO vem calculado, e é o do servidor', () => {
+    // O cliente não soma peso: quem sabe o que cabe é quem recusa.
+    const host = comMochila();
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+    host.flush();
+
+    const sent = socket.received().find((m) => m.type === 'inventory');
+    expect(sent?.type === 'inventory' && sent.capacity.used).toBe(50);
+    expect(sent?.type === 'inventory' && sent.capacity.total).toBeGreaterThan(0);
+  });
+
+  it('equipar reenvia a mochila, e o sucesso NÃO vira mensagem de sistema', () => {
+    // "Equipado com sucesso" é ruído. O item mudando de lugar na tela é a confirmação.
+    const host = comMochila();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    const sent = socket.received();
+    expect(sent.filter((m) => m.type === 'inventory')).toHaveLength(1);
+    expect(sent.some((m) => m.type === 'system-message')).toBe(false);
+    const inventory = sent.find((m) => m.type === 'inventory');
+    expect(inventory?.type === 'inventory' && inventory.equipped['hand']).toBe('i1');
+  });
+
+  it('a recusa vira MENSAGEM, e a mochila não é reenviada', () => {
+    // Reenviar depois de uma recusa mandaria o mesmo estado de novo, dizendo que algo mudou.
+    const host = comMochila();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'equip', instanceId: 'nao-existe' });
+    host.flush();
+
+    expect(socket.received().some((m) => m.type === 'system-message')).toBe(true);
+    expect(socket.received().some((m) => m.type === 'inventory')).toBe(false);
   });
 });
