@@ -1,8 +1,11 @@
 // A geografia do §5.3, sem as janelas ainda (FUN-24).
 //
 // Viewport ao centro, painéis laterais, chat no canto inferior esquerdo, indicadores de HP e
-// mana, e o estado da conexão. O analisador mora no painel da direita (FUN-83); inventário e
-// bot ainda não existem.
+// mana, e o estado da conexão.
+//
+// A GEOGRAFIA É FIXA (§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda,
+// chat embaixo — nos mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao
+// trocar de atividade; em PvP manual, procurar onde a poção foi parar é o que custa a luta.
 //
 // Nenhum componente daqui lê estado de MUNDO. Onde as criaturas estão é assunto do canvas, que
 // lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero render.
@@ -15,6 +18,7 @@ import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
 import { HuntMenu } from './HuntMenu.js';
 import { BotPanel } from './BotPanel.js';
+import { Inventory } from './Inventory.js';
 
 export function Shell() {
   const characterId = useHudSlice((state) => state.characterId);
@@ -34,6 +38,7 @@ export function Shell() {
         <Vitals />
       </section>
       <aside className="panel panel-right" aria-label="painéis à direita">
+        <Inventory />
         <Analyzer />
       </aside>
       <Chat />

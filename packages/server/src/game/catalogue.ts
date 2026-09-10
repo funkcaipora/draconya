@@ -64,5 +64,17 @@ export function buildCatalogue(content: Content): Catalogue {
         effect: supply.effect.kind,
       })),
     },
+    // As DEFINIÇÕES, uma vez cada. Atributo base é fixo (§21.2): duas espadas do mesmo id são
+    // idênticas, então repetir nome e peso por instância mandaria o mesmo texto dezenas de
+    // vezes a cada loot.
+    items: [...content.items.values()].map((item) => ({
+      id: item.id,
+      name: item.name,
+      appearanceId: item.appearanceId,
+      weight: item.weight,
+      // `null` e não ausente: "não veste em lugar nenhum" é uma informação, e campo opcional
+      // a confundiria com "o servidor não disse".
+      slot: item.slot ?? null,
+    })),
   };
 }

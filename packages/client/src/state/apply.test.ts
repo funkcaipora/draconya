@@ -391,3 +391,39 @@ describe('a resposta do bot (FUN-89)', () => {
     expect(bot.get().draft.exit).toEqual([{ kind: 'out-of-gold' }]);
   });
 });
+
+describe('o inventário (FUN-90)', () => {
+  const inventory = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'inventory',
+    backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+    equipped: { chest: 'i2' },
+    capacity: { used: 130, total: 400 },
+    ...over,
+  } as S2CMessage);
+
+  it('chega inteiro, e o peso vem do SERVIDOR', () => {
+    // O cliente não soma peso: quem sabe o que cabe é quem recusa, e a mesma conta em dois
+    // lugares diverge no primeiro item com peso fracionário.
+    applyMessage(inventory(), 0);
+
+    expect(hud.get().inventory?.capacity).toEqual({ used: 130, total: 400 });
+    expect(hud.get().inventory?.equipped).toEqual({ chest: 'i2' });
+  });
+
+  it('ausente e vazio são coisas DIFERENTES', () => {
+    // Uma mochila que abre vazia mente: "ainda não sei" é o estado normal do primeiro segundo
+    // de conexão, e mostrá-lo como "não tem nada" é o tipo de erro que ninguém reporta.
+    expect(hud.get().inventory).toBeNull();
+    applyMessage(inventory({ backpack: [] }), 0);
+    expect(hud.get().inventory?.backpack).toEqual([]);
+  });
+
+  it('SUBSTITUI, e não acumula', () => {
+    // O servidor manda o estado inteiro, não um delta. Montar o conjunto a partir de pedaços
+    // daria uma mochila que diverge da do servidor sem nada acusar.
+    applyMessage(inventory(), 0);
+    applyMessage(inventory({ backpack: [] }), 1_000);
+
+    expect(hud.get().inventory?.backpack).toEqual([]);
+  });
+});

@@ -195,6 +195,13 @@ interface HostedSession {
    */
   credited: boolean;
   /**
+   * Quantos itens esta sessão já entregou, na última vez que o inventário foi mandado.
+   *
+   * É o gatilho barato para reenviar a mochila durante a hunt (FUN-90): comparar um inteiro por
+   * ciclo custa nada, e serializar o inventário a 10 Hz para quem está olhando custaria muito.
+   */
+  sentItemsLooted: number;
+  /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
    * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
@@ -415,6 +422,10 @@ export class SessionHost {
     // na frente de deltas que já esperavam.
     const catalogue = this.#options.catalogue;
     if (catalogue !== undefined) viewer.send({ type: 'catalogue', ...catalogue() });
+
+    // E o que ele carrega agora (FUN-90). Sem isto a mochila abre vazia até o primeiro
+    // equipar — e uma mochila que mente sobre estar vazia é pior que uma que diz "carregando".
+    this.#sendInventory(characterId);
 
     // O jogador precisa SABER que houve retomada e o que se perdeu. Silenciar aqui é como o
     // modo idle perde a confiança de quem joga: o extrato não fecha e ninguém explica.
@@ -721,12 +732,48 @@ export class SessionHost {
       .find((p) => p.id === characterId);
   }
 
-  /** Traduz a recusa do `sim` em algo que o jogador entenda. Sucesso não vira mensagem. */
+  /**
+   * Traduz a recusa do `sim` em algo que o jogador entenda, ou manda o inventário novo.
+   *
+   * O sucesso NÃO vira mensagem de sistema — vira o estado. "Equipado com sucesso" é ruído; o
+   * item mudando de lugar na tela é a confirmação.
+   */
   #answerInventory(viewer: Viewer, result: InventoryResult): void {
-    if (result.ok) return;
-    viewer.send({
-      type: 'system-message', level: 'warning',
-      text: INVENTORY_REFUSAL[result.reason] as string,
+    if (!result.ok) {
+      viewer.send({
+        type: 'system-message', level: 'warning',
+        text: INVENTORY_REFUSAL[result.reason] as string,
+      });
+      return;
+    }
+    this.#sendInventory(viewer.characterId);
+  }
+
+  /**
+   * O que o personagem carrega e veste, para quem estiver olhando ELE (FUN-90).
+   *
+   * **O peso é calculado aqui**, e não no cliente: quem sabe o que cabe é quem recusa, e a
+   * mesma conta em dois lugares diverge no primeiro item com peso fracionário.
+   */
+  #sendInventory(characterId: string): void {
+    const hosted = this.#hostedSession(characterId);
+    const character = this.#ownerOf(characterId);
+    if (hosted === undefined || character === undefined) return;
+
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
+    const state = character.inventory.getState();
+    const equipped: Record<string, string> = {};
+    for (const [slot, item] of Object.entries(state.equipped)) {
+      if (item !== undefined) equipped[slot] = item.instanceId;
+    }
+
+    this.#sendToViewersOf(hosted, characterId, {
+      type: 'inventory',
+      backpack: state.backpack.map((item) => ({
+        instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
+      })),
+      equipped,
+      capacity: { used: character.inventory.weight(catalog), total: character.capacity },
     });
   }
 
@@ -879,6 +926,14 @@ export class SessionHost {
       // O mundo que aconteceu neste avanço vira pacote AQUI, e não dentro do `sim` — que não
       // conhece socket nem numeração de criatura do fio (invariante 1, §12).
       this.#presentMoves(hosted);
+      // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
+      // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
+      if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
+        hosted.sentItemsLooted = hosted.session.aggregates.itemsLooted;
+        for (const characterId of this.#charactersOf(hosted.session.id)) {
+          this.#sendInventory(characterId);
+        }
+      }
       if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
@@ -1219,6 +1274,7 @@ export class SessionHost {
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: false,
+      sentItemsLooted: next.aggregates.itemsLooted,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -1698,6 +1754,7 @@ export class SessionHost {
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
       credited: false,
+      sentItemsLooted: session.aggregates.itemsLooted,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

@@ -4,6 +4,7 @@ import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
+import type { S2CMessage } from '@draconya/protocol';
 import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -84,6 +85,21 @@ function receive(socket: WebSocket): Promise<Uint8Array> {
       reject(new Error('WebSocket handshake rejected'));
     }, { once: true });
   });
+}
+
+/**
+ * Espera a mensagem PEDIDA, e não o próximo quadro.
+ *
+ * Anexar já enfileira catálogo e inventário (FUN-79, FUN-90), então "a próxima coisa que
+ * chegar" deixou de ser a resposta ao que se acabou de mandar — e um teste que assume isso
+ * quebra a cada mensagem nova no boot, sempre por uma razão que não é a dele.
+ */
+async function awaitMessage(socket: WebSocket, type: string): Promise<S2CMessage> {
+  for (let frame = 0; frame < 8; frame++) {
+    const found = decodeS2C(await receive(socket))?.find((m) => m.type === type);
+    if (found !== undefined) return found;
+  }
+  throw new Error(`never received a ${type} message`);
 }
 
 beforeAll(async () => {
@@ -333,9 +349,9 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     socket.binaryType = 'arraybuffer';
     const welcome = decodeS2C(await receive(socket));
     expect(welcome).toContainEqual({ type: 'welcome', characterId: character.id, contentVersion: 'integration-v1' });
-    const pong = receive(socket);
+    const pong = awaitMessage(socket, 'pong');
     socket.send(encodeC2S({ type: 'ping', t: 123 }));
-    expect(decodeS2C(await pong)).toContainEqual({ type: 'pong', t: 123 });
+    expect(await pong).toEqual({ type: 'pong', t: 123 });
     const location = await directory.lookup(character.id);
     expect(location?.nodeId).toBe('integration-node');
     expect((await request(`/api/characters/${character.id}`, 'DELETE', owner.cookie)).status).toBe(409);

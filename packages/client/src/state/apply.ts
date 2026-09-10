@@ -116,7 +116,24 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // Uma vez por sessão: a versão de conteúdo é fixada (invariante 7), então o catálogo não
       // muda enquanto ela vive. SUBSTITUI, e não acumula — reconectar reenvia o mesmo, e
       // concatenar daria hunts duplicadas na tela a cada queda de rede.
-      hud.set((state) => ({ ...state, catalogue: { hunts: message.hunts, bot: message.bot } }));
+      hud.set((state) => ({
+        ...state,
+        catalogue: { hunts: message.hunts, bot: message.bot, items: message.items },
+      }));
+      return;
+
+    case 'inventory':
+      // SUBSTITUI. O servidor manda o estado inteiro da mochila, não um delta: montar o
+      // conjunto a partir de pedaços daria uma mochila que diverge da do servidor sem nada
+      // acusar — e é o servidor quem decide o que cabe.
+      hud.set((state) => ({
+        ...state,
+        inventory: {
+          backpack: message.backpack,
+          equipped: message.equipped,
+          capacity: message.capacity,
+        },
+      }));
       return;
 
     case 'bot-config-result':

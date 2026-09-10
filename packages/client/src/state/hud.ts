@@ -57,6 +57,15 @@ export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
 export type Catalogue = S2CProps<'catalogue'>;
 export type HuntListing = Catalogue['hunts'][number];
 export type BotVocabulary = Catalogue['bot'];
+export type ItemDefinition = Catalogue['items'][number];
+
+/**
+ * O que o personagem carrega e veste (§21.5, FUN-90).
+ *
+ * `null` até chegar. Uma mochila que abre vazia mente: "ainda não sei" e "não tem nada" são
+ * coisas diferentes, e a primeira é o estado normal do primeiro segundo de conexão.
+ */
+export type Inventory = S2CProps<'inventory'>;
 
 /**
  * O analisador (§16.1, §16.2, FUN-83).
@@ -123,6 +132,9 @@ export interface HudState {
    * primeiro segundo de toda conexão.
    */
   readonly catalogue: Catalogue | null;
+
+  /** A mochila, o equipado e o peso — tudo calculado pelo servidor (FUN-90). */
+  readonly inventory: Inventory | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -138,6 +150,7 @@ export const INITIAL_HUD: HudState = {
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
   catalogue: null,
+  inventory: null,
 };
 
 /**

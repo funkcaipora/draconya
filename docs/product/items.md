@@ -1,8 +1,8 @@
 # Itens, equipamento e inventário
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
-capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) implementados;
-resgate da caixa e autovenda ainda não existem
+capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
+mochila e equipamento** (FUN-90) implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -195,3 +195,39 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 ## Divergências do PRD
 
 Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+
+## A tela (FUN-90)
+
+Mochila, nove lugares de equipamento e a capacidade, no painel da direita. **A geografia é fixa**
+(§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda, chat embaixo — nos
+mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao trocar de atividade; em
+PvP manual, procurar onde a poção foi parar é o que custa a luta.
+
+**Nada é calculado no cliente.** Peso, capacidade e o que cabe vêm do servidor: quem sabe o que
+cabe é quem recusa, e a mesma conta em dois lugares diverge no primeiro item com peso
+fracionário — com a versão do cliente sendo a errada.
+
+**O sucesso não vira mensagem.** "Equipado com sucesso" é ruído; o item mudando de lugar na tela
+é a confirmação. A recusa, essa sim, vira texto — e a mochila NÃO é reenviada junto, porque
+reenviar o mesmo estado diria que algo mudou.
+
+A mensagem `inventory` leva só o que muda — id da instância, quantidade e onde ela está. Nome,
+peso e aparência são atributo base, fixo por id (§21.2), e vêm no catálogo: repeti-los por
+instância mandaria o mesmo texto dezenas de vezes a cada loot.
+
+Ela sai ao **anexar**, depois de **equipar ou tirar**, e quando **cai loot** durante a hunt — este
+último detectado por `aggregates.itemsLooted` mudar, que é um inteiro a comparar por ciclo em vez
+de serializar a mochila dez vezes por segundo.
+
+**Sem arte ainda.** Cada item tem `appearanceId`, e o pipeline que o transforma em sprite é o M2.
+Até lá, a inicial do nome num quadrado — um placeholder que não finge ser arte.
+
+### A action bar não entrou, e por quê
+
+A FUN-90 pedia "slots com hotkey que disparam a ação como intenção". **Não existe magia manual**:
+o protocolo não tem `cast`, o servidor não tem caminho para ela, e quem lança é o bot. Combate
+manual é o motor da F4 (E10).
+
+Uma barra sem o que disparar seria decoração, e inventar o opcode com o servidor mudo do outro
+lado é contrato antes do uso — o erro que a DT-07 nomeia. Ela entra quando houver o que ela
+dispare.

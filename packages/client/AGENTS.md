@@ -144,3 +144,11 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   casar com o texto de um `system-message`.
 - **A ordem dos slots É a prioridade** (§13.4). A lista viaja como está; reordenar na hora de
   mandar mudaria o comportamento sem o jogador ter pedido.
+- **O cliente NÃO soma peso** (FUN-90). Capacidade e peso vêm do servidor: quem sabe o que cabe
+  é quem recusa, e a mesma conta em dois lugares diverge no primeiro item fracionário — com a
+  versão do cliente sendo a errada.
+- **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, hunts e bot à
+  esquerda, chat embaixo, nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
+  atividade faz o jogador procurar a poção no meio da luta.
+- **`inventory` e `catalogue` SUBSTITUEM, nunca acumulam.** O servidor manda o estado inteiro;
+  montar a partir de pedaços daria uma mochila que diverge da dele sem nada acusar.
