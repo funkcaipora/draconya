@@ -8,5 +8,9 @@
     "arrow": 3447,
     "leather-armor": 3361,
     "spike-sword": 3271
+  },
+  "maps": {
+    "rat-cellars": { "floor": 357, "wall": 441 },
+    "city": { "floor": 357, "wall": 439 }
   }
 }
