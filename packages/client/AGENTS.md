@@ -65,6 +65,9 @@ a ser GPL. Leia como referência se quiser; não copie linha.
 assets/protobuf.ts     mecanismo: varint, tag, slice, skip por wire type. Não sabe o que é aparência.
 assets/appearances.ts  o schema: números de campo do appearances.proto real, e o leitor dirigido
 assets/catalog.ts      o índice: qual folha tem qual id, e onde dentro dela
+assets/sheet.ts        CIP → LZMA → BMP → RGBA. PURO: entra Uint8Array, sai Uint8Array
+assets/sheet-worker.ts a casca de doze linhas que põe `sheet.ts` num worker
+assets/sheet-loader.ts o lado do thread principal: fila, id por pedido, encerramento
 assets/testing.ts      encoder de protobuf, só para fixture
 ```
 
@@ -85,6 +88,40 @@ mantém o leitor válido quando o pacote sobe de versão.
 Medido contra o `appearances.dat` do Canary (4,8 MB): **42.107 objects, 1.443 outfits, 242
 effects, 62 missiles, em 136 ms.** O `outfit 21` sai com dois grupos — parado com 4 direções e
 1 quadro, andando com 4 direções e 8 fases —, que é a forma que uma criatura do Tibia tem.
+
+## A folha de sprites (FUN-17)
+
+`sprites-<hash>.bmp.lzma` esconde duas camadas, e o nome só conta uma:
+
+1. um **container CIP** de 32 bytes, e depois um stream **LZMA1 CRU** — sem o cabeçalho
+   "alone" que todo decoder de prateleira espera;
+2. dentro dele, um **BMP de 32 bits** com pixels em BGRA e magenta como transparência.
+
+O formato está documentado em `src/client/spriteappearances.cpp` de `opentibiabr/otclient`
+(MIT). Lemos de lá o FORMATO, não o código.
+
+**A conversão para "alone" é a ideia central.** O CIP guarda `[props][dictSize LE32]` e depois
+oito bytes de tamanho COMPRIMIDO; o alone guarda os mesmos cinco primeiros bytes e depois oito
+de tamanho DESCOMPRIMIDO. Trocar os oito finais por `0xFF` ("desconhecido", o stream termina em
+marcador) faz qualquer decoder padrão ler o resto. A alternativa seria um decoder LZMA cru, que
+quase nenhuma biblioteca de navegador expõe — cinco bytes sintetizados compram a escolha inteira
+de biblioteca.
+
+**`lzma-web@4`**, no subpath `lzma-web/decompress`, que descarta o compressor. Descartadas:
+`lzma-js` (20 MB, parado em 2022), `js-lzma` (2022, sem tipos), `xz-decompress` (é XZ, outro
+container), `node-liblzma` (binding nativo — o ADR 0013 exige binário para dois arcos).
+
+### As fixtures são binárias, e isso é a exceção
+
+`src/assets/fixtures/*.lzma` são **LZMA de verdade**, geradas por
+`scripts/make-sheet-fixture.ts` com o `lzma` da linha de comando. Blob binário no repositório é
+normalmente o tipo de fixture que ninguém consegue ler — aqui vale, porque o que precisa ser
+provado é a decodificação de LZMA REAL, e um mock de LZMA prova exatamente nada. A legibilidade
+volta pelo script: a fixture é ilegível, a receita não é, e regerá-la é um comando.
+
+```
+pnpm tsx scripts/make-sheet-fixture.ts
+```
 
 ## Invariantes locais
 
@@ -152,7 +189,22 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   contra um pacote real (FUN-65), e derivar geometria de um campo não conferido seria pior que
   derivá-la de `spritetype`, que a §13.1 documenta. É o primeiro campo a conferir quando um
   pacote de verdade aparecer.
-- O decoder LZMA em JS puro é pesado — roda em Web Worker, nunca no thread principal.
+- O decoder LZMA em JS puro é pesado — roda em Web Worker, nunca no thread principal. Quem
+  garante isso é `sheet.ts` ser PURO: ele não conhece `Worker` nem `self`, então pô-lo no
+  thread errado exige alguém escrever a chamada à mão.
+- **São DUAS fixtures de folha, e a segunda existe por causa de uma mutação sobrevivente.** O
+  enchimento de zeros do cabeçalho CIP varia com quantos bytes o tamanho em varint de 7 bits
+  ocupa; com uma fixture só, trocar a varredura do marcador por uma posição fixa passava em
+  todos os testes. `tiny.bmp.lzma` comprime para menos de 128 bytes, o tamanho cabe num byte, e
+  o marcador anda um lugar. O gerador RECUSA gerar duas fixtures com o marcador no mesmo lugar.
+- **`decompressSync` decide entre `string` e `Uint8Array` por HEURÍSTICA** — "parece texto?". A
+  folha é binária, e `decodeSheet` normaliza em vez de confiar: a heurística errando num pacote
+  devolveria bytes mutilados, que na tela aparecem como sprite corrompido e não como erro.
+- **O alfa do BMP é IGNORADO.** As folhas vêm com alfa 255 em todo pixel, inclusive nos vazios;
+  a transparência é a cor magenta. Confiar no alfa desenharia um retângulo magenta atrás de
+  cada sprite.
+- **O offset dos pixels vem do byte 10 do BMP**, nunca da constante 54: o DIB header tem
+  tamanho variável, e um BMP com máscaras de cor faria a leitura começar dentro do cabeçalho.
 - Folhas decodificadas vão para IndexedDB. Sem isso, cada sessão rebaixa e redescomprime tudo.
 - `requestAnimationFrame` para em aba de fundo. Ao voltar, aplique em bloco o que chegou; não
   tente animar dez minutos de eventos.

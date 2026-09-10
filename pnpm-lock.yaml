@@ -48,6 +48,9 @@ importers:
       '@draconya/protocol':
         specifier: workspace:*
         version: link:../protocol
+      lzma-web:
+        specifier: ^4.0.0
+        version: 4.0.0
       pixi.js:
         specifier: ^8.6.0
         version: 8.20.1
@@ -1499,6 +1502,10 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lzma-web@4.0.0:
+    resolution: {integrity: sha512-a+vREf8P4Xp4+I8MMTJ+mWJgxHydjwdo0mTcgDaMMTIf6L6xrzWql7U3se4XwsYG16RIua4rKecDIgLeOfynJg==}
+    engines: {node: '>=18'}
 
   magic-string@1.2.3:
     resolution: {integrity: sha512-Bpb0W2TbLKOZ7vJnOUnVRGq3WL2p+ISV29M6hYPL1AFCpyKZpdr5ytiXoTSSxRVhg8YW7f65+6gbG8WG6PCa/g==}
@@ -2997,6 +3004,8 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lzma-web@4.0.0: {}
 
   magic-string@1.2.3:
     dependencies:
