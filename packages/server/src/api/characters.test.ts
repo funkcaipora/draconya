@@ -7,6 +7,7 @@ import {
   type AccountRecord,
   type CharacterRecord,
   type GameRepository,
+  type ItemInstanceRecord,
 } from '../db/repository.js';
 import { registerCharacterRoutes } from './characters.js';
 
@@ -20,6 +21,19 @@ class MemorySessions implements AuthSessionStore {
 class MemoryRepository implements GameRepository {
   readonly characters = new Map<string, CharacterRecord>();
   next = 0;
+  async createItemInstance(instance: {
+    itemId: string; ownerCharacterId: string; origin: string; quantity?: number;
+  }): Promise<ItemInstanceRecord> {
+    // Item não passa por este arquivo. Um `throw` seria pior que um valor: ele transformaria
+    // um método nunca chamado numa falha em teste de outra coisa.
+    return {
+      id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
+      quantity: instance.quantity ?? 1, origin: instance.origin, createdAt: new Date(0),
+    };
+  }
+  async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {
+    return [];
+  }
   async saveBotConfig(characterId: string, config: unknown): Promise<void> {
     const character = this.characters.get(characterId);
     if (character !== undefined) this.characters.set(characterId, { ...character, botConfig: config });

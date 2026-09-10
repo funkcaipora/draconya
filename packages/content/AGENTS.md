@@ -108,6 +108,21 @@ lançamento. Por lançamento, a forma ótima de subir magia seria lançar mil ve
 barata. É por isso que o Tibia faz assim, e é por isso que a união de `gain` é discriminada em
 vez de ser um campo `points` só.
 
+## Itens (FUN-76)
+
+`items/*.json` é a DEFINIÇÃO; a instância é linha no Postgres (`item_instance`), e a divisão é o
+ponto. Aqui ficam id, `appearanceId`, tipo, slot, peso, atributos, requisitos e se empilha.
+
+**Atributos base são fixos** (§21.2). Não há rolagem por instância: duas espadas do mesmo id são
+idênticas, e item melhor é item **diferente**. Isso apaga toda a matemática de variação por
+instância — junto com a pergunta "por que a minha é pior".
+
+`loot.items` do monstro é conferido contra este catálogo. Antes ele era recusado por princípio
+porque catálogo não existia; agora o que decide é a referência existir.
+
+`charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
+para o catálogo não mudar quando a mecânica existir.
+
 ## Como testar
 
 ```

@@ -1,6 +1,7 @@
 # Itens, equipamento e inventário
 
-**Status:** não implementado
+**Status:** parcial — catálogo em conteúdo e `item_instance` com identidade própria (FUN-76);
+inventário, equipamento, loot de item e Caixa de Loot ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -34,6 +35,40 @@ Itens lendários vêm de monstros ou de recompensa individual de boss, nunca sã
 - Autovenda: até 5 tipos configuráveis (Free) ou 20 (Premium); fluxo drop → venda automática → gold, sem passar pela mochila.
 - Imbuement: slots fixos por tipo de item; duração de 24h de tempo efetivo de hunt; relógio parado fora de hunt; exige materiais + taxa em gold.
 - Lendários: nunca soulbound, sempre negociáveis, sem limite semanal de negociação; proveniência (personagem original, data, horário, origem) registrada permanentemente desde o drop.
+
+## O que já existe (FUN-76)
+
+Duas metades, e a divisão entre elas é o ponto: **a definição é conteúdo, a instância é banco.**
+
+`packages/content/data/items/*.json` traz a definição — id, `appearanceId`, tipo, slot, peso,
+atributos, requisitos, se empilha. `appearanceId` é a **única** ligação com arte (invariante 6,
+ADR 0008), e o teste que varre os arquivos de dados atrás de caminho de imagem cobre esta pasta
+como cobre as outras.
+
+**Atributos base são fixos** (§21.2): duas espadas do mesmo id são idênticas. Não há rolagem por
+instância, e item melhor é item **diferente**. O que distingue uma instância da outra é
+identidade e proveniência, não número.
+
+A tabela `item_instance` guarda **este** item: id próprio, o id do catálogo, o dono, a quantidade
+(para empilhável), a **origem** e quando nasceu. A `docs/technical-architecture.md` §9 explica por
+que ela nasce assim e não como contador: *sem identidade, lendário não tem proveniência*. Um
+inventário guardado como `{itemId: n}` é barato até o dia em que alguém pergunta de onde veio
+aquela espada — e nesse dia a resposta não existe para item nenhum, retroativamente. Por isso a
+coluna `origin` existe **antes** de existir lendário.
+
+Não há chave estrangeira de `item_id` para tabela nenhuma: o catálogo é conteúdo, e espelhá-lo no
+banco criaria dois lugares para a mesma verdade, divergindo no primeiro deploy em que só um dos
+dois subisse.
+
+`loot.items` do monstro deixou de ser recusado por princípio e passou a ser **conferido**: um
+`itemId` que existe no catálogo é aceito; um fantasma derruba o boot, como antes.
+
+**Nada disto dá item a ninguém ainda.** Loot de item por abate, inventário e Caixa de Loot são as
+issues seguintes do marco, e é por isso que a regra de bot `item` continua recusada — agora com o
+motivo certo: não falta catálogo, falta inventário.
+
+`charges` e `durationMs` estão declarados no schema e **ninguém os consome** (§21.3). A forma
+entra agora para o catálogo não mudar quando a mecânica existir.
 
 ## Parâmetros de balanceamento
 

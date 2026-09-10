@@ -1,0 +1,10 @@
+{
+  "id": "leather-armor",
+  "name": "Leather Armor",
+  "appearanceId": 3361,
+  "kind": "armor",
+  "slot": "chest",
+  "weight": 90,
+  "armor": 4,
+  "_open": "Atributos de referência. Sem requisito de level: é a peça que o personagem novo veste."
+}

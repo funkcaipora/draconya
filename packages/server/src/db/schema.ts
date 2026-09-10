@@ -42,6 +42,35 @@ export const accounts = pgTable(
   }),
 );
 
+/**
+ * A instância de um item — ESTE item, não "um item deste tipo" (FUN-76).
+ *
+ * `docs/technical-architecture.md` §9: sem identidade, lendário não tem proveniência. Um
+ * inventário guardado como contador é barato até o dia em que alguém pergunta de onde veio
+ * aquela espada — e nesse dia a resposta não existe para item nenhum, retroativamente.
+ *
+ * `itemId` aponta o CATÁLOGO, que é conteúdo. Sem chave estrangeira de propósito: o alvo não é
+ * uma tabela, e espelhar o catálogo no banco criaria dois lugares para a mesma verdade.
+ */
+export const itemInstances = pgTable(
+  'item_instance',
+  {
+    id: text('id').primaryKey(),
+    itemId: text('item_id').notNull(),
+    ownerCharacterId: text('owner_character_id').notNull().references(() => characters.id),
+    /** Item empilhável (munição) usa mais de 1. Quem diz qual empilha é o conteúdo. */
+    quantity: integer('quantity').notNull().default(1),
+    /** De onde veio (§25.3). É toda a proveniência de lendário que a arquitetura pede. */
+    origin: text('origin').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // O acesso real é "o que este personagem tem". Sem índice, abrir o inventário varre a
+    // tabela inteira.
+    index('item_instance_owner').on(table.ownerCharacterId),
+  ],
+);
+
 export const characters = pgTable(
   'character',
   {

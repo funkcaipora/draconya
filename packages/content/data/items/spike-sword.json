@@ -1,0 +1,11 @@
+{
+  "id": "spike-sword",
+  "name": "Spike Sword",
+  "appearanceId": 3271,
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 50,
+  "attack": 24,
+  "requires": { "level": 15 },
+  "_open": "Atributos e requisito de referência (§21.2 decide que o atributo base é fixo, não os números). O appearanceId aponta o pacote de assets atual e é remapeável — é a única ligação com arte (ADR 0008)."
+}

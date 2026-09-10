@@ -21,9 +21,70 @@ const lootRollSchema = z.object({
  */
 export const lootTableSchema = z.object({
   gold: lootRollSchema.optional(),
-  /** Itens de verdade. Vazio até o sistema de itens existir; `buildContent` recusa o resto. */
+  /** Itens de verdade. `buildContent` confere cada `itemId` contra o catálogo (FUN-76). */
   items: z.array(lootRollSchema.safeExtend({ itemId: z.string().min(1) })).default([]),
 });
+
+/**
+ * Onde um item se equipa. Ausente no item = ele não se equipa (§21.3).
+ *
+ * Lista fechada porque o personagem tem um slot de cada: um item que declara um slot que o
+ * personagem não tem é conteúdo quebrado, e o boot é o lugar de descobrir isso.
+ */
+export const ITEM_SLOTS = [
+  'head', 'neck', 'chest', 'legs', 'feet', 'hand', 'shield', 'finger', 'ammo',
+] as const;
+export type ItemSlot = (typeof ITEM_SLOTS)[number];
+
+/** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
+export const ITEM_ORIGINS = ['loot', 'boss', 'quest', 'market', 'admin'] as const;
+export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
+
+/**
+ * A DEFINIÇÃO de um item (§21.2, FUN-76).
+ *
+ * **Atributos base são FIXOS.** Não há rolagem aleatória: duas espadas do mesmo id são
+ * idênticas, e item melhor é item DIFERENTE. É a decisão do §21.2, e ela apaga toda a
+ * matemática de variação por instância — junto com a pergunta "por que a minha é pior".
+ *
+ * O que distingue uma instância da outra é identidade e proveniência, não número.
+ */
+export const itemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** A ÚNICA ligação com arte (invariante 6, ADR 0008). Nunca um caminho de arquivo. */
+  appearanceId,
+  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'ammunition', 'other']),
+  slot: z.enum(ITEM_SLOTS).optional(),
+  /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
+  weight: z.number().nonnegative(),
+  /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
+  stackable: z.boolean().default(false),
+  attack: z.number().int().nonnegative().default(0),
+  armor: z.number().int().nonnegative().default(0),
+  /**
+   * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
+   *
+   * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
+   * escolhe no level 8, então item de vocação é inacessível até lá por construção.
+   */
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+    vocationId: z.string().min(1).optional(),
+  }).default(() => ({})),
+  /**
+   * Cargas e duração (§21.3). **Declarados, e ainda não consumidos por ninguém.**
+   *
+   * Equipamento comum não tem durabilidade; anel gasta por TEMPO e colar por CARGA. A forma
+   * entra agora para o catálogo não mudar quando a mecânica existir — e o dia em que ela
+   * existir, quem a implementar acha os campos onde eles já estavam.
+   */
+  charges: z.number().int().positive().optional(),
+  durationMs: z.number().int().positive().optional(),
+  _open: z.string().optional(),
+});
+
+export type Item = z.infer<typeof itemSchema>;
 
 export const monsterSchema = z.object({
   id: z.string().min(1),

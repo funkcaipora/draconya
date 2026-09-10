@@ -64,13 +64,16 @@ describe('a tabela de loot (FUN-63)', () => {
     expect(loot?.items).toEqual([]);
   });
 
-  it('recusa items enquanto não houver catálogo de itens', () => {
+  it('recusa item que não está no catálogo', () => {
     // Aceitar creditaria um item fantasma no primeiro abate. Falhar no boot é o que impede
     // o atalho de "só mais um itemId" antes de existir o que ele aponta.
+    //
+    // Antes da FUN-76 a recusa era categórica — não havia catálogo nenhum. Agora ela é sobre a
+    // REFERÊNCIA, e o teste continua valendo pelo mesmo motivo.
     const withItem = {
       ...rat, loot: { items: [{ itemId: 'spike-sword', chance: 0.1, min: 1, max: 1 }] },
     };
-    expect(() => buildContent(base({ monsters: [withItem] }))).toThrow(/catálogo de itens/);
+    expect(() => buildContent(base({ monsters: [withItem] }))).toThrow(/não existe no catálogo/);
   });
 
   it('recusa a forma antiga, com a moeda escondida como item', () => {
@@ -273,5 +276,79 @@ describe('ponto de entrada da Cidade (FUN-60)', () => {
       .toThrow(/não tem entryPoint/);
     expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'nowhere' } })))
       .toThrow(/mapa inexistente "nowhere"/);
+  });
+});
+
+describe('catálogo de itens (FUN-76)', () => {
+  const espada = {
+    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+    slot: 'hand', weight: 50, attack: 24, requires: { level: 15 },
+  };
+
+  it('monta o catálogo indexado por id, com os defaults do schema', () => {
+    const content = buildContent(base({ items: [espada] }));
+    const item = content.items.get('spike-sword');
+    expect(item?.attack).toBe(24);
+    // Não declarados: armadura zero, não empilha, sem cargas.
+    expect(item?.armor).toBe(0);
+    expect(item?.stackable).toBe(false);
+    expect(item?.charges).toBeUndefined();
+  });
+
+  it('a aparência é um ID, nunca um caminho — e o schema recusa o resto', () => {
+    // Invariante 6 imposto pelo schema, além do teste que varre os arquivos. `appearanceId` é
+    // a única ligação com arte, e é o que mantém a troca de pacote como remapeamento de ids.
+    const comCaminho = { ...espada, appearanceId: 'sprites/spike-sword.png' };
+    expect(() => buildContent(base({ items: [comCaminho] }))).toThrow(ContentError);
+  });
+
+  it('recusa slot que o personagem não tem', () => {
+    // Lista fechada: um item que declara um slot inexistente é conteúdo quebrado, e o boot é
+    // o lugar de descobrir isso — não a primeira tentativa de equipar.
+    expect(() => buildContent(base({ items: [{ ...espada, slot: 'tail' }] })))
+      .toThrow(ContentError);
+  });
+
+  it('item empilhável e item com carga cabem no mesmo schema', () => {
+    const flecha = {
+      id: 'arrow', name: 'Arrow', appearanceId: 3447, kind: 'ammunition', slot: 'ammo',
+      weight: 0.7, stackable: true, attack: 7,
+    };
+    const anel = {
+      id: 'time-ring', name: 'Time Ring', appearanceId: 3050, kind: 'ring', slot: 'finger',
+      weight: 1, durationMs: 600_000,
+    };
+    const content = buildContent(base({ items: [flecha, anel] }));
+    expect(content.items.get('arrow')?.stackable).toBe(true);
+    // Declarado e ainda não consumido por ninguém — §21.3, e a mecânica é issue própria.
+    expect(content.items.get('time-ring')?.durationMs).toBe(600_000);
+  });
+});
+
+describe('loot de item, agora que existe catálogo (FUN-76)', () => {
+  const espada = {
+    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+    slot: 'hand', weight: 50, attack: 24,
+  };
+  const comLoot = (itemId: string) => ({
+    ...rat, loot: { items: [{ itemId, chance: 0.1, min: 1, max: 1 }] },
+  });
+
+  it('ACEITA loot que aponta item do catálogo', () => {
+    // Era recusado por não haver catálogo. Agora o que decide é a referência existir.
+    const content = buildContent(base({ items: [espada], monsters: [comLoot('spike-sword')] }));
+    expect(content.monsters.get('rat')?.loot.items[0]?.itemId).toBe('spike-sword');
+  });
+
+  it('continua recusando item FANTASMA, e diz qual', () => {
+    // Creditar no primeiro abate um item que nunca vai poder ser desenhado, equipado nem
+    // vendido é o defeito; o sintoma chegaria dias depois, longe da causa.
+    expect(() => buildContent(base({ items: [espada], monsters: [comLoot('excalibur')] })))
+      .toThrow(/excalibur/);
+  });
+
+  it('sem catálogo nenhum, qualquer loot de item é recusado', () => {
+    expect(() => buildContent(base({ monsters: [comLoot('spike-sword')] })))
+      .toThrow(ContentError);
   });
 });
