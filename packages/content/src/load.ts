@@ -30,6 +30,7 @@ export function loadContent(dir: string): Content {
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
     supplies: readJsonDir(join(dir, 'supplies')),
+    skills: readJsonDir(join(dir, 'skills')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura

@@ -1,0 +1,9 @@
+{
+  "id": "magic",
+  "name": "Magia",
+  "startingLevel": 0,
+  "curve": { "base": 400, "factor": 1.1 },
+  "gain": { "on": "spell-cast", "pointsPerMana": 1 },
+  "damagePerLevel": 0.03,
+  "_open": "Curva e contribuição provisórias. Sobe por MANA GASTA, como no Tibia: por lançamento, a forma ótima de subir seria lançar mil vezes a magia mais barata."
+}

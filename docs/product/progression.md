@@ -143,6 +143,8 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
 | Velocidade de passo do personagem | 500 ms por tile `[ABERTO — valor provisório: 500]` | `packages/content/data/progression/baseline.json`, `stepDurationMs` |
 | Referência de catálogo de magias | Tibia até ~level 120 (referência funcional; catálogo final próprio) | `packages/content/data/spells/` |
+| Corpo a Corpo — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/melee.json` |
+| Magia — início, curva, dano por nível | 0 / 400×1,1 / +3% `[ABERTO — valores provisórios]` | `packages/content/data/skills/magic.json` |
 | Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |
 | Golpe Arcano — mana, cooldown, dano, alcance | 15 / 2 000 ms / 40 / 3 tiles `[ABERTO — valor provisório]` | `packages/content/data/spells/strike.json` |
 
@@ -181,3 +183,48 @@ não avisa.
 ## Divergências do PRD
 
 Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+
+## Skills sobem pelo USO (FUN-75)
+
+§9.4 **[DECIDIDO]**: skill não vem de level, vem de fazer — paradigma do Tibia. Quais skills
+existem, quanto cada uso rende, quanto custa cada nível e quanto ela acrescenta ao golpe são
+todos **conteúdo**, em `packages/content/data/skills/`.
+
+| Skill | Alimentada por | Contribuição |
+|---|---|---|
+| Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
+| Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
+
+**Magia sobe por mana gasta, e isso é mecanismo, não número.** Por lançamento, a forma ótima de
+subir magia seria lançar mil vezes a magia mais barata, e o jogo viraria macro de spam. É a razão
+pela qual o Tibia faz assim, e ela vale copiar.
+
+**O golpe conta como uso mesmo quando acerta de raspão.** Contar só acerto cheio faria a skill
+subir mais devagar contra alvo blindado, que é o oposto do que "sobe pelo uso" quer dizer. Magia
+recusada, ao contrário, **não** rende nada: não gastou mana, não praticou.
+
+**O custo de um nível é inteiro.** `50 × 1,1` dá `55,000000000000007` em ponto flutuante, e o
+resto que sobra ao fechar um nível carregaria esse lixo para o próximo — numa hunt de oito horas
+são milhares de níveis de resíduo somado. Com custo inteiro e uso inteiro, a conta fecha exata.
+
+Subir uma skill é **evento notável** (§16.2): numa hunt de oito horas é uma das poucas coisas que
+o jogador quer ver ao voltar, ao lado do level up.
+
+### Como a skill vai e volta do banco
+
+| | quando | forma |
+|---|---|---|
+| entra na sessão | emissão do ticket | vem da coluna `skills`, junto com level, XP e gold |
+| sai da sessão | extrato → ledger | valor **absoluto**, fundido pelo maior de cada skill |
+
+A skill precisa **entrar**, não só sair: ela escala o dano durante a hunt, e um personagem que
+entrasse sempre no nível inicial bateria errado a hunt inteira.
+
+Sai absoluta porque a sessão já entrou com o valor de verdade — somar delta por cima do banco
+daria o mesmo número com uma chance a mais de contar duas vezes. E a fusão pelo **maior** de cada
+skill é a regra, não uma escolha conservadora: skill nunca desce, então um extrato antigo
+processado fora de ordem não tem como rebaixar o que já subiu. É a preocupação que a stamina
+resolve com guarda de instante, resolvida aqui sem instante nenhum.
+
+Extrato **sem** skills não apaga as que já estavam lá — é o extrato de uma sessão de Cidade, ou de
+um nó antigo durante deploy em rolagem.

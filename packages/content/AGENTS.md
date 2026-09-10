@@ -97,6 +97,17 @@ gold direto. É por isso que ele tem pasta própria em vez de esperar o catálog
 M8. `validateBotConfig` cruza `spellId` e `supplyId` contra estes dois catálogos; `itemId` é
 sempre recusado, pela mesma razão que `loot.items` só aceita lista vazia.
 
+## Skills (FUN-75)
+
+`skills/*.json` diz quais skills existem, o que alimenta cada uma, quanto custa cada nível e
+quanto ela acrescenta ao golpe. §9.4 decide que skill sobe por USO; os números não vêm do PRD e
+entram com `_open`.
+
+Uma coisa aqui é **mecanismo, não número**: `spell-cast` rende por **mana gasta**, não por
+lançamento. Por lançamento, a forma ótima de subir magia seria lançar mil vezes a magia mais
+barata. É por isso que o Tibia faz assim, e é por isso que a união de `gain` é discriminada em
+vez de ser um campo `points` só.
+
 ## Como testar
 
 ```

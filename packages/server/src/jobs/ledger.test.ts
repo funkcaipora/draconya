@@ -72,15 +72,16 @@ const progression: Progression = {
 
 const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
-): Promise<{ xp: number; gold: number; level: number; staminaMs: number }> => {
+): Promise<{ xp: number; gold: number; level: number; staminaMs: number; skills: unknown }> => {
   const [row] = await database.database.db
     .select({
       xp: characters.xp, gold: characters.gold, level: characters.level,
+      skills: characters.skills,
       staminaMs: characters.staminaMs,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
-  return row as { xp: number; gold: number; level: number; staminaMs: number };
+  return row as { xp: number; gold: number; level: number; staminaMs: number; skills: unknown };
 };
 
 describe('credit of a receipt', () => {
@@ -326,5 +327,80 @@ describe.runIf(ready)('liquidação de um personagem só (FUN-56)', () => {
 
     expect(result).toEqual({ written: 0, failed: 1 });
     expect(await receipts.pendingFor(orphan)).toHaveLength(1);
+  });
+});
+
+describe.runIf(ready)('as skills chegam ao Postgres pelo extrato (FUN-75)', () => {
+  it('grava o que o personagem praticou na hunt', async () => {
+    // O critério da issue em uma linha: skill que sobe pelo uso e não chega ao banco é skill
+    // que zera no próximo logout, e o snapshot em Redis mascara o sintoma até lá.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { melee: { level: 14, points: 3 } },
+    });
+
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).skills)
+      .toEqual({ melee: { level: 14, points: 3 } });
+  });
+
+  it('um extrato ANTIGO não rebaixa uma skill que já subiu', async () => {
+    // Skill é monotônica, e é isso que torna o `max` a fusão certa — não uma escolha
+    // conservadora. É a preocupação da guarda de instante da stamina, resolvida sem instante
+    // nenhum porque a grandeza não desce.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { melee: { level: 20, points: 0 }, magic: { level: 5, points: 10 } },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { melee: { level: 12, points: 0 } },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).skills).toEqual({
+      melee: { level: 20, points: 0 },
+      magic: { level: 5, points: 10 },
+    });
+  });
+
+  it('extrato SEM skills não apaga as que já estavam lá', async () => {
+    // É o extrato de uma sessão de Cidade, ou de um nó antigo durante deploy em rolagem.
+    // Gravar `{}` por cima apagaria progressão que ninguém pediu para apagar.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      skills: { melee: { level: 15, points: 1 } },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    await receipts.save(receiptOf(randomUUID(), characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).skills)
+      .toEqual({ melee: { level: 15, points: 1 } });
   });
 });

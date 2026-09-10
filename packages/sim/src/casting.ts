@@ -106,6 +106,13 @@ export function castSpell(
   nowMs: number,
   combat: Combat,
   rng: Rng,
+  /**
+   * Multiplicador de poder vindo das skills (FUN-75). `1` é "sem skill nenhuma".
+   *
+   * Entra pronto, e não como a skill em si, porque quem sabe quais skills alimentam magia é o
+   * conteúdo — e este arquivo não conhece catálogo. Quem chama já percorreu.
+   */
+  powerScale = 1,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -130,7 +137,7 @@ export function castSpell(
     // `kind: 'magic'` porque a eficácia da armadura contra magia é outra, e ela é conteúdo
     // (`combat/baseline.json`) — não motor. A rolagem consome o RNG da sessão como todo golpe.
     const result = resolveDamage(
-      { power: spell.effect.power, kind: 'magic' },
+      { power: Math.round(spell.effect.power * powerScale), kind: 'magic' },
       { armor: target.armor, dodgeChance: target.dodgeChance },
       'pve',
       combat,

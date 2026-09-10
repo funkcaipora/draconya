@@ -30,6 +30,8 @@ export interface CharacterRecord {
    * jogo. `null` é personagem que nunca configurou.
    */
   readonly botConfig: unknown;
+  /** Skills que sobem por uso (§9.4, FUN-75). A coluna já existia; o que faltava era quem a usasse. */
+  readonly skills: unknown;
   readonly createdAt: Date;
 }
 
@@ -252,6 +254,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     state: row.state,
     sessionId: row.sessionId,
     botConfig: row.botConfig,
+    skills: row.skills,
     createdAt: row.createdAt,
   };
 }

@@ -2,6 +2,7 @@ import { buildContent, isBlocked } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import type { SkillsState } from '../skills.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -94,9 +95,24 @@ const supplies = [
   { id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: { kind: 'mana', amount: 100 } },
 ];
 
+// Skills de teste (FUN-75). Curva curta de propósito: com base 2 dá para contar os golpes na
+// mão e dizer, olhando, em que nível o personagem tem de estar.
+const skills = [
+  {
+    id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 },
+    damagePerLevel: 0.5,
+  },
+  {
+    id: 'magic', name: 'Magia', startingLevel: 0,
+    curve: { base: 100, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 },
+    damagePerLevel: 0,
+  },
+];
+
 const raw = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-  stamina: [stamina], spells, supplies,
+  stamina: [stamina], spells, supplies, skills,
   // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
   bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], maps: [map], routes: [route], ...over,
@@ -104,7 +120,9 @@ const raw = (over: Partial<RawContent> = {}): RawContent => ({
 
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
-const character = (over: Partial<{ health: number; staminaMs: number }> = {}): CharacterRuntime => {
+const character = (
+  over: Partial<{ health: number; staminaMs: number; skills: SkillsState }> = {},
+): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
   return new CharacterRuntime({
     id: 'hero', position: { x: 0, y: 0, z: 7 },
@@ -112,6 +130,7 @@ const character = (over: Partial<{ health: number; staminaMs: number }> = {}): C
     mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
     staminaMs: over.staminaMs ?? stamina.maxMs, staminaUpdatedAtMs: 0,
     goldDelta: 0, alive: true, cooldowns: {},
+    ...(over.skills === undefined ? {} : { skills: over.skills }),
   });
 };
 
@@ -123,7 +142,7 @@ interface Started {
 
 function start(
   options: { difficulty?: 'beginner' | 'professional'; exitRules?: readonly HuntExitRule[];
-    health?: number; staminaMs?: number; loaded?: Content } = {},
+    health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState } = {},
 ): Started {
   const session = createHuntSession({
     id: 'session-1',
@@ -136,6 +155,7 @@ function start(
   const hero = character({
     ...(options.health === undefined ? {} : { health: options.health }),
     ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs }),
+    ...(options.skills === undefined ? {} : { skills: options.skills }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
@@ -1892,5 +1912,135 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
     run(session, 5_000, 100);
 
     expect(session.ended).toBeNull();
+  });
+});
+
+// --- skills sobem pelo USO (FUN-75) ----------------------------------------------------------
+
+describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
+  const skillDe = (hero: CharacterRuntime, id: string) =>
+    hero.skills.getState()[id] ?? null;
+
+  it('cada golpe conta um ponto, e o nível sobe pelo que a curva diz', () => {
+    // Curva de base 2: dois golpes fecham um nível. Contar acerto cheio em vez de golpe faria
+    // a skill subir mais devagar contra alvo blindado, que é o oposto de "sobe pelo uso".
+    //
+    // Dificuldade `professional` (três ratos) e um minuto: sem isso o personagem passa metade
+    // do tempo esperando respawn, e o teste mediria a densidade da hunt em vez da curva.
+    const { session, hero } = start({ difficulty: 'professional' });
+
+    run(session, 60_000, 100);
+
+    const melee = skillDe(hero, 'melee');
+    expect(melee).not.toBeNull();
+    expect(melee?.level).toBeGreaterThan(10);
+  });
+
+  it('a skill ESCALA o dano — quem treinou mata mais no mesmo tempo', () => {
+    // Duas hunts idênticas, mesma semente, mesmo cenário: só o nível de skill do personagem
+    // muda. A primeira versão deste teste só afirmava que a skill subiu, e passava igual com
+    // a escala arrancada — um teste que não distingue os dois lados não protege nenhum.
+    //
+    // `damagePerLevel: 0.5` neste conteúdo de teste, alto de propósito: com skill 30 o poder
+    // vai de 25 para 275, e um rato de 50 cai num golpe em vez de dois.
+    const cru = start({ difficulty: 'professional' });
+    run(cru.session, 60_000, 100);
+
+    const treinado = start({
+      difficulty: 'professional', skills: { melee: { level: 30, points: 0 } },
+    });
+    run(treinado.session, 60_000, 100);
+
+    expect(treinado.session.aggregates.kills)
+      .toBeGreaterThan(cru.session.aggregates.kills);
+  });
+
+  it('magia sobe por MANA GASTA, não por lançamento', () => {
+    // §9.4, modelo do Tibia. Por lançamento, a forma ótima de subir magia seria lançar mil
+    // vezes a magia mais barata, e o jogo viraria macro de spam.
+    //
+    // O teste afirma o NÚMERO, e isso é o ponto: a primeira versão dele só checava "subiu
+    // algo", e passava igual com a magia rendendo um ponto por lançamento. Um teste que passa
+    // dos dois lados da decisão não protege a decisão.
+    const { session, hero } = withSpells(botConfig({
+      heal: [healRule(100)],
+    }), { health: 1_000, monsters: false });
+
+    run(session, 10_000, 100);
+
+    // Mana 200, cura de 20: dez curas até acabar. Por mana gasta são 200 pontos; por
+    // lançamento seriam 10. Com curva de 100, a diferença é nível 2 contra nível 0.
+    const magic = skillDe(hero, 'magic');
+    expect(magic).toEqual({ level: 2, points: 0 });
+    expect(hero.mana).toBe(0);
+  });
+
+  it('magia RECUSADA não rende skill — não gastou mana, não praticou', () => {
+    // Sem mana, a cura é recusada. Contar a tentativa faria "praticar" virar "tentar", e o
+    // caminho ótimo passaria a ser spammar sem mana.
+    const { session, hero } = withSpells(
+      botConfig({ heal: [healRule(100)] }), { health: 1_000, mana: 0, monsters: false },
+    );
+
+    run(session, 10_000, 100);
+
+    expect(skillDe(hero, 'magic')).toBeNull();
+  });
+
+  it('subir de nível vira evento notável — é o que o jogador quer ver ao voltar', () => {
+    // §16.2: a lista curta da tela de retorno. Numa hunt de oito horas, subir uma skill é uma
+    // das poucas coisas que aconteceram que valem uma linha.
+    const { session } = start({ difficulty: 'professional' });
+    run(session, 60_000, 100);
+
+    const subiu = session.notableEvents.filter((e) => e.type === 'skill-up');
+    expect(subiu.length).toBeGreaterThan(0);
+    expect(subiu[0]?.detail).toMatch(/^melee\/\d+$/);
+  });
+
+  it('as skills atravessam o snapshot', () => {
+    const { session, hero } = start({ difficulty: 'professional' });
+    run(session, 60_000, 100);
+    const antes = hero.skills.getState();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.skills.getState()).toEqual(antes);
+  });
+
+  it('personagem SEM skills gravadas começa no nível inicial, e não quebra', () => {
+    // É o personagem de antes desta issue. Campo opcional, sem bump de formato.
+    const { session, hero } = start();
+    run(session, 5_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    delete (snapshot.participants[0] as { skills?: unknown }).skills;
+
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.skills.getState()).toEqual({});
+    expect(() => run(retomado, 5_000, 100)).not.toThrow();
+  });
+
+  it('1 Hz e 10 Hz sobem a MESMA skill — uso é evento, não tick', () => {
+    // O que o invariante 2 proíbe é grandeza dependente do TEMPO somada por tick. Aqui o que
+    // se soma é uso, e uso é evento na fila: um golpe que vence, uma magia que sai.
+    const at = (stepMs: number) => {
+      const { session, hero } = start({ difficulty: 'professional' });
+      run(session, 120_000, stepMs);
+      return { skills: hero.skills.getState(), kills: session.aggregates.kills };
+    };
+
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
   });
 });

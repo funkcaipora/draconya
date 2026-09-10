@@ -101,6 +101,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   nascimento, e a comparação é estrita — o campeão só cai para quem ganha de verdade. Trocar por
   `<=` faz duas execuções da mesma semente divergirem assim que dois monstros empatarem, que é o
   caso comum: monstro recém-nascido tem sempre a vida cheia.
+- **Skill é acumulador de USO, e isso não briga com o invariante 2** (FUN-75). O que a regra
+  proíbe é grandeza dependente do TEMPO somada por tick; o que se soma aqui é uso, e uso é
+  evento na fila — um golpe que vence, uma magia que sai. A 1 Hz e a 10 Hz acontecem os mesmos
+  usos nos mesmos instantes lógicos.
+- **O custo de um nível de skill é INTEIRO** (`Math.round` em `pointsForLevel`). `50 * 1.1` é
+  `55.000000000000007`, e o resto que sobra ao fechar um nível carregaria esse lixo para o
+  próximo — a mesma armadilha do acumulador fracionário registrada acima, por outra porta.
+- **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
+  torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
+  nada, e não é preciso guardar instante como a stamina guarda.
 - **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
   `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
   `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.
