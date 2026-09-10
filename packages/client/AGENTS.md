@@ -68,6 +68,7 @@ assets/catalog.ts      o índice: qual folha tem qual id, e onde dentro dela
 assets/sheet.ts        CIP → LZMA → BMP → RGBA. PURO: entra Uint8Array, sai Uint8Array
 assets/sheet-worker.ts a casca de doze linhas que põe `sheet.ts` num worker
 assets/sheet-loader.ts o lado do thread principal: fila, id por pedido, encerramento
+assets/sprites.ts      id global → folha → recorte → ImageBitmap, com LRU por BYTES
 assets/cache.ts        a POLÍTICA: chave, teto de bytes, despejo LRU, degradação
 assets/indexeddb.ts    o ARMAZENAMENTO: transação, cursor, clone estruturado
 assets/testing.ts      encoder de protobuf, só para fixture
@@ -112,6 +113,25 @@ de biblioteca.
 **`lzma-web@4`**, no subpath `lzma-web/decompress`, que descarta o compressor. Descartadas:
 `lzma-js` (20 MB, parado em 2022), `js-lzma` (2022, sem tipos), `xz-decompress` (é XZ, outro
 container), `node-liblzma` (binding nativo — o ADR 0013 exige binário para dois arcos).
+
+## Do id ao quadro desenhável (FUN-18)
+
+**A folha é insumo, o quadro é o produto.** Uma folha de 384×384 vira 144 quadros de 32×32, e
+o jogo desenha uns poucos por vez — guardar a folha como bitmap gastaria memória de GPU com
+143 quadros que ninguém está olhando.
+
+**O orçamento é em BYTES, nunca em contagem.** Um 64×64 ocupa quatro vezes um 32×32; contar
+itens faria o teto real variar por um fator de quatro conforme o que estivesse em cena, e o
+estouro chegaria numa hunt cheia de monstros grandes — justamente quando não se pode engasgar.
+
+**`close()` no despejado é obrigatório, não higiene.** `ImageBitmap` segura memória de GPU que
+o coletor não recolhe: um cache que respeita o teto e não fecha vaza exatamente igual a um que
+não tem teto, e o sintoma é o navegador ficando lento, não o jogo. `clear()` existe pela mesma
+razão — trocar de mapa sem ele vaza a tela anterior inteira.
+
+**Duas deduplicações, e são coisas diferentes:** por ID em voo (dez criaturas iguais entrando
+em cena criam um bitmap, não dez) e por FOLHA em voo (dez quadros da mesma folha a baixam e
+descomprimem uma vez). Sem a primeira, nove bitmaps vazam porque só um fica no cache.
 
 ## O cache persistente (FUN-19)
 
