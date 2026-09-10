@@ -3,6 +3,7 @@ import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import type { SkillsState } from '../skills.js';
+import type { InventoryState } from '../inventory.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -116,9 +117,22 @@ const skills = [
   },
 ];
 
+// Uma arma que bate MUITO mais que o desarmado (25): com ela o rato de 50 cai num golpe, e o
+// teste consegue medir a diferença sem depender de sorteio.
+const items = [
+  {
+    id: 'sword', name: 'Sword', appearanceId: 3264, kind: 'weapon', slot: 'hand',
+    weight: 50, attack: 200,
+  },
+  {
+    id: 'plate', name: 'Plate Armor', appearanceId: 3357, kind: 'armor', slot: 'chest',
+    weight: 80, armor: 9,
+  },
+];
+
 const raw = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-  stamina: [stamina], spells, supplies, skills,
+  stamina: [stamina], spells, supplies, skills, items,
   // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
   bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], maps: [map], routes: [route], ...over,
@@ -127,7 +141,9 @@ const raw = (over: Partial<RawContent> = {}): RawContent => ({
 const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(over));
 
 const character = (
-  over: Partial<{ health: number; staminaMs: number; skills: SkillsState }> = {},
+  over: Partial<{
+    health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
+  }> = {},
 ): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
   return new CharacterRuntime({
@@ -136,7 +152,9 @@ const character = (
     mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
     staminaMs: over.staminaMs ?? stamina.maxMs, staminaUpdatedAtMs: 0,
     goldDelta: 0, alive: true, cooldowns: {},
+    capacity: 1_000,
     ...(over.skills === undefined ? {} : { skills: over.skills }),
+    ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
   });
 };
 
@@ -148,7 +166,8 @@ interface Started {
 
 function start(
   options: { difficulty?: 'beginner' | 'professional'; exitRules?: readonly HuntExitRule[];
-    health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState } = {},
+    health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
+    inventory?: InventoryState } = {},
 ): Started {
   const session = createHuntSession({
     id: 'session-1',
@@ -162,6 +181,7 @@ function start(
     ...(options.health === undefined ? {} : { health: options.health }),
     ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs }),
     ...(options.skills === undefined ? {} : { skills: options.skills }),
+    ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
@@ -2170,5 +2190,111 @@ describe('o alcance da magia é o DELA, não o da arma (FUN-92)', () => {
     expect(tiles).toBeGreaterThan(combat.player.attackRange);
     expect(tiles).toBeLessThanOrEqual(3);
     expect(alvo.health).toBeLessThan(1_000_000);
+  });
+});
+
+// --- a arma equipada decide o dano (FUN-82) --------------------------------------------------
+
+describe('equipamento no combate (FUN-82)', () => {
+  const comEspada: InventoryState = {
+    backpack: [],
+    equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
+  };
+  const comArmadura: InventoryState = {
+    backpack: [],
+    equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
+  };
+
+  it('quem está armado mata mais no mesmo tempo', () => {
+    // `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
+    // personagem SEM arma. A espada deste conteúdo bate 200 contra os 25 do punho: o rato de
+    // 50 cai num golpe em vez de dois.
+    const desarmado = start({ difficulty: 'professional' });
+    run(desarmado.session, 60_000, 100);
+
+    const armado = start({ difficulty: 'professional', inventory: comEspada });
+    run(armado.session, 60_000, 100);
+
+    expect(armado.session.aggregates.kills)
+      .toBeGreaterThan(desarmado.session.aggregates.kills);
+  });
+
+  it('a armadura vestida SOMA à do conteúdo, e o personagem apanha menos', () => {
+    // Somar, e não substituir: `combat.player.armor` é a resistência do corpo. Substituir faria
+    // vestir a primeira armadura deixar o personagem mais frágil se ela valesse menos.
+    const nu = start({ difficulty: 'professional', health: 5_000 });
+    run(nu.session, 60_000, 100);
+
+    const vestido = start({
+      difficulty: 'professional', health: 5_000, inventory: comArmadura,
+    });
+    run(vestido.session, 60_000, 100);
+
+    expect(vestido.hero.health).toBeGreaterThan(nu.hero.health);
+  });
+
+  it('o inventário atravessa o snapshot', () => {
+    const { session } = start({ difficulty: 'professional', inventory: comEspada });
+    run(session, 5_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.inventory.equippedAt('hand')?.itemId).toBe('sword');
+  });
+
+  it('personagem SEM inventário gravado continua batendo com o desarmado', () => {
+    // É o personagem de antes desta issue. Campo opcional, sem bump de formato.
+    const { session, hero } = start({ difficulty: 'professional' });
+    run(session, 10_000, 100);
+
+    expect(hero.inventory.backpack).toEqual([]);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+  });
+
+  it('capacidade ZERO é reposta na entrada, pela tabela', () => {
+    // Zero é o que um personagem gravado antes do inventário traz, e zero quer dizer "não
+    // carrega nada" — travaria a mochila de quem já jogava. A reposição é só para esse caso:
+    // quem chega com capacidade própria a mantém.
+    const loaded = content();
+    const session = createHuntSession({
+      id: 'capacidade', content: loaded, huntId: 'arena', difficulty: 'beginner',
+      createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const antigo = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    expect(antigo.capacity).toBe(0);
+
+    session.enter(antigo);
+
+    expect(antigo.capacity).toBe(stats.capacity);
+  });
+
+  it('a capacidade acompanha o LEVEL', () => {
+    // Sem isto, subir de level daria vida e mana e deixaria a mochila do mesmo tamanho — e o
+    // jogador descobriria pelo item que não coube, sem nada ligando uma coisa à outra.
+    const um = statsForLevel(1, null, progression as Progression).capacity;
+    const dez = statsForLevel(10, null, progression as Progression).capacity;
+    expect(dez).toBeGreaterThan(um);
+
+    const { session, hero } = start();
+    session.advanceBy(10);
+    hero.xp = totalXpForLevel(10, progression as Progression);
+    run(session, 30_000, 100);
+
+    expect(hero.level).toBeGreaterThan(1);
+    expect(hero.capacity).toBe(
+      statsForLevel(hero.level, null, progression as Progression).capacity,
+    );
   });
 });

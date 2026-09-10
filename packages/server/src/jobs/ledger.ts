@@ -12,7 +12,7 @@ import { Skills, levelForXp } from '@draconya/sim';
 import type { SkillsState } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
-import { characters, ledger } from '../db/schema.js';
+import { characters, itemInstances, ledger } from '../db/schema.js';
 import type { Logger } from '../log.js';
 import type { ReceiptStore, SessionReceipt } from '../receipts.js';
 
@@ -177,6 +177,12 @@ async function applyProgression(
     ? {}
     : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
 
+  // O layout de equipamento (FUN-82). Escopado por dono dentro do próprio `applyEquipment`:
+  // um extrato não move item de outra pessoa nem que traga o id dela.
+  if (receipt.equipment !== undefined) {
+    await applyEquipment(tx, receipt.characterId, receipt.equipment);
+  }
+
   await tx
     .update(characters)
     .set({
@@ -198,4 +204,36 @@ export async function countLedgerRows(database: Database, sessionId: string): Pr
   );
   const first = (rows as unknown as Array<{ total: number }>)[0];
   return first?.total ?? 0;
+}
+
+/**
+ * Põe cada instância no slot que o extrato diz, e tira as que saíram (FUN-82).
+ *
+ * **Desequipa primeiro**, e a ordem é a razão de isto ser dois passos: o índice único do banco
+ * recusa duas peças no mesmo slot, e trocar A por B esbarraria nele se B entrasse antes de A
+ * sair.
+ *
+ * Escopado por dono: um extrato com o id de um item alheio não move nada, porque a consulta que
+ * decide o que existe é a das instâncias DESTE personagem.
+ */
+async function applyEquipment(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  equipment: Readonly<Record<string, string>>,
+): Promise<void> {
+  const wanted = new Map(Object.entries(equipment).map(([slot, id]) => [id, slot]));
+  const owned = await tx
+    .select({ id: itemInstances.id, equippedSlot: itemInstances.equippedSlot })
+    .from(itemInstances)
+    .where(eq(itemInstances.ownerCharacterId, characterId));
+
+  for (const row of owned) {
+    if (row.equippedSlot === null || wanted.get(row.id) === row.equippedSlot) continue;
+    await tx.update(itemInstances).set({ equippedSlot: null }).where(eq(itemInstances.id, row.id));
+  }
+  for (const row of owned) {
+    const slot = wanted.get(row.id);
+    if (slot === undefined || slot === row.equippedSlot) continue;
+    await tx.update(itemInstances).set({ equippedSlot: slot }).where(eq(itemInstances.id, row.id));
+  }
 }

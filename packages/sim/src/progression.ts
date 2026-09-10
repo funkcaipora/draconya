@@ -173,6 +173,10 @@ function retarget(
   character.level = to;
   character.maxHealth = after.maxHealth;
   character.maxMana = after.maxMana;
+  // Capacidade acompanha o level pela mesma tabela (FUN-82). Sem isto, subir de level daria
+  // mais vida e mais mana e deixaria a mochila do mesmo tamanho — e o jogador descobriria pelo
+  // item que não coube, sem nada ligando uma coisa à outra.
+  character.capacity = after.capacity;
   character.health = clamp(character.health + (after.maxHealth - before.maxHealth), 0, after.maxHealth);
   character.mana = clamp(character.mana + (after.maxMana - before.maxMana), 0, after.maxMana);
   return { from, to };

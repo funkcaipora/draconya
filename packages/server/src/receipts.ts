@@ -50,6 +50,16 @@ export interface SessionReceipt {
    * mais de contar duas vezes.
    */
   readonly skills?: SkillsState;
+  /**
+   * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
+   *
+   * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
+   * lados concordassem sobre o inicial. O que não estiver aqui volta para a mochila.
+   *
+   * **Item não muda de dono pela sessão** — não há troca nem venda dentro da hunt. O que muda é
+   * onde ele está, e é só isso que atravessa.
+   */
+  readonly equipment?: Readonly<Record<string, string>>;
 }
 
 export interface ReceiptStoreOptions {
@@ -214,6 +224,11 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // erro nenhum. Foi o que aconteceu na primeira vez que escrevi isto.
     ...(typeof value['skills'] === 'object' && value['skills'] !== null
       ? { skills: value['skills'] as SkillsState }
+      : {}),
+    // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
+    // de volta sem erro nenhum. Já aconteceu com as skills.
+    ...(typeof value['equipment'] === 'object' && value['equipment'] !== null
+      ? { equipment: value['equipment'] as Record<string, string> }
       : {}),
   };
 }

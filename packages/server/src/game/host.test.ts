@@ -63,6 +63,7 @@ function buildHost(
     // `NonNullable`: `SessionHostOptions['x']` já inclui `undefined`, e espalhar uma opcional
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
+    itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
   } = {},
@@ -1598,5 +1599,93 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
 
     expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'error'))
       .toBe(true);
+  });
+});
+
+describe('equipar pelo socket (FUN-82)', () => {
+  const catalogo = new Map([
+    ['sword', {
+      id: 'sword', name: 'Sword', appearanceId: 1, kind: 'weapon' as const, slot: 'hand' as const,
+      weight: 10, stackable: false, attack: 20, armor: 0,
+      requires: { level: 20 },
+    }],
+  ]);
+  const mensagens = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+
+  const comItem = (level: number) => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { itemCatalog: catalogo, level });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+    return { host, viewer, socket, hero };
+  };
+
+  it('veste, e o sucesso NÃO vira mensagem', () => {
+    // Confirmar cada clique com uma linha de chat entulharia a tela. O que o jogador vê é o
+    // item no lugar — e isso é a UI (M10), não uma mensagem de sistema.
+    const { host, viewer, socket, hero } = comItem(20);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('i1');
+    expect(mensagens(socket)).toHaveLength(0);
+  });
+
+  it('recusa por level com o MOTIVO, e o item continua na mochila', () => {
+    // A recusa do `sim` é tipada justamente para virar uma frase; "não foi possível" é o que
+    // faz alguém abrir um chamado.
+    const { host, viewer, socket, hero } = comItem(19);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(hero.inventory.backpack).toHaveLength(1);
+    const aviso = mensagens(socket)[0];
+    expect(aviso?.type === 'system-message' && aviso.text).toContain('level');
+  });
+
+  it('recusa slot que não existe, sem tocar em nada', () => {
+    // O slot chega como string do cliente e é conferido contra o CONTEÚDO, como a dificuldade
+    // de hunt: repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+    const { host, viewer, socket } = comItem(20);
+
+    host.handle(viewer, { type: 'unequip', slot: 'rabo' });
+    host.flush();
+
+    expect(mensagens(socket)).toHaveLength(1);
+  });
+
+  it('desequipar devolve para a mochila', () => {
+    const { host, viewer, hero } = comItem(20);
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.handle(viewer, { type: 'unequip', slot: 'hand' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(hero.inventory.backpack.map((i) => i.instanceId)).toEqual(['i1']);
+  });
+
+  it('host montado SEM catálogo recusa em vez de vestir no escuro', () => {
+    // Um host sem conteúdo não sabe o que é uma espada. Vestir mesmo assim daria atributo de
+    // item que ele não conhece.
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset);
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    expect(hero.inventory.equippedAt('hand')).toBeNull();
+    expect(mensagens(socket)).toHaveLength(1);
   });
 });

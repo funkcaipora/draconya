@@ -19,7 +19,8 @@
 import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
   BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
-  Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap,
+  Vocation,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
@@ -41,7 +42,7 @@ import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep } from '../monster/step.js';
 import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
-import { applyDeathPenalty, grantXp } from '../progression.js';
+import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { TileOccupancy, canOccupy, move, place } from '../movement.js';
 import type { Movable, MoveResult } from '../movement.js';
@@ -212,6 +213,8 @@ export interface HuntRulesetOptions {
   readonly supplies: ReadonlyMap<string, Supply>;
   /** Skills que sobem por uso (FUN-75). Vazio é uma hunt em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
+  /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
+  readonly items: ReadonlyMap<string, Item>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -475,6 +478,13 @@ export class HuntRuleset implements Ruleset {
     // A duração do passo vem do CONTEÚDO e é copiada para a criatura, como `maxHealth` é: o
     // sistema de movimento pergunta a quem anda, e quem anda não conhece o conteúdo.
     character.stepDurationMs = this.#options.player.stepDurationMs;
+    // Capacidade vem da tabela, como `maxHealth` — e é reposta na entrada porque snapshot
+    // anterior ao inventário traz zero, e zero é "não carrega nada".
+    if (character.capacity <= 0) {
+      character.capacity = statsForLevel(
+        character.level, this.#vocationOf(character), this.#options.progression,
+      ).capacity;
+    }
     const refused = place(this.#world, character, this.#walker.current);
     if (refused !== null) {
       throw new Error(
@@ -1282,7 +1292,7 @@ export class HuntRuleset implements Ruleset {
 
     const result = resolveDamage(
       { power: definition.attack, kind: 'melee' },
-      this.#playerDefender(),
+      this.#playerDefender(character),
       'pve',
       this.#options.combat,
       session.rng,
@@ -1351,7 +1361,7 @@ export class HuntRuleset implements Ruleset {
     const result = resolveDamage(
       // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
       // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
-      { power: this.#scaledPower(character, 'melee-hit', this.#options.player.attackPower),
+      { power: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
         kind: 'melee' },
       { armor: definition.armor, dodgeChance: 0 },
       'pve',
@@ -1471,9 +1481,30 @@ export class HuntRuleset implements Ruleset {
     return this.#options.vocations.get(character.vocationId) ?? null;
   }
 
-  #playerDefender(): Defender {
+  /**
+   * O ataque da ARMA equipada, ou o do desarmado (FUN-82).
+   *
+   * `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
+   * personagem SEM arma — o fallback, e ele é conteúdo. Um zero em código no lugar dele faria
+   * todo personagem novo não machucar nada, e sem arma é como todo personagem começa.
+   */
+  #attackPowerOf(character: CharacterRuntime): number {
+    return character.inventory.weaponAttack(this.#options.items)
+      ?? this.#options.player.attackPower;
+  }
+
+  /**
+   * A defesa do personagem: a armadura do CONTEÚDO mais a do que ele veste (FUN-82).
+   *
+   * Soma, e não substituição: `combat.player.armor` é a resistência do corpo, e a peça vestida
+   * acrescenta. Substituir faria vestir a primeira armadura deixar o personagem mais frágil se
+   * ela valesse menos que o número base.
+   *
+   * Recebe o personagem porque a armadura passou a depender de quem é — antes era constante.
+   */
+  #playerDefender(character: CharacterRuntime): Defender {
     return {
-      armor: this.#options.player.armor,
+      armor: this.#options.player.armor + character.inventory.armor(this.#options.items),
       dodgeChance: this.#options.player.dodgeChance,
     };
   }
@@ -1628,6 +1659,7 @@ export function createHuntRuleset(
     stamina: content.stamina,
     vocations: content.vocations,
     skills: content.skills,
+    items: content.items,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

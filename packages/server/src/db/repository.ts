@@ -47,6 +47,8 @@ export interface ItemInstanceRecord {
   readonly ownerCharacterId: string;
   readonly quantity: number;
   readonly origin: string;
+  /** Em que slot está vestida, ou `null` para "na mochila" (FUN-82). */
+  readonly equippedSlot: string | null;
   readonly createdAt: Date;
 }
 
@@ -99,6 +101,17 @@ export interface GameRepository {
   }): Promise<ItemInstanceRecord>;
   /** O que este personagem tem. É a consulta que o índice por dono existe para servir. */
   listItemInstances(characterId: string): Promise<readonly ItemInstanceRecord[]>;
+  /**
+   * Aplica o layout de equipamento que a sessão registrou (FUN-82).
+   *
+   * `equipped` é `slot → instanceId`, ABSOLUTO: o que não está nele volta para a mochila. É a
+   * mesma forma das skills, e pela mesma razão — a sessão sabe o estado final, e mandar delta
+   * exigiria que os dois lados concordassem sobre o inicial.
+   *
+   * Tudo escopado por `ownerCharacterId`: um extrato não move item de outra pessoa nem que
+   * traga o id dela.
+   */
+  applyEquipment(characterId: string, equipped: Readonly<Record<string, string>>): Promise<void>;
 }
 
 export class DrizzleGameRepository implements GameRepository {
@@ -217,6 +230,35 @@ export class DrizzleGameRepository implements GameRepository {
       // Ordem estável: sem ela, duas aberturas do inventário desenham a mesma coisa em ordens
       // diferentes, e o jogador vê os itens dançando sem ter mexido em nada.
       .orderBy(asc(itemInstances.createdAt), asc(itemInstances.id));
+  }
+
+  async applyEquipment(
+    characterId: string, equipped: Readonly<Record<string, string>>,
+  ): Promise<void> {
+    const wanted = new Map(Object.entries(equipped).map(([slot, id]) => [id, slot]));
+    await this.#db.transaction(async (tx) => {
+      const owned = await tx
+        .select({ id: itemInstances.id, equippedSlot: itemInstances.equippedSlot })
+        .from(itemInstances)
+        .where(eq(itemInstances.ownerCharacterId, characterId));
+
+      // DESEQUIPA PRIMEIRO, e a ordem é a razão de isto ser uma transação com dois passos em
+      // vez de um `update` por linha: o índice único recusa duas peças no mesmo slot, e trocar
+      // A por B esbarraria nele se B entrasse antes de A sair.
+      for (const row of owned) {
+        if (row.equippedSlot === null || wanted.get(row.id) === row.equippedSlot) continue;
+        await tx.update(itemInstances)
+          .set({ equippedSlot: null })
+          .where(eq(itemInstances.id, row.id));
+      }
+      for (const row of owned) {
+        const slot = wanted.get(row.id);
+        if (slot === undefined || slot === row.equippedSlot) continue;
+        await tx.update(itemInstances)
+          .set({ equippedSlot: slot })
+          .where(eq(itemInstances.id, row.id));
+      }
+    });
   }
 
   /**

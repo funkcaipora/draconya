@@ -43,6 +43,8 @@ export interface GameDependencies {
   readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
   /** Persiste a configuração aceita. A única escrita de banco do `game`. */
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
+  /** O catálogo de itens, para as regras de equipar (FUN-82). */
+  readonly itemCatalog?: SessionHostOptions['itemCatalog'];
 }
 
 /**
@@ -111,6 +113,9 @@ export function createGame(
       ...(dependencies.saveBotConfig === undefined
         ? {}
         : { saveBotConfig: dependencies.saveBotConfig }),
+      ...(dependencies.itemCatalog === undefined
+        ? {}
+        : { itemCatalog: dependencies.itemCatalog }),
       metrics,
     });
 
