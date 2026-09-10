@@ -31,24 +31,29 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 
 ## Sistemas
 
+> **O status desta tabela é o do cabeçalho de cada arquivo, e não uma segunda opinião.** Ele ficou
+> seis linhas atrás da realidade entre a M3 e a M5 — os arquivos foram atualizados a cada entrega
+> e a tabela não —, e um índice que diz "não implementado" sobre coisa entregue faz alguém
+> reimplementar. Ao mudar o `**Status:**` de um arquivo, mude a linha aqui no mesmo commit.
+
 | Sistema | Arquivo | Status | Épico | PRD |
 |---|---|---|---|---|
 | Contas, autenticação e personagens | [`accounts-and-characters.md`](./accounts-and-characters.md) | parcial | E0 | §7.1–§7.4 |
 | Onboarding e tutorial | [`onboarding.md`](./onboarding.md) | parcial | E14 | §7.4, §8 |
-| Progressão, vocações e level | [`progression.md`](./progression.md) | não implementado | E2, E7 | §4.1, §9, §43.1 |
-| Stamina | [`stamina.md`](./stamina.md) | não implementado | E2, E3 | §10 |
+| Progressão, vocações e level | [`progression.md`](./progression.md) | parcial | E2, E7 | §4.1, §9, §43.1 |
+| Stamina | [`stamina.md`](./stamina.md) | implementado | E2, E3 | §10 |
 | Treino | [`training.md`](./training.md) | não implementado | E8 | §11 |
-| Combate | [`combat.md`](./combat.md) | não implementado | E2 | §12 |
+| Combate | [`combat.md`](./combat.md) | parcial | E2 | §12 |
 | Bot | [`bot.md`](./bot.md) | não implementado | E4 | §13, §43.3 |
-| Hunt | [`hunt.md`](./hunt.md) | não implementado | E3 | §14 |
+| Hunt | [`hunt.md`](./hunt.md) | parcial | E3 | §14 |
 | Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
 | Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | não implementado | E6 | §16, §43.10 |
 | Bestiário | [`bestiary.md`](./bestiary.md) | não implementado | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
-| Economia, supply e Market | [`economy.md`](./economy.md) | não implementado | E5, E13 | §20, §32, §33, §43.5 |
+| Economia, supply e Market | [`economy.md`](./economy.md) | parcial | E5, E13 | §20, §32, §33, §43.5 |
 | Itens, equipamento e inventário | [`items.md`](./items.md) | não implementado | E5, E7, E11 | §21-§23, §25, §43.6 |
-| Morte | [`death.md`](./death.md) | não implementado | E2 | §26 |
+| Morte | [`death.md`](./death.md) | implementado | E2 | §26 |
 | Bosses | [`bosses.md`](./bosses.md) | não implementado | E11 | §27, §43.7 |
 | Quests | [`quests.md`](./quests.md) | não implementado | E11 | §28 |
 | Guildas | [`guilds.md`](./guilds.md) | não implementado | E12 | §29 |

@@ -128,11 +128,13 @@ export const progressionSchema = z.object({
    */
   stepDurationMs: z.number().int().positive(),
   /**
-   * Regeneração passiva, em pontos por segundo (FUN-36).
+   * Regeneração passiva, em pontos por segundo (FUN-36, FUN-68).
    *
-   * Por SEGUNDO, e não por tick: `hp += taxa * dtMs / 1000`, com a fração residual guardada
-   * (ver `Cooldowns.accrue`). É o que faz a hunt desanexada a 1 Hz regenerar o mesmo que a
-   * anexada a 10 Hz.
+   * Por SEGUNDO, e não por tick. Uma taxa de `r` por segundo vira um evento periódico de
+   * `1000 / r` milissegundos na fila da sessão, que vence no instante exato — nada de somar
+   * `taxa * dtMs / 1000` num acumulador fracionário, que derivava: `0,1` dez vezes em ponto
+   * flutuante dá `0,9999…` e some uma unidade a cada dez. É o que faz a hunt desanexada a
+   * 1 Hz regenerar exatamente o mesmo que a anexada a 10 Hz.
    */
   regen: z.object({
     healthPerSecond: z.number().nonnegative(),
