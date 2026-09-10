@@ -18,6 +18,13 @@ Persistência, diretório de sessão e roteamento.
   bug de protocolo, não recurso.
 - **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único (invariante 10).
   Retry nunca duplica. Ver ADR 0006.
+  **A guarda de stamina compara DOIS RELÓGIOS** (FUN-101). `characters.stamina_updated_at`
+  nasce de `defaultNow()` — relógio do Postgres; `receipt.staminaUpdatedAtMs` sai de
+  `Date.now()` do nó `game`. A guarda só vale enquanto o skew for menor que o tempo entre duas
+  sessões do mesmo personagem — o que é verdade, mas por folga e não por construção. **Teste
+  que fale de stamina lê o instante da PRÓPRIA LINHA**, nunca `Date.now()`: medido nesta
+  máquina, o Postgres está ~35 ms à frente, e um insert que volta mais rápido que isso faz a
+  guarda recusar corretamente e reprovar um teste que não fala de relógio nenhum.
   **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
   existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em

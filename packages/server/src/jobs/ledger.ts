@@ -164,6 +164,17 @@ async function applyProgression(
 
   // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato
   // atrasado, processado fora de ordem, não pode devolver stamina já gasta.
+  //
+  // **Os dois lados vêm de relógios DIFERENTES** (FUN-101), e isso é uma premissa, não um
+  // detalhe: `current.staminaUpdatedAt` nasce de `defaultNow()`, que é o relógio do Postgres;
+  // `receipt.staminaUpdatedAtMs` sai de `materializeStamina(character, now())` no nó `game`,
+  // que é o `Date.now()` DELE. A guarda só vale enquanto o skew entre os dois for menor que o
+  // tempo entre duas sessões consecutivas do mesmo personagem.
+  //
+  // Sessão dura segundos no mínimo e NTP mantém máquinas dentro de dezenas de milissegundos,
+  // então vale — mas vale por folga, não por construção. Numa falha de NTP que ponha o banco
+  // à frente, o sintoma é stamina que não desce, sem erro em lugar nenhum. Se um dia isso
+  // acontecer, a correção é o `game` mandar o instante que LEU da linha, e não o próprio.
   const stamina = receipt.staminaMs !== undefined
     && receipt.staminaUpdatedAtMs !== undefined
     && receipt.staminaUpdatedAtMs >= current.staminaUpdatedAt.getTime()

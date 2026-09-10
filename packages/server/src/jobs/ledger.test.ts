@@ -72,6 +72,23 @@ const progression: Progression = {
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };
 
+/**
+ * O `stamina_updated_at` da linha, em milissegundos.
+ *
+ * Existe para o teste de stamina não cruzar relógios (FUN-101): tudo que ele compara passa a
+ * vir do mesmo lugar que a guarda compara.
+ */
+const staminaUpdatedAt = async (
+  database: NonNullable<typeof db>, characterId: string,
+): Promise<number> => {
+  const [row] = await database.database.db
+    .select({ at: characters.staminaUpdatedAt })
+    .from(characters)
+    .where(eq(characters.id, characterId));
+  if (row === undefined) throw new Error('personagem não encontrado');
+  return row.at.getTime();
+};
+
 const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{ xp: number; gold: number; level: number; staminaMs: number; skills: unknown }> => {
@@ -237,10 +254,16 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
     const database = db as NonNullable<typeof db>;
     const characterId = await seedCharacter(database);
     const receipts = new ReceiptStore(redis);
-    const agora = Date.now();
+    // **O instante sai da PRÓPRIA LINHA, nunca de `Date.now()`** (FUN-101). A guarda compara
+    // `receipt.staminaUpdatedAtMs` com `characters.stamina_updated_at`, que nasce de
+    // `defaultNow()` — relógio do POSTGRES. `Date.now()` é o relógio deste processo, e os dois
+    // não são o mesmo: medido nesta máquina, o Postgres está ~35 ms à frente. Com o insert
+    // voltando em menos que isso, `Date.now()` fica ATRÁS da linha recém-criada e a guarda
+    // recusa a primeira escrita — reprovando um teste que não fala de relógio nenhum.
+    const nascido = await staminaUpdatedAt(database, characterId);
 
     await receipts.save(receiptOf(randomUUID(), characterId, {
-      staminaMs: 10_000, staminaUpdatedAtMs: agora,
+      staminaMs: 10_000, staminaUpdatedAtMs: nascido,
     }));
     await writePendingReceipts({
       database: database.database.db, receipts, logger, progression,
@@ -248,7 +271,7 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
     expect((await characterRow(database, characterId)).staminaMs).toBe(10_000);
 
     await receipts.save(receiptOf(randomUUID(), characterId, {
-      seq: 2, staminaMs: 86_400_000, staminaUpdatedAtMs: agora - 60_000,
+      seq: 2, staminaMs: 86_400_000, staminaUpdatedAtMs: nascido - 60_000,
     }));
     await writePendingReceipts({
       database: database.database.db, receipts, logger, progression,
