@@ -18,6 +18,7 @@
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import type { Aggregates, EndReason, NotableEvent, SkillsState } from '@draconya/sim';
+import type { BoxedItem } from './loot-box.js';
 
 export interface SessionReceipt {
   readonly sessionId: string;
@@ -60,6 +61,19 @@ export interface SessionReceipt {
    * onde ele está, e é só isso que atravessa.
    */
   readonly equipment?: Readonly<Record<string, string>>;
+  /**
+   * Os itens que ESTA sessão criou e que couberam na mochila (§22.2, FUN-88).
+   *
+   * Viram linha de `item_instance` na liquidação. O id vem do `sim` e é determinístico
+   * (`sessionId:n`), então reprocessar o extrato insere a mesma chave primária e não faz nada
+   * — a mesma idempotência que a `UNIQUE (session_id, seq)` dá ao ledger.
+   */
+  readonly acquired?: readonly BoxedItem[];
+  /**
+   * O que caiu e NÃO coube (§21.6). Vai para a Caixa de Loot da Sessão, não para o banco:
+   * expirar precisa significar que o item nunca existiu.
+   */
+  readonly lootBox?: readonly BoxedItem[];
 }
 
 export interface ReceiptStoreOptions {
@@ -230,5 +244,7 @@ function parseReceipt(raw: string): SessionReceipt | null {
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null
       ? { equipment: value['equipment'] as Record<string, string> }
       : {}),
+    ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
+    ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),
   };
 }

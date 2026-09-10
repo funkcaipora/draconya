@@ -1,7 +1,8 @@
 # Itens, equipamento e inventário
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
-capacidade (FUN-82) implementados; loot de item, Caixa de Loot e autovenda ainda não existem
+capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) implementados;
+resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -127,6 +128,54 @@ limpar por omissão desequiparia o personagem sem ninguém ter pedido.
 
 Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
 está, e é só isso que atravessa.
+
+## Loot de item e a Caixa de Loot da Sessão (FUN-88)
+
+O item cai pelo mesmo sorteio de sempre — gold antes, itens na ordem da tabela, com o `Rng` da
+sessão. **A ordem dos sorteios é contrato** (FUN-63), e acrescentar destino não muda sorteio.
+
+Onde ele vai (§22.2):
+
+1. **mochila**, se couber pela capacidade;
+2. **Caixa de Loot da Sessão**, se não couber.
+
+Com **stamina zero não cai nada** (§10.2) — nem gold, nem XP, nem item. O abate continua
+contando: o jogador matou, e o extrato mentiria se dissesse que não.
+
+Mochila cheia vira **uma** linha no extrato (`backpack-full`), não uma por item. Uma por item
+encheria a lista curta da tela de retorno até ela deixar de ser lista, e o que o jogador precisa
+saber é que ela encheu.
+
+### O id da instância é determinístico, e é isso que dá idempotência
+
+`sessionId:n`. Reprocessar um extrato insere a **mesma chave primária**, e `ON CONFLICT DO
+NOTHING` faz disso operação nula — a idempotência do invariante 10 obtida por identidade
+previsível, sem conferência. O contador entra no snapshot: recomeçá-lo geraria o mesmo id de
+novo, e o item novo seria descartado por parecer repetido.
+
+O catálogo é conferido **antes** de gastar um id. `buildContent` recusa loot de item inexistente
+no boot, então isso só acontece com o conteúdo mudando sob uma sessão em voo — e aí o certo é não
+entregar nada e não queimar identidade por um item que não vai existir.
+
+### A caixa vive no Redis, e é por isso que ela expira de verdade
+
+`lootbox:{sessionId}`, TTL de 30 minutos, contando do **encerramento da sessão** (§21.6) — quem
+sabe que ela encerrou é quem a encerrou, então a caixa é escrita pelo `game`, não pela varredura.
+
+Redis e não Postgres por uma razão que decide sozinha: **expirar precisa significar que o item
+nunca existiu.** Uma linha em `item_instance` que ninguém consegue mais ver é pior que nenhuma —
+ela aparece em consulta de proveniência, em soma de patrimônio, e em toda auditoria que alguém
+escrever depois. Com TTL, o que expira some.
+
+Por isso o item da caixa **ainda não é** uma instância no banco: ele vira linha quando for
+resgatado. Criar a linha antes tornaria a expiração um `DELETE` que some com item de jogador.
+
+Caixa vazia não cria chave: uma caixa vazia é indistinguível de não haver caixa, e criar uma por
+sessão encerrada encheria o Redis com cinco mil chaves dizendo "não sobrou item".
+
+**Quem expira é o TTL, não o `jobs`.** O ciclo apenas conta as pendentes
+(`draconya_loot_boxes_pending`) — uma pilha que só cresce é jogador ganhando item que não
+consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o número.
 
 ## Parâmetros de balanceamento
 

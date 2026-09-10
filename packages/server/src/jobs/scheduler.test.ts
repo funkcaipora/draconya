@@ -3,6 +3,7 @@ import { createLogger } from '../log.js';
 import type { TicketService } from '../tickets.js';
 import { JobsMetrics } from './metrics.js';
 import { createJobsCycle } from './scheduler.js';
+import type { JobsDependencies } from './scheduler.js';
 
 const logger = createLogger('silent', 'test');
 const scrape = async (metrics: JobsMetrics): Promise<string> => metrics.registry.metrics();
@@ -146,5 +147,55 @@ describe('o lock de singleton decide quem varre (FUN-91)', () => {
     await cycle.run();
 
     expect(varreu).toBe(1);
+  });
+});
+
+describe('a Caixa de Loot é OBSERVADA, não expirada pelo ciclo (FUN-88)', () => {
+  /** Uma caixa de mentira que só sabe contar. É tudo o que o ciclo pede dela. */
+  const boxesWith = (pending: () => Promise<number>) =>
+    ({ pending } as unknown as NonNullable<JobsDependencies['lootBoxes']>);
+
+  it('publica quantas caixas existem, e o zero é OBSERVADO', async () => {
+    // Quem expira é o TTL do Redis. O que o ciclo faz é contar — uma pilha que só cresce é
+    // jogador ganhando item que não consegue resgatar, e isso não aparece em lugar nenhum
+    // sem alguém publicar o número.
+    const metrics = new JobsMetrics('j');
+    const cycle = createJobsCycle(logger, {
+      metrics, lootBoxes: boxesWith(async () => 0),
+    });
+
+    await cycle.run();
+
+    expect(await scrape(metrics)).toMatch(/draconya_loot_boxes_pending\{[^}]*\} 0/);
+  });
+
+  it('o número acompanha o que o Redis tem', async () => {
+    const metrics = new JobsMetrics('j');
+    let quantas = 3;
+    const cycle = createJobsCycle(logger, {
+      metrics, lootBoxes: boxesWith(async () => quantas),
+    });
+
+    await cycle.run();
+    expect(await scrape(metrics)).toMatch(/draconya_loot_boxes_pending\{[^}]*\} 3/);
+
+    quantas = 1;
+    await cycle.run();
+    expect(await scrape(metrics)).toMatch(/draconya_loot_boxes_pending\{[^}]*\} 1/);
+  });
+
+  it('sem caixa configurada, o ciclo roda igual', async () => {
+    // A dependência é opcional, como todas as outras deste ciclo: um `jobs` montado sem Redis
+    // de caixa continua varrendo ticket e escrevendo extrato.
+    //
+    // O que NÃO dá para afirmar aqui é que a gauge fica ausente: `prom-client` registra a
+    // métrica na construção e a expõe como zero. "Ninguém olhou" e "não há nenhuma" são
+    // indistinguíveis no scrape — a diferença é de intenção, e ela vive no fato de o ciclo
+    // escrever o número toda vez que olha.
+    const metrics = new JobsMetrics('j');
+    const cycle = createJobsCycle(logger, { metrics });
+
+    await expect(cycle.run()).resolves.toBeUndefined();
+    expect(await scrape(metrics)).toMatch(/draconya_jobs_cycle_duration_seconds_count/);
   });
 });

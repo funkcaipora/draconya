@@ -6,7 +6,7 @@ import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
 import { Inventory } from './inventory.js';
-import type { InventoryState } from './inventory.js';
+import type { CarriedItem, InventoryState } from './inventory.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
 
@@ -88,6 +88,22 @@ export interface CharacterState {
    * primeira issue que DÁ item a alguém.
    */
   readonly inventory?: InventoryState;
+  /**
+   * O que caiu e NÃO coube na mochila (§21.6, FUN-88).
+   *
+   * Fica aqui, e não fora da sessão, porque o `sim` não faz I/O (invariante 1): a caixa de
+   * verdade é escrita quando a sessão encerra. Entra no snapshot para uma queda de nó não
+   * apagar o que o jogador ganhou — e o custo é uma lista quase sempre vazia.
+   */
+  readonly lootBox?: readonly CarriedItem[];
+  /**
+   * Quantos itens esta sessão já criou. Vira parte do id da instância.
+   *
+   * Precisa do snapshot: sem ele, uma sessão retomada recomeçaria a contagem e geraria o mesmo
+   * id de novo — e como a inserção é idempotente por id, o item novo seria silenciosamente
+   * descartado por parecer repetido.
+   */
+  readonly lootSeq?: number;
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
   readonly cooldowns: Partial<CooldownState>;
@@ -115,6 +131,9 @@ export class CharacterRuntime {
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
+  /** O que caiu e não coube. Ver `CharacterState.lootBox`. */
+  lootBox: CarriedItem[];
+  lootSeq: number;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
@@ -140,6 +159,8 @@ export class CharacterRuntime {
     this.skills = Skills.fromState(state.skills);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
+    this.lootBox = [...(state.lootBox ?? [])];
+    this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
@@ -164,6 +185,8 @@ export class CharacterRuntime {
       skills: this.skills.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
+      lootBox: this.lootBox,
+      lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
     };

@@ -32,6 +32,8 @@ import type { KillCredit, Victim } from '../death.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import type { LootItem } from '../loot.js';
+import type { CarriedItem } from '../inventory.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
@@ -259,6 +261,8 @@ export interface HuntRulesetState {
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
   readonly warnedExhausted: boolean;
+  /** Ver `HuntRuleset.#warnedFullBackpack`. Ausente é `false`: snapshot anterior à FUN-88. */
+  readonly warnedFullBackpack?: boolean;
   /** Ver `HuntRuleset.#warnedNoGold`. Ausente é `false`: snapshot anterior à FUN-77. */
   readonly warnedNoGold?: boolean;
   /**
@@ -341,6 +345,14 @@ export class HuntRuleset implements Ruleset {
    * retorno com a mesma linha até ela deixar de ser lista.
    */
   #warnedExhausted = false;
+
+  /**
+   * Já avisou que a mochila encheu? A notícia sai UMA vez (FUN-88).
+   *
+   * Mesma razão do aviso de stamina: uma linha por item que não coube encheria a lista curta
+   * da tela de retorno, e o que o jogador precisa saber é que ela encheu.
+   */
+  #warnedFullBackpack = false;
 
   /**
    * Já avisou que o gold acabou? A notícia sai UMA vez, como a da stamina.
@@ -663,6 +675,7 @@ export class HuntRuleset implements Ruleset {
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       warnedExhausted: this.#warnedExhausted,
+      warnedFullBackpack: this.#warnedFullBackpack,
       warnedNoGold: this.#warnedNoGold,
       staminaAnchorMs: this.#staminaAnchorMs,
       playerAttackReady: this.#playerAttackReady,
@@ -704,6 +717,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#nextCreatureId = restored.nextCreatureId;
     this.#warnedExhausted = restored.warnedExhausted;
+    this.#warnedFullBackpack = restored.warnedFullBackpack ?? false;
     this.#warnedNoGold = restored.warnedNoGold ?? false;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#playerAttackReady = restored.playerAttackReady ?? true;
@@ -1444,6 +1458,9 @@ export class HuntRuleset implements Ruleset {
       const loot = rollLoot(definition.loot, session.rng);
       killer.goldDelta += loot.gold;
       session.aggregates.goldGained += loot.gold;
+      // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
+      // (FUN-63), e acrescentar destino não muda sorteio nenhum.
+      this.#deliverLoot(session, killer, loot.items);
 
       const change = grantXp(
         killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
@@ -1472,6 +1489,48 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) forgetActor(character.contribution, subject);
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+  }
+
+  /**
+   * Entrega o que caiu: mochila primeiro, Caixa de Loot da Sessão para o que não couber
+   * (§22.2, §21.6, FUN-88).
+   *
+   * **O id da instância é DETERMINÍSTICO** — `sessionId:n` —, e isso é o que torna a inserção
+   * idempotente: um extrato reprocessado insere a mesma chave primária e não faz nada. É a
+   * mesma propriedade que a `UNIQUE (session_id, seq)` dá ao ledger (invariante 10), obtida do
+   * mesmo jeito: identidade previsível em vez de conferência.
+   *
+   * Nada aqui escreve banco. O `sim` não faz I/O (invariante 1): o que ele faz é registrar
+   * onde cada coisa ficou, e o extrato leva.
+   */
+  #deliverLoot(
+    session: Session, character: CharacterRuntime, items: readonly LootItem[],
+  ): void {
+    for (const rolled of items) {
+      // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
+      // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
+      // voo — e aí o certo é não entregar nada e não queimar identidade por um item que não
+      // vai existir.
+      if (this.#options.items.get(rolled.itemId) === undefined) continue;
+
+      const carried: CarriedItem = {
+        instanceId: `${session.id}:${character.lootSeq++}`,
+        itemId: rolled.itemId,
+        quantity: rolled.quantity,
+      };
+      if (character.inventory.add(carried, this.#options.items, character).ok) continue;
+
+      // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
+      // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
+      // significar que ele nunca existiu, não que existe e ninguém consegue ver.
+      character.lootBox.push(carried);
+      if (this.#warnedFullBackpack) continue;
+      this.#warnedFullBackpack = true;
+      // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
+      // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
+      // mochila encheu, não qual das trinta flechas ficou de fora.
+      session.record('backpack-full', character.id);
+    }
   }
 
   #vocationOf(character: CharacterRuntime): Vocation | null {

@@ -45,6 +45,8 @@ export interface GameDependencies {
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
+  /** Onde a Caixa de Loot da Sessão é guardada (FUN-88). */
+  readonly lootBoxes?: SessionHostOptions['lootBoxes'];
 }
 
 /**
@@ -116,6 +118,9 @@ export function createGame(
       ...(dependencies.itemCatalog === undefined
         ? {}
         : { itemCatalog: dependencies.itemCatalog }),
+      ...(dependencies.lootBoxes === undefined
+        ? {}
+        : { lootBoxes: dependencies.lootBoxes }),
       metrics,
     });
 

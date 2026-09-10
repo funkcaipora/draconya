@@ -41,6 +41,15 @@ const rat = {
   loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
 };
 
+/** O mesmo rato, largando uma espada SEMPRE. Chance 1 tira o sorteio da conta (FUN-88). */
+const ratWithDrop = {
+  ...rat,
+  loot: {
+    gold: { chance: 1, min: 3, max: 3 },
+    items: [{ itemId: 'sword', chance: 1, min: 1, max: 1 }],
+  },
+};
+
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
   difficulties: {
@@ -2296,5 +2305,160 @@ describe('equipamento no combate (FUN-82)', () => {
     expect(hero.capacity).toBe(
       statsForLevel(hero.level, null, progression as Progression).capacity,
     );
+  });
+});
+
+// --- loot de item por abate (FUN-88) ---------------------------------------------------------
+
+describe('o item cai, e vai para algum lugar (FUN-88)', () => {
+  /**
+   * A capacidade vem da TABELA e é recalculada a cada level up (FUN-82) — então ela não pode
+   * ser fixada no personagem e esquecida: a primeira subida de level a sobrescreve.
+   *
+   * A primeira versão deste helper fazia exatamente isso, e os testes falharam por culpa da
+   * fixture. Fixar `capacityPerLevel: 0` e escolher a inicial é o que torna o número estável
+   * durante o teste, sem lutar contra o motor.
+   */
+  const comDrop = (over: {
+    capacity?: number; staminaMs?: number; catalog?: boolean;
+  } = {}) => {
+    const loaded = buildContent(raw({
+      monsters: [ratWithDrop],
+      progression: [{
+        ...progression, startingCapacity: over.capacity ?? 10_000, capacityPerLevel: 0,
+      }],
+    }));
+    const session = createHuntSession({
+      // Conteúdo com o catálogo VAZIO simula o que muda debaixo de uma sessão em voo: a
+      // espada existia quando a hunt abriu e não existe mais.
+      content: over.catalog === false ? { ...loaded, items: new Map() } : loaded,
+      id: 'drop', huntId: 'arena', difficulty: 'professional', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: over.staminaMs ?? stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      capacity: stats.capacity,
+    });
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('o item entra na MOCHILA quando cabe', () => {
+    const { session, hero } = comDrop();
+    run(session, 60_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.inventory.backpack.length).toBe(session.aggregates.kills);
+    expect(hero.lootBox).toEqual([]);
+  });
+
+  it('o id da instância é DETERMINÍSTICO, e é o que torna a inserção idempotente', () => {
+    // `sessionId:n`. Reprocessar o extrato insere a mesma chave primária e não faz nada — a
+    // idempotência do invariante 10 obtida por identidade previsível, sem conferência.
+    const { session, hero } = comDrop();
+    run(session, 60_000, 100);
+
+    for (const [n, item] of hero.inventory.backpack.entries()) {
+      expect(item.instanceId).toBe(`drop:${n}`);
+    }
+  });
+
+  it('o que NÃO cabe vai para a Caixa de Loot da Sessão', () => {
+    // Capacidade para uma espada só (peso 50). A segunda não cabe e não se perde: ela vai para
+    // a caixa, que é o §21.6 em uma linha.
+    // Capacidade para uma espada só (peso 50).
+    const { session, hero } = comDrop({ capacity: 50 });
+    run(session, 60_000, 100);
+
+    expect(hero.inventory.backpack).toHaveLength(1);
+    expect(hero.lootBox.length).toBeGreaterThan(0);
+    // E os ids continuam únicos entre a mochila e a caixa: o contador é um só.
+    const todos = [...hero.inventory.backpack, ...hero.lootBox].map((i) => i.instanceId);
+    expect(new Set(todos).size).toBe(todos.length);
+  });
+
+  it('a mochila cheia vira UMA linha no extrato, não uma por item', () => {
+    // Uma por item encheria a lista curta da tela de retorno até ela deixar de ser lista. O
+    // que o jogador precisa saber é que a mochila encheu.
+    const { session } = comDrop({ capacity: 50 });
+    run(session, 60_000, 100);
+
+    expect(session.notableEvents.filter((e) => e.type === 'backpack-full')).toHaveLength(1);
+  });
+
+  it('com stamina ZERO não cai item nenhum, como não cai gold (§10.2)', () => {
+    // O portão da recompensa já existia para gold e XP; itens entram por ele também. O abate
+    // continua contando: o jogador matou, e o extrato mentiria se dissesse que não.
+    const { session, hero } = comDrop({ staminaMs: 0 });
+    run(session, 60_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.inventory.backpack).toEqual([]);
+    expect(hero.lootBox).toEqual([]);
+  });
+
+  it('item que sumiu do catálogo não vira instância fantasma', () => {
+    // `buildContent` recusa loot de item inexistente no boot, então isto só acontece com o
+    // conteúdo mudando sob uma sessão EM VOO. A resposta certa é não entregar nada — uma
+    // instância de um item que não existe não pode ser desenhada, equipada nem vendida, e o
+    // contador de instâncias não pode avançar por ela.
+    const { session, hero } = comDrop({ catalog: false });
+    run(session, 60_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.inventory.backpack).toEqual([]);
+    expect(hero.lootBox).toEqual([]);
+    // E não queimou identidade: o contador não avança por um item que não vai existir.
+    expect(hero.lootSeq).toBe(0);
+  });
+
+  it('a caixa e o contador atravessam o snapshot', () => {
+    const { session, hero } = comDrop({ capacity: 50 });
+    run(session, 60_000, 100);
+    const antes = { caixa: hero.lootBox.length, seq: hero.lootSeq };
+    expect(antes.caixa).toBeGreaterThan(0);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, buildContent(raw({ monsters: [ratWithDrop] }))) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    const voltou = retomado.participants[0] as CharacterRuntime;
+    expect(voltou.lootBox).toHaveLength(antes.caixa);
+    // O contador precisa voltar: recomeçar geraria o mesmo id de novo, e como a inserção é
+    // idempotente por id, o item novo seria descartado por parecer repetido.
+    expect(voltou.lootSeq).toBe(antes.seq);
+  });
+
+  it('o aviso de mochila cheia NÃO se repete depois da retomada', () => {
+    const { session } = comDrop({ capacity: 50 });
+    run(session, 60_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const estado = snapshot.ruleset as { warnedFullBackpack?: boolean };
+    expect(estado.warnedFullBackpack).toBe(true);
+  });
+
+  it('1 Hz e 10 Hz largam os MESMOS itens', () => {
+    // A ordem dos sorteios é contrato (FUN-63), e acrescentar destino não muda sorteio.
+    const at = (stepMs: number) => {
+      const { session, hero } = comDrop();
+      run(session, 120_000, stepMs);
+      return {
+        kills: session.aggregates.kills,
+        mochila: hero.inventory.backpack.map((i) => `${i.instanceId}/${i.itemId}`),
+        caixa: hero.lootBox.length,
+      };
+    };
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.mochila.length).toBeGreaterThan(0);
   });
 });

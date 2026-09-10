@@ -1,6 +1,6 @@
 # Economia, supply e Market
 
-**Status:** parcial — gold por abate cai e chega ao personagem pelo ledger (FUN-63); supply abstrato usado pelo bot debita gold (FUN-77); Market e Coins não implementados
+**Status:** parcial — gold por abate (FUN-63), supply abstrato debitando gold (FUN-77) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (supply abstrato, ledger); E13 (Market, Coins por gold)
 
@@ -77,6 +77,6 @@ acabar" é da FUN-86.
 
 ## Divergências do PRD
 
-**Loot de item não cai, e a tabela recusa tentar.** O PRD assume item; o código só tem gold.
-`loot.items` existe na forma certa e aceita só lista vazia, para o dia em que houver catálogo — e
-para ninguém creditar um item fantasma antes disso.
+~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
+catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
+Sessão se não. Ver [`items.md`](./items.md).

@@ -25,6 +25,7 @@ import type { Progression } from '@draconya/content';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
+import type { LootBoxStore } from '../loot-box.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
@@ -43,6 +44,13 @@ export interface JobsDependencies {
    * de antes — e o certo para um `jobs` montado à mão em teste, que não tem par para disputar.
    */
   readonly lock?: SingletonLock;
+  /**
+   * A Caixa de Loot da Sessão (FUN-88). O ciclo só a OBSERVA: quem expira é o TTL do Redis.
+   *
+   * Ausente: o `jobs` roda igual, e a gauge fica sem ser escrita — que é o estado honesto de
+   * "ninguém olhou", diferente de "não há nenhuma".
+   */
+  readonly lootBoxes?: LootBoxStore;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -136,6 +144,13 @@ export function createJobsCycle(
         if (swept.released > 0) {
           logger.info(swept, 'Swept orphaned sessions');
         }
+      }
+
+      // FUN-88: a caixa expira sozinha, por TTL. O que o ciclo faz é CONTAR — uma pilha que só
+      // cresce é jogador ganhando item que não consegue resgatar, e isso não aparece em
+      // lugar nenhum sem alguém publicar o número.
+      if (dependencies.lootBoxes !== undefined) {
+        metrics?.observeLootBoxes(await dependencies.lootBoxes.pending());
       }
 
       metrics?.observeCycle(

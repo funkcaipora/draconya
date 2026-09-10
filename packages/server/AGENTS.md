@@ -346,6 +346,27 @@ Se um dia aparecer uma segunda escrita no `game`, o ADR 0021 deixa de valer como
 duas escritas já são um repositório, e aí a pergunta é se a divisão de processos ainda descreve
 o sistema.
 
+## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
+
+`lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis
+e Postgres não é sobre velocidade: **expirar precisa significar que o item nunca existiu.** Uma
+linha em `item_instance` que ninguém consegue mais ver é pior que nenhuma — ela aparece em
+consulta de proveniência, em soma de patrimônio, e em toda auditoria escrita depois.
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **A caixa é escrita pelo `game`, no encerramento**, e não pela varredura: o relógio começa
+  quando a sessão acaba, e quem sabe disso é quem a encerrou. Deixar para o `jobs` faria o prazo
+  começar até dez segundos depois, e por acaso.
+- **Quem expira é o TTL, não o ciclo.** O `jobs` só publica `draconya_loot_boxes_pending`. Um
+  contador de "expiradas" exigiria alguém observando o instante em que a chave some, e ninguém
+  observa — ela some sozinha. O alerta útil é a pilha CRESCENDO.
+- **O item da caixa ainda não é linha no banco.** Ele vira instância quando for resgatado.
+  Criá-la antes tornaria a expiração um `DELETE` que some com item de jogador.
+
+O prefixo `lootbox:` é distinto de `receipt:` e `receipts:char:` de propósito — pela mesma razão
+que a FUN-56 registrou: o `SCAN` de uma varredura não pode pegar a chave da outra.
+
 ## Como testar
 
 ```
