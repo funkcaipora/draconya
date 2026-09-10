@@ -76,7 +76,7 @@ const spawnPoints = tiles
 function scenario(): Content {
   return buildContent({
     monsters: [{
-      id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
+      id: 'rat', name: 'Rat', recommendedLevel: 1,
       health: 200, experience: 5, attack: 4, armor: 0,
       attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 8, attackRange: 1,
     }],

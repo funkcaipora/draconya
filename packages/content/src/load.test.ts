@@ -44,6 +44,35 @@ describe('loadContent', () => {
   });
 });
 
+describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
+  it('carrega a tabela real e resolve as entidades do repositório com ela', () => {
+    const content = loadContent(DATA);
+    // `rat.json` não tem outfitId nenhum; o monstro montado tem. É a indireção funcionando
+    // sobre o conteúdo de verdade, e não só sobre fixture.
+    expect(content.monsters.get('rat')?.outfitId).toBeGreaterThan(0);
+    for (const item of content.items.values()) {
+      expect(item.appearanceId).toBeGreaterThan(0);
+    }
+  });
+
+  it('nenhum arquivo de entidade guarda id de aparência por conta própria', () => {
+    // Mesma ideia da varredura de arte abaixo, e pela mesma razão: o schema já recusa a chave
+    // solta, mas a mensagem dele ("chave não reconhecida") não diz PARA ONDE o campo foi. Esta
+    // varredura diz — e cobre pasta nova de graça, como a de arte cobriu `items/`.
+    const ofensores: string[] = [];
+    for (const pasta of readdirSync(DATA)) {
+      if (pasta === 'appearances') continue;
+      for (const arquivo of readdirSync(join(DATA, pasta))) {
+        const texto = readFileSync(join(DATA, pasta, arquivo), 'utf8');
+        if (/"(appearanceId|outfitId)"\s*:/.test(texto)) ofensores.push(`${pasta}/${arquivo}`);
+      }
+    }
+    // Se este teste reprovou: o id saiu do arquivo da entidade na FUN-94 e vive em
+    // `data/appearances/baseline.json`, uma linha por id de conteúdo.
+    expect(ofensores).toEqual([]);
+  });
+});
+
 describe('content/ nunca contém arte (invariante 6)', () => {
   it('nenhum arquivo de dados menciona caminho de imagem', () => {
     // O atalho de gravar o caminho direto é sempre mais rápido numa tarde apertada, e é

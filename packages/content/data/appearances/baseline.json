@@ -1,0 +1,12 @@
+{
+  "id": "baseline",
+  "pack": "tibia-1332",
+  "monsters": {
+    "rat": 21
+  },
+  "items": {
+    "arrow": 3447,
+    "leather-armor": 3361,
+    "spike-sword": 3271
+  }
+}

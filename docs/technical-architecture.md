@@ -212,7 +212,7 @@ content/
 
 **A versão de conteúdo é fixada na sessão.** Uma hunt iniciada com a versão N termina com a versão N, mesmo que um deploy publique N+1 no meio. Sem isso, rebalancear enquanto milhares de sessões desanexadas rodam produz resultados inconsistentes e impossíveis de auditar.
 
-**`content/` nunca contém arte.** Um item do Draconya declara `appearanceId: 3031`; um monstro declara `outfitId: 35`. A arte vive num pacote separado (`things/`), e a ligação entre os dois é uma tabela de ids. Consequência prática: **trocar o pacote de assets é remapear ids, não reescrever conteúdo** — e o servidor não precisa carregar arte nenhuma, só ids.
+**`content/` nunca contém arte.** A arte vive num pacote separado (`things/`), e a ligação entre os dois é uma tabela de ids: `data/appearances/baseline.json` mapeia id de conteúdo → id de aparência, e `buildContent` resolve o `appearanceId` de cada item e o `outfitId` de cada monstro no boot (FUN-94). O arquivo da entidade não guarda nenhum dos dois. Consequência prática: **trocar o pacote de assets é editar um arquivo, não reescrever conteúdo** — e o servidor não precisa carregar arte nenhuma, só ids.
 
 ---
 
@@ -515,7 +515,7 @@ Tamanhos: **P** ≤ 1 dia · **M** 2–4 dias · **G** ≥ 1 semana.
 - [ ] **M** Fatiador de folhas (32×32/32×64/64×32/64×64) + `createImageBitmap` + cache LRU
 - [ ] **M** Cache persistente de folhas decodificadas em IndexedDB / Cache Storage
 - [ ] **P** Colorização de outfit: template de 4 canais sobre paleta HSV
-- [ ] **P** Tabela de indireção `content` → `appearanceId`, para manter a troca de pacote barata
+- [x] **P** Tabela de indireção `content` → `appearanceId`, para manter a troca de pacote barata — `data/appearances/baseline.json` (FUN-94). Validar cada id contra o pacote CARREGADO continua pendente, e depende do pacote (FUN-21, FUN-65)
 - [ ] **M** Auth: registro, login, verificação de e-mail, sessão HTTP
 - [ ] **M** CRUD de personagem, nome, criação inicial (§7.4)
 - [ ] **M** Emissão de ticket de uso único e resolução de nó

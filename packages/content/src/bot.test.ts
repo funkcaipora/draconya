@@ -15,19 +15,24 @@ import type { BotConfig } from './schemas.js';
 const content = buildContent({
   monsters: [
     {
-      id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
+      id: 'rat', name: 'Rat', recommendedLevel: 1,
       health: 20, experience: 5, attack: 6, armor: 0,
       attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
       loot: { items: [] },
     },
     {
-      id: 'wolf', name: 'Wolf', outfitId: 22, recommendedLevel: 3,
+      id: 'wolf', name: 'Wolf', recommendedLevel: 3,
       health: 40, experience: 12, attack: 12, armor: 2,
       attackIntervalMs: 2_000, stepDurationMs: 400, aggroRadius: 5,
       loot: { items: [] },
     },
   ],
   hunts: [], vocations: [],
+  // Aparência derivada (FUN-94): este arquivo valida regra de bot, não arte.
+  appearances: [{
+    id: 'baseline', pack: 'placeholder',
+    monsters: { rat: 1, wolf: 2 }, items: { 'spike-sword': 3, 'life-ring': 4 },
+  }],
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
@@ -59,11 +64,11 @@ const content = buildContent({
   }],
   items: [
     {
-      id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+      id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
       slot: 'hand', weight: 50, attack: 24,
     },
     {
-      id: 'life-ring', name: 'Life Ring', appearanceId: 3052, kind: 'ring',
+      id: 'life-ring', name: 'Life Ring', kind: 'ring',
       slot: 'finger', weight: 1, armor: 2,
     },
   ],

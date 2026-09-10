@@ -41,10 +41,17 @@ Itens lendários vêm de monstros ou de recompensa individual de boss, nunca sã
 
 Duas metades, e a divisão entre elas é o ponto: **a definição é conteúdo, a instância é banco.**
 
-`packages/content/data/items/*.json` traz a definição — id, `appearanceId`, tipo, slot, peso,
-atributos, requisitos, se empilha. `appearanceId` é a **única** ligação com arte (invariante 6,
-ADR 0008), e o teste que varre os arquivos de dados atrás de caminho de imagem cobre esta pasta
-como cobre as outras.
+`packages/content/data/items/*.json` traz a definição — id, tipo, slot, peso, atributos,
+requisitos, se empilha. **A aparência não mora aqui** (FUN-94): ela vive em
+`data/appearances/baseline.json`, uma linha por id, e `buildContent` resolve o `appearanceId` de
+cada item a partir dela no boot. É a tabela que o ADR 0008 já previa — *"trocar o pacote de
+assets é remapear ids numa tabela, não reescrever `content/`"* —, e com o id inline isso valia na
+letra e não no efeito: trocar de pacote era editar todo arquivo de item.
+
+Dois testes seguram a fronteira: o que varre os arquivos de dados atrás de caminho de imagem
+(invariante 6), e o que varre atrás de `appearanceId`/`outfitId` escrito no arquivo da entidade.
+O schema do item é `strictObject` pela mesma razão — Zod descarta chave desconhecida em silêncio,
+e um `appearanceId` escrito ali por hábito não iria a lugar nenhum sem nada acusar.
 
 **Atributos base são fixos** (§21.2): duas espadas do mesmo id são idênticas. Não há rolagem por
 instância, e item melhor é item **diferente**. O que distingue uma instância da outra é
@@ -219,7 +226,8 @@ Ela sai ao **anexar**, depois de **equipar ou tirar**, e quando **cai loot** dur
 último detectado por `aggregates.itemsLooted` mudar, que é um inteiro a comparar por ciclo em vez
 de serializar a mochila dez vezes por segundo.
 
-**Sem arte ainda.** Cada item tem `appearanceId`, e o pipeline que o transforma em sprite é o M2.
+**Sem arte ainda.** Cada item tem `appearanceId` resolvido da tabela, e o pipeline que o
+transforma em sprite é o M2.
 Até lá, a inicial do nome num quadrado — um placeholder que não finge ser arte.
 
 ### A action bar não entrou, e por quê

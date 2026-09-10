@@ -1,7 +1,6 @@
 {
   "id": "arrow",
   "name": "Arrow",
-  "appearanceId": 3447,
   "kind": "ammunition",
   "slot": "ammo",
   "weight": 0.7,

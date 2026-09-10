@@ -32,6 +32,9 @@ export function loadContent(dir: string): Content {
     supplies: readJsonDir(join(dir, 'supplies')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
+    // A tabela de aparências (FUN-94). Uma pasta como as outras, com um `baseline.json` dentro:
+    // trocar de pacote de assets é editar ESTE arquivo, e não todo arquivo de conteúdo.
+    appearances: readJsonDir(join(dir, 'appearances')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura

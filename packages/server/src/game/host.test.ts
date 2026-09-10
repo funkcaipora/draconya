@@ -2150,10 +2150,13 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
   // Pelo SCHEMA, e não por literal: `Item` tem campos com default (`requires`, entre eles), e
   // uma fixture escrita à mão diverge do que `buildContent` produz — aqui isso explodia dentro
   // do `equip`, num erro que não tem nada a ver com o que o teste mede.
-  const catalogo = new Map([['sword', itemSchema.parse({
-    id: 'sword', name: 'Sword', appearanceId: 3264, kind: 'weapon',
-    slot: 'hand', weight: 50, attack: 20,
-  })]]);
+  // A aparência vem da tabela e não do schema desde a FUN-94, então ela entra depois do parse.
+  const catalogo = new Map([['sword', {
+    ...itemSchema.parse({
+      id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 20,
+    }),
+    appearanceId: 3264,
+  }]]);
   const comMochila = () => {
     const content = testContent();
     const host = new SessionHost({

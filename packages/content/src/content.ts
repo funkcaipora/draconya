@@ -7,12 +7,14 @@ import { buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
+  appearancesSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina, Supply, Vocation,
+  Appearances, BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina,
+  Supply, Vocation,
 } from './schemas.js';
 
 export interface Content {
@@ -63,6 +65,7 @@ export interface RawContent {
   readonly supplies?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
+  readonly appearances?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -89,7 +92,7 @@ export class ContentError extends Error {
 export function buildContent(raw: RawContent): Content {
   const problems: string[] = [];
 
-  const monsters = parseAll('monster', raw.monsters, monsterSchema, problems);
+  const monsterDefinitions = parseAll('monster', raw.monsters, monsterSchema, problems);
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
   const progressions = parseAll('progression', raw.progression ?? [], progressionSchema, problems);
@@ -133,9 +136,29 @@ export function buildContent(raw: RawContent): Content {
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
-  const items = parseAll('item', raw.items ?? [], itemSchema, problems);
+  const itemDefinitions = parseAll('item', raw.items ?? [], itemSchema, problems);
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
+
+  // A aparência (FUN-94). Ausente é ERRO quando há o que mapear, pela mesma razão de
+  // `progression` e `combat`: um default em código faria o arquivo que existe para tornar a
+  // troca de pacote barata deixar de valer no dia em que ninguém estivesse olhando.
+  //
+  // Quando não há monstro nem item, a tabela é dispensável — é o conteúdo de teste que só fala
+  // de mapa, e exigir dele um arquivo vazio seria burocracia sem nada do outro lado.
+  const appearanceTables = parseAll('appearances', raw.appearances ?? [], appearancesSchema,
+    problems);
+  const appearances = appearanceTables.get('baseline');
+  if (appearances === undefined && (monsterDefinitions.size > 0 || itemDefinitions.size > 0)) {
+    problems.push(
+      'appearances/baseline.json ausente: sem ele monstro e item não têm aparência, e trocar de '
+        + 'pacote de assets voltaria a ser reescrever conteúdo (ADR 0008)',
+    );
+  }
+  const monsters: ReadonlyMap<string, Monster> = resolveAppearance(
+    'monstro', 'monsters', monsterDefinitions, appearances?.monsters, 'outfitId', problems);
+  const items: ReadonlyMap<string, Item> = resolveAppearance(
+    'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
 
   const maps = new Map<string, Tilemap>();
   for (const data of mapData.values()) {
@@ -180,12 +203,17 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // As referências cruzadas daqui para baixo conferem contra as DEFINIÇÕES, não contra os mapas
+  // resolvidos. A diferença aparece quando a tabela de aparências falta: o mapa resolvido fica
+  // vazio, e conferir contra ele faria uma tabela ausente reportar todo monstro do jogo como
+  // inexistente — o boot escondendo a causa dentro de trinta sintomas.
+  //
   // Loot de item agora tem catálogo (FUN-76), e a referência é conferida — o que continua sendo
   // recusado é o item FANTASMA. Aceitar a linha creditaria no primeiro abate um item que nunca
   // vai poder ser desenhado, equipado nem vendido, e o sintoma chegaria dias depois.
-  for (const monster of monsters.values()) {
+  for (const monster of monsterDefinitions.values()) {
     for (const line of monster.loot.items) {
-      if (items.has(line.itemId)) continue;
+      if (itemDefinitions.has(line.itemId)) continue;
       problems.push(
         `monstro "${monster.id}": loot.items referencia item "${line.itemId}", que não existe `
           + 'no catálogo',
@@ -198,7 +226,7 @@ export function buildContent(raw: RawContent): Content {
   for (const hunt of hunts.values()) {
     for (const [difficultyName, difficulty] of Object.entries(hunt.difficulties)) {
       for (const entry of difficulty?.composition ?? []) {
-        if (!monsters.has(entry.monsterId)) {
+        if (!monsterDefinitions.has(entry.monsterId)) {
           problems.push(
             `hunt "${hunt.id}" (${difficultyName}) referencia monstro inexistente ` +
               `"${entry.monsterId}"`,
@@ -266,6 +294,79 @@ export function buildContent(raw: RawContent): Content {
     openValues,
     ...(city === undefined ? {} : { city }),
   };
+}
+
+/**
+ * Uma tabela de aparências DERIVADA do conteúdo, com ids sequenciais (FUN-94).
+ *
+ * Existe para fixture e para ferramenta de scaffolding, e o nome diz o que ela é: um teste de
+ * combate não fala de arte, e obrigá-lo a escrever a tabela à mão faria toda fixture carregar
+ * um dado que ela não usa — que é como fixture deixa de ser lida.
+ *
+ * **Não serve a conteúdo de verdade.** Os números são 1, 2, 3… e nenhum deles aponta uma
+ * aparência que exista em pacote nenhum. `data/appearances/baseline.json` é escrito à mão, e é
+ * essa a única tabela que o jogo carrega.
+ */
+export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
+  const sequential = (entries: readonly unknown[] | undefined): Record<string, number> =>
+    Object.fromEntries((entries ?? []).map((entry, index) => [
+      typeof entry === 'object' && entry !== null && 'id' in entry
+        ? String((entry as { id: unknown }).id)
+        : `#${index}`,
+      index + 1,
+    ]));
+  return {
+    id: 'baseline',
+    pack: 'placeholder',
+    monsters: sequential(raw.monsters),
+    items: sequential(raw.items),
+  };
+}
+
+/**
+ * Casa cada definição com a aparência da tabela (FUN-94), e reclama dos DOIS lados.
+ *
+ * Entidade sem aparência é o defeito óbvio: um monstro que o cliente não teria como desenhar.
+ * A aparência órfã — a linha que aponta um id que não existe — é o defeito que a tabela
+ * INTRODUZ, e é o preço que a issue já previa: com o id inline, apagar a entidade levava o id
+ * junto; com a tabela, a linha fica para trás em silêncio. Depois de três trocas de pacote,
+ * ninguém sabe mais quais linhas ainda valem.
+ *
+ * Recusar as duas coisas no boot é o que mantém a tabela confiável o bastante para alguém
+ * remapeá-la sem ir conferir entidade por entidade.
+ */
+function resolveAppearance<D extends { id: string }, K extends 'appearanceId' | 'outfitId'>(
+  kind: string,
+  section: string,
+  definitions: ReadonlyMap<string, D>,
+  table: Readonly<Record<string, number>> | undefined,
+  field: K,
+  problems: string[],
+): Map<string, D & Record<K, number>> {
+  const resolved = new Map<string, D & Record<K, number>>();
+  // Tabela ausente já foi reportada uma vez por quem chamou. Repetir aqui daria uma linha de
+  // erro por entidade, e o boot escondendo a causa dentro do próprio sintoma.
+  if (table === undefined) return resolved;
+
+  for (const [id, definition] of definitions) {
+    const appearance = table[id];
+    if (appearance === undefined) {
+      problems.push(
+        `${kind} "${id}" não tem aparência: falta a linha "${id}" em appearances.${section}`,
+      );
+      continue;
+    }
+    // A chave é variável (`outfitId` no monstro, `appearanceId` no item), e o TypeScript
+    // tipa chave computada como índice aberto — daí a asserção ficar no objeto de UM campo, e
+    // não na entidade inteira, onde ela esconderia qualquer divergência de forma.
+    resolved.set(id, { ...definition, ...({ [field]: appearance } as Record<K, number>) });
+  }
+
+  for (const id of Object.keys(table)) {
+    if (definitions.has(id)) continue;
+    problems.push(`appearances.${section} mapeia ${kind} "${id}", que não existe no conteúdo`);
+  }
+  return resolved;
 }
 
 /** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */
