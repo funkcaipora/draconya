@@ -23,6 +23,15 @@ export interface TicketRouteDependencies {
   /** Valida posse e exclusão sob o mesmo lock de linha usado pelo soft delete. */
   readonly withOwnedCharacter?: GameRepository['withOwnedCharacter'];
   /**
+   * Posse SEM travar a linha, para a checagem que vem antes da liquidação (ADR 0024).
+   *
+   * Duas checagens de posse na mesma rota não é descuido: esta é a que decide se a rota faz
+   * ALGUMA COISA, e precisa rodar antes; a de `withOwnedCharacter` é a que decide o que é
+   * lido, e precisa da trava. Uma não substitui a outra, e a barata é um lookup por chave
+   * primária — mais barato que o `SCAN` do `resolveNode`, que já roda aqui do lado.
+   */
+  readonly ownsCharacter?: GameRepository['ownsCharacter'];
+  /**
    * Liquida o extrato que a sessão anterior deixou pendente (FUN-56).
    *
    * Exigida junto com `withOwnedCharacter`, e não opcional por conta própria: quem sabe ler
@@ -67,9 +76,10 @@ export function createTicketHandler(
   deps: TicketRouteDependencies,
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
   return async (request, reply) => {
-    const { authenticate, withOwnedCharacter, settleProgress } = deps;
+    const { authenticate, withOwnedCharacter, ownsCharacter, settleProgress } = deps;
     if (authenticate === undefined
       || withOwnedCharacter === undefined
+      || ownsCharacter === undefined
       || settleProgress === undefined) {
       return reply.code(501).send({ error: 'auth-not-configured' });
     }
@@ -79,6 +89,16 @@ export function createTicketHandler(
 
     const principal = await authenticate(request);
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
+
+    // Posse ANTES de qualquer efeito (ADR 0024). Sem isto, a liquidação abaixo roda sobre o
+    // personagem que o corpo do request pedir, e uma conta autenticada dispara ação sobre dado
+    // de outra conta — sem mudar valor e sem receber nada de volta, mas ainda assim ação.
+    //
+    // 404, e não 403, pela mesma razão do de baixo: "existe, mas não é seu" transformaria esta
+    // rota num verificador de id de personagem para qualquer conta autenticada.
+    if (!await ownsCharacter(principal.accountId, body.data.characterId)) {
+      return reply.code(404).send({ error: 'character-not-found' });
+    }
 
     // O nó é resolvido FORA da trava de linha (FUN-53). Qual nó de jogo está vivo não tem
     // relação nenhuma com a linha do personagem, e descobrir isso é `SCAN` mais `MGET` no
@@ -96,15 +116,9 @@ export function createTicketHandler(
     // ninguém reproduz de propósito e quem reporta parece enganado.
     //
     // Fora da trava de linha, pela mesma razão que `resolveNode`: a liquidação PRECISA da
-    // trava para escrever, e chamá-la de dentro dela seria travar contra si mesma.
-    //
-    // Isso a põe ANTES da checagem de posse, e é uma escolha, não descuido: uma conta
-    // autenticada consegue disparar a liquidação de um personagem que não é dela. O que ela
-    // ganha com isso é o crédito sair dez segundos mais cedo do que a varredura o daria —
-    // nenhum valor muda, nada é devolvido na resposta (o 404 vem logo abaixo), e sem extrato
-    // pendente nem o banco é tocado. E o id é um UUID v4 que nenhuma rota mostra a quem não
-    // é dono. Fechar essa fresta custaria uma consulta de posse a mais em TODO login, o que
-    // é caro para o que se compra.
+    // trava para escrever, e chamá-la de dentro dela seria travar contra si mesma. É por isso
+    // que ela não pode acontecer dentro do `withOwnedCharacter` lá embaixo — e é por isso que
+    // a posse é conferida em dois lugares (ADR 0024), com a barata vindo primeiro.
     let settlement: SettlementResult;
     try {
       settlement = await settleProgress(body.data.characterId);

@@ -126,6 +126,7 @@ export function buildApi(
       ...(auth === undefined ? {} : { authenticate: auth.authenticate.bind(auth) }),
       ...(repository === undefined ? {} : {
         withOwnedCharacter: repository.withOwnedCharacter.bind(repository),
+        ownsCharacter: repository.ownsCharacter.bind(repository),
       }),
     }));
   }

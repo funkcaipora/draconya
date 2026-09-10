@@ -116,10 +116,18 @@ export function registerCharacterRoutes(
     if (principal === null) return reply.code(401).send({ error: 'unauthenticated' });
     const params = CharacterParams.safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: 'invalid-character' });
-    // O caso fácil: o id já é conhecido, então liquida ANTES de ler.
-    await settle(params.data.id, request.log);
-    const character = await repository.getCharacter(principal.accountId, params.data.id);
-    if (character === null) return reply.code(404).send({ error: 'character-not-found' });
+    // Posse ANTES da liquidação (ADR 0024). Liquidar primeiro era mais curto — o id já é
+    // conhecido, então dava para liquidar e ler uma vez só — e deixava uma conta autenticada
+    // disparar escrita no ledger de um personagem que não é dela.
+    //
+    // Custa menos que a mesma correção na rota de ticket, e não mais: no caso comum — nada
+    // pendente — continua sendo UMA consulta ao Postgres, porque só relê quando a liquidação
+    // escreveu alguma coisa. Quem paga a segunda leitura é quem tinha progresso a receber.
+    const found = await repository.getCharacter(principal.accountId, params.data.id);
+    if (found === null) return reply.code(404).send({ error: 'character-not-found' });
+    const character = await settle(params.data.id, request.log)
+      ? await repository.getCharacter(principal.accountId, params.data.id) ?? found
+      : found;
     return reply.send(toDto(character));
   });
 

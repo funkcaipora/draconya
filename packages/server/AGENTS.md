@@ -18,6 +18,13 @@ Persistência, diretório de sessão e roteamento.
   bug de protocolo, não recurso.
 - **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único (invariante 10).
   Retry nunca duplica. Ver ADR 0006.
+  **`characters.gold` é PROJEÇÃO, não fonte** (FUN-57). A verdade é a soma do ledger; a coluna
+  existe para não somar linhas a cada leitura, e é escrita na mesma transação da linha. O que
+  a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
+  `applyProgress`), então uma sessão que gasta mais do que o personagem tinha grava o delta
+  negativo cheio e trunca a coluna. A projeção é a soma DOBRADA NO PISO, linha a linha, na
+  ordem em que entraram — e `ledger.test.ts`, "a coluna `gold` bate com o ledger", é quem
+  confere. Quem escrever um caminho novo que credita gold sem linha de ledger reprova ali.
 - **Nenhuma leitura ou escrita de banco no caminho crítico de uma ação.** A simulação vive em
   memória; persistência é write-behind. Postgres no meio do tick mata o tempo de resposta.
 - Sessão de hunt sobrevive ao socket e ao restart. Deploy **drena encerrando com crédito**, não
@@ -236,6 +243,24 @@ não podem mudar sem pensar duas vezes:
   personagem que o servidor sabe estar desatualizado é o defeito que a rota acabou de deixar de
   ter, e a recusa é retentável de graça: o extrato continua no Redis.
 
+**Liquidar antes de conferir posse é a armadilha desta forma** (ADR 0024), e ela apareceu em
+duas rotas: aqui e em `POST /api/characters/:id/select`. A ordem certa é sempre posse primeiro —
+no `select`, ler a linha JÁ é a checagem, e a releitura depois da liquidação só acontece quando
+algo foi escrito, então o caso comum continua custando uma consulta.
+
+**A posse é conferida DUAS vezes na rota de ticket, e é de propósito** (ADR 0024). `ownsCharacter` roda
+antes de tudo, sem travar nada, e decide se a rota faz ALGUMA coisa; `withOwnedCharacter` roda
+depois, sob a trava que o soft delete também usa, e decide o que é LIDO. Colapsar as duas na
+segunda devolve a fresta que o ADR 0024 fechou — a liquidação rodava sobre o personagem que o
+corpo do request pedisse, e uma conta autenticada disparava ação sobre dado de outra. Colapsar na
+primeira leria a linha sem trava. O custo da barata é um lookup por chave primária, mais barato
+que o `SCAN` do `resolveNode` que já roda ao lado.
+
+**Escrever a linha do personagem daqui não viola o invariante 9** — ver ADR 0024. O invariante é
+sobre estado QUENTE, o `CharacterRuntime` em memória, que continua tendo dono único. A linha do
+Postgres é durável, e o extrato só existe depois que a sessão dona acabou: não há dono para
+disputar.
+
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
 `ReceiptStore` mantém `receipts:char:{characterId}` ao lado de `receipt:{sessionId}`. **Os dois
 prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do
@@ -427,6 +452,10 @@ terceiro slot de personagem.
   creditada. Antes da FUN-71, o `save` da Cidade cobria essa linha por acidente.
 - **Repouso (FUN-52) é por PERSONAGEM.** Por sessão, um jogador com o navegador aberto seguraria
   a praça inteira na memória do nó para sempre.
+- **Repouso é o estado SEM sessão hospedada** (ADR 0024). Recolhida a sessão de Cidade, o
+  personagem continua na Cidade por `characters.state` — e some do diretório de sessões, porque
+  não há sessão para aparecer. É por isso que "onde está este personagem" se pergunta à coluna,
+  nunca ao diretório. O invariante 8 fala de ESTADO, e um estado ativo é que é sempre uma sessão.
 - **No shard, "todos os visualizadores da sessão" está QUASE sempre errado** (FUN-33). O passo, o
   `creature-appear`, o `session-state` e o `say` vão para quem tem o tile no campo de visão —
   `hosted.aoi`. Quem escrever o próximo caminho de saída precisa escolher entre os dois, e o
