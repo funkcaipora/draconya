@@ -184,6 +184,35 @@ precisam da exclusividade — tirá-los exigiria um marcador durável de reserva
 verificação otimista: o teste de exclusão concorrente com emissão precisa continuar passando sem
 alteração.
 
+## O `jobs` é singleton com lock, e agora de fato (FUN-91)
+
+O `AGENTS.md` raiz e o ADR 0005 descrevem o `jobs` como "singleton com lock" desde o primeiro
+dia. O lock **não existia**: ficou um `TODO(FUN-28)` no `start`, a FUN-28 fechou, e a
+documentação seguiu prometendo garantia que o código não dava.
+
+O que dois `jobs` quebram, e o que não quebram:
+
+| Tarefa | Dois processos ao mesmo tempo |
+|---|---|
+| escrever extrato | **seguro** — `UNIQUE (session_id, seq)` faz do segundo operação nula |
+| varrer ticket abandonado | **seguro** — script Lua atômico |
+| varrer sessão órfã | **não** — ela DEVOLVE slot, e o segundo derruba uma sessão que nasceu no intervalo |
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **A liderança é decidida a cada ciclo**, não tomada no boot. Tomar uma vez exigiria um
+  temporizador de renovação em paralelo, e um processo que trava com o lock na mão nunca o
+  solta. Renovar por ciclo faz a tomada ser consequência de não renovar.
+- **O TTL precisa ser maior que o intervalo do ciclo.** Menor, e o dono perde a liderança entre
+  uma renovação e a seguinte: os dois processos se revezam, e metade dos ciclos não roda — pior
+  que não ter lock. Há teste afirmando a desigualdade.
+- **Redis fora do ar NÃO promove ninguém.** Assumir a liderança quando não dá para saber quem a
+  tem é a única forma de acabar com dois líderes de verdade.
+
+O dono do lock é único **por processo**, não por máquina: dois containers `jobs` no mesmo host
+compartilham o `NODE_ID` e renovariam o lock um do outro. `draconya_jobs_lock_held` torna isso
+observável — somando o cluster, o normal é **um**.
+
 ## Progresso pendente é liquidado na emissão do ticket (FUN-56)
 
 Entre a sessão encerrar e o `jobs` varrer passam até dez segundos (`SCHEDULE_INTERVAL_MS`). Quem

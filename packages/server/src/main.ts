@@ -6,6 +6,7 @@
 // A mesma imagem serve aos dois. Validar numa VPS pequena não exige desenho diferente
 // do de escala — muda só a variável.
 
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
@@ -17,6 +18,7 @@ import {
   createCitySessionFactory, createSessionBuilder, createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
+import { createSingletonLock } from './jobs/lock.js';
 import { JobsMetrics } from './jobs/metrics.js';
 import { settleCharacterProgress } from './jobs/ledger.js';
 import { SessionDirectory } from './directory.js';
@@ -161,6 +163,10 @@ async function main(): Promise<void> {
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
       metrics: new JobsMetrics(configuration.NODE_ID),
+      // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
+      // no mesmo host compartilham o `NODE_ID`, renovariam o lock um do outro, e os dois se
+      // achariam líderes — que é exatamente o que o lock existe para impedir.
+      lock: createSingletonLock(redis, `${configuration.NODE_ID}:${randomUUID()}`),
       ...(database === null ? {} : { database: database.db }),
     }),
   };

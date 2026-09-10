@@ -37,7 +37,18 @@ export interface CooldownState {
 export class Cooldowns {
   readonly #until = new Map<string, number>();
 
-  static fromState(state: Partial<CooldownState>): Cooldowns {
+  /**
+   * `state` pode faltar (FUN-91). Hoje ele nunca falta — `getState` sempre grava, mesmo
+   * vazio —, e é essa gravação que custa 6,4% de cada snapshot: são 39 `{"until":{}}` por
+   * instância de hunt, 936 B de 14.561 B, ~4,7 MB de Redis com 5.000 sessões.
+   *
+   * **Omitir o campo vazio não vale um bump de `SNAPSHOT_FORMAT_VERSION`** por 4,7 MB — o
+   * bump credita e descarta toda sessão em voo. E omitir SEM bump quebraria um leitor antigo
+   * durante deploy em rolagem, que é o que esta tolerância remove. Com ela, a omissão vira
+   * mudança de uma linha em `getState` no dia em que o formato subir por outro motivo.
+   */
+  static fromState(state: Partial<CooldownState> | undefined): Cooldowns {
+    if (state === undefined) return new Cooldowns();
     const cd = new Cooldowns();
     for (const [key, value] of Object.entries(state.until ?? {})) cd.#until.set(key, value);
     return cd;

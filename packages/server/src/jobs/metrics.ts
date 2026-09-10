@@ -41,6 +41,7 @@ export class JobsMetrics {
   readonly #cycleFailures: Counter;
   readonly #cyclesSkipped: Counter;
   readonly #lastSuccess: Gauge;
+  readonly #lockHeld: Gauge;
 
   constructor(nodeId: string) {
     this.registry = new Registry();
@@ -89,6 +90,11 @@ export class JobsMetrics {
       help: 'Unix time of the last scheduler cycle that completed without throwing',
       registers: [this.registry],
     });
+    this.#lockHeld = new Gauge({
+      name: 'draconya_jobs_lock_held',
+      help: 'Whether this process currently holds the jobs singleton lock',
+      registers: [this.registry],
+    });
   }
 
   /**
@@ -110,6 +116,15 @@ export class JobsMetrics {
   }
 
   /** Reentrância: o ciclo anterior não terminou. É o primeiro sinal de intervalo apertado. */
+  /**
+   * `1` quando este processo é o `jobs` agora (FUN-91). Somando o cluster, o normal é UM.
+   * Zero por muito tempo significa que ninguém está varrindo; dois significa que o lock
+   * falhou, e as duas leituras só existem porque a métrica é por processo.
+   */
+  observeLock(held: boolean): void {
+    this.#lockHeld.set(held ? 1 : 0);
+  }
+
   observeSkipped(): void {
     this.#cyclesSkipped.inc();
   }

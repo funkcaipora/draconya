@@ -82,3 +82,69 @@ describe('o ciclo do jobs mede (FUN-59)', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('o lock de singleton decide quem varre (FUN-91)', () => {
+  const lockThat = (acquire: () => Promise<boolean>) =>
+    ({ acquire, release: async () => {} });
+
+  it('sem o lock, o ciclo NÃO faz nada', async () => {
+    // A varredura de órfã devolve slot de personagem. Dois `jobs` devolvendo o mesmo slot em
+    // instantes diferentes derrubam uma sessão que nasceu no intervalo — e é isso que o lock
+    // impede. Rodar "só a parte segura" sem a liderança seria meia garantia.
+    let varreu = 0;
+    const metrics = new JobsMetrics('j');
+    const cycle = createJobsCycle(logger, {
+      metrics,
+      lock: lockThat(async () => false),
+      tickets: ticketsThat(async () => { varreu += 1; return 0; }),
+    });
+
+    await cycle.run();
+
+    expect(varreu).toBe(0);
+    expect(await scrape(metrics)).toMatch(/draconya_jobs_lock_held\{[^}]*\} 0/);
+  });
+
+  it('com o lock, roda e se declara líder', async () => {
+    let varreu = 0;
+    const metrics = new JobsMetrics('j');
+    const cycle = createJobsCycle(logger, {
+      metrics,
+      lock: lockThat(async () => true),
+      tickets: ticketsThat(async () => { varreu += 1; return 0; }),
+    });
+
+    await cycle.run();
+
+    expect(varreu).toBe(1);
+    expect(await scrape(metrics)).toMatch(/draconya_jobs_lock_held\{[^}]*\} 1/);
+  });
+
+  it('Redis fora do ar NÃO promove ninguém a líder', async () => {
+    // Assumir a liderança quando não dá para saber quem a tem é a única forma de acabar com
+    // dois líderes de verdade. Sem saber, não varre.
+    let varreu = 0;
+    const metrics = new JobsMetrics('j');
+    const cycle = createJobsCycle(logger, {
+      metrics,
+      lock: lockThat(async () => { throw new Error('redis foi passear'); }),
+      tickets: ticketsThat(async () => { varreu += 1; return 0; }),
+    });
+
+    await cycle.run();
+
+    expect(varreu).toBe(0);
+    expect(await scrape(metrics)).toMatch(/draconya_jobs_lock_held\{[^}]*\} 0/);
+  });
+
+  it('sem lock injetado, o ciclo roda — é o `jobs` de teste, sem par para disputar', async () => {
+    let varreu = 0;
+    const cycle = createJobsCycle(logger, {
+      tickets: ticketsThat(async () => { varreu += 1; return 0; }),
+    });
+
+    await cycle.run();
+
+    expect(varreu).toBe(1);
+  });
+});
