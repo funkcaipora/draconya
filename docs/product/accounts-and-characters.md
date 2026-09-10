@@ -90,7 +90,7 @@ repouso pode ir embora.
 
 ## Em aberto
 
-- A UI própria/headless do AuthKit é suportada pela API do WorkOS, mas o MVP usa Hosted AuthKit. A migração para UI embutida só deve acontecer se o redirect se mostrar ruim para a experiência.
+- **Resolvido (FUN-64, 2026-09-10):** a UI headless é suportada de duas maneiras — `authenticateWithPassword` e `createMagicAuth`/`authenticateWithMagicAuth` (código de seis dígitos por e-mail). **O MVP fica no Hosted AuthKit**, e a decisão só se reabre se a costura medir alguma coisa: abandono na tela de login, ou reclamação de "parece outro site". Se um dia migrar, o caminho é o **Magic Auth**: no headless com senha, a senha em texto claro passaria pela memória do nosso `api`, que é exatamente a superfície que o ADR 0012 delegou para não ter. Ver a confirmação de 2026-09-10 no ADR 0012.
 - A duração de 12 horas da sessão HTTP é operacional, não balanceamento de jogo, e pode ser ajustada por ambiente.
 - A sessão local não consulta o WorkOS a cada request. Revogação externa pode levar até o TTL local para refletir no Draconya; o MVP aceita esse atraso em troca de não colocar o provedor no caminho quente de cada request autenticado.
 
