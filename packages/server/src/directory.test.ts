@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { SessionDirectory } from './directory.js';
+import { SHORT_MS } from './testing/deadlines.js';
 import { connectTestRedis } from './testing/redis.js';
 
 // A verificação precisa acontecer no TOPO DO MÓDULO, e não em `beforeAll`: o `runIf` do
@@ -45,7 +46,7 @@ describe.runIf(available)('session directory', () => {
 
   it('expires a lease and exposes the session as orphaned', async () => {
     // É assim que um nó morto é detectado sem coordenação nenhuma (FUN-28).
-    const directory = new SessionDirectory(redis, { leaseMs: 120 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
     await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'hunt' });
     expect(await directory.lookup('p1')).not.toBeNull();
     // Testar que a chave EXPIRA é testar o Redis (FUN-62). O que é nosso é ter mandado o
@@ -53,7 +54,7 @@ describe.runIf(available)('session directory', () => {
     // mão, que é o que a expiração faz, sem esperar por ela.
     const ttl = await redis.pttl('char:p1:session');
     expect(ttl).toBeGreaterThan(0);
-    expect(ttl).toBeLessThanOrEqual(120);
+    expect(ttl).toBeLessThanOrEqual(SHORT_MS);
     await redis.del('char:p1:session');
     expect(await directory.lookup('p1')).toBeNull();
   });
@@ -73,7 +74,7 @@ describe.runIf(available)('session directory', () => {
   });
 
   it('registers an authenticated session only while its active reservation exists', async () => {
-    const directory = new SessionDirectory(redis, { leaseMs: 300 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
     const location = { sessionId: 's1', nodeId: 'n1', type: 'city' };
 
     expect(await directory.register('p1', location, 'a1')).toBe(false);
@@ -99,12 +100,12 @@ describe.runIf(available)('session directory', () => {
   });
 
   it('expires a node heartbeat', async () => {
-    const directory = new SessionDirectory(redis, { leaseMs: 120 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
     await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171' });
     expect(await directory.isNodeAlive('n1')).toBe(true);
     const ttl = await redis.pttl('node:n1:heartbeat');
     expect(ttl).toBeGreaterThan(0);
-    expect(ttl).toBeLessThanOrEqual(120);
+    expect(ttl).toBeLessThanOrEqual(SHORT_MS);
     await redis.del('node:n1:heartbeat');
     expect(await directory.isNodeAlive('n1')).toBe(false);
   });
@@ -166,7 +167,7 @@ describe.runIf(available)('two active characters per account limit', () => {
   it('releases slots from dead nodes through expiration', async () => {
     // Sem TTL, um slot vazado é permanente — e o sintoma para o jogador é "não consigo
     // mais logar", que ninguém relaciona com sessão.
-    const directory = new SessionDirectory(redis, { leaseMs: 120 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
     await directory.reserveSlot('a1', 'p1');
     await directory.reserveSlot('a1', 'p2');
     expect(await directory.reserveSlot('a1', 'p3')).toBe(false);
@@ -174,7 +175,7 @@ describe.runIf(available)('two active characters per account limit', () => {
     // faz; esperá-la é testar o Redis.
     const ttl = await redis.pttl('account:a1:active');
     expect(ttl).toBeGreaterThan(0);
-    expect(ttl).toBeLessThanOrEqual(120);
+    expect(ttl).toBeLessThanOrEqual(SHORT_MS);
     await redis.del('account:a1:active');
     expect(await directory.reserveSlot('a1', 'p3')).toBe(true);
   });

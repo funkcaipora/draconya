@@ -22,6 +22,9 @@
 // Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
 // arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;
 // teste impede.
+//
+// O mesmo arquivo guarda a outra metade da estabilidade da suíte: o PRAZO das chaves. Ver
+// `testing/deadlines.ts` — prazo curto demais reprova sob carga, e sorteia qual teste cai.
 
 import { Redis } from 'ioredis';
 

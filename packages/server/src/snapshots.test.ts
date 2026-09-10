@@ -4,6 +4,7 @@ import { SessionDirectory } from './directory.js';
 import { SnapshotStore } from './snapshots.js';
 import { sweepOrphanedSessions } from './jobs/orphans.js';
 import { createLogger } from './log.js';
+import { LONG_MS, SHORT_MS } from './testing/deadlines.js';
 import { connectTestRedis } from './testing/redis.js';
 
 const { redis, available } = await connectTestRedis(6);
@@ -50,16 +51,16 @@ describe.runIf(available)('snapshot store', () => {
   it('survives the lease it is meant to outlive', async () => {
     // O lease morre com o nó; o snapshot não. A diferença entre os dois É a definição de
     // sessão órfã, então um TTL curto aqui apagaria justamente a coisa a ser retomada.
-    const directory = new SessionDirectory(redis, { leaseMs: 60 });
-    const store = new SnapshotStore(redis, { ttlMs: 5_000 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
+    const store = new SnapshotStore(redis, { ttlMs: LONG_MS });
     await directory.reserveSlot('a1', 'p1');
     await directory.register('p1', { sessionId: 's1', nodeId: 'n1', type: 'city' }, 'a1');
     await store.save('p1', 'a1', 'n1', snapshotOf('s1'));
 
     // Os dois prazos, afirmados: o lease é curto, o snapshot é longo. Depois, o lease é
     // apagado na mão — é o que a expiração faz — e o snapshot precisa continuar lá.
-    expect(await redis.pttl('char:p1:session')).toBeLessThanOrEqual(60);
-    expect(await redis.pttl('session:p1:snapshot')).toBeGreaterThan(4_000);
+    expect(await redis.pttl('char:p1:session')).toBeLessThanOrEqual(SHORT_MS);
+    expect(await redis.pttl('session:p1:snapshot')).toBeGreaterThan(SHORT_MS);
     await redis.del('char:p1:session');
 
     expect(await directory.lookup('p1')).toBeNull();

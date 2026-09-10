@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import type { InitialCharacter } from './tickets.js';
+import { LONG_MS, SHORT_MS } from './testing/deadlines.js';
 import { connectTestRedis } from './testing/redis.js';
 
 // A checagem fica no topo do módulo, e não em `beforeAll`: `describe.runIf` é avaliado na
@@ -80,7 +81,7 @@ describe.runIf(available)('session ticket', () => {
   });
 
   it('expires in seconds', async () => {
-    const { directory, tickets } = build({ ttlMs: 120 });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS });
     await directory.heartbeat('n1', NODE);
 
     const issued = await tickets.issue('a1', 'p1');
@@ -89,7 +90,7 @@ describe.runIf(available)('session ticket', () => {
     // é nosso é o prazo — afirmado — e o consumo depois dele, provado apagando o claim.
     const ttl = await redis.pttl(`ticket:${issued.value.ticket}`);
     expect(ttl).toBeGreaterThan(0);
-    expect(ttl).toBeLessThanOrEqual(120);
+    expect(ttl).toBeLessThanOrEqual(SHORT_MS);
     await redis.del(`ticket:${issued.value.ticket}`);
 
     expect(await tickets.consume(issued.value.ticket, 'n1')).toBeNull();
@@ -201,7 +202,7 @@ describe.runIf(available)('session ticket', () => {
     // Sem a varredura ele fica com um dos dois slots preso, e o sintoma é "não consigo
     // logar meu outro personagem".
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS, graceMs: SHORT_MS, now: () => now });
     await directory.heartbeat('n1', NODE);
 
     await tickets.issue('a1', 'p1');
@@ -214,7 +215,7 @@ describe.runIf(available)('session ticket', () => {
 
   it('keeps the slot of a ticket that became a session', async () => {
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS, graceMs: SHORT_MS, now: () => now });
     await directory.heartbeat('n1', NODE);
 
     const issued = await tickets.issue('a1', 'p1');
@@ -231,7 +232,7 @@ describe.runIf(available)('session ticket', () => {
     // Conexão morta no handshake: o ticket foi queimado e nenhuma sessão nasceu. A mesma
     // regra da varredura cobre este caso, sem caminho de limpeza próprio.
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS, graceMs: SHORT_MS, now: () => now });
     await directory.heartbeat('n1', NODE);
 
     const issued = await tickets.issue('a1', 'p1');
@@ -245,7 +246,7 @@ describe.runIf(available)('session ticket', () => {
 
   it('does not sweep a ticket that is still within its deadline', async () => {
     const now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 50, now: () => now });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS, graceMs: SHORT_MS, now: () => now });
     await directory.heartbeat('n1', NODE);
 
     await tickets.issue('a1', 'p1');
@@ -258,14 +259,14 @@ describe.runIf(available)('session ticket', () => {
     // é que a reserva SOBREVIVE ao ticket pela carência — e isso é um prazo gravado, não um
     // prazo esperado: o claim tem o TTL do ticket, o slot tem o da carência, e apagar o claim
     // é exatamente o que a expiração dele faria.
-    const directory = new SessionDirectory(redis, { leaseMs: 50 });
-    const tickets = new TicketService(redis, directory, { ttlMs: 200, graceMs: 2_000 });
+    const directory = new SessionDirectory(redis, { leaseMs: SHORT_MS });
+    const tickets = new TicketService(redis, directory, { ttlMs: SHORT_MS, graceMs: LONG_MS });
     await directory.heartbeat('n1', NODE);
 
     const issued = await tickets.issue('a1', 'p1');
     if (!issued.ok) throw new Error('expected a ticket');
-    expect(await redis.pttl(`ticket:${issued.value.ticket}`)).toBeLessThanOrEqual(200);
-    expect(await redis.pttl('account:a1:active')).toBeGreaterThan(200);
+    expect(await redis.pttl(`ticket:${issued.value.ticket}`)).toBeLessThanOrEqual(SHORT_MS);
+    expect(await redis.pttl('account:a1:active')).toBeGreaterThan(SHORT_MS);
     await redis.del(`ticket:${issued.value.ticket}`);
 
     expect(await directory.activeSlots('a1')).toEqual(['p1']);
@@ -277,7 +278,7 @@ describe.runIf(available)('session ticket', () => {
     // precisa ser maior que o tempo que o teste leva — milissegundos —, e cinco segundos é
     // folga, não espera: nada aqui dorme (FUN-62).
     let now = 1_000_000;
-    const { directory, tickets } = build({ ttlMs: 50, graceMs: 5_000, now: () => now });
+    const { directory, tickets } = build({ ttlMs: SHORT_MS, graceMs: SHORT_MS, now: () => now });
     await directory.heartbeat('n1', NODE);
     await tickets.issue('a1', 'p1');
     now += 60_000;

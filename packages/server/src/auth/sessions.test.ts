@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { SHORT_MS } from '../testing/deadlines.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { RedisAuthSessionStore, type AuthSession } from './sessions.js';
 
@@ -70,11 +71,11 @@ describeWithRedis('RedisAuthSessionStore', () => {
   it('expires local sessions without renewing their TTL on reads', async () => {
     const sessions = new RedisAuthSessionStore(redis, 120);
     const token = await sessions.create(session);
-    await redis.pexpire(`auth:session:${token}`, 50);
+    await redis.pexpire(`auth:session:${token}`, SHORT_MS);
     expect(await sessions.get(token)).toEqual(session);
     // A leitura NÃO renovou o TTL — é o que este teste afirma, e está afirmado no `pttl`.
     // Que a chave suma depois é o Redis; apagá-la prova o que `get` faz com a ausência.
-    expect(await redis.pttl(`auth:session:${token}`)).toBeLessThanOrEqual(50);
+    expect(await redis.pttl(`auth:session:${token}`)).toBeLessThanOrEqual(SHORT_MS);
     await redis.del(`auth:session:${token}`);
     expect(await sessions.get(token)).toBeNull();
   });
