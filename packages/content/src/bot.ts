@@ -85,6 +85,21 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
     );
   }
 
+  // O anel apontado precisa existir, e precisa ser um anel (FUN-87). Uma máquina de estados
+  // que aponta item inexistente é um slot avançado que nunca dispara — o formato de defeito
+  // que este vocabulário existe para impedir.
+  if (config.ringSwap !== undefined) {
+    const ring = content.items.get(config.ringSwap.itemId);
+    if (ring === undefined) {
+      problems.push(`ringSwap: item "${config.ringSwap.itemId}" não existe`);
+    } else if (ring.slot !== 'finger') {
+      problems.push(
+        `ringSwap: "${config.ringSwap.itemId}" não é anel — ele veste em `
+          + `"${ring.slot ?? 'lugar nenhum'}"`,
+      );
+    }
+  }
+
   // Targeting (FUN-85): os ids de `prioritize` e `ignore` são de MONSTRO, e valem contra o
   // catálogo inteiro — não contra a composição de uma hunt. A configuração é do personagem e
   // sobrevive à troca de hunt; recusar "priorize dragão" porque a hunt de ratos não tem dragão
@@ -120,6 +135,15 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
 export function advancedFeaturesUsed(config: BotConfig, limits: BotLimits): string[] {
   const { advancedOnly } = limits;
   const used = new Set<string>();
+
+  // Lure e ring swap são avançados **por nome no §13.2**, e por isso não passam pela lista de
+  // `advancedOnly`: o PRD os cita como o que o bot avançado tem. A lista existe para o recorte
+  // que o PRD NÃO decidiu — e ela continua vazia por isso (FUN-81).
+  //
+  // A diferença importa: aqui seguir a especificação é fixar em código; lá seria inventar
+  // balanceamento e disfarçá-lo de implementação.
+  if (config.lure !== undefined) used.add('lure dinâmico');
+  if (config.ringSwap !== undefined) used.add('troca de anel');
 
   for (const category of BOT_CATEGORIES) {
     for (const rule of config[category]) {

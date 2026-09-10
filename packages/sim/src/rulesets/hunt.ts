@@ -285,6 +285,10 @@ export interface HuntRulesetState {
    * havia evento de bot na fila para conflitar.
    */
   readonly botScheduled?: readonly BotCategory[];
+  /** Ver `HuntRuleset.#running`. Ausente é `true`: o lure começa juntando (FUN-87). */
+  readonly luring?: boolean;
+  /** Ver `HuntRuleset.#ringReplaced`. Ausente é `null`: o dedo estava vazio. */
+  readonly ringReplaced?: string | null;
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -371,6 +375,22 @@ export class HuntRuleset implements Ruleset {
 
   /** O golpe do personagem está engatilhado? Ver `#onPlayerAttack`. */
   #playerAttackReady = true;
+
+  /**
+   * O personagem está CORRENDO para juntar monstros (§13.7, FUN-87)? Ver `#luring`.
+   *
+   * Começa em `true` porque o lure começa juntando: um personagem que nasce "lutando" com zero
+   * monstros ao redor pararia na rota esperando alguém aparecer.
+   */
+  #running = true;
+
+  /**
+   * Que anel estava no dedo quando a máquina equipou o dela (§13.8, FUN-87).
+   *
+   * `null` é "o dedo estava vazio". Precisa do snapshot: sem ele, uma hunt retomada com o anel
+   * equipado esqueceria o que restaurar, e o jogador acabaria a hunt sem o anel que era dele.
+   */
+  #ringReplaced: string | null = null;
 
   /**
    * Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada.
@@ -680,6 +700,8 @@ export class HuntRuleset implements Ruleset {
       staminaAnchorMs: this.#staminaAnchorMs,
       playerAttackReady: this.#playerAttackReady,
       botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
+      luring: this.#running,
+      ringReplaced: this.#ringReplaced,
       ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
     };
   }
@@ -724,6 +746,10 @@ export class HuntRuleset implements Ruleset {
     for (const category of BOT_CATEGORIES) {
       this.#botReady[category] = !(restored.botScheduled ?? []).includes(category);
     }
+    // Sem isto, uma hunt retomada no meio de um lure de vinte monstros recomeçaria "correndo"
+    // e continuaria juntando por cima do que já estava junto.
+    this.#running = restored.luring ?? true;
+    this.#ringReplaced = restored.ringReplaced ?? null;
     // A configuração volta CRUA e é recompilada aqui (FUN-81). Sem isto, uma hunt retomada
     // roda sem bot: continua andando e matando com o ataque básico, então nada PARECE
     // quebrado — o que some é a cura, e o jogador descobre pelo personagem morto.
@@ -817,7 +843,10 @@ export class HuntRuleset implements Ruleset {
 
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
-    if (this.#attackTarget(character) !== null) {
+    //
+    // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
+    // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
+    if (this.#attackTarget(character) !== null && !this.#luring(character)) {
       this.#walker.stop();
       this.#armPlayerAttack(session);
       return;
@@ -1023,6 +1052,9 @@ export class HuntRuleset implements Ruleset {
       // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
       // para usar a mana que acabou de repor.
       this.#armBot(session, characterId);
+      // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
+      // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
+      this.#applyRingSwap(session, character);
       return;
     }
     // Recusa por COOLDOWN volta no vencimento dele; as outras engatilham.
@@ -1252,6 +1284,96 @@ export class HuntRuleset implements Ruleset {
     );
   }
 
+  /**
+   * O personagem está CORRENDO para juntar monstros, em vez de parar para lutar (§13.7)?
+   *
+   * Máquina de dois estados com dois limiares, e a separação é o ponto: com um limiar só, a
+   * contagem oscilando em torno dele faria o personagem alternar entre correr e parar a cada
+   * monstro que morre — e um personagem que alterna não faz nem uma coisa nem outra.
+   *
+   *   correndo  --(chegou em `max`)-->  lutando
+   *   lutando   --(caiu abaixo de `min`)-->  correndo
+   *
+   * Ele NÃO deixa de atacar enquanto corre: o golpe continua saindo em quem estiver ao alcance
+   * (`#armPlayerAttack` é chamado no fim do passo). O que muda é ele não PARAR — e é assim que
+   * "correr acumulando" funciona sem pathfinding novo, porque o passo guloso dos monstros já
+   * os faz seguir.
+   */
+  #luring(character: CharacterRuntime): boolean {
+    const lure = this.#bot?.lure;
+    if (lure === undefined) return false;
+
+    const perto = countTargets(
+      this.#targeting, this.#monsters, character.position,
+      this.#options.targetSearchRadius ?? 8,
+    );
+    if (this.#running) {
+      if (perto >= lure.max) this.#running = false;
+    } else if (perto < lure.min) {
+      this.#running = true;
+    }
+    return this.#running;
+  }
+
+  /**
+   * A máquina de estados do anel (§13.8, FUN-87).
+   *
+   *   sem anel  --(HP < equipBelow  E  mana >= manaFloor)-->  com anel
+   *   com anel  --(HP > removeAbove  OU  mana < manaFloor)-->  sem anel
+   *
+   * **Os limiares são separados, e é o ponto inteiro da issue.** Com um só, o HP oscilando em
+   * torno dele troca o anel a cada golpe — e trocar anel é uma ação por vez que o personagem
+   * não está usando para lutar. Entre `equipBelow` e `removeAbove` nada acontece, por
+   * construção: nenhum dos dois lados dispara ali.
+   *
+   * `manaFloor` desativa a máquina: um anel que custa mana não vale a mana que falta para
+   * curar. Ele derruba o anel também quando já está equipado — desativar pela metade seria
+   * gastar a mana justamente quando ela é escassa.
+   *
+   * Não faz nada com o dedo quando o jogador nunca configurou anel nenhum: quem não pediu a
+   * máquina não pode ter o dedo mexido por ela.
+   */
+  #applyRingSwap(session: Session, character: CharacterRuntime): void {
+    const ring = this.#bot?.ringSwap;
+    if (ring === undefined || !character.alive) return;
+
+    const hp = percentOf(character.health, character.maxHealth);
+    const mana = percentOf(character.mana, character.maxMana);
+    const wearing = character.inventory.equippedAt('finger')?.itemId === ring.itemId;
+
+    if (wearing) {
+      if (hp <= ring.removeAbove && mana >= ring.manaFloor) return;
+      this.#takeOffRing(session, character, ring.restorePrevious);
+      return;
+    }
+    if (hp >= ring.equipBelow || mana < ring.manaFloor) return;
+
+    // Guarda o que estava no dedo ANTES de trocar: `equip` devolve a peça anterior para a
+    // mochila, e sem o id guardado não há como saber qual delas era a do jogador.
+    const previous = character.inventory.equippedAt('finger');
+    const carried = character.inventory.backpack
+      .find((item) => item.itemId === ring.itemId);
+    // Não tem o anel na mochila: nada a fazer, e nada a avisar. Perder o anel é caso normal
+    // (§21.3 gasta anel por tempo), e a máquina não pode virar erro por causa disso.
+    if (carried === undefined) return;
+    if (!character.inventory.equip(carried.instanceId, character, this.#options.items).ok) return;
+
+    this.#ringReplaced = previous?.instanceId ?? null;
+    session.record('ring-equipped', ring.itemId);
+  }
+
+  /** Tira o anel e devolve o anterior, se o jogador pediu para restaurar (§13.8). */
+  #takeOffRing(session: Session, character: CharacterRuntime, restore: boolean): void {
+    if (!character.inventory.unequip('finger').ok) return;
+    const previous = this.#ringReplaced;
+    this.#ringReplaced = null;
+    session.record('ring-removed', '');
+    if (!restore || previous === null) return;
+    // Falhar aqui é o anel anterior ter sumido no meio da hunt. O dedo fica vazio, que é o
+    // estado honesto — e é o mesmo que `restorePrevious: false` pede de propósito.
+    character.inventory.equip(previous, character, this.#options.items);
+  }
+
   #armPlayerAttack(session: Session): void {
     if (!this.#playerAttackReady) return;
     for (const character of session.participants) {
@@ -1322,6 +1444,8 @@ export class HuntRuleset implements Ruleset {
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
     this.#armBot(session, character.id);
+    // E o anel defensivo (§13.8): este é o instante em que ele existe para servir.
+    this.#applyRingSwap(session, character);
     if (character.health > 0) return;
 
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
@@ -1649,6 +1773,19 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = false;
     this.#world.reset([...this.#monsters, ...session.participants]);
   }
+}
+
+/**
+ * Percentual inteiro, com o zero protegido — `maxMana` zero é o personagem que ainda não tem
+ * mana, não uma divisão por zero.
+ *
+ * Mesma conta que `bot.ts` faz para as condições, e é de propósito: os dois lados do bot
+ * comparam percentual, e um deles usando outra fórmula faria "abaixo de 30%" querer dizer duas
+ * coisas diferentes na mesma configuração.
+ */
+function percentOf(current: number, max: number): number {
+  if (max <= 0) return 0;
+  return (current / max) * 100;
 }
 
 /**

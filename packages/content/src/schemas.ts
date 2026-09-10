@@ -443,6 +443,8 @@ export const botTargetingSchema = z.object({
 });
 
 export type BotExitRule = z.infer<typeof botExitRuleSchema>;
+export type BotLure = z.infer<typeof botLureSchema>;
+export type BotRingSwap = z.infer<typeof botRingSwapSchema>;
 export type BotTargetPolicy = z.infer<typeof botTargetPolicySchema>;
 export type BotPosture = z.infer<typeof botPostureSchema>;
 export type BotTargeting = z.infer<typeof botTargetingSchema>;
@@ -487,6 +489,51 @@ export const botExitRuleSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('party-member-lost') }),
 ]);
+
+/**
+ * Lure dinâmico (§13.7, FUN-87) — o bot AVANÇADO.
+ *
+ * Abaixo de `min` o personagem volta a percorrer a rota acumulando inimigos; ao chegar em `max`
+ * ele para e limpa o grupo; e volta a correr quando cai abaixo de `min`.
+ *
+ * **`max` igual a `min` é permitido**, diferente do ring swap — e a diferença não é descuido.
+ * Ali os limiares comparam HP, que muda a cada golpe: iguais, o anel trocaria sem parar. Aqui
+ * eles comparam uma CONTAGEM de monstros, que só muda quando alguém morre ou nasce, e "manter
+ * exatamente N ao meu redor" é uma política coerente — `{ min: 1, max: 1 }` é o comportamento
+ * de quem não configurou lure, escrito como configuração.
+ *
+ * O que a validação recusa é `max` ABAIXO de `min`: aí a máquina sairia de "correndo" ao chegar
+ * no máximo e voltaria na mesma avaliação, por estar abaixo do mínimo.
+ */
+export const botLureSchema = z.object({
+  min: z.number().int().positive(),
+  max: z.number().int().positive(),
+}).refine((lure) => lure.max >= lure.min, 'o máximo do lure precisa ser >= o mínimo');
+
+/**
+ * Troca de anel por limiar (§13.8, FUN-87) — o bot AVANÇADO.
+ *
+ * **Os limiares de entrada e saída são SEPARADOS**, e é essa a coisa que a issue pede: com um
+ * limiar só, o HP oscilando em torno dele troca o anel a cada golpe — e trocar anel é uma ação
+ * por vez que o personagem não está usando para lutar.
+ *
+ * `manaFloor` desativa a máquina inteira: um anel que consome mana não vale a mana que falta
+ * para curar.
+ */
+export const botRingSwapSchema = z.object({
+  itemId: z.string().min(1),
+  /** Equipa quando o HP cai ABAIXO deste percentual. */
+  equipBelow: z.number().int().min(0).max(100),
+  /** Retira quando o HP sobe ACIMA deste. Precisa ser maior que `equipBelow`. */
+  removeAbove: z.number().int().min(0).max(100),
+  /** Abaixo desta mana, a máquina não equipa nada. Zero é "não desativa por mana". */
+  manaFloor: z.number().int().min(0).max(100).default(0),
+  /** Ao retirar, devolve o anel que estava antes, ou deixa o dedo vazio (§13.8). */
+  restorePrevious: z.boolean().default(true),
+}).refine(
+  (ring) => ring.removeAbove > ring.equipBelow,
+  'removeAbove precisa ser maior que equipBelow: limiares iguais trocam o anel a cada golpe',
+);
 
 /** Uma linha de slot: a condição e o que fazer quando ela vale. */
 export const botRuleSchema = z.object({
@@ -585,6 +632,12 @@ export const botConfigSchema = z.object({
    * jogador — o comportamento de antes desta issue, e o default para quem não configurou.
    */
   exit: z.array(botExitRuleSchema).default(() => []),
+  /**
+   * O bot AVANÇADO (§13.2, FUN-87). Ausente é o bot básico, que é o de todo mundo abaixo do
+   * level 50 — e de quem, acima dele, não configurou nada disso.
+   */
+  lure: botLureSchema.optional(),
+  ringSwap: botRingSwapSchema.optional(),
   heal: z.array(botRuleSchema),
   potion: z.array(botRuleSchema),
   attack: z.array(botRuleSchema),

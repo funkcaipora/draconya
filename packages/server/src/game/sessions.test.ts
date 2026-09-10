@@ -446,6 +446,21 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     expect(accept(base({ targeting: { policy: 'nearest' } }), 1).ok).toBe(true);
   });
 
+  it('o lure é avançado por NOME, e o gate o recusa abaixo do 50 (FUN-87)', () => {
+    // Diferente da política de alvo acima: `lure` não está em `advancedOnly` nenhum. O §13.2
+    // cita lure e ring swap como o que o bot avançado tem, então o gate os conhece por nome —
+    // e este teste é o que impede alguém de "simplificar" isso para dentro da lista de
+    // conteúdo, onde o recorte ainda é [ABERTO].
+    const recusado = accept(base({ lure: { min: 2, max: 5 } }), 49);
+    expect(recusado.ok).toBe(false);
+    if (!recusado.ok) {
+      expect(recusado.reason).toContain('50');
+      expect(recusado.reason).toContain('lure');
+    }
+
+    expect(accept(base({ lure: { min: 2, max: 5 } }), 50).ok).toBe(true);
+  });
+
   it('o conteúdo REAL não gateia nada — o recorte do §13.2 ainda é [ABERTO]', () => {
     // Este teste é o comentário virando obrigação. No dia em que alguém preencher
     // `advancedOnly` em `bot/baseline.json`, ele falha — e a mudança tem de ser deliberada,

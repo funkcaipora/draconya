@@ -2,9 +2,9 @@
 
 **Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
 cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77), targeting
-configurável (FUN-85), regras de saída do jogador (FUN-86) e configuração pelo socket com
-persistência e gate de level (FUN-81) implementados; falta a UI (M10), o bot avançado (FUN-87) e
-o catálogo de itens (M8)
+configurável (FUN-85), regras de saída do jogador (FUN-86), configuração pelo socket com
+persistência e gate de level (FUN-81) e o bot avançado — lure dinâmico e ring swap (FUN-87) —
+implementados; falta a UI (M10)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -172,12 +172,12 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 | Slots — Magias de suporte | 10 | caminho previsto: `packages/content/bot` |
 | Cooldown por categoria | 1s | caminho previsto: `packages/content/bot` |
 | Teto de ações por segundo por personagem | 5 (derivado: 5 categorias × 1 cooldown cada — não é número do PRD, é consequência calculada em `docs/technical-architecture.md` §5) | caminho previsto: `packages/content/bot` |
-| Lure dinâmico — mín/máx de exemplo | mín 4 / máx 8 (exemplo ilustrativo do PRD, não é valor final) | caminho previsto: `packages/content/bot` |
-| Ring swap — limiares de exemplo | equipar HP<50%, retirar HP>=60%, retirar Mana<10% (exemplo ilustrativo do PRD, não é valor final) | caminho previsto: `packages/content/bot` |
+| Lure dinâmico — mín/máx | escolha do jogador; mín 4 / máx 8 é o exemplo do PRD | `bot_config.lure` do personagem — não é conteúdo |
+| Ring swap — limiares | escolha do jogador; equipar HP<50%, retirar HP>=60%, Mana<10% é o exemplo do PRD | `bot_config.ringSwap` do personagem — não é conteúdo |
 
 ## Em aberto
 
-- Subconjunto exato de opções disponíveis no bot básico (pré-level 50) — deve ser definido a partir do bot completo (§13.2, §43.3). Bloqueia a última tarefa do épico E4 (`docs/technical-architecture.md` §20).
+- Subconjunto exato de opções disponíveis no bot básico (pré-level 50) — deve ser definido a partir do bot completo (§13.2, §43.3). O mecanismo existe e é dado (`advancedOnly` em `bot/baseline.json`); falta o recorte.
 - Vocabulário final de todas as condições possíveis do bot (§43.3).
 
 ## Divergências do PRD
@@ -361,10 +361,15 @@ edição ali para continuar funcionando, e esquecer essa edição travaria o rec
 mundo abaixo do 50.
 
 **A lista está vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]`
-no PRD §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
-ainda não existe (FUN-87). Preencher a lista agora seria decidir balanceamento por conta própria
-e disfarçá-lo de implementação. O mecanismo está pronto e tem teste; o recorte entra editando
-dado, quando o PRD o decidir.
+no PRD §13.2. Preencher a lista agora seria decidir balanceamento por conta própria e disfarçá-lo
+de implementação. O mecanismo está pronto e tem teste; o recorte entra editando dado, quando o
+PRD o decidir.
+
+**Lure dinâmico e ring swap são a exceção, e ela é fixa em código.** Os dois são avançados
+**por nome no §13.2** — é a única coisa que aquele parágrafo decide —, então `advancedFeaturesUsed`
+os reconhece direto, sem passar pela lista. A diferença entre os dois casos é o que separa
+implementar de inventar: aqui seguir a especificação é fixar em código; lá seria escolher
+balanceamento e disfarçá-lo de implementação.
 
 A recusa diz **o quê**, não só que recusou: "bot avançado exige level 50: alvo lowest-hp". Um
 aviso genérico deixa o jogador procurando qual das trinta regras dele é a culpada.
@@ -375,3 +380,75 @@ Conteúdo muda: uma magia é renomeada, um vocabulário sobe de versão. Uma con
 que não passa mais na validação é **ignorada com aviso no log**, nunca fatal — derrubar a conexão
 por isso trancaria o personagem fora do jogo por um arquivo de balanceamento. Ele entra sem bot,
 que é degradação, e pode salvar outra.
+
+## O bot avançado: duas máquinas de estado (FUN-87, §13.7 e §13.8)
+
+As duas rodam sobre o motor que já existia — nenhuma delas trouxe evento, laço ou varredura
+nova. Ficam ligadas a decisões que a hunt já tomava: o lure entra na decisão de **parar para
+lutar**, no vencimento do passo; o ring swap entra onde HP e mana **acabaram de mudar**.
+
+**Os dois são recusados abaixo do level 50** pelo gate do §13.2, por nome — ver acima.
+
+### Lure dinâmico: `lure: { min, max }`
+
+O jogador diz entre quantos monstros quer lutar. Abaixo do máximo o personagem **não para**:
+ele percorre a rota com quem está colado nele, e o passo guloso dos monstros faz o resto —
+não há pathfinding novo, nem rota de fuga, nem "puxar" como verbo separado.
+
+```
+correndo  --(contagem chegou em `max`)-->    lutando
+lutando   --(contagem caiu abaixo de `min`)--> correndo
+```
+
+**Os dois limiares existem para não oscilar.** Com um só, cada monstro que morre em cima do
+número faria o personagem alternar entre correr e parar — e quem alterna não faz nem uma coisa
+nem outra. Entre `min` e `max` a máquina não muda de estado, por construção.
+
+Correndo, ele **continua atacando** quem estiver ao alcance. O que o lure muda é parar, não
+bater: um personagem que corre sem atacar junta um bando que ele nunca começa a limpar, e a
+hunt inteira vira uma volta olímpica.
+
+A contagem usa o **raio de busca** (8 tiles por padrão), não o alcance de ataque: "juntar" é
+sobre quem está vindo atrás, não sobre quem já encostou. E ela ignora quem o jogador mandou
+ignorar (FUN-85) — uma onda disparada por causa de quem o bot não vai atacar é a regra reagindo
+ao que ela não atinge.
+
+O estado (`luring`) **viaja no snapshot**. Uma hunt retomada no meio de um lure voltaria
+correndo e juntaria por cima do bando que já estava junto.
+
+### Ring swap: `ringSwap: { itemId, equipBelow, removeAbove, manaFloor, restorePrevious }`
+
+```
+sem anel  --(HP < `equipBelow`  E  mana >= `manaFloor`)-->  com anel
+com anel  --(HP > `removeAbove` OU mana <  `manaFloor`)-->  sem anel
+```
+
+**`removeAbove` tem de ser maior que `equipBelow`, e o schema recusa o contrário.** Limiares
+iguais apagam a faixa morta: o HP parado em cima do número trocaria o anel a cada golpe, e cada
+troca é uma ação que o personagem não usou para lutar. É o mesmo motivo do lure, no eixo do HP.
+
+`manaFloor` **desativa a máquina inteira**, e derruba o anel já equipado. Um anel que custa mana
+não vale a mana que falta para curar; desativar pela metade — não equipar, mas manter o que está
+— seria gastar exatamente quando ela é escassa.
+
+`restorePrevious` decide o que acontece com o dedo na saída: devolver o anel que o jogador tinha,
+ou deixá-lo vazio. Sem guardar qual era (`ringReplaced`, que também viaja no snapshot), a hunt
+terminaria com o anel do jogador no fundo da mochila e nada explicando para onde ele foi.
+
+Perder o anel no meio da hunt é caso normal — o §21.3 gasta anel por tempo. Sem ele na mochila a
+máquina **não faz nada e não avisa**: virar erro por isso seria transformar consumo previsto em
+falha.
+
+O anel apontado é conferido na entrada: precisa existir no catálogo e vestir em `finger`. Uma
+máquina de estados que aponta item inexistente é um slot avançado que nunca dispara, sem nada
+dizendo por quê.
+
+### Onde os dois são avaliados, e por que ali
+
+| | quando | por quê |
+|---|---|---|
+| lure | no vencimento do passo do personagem | é a decisão de parar; avaliar em outro lugar seria decidir duas vezes |
+| ring swap | depois do dano de monstro, e depois de ação do bot | são os dois instantes em que HP ou mana mudaram |
+
+Nenhum dos dois é uma varredura periódica. Um evento por segundo para redescobrir que nada
+mudou é exatamente o custo que o ADR 0020 existe para não pagar.

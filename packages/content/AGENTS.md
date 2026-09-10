@@ -136,5 +136,11 @@ entre arquivos resolvem.
 
 - É tentador colocar lógica aqui ("esse monstro se comporta assim"). Comportamento é `sim`;
   aqui só ficam os números e as tabelas que o comportamento lê.
+- **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
+  moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
+  configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.
+- **O `.refine` de `botRingSwapSchema` é regra de jogo, não de forma.** `removeAbove` maior que
+  `equipBelow` é o que garante a faixa morta da histerese — limiares iguais parseiam como número
+  válido e trocam o anel a cada golpe. Recusar aqui é mais barato que descobrir pelo extrato.
 
 Issue: FUN-8.

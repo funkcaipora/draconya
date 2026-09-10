@@ -130,6 +130,14 @@ const skills = [
 // teste consegue medir a diferença sem depender de sorteio.
 const items = [
   {
+    id: 'life-ring', name: 'Life Ring', appearanceId: 3052, kind: 'ring', slot: 'finger',
+    weight: 1, armor: 2,
+  },
+  {
+    id: 'other-ring', name: 'Other Ring', appearanceId: 3053, kind: 'ring', slot: 'finger',
+    weight: 1, armor: 1,
+  },
+  {
     id: 'sword', name: 'Sword', appearanceId: 3264, kind: 'weapon', slot: 'hand',
     weight: 50, attack: 200,
   },
@@ -926,7 +934,8 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 import type { BotAction, BotConfig } from '@draconya/content';
 import {
-  BOT_VOCABULARY_VERSION, botConfigSchema, botExitRuleSchema, botTargetingSchema,
+  BOT_VOCABULARY_VERSION, botConfigSchema, botExitRuleSchema, botRingSwapSchema,
+  botTargetingSchema,
 } from '@draconya/content';
 
 const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
@@ -2624,5 +2633,378 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.bestBasicHit).toBeGreaterThan(0);
+  });
+});
+
+// --- bot avançado: lure e ring swap (FUN-87, §13.7 e §13.8) ---------------------------------
+
+/** Quantas vezes o herói mudou de tile no período. É como se mede "ele parou" sem adivinhar. */
+function moves(session: Session, hero: CharacterRuntime, durationMs: number): number {
+  let count = 0;
+  let last = hero.position;
+  for (let t = 0; t < durationMs && session.ended === null; t += 100) {
+    session.advanceBy(100);
+    if (hero.position.x === last.x && hero.position.y === last.y) continue;
+    count++;
+    last = hero.position;
+  }
+  return count;
+}
+
+/** O personagem está correndo para juntar? Ausente é `true` — o lure começa juntando. */
+const luringOf = (ruleset: HuntRuleset): boolean =>
+  (ruleset.getState() as { luring?: boolean }).luring ?? true;
+
+/**
+ * Um monstro que PERSEGUE e não morre.
+ *
+ * Perseguir é o que o mantém atrás do personagem em vez de na frente dele: um monstro parado
+ * no meio da rota travaria o passo, e o teste mediria tile ocupado em vez de decisão de lure.
+ * Não morrer é o que mantém a CONTAGEM fixa durante a medição — com ela caindo, os dois lados
+ * da máquina disparariam no meio do teste e o número medido não diria de qual deles veio.
+ */
+const perseguidor = {
+  ...rat, id: 'chaser', name: 'Perseguidor', health: 1_000_000, attack: 0, aggroRadius: 8,
+};
+
+const huntLure = {
+  id: 'lure-hunt', name: 'Lure', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
+  difficulties: {
+    beginner: {
+      perSpawnPoint: 1, composition: [{ monsterId: 'chaser', weight: 1 }],
+      respawnDelayMs: 600_000,
+    },
+    // Três ratos que MORREM, e sem respawn dentro do teste: é o cenário em que a contagem cai
+    // sozinha, e é o único jeito de exercitar o lado do `min` da máquina.
+    professional: {
+      perSpawnPoint: 3, composition: [{ monsterId: 'rat', weight: 1 }],
+      respawnDelayMs: 600_000,
+    },
+  },
+};
+
+describe('lure dinâmico (FUN-87, §13.7)', () => {
+  /**
+   * Um perseguidor imortal no salão, e só o `max` do lure mudando entre um caso e outro.
+   *
+   * Um número de diferença entre os dois cenários é de propósito: se o teste trocasse mapa,
+   * dificuldade ou monstro junto, ele passaria a medir o cenário e não a regra.
+   */
+  const comLure = (
+    lure?: { min: number; max: number },
+    difficulty: 'beginner' | 'professional' = 'beginner',
+  ) => {
+    const loaded = buildContent(raw({
+      monsters: [rat, perseguidor], hunts: [hunt, huntLure],
+      maps: [map, salaGrande], routes: [route, anel],
+    }));
+    const session = createHuntSession({
+      id: 'lure', content: loaded, huntId: 'lure-hunt', difficulty, createdAtMs: 0,
+      botConfig: lure === undefined ? botConfig() : botConfig({ lure }),
+    });
+    const hero = character();
+    session.enter(hero);
+    return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('abaixo do MÁXIMO ele não para: continua percorrendo a rota com o monstro colado', () => {
+    // Um monstro ao alcance e `max: 2`: a contagem não fechou, então parar seria começar a
+    // lutar com menos do que o jogador pediu. Ele corre, e o monstro vem junto — que é o
+    // "juntar" do §13.7 sem pathfinding novo, porque o passo guloso já os faz seguir.
+    const correndo = comLure({ min: 1, max: 2 });
+    const andou = moves(correndo.session, correndo.hero, 20_000);
+
+    const parando = comLure({ min: 1, max: 1 });
+    const parou = moves(parando.session, parando.hero, 20_000);
+
+    expect(andou).toBeGreaterThan(parou * 3);
+    expect(luringOf(correndo.ruleset)).toBe(true);
+  });
+
+  it('ao chegar no MÁXIMO ele para de correr e passa a lutar', () => {
+    const { session, hero, ruleset } = comLure({ min: 1, max: 1 });
+    run(session, 5_000, 100);
+
+    expect(luringOf(ruleset)).toBe(false);
+    const parado = { ...hero.position };
+    expect(moves(session, hero, 5_000)).toBe(0);
+    expect(hero.position).toEqual(parado);
+  });
+
+  it('quando a contagem cai abaixo do MÍNIMO, ele volta a correr', () => {
+    // O outro lado da máquina, e sem ele o personagem que parou depois de juntar o bando nunca
+    // mais voltaria a juntar: uma onda por hunt, e o resto do tempo parado esperando quem
+    // viesse sozinho.
+    //
+    // `min` e `max` iguais em 3 apagam a faixa morta de propósito: aqui o assunto é a
+    // transição de volta, e a histerese em si tem teste próprio no ring swap.
+    const { session, ruleset } = comLure({ min: 3, max: 3 }, 'professional');
+    const estados: boolean[] = [];
+    for (let t = 0; t < 20_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      estados.push(luringOf(ruleset));
+    }
+
+    const parou = estados.indexOf(false);
+    expect(parou).toBeGreaterThanOrEqual(0);
+    // E DEPOIS de parar ele voltou a correr, porque os abates derrubaram a contagem.
+    expect(estados.indexOf(true, parou)).toBeGreaterThan(parou);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+  });
+
+  it('correndo, ele NÃO deixa de atacar quem está ao alcance', () => {
+    // O que o lure muda é PARAR, não bater. Um personagem que corre sem atacar junta um bando
+    // que nunca começa a limpar, e a hunt inteira vira uma volta olímpica.
+    const { session, hero, ruleset } = comLure({ min: 1, max: 2 });
+    moves(session, hero, 20_000);
+
+    expect(luringOf(ruleset)).toBe(true);
+    expect(session.aggregates.bestBasicHit).toBeGreaterThan(0);
+  });
+
+  it('sem lure configurado, quem tem monstro ao alcance para — como sempre', () => {
+    const { session, hero } = comLure();
+    run(session, 5_000, 100);
+
+    const parado = { ...hero.position };
+    expect(moves(session, hero, 5_000)).toBe(0);
+    expect(hero.position).toEqual(parado);
+  });
+
+  it('o estado do lure atravessa o snapshot', () => {
+    // Sem isto, uma hunt retomada no meio de um lure voltaria "correndo" e juntaria por cima
+    // do bando que já estava junto — que é exatamente como se morre com o bot ligado.
+    const { session, ruleset } = comLure({ min: 1, max: 1 });
+    run(session, 5_000, 100);
+    expect(luringOf(ruleset)).toBe(false);
+
+    const snapshot = session.snapshot();
+    expect((snapshot.ruleset as { luring?: boolean }).luring).toBe(false);
+    const loaded = buildContent(raw({
+      monsters: [rat, perseguidor], hunts: [hunt, huntLure],
+      maps: [map, salaGrande], routes: [route, anel],
+    }));
+    const back = huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset;
+    const resumed = Session.fromSnapshot(snapshot, back, new Rng(snapshot.rng));
+    expect(luringOf(back)).toBe(false);
+
+    // E ele continua parado: um `luring` perdido faria a hunt retomada sair andando com o
+    // monstro colado, e o jogador voltaria para um personagem correndo sem motivo.
+    const heroi = resumed.participants[0];
+    if (heroi === undefined) throw new Error('a sessão retomada perdeu o personagem');
+    expect(moves(resumed, heroi, 5_000)).toBe(0);
+  });
+
+  it('1 Hz e 10 Hz dão o MESMO resultado com o lure ligado', () => {
+    // O lure decide por contagem de monstros VIVOS, e a contagem muda entre um vencimento e
+    // outro. Se a decisão dependesse de com que frequência alguém olha, a hunt desanexada
+    // renderia diferente da anexada — que é o invariante 2 em uma linha.
+    const at = (stepMs: number) => {
+      const session = createHuntSession({
+        id: 'lure-hz', content: content(), huntId: 'arena', difficulty: 'professional',
+        createdAtMs: 0, botConfig: botConfig({ lure: { min: 2, max: 4 } }),
+      });
+      session.enter(character());
+      run(session, 120_000, stepMs);
+      return { ...session.aggregates, luring: luringOf(session.ruleset as HuntRuleset) };
+    };
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.kills).toBeGreaterThan(0);
+  });
+});
+
+// Um monstro que serve de RELÓGIO, não de adversário: bate a cada 100 ms por ZERO de dano e
+// não morre. Cada golpe dele é uma volta da máquina do anel sobre o HP que o teste acabou de
+// escrever — sem isso, provar histerese exigiria orquestrar dano real em valores exatos, e o
+// teste passaria a medir a fórmula de combate em vez dos dois limiares.
+const relogio = {
+  id: 'clock', name: 'Relógio', outfitId: 21, recommendedLevel: 1,
+  health: 1_000_000, experience: 0, attack: 0, armor: 0,
+  attackIntervalMs: 100, stepDurationMs: 100, aggroRadius: 8, attackRange: 1,
+  loot: { items: [] },
+};
+
+describe('ring swap com histerese (FUN-87, §13.8)', () => {
+  // Mil de vida e duzentos de mana: percentual vira conta de cabeça, e 390 é 39%.
+  const anelProgression = {
+    ...progression, startingHealth: 1_000, startingMana: 200, startingCapacity: 1_000,
+    healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
+    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  } as Progression;
+
+  const anelContent = (): Content => buildContent(raw({
+    monsters: [relogio],
+    hunts: [{
+      ...hunt,
+      difficulties: {
+        beginner: {
+          perSpawnPoint: 1, composition: [{ monsterId: 'clock', weight: 1 }],
+          respawnDelayMs: 30_000,
+        },
+      },
+    }],
+    // Spawn colado no começo da rota: o poste encosta no primeiro segundo e o herói para ali.
+    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1 }] }],
+    progression: [anelProgression],
+  }));
+
+  const comAnel = (
+    ringSwap: Record<string, unknown>,
+    options: { backpack?: readonly string[]; equipped?: string } = {},
+  ) => {
+    const loaded = anelContent();
+    const session = createHuntSession({
+      id: 'anel', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      botConfig: botConfig({
+        ringSwap: botRingSwapSchema.parse({ itemId: 'life-ring', ...ringSwap }),
+      }),
+    });
+    const stats = statsForLevel(1, null, anelProgression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+      inventory: {
+        backpack: (options.backpack ?? ['life-ring'])
+          .map((itemId, n) => ({ instanceId: `bag-${n}`, itemId, quantity: 1 })),
+        equipped: options.equipped === undefined
+          ? {}
+          : { finger: { instanceId: 'do-jogador', itemId: options.equipped, quantity: 1 } },
+      },
+    });
+    session.enter(hero);
+    run(session, 2_000, 100);
+
+    /** Põe o HP (e a mana) onde o teste quer, e deixa o golpe seguinte reavaliar a máquina. */
+    const em = (health: number, mana?: number): string | null => {
+      hero.health = health;
+      if (mana !== undefined) hero.mana = mana;
+      session.advanceBy(100);
+      return hero.inventory.equippedAt('finger')?.itemId ?? null;
+    };
+    return { session, hero, em };
+  };
+
+  const trocas = (session: Session, type: string): number =>
+    session.notableEvents.filter((event) => event.type === type).length;
+
+  it('equipa quando o HP cai abaixo do limiar de entrada', () => {
+    const { em } = comAnel({ equipBelow: 40, removeAbove: 70 });
+    expect(em(1_000)).toBeNull();
+    expect(em(390)).toBe('life-ring');
+  });
+
+  it('NÃO troca com o HP oscilando ENTRE os dois limiares', () => {
+    // É o critério que a issue cobra em letra. Com um limiar só, o HP indo e voltando em torno
+    // dele trocaria o anel a cada golpe — e cada troca é uma ação que o personagem não usou
+    // para lutar. A faixa entre `equipBelow` e `removeAbove` é morta por construção.
+    const { session, em } = comAnel({ equipBelow: 40, removeAbove: 70 });
+    expect(em(390)).toBe('life-ring');
+
+    for (const hp of [450, 600, 500, 690, 410, 550, 405, 695]) {
+      expect(em(hp)).toBe('life-ring');
+    }
+    expect(trocas(session, 'ring-equipped')).toBe(1);
+    expect(trocas(session, 'ring-removed')).toBe(0);
+  });
+
+  it('retira quando o HP passa do limiar de saída', () => {
+    const { em } = comAnel({ equipBelow: 40, removeAbove: 70 });
+    expect(em(390)).toBe('life-ring');
+    expect(em(710)).toBeNull();
+  });
+
+  it('devolve ao dedo o anel do jogador, quando ele pediu', () => {
+    // Sem guardar qual era, a hunt acabaria com o dedo vazio e o anel do jogador no fundo da
+    // mochila, sem nada no extrato explicando para onde ele foi.
+    const { em } = comAnel(
+      { equipBelow: 40, removeAbove: 70, restorePrevious: true },
+      { equipped: 'other-ring' },
+    );
+    expect(em(390)).toBe('life-ring');
+    expect(em(710)).toBe('other-ring');
+  });
+
+  it('deixa o dedo vazio quando o jogador NÃO pediu restauração', () => {
+    const { em } = comAnel(
+      { equipBelow: 40, removeAbove: 70, restorePrevious: false },
+      { equipped: 'other-ring' },
+    );
+    expect(em(390)).toBe('life-ring');
+    expect(em(710)).toBeNull();
+  });
+
+  it('mana abaixo do piso desativa a máquina, e derruba o anel já equipado', () => {
+    // Um anel que custa mana não vale a mana que falta para curar. Desativar pela metade — não
+    // equipar mas manter o que está — seria gastar exatamente quando ela é escassa.
+    const { em } = comAnel({ equipBelow: 40, removeAbove: 70, manaFloor: 30 });
+    expect(em(390)).toBe('life-ring');
+    expect(em(390, 20)).toBeNull();
+  });
+
+  it('com a mana no chão, nem chega a equipar', () => {
+    const { em } = comAnel({ equipBelow: 40, removeAbove: 70, manaFloor: 50 });
+    expect(em(390, 20)).toBeNull();
+  });
+
+  it('sem o anel na mochila, não faz nada e não reclama', () => {
+    // Perder o anel é caso normal — o §21.3 gasta anel por tempo. A máquina não pode virar
+    // erro por causa disso, nem deixar linha no extrato dizendo que trocou.
+    const { session, em } = comAnel({ equipBelow: 40, removeAbove: 70 }, { backpack: [] });
+    expect(em(390)).toBeNull();
+    expect(trocas(session, 'ring-equipped')).toBe(0);
+  });
+
+  it('quem NÃO configurou anel não tem o dedo mexido', () => {
+    const loaded = anelContent();
+    const session = createHuntSession({
+      id: 'sem-anel', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      botConfig: botConfig(),
+    });
+    const stats = statsForLevel(1, null, anelProgression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: 300, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+      inventory: {
+        backpack: [{ instanceId: 'bag-0', itemId: 'life-ring', quantity: 1 }],
+        equipped: { finger: { instanceId: 'do-jogador', itemId: 'other-ring', quantity: 1 } },
+      },
+    });
+    session.enter(hero);
+    run(session, 5_000, 100);
+
+    expect(hero.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
+  });
+
+  it('o anel substituído atravessa o snapshot', () => {
+    // Sem isto, uma hunt retomada com o anel no dedo esqueceria o que restaurar, e o jogador
+    // terminaria a sessão sem o anel que era dele.
+    const { session, em } = comAnel(
+      { equipBelow: 40, removeAbove: 70 }, { equipped: 'other-ring' },
+    );
+    expect(em(390)).toBe('life-ring');
+
+    const snapshot = session.snapshot();
+    expect((snapshot.ruleset as { ringReplaced?: string | null }).ringReplaced)
+      .toBe('do-jogador');
+
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, anelContent()) as HuntRuleset,
+      new Rng(snapshot.rng),
+    );
+    const back = resumed.participants[0];
+    if (back === undefined) throw new Error('a sessão retomada perdeu o personagem');
+    back.health = 710;
+    resumed.advanceBy(100);
+    expect(back.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
   });
 });

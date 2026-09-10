@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validateBotConfig } from './bot.js';
+import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
 import { buildContent } from './content.js';
 import {
   BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema, botConditionSchema,
-  botTargetingSchema,
+  botLureSchema, botRingSwapSchema, botTargetingSchema,
 } from './schemas.js';
 import type { BotConfig } from './schemas.js';
 
@@ -57,10 +57,16 @@ const content = buildContent({
     id: 'health-potion', name: 'Poção de Vida', price: 45,
     effect: { kind: 'heal', amount: 80 },
   }],
-  items: [{
-    id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
-    slot: 'hand', weight: 50, attack: 24,
-  }],
+  items: [
+    {
+      id: 'spike-sword', name: 'Spike Sword', appearanceId: 3271, kind: 'weapon',
+      slot: 'hand', weight: 50, attack: 24,
+    },
+    {
+      id: 'life-ring', name: 'Life Ring', appearanceId: 3052, kind: 'ring',
+      slot: 'finger', weight: 1, armor: 2,
+    },
+  ],
 });
 
 const rule = (percent: number) => ({
@@ -281,5 +287,67 @@ describe('regras de saída têm teto (FUN-86)', () => {
   it('aceita o que cabe, e lista vazia é o padrão', () => {
     expect(validateBotConfig(config(), content)).toEqual([]);
     expect(config().exit).toEqual([]);
+  });
+});
+
+describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 e §13.8)', () => {
+  const ring = (over: Record<string, unknown> = {}) =>
+    botRingSwapSchema.safeParse({ itemId: 'life-ring', equipBelow: 40, removeAbove: 70, ...over });
+
+  it('o lure aceita limiares iguais, e recusa o intervalo invertido', () => {
+    // `max` abaixo de `min` deixaria a máquina sem estado alcançável: ela sairia de "correndo"
+    // ao chegar no máximo e voltaria na mesma avaliação, por estar abaixo do mínimo.
+    //
+    // Iguais, porém, VALEM — e é aqui que o lure difere do anel de propósito. Lá os limiares
+    // comparam HP, que muda a cada golpe; aqui comparam uma contagem, que só muda quando
+    // alguém morre ou nasce. `{ min: 1, max: 1 }` é o comportamento de quem não configurou
+    // lure, escrito como configuração.
+    expect(botLureSchema.safeParse({ min: 2, max: 5 }).success).toBe(true);
+    expect(botLureSchema.safeParse({ min: 5, max: 5 }).success).toBe(true);
+    expect(botLureSchema.safeParse({ min: 5, max: 2 }).success).toBe(false);
+  });
+
+  it('os dois limiares do anel precisam ser DIFERENTES, e nessa ordem', () => {
+    // Limiares iguais apagam a faixa morta: com `equipBelow` igual a `removeAbove`, o HP
+    // parado em cima do número troca o anel a cada golpe. Recusar na entrada é mais barato
+    // que descobrir pelo extrato cheio de trocas.
+    expect(ring().success).toBe(true);
+    expect(ring({ equipBelow: 70, removeAbove: 70 }).success).toBe(false);
+    expect(ring({ equipBelow: 70, removeAbove: 40 }).success).toBe(false);
+  });
+
+  it('o anel apontado precisa existir e precisa VESTIR no dedo', () => {
+    // Uma máquina de estados que aponta item inexistente — ou uma espada — é um slot avançado
+    // que nunca dispara, e nada dizendo por quê.
+    const parsed = ring();
+    if (!parsed.success) throw new Error('a fixture do anel deveria parsear');
+    expect(validateBotConfig(config({ ringSwap: parsed.data }), content)).toEqual([]);
+
+    const inexistente = ring({ itemId: 'anel-que-nao-existe' });
+    if (!inexistente.success) throw new Error('a fixture do anel deveria parsear');
+    expect(validateBotConfig(config({ ringSwap: inexistente.data }), content)[0])
+      .toContain('não existe');
+
+    const espada = ring({ itemId: 'spike-sword' });
+    if (!espada.success) throw new Error('a fixture da espada deveria parsear');
+    const problema = validateBotConfig(config({ ringSwap: espada.data }), content)[0];
+    expect(problema).toContain('não é anel');
+    expect(problema).toContain('hand');
+  });
+
+  it('os dois são AVANÇADOS por nome, sem passar pela lista de conteúdo', () => {
+    // O §13.2 cita lure e ring swap como o que o bot avançado tem. Aqui seguir a especificação
+    // é fixar em código; pôr os dois em `advancedOnly` seria fingir que o conteúdo decidiu.
+    expect(content.bot.advancedOnly.conditions).toEqual([]);
+    expect(content.bot.advancedOnly.postures).toEqual([]);
+
+    expect(advancedFeaturesUsed(config(), content.bot)).toEqual([]);
+    expect(advancedFeaturesUsed(config({ lure: { min: 2, max: 5 } }), content.bot))
+      .toEqual(['lure dinâmico']);
+
+    const parsed = ring();
+    if (!parsed.success) throw new Error('a fixture do anel deveria parsear');
+    expect(advancedFeaturesUsed(config({ ringSwap: parsed.data }), content.bot))
+      .toEqual(['troca de anel']);
   });
 });

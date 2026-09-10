@@ -14,7 +14,7 @@
 // cada categoria nova.
 
 import type {
-  BotAction, BotCategory, BotCondition, BotConfig, BotExitRule,
+  BotAction, BotCategory, BotCondition, BotConfig, BotExitRule, BotLure, BotRingSwap,
 } from '@draconya/content';
 import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -82,6 +82,14 @@ export interface CompiledBot {
    * pode, porque o mesmo bot vai valer para quest e boss. Quem compila é quem tem a view.
    */
   readonly exit: readonly BotExitRule[];
+  /**
+   * O bot AVANÇADO (§13.2, FUN-87), cru como as regras de saída e pela mesma razão: quem os
+   * executa precisa do mundo — a rota e o inventário —, e `bot.ts` não conhece ruleset nenhum.
+   *
+   * Ausentes é o bot básico, que é o de todo mundo abaixo do level 50.
+   */
+  readonly lure: BotLure | undefined;
+  readonly ringSwap: BotRingSwap | undefined;
   /**
    * A primeira regra válida da categoria, ou `null` (§13.4).
    *
@@ -176,6 +184,8 @@ export function compileBot(config: BotConfig): CompiledBot {
     categories,
     targeting: compileTargeting(config.targeting),
     exit: config.exit,
+    lure: config.lure,
+    ringSwap: config.ringSwap,
     select(category, view) {
       const rules = categories.get(category);
       if (rules === undefined) return null;
