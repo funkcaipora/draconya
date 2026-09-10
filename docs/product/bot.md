@@ -1,8 +1,9 @@
 # Bot
 
 **Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
-cadência por categoria (FUN-84) e execução de magia e supply (FUN-74/FUN-77) implementados;
-falta a configuração chegar pelo socket (FUN-81) e o catálogo de itens (M8)
+cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77) e targeting
+configurável (FUN-85) implementados; falta a configuração chegar pelo socket (FUN-81), as regras
+de saída do jogador (FUN-86) e o catálogo de itens (M8)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -211,3 +212,68 @@ Três coisas que não podem mudar sem pensar duas vezes:
 O saldo que a sessão enxerga é **o gold de entrada mais o delta da sessão**: o loot desta hunt já
 dá para virar poção sem passar pelo banco. O saldo nunca fica negativo, e a garantia é a ordem —
 o débito é recusado antes, não corrigido depois.
+
+## Alvo e postura (FUN-85)
+
+§13.6. Até aqui a hunt tinha **uma** política, escrita no motor: o monstro mais próximo dentro do
+alcance da arma. Ela continua sendo o padrão — e agora é um caso de uma política que vem da
+configuração.
+
+### Escolher o alvo
+
+| Campo | Valores | O que faz |
+|---|---|---|
+| `policy` | `nearest`, `lowest-hp`, `highest-hp` | mais perto, termina quem está quase morto, ou bate no mais gordo |
+| `prioritize` | ids de monstro | um priorizado ganha de qualquer não-priorizado |
+| `ignore` | ids de monstro | nunca é alvo, e **não conta** na condição `targets` |
+
+A ordem de decisão é contrato, e é o que faz duas execuções da mesma semente escolherem o mesmo
+monstro:
+
+1. **priorizado ganha antes da política** — senão "mate o mago primeiro" só valeria quando o mago
+   já estivesse mais perto, que é justamente quando não faz diferença;
+2. dentro da mesma faixa, a política;
+3. empate fica com quem **nasceu antes**. A varredura é na ordem da lista, e a comparação é
+   estrita: o campeão só é trocado por quem ganha de verdade.
+
+`ignore` vence `prioritize` quando o mesmo id está nas duas listas. É configuração contraditória
+do jogador, e "não ataque" é a leitura conservadora — a outra ordem faria o bot atacar exatamente
+quem foi mandado deixar em paz.
+
+Os ids são validados contra o **catálogo inteiro** de monstros, não contra a composição da hunt:
+a configuração é do personagem e sobrevive à troca de hunt.
+
+### Se posicionar
+
+| `posture` | O que o personagem faz |
+|---|---|
+| `stand` (padrão) | percorre a rota e deixa o monstro vir — o comportamento de sempre (ADR 0009) |
+| `follow` | sai da rota e persegue até chegar ao alcance da arma |
+| `keep-distance` | mira a distância configurada: aproxima se está longe, **recua** se está perto |
+
+É o primeiro caso em que o personagem **anda fora da rota por decisão própria**. Três coisas que
+não podem mudar sem pensar duas vezes:
+
+- **Escolher alvo e alcançar alvo são buscas diferentes.** Em quem bater é limitado pelo alcance
+  da arma; atrás de quem andar é limitado pelo raio de visão (`targetSearchRadius`, em
+  `bot/baseline.json`). Enquanto as duas eram a mesma busca, "seguir o alvo" não tinha como ser
+  expresso — quem já está ao alcance não precisa ser seguido.
+- **O passo sai pelo mesmo sistema de movimento.** `movement.ts` é o único escritor de posição
+  (FUN-69), e a postura não é exceção. Perseguir usa o mesmo passo guloso do monstro; recuar usa
+  o guloso com a ameaça espelhada, que dá a direção oposta sem um segundo algoritmo.
+- **Já estar na distância pedida é ficar parado**, não voltar a percorrer a rota. Voltar faria o
+  personagem oscilar entre manter distância e seguir o laço, e de fora isso parece o bot travado.
+
+Quando o alvo morre, a postura deixa de mandar e o passo volta a ser o da rota: o `rejoinNearest`
+do walker reentra pelo tile mais próximo. É o mesmo caminho de quem foi empurrado para fora.
+
+`keep-distance` só faz sentido com arma de alcance maior que 1, **que ainda não existe**. A
+postura entra por interface agora para a geometria já ter teste, e passa a valer no dia em que
+houver arco ou varinha.
+
+### Por que a versão do vocabulário NÃO subiu
+
+Todo campo de `targeting` tem default, e o bloco inteiro tem: uma configuração salva antes desta
+issue continua válida e ganha `nearest` + `stand`, que é o que ela já fazia. Subir
+`BOT_VOCABULARY_VERSION` invalidaria configuração de jogador para acrescentar um campo que ela nem
+precisa ter — o oposto do que o versionamento existe para proteger.

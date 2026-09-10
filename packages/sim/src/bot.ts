@@ -16,6 +16,8 @@
 import type { BotAction, BotCategory, BotCondition, BotConfig, Content } from '@draconya/content';
 import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
+import { compileTargeting } from './targeting.js';
+import type { Targeting } from './targeting.js';
 
 /**
  * O que uma condição enxerga.
@@ -62,6 +64,14 @@ export interface CompiledRule {
 
 export interface CompiledBot {
   readonly categories: ReadonlyMap<BotCategory, readonly CompiledRule[]>;
+  /**
+   * Alvo e postura (FUN-85), compilados da MESMA configuração.
+   *
+   * Aqui, e não num segundo parâmetro do ruleset, porque é uma configuração só: quem tem o bot
+   * tem a política de alvo dele, e separar os dois criaria o estado em que uma sessão roda com
+   * as regras de um jogador e o targeting de outro.
+   */
+  readonly targeting: Targeting;
   /**
    * A primeira regra válida da categoria, ou `null` (§13.4).
    *
@@ -152,6 +162,7 @@ export function compileBot(config: BotConfig, _content: Content): CompiledBot {
 
   return {
     categories,
+    targeting: compileTargeting(config.targeting),
     select(category, view) {
       const rules = categories.get(category);
       if (rules === undefined) return null;

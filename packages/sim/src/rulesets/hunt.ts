@@ -37,7 +37,9 @@ import {
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
-import { distance } from '../monster/step.js';
+import { distance, fleeStep, greedyStep } from '../monster/step.js';
+import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
+import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp } from '../progression.js';
 import { Rng } from '../rng.js';
 import { TileOccupancy, canOccupy, move, place } from '../movement.js';
@@ -167,6 +169,11 @@ export interface HuntRulesetOptions {
   readonly actuator?: BotActuator;
   /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
+  /**
+   * Até onde o bot ENXERGA ao decidir para onde andar (FUN-85), do conteúdo. Não é o alcance
+   * de ataque: só importa com postura `follow` ou `keep-distance`.
+   */
+  readonly targetSearchRadius?: number;
   /**
    * Premium reduz a penalidade de morte de 60% para 54% (§26.2). É atributo da CONTA, não do
    * personagem, e por isso entra por aqui em vez de morar no `CharacterRuntime`.
@@ -650,14 +657,21 @@ export class HuntRuleset implements Ruleset {
 
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
-    if (this.#nearestMonster(character) !== null) {
+    if (this.#attackTarget(character) !== null) {
       this.#walker.stop();
       this.#armPlayerAttack(session);
       return;
     }
 
-    // Ninguém ao alcance: anda. O personagem NÃO persegue — ele percorre a rota e deixa o
-    // monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
+    // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
+    // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
+    if (this.#holdPosture(session, character)) {
+      this.#armPlayerAttack(session);
+      return;
+    }
+
+    // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
+    // rota e deixa o monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
     this.#walker.resume();
     const to = this.#walker.step();
     if (to === null) return;
@@ -675,6 +689,48 @@ export class HuntRuleset implements Ruleset {
       }
     }
     this.#armPlayerAttack(session);
+  }
+
+  /**
+   * A postura assume o passo, ou devolve `false` e a rota segue (FUN-85, §13.6).
+   *
+   * `true` significa "a postura decidiu o que fazer com este vencimento" — e isso inclui
+   * DECIDIR FICAR PARADO. Um personagem já na distância que pediu não anda, e também não volta
+   * a percorrer a rota: voltar seria ele oscilar entre manter distância e seguir o laço, que
+   * de fora parece o bot travado.
+   *
+   * O passo sai pelo MESMO `#step` do monstro e do `walk` do socket — `movement.ts` é o único
+   * escritor de posição (FUN-69), e a postura não é exceção. O walker fica parado enquanto
+   * isso; quando o alvo morre, o vencimento seguinte cai na rota, o passo é recusado por
+   * `not-adjacent` e `rejoinNearest` reentra pelo tile mais próximo. O caminho de volta já
+   * existia, e é o mesmo de quem foi empurrado.
+   */
+  #holdPosture(session: Session, character: CharacterRuntime): boolean {
+    const posture = this.#targeting.posture;
+    if (posture.kind === 'stand') return false;
+
+    const target = this.#approachTarget(character);
+    if (target === null) return false;
+
+    const from = character.position;
+    const d = distance(from, target.position);
+    const blocked = this.#blockedFor(character);
+    // `follow` persegue até poder bater; `keep-distance` mira a distância configurada. Os dois
+    // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
+    // divergindo na terceira mudança.
+    const want = posture.kind === 'follow' ? this.#options.player.attackRange : posture.tiles;
+    if (d === want) return true;
+
+    const to = d > want
+      ? greedyStep(from, target.position, blocked)
+      : fleeStep(from, target.position, blocked);
+    // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
+    // mesmo que o passo guloso do monstro já faz (ADR 0009).
+    if (to === null) return true;
+
+    this.#walker.stop();
+    this.#step(session, character, { ...to, z: from.z }, character.id);
+    return true;
   }
 
   /**
@@ -704,7 +760,7 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
 
-    const target = this.#nearestMonster(character);
+    const target = this.#attackTarget(character);
     if (target === null) {
       this.#playerAttackReady = true;
       return;
@@ -827,7 +883,7 @@ export class HuntRuleset implements Ruleset {
     let monster: MonsterRuntime | null = null;
     let target: SpellTarget | null = null;
     if (spell.effect.kind === 'damage') {
-      monster = this.#nearestMonster(character);
+      monster = this.#attackTarget(character);
       if (monster !== null) {
         // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual
         // para magia. Escrever `0` aqui e lá é o mesmo dado em dois lugares; quando esquiva
@@ -907,9 +963,14 @@ export class HuntRuleset implements Ruleset {
     return this.#options.botCooldownMs ?? 1_000;
   }
 
+  /** A política do jogador, ou a de sempre: mais próximo, sem preferência, sem sair da rota. */
+  get #targeting(): Targeting {
+    return this.#options.bot?.targeting ?? DEFAULT_TARGETING;
+  }
+
   /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
   #botViewOf(character: CharacterRuntime): BotView {
-    const target = this.#nearestMonster(character);
+    const target = this.#attackTarget(character);
     this.#botView.self = character;
     this.#botView.targetCount = this.#targetsInReach(character);
     this.#botView.target = target === null
@@ -922,22 +983,23 @@ export class HuntRuleset implements Ruleset {
     return this.#options.monsters.get(monster.monsterId)?.health ?? monster.health;
   }
 
-  /** Quantos alvos ao alcance. O NÚMERO, sem materializar a lista (FUN-80). */
+  /**
+   * Quantos alvos ao alcance. O NÚMERO, sem materializar a lista (FUN-80).
+   *
+   * Monstro IGNORADO não conta (FUN-85): "3 ou mais alvos → onda" disparando por causa de
+   * quem o jogador mandou o bot deixar em paz é a regra reagindo ao que ela não vai atingir.
+   */
   #targetsInReach(character: CharacterRuntime): number {
-    let count = 0;
-    const reach = this.#options.player.attackRange;
-    for (const monster of this.#monsters) {
-      if (!monster.alive) continue;
-      if (distance(character.position, monster.position) <= reach) count += 1;
-    }
-    return count;
+    return countTargets(
+      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
+    );
   }
 
   #armPlayerAttack(session: Session): void {
     if (!this.#playerAttackReady) return;
     for (const character of session.participants) {
       if (!character.alive) continue;
-      if (this.#nearestMonster(character) === null) continue;
+      if (this.#attackTarget(character) === null) continue;
       this.#schedulePlayerAttack(session, character.id, 0);
       return;
     }
@@ -1135,19 +1197,30 @@ export class HuntRuleset implements Ruleset {
     };
   }
 
-  #nearestMonster(character: CharacterRuntime): MonsterRuntime | null {
-    let best: MonsterRuntime | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const monster of this.#monsters) {
-      if (!monster.alive) continue;
-      const d = distance(character.position, monster.position);
-      // `>=` desempata pelo monstro que nasceu antes, e a ordem da lista é a de nascimento.
-      // Desempate estável é o que faz duas execuções da mesma semente baterem.
-      if (d > this.#options.player.attackRange || d >= bestDistance) continue;
-      best = monster;
-      bestDistance = d;
-    }
-    return best;
+  /**
+   * Em quem bater AGORA: o melhor alvo dentro do alcance da arma (FUN-85).
+   *
+   * Era `#nearestMonster`, e a política era o motor. Agora ela vem da configuração — e
+   * `nearest` continua sendo o padrão, então uma hunt sem bot se comporta exatamente como
+   * antes. O desempate segue estável, e é `selectTarget` que o garante.
+   */
+  #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
+    return selectTarget(
+      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
+    );
+  }
+
+  /**
+   * Atrás de quem ANDAR: o melhor alvo dentro do raio de visão.
+   *
+   * Só é consultado quando a postura não é `stand`. Separar dos dois é o que destravou esta
+   * issue: enquanto a busca parava no alcance da arma, "seguir o alvo" não tinha como ser
+   * expresso — quem já está ao alcance não precisa ser seguido.
+   */
+  #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
+    return selectTarget(
+      this.#targeting, this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
+    );
   }
 
   // --- ocupação -----------------------------------------------------------------------------
@@ -1270,6 +1343,7 @@ export function createHuntRuleset(
     progression: content.progression,
     stamina: content.stamina,
     vocations: content.vocations,
+    targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
     player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },

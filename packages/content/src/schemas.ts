@@ -287,6 +287,71 @@ export const botActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
 ]);
 
+/**
+ * Como o bot ESCOLHE o alvo (§13.6).
+ *
+ * Fechado como o resto do vocabulário: o compilador só transforma em política o que conhece.
+ * `nearest` é o padrão e é o que a hunt sempre fez — as outras duas existem porque "termine o
+ * que está quase morto" e "bata no mais gordo primeiro" são estratégias diferentes, e escolher
+ * entre elas é do jogador.
+ */
+export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp']);
+
+/**
+ * Como o personagem se POSICIONA em relação ao alvo (§13.6).
+ *
+ * `stand` é o padrão e é o comportamento de hoje: o personagem percorre a rota e deixa o
+ * monstro vir (ADR 0009). As outras duas são o primeiro caso em que ele sai da rota por
+ * decisão própria — e é por isso que a postura é dado do jogador, não constante do motor.
+ *
+ * `keep-distance` só faz sentido com arma de alcance maior que 1, que ainda não existe: a
+ * postura entra por interface agora para a geometria já ter teste, e passa a valer no dia em
+ * que houver arco ou varinha.
+ */
+export const botPostureSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('stand') }),
+  z.object({ kind: z.literal('follow') }),
+  z.object({ kind: z.literal('keep-distance'), tiles: z.number().int().positive() }),
+]);
+
+/**
+ * A política de alvo inteira.
+ *
+ * **Não sobe `BOT_VOCABULARY_VERSION`.** Todo campo tem default, então uma configuração salva
+ * antes desta issue continua válida e ganha o comportamento de sempre — `nearest` + `stand`.
+ * Subir a versão invalidaria configuração de jogador para acrescentar um campo que ela nem
+ * precisa ter, que é o oposto do que o versionamento existe para proteger.
+ */
+export const botTargetingSchema = z.object({
+  policy: botTargetPolicySchema.default('nearest'),
+  /**
+   * Ids de monstro preferidos. Priorizado ganha de não-priorizado ANTES da política — é o que
+   * faz "mate o mago primeiro" valer mesmo quando o mago está mais longe.
+   */
+  prioritize: z.array(z.string().min(1)).default([]),
+  /** Ids de monstro que o bot não ataca, e que também não contam em `targets`. */
+  ignore: z.array(z.string().min(1)).default([]),
+  posture: botPostureSchema.default({ kind: 'stand' }),
+});
+
+export type BotTargetPolicy = z.infer<typeof botTargetPolicySchema>;
+export type BotPosture = z.infer<typeof botPostureSchema>;
+export type BotTargeting = z.infer<typeof botTargetingSchema>;
+
+/**
+ * O padrão, escrito por extenso.
+ *
+ * Zod exige a forma de SAÍDA num `.default`, então `{}` não serve mesmo com todo campo tendo
+ * default próprio. Escrever à mão tem uma vantagem: o comportamento herdado por quem nunca
+ * configurou targeting fica legível num lugar, em vez de espalhado por quatro `.default()`.
+ *
+ * FUNÇÃO, e não constante: um objeto só, entregue por referência a toda configuração parseada,
+ * é uma configuração mutando a de todo mundo no dia em que alguém escrever nele.
+ */
+const defaultTargeting = (): BotTargeting => ({
+  policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' },
+});
+
 /** Uma linha de slot: a condição e o que fazer quando ela vale. */
 export const botRuleSchema = z.object({
   when: botConditionSchema,
@@ -316,6 +381,18 @@ export const botSchema = z.object({
   categoryCooldownMs: z.number().int().positive(),
   /** A partir de qual level o bot avançado abre. §13.2: 50. */
   advancedFromLevel: z.number().int().positive(),
+  /**
+   * Até que distância, em tiles, o bot ENXERGA um alvo (FUN-85).
+   *
+   * Não é o alcance de ataque: é o quanto ele considera ao escolher para onde ir. Só importa
+   * com postura `follow` ou `keep-distance` — com `stand` o personagem nunca sai da rota, e
+   * quem ele bate continua sendo limitado pelo alcance da arma.
+   *
+   * Balanceamento, e por isso mora aqui: um raio grande faz o bot atravessar a hunt atrás de
+   * um monstro e voltar sem ter limpado nada. Tem default para configuração e conteúdo
+   * gravados antes desta issue continuarem válidos.
+   */
+  targetSearchRadius: z.number().int().positive().default(8),
   /** Slots por categoria. §13.3: cura 3, poção 4, ataque 10, runa 10, suporte 10. */
   slots: z.object({
     heal: z.number().int().nonnegative(),
@@ -336,6 +413,8 @@ export const botSchema = z.object({
  */
 export const botConfigSchema = z.object({
   version: z.number().int().positive(),
+  /** Alvo e postura (FUN-85). Ausente é `nearest` + `stand`, o comportamento de sempre. */
+  targeting: botTargetingSchema.default(defaultTargeting),
   heal: z.array(botRuleSchema),
   potion: z.array(botRuleSchema),
   attack: z.array(botRuleSchema),

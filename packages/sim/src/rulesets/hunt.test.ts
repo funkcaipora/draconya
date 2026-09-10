@@ -871,13 +871,17 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 import { compileBot } from '../bot.js';
 import type { BotAction, BotConfig } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION, botConfigSchema, botTargetingSchema } from '@draconya/content';
 
-const botConfig = (over: Partial<BotConfig> = {}): BotConfig => ({
-  version: BOT_VOCABULARY_VERSION,
-  heal: [], potion: [], attack: [], rune: [], support: [],
-  ...over,
-});
+const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
+  // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
+  // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
+  // que é trabalho que o parse já faz — e do jeito que a produção faz.
+  botConfigSchema.parse({
+    version: BOT_VOCABULARY_VERSION,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
 
 /** Um atuador que anota o que foi pedido, e diz se executou. */
 const recorder = (executes = true) => {
@@ -1295,5 +1299,213 @@ describe('a equivalência entre taxas vale para magia e supply também', () => {
     // equivalência sem provar nada. Foi assim que a FUN-67 atravessou um teste vazio.
     expect(rapido.kills).toBeGreaterThan(0);
     expect(rapido.goldSpent).toBeGreaterThan(0);
+  });
+});
+
+// --- alvo e postura (FUN-85) -----------------------------------------------------------------
+
+// Uma sala grande, e uma rota em anel no meio dela. A sala do resto deste arquivo tem 4×3 —
+// nela tudo está a três tiles de tudo, e postura não teria como ser distinguida de rota.
+//
+//     0 1 2 3 4 5 6 7 8 9
+//   0 # # # # # # # # # #
+//   1 # . . . . . . . . #
+//   2 # . . . . . . . . #
+//   3 # . . . . . . . . #      ← a rota corre por aqui
+//   4 # . . . . . . . . #
+//   5 # . . . . . . . . #      ← e volta por aqui
+//   6 # # # # # # # # # #
+const salaGrande = {
+  id: 'salao', z: 7,
+  grid: ['##########', '#........#', '#........#', '#........#', '#........#', '#........#',
+    '##########'],
+};
+
+/** O anel. O índice 0 é (4,3) — o meio —, e o índice 10 é (4,5), dois tiles ABAIXO dele. */
+const anel = {
+  id: 'salao-anel', mapId: 'salao',
+  tiles: [
+    { x: 4, y: 3, z: 7 }, { x: 5, y: 3, z: 7 }, { x: 6, y: 3, z: 7 }, { x: 7, y: 3, z: 7 },
+    { x: 8, y: 3, z: 7 }, { x: 8, y: 4, z: 7 }, { x: 8, y: 5, z: 7 }, { x: 7, y: 5, z: 7 },
+    { x: 6, y: 5, z: 7 }, { x: 5, y: 5, z: 7 }, { x: 4, y: 5, z: 7 }, { x: 3, y: 5, z: 7 },
+    { x: 2, y: 5, z: 7 }, { x: 1, y: 5, z: 7 }, { x: 1, y: 4, z: 7 }, { x: 1, y: 3, z: 7 },
+    { x: 2, y: 3, z: 7 }, { x: 3, y: 3, z: 7 },
+  ],
+  // `radius: 1` com o tile do centro livre coloca o monstro EXATAMENTE em (4,5):
+  // `tilesAround` entrega o centro primeiro, e é isso que torna a posição previsível.
+  spawnPoints: [{ routeIndex: 10, radius: 1 }],
+};
+
+/**
+ * Um monstro que fica ONDE NASCEU: `aggroRadius: 0` faz `chooseTarget` nunca achar alvo, e sem
+ * alvo não há passo nem golpe. É o que permite afirmar a posição do personagem sem que a
+ * decisão do monstro entre na conta — aqui o assunto é a postura, não a IA dele.
+ */
+const poste = {
+  ...rat, id: 'post', name: 'Poste', aggroRadius: 0, health: 40,
+};
+
+/**
+ * O mesmo poste, com vida que não acaba.
+ *
+ * Existe porque duas perguntas diferentes precisam de alvos diferentes: "ele volta para a rota
+ * quando o alvo morre" exige um monstro que morra, e "ele PARA ao alcance em vez de tentar
+ * pisar em cima" exige um que não morra — senão o teste mede o depois da morte e passa por
+ * acidente, que foi como ele passou da primeira vez que o escrevi.
+ */
+const posteEterno = { ...poste, id: 'post-tank', name: 'Poste Eterno', health: 1_000_000 };
+
+const huntSalao = {
+  id: 'salao', name: 'Salão', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
+  difficulties: {
+    beginner: {
+      perSpawnPoint: 1, composition: [{ monsterId: 'post', weight: 1 }], respawnDelayMs: 600_000,
+    },
+    professional: {
+      perSpawnPoint: 1, composition: [{ monsterId: 'post-tank', weight: 1 }],
+      respawnDelayMs: 600_000,
+    },
+    // Ratos de verdade — que andam, agroam e renascem. É o cenário movimentado que a
+    // equivalência entre taxas precisa para não medir um empate de zeros.
+    hero: {
+      perSpawnPoint: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 5_000,
+    },
+  },
+};
+
+const withPosture = (
+  over: Record<string, unknown>,
+  difficulty: 'beginner' | 'professional' | 'hero' = 'beginner',
+) => {
+  const loaded = buildContent(raw({
+    monsters: [rat, poste, posteEterno], hunts: [hunt, huntSalao],
+    maps: [map, salaGrande], routes: [route, anel],
+  }));
+  const session = createHuntSession({
+    id: 'postura', content: loaded, huntId: 'salao', difficulty, createdAtMs: 0,
+    bot: compileBot(botConfig({ targeting: botTargetingSchema.parse(over) }), loaded),
+  });
+  const hero = character();
+  session.enter(hero);
+  return { session, hero, ruleset: session.ruleset as HuntRuleset };
+};
+
+describe('postura: o primeiro caso em que o personagem sai da rota por decisão própria', () => {
+  // O personagem nasce em (4,3) e o monstro nasce em (4,5): dois tiles ABAIXO, fora do alcance
+  // de ataque (1) e dentro do raio de visão (8). A rota, do índice 0, vai para a DIREITA — então
+  // "andou pela rota" e "andou atrás do alvo" apontam para lados diferentes, e um teste consegue
+  // distinguir os dois.
+  it('stand percorre a rota e IGNORA o alvo fora de alcance — o comportamento de sempre', () => {
+    const { session, hero, ruleset } = withPosture({ posture: { kind: 'stand' } });
+
+    session.advanceBy(10);
+
+    expect(ruleset.monsters[0]?.position).toEqual({ x: 4, y: 5, z: 7 });
+    // Índice 1 da rota. Andou para a direita, de costas para o monstro.
+    expect(hero.position).toEqual({ x: 5, y: 3, z: 7 });
+  });
+
+  it('follow anda ATRÁS do alvo, pelo mesmo sistema de movimento', () => {
+    const { session, hero } = withPosture({ posture: { kind: 'follow' } });
+
+    session.advanceBy(10);
+
+    expect(hero.position).toEqual({ x: 4, y: 4, z: 7 });
+  });
+
+  it('follow PARA ao alcance, e não fica tentando pisar em cima do alvo', () => {
+    // Alvo que não morre, de propósito: meio minuto de vencimentos de passo com o monstro
+    // sempre ali. Se ele continuasse perseguindo depois de alcançar, tentaria ocupar o tile do
+    // monstro a cada passo — `movement.ts` recusa, mas a tentativa em si é o bot batendo a
+    // cabeça na parede para sempre, e o teste não veria diferença se o alvo tivesse morrido.
+    const { session, hero, ruleset } = withPosture({ posture: { kind: 'follow' } }, 'professional');
+
+    run(session, 30_000, 100);
+
+    expect(ruleset.monsters[0]?.alive).toBe(true);
+    expect(hero.position).toEqual({ x: 4, y: 4, z: 7 });
+    // E ficou batendo o tempo todo: parar de andar não é parar de lutar.
+    expect(ruleset.monsters[0]?.health).toBeLessThan(1_000_000);
+  });
+
+  it('keep-distance RECUA quando o alvo está perto demais', () => {
+    // Distância pedida 3, distância real 2: ele anda para trás, não para frente. É a única
+    // postura que produz passo na direção oposta à do alvo.
+    const { session, hero } = withPosture({ posture: { kind: 'keep-distance', tiles: 3 } });
+
+    session.advanceBy(10);
+
+    expect(hero.position).toEqual({ x: 4, y: 2, z: 7 });
+  });
+
+  it('keep-distance FICA PARADO na distância pedida — não volta a percorrer a rota', () => {
+    // Voltar para a rota ao chegar na distância certa faria o personagem oscilar entre manter
+    // distância e seguir o laço, e de fora isso parece o bot travado.
+    const { session, hero } = withPosture(
+      { posture: { kind: 'keep-distance', tiles: 2 } }, 'professional',
+    );
+
+    run(session, 10_000, 100);
+
+    expect(hero.position).toEqual({ x: 4, y: 3, z: 7 });
+  });
+
+  it('morto o alvo, o personagem VOLTA para a rota', () => {
+    // A postura só manda enquanto há alvo. Sem alvo, `#holdPosture` devolve `false` e o passo
+    // volta a ser o da rota — que é o caminho de sempre, incluindo o `rejoinNearest` de quem
+    // saiu dela.
+    const { session, hero, ruleset } = withPosture({ posture: { kind: 'follow' } });
+    const naRota = (p: { x: number; y: number }) =>
+      anel.tiles.some((t) => t.x === p.x && t.y === p.y);
+
+    run(session, 30_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(0);
+
+    run(session, 10_000, 100);
+    expect(naRota(hero.position)).toBe(true);
+  });
+
+  it('ignorar o único monstro faz a hunt inteira virar caminhada', () => {
+    // O bot não ataca, e a postura não tem atrás de quem ir: ele percorre a rota e pronto. É
+    // o mesmo efeito de não haver monstro, e é o que "ignorar" tem que significar.
+    const { session, ruleset } = withPosture({
+      posture: { kind: 'follow' }, ignore: ['post'],
+    });
+
+    run(session, 30_000, 100);
+
+    expect(session.aggregates.kills).toBe(0);
+    expect(ruleset.monsters[0]?.health).toBe(40);
+    expect(ruleset.monsters[0]?.position).toEqual({ x: 4, y: 5, z: 7 });
+  });
+});
+
+describe('a equivalência entre taxas vale para a postura também', () => {
+  it('1 Hz e 10 Hz dão o MESMO resultado com o personagem perseguindo o alvo', () => {
+    // Postura é MOVIMENTO, e movimento é a coisa que mais quebrou equivalência neste projeto:
+    // o 1,51× de dano sofrido da FUN-68 saía exatamente de o personagem atravessar vários
+    // tiles num tick longo. Perseguir acrescenta um passo por vencimento fora da rota, e ele
+    // precisa cair no mesmo instante lógico nas duas taxas.
+    const at = (stepMs: number) => {
+      const { session, hero, ruleset } = withPosture(
+        { posture: { kind: 'follow' }, policy: 'lowest-hp' }, 'hero',
+      );
+      run(session, 120_000, stepMs);
+      return {
+        kills: session.aggregates.kills,
+        xp: hero.xp,
+        health: hero.health,
+        position: { ...hero.position },
+        vivos: ruleset.monsters.filter((m) => m.alive).length,
+        posicoes: ruleset.monsters.map((m) => `${m.monsterId}@${m.position.x},${m.position.y}`),
+      };
+    };
+
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    // E o cenário exercitou o que diz exercitar: um empate de zeros passaria por equivalência
+    // sem provar nada, que foi como a FUN-67 atravessou um teste vazio.
+    expect(rapido.kills).toBeGreaterThan(0);
   });
 });

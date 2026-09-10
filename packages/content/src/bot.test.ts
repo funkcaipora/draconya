@@ -3,6 +3,7 @@ import { validateBotConfig } from './bot.js';
 import { buildContent } from './content.js';
 import {
   BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema, botConditionSchema,
+  botTargetingSchema,
 } from './schemas.js';
 import type { BotConfig } from './schemas.js';
 
@@ -12,7 +13,21 @@ import type { BotConfig } from './schemas.js';
  * escrita à mão passaria a divergir do que o carregador de verdade produz.
  */
 const content = buildContent({
-  monsters: [], hunts: [], vocations: [],
+  monsters: [
+    {
+      id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
+      health: 20, experience: 5, attack: 6, armor: 0,
+      attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
+      loot: { items: [] },
+    },
+    {
+      id: 'wolf', name: 'Wolf', outfitId: 22, recommendedLevel: 3,
+      health: 40, experience: 12, attack: 12, armor: 2,
+      attackIntervalMs: 2_000, stepDurationMs: 400, aggroRadius: 5,
+      loot: { items: [] },
+    },
+  ],
+  hunts: [], vocations: [],
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
@@ -49,11 +64,15 @@ const rule = (percent: number) => ({
   do: { kind: 'spell' as const, spellId: 'strong-heal' },
 });
 
-const config = (over: Partial<BotConfig> = {}): BotConfig => ({
-  version: BOT_VOCABULARY_VERSION,
-  heal: [], potion: [], attack: [], rune: [], support: [],
-  ...over,
-});
+const config = (over: Partial<BotConfig> = {}): BotConfig =>
+  // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
+  // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
+  // que é trabalho que o parse já faz — e do jeito que a produção faz.
+  botConfigSchema.parse({
+    version: BOT_VOCABULARY_VERSION,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
 
 describe('o vocabulário é FECHADO (FUN-73)', () => {
   it('aceita as quatro condições do §13.3, e recusa o que não está na lista', () => {
@@ -194,5 +213,31 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
     );
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('catálogo de itens');
+  });
+});
+
+describe('targeting é validado contra o catálogo de MONSTROS (FUN-85)', () => {
+  it('recusa priorizar ou ignorar monstro que não existe', () => {
+    // Slot morto pela mesma razão que a magia inexistente: a preferência nunca dispara e nada
+    // diz por quê. Nomear o campo é o que permite ao cliente apontar onde.
+    const problems = validateBotConfig(
+      config({ targeting: botTargetingSchema.parse({
+        prioritize: ['dragao-que-nao-existe'], ignore: ['outro-que-nao-existe'],
+      }) }),
+      content,
+    );
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toContain('prioritize');
+    expect(problems[1]).toContain('ignore');
+  });
+
+  it('aceita id que existe no catálogo, mesmo fora da hunt em que ele vai caçar', () => {
+    // A configuração é do PERSONAGEM e sobrevive à troca de hunt. Recusar "priorize rato"
+    // porque a hunt do momento não tem rato faria a configuração deixar de valer ao mudar de
+    // lugar — e o jogador teria que reconfigurar a cada hunt.
+    expect(validateBotConfig(
+      config({ targeting: botTargetingSchema.parse({ prioritize: ['rat'], ignore: ['wolf'] }) }),
+      content,
+    )).toEqual([]);
   });
 });
