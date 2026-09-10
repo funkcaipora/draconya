@@ -227,6 +227,129 @@ export const staminaSchema = z.object({
 
 export type Stamina = z.infer<typeof staminaSchema>;
 
+/**
+ * Vocabulário do bot (FUN-73, ADR 0002, §13).
+ *
+ * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de
+ * script no lugar disto seria código do jogador rodando no servidor, e o ADR 0002 descartou
+ * isso por segurança e por custo. Fechado também é o que permite versionar.
+ *
+ * **Versionado** porque a configuração é dado PERSISTIDO do jogador. Um vocabulário que muda
+ * sem número quebra a regra de quem a salvou — e quebra em silêncio, que é o formato pior:
+ * o bot simplesmente para de curar e ninguém liga uma coisa à outra.
+ *
+ * A referência (ADR 0019, §35) confirma o caminho: dados em JSON validados por schema mais
+ * registries tipados, e **Lua adiada** até haver evidência de que conteúdo exige deploy para
+ * mudança trivial. Não há.
+ */
+export const BOT_VOCABULARY_VERSION = 1;
+
+/** Os quatro comparadores do §13.3. Sem `==`: comparar percentual exato é armadilha. */
+const botOperator = z.enum(['<', '<=', '>', '>=']);
+
+/**
+ * `kind` É o nome da condição, e não um rótulo ao lado dela.
+ *
+ * União discriminada de propósito: sem discriminador, um `when` malformado produz o erro
+ * "nenhuma das N variantes casou", que não diz qual campo está errado — e o critério desta
+ * issue é que regra fora do vocabulário seja **recusada com motivo**, nunca ignorada.
+ */
+export const botConditionSchema = z.discriminatedUnion('kind', [
+  /** HP do personagem, em percentual do máximo. */
+  z.object({
+    kind: z.literal('hp'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+  /** Mana do personagem, em percentual do máximo. */
+  z.object({
+    kind: z.literal('mana'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+  /** Quantos alvos estão ao alcance. É o que sustenta "3 ou mais → onda". */
+  z.object({
+    kind: z.literal('targets'), op: botOperator, count: z.number().int().nonnegative(),
+  }),
+  /** Vida do alvo atual, em percentual. Sem alvo, a condição é falsa — nunca um erro. */
+  z.object({
+    kind: z.literal('target-hp'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+]);
+
+/**
+ * O que uma regra dispara.
+ *
+ * `spellId`, `supplyId` e `itemId` apontam catálogos que ainda não existem por inteiro (M7 e
+ * M8). O schema valida a FORMA agora; a referência cruzada entra quando o catálogo existir,
+ * pelo mesmo mecanismo que `loot.items` já usa em `buildContent` — recusar o que não tem
+ * catálogo, em vez de aceitar e descobrir na hora de executar.
+ */
+export const botActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('spell'), spellId: z.string().min(1) }),
+  z.object({ kind: z.literal('supply'), supplyId: z.string().min(1) }),
+  z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
+]);
+
+/** Uma linha de slot: a condição e o que fazer quando ela vale. */
+export const botRuleSchema = z.object({
+  when: botConditionSchema,
+  do: botActionSchema,
+});
+
+/**
+ * As cinco categorias do §13.5. Independentes: uma ação de poção não consome o cooldown de
+ * runa, e não há prioridade global entre elas — cada uma avalia os próprios slots de cima
+ * para baixo, e a primeira regra válida executa.
+ */
+export const BOT_CATEGORIES = ['heal', 'potion', 'attack', 'rune', 'support'] as const;
+export type BotCategory = (typeof BOT_CATEGORIES)[number];
+
+/**
+ * Os limites do bot, em CONTEÚDO e não em código (§13.3).
+ *
+ * Quantos slots cada categoria tem é balanceamento, e balanceamento mora onde um designer o
+ * alcança sem deploy. O `_open` registra que o subconjunto do bot básico (até o level 49)
+ * continua `[ABERTO]` no PRD §13.2.
+ */
+export const botSchema = z.object({
+  id: z.literal('baseline'),
+  /** A versão do vocabulário que este conteúdo entende. Recusa configuração de outra. */
+  vocabularyVersion: z.number().int().positive(),
+  /** Cooldown de cada categoria, independente das outras. §13.5: 1 s. */
+  categoryCooldownMs: z.number().int().positive(),
+  /** A partir de qual level o bot avançado abre. §13.2: 50. */
+  advancedFromLevel: z.number().int().positive(),
+  /** Slots por categoria. §13.3: cura 3, poção 4, ataque 10, runa 10, suporte 10. */
+  slots: z.object({
+    heal: z.number().int().nonnegative(),
+    potion: z.number().int().nonnegative(),
+    attack: z.number().int().nonnegative(),
+    rune: z.number().int().nonnegative(),
+    support: z.number().int().nonnegative(),
+  }),
+  _open: z.string().optional(),
+});
+
+/**
+ * A configuração que o JOGADOR salva. Não é conteúdo — é dado dele —, mas o schema mora aqui
+ * porque quem define o que é aceitável é o vocabulário, e o vocabulário é conteúdo.
+ *
+ * Os limites de slot NÃO são checados aqui: eles vêm de `bot/baseline.json`, que o schema não
+ * enxerga. Quem cruza os dois é `validateBotConfig`.
+ */
+export const botConfigSchema = z.object({
+  version: z.number().int().positive(),
+  heal: z.array(botRuleSchema),
+  potion: z.array(botRuleSchema),
+  attack: z.array(botRuleSchema),
+  rune: z.array(botRuleSchema),
+  support: z.array(botRuleSchema),
+});
+
+export type BotOperator = z.infer<typeof botOperator>;
+export type BotCondition = z.infer<typeof botConditionSchema>;
+export type BotAction = z.infer<typeof botActionSchema>;
+export type BotRule = z.infer<typeof botRuleSchema>;
+export type BotLimits = z.infer<typeof botSchema>;
+export type BotConfig = z.infer<typeof botConfigSchema>;
+
 export type Monster = z.infer<typeof monsterSchema>;
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */

@@ -6,10 +6,14 @@ import { z } from 'zod';
 import { buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
-  combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema, staminaSchema,
+  BOT_VOCABULARY_VERSION,
+  botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
+  staminaSchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
-import type { Combat, Hunt, Monster, Progression, Stamina, Vocation } from './schemas.js';
+import type {
+  BotLimits, Combat, Hunt, Monster, Progression, Stamina, Vocation,
+} from './schemas.js';
 
 export interface Content {
   /**
@@ -26,6 +30,8 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
+  readonly bot: BotLimits;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
@@ -44,6 +50,7 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly bot?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -95,6 +102,21 @@ export function buildContent(raw: RawContent): Content {
   // custo morar onde ninguém procura por ele.
   if (stamina === undefined) {
     problems.push('stamina/baseline.json ausente: sem ele não há teto de stamina');
+  }
+  const bots = parseAll('bot', raw.bot ?? [], botSchema, problems);
+  const bot = bots.get('baseline');
+  // Ausente é ERRO, como progressão, combate e stamina. O bot é o produto — o invariante 11
+  // diz que a automação é funcionalidade central, não tolerância —, e um default em código
+  // faria os slots que o designer ajusta morarem onde ele não alcança.
+  if (bot === undefined) {
+    problems.push('bot/baseline.json ausente: sem ele não há vocabulário de automação');
+  } else if (bot.vocabularyVersion !== BOT_VOCABULARY_VERSION) {
+    // Conteúdo declarando outra versão de vocabulário é conteúdo escrito para outro servidor.
+    // Aceitar seria rodar regra que este binário não sabe compilar, e descobrir na execução.
+    problems.push(
+      `bot/baseline.json declara vocabularyVersion ${bot.vocabularyVersion}, e este servidor `
+        + `entende ${BOT_VOCABULARY_VERSION}`,
+    );
   }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
@@ -206,6 +228,7 @@ export function buildContent(raw: RawContent): Content {
 
   return {
     version: computeVersion(raw),
+    bot: bot as BotLimits,
     monsters,
     hunts,
     vocations,

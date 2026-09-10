@@ -27,6 +27,7 @@ export function loadContent(dir: string): Content {
     progression: readJsonDir(join(dir, 'progression')),
     combat: readJsonDir(join(dir, 'combat')),
     stamina: readJsonDir(join(dir, 'stamina')),
+    bot: readJsonDir(join(dir, 'bot')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura

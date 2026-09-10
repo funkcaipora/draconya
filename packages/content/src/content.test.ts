@@ -36,7 +36,10 @@ const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 
 const base = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [cellars], vocations: [knight],
-  progression: [baseline], combat: [combat], stamina: [stamina], ...over,
+  progression: [baseline], combat: [combat], stamina: [stamina],
+ // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
+ bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], ...over,
 });
 
 describe('buildContent', () => {
