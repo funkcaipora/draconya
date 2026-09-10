@@ -8,7 +8,7 @@ import type { Tilemap } from '@draconya/content';
 import type { EndReason, Ruleset, Session } from '../session.js';
 import type { CharacterRuntime } from '../character.js';
 import type { GridPoint } from '../monster/step.js';
-import { TileOccupancy, move, place } from '../movement.js';
+import { TileOccupancy, move, placeNear } from '../movement.js';
 import type { MoveResult } from '../movement.js';
 
 export interface CityRulesetOptions {
@@ -22,6 +22,14 @@ export interface CityRulesetOptions {
   readonly stepDurationMs?: number;
 }
 
+/**
+ * Até onde procurar tile livre ao chegar na praça, em tiles.
+ *
+ * Oito dá 289 tiles ao redor do ponto de entrada — folga para o teto de população por cópia
+ * que a FUN-33 vai definir, sem virar uma varredura do mapa inteiro quando a praça enche.
+ */
+const ENTRY_RADIUS = 8;
+
 export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
   const world = options.map === undefined ? null : new TileOccupancy(options.map);
   let occupancyStale = true;
@@ -33,6 +41,10 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
 
   return {
     type: 'city',
+
+    // A Cidade é o SHARD (FUN-71, ADR 0023): uma cópia, muitos personagens. É a única sessão
+    // do jogo assim — hunt, quest, boss e guild war são instanciadas por quem entra.
+    shared: true,
 
     // Orientada a evento: sem laço de simulação nenhum. Movimento e chat chegam como
     // mensagem e respondem; loja, depósito e market são pedido-resposta.
@@ -50,9 +62,30 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       // outra criatura em cima dele — e nesse caso o personagem fica onde estava.
       if (world !== null && options.map?.entryPoint !== undefined) {
         if (occupancyStale) rebuild(session);
-        place(world, character, { ...options.map.entryPoint, z: options.map.z });
+        // No tile de entrada, ou no livre mais próximo dele.
+        //
+        // A praça é COMPARTILHADA (FUN-71): o segundo a chegar encontra o primeiro parado
+        // exatamente no ponto de entrada, e um `place` seco recusaria — o personagem ficaria
+        // fora do mapa, invisível e sem andar, com o log dizendo que ele entrou.
+        placeNear(world, character, { ...options.map.entryPoint, z: options.map.z },
+          ENTRY_RADIUS);
       }
       session.record('entered-city', character.id);
+    },
+
+    onLeave(session: Session) {
+      // REMONTA a ocupação a partir de quem ficou, em vez de liberar o tile pela posição de
+      // quem saiu.
+      //
+      // A diferença não é estilo. Quando esta saída acontece, quem sai já pode ter sido
+      // colocado no mapa da hunt para onde vai — e `TileOccupancy` guarda coordenada, não
+      // dono. Liberar por `character.position` liberaria um tile da PRAÇA usando coordenada
+      // de OUTRO mapa, em cima de quem estivesse parado ali. É o defeito que a FUN-72
+      // corrigiu no `place`, pela mesma porta.
+      //
+      // Sem isto, na direção contrária, sobra um bloqueio invisível no meio da praça: ninguém
+      // consegue pisar, ninguém está ali, e nada na tela explica.
+      if (world !== null) rebuild(session);
     },
 
     onEvent() {

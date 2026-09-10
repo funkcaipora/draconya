@@ -154,6 +154,18 @@ export interface Ruleset {
   readonly type: SessionType;
 
   /**
+   * Esta sessão é um SHARD — uma cópia compartilhada por muitos personagens (FUN-71)?
+   *
+   * Ausente é `false`, que é a sessão de sempre: um personagem, dono do que ela produz. O
+   * invariante 8 continua de pé na letra — todo personagem está em exatamente uma sessão —, e
+   * o que muda é a leitura: a sessão é que passa a ter muitos.
+   *
+   * Marcar `true` muda o que "sair" significa. Numa sessão privada, sair é encerrar; num
+   * shard, sair é `leave`, e quem fica não perde nada. Ver o ADR 0023.
+   */
+  readonly shared?: boolean;
+
+  /**
    * Com que frequência o HOSPEDEIRO avança esta sessão, em Hz. `0` significa orientada a
    * evento — sem laço.
    *
@@ -169,6 +181,15 @@ export interface Ruleset {
   hz(attached: boolean): number;
 
   onEnter(session: Session, character: CharacterRuntime): void;
+
+  /**
+   * O personagem saiu de uma sessão que CONTINUA viva (FUN-71). Só acontece em shard.
+   *
+   * Existe porque a saída tem consequência no mundo: o tile que ele ocupava precisa ser
+   * liberado, senão sobra um bloqueio invisível que ninguém consegue pisar e nada explica.
+   * Numa sessão privada isto nunca é chamado — lá a sessão inteira acaba, e `onEnd` basta.
+   */
+  onLeave?(session: Session, character: CharacterRuntime): void;
 
   /**
    * Um evento venceu. `session.nowMs` É o instante do vencimento — não "algum ponto do tick".
@@ -317,6 +338,28 @@ export class Session {
     if (this.#endedReason) throw new Error(`session ${this.id} has already ended`);
     this.participants.push(character);
     this.ruleset.onEnter(this, character);
+  }
+
+  /**
+   * Tira um personagem de uma sessão que CONTINUA viva (FUN-71) e devolve quem saiu.
+   *
+   * É a operação que faltava para a Cidade compartilhada existir: antes disto, "sair" só sabia
+   * ser `end`, e um jogador saindo da praça encerraria a praça para todo mundo.
+   *
+   * **Só faz sentido em shard**, e é o hospedeiro quem sabe disso — aqui a checagem seria uma
+   * regra de servidor dentro do motor. O que este método garante é o mínimo: quem saiu sai da
+   * lista, o ruleset é avisado para desfazer o que a entrada fez, e a sessão não termina.
+   *
+   * Não mexe em agregado nem em extrato: no shard não há nada a creditar (§37), e numa sessão
+   * privada esta chamada não acontece.
+   */
+  leave(characterId: string): CharacterRuntime | null {
+    const index = this.participants.findIndex((participant) => participant.id === characterId);
+    if (index < 0) return null;
+    const [character] = this.participants.splice(index, 1);
+    if (character === undefined) return null;
+    this.ruleset.onLeave?.(this, character);
+    return character;
   }
 
   /**

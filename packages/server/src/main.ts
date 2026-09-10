@@ -15,7 +15,7 @@ import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
   createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
@@ -125,6 +125,11 @@ async function main(): Promise<void> {
 
   const lootBoxes = new LootBoxStore(redis);
 
+  // A cópia da Cidade deste nó (FUN-71, ADR 0023). Uma por processo `game`, e é assim que
+  // "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais.
+  const nowMs = (): number => Date.now();
+  const cityShard = new CityShard(content, nowMs);
+
   const factories: Record<RoleName, () => Role> = {
     api: () => {
       const apiLogger = logger.child({ role: 'api' });
@@ -162,11 +167,15 @@ async function main(): Promise<void> {
       directory,
       tickets,
       contentVersion: content.version,
-      createSession: createCitySessionFactory(content),
+      // A MESMA cópia da Cidade nos dois caminhos (FUN-71, ADR 0023): quem entra no jogo e
+      // quem volta de uma hunt chegam na mesma praça. Duas instâncias de `CityShard` aqui
+      // dariam duas praças que nunca se veem, e o defeito seria invisível até alguém tentar
+      // encontrar um amigo.
+      createSession: createCitySessionFactory(content, nowMs, cityShard),
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),
-      buildSession: createSessionBuilder(content),
+      buildSession: createSessionBuilder(content, nowMs, cityShard),
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
