@@ -387,13 +387,13 @@ terceiro slot de personagem.
 - **Teste que usa Redis escolhe um banco só seu** (`testing/redis.ts`). O Vitest roda arquivos
   em paralelo e `flushdb` é global: dois arquivos no mesmo banco passam sozinhos e falham
   juntos, de forma intermitente.
-
-## Testes de autenticação e admissão
-
-`TEST_REDIS_URL` deve apontar para um Redis descartável; bancos 1–8 são apagados pelos testes.
-`DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
-fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
-`state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.
+- **Prazo de Redis em fixture vem de `testing/deadlines.ts`, e é LONGO** (FUN-95). Nenhum teste
+  daqui espera prazo vencer: a FUN-62 trocou espera por asserção do prazo gravado, e a expiração
+  é provada apagando a chave na mão. O número, então, só precisa **sobreviver ao próprio teste** —
+  e um lease de 120 ms não sobrevive. Sob carga, a suíte inteira reprovava dois a quatro testes
+  DIFERENTES por execução, cada um passando sozinho; `testing/redis.test.ts` agora reprova quem
+  escrever prazo abaixo do piso. Prazo curto de verdade é LÓGICO, e prazo lógico não vai ao
+  Redis: passa pelo relógio injetado, que o teste controla.
 - **A Cidade é UMA sessão com muitos personagens** (FUN-71, ADR 0023). `#sessions` é indexado por
   sessão e `#sessionIdByCharacter` por personagem: com o shard, N personagens apontam para o
   mesmo `HostedSession`. Todo caminho que fazia "esta sessão = este personagem" precisa escolher
@@ -411,3 +411,11 @@ fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entr
   creditada. Antes da FUN-71, o `save` da Cidade cobria essa linha por acidente.
 - **Repouso (FUN-52) é por PERSONAGEM.** Por sessão, um jogador com o navegador aberto seguraria
   a praça inteira na memória do nó para sempre.
+
+## Testes de autenticação e admissão
+
+`TEST_REDIS_URL` deve apontar para um Redis descartável; os bancos listados em `testing/redis.ts`
+são apagados pelos testes — hoje 1 a 10, e a lista é verificada, não confiada.
+`DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
+fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
+`state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

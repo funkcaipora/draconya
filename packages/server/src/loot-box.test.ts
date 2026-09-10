@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { LOOT_BOX_TTL_MS, LootBoxStore } from './loot-box.js';
+import { SHORT_MS } from './testing/deadlines.js';
 import { connectTestRedis } from './testing/redis.js';
 
 // O banco 10 é deste arquivo — ver testing/redis.ts para por que cada um tem o seu.
@@ -88,7 +89,7 @@ describe.runIf(available)('Caixa de Loot da Sessão (FUN-88)', () => {
     // tentativa repetida do servidor.
     const curta = new LootBoxStore(redis, 60_000);
     await curta.save('s1', [item('s1:0')]);
-    await redis.pexpire('lootbox:s1', 1_000);
+    await redis.pexpire('lootbox:s1', SHORT_MS);
 
     await curta.save('s1', [item('s1:0')]);
 
