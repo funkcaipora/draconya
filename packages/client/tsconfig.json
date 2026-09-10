@@ -13,5 +13,10 @@
   },
   "include": [
     "src/**/*"
+  ],
+  "//": "Teste fica de FORA deste projeto e vive no `tsconfig.tests.json`, que tem os tipos do Node. O cliente é pacote de navegador: dar tipos de Node a ele faria `node:fs` typecheckar dentro do código de produção, que é justamente o que não pode acontecer. Cobertura não se perde — os testes continuam checados, no projeto certo.",
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }

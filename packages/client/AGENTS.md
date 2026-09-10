@@ -20,9 +20,26 @@ está em nenhum repositório público. Ele vem de uma instalação do cliente do
 
 ```
 things/<version>/           # THINGS_DIR e THINGS_VERSION no .env
-  catalog-content.json
-  appearances-<hash>.dat
-  sprites-<hash>.bmp.lzma
+  catalog-content.json      # índice → catalog.ts
+  appearances-<hash>.dat    # protobuf → appearances.ts
+  sprites-<hash>.bmp.lzma   # folhas → FUN-17
+```
+
+**Os testes do pipeline não dependem disso.** `src/assets/*.test.ts` monta o `.dat` com um
+encoder de protobuf próprio (`assets/testing.ts`) e roda em qualquer lugar, CI incluído.
+`appearances.pack.test.ts` é o outro lado: ele procura um `appearances*.dat` sob `THINGS_DIR`
+e **pula** quando não acha, dizendo por quê numa linha.
+
+A divisão é o ponto. Fixture prova COMPORTAMENTO — defaults do proto2, pulo por wire type,
+registros separados — mas não prova que o schema que escrevemos é o schema que existe: ela foi
+escrita pela mesma cabeça que escreveu o leitor, e um número de campo errado nos dois lugares
+passa nos dois. Só arquivo real pega isso. Um teste que reprova onde o dado não existe seria
+desligado no primeiro PR vermelho, e aí não protegeria nada em lugar nenhum.
+
+Para rodar contra um pacote fora do repositório:
+
+```
+THINGS_DIR=/caminho/para/things pnpm vitest run packages/client/src/assets
 ```
 
 **Os repositórios de OTClient não contêm sprites.** Foi verificado: `opentibiabr/otclient`,
@@ -41,6 +58,33 @@ O que eles trazem e que **vale muito**:
 **Cuidado de licença:** MIT nos dois primeiros — copiar código é limpo, mantendo o aviso de
 copyright. **O YATC é GPL-2.0**, que é copyleft: copiar código de lá obrigaria o Draconya inteiro
 a ser GPL. Leia como referência se quiser; não copie linha.
+
+## O pipeline de assets (FUN-16)
+
+```
+assets/protobuf.ts     mecanismo: varint, tag, slice, skip por wire type. Não sabe o que é aparência.
+assets/appearances.ts  o schema: números de campo do appearances.proto real, e o leitor dirigido
+assets/catalog.ts      o índice: qual folha tem qual id, e onde dentro dela
+assets/testing.ts      encoder de protobuf, só para fixture
+```
+
+**Por que um leitor dirigido em vez de `protobufjs`.** A issue sugeria gerar o leitor a partir
+do `.proto`, e a preocupação dela era não ADIVINHAR número de campo — `appearances.ts` cita o
+schema real de `opentibiabr/otclient` (MIT) campo a campo, então não adivinhamos. O que um
+decoder genérico custaria é o resto: ele materializa TODO campo de TODA mensagem, e
+`Appearance.flags` — a maior parte dos 4,8 MB, da qual não usamos nada — viraria objeto para
+cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um varint.
+(`pbjs --target static-module` ainda emitiria `.js`, que o `source-policy` recusa.)
+
+**O que é lido, e o que é pulado.** Lidos: `id`, `frame_group`, e de `sprite_info` os
+`pattern_*`, `layers`, `sprite_id`, `bounding_square` e as durações das fases. Pulados:
+`flags`, `name`, `description`, `bounding_box_per_direction`, `is_opaque` — e todo campo que
+uma versão futura trouxer, **pelo wire type**. É isso, e não a lista de campos conhecidos, que
+mantém o leitor válido quando o pacote sobe de versão.
+
+Medido contra o `appearances.dat` do Canary (4,8 MB): **42.107 objects, 1.443 outfits, 242
+effects, 62 missiles, em 136 ms.** O `outfit 21` sai com dois grupos — parado com 4 direções e
+1 quadro, andando com 4 direções e 8 fases —, que é a forma que uma criatura do Tibia tem.
 
 ## Invariantes locais
 
@@ -97,6 +141,17 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 
 ## Armadilhas conhecidas
 
+- **`packages/client/tsconfig.json` EXCLUI `*.test.ts`**, e isso é de propósito: o cliente é
+  pacote de navegador e não tem tipos do Node. Dá-los a ele faria `node:fs` typecheckar dentro
+  do código de produção — que é justamente o que não pode acontecer. Os testes continuam
+  checados, pelo `tsconfig.tests.json`, que tem os tipos certos.
+- **O id de sprite é GLOBAL entre as folhas**, não índice dentro de uma. `sheetFor` resolve pela
+  faixa do `catalog-content.json`, e a faixa é INCLUSIVA nas duas pontas — um `<` no lugar de
+  `<=` perde exatamente um sprite por folha, que é o defeito que ninguém acha olhando a tela.
+- **`area` do `catalog-content.json` é lido e ignorado.** O que ele significa não foi verificado
+  contra um pacote real (FUN-65), e derivar geometria de um campo não conferido seria pior que
+  derivá-la de `spritetype`, que a §13.1 documenta. É o primeiro campo a conferir quando um
+  pacote de verdade aparecer.
 - O decoder LZMA em JS puro é pesado — roda em Web Worker, nunca no thread principal.
 - Folhas decodificadas vão para IndexedDB. Sem isso, cada sessão rebaixa e redescomprime tudo.
 - `requestAnimationFrame` para em aba de fundo. Ao voltar, aplique em bloco o que chegou; não
