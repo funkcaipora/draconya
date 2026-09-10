@@ -18,8 +18,8 @@
 
 import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
-  BotAction, BotCategory, BotExitRule, Combat, Content, Hunt, HuntDifficulty, Monster,
-  Progression, Route, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
+  Monster, Progression, Route, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
@@ -31,6 +31,7 @@ import type { KillCredit, Victim } from '../death.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
@@ -211,11 +212,17 @@ export interface HuntRulesetOptions {
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
-   * O bot já compilado (FUN-80). Ausente é o normal hoje: a configuração vem pelo socket, e
-   * isso é a FUN-81. **Sem bot não há evento nenhum agendado** — o custo de cinco eventos por
-   * segundo por hunt só existe para quem configurou.
+   * A configuração do bot, CRUA (FUN-73, FUN-80, FUN-81).
+   *
+   * **Uma porta de entrada só.** Houve um tempo em que dava para passar o bot já compilado, e
+   * as duas formas divergiram na primeira oportunidade: quem entrava pelo compilado ficava sem
+   * as regras de saída, porque elas são compostas a partir da configuração crua. Compilar aqui
+   * dentro torna a divergência impossível de escrever.
+   *
+   * **Sem configuração não há evento nenhum agendado** — o custo de cinco eventos por segundo
+   * por hunt só existe para quem configurou.
    */
-  readonly bot?: CompiledBot;
+  readonly botConfig?: BotConfig;
   /**
    * Substitui o atuador embutido (FUN-74/FUN-77).
    *
@@ -268,14 +275,45 @@ export interface HuntRulesetState {
    * havia evento de bot na fila para conflitar.
    */
   readonly botScheduled?: readonly BotCategory[];
+  /**
+   * A configuração do bot, CRUA (FUN-81).
+   *
+   * Crua e não compilada: `CompiledBot` é um vetor de closures, e closure não serializa. O
+   * `restore` recompila, que é barato — é um `map` sobre poucas dezenas de regras.
+   *
+   * Precisa entrar no snapshot porque a sessão é a DONA da configuração enquanto roda: uma
+   * edição feita no meio da hunt vale na hora, e ler o banco na retomada descartaria tudo o
+   * que foi salvo depois do último `UPDATE`. O banco é a fonte para COMEÇAR uma hunt; o
+   * snapshot é a fonte para CONTINUAR a que já estava rodando.
+   *
+   * Opcional: snapshot gravado antes desta issue não tem a chave, e ausente é "sem bot" — que
+   * é exatamente o que aquelas sessões tinham.
+   */
+  readonly botConfig?: BotConfig;
 }
 
 export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
   readonly #options: HuntRulesetOptions;
+  /**
+   * O bot vigente. MUTÁVEL, ao contrário do resto das opções: o jogador troca a configuração
+   * no meio da hunt e ela passa a valer na hora (FUN-81, §13).
+   */
+  #bot: CompiledBot | undefined;
+  /** A configuração crua correspondente, para o snapshot. Anda junto com `#bot`, sempre. */
+  #botConfig: BotConfig | undefined;
   readonly #difficulty: HuntDifficulty;
-  readonly #exitRules: readonly HuntExitRule[];
+  #exitRules: readonly HuntExitRule[];
+  /**
+   * As regras injetadas por quem montou o ruleset, separadas das do jogador.
+   *
+   * Precisam ficar guardadas à parte porque a lista efetiva é RECOMPOSTA três vezes — na
+   * construção, na restauração e a cada troca de configuração — e sem separar não há como
+   * recompor sem duplicar as injetadas ou perdê-las. Foi assim que a restauração passou a
+   * voltar sem as regras de saída, e o teste de retomada pegou.
+   */
+  readonly #injectedExitRules: readonly HuntExitRule[];
   #walker: RouteWalker;
   #spawner: Spawner;
   #monsters: MonsterRuntime[] = [];
@@ -362,8 +400,11 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
+    this.#botConfig = options.botConfig;
+    this.#bot = options.botConfig === undefined ? undefined : compileBot(options.botConfig);
     this.#difficulty = difficulty;
-    this.#exitRules = options.exitRules ?? [];
+    this.#injectedExitRules = options.exitRules ?? [];
+    this.#exitRules = this.#composeExitRules(options.botConfig);
     this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
@@ -590,6 +631,7 @@ export class HuntRuleset implements Ruleset {
       staminaAnchorMs: this.#staminaAnchorMs,
       playerAttackReady: this.#playerAttackReady,
       botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
+      ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
     };
   }
 
@@ -631,6 +673,17 @@ export class HuntRuleset implements Ruleset {
     this.#playerAttackReady = restored.playerAttackReady ?? true;
     for (const category of BOT_CATEGORIES) {
       this.#botReady[category] = !(restored.botScheduled ?? []).includes(category);
+    }
+    // A configuração volta CRUA e é recompilada aqui (FUN-81). Sem isto, uma hunt retomada
+    // roda sem bot: continua andando e matando com o ataque básico, então nada PARECE
+    // quebrado — o que some é a cura, e o jogador descobre pelo personagem morto.
+    if (restored.botConfig !== undefined) {
+      this.#botConfig = restored.botConfig;
+      this.#bot = compileBot(restored.botConfig);
+      // As regras de SAÍDA também. Esquecê-las aqui foi um defeito de verdade: a hunt voltava
+      // curando de novo, mas sem a regra que a tirava de lá — e o jogador que configurou
+      // "sair abaixo de 20%" descobriria pelo personagem morto.
+      this.#exitRules = this.#composeExitRules(restored.botConfig);
     }
     // Os participantes ainda não existem: a `Session` os reconstrói depois desta chamada.
     // A ocupação é remontada no primeiro evento, quando todo mundo já está de pé.
@@ -791,6 +844,29 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O jogador salvou uma configuração nova no meio da hunt (FUN-81, §13).
+   *
+   * Recompila e passa a valer NA HORA. Esperar a próxima hunt seria o jogador corrigir a regra
+   * de cura enquanto o personagem morre — e a configuração é dado puro, então recompilar não
+   * tem risco nenhum.
+   *
+   * Quem chama é a sessão dona, nunca outro processo (invariante 9). As regras de saída são
+   * recompiladas junto: elas vêm da mesma configuração, e deixar as antigas valendo faria a
+   * hunt encerrar por uma regra que o jogador acabou de apagar.
+   */
+  configureBot(session: Session, config: BotConfig): void {
+    this.#botConfig = config;
+    this.#bot = compileBot(config);
+    this.#exitRules = this.#composeExitRules(config);
+    // Categoria que ganhou regra agora precisa acordar. `#armBot` só toca as ENGATILHADAS, e
+    // as que já tinham evento pendente seguem com ele — a invariante "engatilhada ou agendada"
+    // continua valendo do outro lado de uma troca de configuração.
+    for (const character of session.participants) {
+      if (character.alive) this.#armBot(session, character.id);
+    }
+  }
+
+  /**
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
@@ -876,7 +952,7 @@ export class HuntRuleset implements Ruleset {
    */
   #onBot(session: Session, category: BotCategory, characterId: string): void {
     this.#botReady[category] = true;
-    const bot = this.#options.bot;
+    const bot = this.#bot;
     const character = findById(session.participants, characterId);
     if (bot === undefined || character === null || !character.alive) return;
 
@@ -997,10 +1073,11 @@ export class HuntRuleset implements Ruleset {
    * seria a ação dobrada.
    */
   #armBot(session: Session, characterId: string): void {
-    if (this.#options.bot === undefined) return;
+    const bot = this.#bot;
+    if (bot === undefined) return;
     for (const category of BOT_CATEGORIES) {
       if (!this.#botReady[category]) continue;
-      if ((this.#options.bot.categories.get(category)?.length ?? 0) === 0) continue;
+      if ((bot.categories.get(category)?.length ?? 0) === 0) continue;
       this.#scheduleBot(session, category, characterId, 0);
     }
   }
@@ -1016,13 +1093,25 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
+  /**
+   * A lista efetiva: as do JOGADOR primeiro, as injetadas depois.
+   *
+   * A ordem decide qual `id` vai para o extrato quando duas valem no mesmo instante, e a do
+   * jogador é a que ele consegue explicar — `exitRules` é costura de teste e do dia em que a
+   * hunt tiver regra própria.
+   */
+  #composeExitRules(config: BotConfig | undefined): readonly HuntExitRule[] {
+    if (config === undefined) return this.#injectedExitRules;
+    return [...compileExitRules(config.exit), ...this.#injectedExitRules];
+  }
+
   #botCooldownMs(): number {
     return this.#options.botCooldownMs ?? 1_000;
   }
 
   /** A política do jogador, ou a de sempre: mais próximo, sem preferência, sem sair da rota. */
   get #targeting(): Targeting {
-    return this.#options.bot?.targeting ?? DEFAULT_TARGETING;
+    return this.#bot?.targeting ?? DEFAULT_TARGETING;
   }
 
   /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
@@ -1345,8 +1434,8 @@ export interface HuntSessionOptions {
   readonly createdAtMs: number;
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
-  /** O bot já compilado (FUN-80). Ausente: nenhuma categoria entra na fila. */
-  readonly bot?: CompiledBot;
+  /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
+  readonly botConfig?: BotConfig;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -1367,8 +1456,8 @@ export class HuntUnavailableError extends Error {
 export interface HuntRulesetExtras {
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
-  /** O bot já compilado (FUN-80). Ausente: nenhuma categoria entra na fila. */
-  readonly bot?: CompiledBot;
+  /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
+  readonly botConfig?: BotConfig;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -1379,14 +1468,10 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, bot, actuator } = extras;
-  // As do JOGADOR primeiro, as injetadas depois. A ordem decide qual `id` vai para o extrato
-  // quando duas disparam no mesmo instante, e a do jogador é a que ele consegue explicar —
-  // `extras.exitRules` é costura de teste e do dia em que a hunt tiver regra própria.
-  const compiled = bot === undefined ? [] : compileExitRules(bot.exit);
-  const exitRules = compiled.length === 0 && extras.exitRules === undefined
-    ? undefined
-    : [...compiled, ...(extras.exitRules ?? [])];
+  const { premium, botConfig, exitRules, actuator } = extras;
+  // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
+  // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
+  // de quem entrasse pela outra. Já aconteceu.
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) throw new HuntUnavailableError(`hunt "${huntId}" não existe`);
   const map = content.maps.get(hunt.mapId);
@@ -1413,7 +1498,7 @@ export function createHuntRuleset(
     player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
-    ...(bot === undefined ? {} : { bot }),
+    ...(botConfig === undefined ? {} : { botConfig }),
     ...(actuator === undefined ? {} : { actuator }),
     // O cooldown de categoria vem do CONTEÚDO (§13.5), como todo parâmetro de balanceamento.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -1434,7 +1519,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
     ruleset: createHuntRuleset(options.content, options.huntId, options.difficulty, {
       ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
       ...(options.premium === undefined ? {} : { premium: options.premium }),
-      ...(options.bot === undefined ? {} : { bot: options.bot }),
+      ...(options.botConfig === undefined ? {} : { botConfig: options.botConfig }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
@@ -1458,6 +1543,9 @@ export function huntRulesetFromSnapshot(
   const state = snapshot.ruleset as Partial<HuntRulesetState> | undefined;
   if (state?.huntId === undefined || state.difficulty === undefined) return null;
   try {
+    // Sem `extras`: o bot volta do próprio estado do ruleset, em `restore`, e não daqui. Quem
+    // monta o ruleset não conhece o snapshot inteiro — só a hunt e a dificuldade, que são a
+    // IDENTIDADE da instância. O resto é estado, e estado é assunto de `restore`.
     return createHuntRuleset(content, state.huntId, state.difficulty);
   } catch {
     return null;

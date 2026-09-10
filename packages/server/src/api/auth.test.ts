@@ -36,6 +36,9 @@ class MemorySessions implements AuthSessionStore {
 
 class MemoryRepository implements GameRepository {
   readonly accounts = new Map<string, AccountRecord>();
+  async saveBotConfig(): Promise<void> {
+    // Este arquivo é sobre autenticação. A configuração do bot não passa por aqui.
+  }
   async ensureAccount(identity: { externalAuthId: string; email: string }) {
     const existing = [...this.accounts.values()].find(
       (account) => account.externalAuthId === identity.externalAuthId,

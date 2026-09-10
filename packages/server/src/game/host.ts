@@ -15,6 +15,8 @@
 import { performance } from 'node:perf_hooks';
 import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
+import type { BotConfig } from '@draconya/content';
+import type { HuntRuleset } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
@@ -35,6 +37,12 @@ export interface TransitionRequest {
   readonly to: SessionType;
   readonly huntId?: string;
   readonly difficulty?: string;
+  /**
+   * A configuração do bot deste personagem, JÁ VALIDADA (FUN-81). Preenchida pelo host, nunca
+   * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
+   * o que o servidor aceitou.
+   */
+  readonly botConfig?: BotConfig;
 }
 
 /**
@@ -65,7 +73,28 @@ export interface SessionHostOptions {
   readonly metrics?: GameMetrics;
   /** Relógio monotônico da simulação. Injetável para o teste não depender de tempo real. */
   readonly now?: () => number;
+  /**
+   * Aceita ou recusa uma configuração de bot (FUN-81). Ausente: `bot-config` é ignorada e o
+   * jogador recebe um aviso — um host montado sem conteúdo não tem como julgar vocabulário.
+   */
+  readonly acceptBotConfig?: (raw: unknown, level: number) => BotConfigDecision;
+  /**
+   * Persiste a configuração aceita. Ausente: ela vale nesta sessão e some no logout.
+   *
+   * É a ÚNICA escrita de banco do `game`, e é deliberada: a configuração é editada com o
+   * jogador conectado, e o processo que tem a conexão é este. Mandá-la pelo `api` obrigaria o
+   * cliente a manter sessão HTTP para uma ação de jogo, e ainda deixaria o `game` sem o valor.
+   *
+   * O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo ticket,
+   * que o `api` monta lendo a linha do personagem.
+   */
+  readonly saveBotConfig?: (characterId: string, config: BotConfig) => Promise<void>;
 }
+
+/** Ver `createBotConfigValidator` em `sessions.ts`. */
+export type BotConfigDecision =
+  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: false; readonly reason: string };
 
 interface HostedSession {
   readonly session: Session;
@@ -151,6 +180,15 @@ export class SessionHost {
   readonly #accountIdByCharacter = new Map<string, string>();
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
   readonly #nameByCharacter = new Map<string, string>();
+  /**
+   * A configuração do bot vigente, por personagem (FUN-81).
+   *
+   * Nasce do ticket e é substituída pela mensagem `bot-config`. Vive aqui, e não no
+   * `CharacterRuntime`, porque ela ACOMPANHA o personagem entre sessões: ele configura na
+   * Cidade e entra na hunt, e é o host que constrói a hunt. Guardá-la no runtime a poria no
+   * snapshot duas vezes — o do personagem e o do ruleset.
+   */
+  readonly #botByCharacter = new Map<string, BotConfig>();
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
@@ -348,6 +386,7 @@ export class SessionHost {
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
+    this.#botByCharacter.delete(characterId);
 
     // A sessão ACABOU: deixar o snapshot faria a próxima conexão ressuscitar uma sessão
     // encerrada, com os agregados de antes.
@@ -388,6 +427,11 @@ export class SessionHost {
         // dificuldade, e quem decide se cabe, cria a instância e credita é o servidor.
         void this.#requestTransition(viewer, {
           to: 'hunt', huntId: message.huntId, difficulty: message.difficulty,
+          // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
+          // da última `bot-config` desta conexão.
+          ...(this.#botByCharacter.has(viewer.characterId)
+            ? { botConfig: this.#botByCharacter.get(viewer.characterId) as BotConfig }
+            : {}),
         });
         return;
       case 'leave-hunt':
@@ -414,6 +458,11 @@ export class SessionHost {
         return;
       case 'walk-to':
         this.#requestWalk(viewer, message.destination);
+        return;
+      case 'bot-config':
+        // INTENÇÃO (invariante 4): o jogador manda as REGRAS, e quem decide se elas valem —
+        // vocabulário, slots, catálogo e gate de level — é o servidor.
+        void this.#configureBot(viewer, message.config);
         return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
@@ -493,6 +542,86 @@ export class SessionHost {
    * A recusa vira MENSAGEM, e é o produto: "você não pode fazer isso" é o texto que faz
    * alguém achar que o jogo travou. Cada recusa diz o que fazer em seguida.
    */
+  /**
+   * O jogador salvou uma configuração de bot (FUN-81, §13).
+   *
+   * A ordem importa e é: aceitar → aplicar → persistir. Aplicar antes de gravar é deliberado —
+   * a hunt em curso passa a usar a regra nova na hora, e uma falha do Postgres não pode fazer
+   * o jogador ficar sem a cura que acabou de configurar. O preço é uma configuração que vale
+   * nesta sessão e não volta na próxima, e esse é o lado certo para errar.
+   */
+  async #configureBot(viewer: Viewer, raw: unknown): Promise<void> {
+    const accept = this.#options.acceptBotConfig;
+    if (accept === undefined) {
+      viewer.send({
+        type: 'system-message', level: 'error',
+        text: 'Este servidor não aceita configuração de bot.',
+      });
+      return;
+    }
+
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = hosted?.session.participants
+      .find((p) => p.id === viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+
+    const decision = accept(raw, character.level);
+    if (!decision.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: decision.reason });
+      return;
+    }
+
+    this.#botByCharacter.set(viewer.characterId, decision.config);
+    this.#applyBotConfig(hosted, decision.config);
+    viewer.send({
+      type: 'system-message', level: 'info', text: 'Configuração do bot salva.',
+    });
+
+    // Persistir é o último passo, e falhar nele não desfaz o que já vale. O log é para quem
+    // investiga "salvei e voltou o antigo"; o jogador não pode fazer nada com esse erro.
+    try {
+      await this.#options.saveBotConfig?.(viewer.characterId, decision.config);
+    } catch (error) {
+      this.#logger.error(
+        { error, characterId: viewer.characterId }, 'Failed to persist bot configuration',
+      );
+    }
+  }
+
+  /**
+   * A configuração que veio no ticket (FUN-81). Recusada é IGNORADA, nunca fatal.
+   *
+   * O caso real é conteúdo mudando debaixo de uma configuração salva: uma magia renomeada, um
+   * vocabulário novo. Derrubar a conexão por isso trancaria o personagem fora do jogo por um
+   * arquivo de balanceamento — entrar sem bot e avisar é a degradação certa.
+   */
+  #adoptTicketBotConfig(
+    characterId: string, session: Session, initial: InitialCharacter | undefined,
+  ): void {
+    const raw = initial?.botConfig;
+    const accept = this.#options.acceptBotConfig;
+    if (raw === undefined || accept === undefined) return;
+
+    const level = session.participants.find((p) => p.id === characterId)?.level
+      ?? initial?.level ?? 1;
+    const decision = accept(raw, level);
+    if (!decision.ok) {
+      this.#logger.warn(
+        { characterId, reason: decision.reason }, 'Stored bot configuration refused',
+      );
+      return;
+    }
+    this.#botByCharacter.set(characterId, decision.config);
+  }
+
+  /** Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal. */
+  #applyBotConfig(hosted: HostedSession, config: BotConfig): void {
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    // A sessão dona é quem escreve (invariante 9), e é ela que está aqui: `configureBot`
+    // recompila dentro do ruleset, não de fora.
+    ruleset.configureBot?.(hosted.session, config);
+  }
+
   async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {
     try {
       await this.transition(viewer.characterId, request);
@@ -1073,6 +1202,7 @@ export class SessionHost {
     await this.#register(characterId, session, accountId);
     this.#createLocal(characterId, session, accountId);
     if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    this.#adoptTicketBotConfig(characterId, session, initialCharacter);
     if (resumed !== null) {
       this.#resumedGapMs.set(characterId, resumed.gapMs);
       this.#logger.info(

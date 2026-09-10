@@ -67,6 +67,15 @@ export const characters = pgTable(
     staminaMs: bigint('stamina_ms', { mode: 'number' }).notNull().default(86_400_000),
     staminaUpdatedAt: timestamp('stamina_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
+    /**
+     * A configuração do bot (§13, FUN-81). Nulável: personagem que nunca configurou entra na
+     * hunt sem bot, que é o que ele já fazia.
+     *
+     * A versão do vocabulário vai DENTRO do documento (`config.version`), não numa coluna ao
+     * lado — um segundo lugar para a versão é um segundo lugar para ela divergir.
+     */
+    botConfig: jsonb('bot_config'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

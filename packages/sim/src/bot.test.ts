@@ -38,7 +38,7 @@ describe('as quatro condições viram predicado (FUN-80)', () => {
   it('hp e mana comparam PERCENTUAL, não valor absoluto', () => {
     // A regra do jogador fala em percentual (§13.3). Comparar o valor absoluto faria a mesma
     // configuração se comportar diferente a cada level up, que é o oposto do que ele pediu.
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }), content);
+    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
 
     expect(bot.select('heal', view({ self: hero(40, 100) }))).toEqual(
       { kind: 'spell', spellId: 'cure' },
@@ -58,7 +58,7 @@ describe('as quatro condições viram predicado (FUN-80)', () => {
         when: { kind: 'target-hp', op: '<=', percent: 30 },
         do: { kind: 'spell', spellId: 'finish' },
       }],
-    }), content);
+    }));
 
     expect(bot.select('attack', view({ target: null }))).toBeNull();
     expect(bot.select('attack', view({ target: { health: 20, maxHealth: 100 } })))
@@ -66,7 +66,7 @@ describe('as quatro condições viram predicado (FUN-80)', () => {
   });
 
   it('maxHealth zero não divide por zero', () => {
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }), content);
+    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
     expect(() => bot.select('heal', view({ self: hero(0, 0) }))).not.toThrow();
   });
 });
@@ -82,14 +82,14 @@ describe('primeira válida executa (§13.4)', () => {
     });
     const bot = compileBot(config({
       heal: [contando(30, 'forte'), contando(55, 'media'), contando(80, 'fraca')],
-    }), content);
+    }));
     // Espiona os predicados compilados para contar quantos foram consultados.
     const rules = bot.categories.get('heal') ?? [];
     const espiadas = rules.map((rule) => ({
       ...rule,
       when: (v: BotView) => { avaliadas += 1; return rule.when(v); },
     }));
-    const espiao = compileBot(config(), content);
+    const espiao = compileBot(config());
     (espiao.categories as Map<string, unknown>).set('heal', espiadas);
 
     expect(espiao.select('heal', view({ self: hero(20) })))
@@ -98,7 +98,7 @@ describe('primeira válida executa (§13.4)', () => {
   });
 
   it('categoria vazia devolve null, e não quebra', () => {
-    expect(compileBot(config(), content).select('heal', view())).toBeNull();
+    expect(compileBot(config()).select('heal', view())).toBeNull();
   });
 
   it('as categorias são independentes — sem prioridade global', () => {
@@ -110,7 +110,7 @@ describe('primeira válida executa (§13.4)', () => {
         when: { kind: 'targets', op: '>=', count: 3 },
         do: { kind: 'spell', spellId: 'wave' },
       }],
-    }), content);
+    }));
     const v = view({ self: hero(40), targetCount: 5 });
 
     expect(bot.select('heal', v)).toEqual({ kind: 'spell', spellId: 'cure' });
@@ -123,7 +123,7 @@ describe('compilar é o que torna a avaliação barata', () => {
     // É o critério de custo da issue. Com 5.000 hunts e cinco categorias por personagem,
     // alocar por avaliação é o coletor rodando o tempo todo por dados que morrem em
     // microssegundos. A ação devolvida é a MESMA referência do vetor compilado, não uma cópia.
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }), content);
+    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
     const v = view({ self: hero(40) });
 
     const primeira = bot.select('heal', v);
@@ -134,7 +134,7 @@ describe('compilar é o que torna a avaliação barata', () => {
   });
 
   it('a view é reaproveitada: mudar o campo muda o resultado, sem recompilar', () => {
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }), content);
+    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
     const v = view({ self: hero(40) });
 
     expect(bot.select('heal', v)).not.toBeNull();

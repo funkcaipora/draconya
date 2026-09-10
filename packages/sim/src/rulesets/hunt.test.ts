@@ -869,7 +869,6 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 // --- as cinco categorias do bot (FUN-84) -----------------------------------------------------
 
-import { compileBot } from '../bot.js';
 import type { BotAction, BotConfig } from '@draconya/content';
 import {
   BOT_VOCABULARY_VERSION, botConfigSchema, botExitRuleSchema, botTargetingSchema,
@@ -899,7 +898,7 @@ const withBot = (config: BotConfig, actuator?: { perform(a: BotAction): boolean 
   const session = createHuntSession({
     id: 'bot-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
     createdAtMs: 0,
-    bot: compileBot(config, loaded),
+    botConfig: config,
     ...(actuator === undefined ? {} : { actuator }),
   });
   const hero = character();
@@ -1052,7 +1051,7 @@ const withSpells = (
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
-    createdAtMs: 0, bot: compileBot(config, loaded),
+    createdAtMs: 0, botConfig: config,
   });
   const stats = statsForLevel(1, null, loaded.progression);
   const hero = new CharacterRuntime({
@@ -1385,7 +1384,7 @@ const withPosture = (
   }));
   const session = createHuntSession({
     id: 'postura', content: loaded, huntId: 'salao', difficulty, createdAtMs: 0,
-    bot: compileBot(botConfig({ targeting: botTargetingSchema.parse(over) }), loaded),
+    botConfig: botConfig({ targeting: botTargetingSchema.parse(over) }),
   });
   const hero = character();
   session.enter(hero);
@@ -1527,7 +1526,7 @@ const withExit = (
     id: 'saida', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
     // Pelo schema, como a configuração do jogador chega: é ele que valida o percentual e
     // recusa um `kind` que o vocabulário não conhece.
-    bot: compileBot(botConfig({ exit: exit.map((r) => botExitRuleSchema.parse(r)) }), loaded),
+    botConfig: botConfig({ exit: exit.map((r) => botExitRuleSchema.parse(r)) }),
   });
   const stats = statsForLevel(1, null, loaded.progression);
   const hero = new CharacterRuntime({
@@ -1710,5 +1709,188 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
 
   it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
     expect(compileExitRules([])).toEqual([]);
+  });
+});
+
+// --- a configuração sobrevive ao snapshot e à troca ao vivo (FUN-81) -------------------------
+
+describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
+  const curar = botConfig({
+    heal: [{ when: { kind: 'hp', op: '<=', percent: 90 }, do: { kind: 'spell', spellId: 'heal' } }],
+    targeting: botTargetingSchema.parse({ policy: 'lowest-hp', ignore: ['rat'] }),
+    exit: [botExitRuleSchema.parse({ kind: 'hp-below', percent: 10 })],
+  });
+
+  /**
+   * Pool de vida REALISTA aqui, ao contrário do resto do arquivo.
+   *
+   * O `progression` compartilhado dá 500.000 de HP inicial para uma hunt de dez minutos caber
+   * sem morrer, e com ele um herói com 1.000 de vida está a 0,2% do máximo — a regra de saída
+   * `hp-below: 10` encerraria a sessão em 250 ms, antes de qualquer snapshot. Foi exatamente o
+   * que aconteceu na primeira versão destes testes: eles falharam por causa da fixture, não do
+   * código. Com 1.000 de teto, "metade da vida" quer dizer metade.
+   */
+  const comBot = (health = 500) => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingHealth: 1_000, startingMana: 200,
+        regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      }],
+    }));
+    const session = createHuntSession({
+      id: 'snap-bot', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      botConfig: curar,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health, maxHealth: stats.maxHealth, mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    return { session, hero, loaded };
+  };
+
+  it('a hunt retomada CONTINUA com o bot — antes disto ela voltava sem nenhum', () => {
+    // O defeito que este teste fecha: `huntRulesetFromSnapshot` montava o ruleset sem bot, e a
+    // hunt retomada seguia andando e matando com o ataque básico. Nada PARECIA quebrado — o
+    // que sumia era a cura, e o jogador descobria pelo personagem morto.
+    const { session, loaded } = comBot();
+    session.advanceBy(5_000);
+
+    // Pelo JSON, porque é assim que ele atravessa o Redis.
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    const antes = retomado.participants[0]?.mana ?? 0;
+    run(retomado, 5_000, 100);
+    // Curou: a mana desceu. Sem bot, ela ficaria parada onde estava.
+    expect(retomado.participants[0]?.mana).toBeLessThan(antes);
+  });
+
+  it('o targeting configurado sobrevive: ignorar continua ignorando depois da retomada', () => {
+    const { session, loaded } = comBot();
+    run(session, 10_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const abatesAoRetomar = retomado.aggregates.kills;
+
+    run(retomado, 30_000, 100);
+
+    // `ignore: ['rat']` e a hunt só tem rato: o personagem não bate em ninguém.
+    expect(retomado.aggregates.kills).toBe(abatesAoRetomar);
+  });
+
+  it('as regras de saída voltam junto — o extrato continua sabendo por que encerrou', () => {
+    const { session, hero, loaded } = comBot();
+    session.advanceBy(250);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    // Derruba o personagem abaixo dos 10% que a regra pede. Só depois de retomar: se a regra
+    // não tivesse voltado, ele ficaria caçando com 5% de vida até morrer.
+    const eu = retomado.participants[0] as CharacterRuntime;
+    eu.health = Math.round(hero.maxHealth * 0.05);
+    run(retomado, 2_000, 100);
+
+    expect(retomado.ended).toBe('exit-rule');
+    expect(retomado.notableEvents.find((e) => e.type === 'exit-rule')?.detail)
+      .toBe('hp-below-10');
+  });
+
+  it('snapshot SEM configuração continua legível — é o de antes desta issue', () => {
+    // Campo opcional, sem bump de formato. Ausente significa "sem bot", que é o que aquelas
+    // sessões de fato tinham.
+    const { session, loaded } = comBot();
+    session.advanceBy(250);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    delete (snapshot.ruleset as { botConfig?: unknown }).botConfig;
+
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const antes = retomado.participants[0]?.mana ?? 0;
+    run(retomado, 5_000, 100);
+
+    expect(retomado.participants[0]?.mana).toBe(antes);
+    expect(retomado.ended).toBeNull();
+  });
+});
+
+describe('trocar a configuração no meio da hunt (FUN-81)', () => {
+  it('a regra nova passa a valer NA HORA, sem esperar a próxima hunt', () => {
+    // Esperar a próxima hunt seria o jogador corrigir a regra de cura enquanto o personagem
+    // morre. A configuração é dado puro: recompilar não tem risco nenhum.
+    const loaded = buildContent(raw({
+      routes: [{ ...route, spawnPoints: [] }],
+      progression: [{
+        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      }],
+    }));
+    const session = createHuntSession({
+      id: 'troca', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      botConfig: botConfig(),
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: 1_000, maxHealth: stats.maxHealth, mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+
+    run(session, 3_000, 100);
+    expect(hero.mana).toBe(200); // sem regra de cura, nada aconteceu
+
+    (session.ruleset as HuntRuleset).configureBot(session, botConfig({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 90 }, do: { kind: 'spell', spellId: 'heal' },
+      }],
+    }));
+    run(session, 1_000, 100);
+
+    expect(hero.mana).toBeLessThan(200);
+  });
+
+  it('trocar a configuração troca também as regras de SAÍDA', () => {
+    // Deixar as antigas valendo faria a hunt encerrar por uma regra que o jogador acabou de
+    // apagar — e o extrato diria o nome de uma regra que já não existe.
+    const loaded = buildContent(raw({ routes: [{ ...route, spawnPoints: [] }] }));
+    const session = createHuntSession({
+      id: 'troca-saida', content: loaded, huntId: 'arena', difficulty: 'beginner',
+      createdAtMs: 0,
+      botConfig: botConfig({ exit: [botExitRuleSchema.parse({ kind: 'hp-below', percent: 99 })] }),
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: 10, maxHealth: stats.maxHealth, mana: 0, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+
+    // Apaga a regra ANTES de ela ser avaliada — o primeiro `EXIT_RULES` vence em 250 ms.
+    (session.ruleset as HuntRuleset).configureBot(session, botConfig());
+    run(session, 5_000, 100);
+
+    expect(session.ended).toBeNull();
   });
 });

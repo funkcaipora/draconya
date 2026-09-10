@@ -2,8 +2,9 @@
 
 **Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
 cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77), targeting
-configurável (FUN-85) e regras de saída do jogador (FUN-86) implementados; falta a configuração
-chegar pelo socket (FUN-81) e o catálogo de itens (M8)
+configurável (FUN-85), regras de saída do jogador (FUN-86) e configuração pelo socket com
+persistência e gate de level (FUN-81) implementados; falta a UI (M10), o bot avançado (FUN-87) e
+o catálogo de itens (M8)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -318,3 +319,59 @@ pode morrer. São as duas metades do §20.3, e a diferença entre elas é uma li
 `HuntView`, e `bot.ts` não conhece ruleset nenhum — nem pode, porque o mesmo bot vai valer para
 quest e boss, que terão outra view. O compilador entrega a regra crua; quem tem a view é quem
 sabe fechar a closure.
+
+## Como a configuração chega, e onde ela mora (FUN-81)
+
+O jogador monta o bot na Cidade, entra na hunt, fecha o navegador — e a hunt roda com ele. Isso
+exige que a configuração seja **durável** e que o processo que hospeda a sessão a tenha na mão.
+
+| | quem | como |
+|---|---|---|
+| escrever | `game` | mensagem `bot-config` no socket → `UPDATE character SET bot_config` |
+| ler | `api` | lê a linha ao emitir o ticket; a configuração viaja em `InitialCharacter` |
+
+Os dois caminhos não se cruzam, e a decisão está no [ADR 0021](../adr/0021-the-game-process-writes-the-bot-configuration.md).
+A escrita é uma instrução só, sem `SELECT` antes: "o jogador salvou isto" é última-escrita-vence
+por natureza, a configuração é substituída inteira e nunca mesclada.
+
+**A ordem no servidor é aceitar → aplicar → persistir.** Aplicar antes de gravar é decisão: a
+hunt em curso usa a regra nova na hora, e uma falha do Postgres não deixa o jogador sem a cura
+que acabou de configurar. O preço é a configuração valer nesta sessão e não voltar na próxima —
+o lado certo para errar.
+
+**Mudar no meio da hunt vale na hora.** A configuração é dado puro, então recompilar não tem
+risco; quem recompila é a própria sessão (invariante 9), nunca outro processo. As regras de saída
+vão junto: deixar as antigas valendo faria a hunt encerrar por uma regra que o jogador acabou de
+apagar.
+
+**A configuração viaja no snapshot.** Uma hunt retomada em outro nó volta com o bot que estava
+rodando — antes disto ela voltava sem nenhum, e o sintoma era o pior possível: a hunt seguia
+andando e matando com o ataque básico, então nada parecia quebrado. O que sumia era a cura.
+
+O banco é a fonte para **começar** uma hunt; o snapshot é a fonte para **continuar** a que já
+estava rodando. Não é duplicação — são dois instantes da mesma coisa, e a sessão é a dona
+enquanto roda.
+
+### O gate de level (§13.2)
+
+Até o level 49 vale o bot **básico**; do 50 em diante, o avançado. O recorte é **dado**, em
+`bot/baseline.json`, como uma lista do que só o avançado pode usar — e não como uma lista do que
+o básico permite: descrever a regra por enumeração faria toda adição ao vocabulário exigir uma
+edição ali para continuar funcionando, e esquecer essa edição travaria o recurso novo para todo
+mundo abaixo do 50.
+
+**A lista está vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]`
+no PRD §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
+ainda não existe (FUN-87). Preencher a lista agora seria decidir balanceamento por conta própria
+e disfarçá-lo de implementação. O mecanismo está pronto e tem teste; o recorte entra editando
+dado, quando o PRD o decidir.
+
+A recusa diz **o quê**, não só que recusou: "bot avançado exige level 50: alvo lowest-hp". Um
+aviso genérico deixa o jogador procurando qual das trinta regras dele é a culpada.
+
+### Configuração salva que deixou de valer
+
+Conteúdo muda: uma magia é renomeada, um vocabulário sobe de versão. Uma configuração guardada
+que não passa mais na validação é **ignorada com aviso no log**, nunca fatal — derrubar a conexão
+por isso trancaria o personagem fora do jogo por um arquivo de balanceamento. Ele entra sem bot,
+que é degradação, e pode salvar outra.

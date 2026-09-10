@@ -16,6 +16,7 @@ export const CLIENT_TO_SERVER = {
   logout: 8,
   'enter-hunt': 9,
   'leave-hunt': 10,
+  'bot-config': 11,
 } as const;
 
 export const SERVER_TO_CLIENT = {
