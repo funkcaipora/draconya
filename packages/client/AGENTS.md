@@ -101,3 +101,15 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - Folhas decodificadas vão para IndexedDB. Sem isso, cada sessão rebaixa e redescomprime tudo.
 - `requestAnimationFrame` para em aba de fundo. Ao voltar, aplique em bloco o que chegou; não
   tente animar dez minutos de eventos.
+- **O analisador é DOM e tem FATIA PRÓPRIA** (`state/hud.ts`, FUN-83). Ler o estado inteiro faria
+  a janela re-renderizar a cada golpe, que é exatamente o que o ADR 0007 existe para evitar.
+- **Entre dois `session-state`, só o TEMPO anda.** O "por hora" é uma divisão cujo denominador é
+  um relógio local; o numerador é sempre o último número que o servidor mandou. Extrapolar XP ou
+  gold mostraria progresso que talvez não tenha acontecido — e o valor andaria PARA TRÁS na
+  atualização seguinte. A taxa caindo devagar entre duas atualizações é o lado certo para errar.
+- **`Aggregates` e `NotableEvent` do HUD são derivados do protocolo, não redeclarados.** Uma
+  cópia à mão diverge no primeiro campo novo, e diverge em silêncio: `decodeS2C` devolve `null`
+  sem erro quando a mensagem não bate, e a tela fica vazia sem ninguém ligar uma coisa à outra.
+- **Campo opcional dos agregados vira "—", nunca zero.** Eles são opcionais porque um nó `game`
+  anterior à FUN-78 manda sem eles (deploy em rolagem). Zero é uma afirmação que o servidor não
+  fez.

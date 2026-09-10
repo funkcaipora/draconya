@@ -1,7 +1,7 @@
 import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
-import { INITIAL_HUD, hud, subscribeSlice } from './hud.js';
+import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
 import { interpolate, world } from './world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
@@ -215,5 +215,102 @@ describe('session-ended', () => {
     }, 0);
 
     expect(world.creatures.has(4)).toBe(true);
+  });
+});
+
+describe('o analisador (FUN-83)', () => {
+  const sessionState = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state',
+    sessionType: 'hunt',
+    elapsedMs: 600_000,
+    self: {
+      creatureId: 1, characterId: 'char-1',
+      health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200,
+    },
+    world: { mapId: 'rat-cellars', creatures: [] },
+    aggregates: {
+      durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120,
+      kills: 12, deaths: 0, itemsLooted: 4, suppliesUsed: 7, bestBasicHit: 88,
+      bestSpellHit: 140,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+    ...over,
+  } as S2CMessage);
+
+  it('guarda os agregados e o INSTANTE local em que eles chegaram', () => {
+    // O instante é o que faz o relógio da janela andar entre dois `session-state`. Sem ele o
+    // tempo de hunt ficaria congelado, e o "por hora" — que é uma divisão por ele — junto.
+    applyMessage(sessionState(), 5_000);
+
+    const { analyzer } = hud.get();
+    expect(analyzer.aggregates?.xpGained).toBe(900);
+    expect(analyzer.aggregates?.bestSpellHit).toBe(140);
+    expect(analyzer.notableEvents).toEqual([{ atMs: 1_000, type: 'level-up' }]);
+    expect(analyzer.receivedAtMs).toBe(5_000);
+    expect(analyzer.sessionType).toBe('hunt');
+    expect(analyzer.ended).toBe(false);
+  });
+
+  it('o extrato entra na MESMA janela, com o relógio parado', () => {
+    // §16.2: a tela de retorno é o analisador com o que a sessão rendeu. Duas janelas para a
+    // mesma pergunta divergiriam na terceira mudança — e continuar contando o tempo depois do
+    // fim faria o "por hora" derreter na frente do jogador.
+    applyMessage(sessionState(), 5_000);
+    applyMessage({
+      type: 'session-ended',
+      reason: 'exit-rule',
+      aggregates: {
+        durationMs: 900_000, xpGained: 1_500, goldGained: 400, goldSpent: 200,
+        kills: 20, deaths: 0,
+      },
+      notableEvents: [{ atMs: 2_000, type: 'stamina-exhausted' }],
+    }, 9_000);
+
+    const { analyzer } = hud.get();
+    expect(analyzer.ended).toBe(true);
+    expect(analyzer.aggregates?.xpGained).toBe(1_500);
+    expect(analyzer.notableEvents).toEqual([{ atMs: 2_000, type: 'stamina-exhausted' }]);
+  });
+
+  it('campo que o servidor NÃO mandou fica ausente, e não zero', () => {
+    // Um nó `game` anterior à FUN-78 manda os agregados sem estes campos. Zero é uma
+    // afirmação; a janela precisa poder mostrar "—" em vez de dizer que nada caiu.
+    applyMessage(sessionState({
+      aggregates: {
+        durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 0, kills: 12, deaths: 0,
+      },
+    }), 0);
+
+    expect(hud.get().analyzer.aggregates?.itemsLooted).toBeUndefined();
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // A janela tem fatia própria justamente para não re-renderizar quando o HP mexe — e o
+    // contrário também vale: o analisador chegando não pode redesenhar as barras.
+    applyMessage(sessionState(), 0);
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.chat, notified);
+
+    applyMessage(sessionState({ aggregates: {
+      durationMs: 700_000, xpGained: 1_000, goldGained: 300, goldSpent: 0, kills: 13, deaths: 0,
+    } }), 1_000);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('a derivada por hora (FUN-83, §16.1)', () => {
+  it('converte para hora, e é o CLIENTE que faz a conta', () => {
+    // O servidor não manda número redundante (FUN-78): mandar `xpGained` e `xpPerHour` é
+    // mandar o mesmo número duas vezes, e os dois divergem na primeira pausa entre calcular
+    // e enviar.
+    expect(perHour(900, 600_000)).toBe(5_400);
+    expect(perHour(300, 3_600_000)).toBe(300);
+  });
+
+  it('duração zero é ZERO, não infinito', () => {
+    // Uma hunt que acabou de começar não rendeu "infinito por hora" — ela ainda não tem taxa.
+    expect(perHour(10, 0)).toBe(0);
+    expect(perHour(10, -1)).toBe(0);
   });
 });

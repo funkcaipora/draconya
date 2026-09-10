@@ -7,6 +7,8 @@
 // devolveria o problema que o ADR 0007 evita: o painel de inventário re-renderizando porque a
 // mana mexeu.
 
+import type { S2CProps } from '@draconya/protocol';
+
 export type ConnectionStatus =
   | 'idle'
   | 'connecting'
@@ -30,6 +32,42 @@ export interface SystemLine {
   readonly text: string;
   readonly atMs: number;
 }
+
+/**
+ * O que a hunt rendeu, como o servidor mandou (§16.1), e a lista curta do §16.2.
+ *
+ * **Derivados do protocolo, não redeclarados.** Uma cópia à mão aqui divergiria no primeiro
+ * campo novo — e divergiria em SILÊNCIO, porque `decodeS2C` devolve `null` sem erro quando a
+ * mensagem não bate. Alguns campos dos agregados são opcionais de propósito (FUN-78): um nó
+ * `game` antigo, em deploy em rolagem, manda sem eles, e a janela mostra "—" no lugar. Zero
+ * seria uma afirmação, e o servidor não afirmou nada.
+ */
+export type Aggregates = S2CProps<'session-state'>['aggregates'];
+export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
+
+/**
+ * O analisador (§16.1, §16.2, FUN-83).
+ *
+ * **`receivedAtMs` é o instante local em que este pacote chegou**, e é ele que faz o relógio
+ * andar entre dois `session-state`. Sem isso, o tempo de hunt ficaria congelado entre uma
+ * atualização e outra — e o "por hora", que é uma divisão por ele, ficaria congelado junto.
+ */
+export interface AnalyzerState {
+  readonly sessionType: string | null;
+  readonly aggregates: Aggregates | null;
+  readonly notableEvents: readonly NotableEvent[];
+  readonly receivedAtMs: number;
+  /** A sessão já acabou? Aí o relógio PARA: o extrato é definitivo. */
+  readonly ended: boolean;
+}
+
+export const INITIAL_ANALYZER: AnalyzerState = {
+  sessionType: null,
+  aggregates: null,
+  notableEvents: [],
+  receivedAtMs: 0,
+  ended: false,
+};
 
 export interface HudState {
   readonly characterId: string | null;
@@ -59,6 +97,9 @@ export interface HudState {
 
   readonly chat: readonly ChatLine[];
   readonly systemMessages: readonly SystemLine[];
+
+  /** O analisador. Fatia própria para a janela não re-renderizar quando o HP mexe. */
+  readonly analyzer: AnalyzerState;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -72,7 +113,22 @@ export const INITIAL_HUD: HudState = {
   connection: 'idle',
   chat: [],
   systemMessages: [],
+  analyzer: INITIAL_ANALYZER,
 };
+
+/**
+ * A derivada "por hora" (§16.1), calculada NO CLIENTE.
+ *
+ * O servidor não manda número redundante (FUN-78): mandar `xpGained` e `xpPerHour` é mandar o
+ * mesmo número duas vezes, e os dois divergem na primeira pausa entre calcular e enviar.
+ *
+ * Duração zero devolve zero, e não infinito: uma hunt que acabou de começar não rendeu "infinito
+ * por hora", ela ainda não tem taxa.
+ */
+export function perHour(value: number, durationMs: number): number {
+  if (durationMs <= 0) return 0;
+  return (value * 3_600_000) / durationMs;
+}
 
 /**
  * Teto de linhas guardadas. Chat de MMORPG roda o dia inteiro; sem teto, o array cresce até a

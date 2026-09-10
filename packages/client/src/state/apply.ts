@@ -124,6 +124,15 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       const { aggregates } = message;
       hud.set((state) => ({
         ...state,
+        // A tela de retorno é a MESMA janela (§16.2), com o relógio parado: o extrato é
+        // definitivo, e continuar contando o tempo faria o "por hora" derreter depois do fim.
+        analyzer: {
+          sessionType: state.analyzer.sessionType,
+          aggregates,
+          notableEvents: message.notableEvents,
+          receivedAtMs: nowMs,
+          ended: true,
+        },
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
           text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
@@ -160,6 +169,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         health: message.self.health, maxHealth: message.self.maxHealth,
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
+        // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
+        // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
+        // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre
+        // dois `session-state`, sem inventar XP nenhuma.
+        analyzer: {
+          sessionType: message.sessionType,
+          aggregates: message.aggregates,
+          notableEvents: message.notableEvents,
+          receivedAtMs: nowMs,
+          ended: false,
+        },
       }));
       return;
     }

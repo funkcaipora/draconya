@@ -1,8 +1,8 @@
 // A geografia do §5.3, sem as janelas ainda (FUN-24).
 //
-// Viewport ao centro, lugar reservado para os painéis laterais, chat no canto inferior
-// esquerdo, indicadores de HP e mana, e o estado da conexão. Janelas, inventário, bot e
-// analisador são F2.
+// Viewport ao centro, painéis laterais, chat no canto inferior esquerdo, indicadores de HP e
+// mana, e o estado da conexão. O analisador mora no painel da direita (FUN-83); inventário e
+// bot ainda não existem.
 //
 // Nenhum componente daqui lê estado de MUNDO. Onde as criaturas estão é assunto do canvas, que
 // lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero render.
@@ -12,6 +12,7 @@ import { Viewport } from './Viewport.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
 import { Vitals } from './Vitals.js';
 import { Chat } from './Chat.js';
+import { Analyzer } from './Analyzer.js';
 
 export function Shell() {
   const characterId = useHudSlice((state) => state.characterId);
@@ -27,7 +28,9 @@ export function Shell() {
         <Viewport />
         <Vitals />
       </section>
-      <aside className="panel panel-right" aria-label="painéis à direita" />
+      <aside className="panel panel-right" aria-label="painéis à direita">
+        <Analyzer />
+      </aside>
       <Chat />
     </div>
   );

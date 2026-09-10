@@ -18,11 +18,13 @@ body {
   box-sizing: border-box;
 }
 
-/* Reservado para as janelas da F2 — inventário, bot, analisador. */
+/* Os painéis laterais. O da direita já tem o analisador (FUN-83); o da esquerda continua
+   reservado para inventário e bot. */
 .panel {
   border: 1px dashed #2a2a35;
   border-radius: 4px;
   min-height: 120px;
+  padding: 4px;
 }
 
 .stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -59,3 +61,33 @@ body {
 .chat .quiet { color: #4a4a56; }
 .system-warning { color: #c2a54a; }
 .system-error { color: #c25b4a; }
+
+/* O analisador (FUN-83). Nasce minimizado: ocupa uma linha até alguém abrir. */
+.analyzer {
+  border: 1px solid #2a2a35; border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.analyzer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 4px 6px;
+}
+.analyzer-toggle {
+  background: none; border: none; padding: 0;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.analyzer-summary { color: #6a6a78; }
+.analyzer-body { padding: 0 6px 6px; }
+.analyzer-row { display: flex; gap: 8px; align-items: baseline; }
+/* O rótulo QUEBRA em vez de ser cortado. Reticências escondem informação — "Maior ma…" e
+   "Te…" não dizem nada —, e num painel estreito duas linhas custam menos que isso. */
+.analyzer-label { flex: 1 1 auto; min-width: 0; color: #8a8a98; }
+/* O VALOR alinha em coluna; a taxa vai atrás e não reserva largura. Reservar espaço para uma
+   taxa que a linha não tem espremia o rótulo no painel de 200px, e "Maior magia" quebrava. */
+.analyzer-value { flex: 0 0 auto; min-width: 52px; text-align: right; }
+.analyzer-rate { flex: 0 0 auto; color: #6a6a78; }
+.analyzer-events {
+  margin: 8px 0 0; padding: 0; list-style: none;
+  border-top: 1px solid #2a2a35; padding-top: 6px; color: #8a8a98;
+}
+.analyzer-events li { margin: 0 0 2px; }
+.analyzer-event-time { color: #4a4a56; margin-right: 6px; }
