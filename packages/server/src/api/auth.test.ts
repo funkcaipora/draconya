@@ -37,6 +37,9 @@ class MemorySessions implements AuthSessionStore {
 
 class MemoryRepository implements GameRepository {
   readonly accounts = new Map<string, AccountRecord>();
+  async applyEquipment(): Promise<void> {
+    // Equipamento não passa por este arquivo.
+  }
   async createItemInstance(instance: {
     itemId: string; ownerCharacterId: string; origin: string; quantity?: number;
   }): Promise<ItemInstanceRecord> {
@@ -44,7 +47,8 @@ class MemoryRepository implements GameRepository {
     // um método nunca chamado numa falha em teste de outra coisa.
     return {
       id: 'i1', itemId: instance.itemId, ownerCharacterId: instance.ownerCharacterId,
-      quantity: instance.quantity ?? 1, origin: instance.origin, createdAt: new Date(0),
+      quantity: instance.quantity ?? 1, origin: instance.origin, equippedSlot: null,
+      createdAt: new Date(0),
     };
   }
   async listItemInstances(): Promise<readonly ItemInstanceRecord[]> {

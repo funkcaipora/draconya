@@ -126,6 +126,12 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
+- **Capacidade é PESO, e o equipado conta** (`inventory.ts`, FUN-82). Sem contar o equipado, a
+  estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
+  arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como
+  todo mundo começa — quem sabe quanto o punho bate é o conteúdo.
+- **A sessão NUNCA escreve `item_instance`.** Ela registra o layout; o extrato leva e o `jobs`
+  aplica (invariante 10). O mesmo caminho de XP, gold e skill.
 - **Magia em área colhe TODOS os alvos antes de aplicar dano nenhum** (FUN-92). Resolver morte
   no meio da varredura é varrer um array que está sendo trocado — `#onMonsterDied` substitui
   `#monsters` por um filtrado —, e os alvos depois do que morreu ficariam de fora.

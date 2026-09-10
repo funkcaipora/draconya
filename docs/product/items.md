@@ -1,7 +1,7 @@
 # Itens, equipamento e inventário
 
-**Status:** parcial — catálogo em conteúdo e `item_instance` com identidade própria (FUN-76);
-inventário, equipamento, loot de item e Caixa de Loot ainda não existem
+**Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
+capacidade (FUN-82) implementados; loot de item, Caixa de Loot e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -69,6 +69,64 @@ motivo certo: não falta catálogo, falta inventário.
 
 `charges` e `durationMs` estão declarados no schema e **ninguém os consome** (§21.3). A forma
 entra agora para o catálogo não mudar quando a mecânica existir.
+
+## Inventário e equipamento (FUN-82)
+
+**Capacidade é peso**, no paradigma do Tibia (§21.5): a mochila cabe o que o personagem aguenta,
+e a capacidade cresce com o level pela mesma tabela que dá HP e mana. Contar espaços seria outro
+jogo — e um em que a armadura pesada não custa nada.
+
+O que está **equipado conta no peso**. Sem isso, a estratégia ótima é vestir tudo para carregar o
+dobro, e a capacidade deixa de significar o que diz.
+
+| | |
+|---|---|
+| stack máximo | 100, e pilha cheia começa outra |
+| empilha | só o que o conteúdo marca `stackable` — munição sim, espada não |
+| item que não cabe | **recusado**, e vai para a Caixa de Loot da Sessão (issue própria) |
+
+Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
+identidade que carrega a proveniência (FUN-76). Juntá-las num contador apagaria de onde cada uma
+veio.
+
+### Equipar
+
+Intenção pelo socket (`equip`/`unequip`), validada no servidor por **slot, level e vocação**
+(§21.2). Vocação é o mesmo campo que a magia usa: o personagem nasce sem uma e escolhe no level
+8, então item de vocação é inacessível até lá por construção.
+
+O que sai do corpo **volta para a mochila**, então a troca não muda o peso total — e é por isso
+que equipar não confere capacidade.
+
+Sucesso **não vira mensagem**: confirmar cada clique com uma linha de chat entulharia a tela. O
+que o jogador vê é o item no lugar. Recusa vira mensagem, e diz qual foi.
+
+### O que o combate lê
+
+`combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do personagem
+**sem arma** — o fallback, e ele é conteúdo. A arma equipada substitui; a armadura vestida
+**soma** à do conteúdo, porque `combat.player.armor` é a resistência do corpo e a peça
+acrescenta. Substituir faria vestir a primeira armadura deixar o personagem mais frágil se ela
+valesse menos que o número base.
+
+### Como o item vai e volta do banco
+
+| | quando | forma |
+|---|---|---|
+| entra na sessão | emissão do ticket | as instâncias do personagem viram mochila e equipamento |
+| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto** |
+
+**A sessão nunca escreve `item_instance`.** Ela registra onde as coisas ficaram; o `jobs` aplica
+na mesma transação da linha de ledger (invariante 10), e retry não duplica porque a chave
+`(session_id, seq)` recusa.
+
+A liquidação **desequipa primeiro**: o índice único do banco recusa duas peças no mesmo slot, e
+trocar A por B esbarraria nele se B entrasse antes de A sair. Extrato **sem** equipamento não
+mexe em nada — é o de uma sessão de Cidade, ou de um nó antigo durante deploy em rolagem, e
+limpar por omissão desequiparia o personagem sem ninguém ter pedido.
+
+Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
+está, e é só isso que atravessa.
 
 ## Parâmetros de balanceamento
 

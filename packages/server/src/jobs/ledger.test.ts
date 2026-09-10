@@ -3,9 +3,10 @@ import { eq } from 'drizzle-orm';
 import { levelForXp } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { accounts, characters } from '../db/schema.js';
+import { accounts, characters, itemInstances } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
+import { DrizzleGameRepository } from '../db/repository.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import {
@@ -402,5 +403,139 @@ describe.runIf(ready)('as skills chegam ao Postgres pelo extrato (FUN-75)', () =
 
     expect((await characterRow(database, characterId)).skills)
       .toEqual({ melee: { level: 15, points: 1 } });
+  });
+});
+
+describe.runIf(ready)('o equipamento é liquidado pelo extrato (FUN-82)', () => {
+  const seedItems = async (
+    database: NonNullable<typeof db>, characterId: string, ids: readonly string[],
+  ) => {
+    const repository = new DrizzleGameRepository(database.database.db);
+    const created = [];
+    for (const itemId of ids) {
+      created.push(await repository.createItemInstance({
+        itemId, ownerCharacterId: characterId, origin: 'loot',
+      }));
+    }
+    return created;
+  };
+  const slotsOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const rows = await database.database.db
+      .select({ id: itemInstances.id, slot: itemInstances.equippedSlot })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    return new Map(rows.map((row) => [row.id, row.slot]));
+  };
+
+  it('veste o que a sessão registrou', async () => {
+    // A sessão NUNCA escreve `item_instance` — ela registra onde as coisas ficaram, e o `jobs`
+    // aplica na mesma transação da linha de ledger (invariante 10).
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [espada] = await seedItems(database, characterId, ['spike-sword']);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      equipment: { hand: (espada as { id: string }).id },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await slotsOf(database, characterId)).get((espada as { id: string }).id))
+      .toBe('hand');
+  });
+
+  it('troca no mesmo slot: a antiga sai antes de a nova entrar', async () => {
+    // O índice único do banco recusa duas peças no mesmo slot. Trocar A por B esbarraria nele
+    // se B entrasse antes de A sair — por isso a liquidação desequipa primeiro, e por isso ela
+    // é uma transação com dois passos em vez de um `update` por linha.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [a, b] = await seedItems(database, characterId, ['spike-sword', 'spike-sword']);
+    const idA = (a as { id: string }).id;
+    const idB = (b as { id: string }).id;
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), equipment: { hand: idA },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), equipment: { hand: idB },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const slots = await slotsOf(database, characterId);
+    expect(slots.get(idA)).toBeNull();
+    expect(slots.get(idB)).toBe('hand');
+  });
+
+  it('o que sai do layout volta para a MOCHILA', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [espada] = await seedItems(database, characterId, ['spike-sword']);
+    const id = (espada as { id: string }).id;
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), equipment: { hand: id },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    // Desequipou durante a sessão seguinte: o layout chega vazio.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), equipment: {} });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await slotsOf(database, characterId)).get(id)).toBeNull();
+  });
+
+  it('extrato SEM equipamento não mexe no que estava vestido', async () => {
+    // É o extrato de uma sessão de Cidade, ou de um nó antigo durante deploy em rolagem.
+    // Limpar por omissão desequiparia o personagem sem ninguém ter pedido.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [espada] = await seedItems(database, characterId, ['spike-sword']);
+    const id = (espada as { id: string }).id;
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId), equipment: { hand: id },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    await receipts.save(receiptOf(randomUUID(), characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await slotsOf(database, characterId)).get(id)).toBe('hand');
+  });
+
+  it('um extrato NÃO move item de outra pessoa', async () => {
+    // Escopado por dono: a consulta que decide o que existe é a das instâncias DESTE
+    // personagem, então um id alheio no layout simplesmente não encontra nada.
+    const database = db as NonNullable<typeof db>;
+    const meu = await seedCharacter(database);
+    const alheio = await seedCharacter(database);
+    const [dele] = await seedItems(database, alheio, ['spike-sword']);
+    const id = (dele as { id: string }).id;
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({ ...receiptOf(randomUUID(), meu), equipment: { hand: id } });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await slotsOf(database, alheio)).get(id)).toBeNull();
   });
 });

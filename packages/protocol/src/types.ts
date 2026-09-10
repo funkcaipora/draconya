@@ -70,6 +70,21 @@ export const C2S_SCHEMAS = {
    * opcode. O servidor faz o `parse` com o schema real e recusa com `system-message`.
    */
   'bot-config': z.object({ config: z.unknown() }),
+  /**
+   * Vestir um item (§21.4, FUN-82). INTENÇÃO: o cliente diz QUAL item, e quem decide se ele
+   * cabe, se o level basta e em que slot vai é o servidor (invariante 4).
+   *
+   * `instanceId`, e não `itemId`: o que se veste é ESTE item, o da linha de `item_instance`,
+   * não "um item deste tipo". Mandar o id de catálogo deixaria o servidor escolher qual das
+   * duas espadas do jogador equipar — e a que ele escolhesse não seria a que o jogador clicou.
+   */
+  equip: z.object({ instanceId: z.string().min(1) }),
+  /**
+   * Tirar o que está num slot. O slot vem como string livre e é validado contra o CONTEÚDO,
+   * como a dificuldade de hunt: repetir a lista aqui criaria um segundo lugar para ela
+   * divergir.
+   */
+  unequip: z.object({ slot: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {

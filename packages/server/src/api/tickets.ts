@@ -30,6 +30,14 @@ export interface TicketRouteDependencies {
    * ticket com o progresso de antes da última sessão, e o defeito voltaria calado.
    */
   readonly settleProgress?: (characterId: string) => Promise<SettlementResult>;
+  /**
+   * O que o personagem tem, para o ticket carregar (FUN-82).
+   *
+   * Estreita, como o resto desta interface: a rota não precisa do repositório inteiro para
+   * montar uma mochila. Ausente é personagem que entra de mãos vazias — degradação, e é o que
+   * acontece num `api` montado sem banco.
+   */
+  readonly listItemInstances?: GameRepository['listItemInstances'];
 }
 
 /**
@@ -121,7 +129,7 @@ export function createTicketHandler(
     const issued = await withOwnedCharacter(
       principal.accountId,
       body.data.characterId,
-      (character) => deps.tickets.issue(principal.accountId, character.id, {
+      async (character) => deps.tickets.issue(principal.accountId, character.id, {
         level: character.level,
         xp: character.xp,
         name: character.name,
@@ -131,6 +139,9 @@ export function createTicketHandler(
         ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
         // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
         skills: character.skills,
+        // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
+        // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
+        inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
       }, resolution.node),
@@ -152,4 +163,24 @@ export function createTicketHandler(
       expiresAtMs: issued.value.expiresAtMs,
     });
   };
+}
+
+/**
+ * Monta a mochila e o equipamento a partir das instâncias do banco (FUN-82).
+ *
+ * `equipped_slot` diz onde cada uma está: com slot, no corpo; sem slot, na mochila. Duas peças
+ * no mesmo slot são impossíveis — o índice único do banco recusa —, então não há desempate a
+ * fazer aqui.
+ */
+function inventoryOf(instances: readonly {
+  id: string; itemId: string; quantity: number; equippedSlot: string | null;
+}[]): { backpack: unknown[]; equipped: Record<string, unknown> } {
+  const backpack: unknown[] = [];
+  const equipped: Record<string, unknown> = {};
+  for (const row of instances) {
+    const carried = { instanceId: row.id, itemId: row.itemId, quantity: row.quantity };
+    if (row.equippedSlot === null) backpack.push(carried);
+    else equipped[row.equippedSlot] = carried;
+  }
+  return { backpack, equipped };
 }

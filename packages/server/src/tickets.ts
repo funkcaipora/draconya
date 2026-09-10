@@ -70,6 +70,14 @@ export interface InitialCharacter {
    */
   readonly skills?: unknown;
   /**
+   * O que o personagem tem (§21.4, FUN-82), cru.
+   *
+   * Precisa entrar na sessão porque a arma equipada decide o dano e a mochila decide o que
+   * cabe. Um personagem que entrasse de mãos vazias bateria com o desarmado a hunt inteira,
+   * carregando uma espada que o banco diz que ele tem.
+   */
+  readonly inventory?: unknown;
+  /**
    * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
    * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
@@ -440,6 +448,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
       : { botConfig: initial['botConfig'] }),
     ...(typeof initial['skills'] === 'object' && initial['skills'] !== null
       ? { skills: initial['skills'] }
+      : {}),
+    ...(typeof initial['inventory'] === 'object' && initial['inventory'] !== null
+      ? { inventory: initial['inventory'] }
       : {}),
   };
 }

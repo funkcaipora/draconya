@@ -62,12 +62,24 @@ export const itemInstances = pgTable(
     quantity: integer('quantity').notNull().default(1),
     /** De onde veio (§25.3). É toda a proveniência de lendário que a arquitetura pede. */
     origin: text('origin').notNull(),
+    /**
+     * Em que slot está vestida, ou `null` para "na mochila" (FUN-82).
+     *
+     * Coluna na INSTÂNCIA, e não tabela à parte: o item está num lugar só. Uma tabela separada
+     * permitiria a mesma instância aparecer equipada e na mochila ao mesmo tempo.
+     */
+    equippedSlot: text('equipped_slot'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // O acesso real é "o que este personagem tem". Sem índice, abrir o inventário varre a
     // tabela inteira.
     index('item_instance_owner').on(table.ownerCharacterId),
+    // Um slot, um item — imposto pelo BANCO, que é o que continua valendo quando alguém
+    // escrever um caminho novo de escrita.
+    uniqueIndex('item_instance_one_per_slot')
+      .on(table.ownerCharacterId, table.equippedSlot)
+      .where(sql`${table.equippedSlot} is not null`),
   ],
 );
 

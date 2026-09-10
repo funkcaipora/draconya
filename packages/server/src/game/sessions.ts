@@ -9,7 +9,9 @@ import {
   CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
   huntRulesetFromSnapshot, materializeStamina, statsForLevel,
 } from '@draconya/sim';
-import type { HuntDifficultyName, Ruleset, SessionSnapshot, SkillsState } from '@draconya/sim';
+import type {
+  HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
+} from '@draconya/sim';
 import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
 import type { BotConfig, Content } from '@draconya/content';
 import type {
@@ -71,12 +73,18 @@ export function createCitySessionFactory(
       vocationId: null,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
+      capacity: stats.capacity,
       // O saldo de entrada vem do TICKET (invariante 4). Ausente é zero, e zero recusa gasto —
       // é o lado seguro do erro: não gastar o que não se sabe ter.
       gold: initialCharacter.gold ?? 0,
       // Skills vêm do ticket porque escalam o dano DURANTE a hunt (FUN-75). Ausentes, toda
       // skill vale o nível inicial do conteúdo — que é onde um personagem novo começa.
       ...(isSkillsState(initialCharacter.skills) ? { skills: initialCharacter.skills } : {}),
+      // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
+      // quebrada vira "sem item", não sessão que não abre.
+      ...(isInventoryState(initialCharacter.inventory)
+        ? { inventory: initialCharacter.inventory }
+        : {}),
       staminaMs: initialCharacter.staminaMs ?? null,
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}
@@ -294,4 +302,28 @@ function isSkillsState(value: unknown): value is SkillsState {
     const skill = entry as { level?: unknown; points?: unknown };
     return Number.isFinite(skill.level) && Number.isFinite(skill.points);
   });
+}
+
+/**
+ * A forma mínima de `InventoryState` vinda do banco (FUN-82).
+ *
+ * Mesma escolha de `isSkillsState`: checagem estrutural, não schema. Entrada quebrada vira
+ * "sem item" e o personagem entra de mãos vazias, em vez de a sessão não abrir por um JSON
+ * torto — perder o inventário de uma hunt é ruim, não conseguir entrar é pior.
+ */
+function isInventoryState(value: unknown): value is InventoryState {
+  if (typeof value !== 'object' || value === null) return false;
+  const state = value as { backpack?: unknown; equipped?: unknown };
+  if (!Array.isArray(state.backpack)) return false;
+  if (typeof state.equipped !== 'object' || state.equipped === null) return false;
+  return state.backpack.every(isCarried)
+    && Object.values(state.equipped).every((item) => item === undefined || isCarried(item));
+}
+
+function isCarried(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as { instanceId?: unknown; itemId?: unknown; quantity?: unknown };
+  return typeof item.instanceId === 'string'
+    && typeof item.itemId === 'string'
+    && Number.isInteger(item.quantity);
 }

@@ -15,8 +15,9 @@
 import { performance } from 'node:perf_hooks';
 import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
 import type { C2SMessage, S2CMessage } from '@draconya/protocol';
-import type { BotConfig } from '@draconya/content';
-import type { HuntRuleset } from '@draconya/sim';
+import { ITEM_SLOTS } from '@draconya/content';
+import type { BotConfig, Item, ItemSlot } from '@draconya/content';
+import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
@@ -89,6 +90,37 @@ export interface SessionHostOptions {
    * que o `api` monta lendo a linha do personagem.
    */
   readonly saveBotConfig?: (characterId: string, config: BotConfig) => Promise<void>;
+  /**
+   * O catálogo de itens (FUN-76), para as regras de equipar. Ausente: nada se veste, e a
+   * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
+   */
+  readonly itemCatalog?: ReadonlyMap<string, Item>;
+}
+
+const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
+
+/**
+ * Por que o item não entrou, em português e para o jogador.
+ *
+ * A recusa do `sim` é tipada justamente para caber num mapa como este: sem ela, o host teria
+ * que inventar a mensagem, e "não foi possível" é o que faz alguém abrir um chamado.
+ */
+const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
+  'over-capacity': 'Você não aguenta carregar mais isso.',
+  'not-carried': 'Você não está com esse item.',
+  'not-equippable': 'Esse item não se veste.',
+  'level-too-low': 'Seu level ainda não permite usar esse item.',
+  'wrong-vocation': 'Esse item é de outra vocação.',
+  'stack-too-large': 'Essa pilha é grande demais.',
+};
+
+/** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
+function equipmentOf(character: CharacterRuntime): Record<string, string> {
+  const equipped: Record<string, string> = {};
+  for (const [slot, item] of Object.entries(character.inventory.getState().equipped)) {
+    if (item !== undefined) equipped[slot] = item.instanceId;
+  }
+  return equipped;
 }
 
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
@@ -459,6 +491,14 @@ export class SessionHost {
       case 'walk-to':
         this.#requestWalk(viewer, message.destination);
         return;
+      case 'equip':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL item, e quem decide se ele cabe, se o
+        // level basta e em que slot vai é o servidor.
+        this.#requestEquip(viewer, message.instanceId);
+        return;
+      case 'unequip':
+        this.#requestUnequip(viewer, message.slot);
+        return;
       case 'bot-config':
         // INTENÇÃO (invariante 4): o jogador manda as REGRAS, e quem decide se elas valem —
         // vocabulário, slots, catálogo e gate de level — é o servidor.
@@ -542,6 +582,47 @@ export class SessionHost {
    * A recusa vira MENSAGEM, e é o produto: "você não pode fazer isso" é o texto que faz
    * alguém achar que o jogo travou. Cada recusa diz o que fazer em seguida.
    */
+  /**
+   * Vestir um item (§21.4, FUN-82). Processado NA CHEGADA, como o passo — o jogador clicou.
+   *
+   * Quem valida é o `sim`: level, vocação, slot e capacidade são regra de jogo, e regra de jogo
+   * não mora no host. O host traduz a recusa em mensagem, e é só isso que ele faz.
+   */
+  #requestEquip(viewer: Viewer, instanceId: string): void {
+    const character = this.#ownerOf(viewer.characterId);
+    if (character === undefined) return;
+    this.#answerInventory(
+      viewer,
+      character.inventory.equip(instanceId, character, this.#options.itemCatalog ?? EMPTY_ITEMS),
+    );
+  }
+
+  #requestUnequip(viewer: Viewer, slot: string): void {
+    const character = this.#ownerOf(viewer.characterId);
+    if (character === undefined) return;
+    // O slot chega como string do cliente e é conferido pelo CONTEÚDO, como a dificuldade de
+    // hunt: repetir a lista no protocolo criaria um segundo lugar para ela divergir.
+    if (!(ITEM_SLOTS as readonly string[]).includes(slot)) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
+      return;
+    }
+    this.#answerInventory(viewer, character.inventory.unequip(slot as ItemSlot));
+  }
+
+  #ownerOf(characterId: string): CharacterRuntime | undefined {
+    return this.#hostedSession(characterId)?.session.participants
+      .find((p) => p.id === characterId);
+  }
+
+  /** Traduz a recusa do `sim` em algo que o jogador entenda. Sucesso não vira mensagem. */
+  #answerInventory(viewer: Viewer, result: InventoryResult): void {
+    if (result.ok) return;
+    viewer.send({
+      type: 'system-message', level: 'warning',
+      text: INVENTORY_REFUSAL[result.reason] as string,
+    });
+  }
+
   /**
    * O jogador salvou uma configuração de bot (FUN-81, §13).
    *
@@ -1113,6 +1194,9 @@ export class SessionHost {
       // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
       // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
       ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
+      // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
+      // onde ele está, e é só isso que precisa atravessar.
+      ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
     });
   }
 
