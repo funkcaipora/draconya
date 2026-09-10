@@ -1,6 +1,6 @@
 # Economia, supply e Market
 
-**Status:** parcial — gold por abate cai e chega ao personagem pelo ledger (FUN-63); supply, Market e Coins não implementados
+**Status:** parcial — gold por abate cai e chega ao personagem pelo ledger (FUN-63); supply abstrato usado pelo bot debita gold (FUN-77); Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
 **Épico:** E5 (supply abstrato, ledger); E13 (Market, Coins por gold)
 
@@ -37,12 +37,43 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 | Loot de gold por monstro (chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
-| Preço de poções e runas | referência inicial: preços do Tibia (conteúdo final a definir) | caminho previsto: `packages/content/supply` |
-| Preço de arrows e demais munições | `[ABERTO]` | caminho previsto: `packages/content/supply` |
+| Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json` |
+| Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json` |
+| Preço de arrows e demais munições | `[ABERTO]` | caminho previsto: `packages/content/data/supplies` |
 
 ## Em aberto
 
 - Preço de arrows e demais munições, ainda não definido (§20.2, §43.5).
+
+## Supply abstrato, na prática (FUN-77)
+
+§20.1 **[DECIDIDO]**: poção e runa não existem fisicamente — usar debita gold direto. Por isso um
+supply tem `price` e não tem peso, slot nem instância, e por isso ele mora em
+`packages/content/data/supplies/` e não no catálogo de itens.
+
+O saldo que a sessão enxerga é o **gold de entrada mais o delta da sessão**. Duas consequências:
+
+- o loot desta hunt já dá para virar poção, sem passar pelo banco. Exigir o contrário faria a
+  poção só chegar depois de encerrar a sessão, que é o oposto do idle-first;
+- o gold de entrada vem do **ticket**, nunca do cliente (invariante 4). Um saldo vindo do socket
+  seria poção de graça, e não haveria como distinguir isso de um jogador rico. Ticket emitido por
+  um `api` antigo, sem o campo, entra com zero e recusa gasto — degrada para o lado seguro.
+
+**O saldo nunca fica negativo**, e a garantia é a ordem: o débito é recusado antes, não corrigido
+depois. O `Math.max(0, …)` que o ledger aplica ao creditar continua lá, mas como rede de
+segurança — não como a regra.
+
+O gasto vira `aggregates.goldSpent` na sessão, e o extrato leva ganho e gasto ao ledger na mesma
+linha (`goldGained - goldSpent`), com `(session_id, seq)` único: retry nunca duplica
+(invariante 10).
+
+**Gold zerado não encerra a hunt** (§20.3, sem a regra de saída): o personagem fica, não paga o
+supply e pode morrer. É comportamento, não erro — mas a hunt que acabou em morte precisa ter
+explicação na tela de retorno, então a primeira recusa por falta de gold vira uma linha
+(`supply-unaffordable`) no extrato. **Uma** linha, não uma por tentativa: a categoria de poção
+tenta a cada mudança do mundo, e uma linha por tentativa encheria a lista curta até ela deixar de
+ser lista. É a mesma escolha do aviso de stamina zerada. A regra de saída "sair quando o gold
+acabar" é da FUN-86.
 
 ## Divergências do PRD
 

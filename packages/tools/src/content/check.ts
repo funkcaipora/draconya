@@ -27,6 +27,8 @@ try {
   console.log(`  monstros: ${content.monsters.size}`);
   console.log(`  hunts:    ${content.hunts.size}`);
   console.log(`  vocações: ${content.vocations.size}`);
+  console.log(`  magias:   ${content.spells.size}`);
+  console.log(`  supplies: ${content.supplies.size}`);
   console.log(`  mapas:    ${content.maps.size}`);
   console.log(`  rotas:    ${content.routes.size}`);
 

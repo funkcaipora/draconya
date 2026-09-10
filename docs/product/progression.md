@@ -142,7 +142,14 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Base da curva de XP | 20 `[ABERTO — valor provisório: 20]` | `packages/content/data/progression/baseline.json`, `xp.base` |
 | Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
 | Velocidade de passo do personagem | 500 ms por tile `[ABERTO — valor provisório: 500]` | `packages/content/data/progression/baseline.json`, `stepDurationMs` |
-| Referência de catálogo de magias | Tibia até ~level 120 (referência funcional; catálogo final próprio) | caminho previsto: `packages/content/spells` |
+| Referência de catálogo de magias | Tibia até ~level 120 (referência funcional; catálogo final próprio) | `packages/content/data/spells/` |
+| Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |
+| Golpe Arcano — mana, cooldown, dano, alcance | 15 / 2 000 ms / 40 / 3 tiles `[ABERTO — valor provisório]` | `packages/content/data/spells/strike.json` |
+
+O catálogo tem **duas magias** (FUN-74), e é de propósito: uma de cura e uma de dano de alvo
+único são o suficiente para o motor de magia existir por inteiro — custo, cooldown, alcance,
+alvo, atribuição e morte. Magia em área e o resto do catálogo entram depois, contra um motor que
+já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
 
 ## Em aberto
 

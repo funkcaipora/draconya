@@ -82,6 +82,21 @@ por isso tem lugar próprio, em vez de um `itemId: "gold-coin"` que o código te
 pelo nome. `items` só aceita lista vazia enquanto não houver catálogo de itens; `buildContent`
 recusa o resto, porque creditar um item fantasma no primeiro abate é pior que não subir.
 
+## Magia e supply (FUN-74, FUN-77)
+
+`spells/*.json` e `supplies/*.json` são catálogos como os outros: **a engine é dona do
+mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura e
+quanto custa em gold — nada disso mora em `sim`.
+
+O `effect` é uma união discriminada por `kind`, fechada como o vocabulário do bot e pela mesma
+razão: o `sim` só executa o que conhece, e uma magia com efeito desconhecido é recusada no boot
+em vez de virar um slot morto que ninguém explica.
+
+**Supply não é item** (§20.1). Ele tem `price` e não tem peso, slot nem instância — usar debita
+gold direto. É por isso que ele tem pasta própria em vez de esperar o catálogo de itens, que é
+M8. `validateBotConfig` cruza `spellId` e `supplyId` contra estes dois catálogos; `itemId` é
+sempre recusado, pela mesma razão que `loot.items` só aceita lista vazia.
+
 ## Como testar
 
 ```

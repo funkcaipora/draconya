@@ -125,6 +125,7 @@ export function createTicketHandler(
         level: character.level,
         xp: character.xp,
         name: character.name,
+        gold: character.gold,
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
       }, resolution.node),

@@ -77,9 +77,26 @@ const combat = {
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 
+// Magia e supply de teste (FUN-74, FUN-77). Números redondos de propósito: `strike` tira 40 de
+// um rato de 50, então dois golpes matam e o terceiro é ruído — dá para conferir a olho.
+const spells = [
+  {
+    id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000,
+    effect: { kind: 'heal', amount: 60 },
+  },
+  {
+    id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
+    effect: { kind: 'damage', power: 40, range: 3 },
+  },
+];
+const supplies = [
+  { id: 'health-potion', name: 'Poção de Vida', price: 45, effect: { kind: 'heal', amount: 80 } },
+  { id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: { kind: 'mana', amount: 100 } },
+];
+
 const raw = (over: Partial<RawContent> = {}): RawContent => ({
   monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-  stamina: [stamina],
+  stamina: [stamina], spells, supplies,
   // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
   bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }], maps: [map], routes: [route], ...over,
@@ -996,5 +1013,287 @@ describe('cadência das cinco categorias (FUN-84)', () => {
     };
 
     expect(run(1_000)).toBe(run(100));
+  });
+});
+
+// --- o atuador embutido: magia e supply (FUN-74, FUN-77) -------------------------------------
+
+/**
+ * Uma hunt com bot e SEM atuador injetado — quem executa é a própria hunt.
+ *
+ * Mana e gold entram por aqui porque o conteúdo de teste nasceu antes de existir magia: o
+ * `progression` compartilhado dá 0 de mana, e mexer nele mudaria os stats de todos os testes
+ * acima. Um conteúdo próprio custa quatro linhas e não move nada de lugar.
+ */
+const withSpells = (
+  config: BotConfig,
+  over: {
+    health?: number; mana?: number; gold?: number;
+    spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
+  } = {},
+) => {
+  // **Regeneração zerada, e é decisão.** Aqui o assunto é quanto a magia cura e quanto o
+  // supply repõe; com 1 HP/s no meio, toda asserção absoluta viraria "mais ou menos isso", e
+  // um teste que ninguém consegue conferir a olho é um teste que ninguém confia. Quem cuida
+  // da regeneração é o bloco dela, onde ela é o assunto.
+  const loaded = buildContent(raw({
+    progression: [{
+      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    }],
+    ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
+    ...(over.spells === undefined ? {} : { spells: over.spells }),
+    ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
+  }));
+  const session = createHuntSession({
+    id: 'spell-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
+    createdAtMs: 0, bot: compileBot(config, loaded),
+  });
+  const stats = statsForLevel(1, null, loaded.progression);
+  const hero = new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+    mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
+    level: 1, xp: 0, vocationId: null,
+    staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
+  });
+  session.enter(hero);
+  return { session, hero, ruleset: session.ruleset as HuntRuleset };
+};
+
+const healRule = (percent: number) => ({
+  when: { kind: 'hp' as const, op: '<=' as const, percent },
+  do: { kind: 'spell' as const, spellId: 'heal' },
+});
+
+describe('magia (FUN-74)', () => {
+  it('a cura repõe HP e debita mana, e os dois números vêm do CONTEÚDO', () => {
+    // Mudar quanto a cura cura é editar JSON. Se um destes dois números aparecesse em código,
+    // o balanceamento teria virado tarefa de quem mexe em `sim`.
+    const { session, hero } = withSpells(
+      botConfig({ heal: [healRule(50)] }), { health: 1_000, monsters: false },
+    );
+
+    session.advanceBy(50);
+
+    expect(hero.health).toBe(1_060);
+    expect(hero.mana).toBe(180);
+  });
+
+  it('sem mana a cura é RECUSADA, e a categoria não fica parada por causa disso', () => {
+    // Recusar não é falhar: a hunt segue, e o slot volta a valer no instante em que houver
+    // mana. Uma exceção aqui derrubaria a sessão por uma regra que o jogador escreveu certa.
+    const { session, hero } = withSpells(
+      botConfig({ heal: [healRule(50)] }), { health: 1_000, mana: 5, monsters: false },
+    );
+
+    session.advanceBy(2_000);
+
+    expect(hero.health).toBe(1_000);
+    expect(hero.mana).toBe(5);
+  });
+
+  it('o cooldown é POR MAGIA, e a categoria VOLTA no vencimento dele — não fica dormindo', () => {
+    // Duas afirmações, e elas são a mesma mecânica vista dos dois lados.
+    //
+    // Categoria a 1 s, magia a 4 s: em doze segundos saem QUATRO curas — nos instantes 0,
+    // 4 000, 8 000 e 12 000 —, e não doze. Quem tratasse o cooldown da categoria como se fosse
+    // o da magia veria doze.
+    //
+    // E as três recusas entre uma cura e a seguinte não podem ENGATILHAR a categoria. Uma
+    // categoria engatilhada só acorda quando o mundo muda, e aqui o mundo não muda: sem ponto
+    // de spawn não há monstro, e a regeneração está zerada. Se a volta dependesse do mundo,
+    // sairia UMA cura e mais nenhuma.
+    const lenta = [
+      { ...spells[0], cooldownMs: 4_000 },
+      spells[1],
+    ];
+    const { session, hero } = withSpells(
+      botConfig({ heal: [healRule(100)] }),
+      { health: 1_000, spells: lenta, monsters: false },
+    );
+
+    run(session, 12_100, 100);
+
+    expect(hero.mana).toBe(200 - 4 * 20);
+  });
+
+  it('a magia de ataque mata o monstro, e o abate credita quem lançou', () => {
+    // O dano de magia passa pela MESMA atribuição do golpe (`recordDamage`) e pelo MESMO
+    // pipeline de morte. Se não passasse, o rato morreria sem dono e a recompensa evaporaria —
+    // que é o formato de defeito que ninguém liga à causa.
+    const { session, hero } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    }));
+
+    run(session, 20_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // Loot fixo de 3 por rato: o gold ganho tem que bater com os abates.
+    expect(session.aggregates.goldGained).toBe(session.aggregates.kills * 3);
+    expect(hero.xp).toBeGreaterThan(0);
+  });
+
+  it('magia que sumiu do conteúdo não derruba a hunt: a regra só não faz nada', () => {
+    // `validateBotConfig` recusa isto na ENTRADA. Sobra o conteúdo mudar sob uma sessão em
+    // voo, e aí a resposta certa é a hunt continuar — quem estava caçando não perde a sessão
+    // por um arquivo que alguém renomeou.
+    const { session, hero } = withSpells(botConfig({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'spell', spellId: 'nao-existe' },
+      }],
+    }), { health: 1_000, monsters: false });
+
+    expect(() => run(session, 3_000, 100)).not.toThrow();
+    expect(hero.mana).toBe(200);
+  });
+});
+
+describe('supply (FUN-77)', () => {
+  const potionRule = (supplyId: string, percent: number) => ({
+    when: { kind: 'hp' as const, op: '<=' as const, percent },
+    do: { kind: 'supply' as const, supplyId },
+  });
+
+  it('a poção repõe vida, debita gold do saldo e entra no goldSpent do extrato', () => {
+    // §20.1: poção não é item físico — usar debita gold direto. O extrato leva o gasto ao
+    // ledger junto com o ganho (invariante 10), e é por isso que o agregado existe.
+    const { session, hero } = withSpells(
+      botConfig({ potion: [potionRule('health-potion', 50)] }),
+      { health: 1_000, gold: 100, monsters: false },
+    );
+
+    session.advanceBy(50);
+
+    expect(hero.health).toBe(1_080);
+    expect(hero.goldDelta).toBe(-45);
+    expect(session.aggregates.goldSpent).toBe(45);
+  });
+
+  it('a poção de mana repõe MANA, e sai da mesma categoria', () => {
+    const { session, hero } = withSpells(
+      botConfig({ potion: [{
+        when: { kind: 'mana', op: '<=', percent: 50 },
+        do: { kind: 'supply', supplyId: 'mana-potion' },
+      }] }),
+      { mana: 20, gold: 500, monsters: false },
+    );
+
+    session.advanceBy(50);
+
+    expect(hero.mana).toBe(120);
+    expect(session.aggregates.goldSpent).toBe(50);
+  });
+
+  it('sem gold, a poção é recusada e o saldo NUNCA fica negativo', () => {
+    // A garantia é a ordem: o débito é recusado antes, não corrigido depois. Um delta negativo
+    // aqui viraria uma linha de ledger que tira gold que o personagem não tem.
+    const { session, hero } = withSpells(
+      botConfig({ potion: [potionRule('health-potion', 100)] }),
+      { health: 1_000, gold: 44, monsters: false },
+    );
+
+    run(session, 5_000, 100);
+
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
+    expect(hero.health).toBe(1_000);
+  });
+
+  it('o gold que acabou vira UMA linha no extrato, e não uma por tentativa', () => {
+    // §20.3 sem a regra de saída: a hunt continua, sem poção, e o personagem pode morrer. Isso
+    // é comportamento, não erro — mas quem estava ausente precisa encontrar o motivo na tela
+    // de retorno. Uma linha por tentativa encheria a lista curta até ela deixar de ser lista,
+    // que é a mesma razão pela qual o aviso de stamina sai uma vez só.
+    const { session } = withSpells(
+      botConfig({ potion: [potionRule('health-potion', 100)] }),
+      { health: 1_000, gold: 0, monsters: false },
+    );
+
+    run(session, 10_000, 100);
+
+    const avisos = session.notableEvents.filter((e) => e.type === 'supply-unaffordable');
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]?.detail).toBe('health-potion');
+  });
+
+  it('o aviso sobrevive ao snapshot: retomar não repete a notícia', () => {
+    const { session } = withSpells(
+      botConfig({ potion: [potionRule('health-potion', 100)] }),
+      { health: 1_000, gold: 0, monsters: false },
+    );
+    session.advanceBy(100);
+
+    const state = session.ruleset.getState?.() as { warnedNoGold?: boolean };
+    expect(state.warnedNoGold).toBe(true);
+  });
+
+  it('o gold ganho na hunt já dá para gastar na hunt, sem passar pelo banco', () => {
+    // Idle-first: exigir que o loot passasse pelo banco antes de virar poção faria a poção só
+    // chegar depois de encerrar a sessão. O saldo é o de entrada MAIS o delta, e é por isso
+    // que `balanceOf` soma os dois em vez de olhar só o que veio da tabela.
+    //
+    // O personagem entra com ZERO e a poção custa exatamente o loot de um rato: a primeira
+    // tentativa é recusada, e a que vem depois do primeiro abate passa. Se o saldo ignorasse o
+    // delta, nenhuma passaria nunca.
+    const barata = [{ ...supplies[0], price: 3 }, supplies[1]];
+    const { session, hero } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+      potion: [potionRule('health-potion', 100)],
+    }), { health: 1_000, gold: 0, supplies: barata });
+
+    run(session, 20_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.aggregates.goldSpent).toBeGreaterThan(0);
+    // Nunca gastou mais do que ganhou: o saldo não fica negativo em nenhum instante.
+    expect(hero.gold + hero.goldDelta).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('a equivalência entre taxas vale para magia e supply também', () => {
+  it('1 Hz e 10 Hz dão o MESMO resultado, com cura, poção e magia de dano', () => {
+    // É o teste que mais importa deste pacote, aplicado ao que esta issue acrescentou. Se
+    // divergir, alguém pôs decisão de jogo fora da fila de eventos — e o cooldown de magia é
+    // exatamente o lugar onde um acumulador entraria sem ninguém notar.
+    const completo = botConfig({
+      heal: [healRule(90)],
+      potion: [{
+        when: { kind: 'mana', op: '<=', percent: 40 },
+        do: { kind: 'supply', supplyId: 'mana-potion' },
+      }],
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    });
+
+    const at = (stepMs: number) => {
+      const { session, hero } = withSpells(completo, { health: 2_000, gold: 10_000 });
+      run(session, 120_000, stepMs);
+      return {
+        kills: session.aggregates.kills,
+        goldGained: session.aggregates.goldGained,
+        goldSpent: session.aggregates.goldSpent,
+        xp: hero.xp,
+        health: hero.health,
+        mana: hero.mana,
+        goldDelta: hero.goldDelta,
+      };
+    };
+
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    // E o cenário precisa ter EXERCITADO o que diz exercitar: um empate de zeros passaria por
+    // equivalência sem provar nada. Foi assim que a FUN-67 atravessou um teste vazio.
+    expect(rapido.kills).toBeGreaterThan(0);
+    expect(rapido.goldSpent).toBeGreaterThan(0);
   });
 });

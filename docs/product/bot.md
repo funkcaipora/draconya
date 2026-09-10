@@ -1,7 +1,8 @@
 # Bot
 
-**Status:** parcial — vocabulário fechado e versionado (FUN-73) e compilador de regras
-(FUN-80) implementados; nada **executa** ação ainda, porque magia é M7 e supply é M8
+**Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
+cadência por categoria (FUN-84) e execução de magia e supply (FUN-74/FUN-77) implementados;
+falta a configuração chegar pelo socket (FUN-81) e o catálogo de itens (M8)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -61,14 +62,16 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 
 | `kind` | Campo | Catálogo |
 |---|---|---|
-| `spell` | `spellId` | M7 — ainda não existe |
-| `supply` | `supplyId` | M8 — ainda não existe |
-| `item` | `itemId` | M8 — ainda não existe |
+| `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) |
+| `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
 
-A forma é validada agora; **a referência cruzada entra quando o catálogo existir**, e entra na
-validação, não na execução. Uma regra que aponta magia inexistente e só falha ao ser disparada é
-o bot que para de curar sem explicação — o formato exato que este vocabulário existe para
-impedir. É o mesmo mecanismo que `buildContent` já usa em `loot.items`.
+A referência cruzada acontece na **validação**, nunca na execução: `validateBotConfig` confere
+cada `spellId` e `supplyId` contra o catálogo e devolve o problema com a categoria e o número do
+slot. Uma regra que aponta magia inexistente e só falha ao ser disparada é o bot que para de
+curar sem explicação — o formato exato que este vocabulário existe para impedir. É o mesmo
+mecanismo que `buildContent` já usa em `loot.items`, e `item` segue recusado pela mesma razão que
+`loot.items` só aceita lista vazia.
 
 ### Exemplo
 
@@ -91,8 +94,8 @@ impedir. É o mesmo mecanismo que `buildContent` já usa em `loot.items`.
 do bot avançado. Em conteúdo e não em código, porque é balanceamento: um designer precisa
 alcançá-lo sem deploy.
 
-**Nada aqui executa regra.** Isto é o contrato; a avaliação é a FUN-80, e a configuração pelo
-socket é a FUN-81.
+Isto é o contrato. A avaliação é a FUN-80, a execução é a FUN-74/FUN-77, e a configuração pelo
+socket segue sendo a FUN-81 — até ela existir, nenhum personagem tem bot configurado.
 
 ## Como a regra vira decisão (FUN-80)
 
@@ -114,10 +117,10 @@ Três propriedades que o compilador garante, e que têm teste:
 **Sem alvo, `target-hp` é falsa** — não é erro. "Ataque quando o alvo estiver abaixo de 30%" não
 vale quando não há alvo, e lançar ali derrubaria a sessão por uma regra escrita corretamente.
 
-Quem **executa** a ação escolhida é o motor de magia (M7) e o de supply (M8), por uma interface
-(`BotActuator`) — não por um `if` dentro do compilador que cresce a cada categoria nova. Ela
-devolve `false` quando a ação não aconteceu, porque uma categoria não pode gastar o cooldown de
-uma ação que não aconteceu: seria o bot parando um segundo por ter tentado curar sem mana.
+Quem **executa** a ação escolhida não é o compilador, e sim uma interface (`BotActuator`) — não
+um `if` lá dentro que cresce a cada categoria nova. Ela devolve `false` quando a ação não
+aconteceu, porque uma categoria não pode gastar o cooldown de uma ação que não aconteceu: seria
+o bot parando um segundo por ter tentado curar sem mana.
 
 ## A cadência: cinco categorias, cinco relógios (FUN-84)
 
@@ -136,8 +139,15 @@ nada. Reavaliar é imediato quando o personagem **leva dano** — esperar o pró
 relógio para curar quem está caindo custa a vida do personagem, e é a mesma perda que o golpe
 engatilhado da FUN-68 corrigiu do outro lado.
 
-**Atuador que recusa não consome o cooldown.** Sem mana ou sem supply, a ação não aconteceu — e a
+**Atuador que recusa não consome o cooldown.** Sem mana ou sem gold, a ação não aconteceu — e a
 categoria não pode ficar um segundo parada por ter tentado.
+
+**A recusa por cooldown é a exceção, e ela reagenda** (FUN-74). "Sem mana" e "sem gold" não
+melhoram com o tempo passar, então engatilhar é certo: a categoria volta quando o mundo mudar.
+"Em cooldown" melhora, e só com o tempo — uma categoria engatilhada por isso ficaria dormindo
+até alguém bater no personagem, e um personagem parado, sangrando, com a cura em cooldown,
+simplesmente nunca curaria. Por isso a recusa carrega o **prazo** (`retryInMs`), e a categoria é
+reagendada para o vencimento dele.
 
 **Categoria sem regra não entra na fila**, e personagem sem bot configurado não agenda nada. Os
 cinco eventos por segundo por hunt que isto orça só existem para quem configurou — e até a
@@ -171,3 +181,33 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 ## Divergências do PRD
 
 Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+
+## Quem executa: magia e supply (FUN-74, FUN-77)
+
+O atuador embutido é a **própria hunt**, e não uma classe à parte. Tudo o que ele precisa já está
+lá: o alvo mais próximo, o RNG semeado da sessão, o relógio lógico e o pipeline de morte. Uma
+classe separada receberia os quatro por parâmetro e não ganharia nada em troca.
+
+O que ele faz, por tipo de ação:
+
+| Ação | O que acontece | Recusa quando |
+|---|---|---|
+| `spell` com efeito `heal` | repõe HP do lançador, debita mana, inicia o cooldown da magia | level insuficiente, cooldown, mana |
+| `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no monstro mais próximo e **atribui** (`recordDamage`) | level, cooldown, sem alvo, fora de alcance, mana |
+| `supply` | repõe HP ou mana e **debita gold** | gold insuficiente |
+| `item` | nada | sempre — não há catálogo |
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **A mana sai por último.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
+  Descontar primeiro é como se perde mana sem lançar nada, e esse é o defeito que o jogador nota
+  e não consegue explicar.
+- **O cooldown da magia é dela, e é diferente do cooldown da categoria.** Uma cura de 4 s numa
+  categoria de 1 s sai a cada 4 s, não a cada 1 s. Os dois valores são conteúdo, e o maior manda.
+- **O dano sai do motor de magia RESOLVIDO, não aplicado.** Quem aplica é quem tem o alvo, porque
+  aplicar é também registrar a atribuição e resolver a morte — e a atribuição não pode ser paga
+  duas vezes.
+
+O saldo que a sessão enxerga é **o gold de entrada mais o delta da sessão**: o loot desta hunt já
+dá para virar poção sem passar pelo banco. O saldo nunca fica negativo, e a garantia é a ordem —
+o débito é recusado antes, não corrigido depois.

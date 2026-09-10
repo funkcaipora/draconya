@@ -9,7 +9,9 @@
 // saber se o JSON tem forma de regra, e a checagem de conteúdo exige o `bot/baseline.json`
 // carregado, que nem todo chamador tem.
 
-import type { BotCategory, BotConfig, BotLimits } from './schemas.js';
+import type { Content } from './content.js';
+import type { BotCategory, BotLimits } from './schemas.js';
+import type { BotConfig } from './schemas.js';
 import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION } from './schemas.js';
 
 /**
@@ -19,7 +21,8 @@ import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION } from './schemas.js';
  * fora do vocabulário seja recusada com MOTIVO, e um booleano obriga quem chama a inventar a
  * mensagem — que é como "sua configuração é inválida" chega ao jogador sem dizer onde.
  */
-export function validateBotConfig(config: BotConfig, limits: BotLimits): string[] {
+export function validateBotConfig(config: BotConfig, content: Content): string[] {
+  const limits = content.bot;
   const problems: string[] = [];
 
   // A versão vem primeiro e não interrompe: uma configuração de vocabulário antigo pode ter
@@ -41,14 +44,35 @@ export function validateBotConfig(config: BotConfig, limits: BotLimits): string[
     }
   }
 
-  // AINDA NÃO checado: se `spellId`, `supplyId` e `itemId` existem. Os catálogos são M7 e M8,
-  // e inventar a checagem antes deles é escrever contra um contrato que ninguém viu.
+  // A referência cruzada, que a FUN-73 deixou como gancho e a FUN-74 pôde preencher: os
+  // catálogos de magia e supply agora existem.
   //
-  // **Quando existirem, a checagem entra AQUI**, e não na hora de executar a regra. O
-  // mecanismo é o mesmo que `buildContent` já usa para `loot.items`: recusar o que não tem
-  // catálogo. Uma regra que aponta magia inexistente e só falha ao ser disparada é o bot que
-  // para de curar sem ninguém saber por quê — o formato exato que esta issue existe para
-  // impedir.
+  // A checagem é AQUI, e não na hora de executar a regra. Uma regra que aponta magia
+  // inexistente e só falha ao ser disparada é o bot que para de curar sem ninguém saber por
+  // quê — o formato exato que este vocabulário existe para impedir.
+  for (const category of BOT_CATEGORIES) {
+    config[category].forEach((rule, slot) => {
+      const where = `categoria "${category}", slot ${slot + 1}`;
+      switch (rule.do.kind) {
+        case 'spell':
+          if (!content.spells.has(rule.do.spellId)) {
+            problems.push(`${where}: magia "${rule.do.spellId}" não existe`);
+          }
+          return;
+        case 'supply':
+          if (!content.supplies.has(rule.do.supplyId)) {
+            problems.push(`${where}: supply "${rule.do.supplyId}" não existe`);
+          }
+          return;
+        case 'item':
+          // Catálogo de ITEM continua sendo M8. Recusar tudo é o mesmo que `buildContent` faz
+          // com `loot.items`: melhor um slot recusado no boot que um crédito fantasma.
+          problems.push(
+            `${where}: item "${rule.do.itemId}" — não existe catálogo de itens ainda`,
+          );
+      }
+    });
+  }
   return problems;
 }
 

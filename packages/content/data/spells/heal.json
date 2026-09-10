@@ -1,0 +1,9 @@
+{
+  "id": "heal",
+  "name": "Cura",
+  "manaCost": 20,
+  "cooldownMs": 1000,
+  "minLevel": 1,
+  "effect": { "kind": "heal", "amount": 60 },
+  "_open": "Valores de referência. O §4.1 usa as magias do Tibia até ~level 120 como escopo funcional, sem reproduzir catálogo — estes números são ponto de partida de balanceamento."
+}

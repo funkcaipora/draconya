@@ -49,6 +49,19 @@ export interface CharacterState {
    * quem restaura repõe a partir do conteúdo.
    */
   readonly stepDurationMs?: number;
+  /**
+   * Gold que o personagem TINHA ao entrar na sessão (FUN-77). Vem do ticket, nunca do cliente
+   * (invariante 4), e não é escrito aqui: o que a sessão movimenta é `goldDelta`.
+   *
+   * Existe porque gastar exige saber o saldo, e o saldo é `gold + goldDelta`. Sem ele, uma
+   * poção de 45 seria comprada por quem tem 10 e o delta ficaria negativo — o ledger
+   * corrigiria depois, com o jogador já tendo bebido.
+   *
+   * Opcional: snapshot gravado antes desta issue não tem a chave, e ausente vira zero. A
+   * degradação erra para o lado seguro — quem retoma uma sessão antiga não consegue gastar,
+   * em vez de gastar o que não tem.
+   */
+  readonly gold?: number;
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
@@ -69,6 +82,8 @@ export class CharacterRuntime {
   vocationId: string | null;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
+  /** Saldo de entrada. Ver `CharacterState.gold` — a sessão lê, nunca escreve. */
+  readonly gold: number;
   goldDelta: number;
   alive: boolean;
   stepDurationMs: number;
@@ -88,6 +103,7 @@ export class CharacterRuntime {
     this.vocationId = state.vocationId ?? null;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
+    this.gold = state.gold ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
     // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
@@ -111,6 +127,7 @@ export class CharacterRuntime {
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
       stepDurationMs: this.stepDurationMs,
+      gold: this.gold,
       goldDelta: this.goldDelta,
       alive: this.alive,
       contribution: this.contribution.getState(),

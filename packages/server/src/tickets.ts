@@ -39,6 +39,17 @@ export interface InitialCharacter {
   readonly staminaMs?: number;
   readonly staminaUpdatedAtMs?: number;
   /**
+   * Gold da tabela, para a sessão saber o saldo antes de gastar (FUN-77).
+   *
+   * Vem do banco pelo mesmo caminho que level e XP, e pela mesma razão: nada que o cliente
+   * manda participa da criação da sessão (invariante 4). Um saldo vindo do socket seria poção
+   * de graça, e não haveria como distinguir isso de um jogador rico.
+   *
+   * Ausente é ticket emitido por um `api` antigo, durante deploy em rolagem: a sessão entra
+   * com zero e recusa gasto. Degrada para o lado seguro — não gastar o que não se sabe ter.
+   */
+  readonly gold?: number;
+  /**
    * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
    * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
@@ -392,7 +403,16 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ? { staminaMs, staminaUpdatedAtMs }
     : {};
   const name = initial['name'];
-  return { level, xp, ...stamina, ...(typeof name === 'string' && name.length > 0 ? { name } : {}) };
+  const gold = initial['gold'];
+  return {
+    level,
+    xp,
+    ...stamina,
+    ...(typeof name === 'string' && name.length > 0 ? { name } : {}),
+    // Gold inválido vira AUSENTE, não zero implícito com cara de valor: o resultado é o mesmo
+    // saldo zero, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
+    ...(typeof gold === 'number' && Number.isSafeInteger(gold) && gold >= 0 ? { gold } : {}),
+  };
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {
