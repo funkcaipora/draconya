@@ -116,7 +116,80 @@ nosso `lure`, mas expresso como **distância alvo** em vez de dois limiares de c
 conjunto", "limpar a barra"). Nós temos 5 categorias com slots por categoria (37 no total) e
 nenhum conceito de conjunto salvo.
 
-## 7. O que NÃO dá para concluir daqui
+## 7. O catálogo de caçadas
+
+**55 caçadas**, listadas em ordem de progressão, e a primeira delas é literalmente
+**`Rat Cellars` / `Rat`** — o mesmo nome que já está no nosso `hunts/rat-cellars.json`.
+
+Cada linha do catálogo mostra três coisas: o nome, **a lista de monstros** e
+`3 tamanhos de pull · N drops de loot`. A ordem é Rat Cellars → Spider Nest → Troll Hills →
+Orc Camp → … → Infernal Gate (Demon) → Falcon's Eye.
+
+**"Tamanho do pull" é um nome melhor que "dificuldade".** Nós chamamos de dificuldade o que a
+`huntDifficultySchema` guarda como `perSpawnPoint` — quantos monstros vêm de uma vez. Eles
+chamam pelo que é, e os três são `Cautelosa`, `Ousada`, `Agressiva`. Vale considerar renomear:
+"dificuldade" sugere monstro mais forte, e não é isso que muda.
+
+A tela de detalhe traz, antes de entrar: a **lista de loot possível** (Rat Cellars: Gold Coin,
+Cheese), a descrição, e **"Encontrar time"** ao lado de "Iniciar caçada" — o matchmaking de
+party mora na seleção de caçada, não numa tela à parte.
+
+E há **recorde por caçada**: *"complete uma caçada de 5 minutos para marcar um recorde"*.
+
+## 8. O que aparece DENTRO da caçada
+
+Três ações no topo: **`DETALHES DA CAÇADA`**, **`DESPACHAR LOOT`**, **`SAIR DA CAÇADA`**.
+
+**As barras mostram a regeneração como número:** `110/110 +10` e `15/15 +5`. É a regra da §4
+tornada visível — o `+10` só existe porque o personagem está caçando.
+
+**A stamina drena 1 min por minuto de caçada**, e a barra dela fica ao lado das outras.
+
+### A caixa de loot da sessão expira em 15 minutos
+
+```
+Loot da sessão
+Nada aqui ainda — vá caçar!
+Clique para pegar — expira em 15 min
+```
+
+Nós temos a caixa (M8, §25) e **não temos o prazo**. Quinze minutos é uma decisão de produto
+com consequência clara: loot não recolhido some, o que empurra o jogador a voltar — e é
+exatamente o tipo de número que o PRD deixou `[ABERTO]`.
+
+### O analisador é PREMIUM
+
+```
+SESSÃO ATUAL 00:01:06 · PRÓXIMO LEVEL --:--:-- · EXP TOTAL --- · EXP/H ---
+LUCRO TOTAL --- · LUCRO/H ---
+                                                        [Assinar Premium]
+```
+
+Duas coisas aqui. A primeira: eles mostram **tempo até o próximo level**, que é derivada e nós
+não temos. A segunda, e maior: **o analisador inteiro é recurso pago**. O nosso §16 o trata
+como parte do jogo. Não é evidência de que estejamos errados — é evidência de que dá para
+monetizá-lo, e de que alguém no gênero achou que valia.
+
+## 9. Progressão medida, level 1 ao 3
+
+Um minuto de Rat Cellars, com o bot padrão e sem equipamento:
+
+| | Level 1 | Level 2 | Level 3 |
+|---|---|---|---|
+| Vida | 100 | 110 | 120 |
+| Mana | 10 | 15 | 20 |
+| Bônus de XP | +200% | +199% | +197% |
+
+**Por level, sem vocação: +10 de vida e +5 de mana.** O nosso `progression/baseline.json` tem
+`healthPerLevel: 5` e `manaPerLevel: 5` — metade da vida.
+
+**O bônus de level decai por level**, e devagar: dois pontos percentuais do 2 para o 3. É uma
+rampa de entrada longa, não um empurrão de dois minutos.
+
+E a velocidade importa: **level 1 → 3 em cerca de um minuto**, com 15 de gold e 6 itens de
+loot. O começo do jogo deles é deliberadamente rápido.
+
+## 10. O que NÃO dá para concluir daqui
 
 - **Nada sobre o servidor deles.** Tudo acima é tela e tráfego HTTP; não há como saber como o
   laço de simulação funciona, se a hunt roda desanexada, nem a que taxa.
@@ -125,7 +198,7 @@ nenhum conceito de conjunto salvo.
   como nós pretendemos; isso não diz nada sobre o risco que o ADR 0008 assume, só que não
   somos os primeiros a assumi-lo.
 
-## 8. O que isto sugere abrir
+## 11. O que isto sugere abrir
 
 Cada linha da §3 e da §6 que diverge é candidata a issue de balanceamento — em especial a
 lista de políticas de alvo (§13.2, hoje vazia) e a regeneração fora de hunt, que é regra e não
