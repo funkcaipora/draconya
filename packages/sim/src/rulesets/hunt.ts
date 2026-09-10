@@ -18,10 +18,12 @@
 
 import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
-  BotCategory, Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route, SpawnPoint,
-  Stamina, Tilemap, Vocation,
+  BotAction, BotCategory, Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route,
+  Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
+import { NOT_IN_CATALOG, castSpell, useSupply } from '../casting.js';
+import type { CastResult, SpellTarget } from '../casting.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -95,6 +97,9 @@ const SPAWN_RETRY_MS = 1000;
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
+/** O `SpellTarget` do lado de quem o PREENCHE. Ver `HuntRuleset.#spellTarget`. */
+type MutableSpellTarget = { -readonly [K in keyof SpellTarget]: SpellTarget[K] };
+
 /**
  * O que o personagem bate e o quanto aguenta. Vem de `content` (§12.1) — nenhum coeficiente
  * mora neste arquivo.
@@ -140,6 +145,10 @@ export interface HuntRulesetOptions {
   readonly progression: Progression;
   readonly stamina: Stamina;
   readonly vocations: ReadonlyMap<string, Vocation>;
+  /** Catálogo de magias (FUN-74). Vazio é uma hunt em que nenhuma magia sai. */
+  readonly spells: ReadonlyMap<string, Spell>;
+  /** Catálogo de supplies (FUN-77). Vazio é uma hunt sem poção. */
+  readonly supplies: ReadonlyMap<string, Supply>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -148,7 +157,13 @@ export interface HuntRulesetOptions {
    * segundo por hunt só existe para quem configurou.
    */
   readonly bot?: CompiledBot;
-  /** Quem executa a ação escolhida. Magia é M7, supply é M8; sem ele, nada acontece. */
+  /**
+   * Substitui o atuador embutido (FUN-74/FUN-77).
+   *
+   * O padrão é a própria hunt: magia e supply são executados aqui, onde estão o alvo, o RNG da
+   * sessão e o relógio lógico. Este campo sobrou como costura de teste — e para o dia em que
+   * um ruleset quiser outra política sem reescrever o resto.
+   */
   readonly actuator?: BotActuator;
   /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
@@ -167,6 +182,8 @@ export interface HuntRulesetState {
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
   readonly warnedExhausted: boolean;
+  /** Ver `HuntRuleset.#warnedNoGold`. Ausente é `false`: snapshot anterior à FUN-77. */
+  readonly warnedNoGold?: boolean;
   /**
    * Até que instante lógico a stamina já foi consumida.
    *
@@ -217,6 +234,18 @@ export class HuntRuleset implements Ruleset {
    */
   #warnedExhausted = false;
 
+  /**
+   * Já avisou que o gold acabou? A notícia sai UMA vez, como a da stamina.
+   *
+   * §20.3 sem a regra de saída: o personagem FICA, não paga o supply e pode morrer. Isso é
+   * comportamento, não erro — mas é o tipo de coisa que o jogador ausente precisa encontrar na
+   * tela de retorno, senão a hunt que acabou em morte não tem explicação nenhuma.
+   *
+   * Uma vez, e não por recusa: a categoria de poção tenta a cada mudança do mundo, e uma linha
+   * por tentativa encheria a lista curta até ela deixar de ser lista.
+   */
+  #warnedNoGold = false;
+
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
 
@@ -242,6 +271,13 @@ export class HuntRuleset implements Ruleset {
   readonly #botView: BotView = {
     self: null as unknown as CharacterRuntime, targetCount: 0, target: null,
   };
+
+  /**
+   * O alvo de magia, reaproveitado pela mesma razão que `#botView`.
+   *
+   * Mutável de propósito: `castSpell` só lê, e quem escreve é `#castSpell`, num lugar só.
+   */
+  readonly #spellTarget: MutableSpellTarget = { armor: 0, dodgeChance: 0, distance: 0 };
 
   /**
    * Quem escreve posição. **A hunt não escreve nenhuma** desde a FUN-69 — ela pede.
@@ -486,6 +522,7 @@ export class HuntRuleset implements Ruleset {
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       warnedExhausted: this.#warnedExhausted,
+      warnedNoGold: this.#warnedNoGold,
       staminaAnchorMs: this.#staminaAnchorMs,
       playerAttackReady: this.#playerAttackReady,
       botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
@@ -525,6 +562,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#nextCreatureId = restored.nextCreatureId;
     this.#warnedExhausted = restored.warnedExhausted;
+    this.#warnedNoGold = restored.warnedNoGold ?? false;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#playerAttackReady = restored.playerAttackReady ?? true;
     for (const category of BOT_CATEGORIES) {
@@ -731,12 +769,108 @@ export class HuntRuleset implements Ruleset {
 
     const action = bot.select(category, this.#botViewOf(character));
     if (action === null) return;
-    // Sem atuador — hoje é o normal, porque magia é M7 e supply é M8 — a escolha acontece e
-    // nada é executado. Engatilhar mesmo assim é o certo: quando o atuador existir, a mesma
-    // regra volta a ser avaliada no próximo movimento do mundo.
-    if (this.#options.actuator?.perform(action, this.#botView) !== true) return;
 
-    this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
+    const external = this.#options.actuator;
+    if (external !== undefined) {
+      if (!external.perform(action, this.#botView)) return;
+      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
+      return;
+    }
+
+    const result = this.#perform(session, character, action);
+    if (result.ok) {
+      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
+      // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
+      // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
+      // para usar a mana que acabou de repor.
+      this.#armBot(session, characterId);
+      return;
+    }
+    // Recusa por COOLDOWN volta no vencimento dele; as outras engatilham.
+    //
+    // A distinção não é detalhe. Uma categoria engatilhada só acorda quando o mundo muda, e
+    // "o mundo mudar" pode simplesmente não acontecer: o personagem com a cura em cooldown,
+    // parado, sem levar dano, ficaria sem curar até alguém bater nele de novo. As outras
+    // recusas são o oposto — sem mana e sem gold não melhoram com o tempo passar, e reagendar
+    // por elas seria um evento por segundo para redescobrir a mesma falta.
+    if (result.retryInMs > 0) {
+      this.#scheduleBot(session, category, characterId, result.retryInMs);
+    }
+  }
+
+  /**
+   * Executa a ação escolhida pelo bot (FUN-74, FUN-77).
+   *
+   * É o `BotActuator` embutido, e mora aqui — e não numa classe à parte — porque tudo o que
+   * ele precisa é da hunt: o alvo mais próximo, o RNG semeado da sessão, o relógio lógico e o
+   * pipeline de morte. Uma classe separada receberia os quatro por parâmetro e não ganharia
+   * nada em troca.
+   */
+  #perform(session: Session, character: CharacterRuntime, action: BotAction): CastResult {
+    switch (action.kind) {
+      case 'spell': return this.#castSpell(session, character, action.spellId);
+      case 'supply': return this.#useSupply(session, character, action.supplyId);
+      // Catálogo de ITEM é M8. `validateBotConfig` já recusa a regra na entrada; aqui a
+      // resposta é não fazer nada, que é o que "sem catálogo" significa.
+      case 'item': return NOT_IN_CATALOG;
+    }
+  }
+
+  /**
+   * Lança a magia. O alvo é o mesmo do golpe — o monstro mais próximo —, e o alcance é o da
+   * MAGIA, não o da arma: uma magia de alcance 3 alcança de onde o corpo a corpo não alcança.
+   */
+  #castSpell(session: Session, character: CharacterRuntime, spellId: string): CastResult {
+    const spell = this.#options.spells.get(spellId);
+    if (spell === undefined) return NOT_IN_CATALOG;
+
+    let monster: MonsterRuntime | null = null;
+    let target: SpellTarget | null = null;
+    if (spell.effect.kind === 'damage') {
+      monster = this.#nearestMonster(character);
+      if (monster !== null) {
+        // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual
+        // para magia. Escrever `0` aqui e lá é o mesmo dado em dois lugares; quando esquiva
+        // de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
+        this.#spellTarget.armor = this.#options.monsters.get(monster.monsterId)?.armor ?? 0;
+        this.#spellTarget.dodgeChance = 0;
+        this.#spellTarget.distance = distance(character.position, monster.position);
+        target = this.#spellTarget;
+      }
+    }
+
+    const result = castSpell(
+      character, spell, target, session.nowMs, this.#options.combat, session.rng,
+    );
+    if (!result.ok || monster === null) return result;
+
+    // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
+    recordDamage(monster.contribution, character.id, monster.receiveDamage(result.damage));
+    if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
+    return result;
+  }
+
+  /** Usa o supply e leva o gasto ao extrato. O débito em si é do `useSupply`. */
+  #useSupply(session: Session, character: CharacterRuntime, supplyId: string): CastResult {
+    const supply = this.#options.supplies.get(supplyId);
+    if (supply === undefined) return NOT_IN_CATALOG;
+
+    const result = useSupply(character, supply);
+    if (result.ok) {
+      // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
+      // ao ledger, e o personagem só carrega o delta.
+      session.aggregates.goldSpent += result.goldSpent;
+      return result;
+    }
+
+    // §20.3 sem a regra de saída: a hunt CONTINUA, sem poção, e o personagem pode morrer. Vale
+    // a linha no extrato pela mesma razão que a stamina zerada vale: descobrir isso só pelo
+    // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo.
+    if (!this.#warnedNoGold) {
+      this.#warnedNoGold = true;
+      session.record('supply-unaffordable', supply.id);
+    }
+    return result;
   }
 
   /**
@@ -1083,7 +1217,7 @@ export interface HuntSessionOptions {
   readonly premium?: boolean;
   /** O bot já compilado (FUN-80). Ausente: nenhuma categoria entra na fila. */
   readonly bot?: CompiledBot;
-  /** Quem executa a ação escolhida. Magia é M7, supply é M8. */
+  /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
 
@@ -1105,7 +1239,7 @@ export interface HuntRulesetExtras {
   readonly premium?: boolean;
   /** O bot já compilado (FUN-80). Ausente: nenhuma categoria entra na fila. */
   readonly bot?: CompiledBot;
-  /** Quem executa a ação escolhida. Magia é M7, supply é M8. */
+  /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
 
@@ -1136,6 +1270,8 @@ export function createHuntRuleset(
     progression: content.progression,
     stamina: content.stamina,
     vocations: content.vocations,
+    spells: content.spells,
+    supplies: content.supplies,
     player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),

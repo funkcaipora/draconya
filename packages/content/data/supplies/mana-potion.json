@@ -1,0 +1,7 @@
+{
+  "id": "mana-potion",
+  "name": "Poção de Mana",
+  "price": 50,
+  "effect": { "kind": "mana", "amount": 100 },
+  "_open": "Preço de referência do §20.2. Não é valor final."
+}

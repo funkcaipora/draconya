@@ -350,6 +350,64 @@ export type BotRule = z.infer<typeof botRuleSchema>;
 export type BotLimits = z.infer<typeof botSchema>;
 export type BotConfig = z.infer<typeof botConfigSchema>;
 
+/**
+ * Uma magia (FUN-74, §4.1, §9.2).
+ *
+ * Tudo em CONTEÚDO: custo, cooldown, alcance e efeito. O motor não sabe quanto cura nem quanto
+ * custa — ele sabe *que* cura e *que* custa. É a mesma regra que vale para monstro e progressão,
+ * e é o que permite balancear sem deploy.
+ *
+ * O `kind` do efeito é fechado como o do bot, e pela mesma razão: o `sim` só executa o que
+ * conhece, e uma magia com efeito desconhecido é recusada no boot em vez de virar uma linha
+ * morta que ninguém explica.
+ */
+export const spellSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
+  manaCost: z.number().int().nonnegative(),
+  /** Tempo até poder lançar de novo. Evento na fila, nunca acumulador (ADR 0020). */
+  cooldownMs: z.number().int().positive(),
+  /** Level mínimo. Vocação é `[ABERTO]` até o §7.4 existir — o personagem nasce sem uma. */
+  minLevel: z.number().int().positive().default(1),
+  effect: z.discriminatedUnion('kind', [
+    /** Cura o próprio lançador. Alcance não se aplica. */
+    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    /**
+     * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
+     * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor.
+     */
+    z.object({
+      kind: z.literal('damage'),
+      power: z.number().int().positive(),
+      range: z.number().int().positive(),
+    }),
+  ]),
+  _open: z.string().optional(),
+});
+
+/**
+ * Um supply (FUN-77, §20.1 **[DECIDIDO]**).
+ *
+ * Poção e runa **não são itens físicos**: usar debita gold direto. Por isso supply tem preço e
+ * não tem peso, slot nem instância — e por isso ele mora aqui, e não no catálogo de itens que
+ * ainda não existe.
+ */
+export const supplySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
+  price: z.number().int().nonnegative(),
+  effect: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+  ]),
+  _open: z.string().optional(),
+});
+
+export type Spell = z.infer<typeof spellSchema>;
+export type Supply = z.infer<typeof supplySchema>;
+
 export type Monster = z.infer<typeof monsterSchema>;
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */

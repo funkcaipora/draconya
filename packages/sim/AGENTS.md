@@ -93,3 +93,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `globalThis`, para impedir que tempo real volte a entrar no núcleo.
 - O motor de bot é compilado ao entrar na sessão, para um vetor de predicados. Interpretar JSON a
   cada avaliação é o caminho fácil e errado. Ver ADR 0002.
+- **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
+  de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
+  regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
+  que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
+- **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
+  Descontar primeiro é como se perde mana sem lançar nada.
+- **`castSpell` devolve o dano RESOLVIDO, não aplicado.** Quem aplica é quem tem o alvo, porque
+  aplicar é também `recordDamage` e `resolveDeath` — e a atribuição não pode ser paga duas vezes.
+- **O cooldown de magia é `Cooldowns`, com instante ABSOLUTO no relógio lógico.** Não é
+  acumulador e não é evento próprio na fila: a categoria do bot já é o evento, e um segundo
+  evento por magia seria a mesma cadência escrita duas vezes. Absoluto é o que o mantém correto
+  do outro lado de um snapshot.
+- **Gold gasto é `goldDelta` no personagem E `aggregates.goldSpent` na sessão**, como o loot é
+  `goldDelta` e `goldGained`. O extrato leva os dois ao ledger; escrever só um faz a conta do
+  jogador divergir da linha do banco. O saldo é `gold + goldDelta`, e nunca fica negativo —
+  o débito é recusado antes, não corrigido depois.

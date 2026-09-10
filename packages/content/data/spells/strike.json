@@ -1,0 +1,9 @@
+{
+  "id": "strike",
+  "name": "Golpe Arcano",
+  "manaCost": 15,
+  "cooldownMs": 2000,
+  "minLevel": 1,
+  "effect": { "kind": "damage", "power": 40, "range": 3 },
+  "_open": "Ataque em alvo único, de referência. Ataque em ÁREA é a mesma issue e entra com a forma de área (FUN-74) — aqui só o de alvo único."
+}

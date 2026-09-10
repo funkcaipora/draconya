@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
+import type { InitialCharacter } from './tickets.js';
 import { connectTestRedis } from './testing/redis.js';
 
 // A checagem fica no topo do módulo, e não em `beforeAll`: `describe.runIf` é avaliado na
@@ -52,6 +53,29 @@ describe.runIf(available)('session ticket', () => {
       characterId: 'p1',
       nodeId: 'n1',
       initialCharacter: { level: 17, xp: 93_000 },
+    });
+  });
+
+  it('carries the character gold, and drops a value it cannot trust (FUN-77)', async () => {
+    // O saldo tem de vir do banco pelo mesmo caminho que level e XP (invariante 4). E um valor
+    // corrompido no claim vira AUSENTE, não zero implícito: a sessão entra com zero de qualquer
+    // forma, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, gold: 4_200 });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, gold: 4_200 },
+    });
+
+    const ruim = await tickets.issue(
+      'a1', 'p1', { level: 1, xp: 0, gold: -5 } as unknown as InitialCharacter,
+    );
+    if (!ruim.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(ruim.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0 },
     });
   });
 

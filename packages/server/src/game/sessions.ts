@@ -70,6 +70,9 @@ export function createCitySessionFactory(
       vocationId: null,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
+      // O saldo de entrada vem do TICKET (invariante 4). Ausente é zero, e zero recusa gasto —
+      // é o lado seguro do erro: não gastar o que não se sabe ter.
+      gold: initialCharacter.gold ?? 0,
       staminaMs: initialCharacter.staminaMs ?? null,
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}

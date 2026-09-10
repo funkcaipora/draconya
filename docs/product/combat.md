@@ -101,6 +101,23 @@ reequilibrar quando existirem.
 
 O catálogo de magias e seus números de dano/custo/cooldown pertence a `progression.md` — este arquivo cobre só a matemática geral de acerto/Dodge.
 
+## Magia usa a MESMA resolução de dano (FUN-74)
+
+Uma magia de dano não tem matemática própria: ela chama `resolveDamage` com `kind: 'magic'`, e é
+só isso que a distingue de um golpe. A consequência é que a efetividade da armadura contra magia
+— hoje `0`, e provisória — vale por construção, e o dodge do defensor também: as duas são
+conteúdo, e nenhuma das duas precisou ser escrita duas vezes.
+
+O que é da magia, e não do golpe, é o **portão**: level mínimo, cooldown próprio, alcance próprio
+e custo de mana. Ele mora em `packages/sim/src/casting.ts`, e os números moram em
+`packages/content/data/spells/*.json`. Quem lança é o bot (ver [`bot.md`](./bot.md)); o alvo é o
+monstro mais próximo, e o alcance é o **da magia**, não o da arma — uma magia de alcance 3
+alcança de onde o corpo a corpo não alcança.
+
+O cooldown de magia guarda **instante absoluto no relógio lógico da sessão**, que é a primeira
+das três linhas da tabela acima. É o que faz o mesmo cooldown valer igual a 1 Hz e a 10 Hz, e o
+que o mantém correto do outro lado de um snapshot.
+
 ## Em aberto
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.

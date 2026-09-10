@@ -213,6 +213,27 @@ describe('city successor (FUN-38)', () => {
   });
 });
 
+describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {
+  const content = testContent();
+
+  it('o saldo persistido chega ao personagem da sessão', () => {
+    // Invariante 4: nada que o cliente manda participa da criação da sessão. Um saldo vindo
+    // do socket seria poção de graça, e não haveria como distinguir isso de um jogador rico.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0, gold: 4_200 });
+
+    expect(session.participants[0]?.gold).toBe(4_200);
+    // O que a sessão movimenta é o DELTA. O saldo de entrada é leitura.
+    expect(session.participants[0]?.goldDelta).toBe(0);
+  });
+
+  it('ticket sem gold entra com zero, e zero recusa gasto', () => {
+    // É o ticket emitido por um `api` antigo, durante deploy em rolagem. Degradar para zero
+    // erra para o lado seguro: não gastar o que não se sabe ter.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.gold).toBe(0);
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;

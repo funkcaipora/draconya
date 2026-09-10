@@ -8,11 +8,11 @@ import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  staminaSchema,
+  spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  BotLimits, Combat, Hunt, Monster, Progression, Stamina, Vocation,
+  BotLimits, Combat, Hunt, Monster, Progression, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 
 export interface Content {
@@ -32,6 +32,10 @@ export interface Content {
   readonly stamina: Stamina;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
+  /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
+  readonly spells: ReadonlyMap<string, Spell>;
+  /** Catálogo de supplies (§20.1). Poção e runa debitam gold; não são itens físicos. */
+  readonly supplies: ReadonlyMap<string, Supply>;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
@@ -51,6 +55,8 @@ export interface RawContent {
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
   readonly bot?: readonly unknown[];
+  readonly spells?: readonly unknown[];
+  readonly supplies?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -118,6 +124,8 @@ export function buildContent(raw: RawContent): Content {
         + `entende ${BOT_VOCABULARY_VERSION}`,
     );
   }
+  const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
+  const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
@@ -224,11 +232,15 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...openOf('spell', spells),
+    ...openOf('supply', supplies),
   ];
 
   return {
     version: computeVersion(raw),
     bot: bot as BotLimits,
+    spells,
+    supplies,
     monsters,
     hunts,
     vocations,
@@ -240,6 +252,17 @@ export function buildContent(raw: RawContent): Content {
     openValues,
     ...(city === undefined ? {} : { city }),
   };
+}
+
+/** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */
+function openOf(
+  kind: string, catalog: ReadonlyMap<string, { readonly _open?: string | undefined }>,
+): string[] {
+  const open: string[] = [];
+  for (const [id, entry] of catalog) {
+    if (entry._open !== undefined) open.push(`${kind}/${id}: ${entry._open}`);
+  }
+  return open;
 }
 
 function parseAll<S extends z.ZodType<{ id: string }>>(
