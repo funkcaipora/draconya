@@ -64,6 +64,8 @@ O cookie retornado é a sessão HTTP usada em `/api/characters` e `/api/tickets`
 | `pnpm lint` | ESLint, incluindo as fronteiras de import entre pacotes |
 | `pnpm docs-check` | valida a documentação estrutural |
 | `pnpm source-policy` | recusa código first-party em JavaScript ([ADR 0016](docs/adr/0016-typescript-only-first-party-code.md)) |
+| `pnpm assets:library` | organiza um pacote local de sprites e recursos para ferramentas ([guia](docs/asset-library.md)) |
+| `pnpm assets:fetch:1098` | baixa, verifica e organiza o snapshot comunitário completo 10.98 |
 | `pnpm --filter @draconya/client dev` | sobe o cliente em modo de desenvolvimento |
 
 Requisitos: Node 24 (conforme `.node-version`) e pnpm (via corepack).
