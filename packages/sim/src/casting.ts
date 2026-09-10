@@ -34,7 +34,9 @@ export type CastRefusal =
   | 'no-target'
   | 'out-of-range'
   | 'not-enough-mana'
-  | 'not-enough-gold';
+  | 'not-enough-gold'
+  /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
+  | 'wrong-vocation';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -42,8 +44,20 @@ export interface CastSuccess {
   readonly healed: number;
   /** Mana reposta, pela mesma regra. */
   readonly manaRestored: number;
-  /** Dano RESOLVIDO, ainda não aplicado. Zero quando a magia não é de dano. */
+  /**
+   * Dano RESOLVIDO no total, ainda não aplicado. Zero quando a magia não é de dano.
+   *
+   * É a soma de `hits`, e existe para o extrato e o analisador — quem APLICA precisa de
+   * `hits`, alvo a alvo, porque cada um leva o seu.
+   */
   readonly damage: number;
+  /**
+   * O dano de cada alvo, na MESMA ordem de `aim.targets` (FUN-92).
+   *
+   * Ordem é contrato: cada alvo consome uma rolagem do `Rng` da sessão, e trocar a ordem troca
+   * qual sorteio cai em quem — o que faz a mesma semente render uma hunt diferente.
+   */
+  readonly hits: readonly number[];
   /** Gold debitado. Vira `aggregates.goldSpent` em quem chama. */
   readonly goldSpent: number;
 }
@@ -68,9 +82,22 @@ export type CastResult = CastSuccess | CastRefused;
 export interface SpellTarget {
   readonly armor: number;
   readonly dodgeChance: number;
-  /** Distância em tiles até o lançador. Quem sabe medir é quem tem o mapa. */
-  readonly distance: number;
 }
+
+/**
+ * Onde a magia cai (FUN-92).
+ *
+ * A distância é UMA, a do alvo principal, e é só ela que o alcance confere: quem foi pego pela
+ * área está lá porque cai dentro do raio, não porque o lançador o alcança.
+ *
+ * `targets` traz o alvo principal PRIMEIRO. A ordem é contrato — ver `CastSuccess.hits`.
+ */
+export interface SpellAim {
+  readonly distance: number;
+  readonly targets: readonly SpellTarget[];
+}
+
+const NO_HITS: readonly number[] = [];
 
 /**
  * A chave de cooldown de uma magia, no `Cooldowns` do personagem.
@@ -102,7 +129,7 @@ export const NOT_IN_CATALOG: CastRefused = {
 export function castSpell(
   caster: CharacterRuntime,
   spell: Spell,
-  target: SpellTarget | null,
+  aim: SpellAim | null,
   nowMs: number,
   combat: Combat,
   rng: Rng,
@@ -117,6 +144,12 @@ export function castSpell(
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
   }
+  // §9.2 (FUN-92). Antes do cooldown porque nunca melhora: quem não tem a vocação não vai
+  // passar a ter esperando, e reagendar por isso seria um evento por segundo para
+  // redescobrir a mesma coisa.
+  if (spell.vocationId !== undefined && caster.vocationId !== spell.vocationId) {
+    return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
+  }
 
   const key = spellCooldownKey(spell.id);
   if (!caster.cooldowns.isReady(key, nowMs)) {
@@ -124,8 +157,12 @@ export function castSpell(
   }
 
   if (spell.effect.kind === 'damage') {
-    if (target === null) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
-    if (target.distance > spell.effect.range) {
+    if (aim === null || aim.targets.length === 0) {
+      return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    }
+    // Só o alvo PRINCIPAL é conferido contra o alcance: quem foi pego pela área está lá porque
+    // cai dentro do raio, não porque o lançador o alcança.
+    if (aim.distance > spell.effect.range) {
       return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
     }
     if (caster.mana < spell.manaCost) {
@@ -134,16 +171,29 @@ export function castSpell(
 
     caster.mana -= spell.manaCost;
     caster.cooldowns.start(key, nowMs, spell.cooldownMs);
+
+    // Uma rolagem POR ALVO, na ordem em que eles chegaram. A ordem é contrato: trocar qual
+    // sorteio cai em quem faz a mesma semente render uma hunt diferente, e o `AGENTS.md` deste
+    // pacote registra que semente e ordem de consumo do RNG são contrato de loot também.
+    //
     // `kind: 'magic'` porque a eficácia da armadura contra magia é outra, e ela é conteúdo
-    // (`combat/baseline.json`) — não motor. A rolagem consome o RNG da sessão como todo golpe.
-    const result = resolveDamage(
-      { power: Math.round(spell.effect.power * powerScale), kind: 'magic' },
-      { armor: target.armor, dodgeChance: target.dodgeChance },
-      'pve',
-      combat,
-      rng,
-    );
-    return { ok: true, healed: 0, manaRestored: 0, damage: result.damage, goldSpent: 0 };
+    // (`combat/baseline.json`) — não motor.
+    const power = Math.round(spell.effect.power * powerScale);
+    const hits: number[] = [];
+    let total = 0;
+    for (let i = 0; i < aim.targets.length; i += 1) {
+      const target = aim.targets[i] as SpellTarget;
+      const result = resolveDamage(
+        { power, kind: 'magic' },
+        { armor: target.armor, dodgeChance: target.dodgeChance },
+        'pve',
+        combat,
+        rng,
+      );
+      hits.push(result.damage);
+      total += result.damage;
+    }
+    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
   }
 
   if (caster.mana < spell.manaCost) {
@@ -156,6 +206,7 @@ export function castSpell(
     healed: restore(caster, 'health', spell.effect.amount),
     manaRestored: 0,
     damage: 0,
+    hits: NO_HITS,
     goldSpent: 0,
   };
 }
@@ -183,6 +234,7 @@ export function useSupply(user: CharacterRuntime, supply: Supply): CastResult {
       healed: restore(user, 'health', supply.effect.amount),
       manaRestored: 0,
       damage: 0,
+      hits: NO_HITS,
       goldSpent: supply.price,
     }
     : {
@@ -190,6 +242,7 @@ export function useSupply(user: CharacterRuntime, supply: Supply): CastResult {
       healed: 0,
       manaRestored: restore(user, 'mana', supply.effect.amount),
       damage: 0,
+      hits: NO_HITS,
       goldSpent: supply.price,
     };
 }

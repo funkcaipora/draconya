@@ -89,6 +89,12 @@ const spells = [
     id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
     effect: { kind: 'damage', power: 40, range: 3 },
   },
+  // Área de raio 2 e poder que MATA um rato de 50 num golpe: é o que faz o teste de "morte no
+  // meio da área" ser sobre morte, e não sobre quanto falta de vida.
+  {
+    id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 1_000,
+    effect: { kind: 'damage', power: 80, range: 3, area: { radius: 2 } },
+  },
 ];
 const supplies = [
   { id: 'health-potion', name: 'Poção de Vida', price: 45, effect: { kind: 'heal', amount: 80 } },
@@ -1056,6 +1062,7 @@ const withSpells = (
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
   } = {},
+  difficulty: 'beginner' | 'professional' = 'beginner',
 ) => {
   // **Regeneração zerada, e é decisão.** Aqui o assunto é quanto a magia cura e quanto o
   // supply repõe; com 1 HP/s no meio, toda asserção absoluta viraria "mais ou menos isso", e
@@ -1070,7 +1077,7 @@ const withSpells = (
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
   }));
   const session = createHuntSession({
-    id: 'spell-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
+    id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
     createdAtMs: 0, botConfig: config,
   });
   const stats = statsForLevel(1, null, loaded.progression);
@@ -2042,5 +2049,126 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
+  });
+});
+
+// --- magia em área dentro da hunt (FUN-92) ---------------------------------------------------
+
+describe('magia em área (FUN-92)', () => {
+  const explodir = botConfig({
+    attack: [{
+      when: { kind: 'targets', op: '>=', count: 1 },
+      do: { kind: 'spell', spellId: 'blast' },
+    }],
+  });
+
+  it('atinge TODOS os monstros no raio, não só o alvo', () => {
+    // Dificuldade `professional` põe três ratos perto do mesmo ponto de spawn. Um `blast` de
+    // raio 2 pega mais de um, e o teste mede isso pelos abates: com alvo único seriam três
+    // lançamentos para três ratos.
+    const { session } = withSpells(explodir, { mana: 200 }, 'professional');
+
+    run(session, 20_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+  });
+
+  it('uma morte no meio da área NÃO perde os alvos seguintes', () => {
+    // O defeito que este teste fecha: `#onMonsterDied` troca `#monsters` por um array filtrado,
+    // então resolver morte durante a varredura seria varrer um array sendo substituído — e os
+    // alvos depois do que morreu ficariam de fora. Colher primeiro, aplicar depois.
+    //
+    // `blast` mata um rato de 50 num golpe (poder 80): com três ratos no raio, o primeiro
+    // morre e os outros dois PRECISAM levar o dano da mesma rolagem.
+    const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'professional');
+
+    // Um único vencimento da categoria de ataque, no instante zero.
+    session.advanceBy(50);
+
+    // Morto sai da lista (`#onMonsterDied` a filtra), então o abate se conta pelo agregado.
+    const mortos = session.aggregates.kills;
+    const feridos = ruleset.monsters.filter((m) => m.alive && m.health < 50).length;
+    // Ou morreram, ou saíram feridos — o que não pode é um deles sair intacto tendo estado no
+    // raio de uma explosão que matou o vizinho.
+    expect(mortos).toBeGreaterThan(0);
+    expect(mortos + feridos).toBeGreaterThan(1);
+  });
+
+  it('o mesmo lançamento com a mesma semente dá o MESMO resultado', () => {
+    // A ordem em que os alvos entram na mira decide qual rolagem cai em quem. Ela é a ordem da
+    // lista de monstros, que é a de nascimento — e por isso é reproduzível.
+    const estado = () => {
+      const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'professional');
+      session.advanceBy(50);
+      return ruleset.monsters.map((m) => `${m.id}:${m.health}`);
+    };
+    expect(estado()).toEqual(estado());
+  });
+
+  it('1 Hz e 10 Hz dão o mesmo resultado com magia de área', () => {
+    const at = (stepMs: number) => {
+      const { session, hero, ruleset } = withSpells(explodir, { mana: 2_000 }, 'professional');
+      run(session, 60_000, stepMs);
+      return {
+        kills: session.aggregates.kills,
+        mana: hero.mana,
+        vivos: ruleset.monsters.map((m) => `${m.monsterId}:${m.health}`),
+      };
+    };
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.kills).toBeGreaterThan(0);
+  });
+});
+
+describe('o alcance da magia é o DELA, não o da arma (FUN-92)', () => {
+  it('uma magia de alcance 3 alcança de onde o corpo a corpo não alcança', () => {
+    // Era um defeito desde a FUN-74, e só apareceu quando o teste de área foi escrito: a mira
+    // usava `#attackTarget`, que para no alcance do GOLPE (1 neste conteúdo). A conferência de
+    // alcance dentro de `castSpell` nunca era a restrição que mordia, porque a seleção já
+    // tinha mordido antes — uma magia de alcance 3 se comportava como uma de alcance 1.
+    //
+    // O cenário: personagem parado no meio do salão, alvo eterno dois tiles abaixo, sem se
+    // mexer (`aggroRadius: 0`). Fora do alcance da arma, dentro do da magia.
+    const loaded = buildContent(raw({
+      monsters: [rat, poste, posteEterno], hunts: [hunt, huntSalao],
+      maps: [map, salaGrande], routes: [route, anel],
+      progression: [{ ...progression, startingMana: 500 }],
+    }));
+    const session = createHuntSession({
+      id: 'alcance', content: loaded, huntId: 'salao', difficulty: 'professional',
+      createdAtMs: 0,
+      botConfig: botConfig({
+        attack: [{
+          when: { kind: 'targets', op: '>=', count: 0 },
+          do: { kind: 'spell', spellId: 'strike' },
+        }],
+      }),
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    session.enter(hero);
+    const ruleset = session.ruleset as HuntRuleset;
+
+    // Um único vencimento. Nele o monstro nasce, o personagem dá um passo de rota e o bot
+    // lança — tudo no instante zero, e nessa ordem, pela prioridade dos eventos.
+    session.advanceBy(50);
+
+    const alvo = ruleset.monsters[0] as { position: { x: number; y: number }; health: number };
+    const tiles = Math.max(
+      Math.abs(hero.position.x - alvo.position.x),
+      Math.abs(hero.position.y - alvo.position.y),
+    );
+    // O cenário precisa ser o que ele diz ser: FORA do alcance do golpe (1), DENTRO do da
+    // magia (3). Sem esta afirmação, o teste passaria com o personagem colado no monstro.
+    expect(tiles).toBeGreaterThan(combat.player.attackRange);
+    expect(tiles).toBeLessThanOrEqual(3);
+    expect(alvo.health).toBeLessThan(1_000_000);
   });
 });

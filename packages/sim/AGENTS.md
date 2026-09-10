@@ -126,6 +126,14 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
+- **Magia em área colhe TODOS os alvos antes de aplicar dano nenhum** (FUN-92). Resolver morte
+  no meio da varredura é varrer um array que está sendo trocado — `#onMonsterDied` substitui
+  `#monsters` por um filtrado —, e os alvos depois do que morreu ficariam de fora.
+- **A ordem dos alvos de uma área é contrato**, como semente e ordem de sorteio do loot: cada
+  alvo consome uma rolagem, e trocar a ordem troca qual sorteio cai em quem.
+- **O alcance de uma magia é o DELA, não o da arma.** A mira usa `selectTarget` com
+  `spell.effect.range`; usar `#attackTarget` fazia uma magia de alcance 3 se comportar como uma
+  de alcance 1, porque a seleção mordia antes da conferência. Foi um defeito real da FUN-74.
 - **`castSpell` devolve o dano RESOLVIDO, não aplicado.** Quem aplica é quem tem o alvo, porque
   aplicar é também `recordDamage` e `resolveDeath` — e a atribuição não pode ser paga duas vezes.
 - **O cooldown de magia é `Cooldowns`, com instante ABSOLUTO no relógio lógico.** Não é
