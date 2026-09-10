@@ -35,7 +35,18 @@ export const SERVER_TO_CLIENT = {
   'system-message': 11,
   'chat-message': 12,
   'session-ended': 13,
-  'hunt-catalogue': 14,
+  /**
+   * O catálogo do que existe: hunts (FUN-79) e vocabulário do bot (FUN-89).
+   *
+   * **Uma mensagem, e não duas.** As duas telas perguntam a mesma coisa — "o que este servidor
+   * tem" —, chegam no mesmo instante e mudam pela mesma razão (a versão de conteúdo, que é
+   * fixada na sessão). Separar daria dois pacotes que nunca aparecem um sem o outro.
+   *
+   * Nasceu como `hunt-catalogue` e foi generalizada no mesmo dia, antes de a UI do bot existir.
+   * O opcode não muda: é o mesmo assunto, com mais dentro.
+   */
+  catalogue: 14,
+  'bot-config-result': 15,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

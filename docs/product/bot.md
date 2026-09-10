@@ -4,7 +4,8 @@
 cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77), targeting
 configurável (FUN-85), regras de saída do jogador (FUN-86), configuração pelo socket com
 persistência e gate de level (FUN-81) e o bot avançado — lure dinâmico e ring swap (FUN-87) —
-implementados; falta a UI (M10)
+implementados; a **UI** existe (FUN-89) — falta a parte avançada dela, que a issue deixou fora
+do escopo até o servidor tê-la (e ele já tem, desde a FUN-87)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -452,3 +453,35 @@ dizendo por quê.
 
 Nenhum dos dois é uma varredura periódica. Um evento por segundo para redescobrir que nada
 mudou é exatamente o custo que o ADR 0020 existe para não pagar.
+
+## A tela (FUN-89)
+
+Sobreposição, não coluna. Uma linha de regra tem condição, operador, valor e ação — não cabe nos
+200px do painel lateral, e espremer daria seis caixinhas ilegíveis. E abrir por cima **é** a
+resposta para o celular (§5.1): configurar o bot é o caso de uso móvel do jogo — o jogador ajusta
+e fecha, sem precisar de jogabilidade completa. No celular a linha quebra em vez de espremer.
+
+**Nada na tela tem lista de opções em código.** Categorias, slots, magias e supplies vêm do
+catálogo. Se as duas divergirem sobre o que existe, o jogador configura o que o bot recusa — e
+descobre isso pelo extrato que não fecha, não por uma mensagem de erro.
+
+**A ordem dos slots é a prioridade** (§13.4), então dá para mover uma regra para cima e para
+baixo: reordenar é configurar. A lista viaja como está — reordenar na hora de mandar mudaria o
+comportamento sem o jogador ter pedido, e ele não estaria lá para notar.
+
+**Salvar é uma intenção.** O estado "salvo" só vira verdade quando o servidor responde
+`bot-config-result` — tipado, e não uma frase num `system-message`, porque casar com texto
+quebraria no dia em que alguém melhorasse a redação.
+
+**Uma recusa NÃO descarta o que o jogador escreveu.** Seria a pior resposta possível a "corrija
+isto": apagar justamente o que precisa ser corrigido. O motivo fica na tela, em palavras do
+servidor — quem recusa é quem sabe por quê, e traduzir no cliente espalharia a mesma explicação
+por dois lugares.
+
+**Mudar depois de salvar tira o "salvo" da tela.** O que está no servidor deixou de ser o que
+está na tela, e continuar dizendo "salvo" faria o jogador fechar o navegador achando que
+configurou.
+
+O teto de cada categoria vem do catálogo, e a tela para de oferecer ao chegar nele. O gate do
+§13.2 aparece como aviso — "bot avançado a partir do level 50" —, e não como opção escondida:
+descobrir o limite montando uma configuração inteira e levando um não é pior que ler antes.

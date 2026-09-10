@@ -157,6 +157,21 @@ export const S2C_SCHEMAS = {
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
   /**
+   * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
+   *
+   * Tipado, e não uma frase num `system-message`, porque a TELA precisa da resposta: enquanto
+   * ela não vem, o que o jogador escreveu está pendente, e uma recusa não pode descartar o que
+   * ele digitou. Casar com o texto de uma mensagem de sistema faria a UI quebrar no dia em que
+   * alguém melhorasse a redação.
+   *
+   * `reason` já vem em palavras que o jogador entende — quem recusa é quem sabe por quê
+   * (FUN-73), e traduzir código no cliente espalharia a mesma explicação por dois lugares.
+   */
+  'bot-config-result': z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+  }),
+  /**
    * O que a tela de seleção de hunt pode mostrar (§14.3, FUN-79).
    *
    * **Level recomendado aparece; estimativa de XP/h e gold/h NÃO.** A razão é de produto, e a
@@ -172,13 +187,49 @@ export const S2C_SCHEMAS = {
    * define as que fazem sentido para ela, e um enum aqui obrigaria a mexer no protocolo para
    * cada dificuldade nova (mesma razão de `enter-hunt`).
    */
-  'hunt-catalogue': z.object({
+  catalogue: z.object({
     hunts: z.array(z.object({
       id: z.string().min(1),
       name: z.string().min(1),
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
     })),
+    /**
+     * O que a UI do bot pode oferecer (§13.3, FUN-89).
+     *
+     * **A tela NÃO tem lista de opções em código.** O que existe é o que este pacote diz que
+     * existe: se a tela e o servidor divergirem, o jogador configura o que o bot recusa — e
+     * descobre isso pelo extrato que não fecha, não por uma mensagem de erro.
+     *
+     * As magias e supplies vêm com o que a tela mostra e com o que o gate do §13.2 precisa —
+     * level e vocação —, e nada mais: dano, cura e cooldown são balanceamento, e o cliente não
+     * simula (invariante 4).
+     */
+    bot: z.object({
+      vocabularyVersion: z.number().int().positive(),
+      advancedFromLevel: z.number().int().positive(),
+      slots: z.record(z.string(), z.number().int().nonnegative()),
+      advancedOnly: z.object({
+        conditions: z.array(z.string()),
+        targetPolicies: z.array(z.string()),
+        postures: z.array(z.string()),
+      }),
+      spells: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        manaCost: z.number().int().nonnegative(),
+        minLevel: z.number().int().positive(),
+        vocationId: z.string().nullable(),
+        /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
+        effect: z.string().min(1),
+      })),
+      supplies: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        price: z.number().int().nonnegative(),
+        effect: z.string().min(1),
+      })),
+    }),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   'player-stats': z.object({

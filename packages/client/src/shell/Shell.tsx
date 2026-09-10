@@ -14,6 +14,7 @@ import { Vitals } from './Vitals.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
 import { HuntMenu } from './HuntMenu.js';
+import { BotPanel } from './BotPanel.js';
 
 export function Shell() {
   const characterId = useHudSlice((state) => state.characterId);
@@ -22,6 +23,7 @@ export function Shell() {
     <div className="shell">
       <aside className="panel panel-left" aria-label="painéis à esquerda">
         <HuntMenu />
+        <BotPanel />
       </aside>
       <section className="stage">
         <header className="stage-top">

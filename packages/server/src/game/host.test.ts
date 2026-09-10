@@ -13,6 +13,7 @@ import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
 import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
+import { buildCatalogue } from './catalogue.js';
 import { TEST_MAP, rawTestContent, testContent } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
@@ -1517,8 +1518,9 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     return { ok: true, config: config as never };
   };
 
+  /** O que o servidor respondeu sobre a configuração. Tipado desde a FUN-89. */
   const mensagens = (socket: FakeSocket) =>
-    socket.received().filter((m) => m.type === 'system-message');
+    socket.received().filter((m) => m.type === 'bot-config-result');
 
   it('aceita, confirma ao jogador e PERSISTE', () => {
     const saved: Array<{ characterId: string; config: unknown }> = [];
@@ -1534,8 +1536,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     host.flush();
 
     expect(saved).toEqual([{ characterId: 'p1', config: CONFIG }]);
-    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'info'))
-      .toBe(true);
+    expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && m.ok)).toBe(true);
   });
 
   it('recusa com o MOTIVO, e não persiste nada', () => {
@@ -1554,8 +1555,11 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     host.flush();
 
     expect(saved).toHaveLength(0);
-    const aviso = mensagens(socket).find((m) => m.type === 'system-message' && m.level === 'warning');
-    expect(aviso?.type === 'system-message' && aviso.text).toContain('vocabulário');
+    // Resultado TIPADO, e não uma frase: a tela precisa da resposta para não descartar o que
+    // o jogador digitou, e casar com texto quebraria no dia em que alguém melhorasse a redação.
+    const aviso = mensagens(socket).find((m) => m.type === 'bot-config-result');
+    expect(aviso?.type === 'bot-config-result' && aviso.ok).toBe(false);
+    expect(aviso?.type === 'bot-config-result' && aviso.reason).toContain('vocabulário');
   });
 
   it('o gate de level recusa o bot avançado, e o mesmo config passa no 50', () => {
@@ -1566,17 +1570,15 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     const viewerBaixo = baixo.host.attach(socketBaixo, 'p1');
     baixo.host.handle(viewerBaixo, { type: 'bot-config', config: { version: 1, avancado: true } });
     baixo.host.flush();
-    const aviso = mensagens(socketBaixo)
-      .find((m) => m.type === 'system-message' && m.level === 'warning');
-    expect(aviso?.type === 'system-message' && aviso.text).toContain('level 50');
+    const aviso = mensagens(socketBaixo).find((m) => m.type === 'bot-config-result');
+    expect(aviso?.type === 'bot-config-result' && aviso.reason).toContain('level 50');
 
     const alto = buildHost(ruleset, { acceptBotConfig: accepting, level: 50 });
     const socketAlto = new FakeSocket();
     const viewerAlto = alto.host.attach(socketAlto, 'p1');
     alto.host.handle(viewerAlto, { type: 'bot-config', config: { version: 1, avancado: true } });
     alto.host.flush();
-    expect(mensagens(socketAlto).some((m) => m.type === 'system-message' && m.level === 'info'))
-      .toBe(true);
+    expect(mensagens(socketAlto).some((m) => m.type === 'bot-config-result' && m.ok)).toBe(true);
   });
 
   it('falha ao PERSISTIR não desfaz o que já vale para o jogador', () => {
@@ -1593,8 +1595,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
 
     expect(() => host.handle(viewer, { type: 'bot-config', config: CONFIG })).not.toThrow();
     host.flush();
-    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'info'))
-      .toBe(true);
+    expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && m.ok)).toBe(true);
   });
 
   it('host montado SEM validador avisa, em vez de aceitar em silêncio', () => {
@@ -1607,8 +1608,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     host.handle(viewer, { type: 'bot-config', config: CONFIG });
     host.flush();
 
-    expect(mensagens(socket).some((m) => m.type === 'system-message' && m.level === 'error'))
-      .toBe(true);
+    expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && !m.ok)).toBe(true);
   });
 });
 
@@ -2073,20 +2073,15 @@ describe('a praça não manda tudo para todos (FUN-33)', () => {
   });
 });
 
-describe('o catálogo de hunts chega ao cliente (FUN-79)', () => {
-  const hunts = [
-    { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
-  ];
-  const withCatalogue = () => {
-    const content = testContent();
-    const host = new SessionHost({
-      nodeId: 'n1', contentVersion: 'v-test', logger,
-      createSession: createCitySessionFactory(content),
-      huntCatalogue: () => hunts,
-      now: () => 0,
-    });
-    return host;
-  };
+describe('o catálogo chega ao cliente (FUN-79, FUN-89)', () => {
+  const content = testContent();
+  const catalogue = buildCatalogue(content);
+  const withCatalogue = () => new SessionHost({
+    nodeId: 'n1', contentVersion: 'v-test', logger,
+    createSession: createCitySessionFactory(content),
+    catalogue: () => catalogue,
+    now: () => 0,
+  });
 
   it('vai pela FILA, e não furando a fila como o welcome', () => {
     // `welcome` é `sendNow` porque é resposta ao handshake. O catálogo não é resposta a nada:
@@ -2102,10 +2097,10 @@ describe('o catálogo de hunts chega ao cliente (FUN-79)', () => {
 
     const antesDoFlush = socket.received();
     expect(antesDoFlush.some((m) => m.type === 'welcome')).toBe(true);
-    expect(antesDoFlush.some((m) => m.type === 'hunt-catalogue')).toBe(false);
+    expect(antesDoFlush.some((m) => m.type === 'catalogue')).toBe(false);
 
     host.flush();
-    expect(socket.received().some((m) => m.type === 'hunt-catalogue')).toBe(true);
+    expect(socket.received().some((m) => m.type === 'catalogue')).toBe(true);
   });
 
   it('sai uma vez por conexão, com o que a tela mostra', () => {
@@ -2116,15 +2111,17 @@ describe('o catálogo de hunts chega ao cliente (FUN-79)', () => {
     host.attach(socket, 'p1');
     host.flush();
 
-    const catalogue = socket.received().filter((m) => m.type === 'hunt-catalogue');
-    expect(catalogue).toHaveLength(1);
-    expect(catalogue[0]).toMatchObject({ hunts });
+    const sent = socket.received().filter((m) => m.type === 'catalogue');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      hunts: catalogue.hunts,
+      bot: { vocabularyVersion: content.bot.vocabularyVersion },
+    });
   });
 
   it('sem catálogo injetado, o host não inventa um', () => {
     // O host não conhece conteúdo (FUN-81): sem a função, ele não tem o que mandar — e mandar
     // uma lista vazia diria ao cliente que não há hunt nenhuma, que é diferente de "não sei".
-    const content = testContent();
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: 'v-test', logger,
       createSession: createCitySessionFactory(content),
@@ -2134,6 +2131,6 @@ describe('o catálogo de hunts chega ao cliente (FUN-79)', () => {
     host.attach(socket, 'p1');
     host.flush();
 
-    expect(socket.received().some((m) => m.type === 'hunt-catalogue')).toBe(false);
+    expect(socket.received().some((m) => m.type === 'catalogue')).toBe(false);
   });
 });

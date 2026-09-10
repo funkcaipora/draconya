@@ -123,13 +123,13 @@ export interface SessionHostOptions {
    */
   readonly areaOfInterest?: boolean;
   /**
-   * O catálogo de hunts que a tela de seleção mostra (FUN-79).
+   * O catálogo do que existe: hunts (FUN-79) e vocabulário do bot (FUN-89).
    *
    * Função, e não o `Content`: o host não precisa conhecer balanceamento para mandar uma lista,
    * pela mesma razão que ele recebe `acceptBotConfig` em vez do conteúdo inteiro. Calculada uma
    * vez no boot — a versão de conteúdo é fixada e não muda enquanto o processo vive.
    */
-  readonly huntCatalogue?: () => S2CProps<'hunt-catalogue'>['hunts'];
+  readonly catalogue?: () => S2CProps<'catalogue'>;
 }
 
 const EMPTY_ITEMS: ReadonlyMap<string, Item> = new Map();
@@ -413,8 +413,8 @@ export class SessionHost {
     // campo do `welcome`, porque são assuntos diferentes — quem sou eu, e o que existe para
     // jogar. Vai pela FILA, não por `sendNow`: não é resposta a nada, e furar a fila o poria
     // na frente de deltas que já esperavam.
-    const catalogue = this.#options.huntCatalogue;
-    if (catalogue !== undefined) viewer.send({ type: 'hunt-catalogue', hunts: catalogue() });
+    const catalogue = this.#options.catalogue;
+    if (catalogue !== undefined) viewer.send({ type: 'catalogue', ...catalogue() });
 
     // O jogador precisa SABER que houve retomada e o que se perdeu. Silenciar aqui é como o
     // modo idle perde a confiança de quem joga: o extrato não fecha e ninguém explica.
@@ -742,8 +742,8 @@ export class SessionHost {
     const accept = this.#options.acceptBotConfig;
     if (accept === undefined) {
       viewer.send({
-        type: 'system-message', level: 'error',
-        text: 'Este servidor não aceita configuração de bot.',
+        type: 'bot-config-result', ok: false,
+        reason: 'Este servidor não aceita configuração de bot.',
       });
       return;
     }
@@ -755,15 +755,13 @@ export class SessionHost {
 
     const decision = accept(raw, character.level);
     if (!decision.ok) {
-      viewer.send({ type: 'system-message', level: 'warning', text: decision.reason });
+      viewer.send({ type: 'bot-config-result', ok: false, reason: decision.reason });
       return;
     }
 
     this.#botByCharacter.set(viewer.characterId, decision.config);
     this.#applyBotConfig(hosted, decision.config);
-    viewer.send({
-      type: 'system-message', level: 'info', text: 'Configuração do bot salva.',
-    });
+    viewer.send({ type: 'bot-config-result', ok: true });
 
     // Persistir é o último passo, e falhar nele não desfaz o que já vale. O log é para quem
     // investiga "salvei e voltou o antigo"; o jogador não pode fazer nada com esse erro.
