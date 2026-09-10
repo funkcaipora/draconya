@@ -42,6 +42,19 @@ Para rodar contra um pacote fora do repositório:
 THINGS_DIR=/caminho/para/things pnpm vitest run packages/client/src/assets
 ```
 
+### Biblioteca local para o Claude Code
+
+`pnpm assets:library` transforma o pacote bruto numa biblioteca em
+`things/<versão>/library/`: índices JSONL por `object`, `outfit`, `effect` e `missile`, folhas
+PNG por faixa, quadros individuais por id global e a árvore de UI do
+`graphics_resources.rcc.lzma`. O comando e a estrutura estão em `docs/asset-library.md`.
+O snapshot comunitário completo 10.98 pode ser reproduzido com `pnpm assets:fetch:1098`.
+
+No Claude Code, invoque `/assets`. A skill começa por `manifest.json`, confere se o pacote está
+completo e só então procura ids e abre PNGs. Ela também impõe a regra que costuma se perder nessa
+etapa: a escolha visual atualiza `data/appearances/<versão>.json`; nunca põe caminho de arte em
+`content/`.
+
 **Os repositórios de OTClient não contêm sprites.** Foi verificado: `opentibiabr/otclient`,
 `OTCv8/otclientv8` e `opentibia/yatc` não trazem `Tibia.spr`, `Tibia.dat`, `catalog-content.json`
 nem folhas `sprites-*.bmp.lzma`. São clientes que *leem* os assets; a arte própria deles é só de
