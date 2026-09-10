@@ -6,3 +6,4 @@
 export * from './schemas.js';
 export * from './map.js';
 export * from './content.js';
+export * from './bot.js';

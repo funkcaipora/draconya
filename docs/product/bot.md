@@ -1,6 +1,7 @@
 # Bot
 
-**Status:** não implementado
+**Status:** parcial — vocabulário fechado e versionado implementado (FUN-73); nada executa
+regra ainda, e o compilador é a FUN-80
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -30,6 +31,68 @@ Por fim, o jogador pode configurar duas regras automáticas de saída da hunt: s
 - Lure dinâmico: intervalo mínimo/máximo de monstros configurável; abaixo do mínimo percorre a rota acumulando, no máximo para e limpa, retoma quando cai abaixo do mínimo de novo.
 - Ring swap: limiares de entrada e saída distintos (histerese); ao retirar, jogador escolhe restaurar o anel anterior ou deixar o slot vazio.
 - Regras de saída configuráveis: (1) sair se membro da party sair/morrer; (2) sair se o próprio gold acabar. Sem a regra (2) ativa, gold zerado não tira o personagem da hunt.
+
+## O vocabulário, por inteiro (FUN-73)
+
+Fechado, e é decisão do ADR 0002: o compilador só transforma em predicado o que conhece, e uma
+linguagem de script no lugar disto seria código do jogador rodando no servidor. Versionado
+porque a configuração é dado **persistido** — um vocabulário que muda sem número quebra a regra
+de quem a salvou, em silêncio, e o sintoma é o bot parar de curar sem ninguém ligar uma coisa à
+outra.
+
+**Versão atual: 1.** Configuração declarando outra versão é recusada com o número no motivo.
+
+### Condições
+
+`kind` é o nome da condição, não um rótulo ao lado dela — é o que faz a recusa apontar o campo
+errado em vez de dizer "nenhuma variante casou".
+
+| `kind` | Campos | O que testa |
+|---|---|---|
+| `hp` | `op`, `percent` (0–100) | HP do personagem, em percentual do máximo |
+| `mana` | `op`, `percent` (0–100) | Mana do personagem, em percentual do máximo |
+| `targets` | `op`, `count` (≥ 0) | Quantos alvos estão ao alcance |
+| `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
+
+**Operadores:** `<`, `<=`, `>`, `>=`. **Sem `==`** — comparar percentual exato quase nunca
+dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter cura nenhuma.
+
+### Ações
+
+| `kind` | Campo | Catálogo |
+|---|---|---|
+| `spell` | `spellId` | M7 — ainda não existe |
+| `supply` | `supplyId` | M8 — ainda não existe |
+| `item` | `itemId` | M8 — ainda não existe |
+
+A forma é validada agora; **a referência cruzada entra quando o catálogo existir**, e entra na
+validação, não na execução. Uma regra que aponta magia inexistente e só falha ao ser disparada é
+o bot que para de curar sem explicação — o formato exato que este vocabulário existe para
+impedir. É o mesmo mecanismo que `buildContent` já usa em `loot.items`.
+
+### Exemplo
+
+```jsonc
+{
+  "version": 1,
+  "heal":    [{ "when": { "kind": "hp", "op": "<=", "percent": 30 },
+                "do": { "kind": "spell", "spellId": "strong-heal" } }],
+  "potion":  [{ "when": { "kind": "mana", "op": "<", "percent": 20 },
+                "do": { "kind": "supply", "supplyId": "mana-potion" } }],
+  "attack":  [{ "when": { "kind": "targets", "op": ">=", "count": 3 },
+                "do": { "kind": "spell", "spellId": "wave" } }],
+  "rune": [], "support": []
+}
+```
+
+### Onde os limites moram
+
+`packages/content/data/bot/baseline.json` — slots por categoria, cooldown de categoria e o level
+do bot avançado. Em conteúdo e não em código, porque é balanceamento: um designer precisa
+alcançá-lo sem deploy.
+
+**Nada aqui executa regra.** Isto é o contrato; a avaliação é a FUN-80, e a configuração pelo
+socket é a FUN-81.
 
 ## Parâmetros de balanceamento
 

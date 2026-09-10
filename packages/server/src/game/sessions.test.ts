@@ -62,7 +62,11 @@ describe('session restorer', () => {
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
-      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA] });
+      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
+      // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
+      bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000,
+        advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }] });
     expect(createSessionRestorer(empty)(hunt().snapshot())).toBeNull();
   });
 

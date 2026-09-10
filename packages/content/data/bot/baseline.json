@@ -1,0 +1,8 @@
+{
+  "id": "baseline",
+  "vocabularyVersion": 1,
+  "categoryCooldownMs": 1000,
+  "advancedFromLevel": 50,
+  "slots": { "heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10 },
+  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código."
+}
