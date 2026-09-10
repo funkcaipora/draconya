@@ -68,6 +68,8 @@ assets/catalog.ts      o índice: qual folha tem qual id, e onde dentro dela
 assets/sheet.ts        CIP → LZMA → BMP → RGBA. PURO: entra Uint8Array, sai Uint8Array
 assets/sheet-worker.ts a casca de doze linhas que põe `sheet.ts` num worker
 assets/sheet-loader.ts o lado do thread principal: fila, id por pedido, encerramento
+assets/cache.ts        a POLÍTICA: chave, teto de bytes, despejo LRU, degradação
+assets/indexeddb.ts    o ARMAZENAMENTO: transação, cursor, clone estruturado
 assets/testing.ts      encoder de protobuf, só para fixture
 ```
 
@@ -110,6 +112,28 @@ de biblioteca.
 **`lzma-web@4`**, no subpath `lzma-web/decompress`, que descarta o compressor. Descartadas:
 `lzma-js` (20 MB, parado em 2022), `js-lzma` (2022, sem tipos), `xz-decompress` (é XZ, outro
 container), `node-liblzma` (binding nativo — o ADR 0013 exige binário para dois arcos).
+
+## O cache persistente (FUN-19)
+
+O Huntera rebaixa e redescomprime as folhas **a cada sessão**. Guardar o resultado decodificado
+corta a maior parte do carregamento a partir do segundo acesso, e é uma das três melhorias
+deliberadas sobre eles (ADR 0008).
+
+**A chave já resolve a invalidação.** O hash vem no nome do arquivo (`sprites-<hash>.bmp.lzma`)
+e é imutável por construção: nunca existe entrada velha para o mesmo hash. A versão do pacote
+entra na chave junto, porque duas versões podem trazer folhas de mesmo nome com conteúdo
+diferente — e aí o hash sozinho mentiria. Sobra despejo por espaço, e mais nada.
+
+**A versão do SCHEMA do banco não é a versão do pacote.** Subir a do schema apagaria o cache
+inteiro a cada deploy que mexesse no formato; a chave já dá coexistência.
+
+**Guardamos os PIXELS, nunca um `ImageBitmap`** — ele não é serializável de forma portável
+entre sessões, e recriar o bitmap a partir dos pixels já pula a parte cara, que é o LZMA.
+
+`cache.ts` é a política e `indexeddb.ts` é o armazenamento, pela mesma razão que
+`sheet-loader.ts` não conhece `Worker`: despejo, teto e degradação se testam sem banco nenhum.
+O adaptador tem teste próprio contra `fake-indexeddb`, que implementa a especificação — um
+duplo escrito à mão provaria só que o duplo concorda comigo.
 
 ### As fixtures são binárias, e isso é a exceção
 
@@ -203,6 +227,18 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **O alfa do BMP é IGNORADO.** As folhas vêm com alfa 255 em todo pixel, inclusive nos vazios;
   a transparência é a cor magenta. Confiar no alfa desenharia um retângulo magenta atrás de
   cada sprite.
+- **Falha do cache NUNCA é falha do jogo.** Aba anônima, cota estourada e armazenamento
+  bloqueado são normais, não excepcionais: leitura que falha vira `null`, gravação que falha
+  vira `false`, e paga-se o LZMA de novo — que é o comportamento de antes do cache existir.
+  Mas ela AVISA por `onDegraded`: cache que falha calado é indistinguível de cache que
+  funciona, e o sintoma vira "o jogo é lento" sem nada apontando para aqui.
+- **O despejo exclui a chave que está ENTRANDO.** Sem isso o cache soma a mesma folha duas
+  vezes, conclui que falta espaço e despeja uma folha alheia — e a reconexão de um jogador
+  esvazia o cache aos poucos. O teste disso **já foi vácuo**: reescrever a única folha do
+  cache chegava ao mesmo estado com e sem o defeito. Precisa de OUTRA folha para perder.
+- **`entries()` usa cursor, não `getAll`.** `getAll` carregaria os pixels de todas as folhas
+  para responder "quanto ocupa cada uma" — dezenas de MB por consulta de despejo, no thread
+  principal, toda vez que uma folha nova chega.
 - **O offset dos pixels vem do byte 10 do BMP**, nunca da constante 54: o DIB header tem
   tamanho variável, e um BMP com máscaras de cor faria a leitura começar dentro do cabeçalho.
 - Folhas decodificadas vão para IndexedDB. Sem isso, cada sessão rebaixa e redescomprime tudo.
