@@ -107,6 +107,17 @@ export interface NotableEvent {
   readonly detail?: string;
 }
 
+/**
+ * O que a hunt rendeu (§16.1, §16.2).
+ *
+ * **Nada aqui é "por hora".** A derivada é `valor / durationMs`, e o cliente a faz — mandar a
+ * divisão pela rede é mandar o mesmo número duas vezes, e as duas divergem na primeira pausa
+ * entre calcular e enviar.
+ *
+ * Todo agregado é escrito ONDE O FATO ACONTECE, pela sessão dona (invariante 9): o maior hit
+ * no golpe, o loot no abate, o supply no uso. Reconstruir por varredura seria contar de novo o
+ * que já foi contado, e é assim que dois números que deveriam bater param de bater.
+ */
 export interface Aggregates {
   durationMs: number;
   xpGained: number;
@@ -114,6 +125,17 @@ export interface Aggregates {
   goldSpent: number;
   kills: number;
   deaths: number;
+  /**
+   * Quantos ITENS caíram (§16.1). Contagem, não valor: o preço de venda é do Market, que é F6,
+   * e um "valor do loot" hoje seria um número inventado passando por medida.
+   */
+  itemsLooted: number;
+  /** Quantos supplies foram usados. O gold deles já está em `goldSpent`. */
+  suppliesUsed: number;
+  /** O maior golpe de arma da sessão. Zero é "ainda não bateu em ninguém". */
+  bestBasicHit: number;
+  /** O maior dano de magia da sessão, do ALVO que levou mais — não a soma de uma área. */
+  bestSpellHit: number;
 }
 
 export interface Receipt {
@@ -208,6 +230,7 @@ export class Session {
   readonly notableEvents: NotableEvent[] = [];
   readonly aggregates: Aggregates = {
     durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+    itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
   };
 
   /** Sequência para idempotência econômica: `UNIQUE (session_id, seq)` (invariante 10). */

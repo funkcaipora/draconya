@@ -221,6 +221,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
       seq: 1,
       aggregates: {
         durationMs: 60_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
       },
       notableEvents: [],
     });
@@ -289,6 +290,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
       reason: 'drain', seq: 1,
       aggregates: {
         durationMs: 60_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
       },
       notableEvents: [],
     });
@@ -306,6 +308,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
       reason: 'drain', seq: 1,
       aggregates: {
         durationMs: 1_000, xpGained: 0, goldGained: 20, goldSpent: 0, kills: 0, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
       },
       notableEvents: [],
     });

@@ -1088,6 +1088,9 @@ export class HuntRuleset implements Ruleset {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
       const damage = result.hits[i] ?? 0;
+      // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
+      // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
+      session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       recordDamage(monster.contribution, character.id, monster.receiveDamage(damage));
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
@@ -1154,6 +1157,9 @@ export class HuntRuleset implements Ruleset {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
       // ao ledger, e o personagem só carrega o delta.
       session.aggregates.goldSpent += result.goldSpent;
+      // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
+      // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
+      session.aggregates.suppliesUsed += 1;
       return result;
     }
 
@@ -1382,7 +1388,14 @@ export class HuntRuleset implements Ruleset {
       this.#options.combat,
       session.rng,
     );
-    recordDamage(monster.contribution, character.id, monster.receiveDamage(result.damage));
+    const applied = monster.receiveDamage(result.damage);
+    recordDamage(monster.contribution, character.id, applied);
+    // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
+    // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
+    // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
+    session.aggregates.bestBasicHit = Math.max(
+      session.aggregates.bestBasicHit, result.damage,
+    );
     // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
     // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
     // que "sobe pelo uso" quer dizer.
@@ -1518,6 +1531,10 @@ export class HuntRuleset implements Ruleset {
         itemId: rolled.itemId,
         quantity: rolled.quantity,
       };
+      // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
+      // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
+      session.aggregates.itemsLooted += carried.quantity;
+
       if (character.inventory.add(carried, this.#options.items, character).ok) continue;
 
       // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30

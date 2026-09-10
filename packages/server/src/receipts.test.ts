@@ -23,6 +23,7 @@ const receiptOf = (
   seq: 1,
   aggregates: {
     durationMs: 60_000, xpGained: 400, goldGained: 90, goldSpent: 10, kills: 4, deaths: 0,
+       itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
   },
   notableEvents: [],
   ...overrides,

@@ -1692,7 +1692,10 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
   // porque a morte do único personagem encerra a sessão antes.
   const view = (participants: readonly CharacterRuntime[]): HuntView => ({
     elapsedMs: 0,
-    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    aggregates: {
+      durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+      itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+    },
     participants,
     monstersAlive: 0,
   });
@@ -2460,5 +2463,166 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.mochila.length).toBeGreaterThan(0);
+  });
+});
+
+// --- os agregados do analisador (FUN-78) -----------------------------------------------------
+
+describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
+  it('o maior hit de arma é o RESOLVIDO, não o aplicado', () => {
+    // Um golpe de 300 num monstro com 10 de vida foi um golpe de 300. Guardar o aplicado faria
+    // o recorde depender de quão morto o alvo já estava, e o jogador nunca veria o número que
+    // de fato bateu.
+    //
+    // A prova é o recorde PASSAR da vida do monstro: o aplicado nunca passa, por construção —
+    // `receiveDamage` devolve `min(dano, vida)`.
+    const { session } = start({
+      difficulty: 'professional',
+      inventory: {
+        backpack: [],
+        equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
+      },
+    });
+    run(session, 30_000, 100);
+
+    expect(session.aggregates.bestBasicHit).toBeGreaterThan(rat.health);
+  });
+
+  it('o maior hit sobe quando o personagem fica mais forte', () => {
+    const cru = start({ difficulty: 'professional' });
+    run(cru.session, 30_000, 100);
+
+    const armado = start({
+      difficulty: 'professional',
+      inventory: { backpack: [], equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } } },
+    });
+    run(armado.session, 30_000, 100);
+
+    expect(armado.session.aggregates.bestBasicHit)
+      .toBeGreaterThan(cru.session.aggregates.bestBasicHit);
+  });
+
+  it('o maior hit de magia é POR ALVO, não a soma da área', () => {
+    // Somar faria uma magia fraca em cinco alvos superar a mais forte do jogo em um — e
+    // "maior hit" deixaria de responder a pergunta que ele existe para responder.
+    const explodir = botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'blast' },
+      }],
+    });
+    const { session } = withSpells(explodir, { mana: 2_000 }, 'professional');
+    run(session, 30_000, 100);
+
+    expect(session.aggregates.bestSpellHit).toBeGreaterThan(0);
+    // O `blast` deste conteúdo bate 80 por alvo. Com três ratos no raio, somar daria 240.
+    expect(session.aggregates.bestSpellHit).toBeLessThanOrEqual(80);
+  });
+
+  it('o item conta no analisador mesmo quando não cabe na mochila', () => {
+    // Contar só o que coube faria a mochila cheia parecer hunt ruim — e a hunt rendeu, o que
+    // faltou foi espaço. São perguntas diferentes, e o §16.1 quer a primeira.
+    const loaded = buildContent(raw({
+      monsters: [ratWithDrop],
+      progression: [{ ...progression, startingCapacity: 50, capacityPerLevel: 0 }],
+    }));
+    const session = createHuntSession({
+      id: 'drop', content: loaded, huntId: 'arena', difficulty: 'professional', createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+    });
+    session.enter(hero);
+
+    run(session, 60_000, 100);
+
+    expect(hero.lootBox.length).toBeGreaterThan(0);
+    // Um item por abate, e todos contam — os que couberam e os que ficaram na caixa.
+    expect(session.aggregates.itemsLooted).toBe(session.aggregates.kills);
+    expect(session.aggregates.itemsLooted)
+      .toBe(hero.inventory.backpack.length + hero.lootBox.length);
+  });
+
+  it('supply conta em QUANTIDADE além de contar em gold', () => {
+    // "Gastei 4.000 de gold" e "bebi 80 poções" contam coisas diferentes sobre a mesma hunt, e
+    // o §16.1 pede as duas.
+    const { session, hero } = withSpells(botConfig({
+      potion: [{
+        when: { kind: 'hp', op: '<=', percent: 100 },
+        do: { kind: 'supply', supplyId: 'health-potion' },
+      }],
+    }), { health: 1_000, gold: 10_000, monsters: false });
+
+    run(session, 10_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
+    // 45 de gold por poção: as duas contas descrevem a mesma coisa e têm de bater.
+    expect(session.aggregates.goldSpent).toBe(session.aggregates.suppliesUsed * 45);
+    expect(hero.goldDelta).toBe(-session.aggregates.goldSpent);
+  });
+
+  it('o extrato leva os MESMOS números que o analisador mostra', () => {
+    // É o critério da issue: o que a tela de retorno mostra é o que o ledger recebe. Eles são
+    // o mesmo objeto de propósito — duas cópias divergiriam, e a divergência apareceria como
+    // "o analisador me deu mais gold do que caiu na conta".
+    const { session } = start({ difficulty: 'professional' });
+    run(session, 30_000, 100);
+    const receipt = session.end('manual-exit');
+
+    expect(receipt?.aggregates).toEqual(session.aggregates);
+  });
+
+  it('os agregados novos atravessam o snapshot', () => {
+    const { session } = start({ difficulty: 'professional' });
+    run(session, 30_000, 100);
+    const antes = { ...session.aggregates };
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.aggregates).toEqual(antes);
+  });
+
+  it('snapshot ANTIGO, sem os campos novos, restaura com zero', () => {
+    // Campos opcionais no formato: `Object.assign` sobre os agregados já inicializados deixa
+    // o que faltou em zero, e por isso o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
+    const { session } = start({ difficulty: 'professional' });
+    run(session, 10_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const velhos = snapshot.aggregates as unknown as Record<string, unknown>;
+    delete velhos['itemsLooted'];
+    delete velhos['suppliesUsed'];
+    delete velhos['bestBasicHit'];
+    delete velhos['bestSpellHit'];
+
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.aggregates.itemsLooted).toBe(0);
+    expect(retomado.aggregates.bestBasicHit).toBe(0);
+    expect(retomado.aggregates.xpGained).toBe(session.aggregates.xpGained);
+  });
+
+  it('1 Hz e 10 Hz dão os MESMOS agregados', () => {
+    const at = (stepMs: number) => {
+      const { session } = start({ difficulty: 'professional' });
+      run(session, 120_000, stepMs);
+      return { ...session.aggregates };
+    };
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.bestBasicHit).toBeGreaterThan(0);
   });
 });
