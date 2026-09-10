@@ -35,6 +35,7 @@ export const SERVER_TO_CLIENT = {
   'system-message': 11,
   'chat-message': 12,
   'session-ended': 13,
+  'hunt-catalogue': 14,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

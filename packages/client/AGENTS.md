@@ -127,3 +127,12 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   aparece cru, porque "algo deu errado" faz o jogador repetir o mesmo erro.
 - **`?character=<id>` fica.** `phase-one-exit.test.ts` e `pnpm load` entram sem tela, e tirá-lo
   obrigaria os dois a simular login para testar sessão.
+- **`net/current.ts` é como um botão manda intenção** (FUN-79). A conexão nasce e morre num
+  efeito, e quem clica está em qualquer lugar da árvore: passar `send` por props atravessaria
+  seis componentes que não têm nada a ver com socket, e contexto do React traria o socket para
+  dentro do ciclo de render — que é o que o ADR 0007 mantém fora.
+- **Mandar sem conexão é SILENCIOSO.** O clique pode cair no instante entre uma queda e a volta,
+  e derrubar a tela por isso transformaria um piscar de rede em erro de jogo. Reconectar reanexa
+  à mesma sessão (ADR 0001): o que se perde é o clique, não o estado.
+- **O catálogo de hunts SUBSTITUI a lista, nunca acumula.** Reconectar reenvia a mesma lista, e
+  concatenar daria hunts duplicadas a cada queda de rede.

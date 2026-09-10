@@ -11,6 +11,7 @@ import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
 import { loadConfiguration } from './config.js';
+import { huntListings } from '@draconya/sim';
 import { createLogger } from './log.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
@@ -129,6 +130,15 @@ async function main(): Promise<void> {
   // "Cidade 2" nasce: dois nós já são duas praças, sem nada a mais.
   const nowMs = (): number => Date.now();
   const cityShard = new CityShard(content, nowMs);
+  // Copiado para o formato do protocolo: `HuntListing` do `sim` traz as dificuldades como
+  // união fechada e `readonly`, e a mensagem as leva como `string` — quem define quais existem
+  // é o conteúdo, não o protocolo.
+  const catalogue = huntListings(content).map((hunt) => ({
+    id: hunt.id,
+    name: hunt.name,
+    recommendedLevel: hunt.recommendedLevel,
+    difficulties: [...hunt.difficulties],
+  }));
 
   const factories: Record<RoleName, () => Role> = {
     api: () => {
@@ -179,6 +189,9 @@ async function main(): Promise<void> {
       // O host não recebe o `Content` inteiro: recebe a função que julga uma configuração de
       // bot (FUN-81). Quem cuida de socket não precisa conhecer balanceamento.
       acceptBotConfig: createBotConfigValidator(content),
+      // O catálogo da tela de seleção (FUN-79). Calculado UMA vez: a versão de conteúdo é
+      // fixada e não muda enquanto o processo vive.
+      huntCatalogue: () => catalogue,
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,

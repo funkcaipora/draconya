@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { createConnection } from '../net/connection.js';
-
-const API_URL = import.meta.env['VITE_API_URL'] ?? 'http://localhost:3000';
+import { setConnection } from '../net/current.js';
+import { API_URL } from '../account/api.js';
 
 /**
  * Liga o socket enquanto o componente estiver montado.
@@ -13,7 +13,13 @@ export function useConnection(characterId: string | null): void {
   useEffect(() => {
     if (characterId === null) return;
     const connection = createConnection({ apiUrl: API_URL, characterId });
+    // Registrada enquanto viva: é por aqui que um botão manda intenção sem o socket passar
+    // por props ou por contexto do React (FUN-79).
+    setConnection(connection);
     connection.start();
-    return () => connection.stop();
+    return () => {
+      setConnection(null);
+      connection.stop();
+    };
   }, [characterId]);
 }

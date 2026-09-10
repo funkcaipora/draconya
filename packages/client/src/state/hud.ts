@@ -46,6 +46,14 @@ export type Aggregates = S2CProps<'session-state'>['aggregates'];
 export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
 
 /**
+ * Uma hunt como a tela de seleção a mostra (§14.3, FUN-79).
+ *
+ * Sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe no
+ * protocolo. Ver o comentário de `hunt-catalogue` lá.
+ */
+export type HuntListing = S2CProps<'hunt-catalogue'>['hunts'][number];
+
+/**
  * O analisador (§16.1, §16.2, FUN-83).
  *
  * **`receivedAtMs` é o instante local em que este pacote chegou**, e é ele que faz o relógio
@@ -100,6 +108,13 @@ export interface HudState {
 
   /** O analisador. Fatia própria para a janela não re-renderizar quando o HP mexe. */
   readonly analyzer: AnalyzerState;
+
+  /**
+   * O que existe para caçar (FUN-79). Chega uma vez, logo depois do `welcome`.
+   *
+   * Vazio até chegar — e a tela mostra isso como "carregando", não como "não há hunt".
+   */
+  readonly hunts: readonly HuntListing[];
 }
 
 export const INITIAL_HUD: HudState = {
@@ -114,6 +129,7 @@ export const INITIAL_HUD: HudState = {
   chat: [],
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
+  hunts: [],
 };
 
 /**

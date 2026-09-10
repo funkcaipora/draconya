@@ -156,6 +156,30 @@ export const S2C_SCHEMAS = {
     from: Point, to: Point, durationMs: z.number().positive(), pushed: z.boolean().optional(),
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
+  /**
+   * O que a tela de seleção de hunt pode mostrar (§14.3, FUN-79).
+   *
+   * **Level recomendado aparece; estimativa de XP/h e gold/h NÃO.** A razão é de produto, e a
+   * regra vira ESTRUTURA aqui: não existe campo onde guardar a estimativa. Um comentário
+   * pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido
+   * por engano. Um número oficial de XP/h vira a métrica pela qual toda hunt é julgada, e a
+   * partir daí só existe uma hunt boa — o jogo passa a ter uma escolha, não quatro.
+   *
+   * Chega UMA vez, logo depois do `welcome`: a versão de conteúdo é fixada na sessão
+   * (invariante 7), então o catálogo não muda enquanto ela vive.
+   *
+   * As dificuldades vêm como `string` porque são do CONTEÚDO, não do protocolo — uma hunt
+   * define as que fazem sentido para ela, e um enum aqui obrigaria a mexer no protocolo para
+   * cada dificuldade nova (mesma razão de `enter-hunt`).
+   */
+  'hunt-catalogue': z.object({
+    hunts: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      recommendedLevel: z.number().int().positive(),
+      difficulties: z.array(z.string().min(1)),
+    })),
+  }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
