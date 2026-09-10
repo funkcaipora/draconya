@@ -118,18 +118,44 @@ export async function deployStaging(
     await dependencies.sleep(5_000);
   }
   if (!healthy) throw new Error('Staging containers did not become healthy.');
+  // As rotas públicas aceitam ESPERA, e não afrouxamento.
+  //
+  // "Saudável" é a visão do Coolify sobre o contêiner; o proxy reverso ainda pode estar
+  // trocando o upstream, e nesse instante a rota devolve 503. O deploy funcionou — só a
+  // verificação chegou cedo. Reprovar por isso pinta de vermelho uma entrega que deu certo, e
+  // pipeline que fica vermelho sem motivo é pipeline que ninguém mais lê.
+  //
+  // O que NÃO muda é o critério: continua sendo o status exato. Só o prazo é que existe.
+  const settle = async (
+    label: string, attempt: () => Promise<string | null>,
+  ): Promise<void> => {
+    let last = 'nenhuma resposta';
+    for (let tries = 0; tries < 12; tries++) {
+      const failure = await attempt();
+      if (failure === null) return;
+      last = failure;
+      await dependencies.sleep(5_000);
+    }
+    throw new Error(`Staging ${label} never settled: ${last}`);
+  };
+
   for (const [route, expected] of [['/', 200], ['/healthz', 200], ['/api/auth/me', 401]] as const) {
-    const response = await request(`${origin}${route}`);
-    if (response.status !== expected) throw new Error(`Staging ${route} returned HTTP ${response.status}.`);
-    await response.body?.cancel();
+    await settle(route, async () => {
+      const response = await request(`${origin}${route}`);
+      await response.body?.cancel();
+      return response.status === expected ? null : `HTTP ${response.status}`;
+    });
   }
-  const login = await request(`${origin}/api/auth/login`);
-  const location = new URL(login.headers.get('location') ?? origin);
-  if (login.status !== 302 || location.origin !== 'https://api.workos.com'
-    || location.searchParams.get('redirect_uri') !== `${origin}/api/auth/callback`) {
-    throw new Error('Staging login did not redirect to WorkOS with the expected callback.');
-  }
-  await login.body?.cancel();
+  await settle('login', async () => {
+    const login = await request(`${origin}/api/auth/login`);
+    await login.body?.cancel();
+    const location = new URL(login.headers.get('location') ?? origin);
+    if (login.status !== 302) return `HTTP ${login.status}`;
+    if (location.origin !== 'https://api.workos.com') return `redirected to ${location.origin}`;
+    return location.searchParams.get('redirect_uri') === `${origin}/api/auth/callback`
+      ? null
+      : 'wrong callback in the WorkOS redirect';
+  });
   console.log(`Staging deployment ${deploymentId} is healthy and HTTPS checks passed.`);
 }
 

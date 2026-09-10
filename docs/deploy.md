@@ -145,6 +145,12 @@ Após push na `main`, o deploy aguarda os três checks (`docs`, `code` e `image`
 recebem os secrets do job de deploy. O job fixa `git_commit_sha` no SHA aprovado, desativa
 o auto-deploy por webhook, sincroniza a configuração e aguarda o resultado do Coolify.
 Ele só passa depois de confirmar o SHA publicado, estado saudável e rotas HTTPS.
+
+**As rotas públicas aceitam espera, não afrouxamento.** `running:healthy` é a visão do Coolify
+sobre o contêiner; o proxy reverso ainda pode estar trocando o upstream, e nesse instante a rota
+devolve 503. O critério continua sendo o status exato — o que existe é um prazo de até um minuto
+por rota. Esgotado, a falha diz o último status, porque "nunca subiu: HTTP 503" leva a algum
+lugar e "falhou" não.
 Execuções de deploy são serializadas; uma execução cujo SHA já não é o topo da `main`
 é ignorada para impedir que um CI antigo reverta o staging.
 
