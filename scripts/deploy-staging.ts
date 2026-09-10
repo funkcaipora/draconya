@@ -82,7 +82,13 @@ export async function deployStaging(
   });
   await api(`${path}/envs/bulk`, 'PATCH', { data });
   console.log('Staging variables synchronized; runtime secrets are excluded from build arguments.');
-  const result = await api(`/deploy?uuid=${uuid}`);
+  // **POST, e não GET.** A partir do Coolify 4.2.0, todo endpoint que MUDA ESTADO — `deploy`,
+  // `start`, `stop`, `restart`, `enable`, `disable`, validação de servidor — exige POST, e o GET
+  // equivalente responde 405. Com GET, o deploy de staging ficou quebrado em toda entrega na
+  // `main`: as variáveis eram sincronizadas, o commit era fixado, e o build nunca começava.
+  //
+  // O sintoma era invisível de dentro de uma PR, porque este job não roda lá (`github.ref`).
+  const result = await api(`/deploy?uuid=${uuid}`, 'POST');
   const deployments = result.deployments as { deployment_uuid?: string; resource_uuid?: string }[] | undefined;
   const deployment = deployments?.find((item) => item.resource_uuid === uuid);
   const deploymentId = deployment?.deployment_uuid;

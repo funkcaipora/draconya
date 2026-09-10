@@ -153,6 +153,19 @@ o workflow. A senha de um PostgreSQL já inicializado não muda com `POSTGRES_PA
 uma rotação exige alterar a senha do usuário no banco e atualizar o Secret de forma coordenada.
 Não apague o volume para trocar a senha.
 
+**O gatilho de deploy é `POST`.** Desde o Coolify 4.2.0, todo endpoint que muda estado — `deploy`,
+`start`, `stop`, `restart`, `enable`, `disable`, validação de servidor — exige POST, e o GET
+equivalente responde **405**. Com GET, o sintoma é o pior possível: as variáveis são
+sincronizadas, o commit é fixado, o job falha, e o build **nunca começa** — staging fica parado no
+commit anterior enquanto a `main` anda. Aconteceu por seis entregas seguidas.
+
+**O job de deploy não roda em PR** (`github.ref == 'refs/heads/main'`), então `gh pr checks` nunca
+mostra que ele quebrou. Depois de mergear, confira a execução da `main`:
+
+```bash
+gh run list --branch main --limit 1
+```
+
 Em falha, consulte o job e a execução correspondente no Coolify. Não há rollback automático
 de banco. Um timeout no GitHub não cancela um build remoto já iniciado; confira seu estado
 antes de tentar novamente.

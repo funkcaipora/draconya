@@ -19,7 +19,13 @@ function fixture(options: { head?: string; commit?: string; status?: string; env
     if (url.endsWith('/envs/bulk')) {
       return Response.json({ value: 'sensitive-response-must-not-be-logged' }, { status: options.envStatus ?? 201 });
     }
-    if (url.includes('/deploy?')) return Response.json({ deployments: [{ resource_uuid: 'app123', deployment_uuid: 'deploy123' }] });
+    if (url.includes('/deploy?')) {
+      // O duplo responde como o Coolify 4.2.0: endpoint que muda estado só aceita POST, e o
+      // GET equivalente devolve 405. Aceitar qualquer método aqui era o que deixava o teste
+      // passar com o script quebrado em produção.
+      if (init?.method !== 'POST') return new Response('', { status: 405 });
+      return Response.json({ deployments: [{ resource_uuid: 'app123', deployment_uuid: 'deploy123' }] });
+    }
     if (url.includes('/deployments/')) return Response.json({ status: options.status ?? 'finished', commit: options.commit ?? sha });
     if (url.includes('/applications/')) return Response.json({ status: 'running:healthy' });
     if (url.endsWith('/api/auth/me')) return new Response('', { status: 401 });
@@ -58,6 +64,20 @@ describe('staging deployment', () => {
     const { calls, dependencies } = fixture();
     await expect(deployStaging({ ...env, GITHUB_REF: 'refs/pull/69/merge' }, dependencies)).rejects.toThrow('requires a main commit');
     expect(calls).toHaveLength(0);
+  });
+
+  it('dispara o deploy com POST, porque o GET equivalente é 405 desde o Coolify 4.2.0', async () => {
+    // O defeito que deixou o staging parado em SEIS entregas seguidas na `main`: as variáveis
+    // eram sincronizadas, o commit era fixado no Coolify, e o build nunca começava.
+    //
+    // Ele era invisível de dentro de uma PR — o job de deploy só roda na `main` —, e o teste
+    // não pegava porque o duplo aceitava qualquer método. Agora ele responde 405 ao GET, como
+    // o Coolify de verdade.
+    const { dependencies, calls } = fixture();
+    await deployStaging(env, dependencies);
+
+    const trigger = calls.find((call) => call.url.includes('/deploy?'));
+    expect(trigger?.init?.method).toBe('POST');
   });
 
   it('does not deploy when secret synchronization fails or disclose the response body', async () => {
