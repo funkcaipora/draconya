@@ -165,6 +165,17 @@ diz o motivo, e no caso de regra automática diz **qual** regra: "sua hunt encer
 de saída" sem dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo
 configurou.
 
+**As regras de saída vêm da configuração do jogador** (FUN-86). São `hp-below`, `out-of-gold` e
+`party-member-lost`, com teto de 4 slots, avaliadas a cada 250 ms — e o extrato registra **qual**
+delas encerrou, com o percentual no id quando é de HP. O encerramento é `exit-rule`, nunca
+`manual-exit`: o jogador não pediu para sair, a regra dele decidiu, e o extrato tem que dizer a
+verdade sobre isso. Ver [`bot.md`](./bot.md) para o vocabulário.
+
+**Gold zerado NÃO encerra a hunt sozinho** (§20.3). Sem a regra `out-of-gold`, o personagem fica,
+não consegue pagar supply e pode morrer — e a primeira recusa por falta de gold vira uma linha no
+extrato, uma só. Com a regra, ele sai antes. A diferença entre os dois comportamentos é uma linha
+na configuração, e é assim de propósito.
+
 **Trocar de dificuldade encerra e cria outra** (§14.7). Não existe alteração dinâmica: mudar a
 densidade no meio deixaria monstros da densidade antiga vivos ao lado dos novos, e o jogador
 veria uma dificuldade que não é nenhuma das duas.

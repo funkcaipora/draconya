@@ -334,6 +334,7 @@ export const botTargetingSchema = z.object({
   posture: botPostureSchema.default({ kind: 'stand' }),
 });
 
+export type BotExitRule = z.infer<typeof botExitRuleSchema>;
 export type BotTargetPolicy = z.infer<typeof botTargetPolicySchema>;
 export type BotPosture = z.infer<typeof botPostureSchema>;
 export type BotTargeting = z.infer<typeof botTargetingSchema>;
@@ -351,6 +352,33 @@ export type BotTargeting = z.infer<typeof botTargetingSchema>;
 const defaultTargeting = (): BotTargeting => ({
   policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' },
 });
+
+/**
+ * Quando a hunt encerra sozinha (§13.9, §14.8).
+ *
+ * Encerrar é diferente de agir: uma regra de saída não escolhe magia nem alvo, ela decide que a
+ * sessão acabou. Por isso mora numa lista própria e não numa das cinco categorias — e por isso
+ * o extrato registra QUAL regra disparou, em vez de um "encerrou por regra" que faz o jogador
+ * desconfiar do bot que ele mesmo configurou.
+ *
+ * `hp-below` é a mais óbvia para quem caça ausente, e é a única das três que o §13.9 não cita:
+ * ela entra porque `HuntView` já a suporta e porque sem ela a única defesa contra morrer AFK é
+ * a poção nunca falhar.
+ */
+export const botExitRuleSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('hp-below'), percent: z.number().int().min(1).max(100) }),
+  /**
+   * §20.3: sem esta regra o personagem FICA na hunt sem conseguir pagar supply, e pode morrer.
+   * Com ela, sai — e sai por `exit-rule`, nunca por `manual-exit`: o extrato tem que dizer a
+   * verdade sobre quem encerrou.
+   */
+  z.object({ kind: z.literal('out-of-gold') }),
+  /**
+   * §13.9. Party é F3, então esta regra é INERTE numa hunt de um — e entra agora para a
+   * configuração salva não mudar de forma quando party existir.
+   */
+  z.object({ kind: z.literal('party-member-lost') }),
+]);
 
 /** Uma linha de slot: a condição e o que fazer quando ela vale. */
 export const botRuleSchema = z.object({
@@ -400,6 +428,15 @@ export const botSchema = z.object({
     attack: z.number().int().nonnegative(),
     rune: z.number().int().nonnegative(),
     support: z.number().int().nonnegative(),
+    /**
+     * Quantas regras de SAÍDA cabem (FUN-86). Não é categoria — regra de saída não age, ela
+     * encerra —, mas precisa de teto pela mesma razão que as outras: a lista é avaliada a cada
+     * 250 ms, e nada no schema impediria mil regras salvas.
+     *
+     * Quatro: os três tipos do vocabulário mais folga. Tem default para o conteúdo gravado
+     * antes desta issue continuar válido.
+     */
+    exit: z.number().int().nonnegative().default(4),
   }),
   _open: z.string().optional(),
 });
@@ -415,6 +452,11 @@ export const botConfigSchema = z.object({
   version: z.number().int().positive(),
   /** Alvo e postura (FUN-85). Ausente é `nearest` + `stand`, o comportamento de sempre. */
   targeting: botTargetingSchema.default(defaultTargeting),
+  /**
+   * Regras de saída (FUN-86). Lista vazia é a hunt que só encerra por morte ou por ação do
+   * jogador — o comportamento de antes desta issue, e o default para quem não configurou.
+   */
+  exit: z.array(botExitRuleSchema).default(() => []),
   heal: z.array(botRuleSchema),
   potion: z.array(botRuleSchema),
   attack: z.array(botRuleSchema),

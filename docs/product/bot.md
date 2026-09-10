@@ -1,9 +1,9 @@
 # Bot
 
 **Status:** parcial — vocabulário fechado e versionado (FUN-73), compilador de regras (FUN-80),
-cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77) e targeting
-configurável (FUN-85) implementados; falta a configuração chegar pelo socket (FUN-81), as regras
-de saída do jogador (FUN-86) e o catálogo de itens (M8)
+cadência por categoria (FUN-84), execução de magia e supply (FUN-74/FUN-77), targeting
+configurável (FUN-85) e regras de saída do jogador (FUN-86) implementados; falta a configuração
+chegar pelo socket (FUN-81) e o catálogo de itens (M8)
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -277,3 +277,44 @@ Todo campo de `targeting` tem default, e o bloco inteiro tem: uma configuração
 issue continua válida e ganha `nearest` + `stand`, que é o que ela já fazia. Subir
 `BOT_VOCABULARY_VERSION` invalidaria configuração de jogador para acrescentar um campo que ela nem
 precisa ter — o oposto do que o versionamento existe para proteger.
+
+## Quando a hunt encerra sozinha (FUN-86)
+
+§13.9. A configuração tem uma lista `exit`, com teto de 4 slots em `bot/baseline.json` — regra de
+saída não age, ela **encerra**, e por isso vive fora das cinco categorias. O teto existe pela
+mesma razão que o das categorias: a lista é avaliada a cada 250 ms, e nada no schema impediria
+mil regras salvas.
+
+| `kind` | Dispara quando | Hoje |
+|---|---|---|
+| `hp-below` | o HP do personagem cai **abaixo** de `percent` | vale |
+| `out-of-gold` | o saldo (entrada + delta) chega a zero | vale |
+| `party-member-lost` | um companheiro saiu ou morreu | **inerte** — party é F3 |
+
+Quatro coisas que não podem mudar sem pensar duas vezes:
+
+- **A comparação de HP é estrita.** Com `<=`, quem configurasse "sair abaixo de 100%" veria a
+  hunt encerrar no instante em que entrasse, de vida cheia, sem ter tomado um golpe.
+- **`out-of-gold` olha o SALDO, não o delta.** Delta negativo é qualquer um que gastou uma poção;
+  saldo zero é quem não consegue comprar a próxima. Olhar o delta encerraria a hunt de quem tem
+  mil de gold e gastou um.
+- **`party-member-lost` ignora o próprio personagem**, mesmo morto. Sem isso, quem morre sozinho
+  encerraria por "companheiro caiu" em vez de por morte — e o motivo é o que o jogador lê ao
+  voltar.
+- **Encerra por `exit-rule`, nunca por `manual-exit`.** O jogador não pediu para sair; a regra
+  dele decidiu. Trocar os dois é o extrato mentindo sobre quem encerrou.
+
+O extrato registra **qual** regra disparou, e `hp-below` carrega o percentual no id
+(`hp-below-30`): duas regras de HP com limites diferentes precisam ser distinguíveis na tela de
+retorno. "Sua hunt encerrou por uma regra de saída", sem dizer qual, é a mensagem que faz o
+jogador desconfiar do bot que ele mesmo configurou.
+
+Sem a regra `out-of-gold`, gold zerado **não** encerra: o personagem fica, não paga o supply e
+pode morrer. São as duas metades do §20.3, e a diferença entre elas é uma linha na configuração.
+
+### Onde o predicado é compilado, e por quê ali
+
+`compileExitRules` mora em `rulesets/hunt.ts`, não no compilador do bot. O predicado lê a
+`HuntView`, e `bot.ts` não conhece ruleset nenhum — nem pode, porque o mesmo bot vai valer para
+quest e boss, que terão outra view. O compilador entrega a regra crua; quem tem a view é quem
+sabe fechar a closure.

@@ -241,3 +241,22 @@ describe('targeting é validado contra o catálogo de MONSTROS (FUN-85)', () => 
     )).toEqual([]);
   });
 });
+
+describe('regras de saída têm teto (FUN-86)', () => {
+  it('recusa mais regras de saída que slots, dizendo os números', () => {
+    // A lista é avaliada a cada 250 ms. Sem teto, mil regras salvas viram mil predicados
+    // rodando quatro vezes por segundo por hunt — e nada no schema impediria isso.
+    const uma = { kind: 'hp-below' as const, percent: 50 };
+    const problems = validateBotConfig(
+      config({ exit: [uma, uma, uma, uma, uma] }), content,
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('5');
+    expect(problems[0]).toContain('4');
+  });
+
+  it('aceita o que cabe, e lista vazia é o padrão', () => {
+    expect(validateBotConfig(config(), content)).toEqual([]);
+    expect(config().exit).toEqual([]);
+  });
+});

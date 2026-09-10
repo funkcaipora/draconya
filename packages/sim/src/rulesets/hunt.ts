@@ -18,11 +18,11 @@
 
 import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
-  BotAction, BotCategory, Combat, Content, Hunt, HuntDifficulty, Monster, Progression, Route,
-  Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  BotAction, BotCategory, BotExitRule, Combat, Content, Hunt, HuntDifficulty, Monster,
+  Progression, Route, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
-import { NOT_IN_CATALOG, castSpell, useSupply } from '../casting.js';
+import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
 import type { CastResult, SpellTarget } from '../casting.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
@@ -125,16 +125,73 @@ export interface HuntView {
 }
 
 /**
- * Regra automática de saída (§14.8).
+ * Regra automática de saída (§14.8, §13.9).
  *
- * Predicado já compilado, avaliado a cada tick — é a forma que o ADR 0002 exige do motor de
- * bot, e a razão é a mesma: interpretar JSON a cada avaliação é o caminho fácil e caro. O
- * motor que TRADUZ a configuração do jogador nestes predicados é a F2; o que existe aqui é o
- * ponto onde ele vai encaixar.
+ * Predicado já compilado, avaliado a cada `EXIT_RULE_INTERVAL_MS` — é a forma que o ADR 0002
+ * exige do motor de bot, e a razão é a mesma: interpretar JSON a cada avaliação é o caminho
+ * fácil e caro. Quem TRADUZ a configuração do jogador nestes predicados é `compileExitRules`,
+ * logo abaixo; a interface continua aberta para quem quiser injetar uma regra de teste.
  */
 export interface HuntExitRule {
   readonly id: string;
   when(view: HuntView): boolean;
+}
+
+/**
+ * Traduz as regras do jogador em predicados (FUN-86).
+ *
+ * Mora AQUI, e não no compilador do bot, porque o predicado lê a `HuntView` — e `bot.ts` não
+ * conhece ruleset nenhum, nem pode: o mesmo bot vai valer para quest e boss, que terão outra
+ * view. O compilador entrega a regra crua; quem tem a view é quem sabe fechar a closure.
+ *
+ * O `id` é o que vai para o extrato, e é ele que responde "por que a minha hunt encerrou". Por
+ * isso `hp-below` carrega o percentual no id: duas regras de HP com limites diferentes
+ * precisam ser distinguíveis na tela de retorno.
+ */
+export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntExitRule[] {
+  return rules.map((rule) => {
+    switch (rule.kind) {
+      case 'hp-below': {
+        const { percent } = rule;
+        return {
+          id: `hp-below-${percent}`,
+          when: (view: HuntView) => {
+            // Só o personagem desta sessão. Party é F3, e quando existir a pergunta vira "o
+            // MEU HP", não "o de alguém" — por isso o primeiro participante, e não um `some`
+            // que passaria a significar outra coisa sem ninguém mudar esta linha.
+            const self = view.participants[0];
+            if (self === undefined || !self.alive) return false;
+            if (self.maxHealth <= 0) return false;
+            return (self.health / self.maxHealth) * 100 < percent;
+          },
+        };
+      }
+      case 'out-of-gold':
+        return {
+          id: 'out-of-gold',
+          when: (view: HuntView) => {
+            const self = view.participants[0];
+            // Saldo é o de entrada mais o delta (FUN-77). Zero é "acabou": com zero não dá
+            // para comprar a poção mais barata, e esperar chegar a negativo seria esperar por
+            // um estado que o débito recusa antes de criar.
+            return self !== undefined && self.alive && balanceOf(self) <= 0;
+          },
+        };
+      case 'party-member-lost':
+        return {
+          id: 'party-member-lost',
+          when: (view: HuntView) => {
+            // INERTE numa hunt de um, e por construção: o laço começa no segundo participante.
+            // Quando party existir (F3), "saiu" some da lista e "morreu" fica com `alive`
+            // falso — os dois casos que o §13.9 junta numa regra só.
+            for (let i = 1; i < view.participants.length; i += 1) {
+              if (!(view.participants[i] as CharacterRuntime).alive) return true;
+            }
+            return false;
+          },
+        };
+    }
+  });
 }
 
 export interface HuntRulesetOptions {
@@ -1322,7 +1379,14 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { exitRules, premium, bot, actuator } = extras;
+  const { premium, bot, actuator } = extras;
+  // As do JOGADOR primeiro, as injetadas depois. A ordem decide qual `id` vai para o extrato
+  // quando duas disparam no mesmo instante, e a do jogador é a que ele consegue explicar —
+  // `extras.exitRules` é costura de teste e do dia em que a hunt tiver regra própria.
+  const compiled = bot === undefined ? [] : compileExitRules(bot.exit);
+  const exitRules = compiled.length === 0 && extras.exitRules === undefined
+    ? undefined
+    : [...compiled, ...(extras.exitRules ?? [])];
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) throw new HuntUnavailableError(`hunt "${huntId}" não existe`);
   const map = content.maps.get(hunt.mapId);
