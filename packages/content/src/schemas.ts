@@ -254,6 +254,49 @@ const botOperator = z.enum(['<', '<=', '>', '>=']);
  * "nenhuma das N variantes casou", que não diz qual campo está errado — e o critério desta
  * issue é que regra fora do vocabulário seja **recusada com motivo**, nunca ignorada.
  */
+/**
+ * Uma skill que sobe pelo USO (§9.4 **[DECIDIDO]**, FUN-75).
+ *
+ * Paradigma do Tibia: skill não vem de level, vem de fazer. Quem a alimenta, quanto cada uso
+ * rende, quantos pontos custa cada nível e quanto ela acrescenta ao golpe — tudo é conteúdo.
+ * Se algum desses números aparecesse em `sim`, mudar a curva viraria deploy de lógica.
+ *
+ * **Quais skills existem também é dado.** A lista mínima é a que o combate atual precisa: uma
+ * de arma e uma de magia. Distância e defesa entram quando houver arma de alcance e bloqueio.
+ */
+export const skillSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Onde ela começa. Um personagem novo nasce aqui, e daqui o dano é o de base. */
+  startingLevel: z.number().int().nonnegative(),
+  /**
+   * Pontos para sair do nível N: `base * factor^(N - startingLevel)`.
+   *
+   * Fórmula, e não tabela, pela mesma razão que a curva de XP é fórmula: uma tabela precisa
+   * ter fim, e o fim vira o teto acidental que ninguém decidiu.
+   */
+  curve: z.object({
+    base: z.number().positive(),
+    factor: z.number().min(1),
+  }),
+  /**
+   * O que a alimenta, e quanto.
+   *
+   * `spell-cast` rende por MANA GASTA, não por lançamento — é o modelo do Tibia, e ele existe
+   * por um motivo que vale copiar: sem ele, a forma ótima de subir magia é lançar mil vezes a
+   * magia mais barata, e o jogo vira macro de spam.
+   */
+  gain: z.discriminatedUnion('on', [
+    z.object({ on: z.literal('melee-hit'), points: z.number().positive() }),
+    z.object({ on: z.literal('spell-cast'), pointsPerMana: z.number().positive() }),
+  ]),
+  /** Fração acrescentada ao poder por nível ACIMA do inicial. `0` é skill que não bate. */
+  damagePerLevel: z.number().nonnegative().default(0),
+  _open: z.string().optional(),
+});
+
+export type Skill = z.infer<typeof skillSchema>;
+
 /** Os quatro tipos de condição, como lista — é o que o gate do bot básico nomeia (FUN-81). */
 export const BOT_CONDITION_KINDS = ['hp', 'mana', 'targets', 'target-hp'] as const;
 export type BotConditionKind = (typeof BOT_CONDITION_KINDS)[number];

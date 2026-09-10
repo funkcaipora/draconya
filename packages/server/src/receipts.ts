@@ -17,7 +17,7 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import type { Aggregates, EndReason, NotableEvent } from '@draconya/sim';
+import type { Aggregates, EndReason, NotableEvent, SkillsState } from '@draconya/sim';
 
 export interface SessionReceipt {
   readonly sessionId: string;
@@ -38,6 +38,18 @@ export interface SessionReceipt {
    */
   readonly staminaMs?: number;
   readonly staminaUpdatedAtMs?: number;
+  /**
+   * As skills no fim da sessão (§9.4, FUN-75).
+   *
+   * Valor ABSOLUTO, como a stamina — e sem precisar de guarda de instante, porque skill é
+   * monotônica: o ledger funde ficando com o maior de cada uma, e um extrato antigo
+   * processado fora de ordem não tem como rebaixar nada.
+   *
+   * Absoluto e não delta porque a sessão já entrou com o valor de verdade (ele vem no
+   * ticket): somar delta por cima do que está no banco daria o mesmo número, com uma chance a
+   * mais de contar duas vezes.
+   */
+  readonly skills?: SkillsState;
 }
 
 export interface ReceiptStoreOptions {
@@ -196,6 +208,12 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // diz nada. Meio par é dado corrompido, e a resposta é ignorar o par inteiro.
     ...(typeof value['staminaMs'] === 'number' && typeof value['staminaUpdatedAtMs'] === 'number'
       ? { staminaMs: value['staminaMs'], staminaUpdatedAtMs: value['staminaUpdatedAtMs'] }
+      : {}),
+    // Skills (FUN-75). Esta função é lista de PERMISSÃO — reconstrói campo a campo em vez de
+    // espalhar o que veio —, e campo novo que não entra aqui some no caminho de volta sem
+    // erro nenhum. Foi o que aconteceu na primeira vez que escrevi isto.
+    ...(typeof value['skills'] === 'object' && value['skills'] !== null
+      ? { skills: value['skills'] as SkillsState }
       : {}),
   };
 }

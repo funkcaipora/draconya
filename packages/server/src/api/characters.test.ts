@@ -35,7 +35,7 @@ class MemoryRepository implements GameRepository {
     const character: CharacterRecord = {
       id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
-      state: 'city', sessionId: null, botConfig: null, createdAt: now,
+      state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: now,
     };
     this.characters.set(character.id, character);
     return character;

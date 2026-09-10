@@ -7,7 +7,7 @@ import type { CharacterRecord } from '../db/repository.js';
 const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
-  state: 'city', sessionId: null, botConfig: null, createdAt: new Date(),
+  state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };

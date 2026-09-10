@@ -19,7 +19,7 @@
 import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
   BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
-  Monster, Progression, Route, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
@@ -47,6 +47,7 @@ import { TileOccupancy, canOccupy, move, place } from '../movement.js';
 import type { Movable, MoveResult } from '../movement.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
+import { powerMultiplier } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
 import type { RouteState } from '../route/walker.js';
@@ -209,6 +210,8 @@ export interface HuntRulesetOptions {
   readonly spells: ReadonlyMap<string, Spell>;
   /** Catálogo de supplies (FUN-77). Vazio é uma hunt sem poção. */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /** Skills que sobem por uso (FUN-75). Vazio é uma hunt em que nada sobe por fazer. */
+  readonly skills: ReadonlyMap<string, Skill>;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -375,6 +378,16 @@ export class HuntRuleset implements Ruleset {
   };
 
   /**
+   * As skills indexadas pelo que as alimenta (FUN-75).
+   *
+   * Montado UMA vez, na construção. `map.values()` aloca um iterador por chamada, e
+   * `#scaledPower` e `#gainSkills` rodam a cada golpe e a cada magia — com 5.000 instâncias
+   * isso é o coletor trabalhando para percorrer duas entradas. É a mesma conta que fez o
+   * índice de monstro por subject valer a pena.
+   */
+  readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
+
+  /**
    * O alvo de magia, reaproveitado pela mesma razão que `#botView`.
    *
    * Mutável de propósito: `castSpell` só lê, e quem escreve é `#castSpell`, num lugar só.
@@ -405,6 +418,10 @@ export class HuntRuleset implements Ruleset {
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#exitRules = this.#composeExitRules(options.botConfig);
+    this.#skillsByGain = {
+      'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
+      'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
+    };
     this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
@@ -1030,7 +1047,12 @@ export class HuntRuleset implements Ruleset {
 
     const result = castSpell(
       character, spell, target, session.nowMs, this.#options.combat, session.rng,
+      // A skill de magia escala o poder, como a de arma escala o golpe (FUN-75).
+      this.#scaledPower(character, 'spell-cast', 1),
     );
+    // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
+    // não gastou mana, não praticou.
+    if (result.ok) this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
     if (!result.ok || monster === null) return result;
 
     // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
@@ -1268,13 +1290,67 @@ export class HuntRuleset implements Ruleset {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
     const result = resolveDamage(
-      { power: this.#options.player.attackPower, kind: 'melee' },
+      // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
+      // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
+      { power: this.#scaledPower(character, 'melee-hit', this.#options.player.attackPower),
+        kind: 'melee' },
       { armor: definition.armor, dodgeChance: 0 },
       'pve',
       this.#options.combat,
       session.rng,
     );
     recordDamage(monster.contribution, character.id, monster.receiveDamage(result.damage));
+    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
+    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
+    // que "sobe pelo uso" quer dizer.
+    this.#gainSkills(session, character, 'melee-hit', 1);
+  }
+
+  /**
+   * O poder já escalado pelas skills que alimentam esta fonte.
+   *
+   * Percorre o catálogo em vez de procurar uma skill por nome: quais skills existem e o que
+   * alimenta cada uma é DADO (§9.4), e um `'melee'` escrito aqui faria o motor conhecer o
+   * nome de uma skill que o conteúdo pode renomear.
+   */
+  #scaledPower(character: CharacterRuntime, on: Skill['gain']['on'], base: number): number {
+    const definitions = this.#skillsByGain[on];
+    // Nenhuma skill alimentada por esta fonte: devolve o base sem tocar em nada. É o caminho
+    // de um conteúdo sem skills, e ele custa uma comparação.
+    if (definitions.length === 0) return base;
+
+    let power = base;
+    for (let i = 0; i < definitions.length; i += 1) {
+      const definition = definitions[i] as Skill;
+      if (definition.damagePerLevel === 0) continue;
+      power *= powerMultiplier(definition, character.skills.levelOf(definition));
+    }
+    return Math.round(power);
+  }
+
+  /**
+   * Credita uso a toda skill alimentada por esta fonte.
+   *
+   * `amount` é o que a fonte rende: um golpe é um golpe; uma magia rende a MANA que gastou
+   * (§9.4, modelo do Tibia). Sem isso, a forma ótima de subir magia seria lançar mil vezes a
+   * magia mais barata, e o jogo viraria macro de spam.
+   *
+   * Subir de nível é evento notável: numa hunt de oito horas é uma das poucas coisas que o
+   * jogador quer ver ao voltar, ao lado do level up (§16.2).
+   */
+  #gainSkills(
+    session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
+  ): void {
+    if (amount <= 0) return;
+    const definitions = this.#skillsByGain[on];
+    for (let i = 0; i < definitions.length; i += 1) {
+      const definition = definitions[i] as Skill;
+      const gain = definition.gain;
+      const points = gain.on === 'melee-hit' ? gain.points * amount : gain.pointsPerMana * amount;
+      if (character.skills.gain(definition, points) > 0) {
+        session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
+      }
+    }
   }
 
   /**
@@ -1492,6 +1568,7 @@ export function createHuntRuleset(
     progression: content.progression,
     stamina: content.stamina,
     vocations: content.vocations,
+    skills: content.skills,
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

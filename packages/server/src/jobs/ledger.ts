@@ -8,7 +8,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { levelForXp } from '@draconya/sim';
+import { Skills, levelForXp } from '@draconya/sim';
+import type { SkillsState } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
 import { characters, ledger } from '../db/schema.js';
@@ -148,6 +149,7 @@ async function applyProgression(
     .select({
       xp: characters.xp,
       gold: characters.gold,
+      skills: characters.skills,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
     .from(characters)
@@ -168,11 +170,19 @@ async function applyProgression(
     ? { staminaMs: receipt.staminaMs, staminaUpdatedAt: new Date(receipt.staminaUpdatedAtMs) }
     : {};
 
+  // Skill nunca desce, então fundir pelo MAIOR de cada uma é a regra, não uma escolha
+  // conservadora: um extrato antigo processado fora de ordem não tem como rebaixar o que já
+  // subiu. É a preocupação da guarda de instante da stamina, resolvida sem instante nenhum.
+  const skills = receipt.skills === undefined
+    ? {}
+    : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
+
   await tx
     .update(characters)
     .set({
       xp,
       gold,
+      ...skills,
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),

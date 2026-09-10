@@ -1110,6 +1110,9 @@ export class SessionHost {
       ...(owner?.staminaMs === undefined || owner.staminaMs === null
         ? {}
         : { staminaMs: owner.staminaMs, staminaUpdatedAtMs: owner.staminaUpdatedAtMs }),
+      // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
+      // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
+      ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
     });
   }
 

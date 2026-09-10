@@ -129,6 +129,8 @@ export function createTicketHandler(
         // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
         // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
         ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
+        // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
+        skills: character.skills,
         staminaMs: character.staminaMs,
         staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
       }, resolution.node),

@@ -8,11 +8,11 @@ import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  spellSchema, staminaSchema, supplySchema,
+  skillSchema, spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  BotLimits, Combat, Hunt, Monster, Progression, Spell, Stamina, Supply, Vocation,
+  BotLimits, Combat, Hunt, Monster, Progression, Skill, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 
 export interface Content {
@@ -36,6 +36,8 @@ export interface Content {
   readonly spells: ReadonlyMap<string, Spell>;
   /** Catálogo de supplies (§20.1). Poção e runa debitam gold; não são itens físicos. */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /** Skills que sobem por uso (§9.4). Vazio é um jogo em que nada sobe por fazer. */
+  readonly skills: ReadonlyMap<string, Skill>;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
@@ -57,6 +59,7 @@ export interface RawContent {
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
+  readonly skills?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -126,6 +129,7 @@ export function buildContent(raw: RawContent): Content {
   }
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
+  const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
@@ -234,6 +238,7 @@ export function buildContent(raw: RawContent): Content {
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
     ...openOf('spell', spells),
     ...openOf('supply', supplies),
+    ...openOf('skill', skills),
   ];
 
   return {
@@ -241,6 +246,7 @@ export function buildContent(raw: RawContent): Content {
     bot: bot as BotLimits,
     spells,
     supplies,
+    skills,
     monsters,
     hunts,
     vocations,

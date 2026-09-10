@@ -5,6 +5,8 @@ import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
+import { Skills } from './skills.js';
+import type { SkillsState } from './skills.js';
 
 export interface Point {
   readonly x: number;
@@ -65,6 +67,12 @@ export interface CharacterState {
   /** Variação de gold desta sessão. Vira linha de ledger ao encerrar (invariante 10). */
   readonly goldDelta: number;
   readonly alive: boolean;
+  /**
+   * Skills que sobem por uso (§9.4, FUN-75). Ausente é snapshot ou personagem anterior a
+   * elas — e aí toda skill vale o nível inicial do conteúdo, que é onde um personagem novo
+   * começa. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
+   */
+  readonly skills?: SkillsState;
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
   readonly cooldowns: Partial<CooldownState>;
@@ -87,6 +95,8 @@ export class CharacterRuntime {
   goldDelta: number;
   alive: boolean;
   stepDurationMs: number;
+  /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
+  readonly skills: Skills;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
@@ -109,6 +119,7 @@ export class CharacterRuntime {
     // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
     // duração zero nunca chega ao fio — o protocolo exige duração positiva.
     this.stepDurationMs = state.stepDurationMs ?? 0;
+    this.skills = Skills.fromState(state.skills);
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
   }
@@ -130,6 +141,7 @@ export class CharacterRuntime {
       gold: this.gold,
       goldDelta: this.goldDelta,
       alive: this.alive,
+      skills: this.skills.getState(),
       contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
     };

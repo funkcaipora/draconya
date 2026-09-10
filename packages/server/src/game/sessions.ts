@@ -9,7 +9,7 @@ import {
   CharacterRuntime, Rng, Session, createCityRuleset, createHuntSession,
   huntRulesetFromSnapshot, materializeStamina, statsForLevel,
 } from '@draconya/sim';
-import type { HuntDifficultyName, Ruleset, SessionSnapshot } from '@draconya/sim';
+import type { HuntDifficultyName, Ruleset, SessionSnapshot, SkillsState } from '@draconya/sim';
 import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
 import type { BotConfig, Content } from '@draconya/content';
 import type {
@@ -74,6 +74,9 @@ export function createCitySessionFactory(
       // O saldo de entrada vem do TICKET (invariante 4). Ausente é zero, e zero recusa gasto —
       // é o lado seguro do erro: não gastar o que não se sabe ter.
       gold: initialCharacter.gold ?? 0,
+      // Skills vêm do ticket porque escalam o dano DURANTE a hunt (FUN-75). Ausentes, toda
+      // skill vale o nível inicial do conteúdo — que é onde um personagem novo começa.
+      ...(isSkillsState(initialCharacter.skills) ? { skills: initialCharacter.skills } : {}),
       staminaMs: initialCharacter.staminaMs ?? null,
       ...(initialCharacter.staminaUpdatedAtMs === undefined
         ? {}
@@ -274,4 +277,21 @@ export function createBotConfigValidator(
     }
     return { ok: true, config: parsed.data };
   };
+}
+
+/**
+ * A forma mínima de `SkillsState` vinda do banco (FUN-75).
+ *
+ * Checagem estrutural e não schema Zod: o formato é do `sim`, e importar um validador de
+ * domínio aqui só para conferir dois números seria mais acoplamento que garantia. O que
+ * importa é não deixar lixo virar `NaN` dentro do motor — entrada quebrada vira "sem skills",
+ * e o personagem começa no nível inicial em vez de a sessão não abrir.
+ */
+function isSkillsState(value: unknown): value is SkillsState {
+  if (typeof value !== 'object' || value === null) return false;
+  return Object.values(value).every((entry) => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const skill = entry as { level?: unknown; points?: unknown };
+    return Number.isFinite(skill.level) && Number.isFinite(skill.points);
+  });
 }

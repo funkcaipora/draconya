@@ -61,6 +61,15 @@ export interface InitialCharacter {
    */
   readonly botConfig?: unknown;
   /**
+   * As skills do personagem (§9.4, FUN-75), cruas.
+   *
+   * Precisam entrar na sessão, e não só sair dela: a skill escala o dano DURANTE a hunt, e um
+   * personagem que entrasse sempre no nível inicial bateria errado a hunt inteira.
+   *
+   * `unknown` porque a forma é do `sim`; o serviço de ticket não é lugar de conhecer domínio.
+   */
+  readonly skills?: unknown;
+  /**
    * Nome de exibição, para o chat assinar a mensagem (FUN-58). Vem do banco pelo mesmo
    * caminho que level e XP: o cliente não escolhe como aparece para os outros. Ausente é
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
@@ -429,6 +438,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(initial['botConfig'] === undefined || initial['botConfig'] === null
       ? {}
       : { botConfig: initial['botConfig'] }),
+    ...(typeof initial['skills'] === 'object' && initial['skills'] !== null
+      ? { skills: initial['skills'] }
+      : {}),
   };
 }
 
