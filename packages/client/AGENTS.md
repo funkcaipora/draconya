@@ -42,6 +42,49 @@ O que eles trazem e que **vale muito**:
 copyright. **O YATC é GPL-2.0**, que é copyleft: copiar código de lá obrigaria o Draconya inteiro
 a ser GPL. Leia como referência se quiser; não copie linha.
 
+## Pipeline de assets (`src/assets/`)
+
+O que existe hoje é a **leitura do índice**, e ela foi escrita sem o pacote na máquina (FUN-16).
+
+| Arquivo | O quê |
+|---|---|
+| `protobuf.ts` | Leitor de fio proto2 mínimo: varint, length-delimited, e pular o resto pelo wire type |
+| `appearances.ts` | `readAppearances(buffer)` → os quatro catálogos indexados por id |
+| `catalog.ts` | `readCatalog(json)`, `sheetForSprite(catalog, id)` e `thingsPath(version, file)` |
+
+**Os números de campo saem do schema REAL** — `src/protobuf/appearances.proto` do
+`opentibiabr/otclient`, MIT —, não de engenharia reversa do binário. É a diferença entre "campo
+5 parece ser a lista de sprites" e "campo 5 É `sprite_id`". Nenhuma dependência de protobuf foi
+adicionada: o único consumidor é um arquivo, e um gerador traria o runtime inteiro para o bundle.
+
+Três coisas que não podem mudar sem pensar duas vezes:
+
+- **Pular campo desconhecido pelo wire type é o que sustenta subir de versão do pacote.** Sem
+  isso, o primeiro campo que a CIP adicionar desalinha tudo o que vem depois dele — e o sintoma
+  é sprite trocado, não erro de leitura. Há teste com os quatro wire types.
+- **`repeated` numérico é lido nas DUAS codificações.** proto2 não empacota por padrão, mas nada
+  impede o pacote de empacotar, e um leitor que só entende uma das formas devolve zero sprite
+  para metade das aparências.
+- **No catálogo, tipo desconhecido é ignorado e tipo conhecido inválido é ERRO.** A validação é
+  em duas etapas de propósito: uma união simples faz uma entrada `sprite` corrompida escorregar
+  para o ramo "não sei o que é isso" e sumir — e uma folha que some é uma faixa inteira de ids
+  sem dono, com todo sprite dela em branco, num catálogo que "carregou com sucesso".
+
+**Só as bandeiras de DESENHO são lidas.** `AppearanceFlags` tem ~70 campos — empilhável,
+container, bloqueia passagem, categoria de mercado — e nenhum entra: quem decide o que uma coisa
+faz é `content` (invariante 6). Ler isso aqui criaria uma segunda fonte de verdade sobre regra de
+jogo, dentro do pacote de arte.
+
+**O que NÃO foi escrito, e por quê:** o índice de um sprite dentro de um `frameGroup` a partir de
+`(x, y, z, camada, fase)`. A ordem de aninhamento não sai do `.proto` — só do arquivo real — e
+uma suposição errada ali desenha o sprite errado em vez de falhar. Entra na FUN-23, com o pacote
+na mão.
+
+**Nada disto foi conferido contra um `.dat` de verdade** (FUN-65). Os testes provam que o leitor
+obedece ao schema; que o arquivo obedece ao schema é o que a FUN-21 mede. A única suposição fora
+do `.proto` está marcada com `SUPOSIÇÃO` no código: padrão e camada ausentes valem 1, não 0,
+porque a contagem de sprites é o produto das dimensões e um zero ali zeraria o produto.
+
 ## Invariantes locais
 
 - **O estado de jogo vive num store mutável fora do React**, em `src/state/`, alimentado pelos
@@ -56,7 +99,7 @@ a ser GPL. Leia como referência se quiser; não copie linha.
   HUD. **O canvas nunca renderiza através do React**; ele lê `world` direto no laço de render
   (`world/viewport.ts`). Ver ADR 0007.
 - **O mundo é desenhado com RETÂNGULOS por enquanto** (`world/`). O pacote de arte não está no
-  repositório e o pipeline dele é a FUN-16..21. O que existe é tudo o que não depende de arte:
+  repositório e o pipeline dele é a FUN-17..21. O que existe é tudo o que não depende de arte:
   câmera de 18×14, camadas, ordem de desenho por `y`, reaproveitamento de sprite e
   interpolação de passo. Trocar retângulo por sprite é trocar a textura e ligar os
   `frameGroups`, não reescrever o viewport.
