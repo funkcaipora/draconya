@@ -146,7 +146,11 @@ a cada entrega. Nunca faça push direto na `main`; execute `pnpm check` antes de
 - `docs/reference/` — estudo de engines externas usado como **especificação de domínio**. Antes de
   implementar mecânica de jogo nova, consulte a seção correspondente: o objetivo é não
   redescobrir problema que outra engine já resolveu. Ver ADR 0019 — inclusive o limite de
-  licença, que não é negociável
+  licença, que não é negociável. São dois documentos e eles respondem coisas diferentes:
+  `opentibia-engine-reference.md` diz **como o mecanismo funciona** (TFS e Canary, código
+  aberto); `huntera-observed.md` diz **que números um jogo do gênero usa de fato**, observados
+  em produção — é a ele que se recorre quando um `[ABERTO]` do PRD precisa de um ponto de
+  partida em vez de um palpite
 
 ## Ao trabalhar aqui
 
