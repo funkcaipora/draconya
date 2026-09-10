@@ -119,6 +119,35 @@ Quem **executa** a ação escolhida é o motor de magia (M7) e o de supply (M8),
 devolve `false` quando a ação não aconteceu, porque uma categoria não pode gastar o cooldown de
 uma ação que não aconteceu: seria o bot parando um segundo por ter tentado curar sem mana.
 
+## A cadência: cinco categorias, cinco relógios (FUN-84)
+
+Cada categoria é um **evento independente** na fila da sessão. Não existe prioridade global
+(§13.4): uma cura que executa não atrasa o ataque, porque são vencimentos separados.
+
+Uma categoria está sempre num de dois estados, e nunca nos dois:
+
+| Estado | Quando | Custo |
+|---|---|---|
+| **agendada** | executou uma ação; volta no cooldown da categoria | um evento por cooldown |
+| **engatilhada** | nenhuma regra valeu, ou o atuador recusou | **zero** até o mundo mudar |
+
+Engatilhar em vez de reagendar no vazio é o que faz um bot configurado e sem nada a fazer custar
+nada. Reavaliar é imediato quando o personagem **leva dano** — esperar o próximo múltiplo de um
+relógio para curar quem está caindo custa a vida do personagem, e é a mesma perda que o golpe
+engatilhado da FUN-68 corrigiu do outro lado.
+
+**Atuador que recusa não consome o cooldown.** Sem mana ou sem supply, a ação não aconteceu — e a
+categoria não pode ficar um segundo parada por ter tentado.
+
+**Categoria sem regra não entra na fila**, e personagem sem bot configurado não agenda nada. Os
+cinco eventos por segundo por hunt que isto orça só existem para quem configurou — e até a
+FUN-81 não existe configuração, então o custo medido é zero: `pnpm bench:hunts` deu 17,1 µs por
+tick contra 21,0 µs na `main`, diferença dentro da variância entre execuções.
+
+O estado de "agendada" entra no **snapshot**. Sem ele, uma sessão retomada acharia a categoria
+engatilhada com um evento já na fila, e ela agiria duas vezes por cooldown — a mesma invariante
+que o golpe do personagem protege, e que já quebrou uma vez lá.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |

@@ -398,6 +398,12 @@ com `dist` apagado, para garantir que mede o código de agora e não um build ve
 | instâncias por core (1 Hz) | 200–500 | **48.600 – 54.900** |
 | memória por sessão | a medir | **27,0 KiB** (idêntico nas três) |
 | snapshot por sessão | a medir | **12,0 KiB** (idêntico nas três) |
+
+> **Estes dois números são anteriores à FUN-63.** A atribuição de dano (`Contribution`, um `Map`
+> por criatura viva) subiu a memória para **36,9 KiB** e o snapshot para **14,2 KiB** — medido na
+> `main` em 2026-09-10, no mesmo M2. O custo de tick foi de 18–21 µs para 21,0 µs, dentro da
+> variância entre execuções. Ninguém remediu ao mergear a FUN-63, e a tabela ficou dizendo o
+> número de antes: é o mesmo tipo de deriva que o índice de `docs/product/` tinha.
 | pausa de GC | a medir | 2,9–3,7 s em ~50 s de laço, **pico de 100–195 ms** |
 
 Um número anterior desta seção dizia 34,7 KiB de memória por sessão e não reproduz: três

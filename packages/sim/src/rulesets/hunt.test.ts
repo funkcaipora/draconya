@@ -849,3 +849,152 @@ describe('movimento com escritor único (FUN-69)', () => {
   });
 
 });
+
+// --- as cinco categorias do bot (FUN-84) -----------------------------------------------------
+
+import { compileBot } from '../bot.js';
+import type { BotAction, BotConfig } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+
+const botConfig = (over: Partial<BotConfig> = {}): BotConfig => ({
+  version: BOT_VOCABULARY_VERSION,
+  heal: [], potion: [], attack: [], rune: [], support: [],
+  ...over,
+});
+
+/** Um atuador que anota o que foi pedido, e diz se executou. */
+const recorder = (executes = true) => {
+  const done: BotAction[] = [];
+  return {
+    done,
+    perform(action: BotAction) { if (executes) done.push(action); return executes; },
+  };
+};
+
+const withBot = (config: BotConfig, actuator?: { perform(a: BotAction): boolean }) => {
+  const loaded = content();
+  const session = createHuntSession({
+    id: 'bot-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
+    createdAtMs: 0,
+    bot: compileBot(config, loaded),
+    ...(actuator === undefined ? {} : { actuator }),
+  });
+  const hero = character();
+  session.enter(hero);
+  return { session, hero };
+};
+
+describe('cadência das cinco categorias (FUN-84)', () => {
+  const scheduled = (session: Session): readonly string[] =>
+    (session.ruleset.getState?.() as { botScheduled?: readonly string[] }).botScheduled ?? [];
+
+  it('personagem SEM bot não agenda categoria nenhuma', () => {
+    // O custo de cinco eventos por segundo por hunt só pode existir para quem configurou. Até
+    // a FUN-81 isso é todo mundo, e uma fila com evento inerte é custo puro.
+    const { session } = start();
+    session.advanceBy(5_000);
+    expect(scheduled(session)).toEqual([]);
+  });
+
+  it('categoria VAZIA não entra na fila, mesmo com bot configurado', () => {
+    // Só `heal` tem regra. As outras quatro não custam evento nenhum — e o recusador mantém a
+    // categoria engatilhada, então o que se vê é exatamente quem foi agendado.
+    const { session } = withBot(botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } }],
+    }), recorder());
+    expect(scheduled(session)).toEqual(['heal']);
+  });
+
+  it('o estado de "agendada" sobrevive ao snapshot — senão é ação DOBRADA', () => {
+    // O evento pendente da categoria está na fila serializada. Restaurar como engatilhada
+    // faria o próximo `#armBot` agendar um segundo, e a categoria agiria duas vezes por
+    // cooldown. É a mesma invariante do golpe do personagem, e ela já quebrou uma vez lá.
+    const { session } = withBot(botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } }],
+    }), recorder());
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as { ruleset: unknown };
+    expect((snapshot.ruleset as { botScheduled: readonly string[] }).botScheduled)
+      .toEqual(['heal']);
+  });
+
+  it('uma cura que executa NÃO atrasa o ataque: as categorias são independentes', () => {
+    // §13.4: sem prioridade global. Se uma categoria bloqueasse a outra, o bot pararia de
+    // atacar toda vez que curasse — que é a razão de serem eventos separados na fila.
+    const actuator = recorder();
+    const { session } = withBot(botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'cure' } }],
+      attack: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'bolt' } }],
+    }), actuator);
+
+    session.advanceBy(50);
+
+    expect(actuator.done.map((a) => (a.kind === 'spell' ? a.spellId : '')))
+      .toEqual(expect.arrayContaining(['cure', 'bolt']));
+  });
+
+  it('duas regras válidas na mesma categoria executam SÓ a primeira', () => {
+    const actuator = recorder();
+    const { session } = withBot(botConfig({
+      heal: [
+        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'forte' } },
+        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'fraca' } },
+      ],
+    }), actuator);
+
+    session.advanceBy(50);
+
+    expect(actuator.done).toHaveLength(1);
+    expect(actuator.done[0]).toEqual({ kind: 'spell', spellId: 'forte' });
+  });
+
+  it('o cooldown de categoria conta a partir da AÇÃO, e vem do conteúdo', () => {
+    // §13.5: 1 s por categoria. O número mora em `bot/baseline.json`, não em código.
+    const actuator = recorder();
+    const { session } = withBot(botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'cure' } }],
+    }), actuator);
+
+    session.advanceBy(50);
+    expect(actuator.done).toHaveLength(1);
+    // Antes de fechar o segundo, nada de novo.
+    session.advanceBy(800);
+    expect(actuator.done).toHaveLength(1);
+    // Passado o cooldown, a categoria volta.
+    session.advanceBy(300);
+    expect(actuator.done).toHaveLength(2);
+  });
+
+  it('atuador que RECUSA não consome o cooldown da categoria', () => {
+    // Sem mana, sem supply: a ação não aconteceu, e a categoria não pode ficar um segundo
+    // parada por ter tentado. Ela engatilha e volta quando o mundo mudar.
+    const actuator = recorder(false);
+    const { session } = withBot(botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'cure' } }],
+    }), actuator);
+
+    session.advanceBy(2_000);
+
+    expect(actuator.done).toHaveLength(0);
+  });
+
+  it('o mesmo resultado a 1 Hz e a 10 Hz, com as cinco configuradas', () => {
+    // O contrato do invariante 3 aplicado ao bot: quem caça desanexado configurou o mesmo bot,
+    // e ele precisa render o mesmo.
+    const todas = botConfig({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'h' } }],
+      potion: [{ when: { kind: 'mana', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'p' } }],
+      attack: [{ when: { kind: 'targets', op: '>=', count: 0 }, do: { kind: 'spell', spellId: 'a' } }],
+      rune: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'item', itemId: 'r' } }],
+      support: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 's' } }],
+    });
+    const run = (stepMs: number) => {
+      const actuator = recorder();
+      const { session } = withBot(todas, actuator);
+      for (let at = stepMs; at <= 60_000; at += stepMs) session.advanceBy(stepMs);
+      return actuator.done.length;
+    };
+
+    expect(run(1_000)).toBe(run(100));
+  });
+});
