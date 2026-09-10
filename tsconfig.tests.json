@@ -10,5 +10,10 @@
     "jsx": "react-jsx",
     "resolveJsonModule": true
   },
-  "include": ["packages/*/src/**/*.test.ts", "packages/*/src/testing/**/*.ts"]
+  "//": "`vite-env.d.ts` entra porque teste de cliente alcança módulo que lê `import.meta.env` — que é do Vite, não do TypeScript. Sem ele, o typecheck dos testes reprova um arquivo que o typecheck do pacote aceita.",
+  "include": [
+    "packages/*/src/**/*.test.ts",
+    "packages/*/src/testing/**/*.ts",
+    "packages/client/src/vite-env.d.ts"
+  ]
 }

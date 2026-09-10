@@ -91,3 +91,33 @@ body {
 }
 .analyzer-events li { margin: 0 0 2px; }
 .analyzer-event-time { color: #4a4a56; margin-right: 6px; }
+
+/* A tela de entrada (FUN-97). Ela não divide espaço com o jogo: ou uma, ou o outro. */
+.entry {
+  max-width: 420px; margin: 12vh auto; padding: 0 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.entry h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.04em; }
+.entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.entry .quiet { color: #6a6a78; margin: 0; }
+.entry button {
+  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 4px;
+  padding: 6px 12px; color: inherit; font: inherit; cursor: pointer;
+}
+.entry button:hover:not(:disabled) { border-color: #3a3a48; }
+.entry button:disabled { opacity: 0.5; cursor: default; }
+.entry-quiet { background: none !important; border: none !important; color: #6a6a78 !important; }
+.entry-characters { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.entry-character {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid #2a2a35; border-radius: 4px; padding: 8px 10px;
+}
+.entry-meta { color: #6a6a78; }
+.entry-create { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.entry-create label { color: #6a6a78; }
+.entry-create-row { display: flex; gap: 8px; }
+.entry-create input {
+  flex: 1 1 auto; min-width: 0;
+  background: #131319; border: 1px solid #2a2a35; border-radius: 4px;
+  padding: 6px 8px; color: inherit; font: inherit;
+}

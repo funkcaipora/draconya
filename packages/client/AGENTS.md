@@ -113,3 +113,17 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **Campo opcional dos agregados vira "—", nunca zero.** Eles são opcionais porque um nó `game`
   anterior à FUN-78 manda sem eles (deploy em rolagem). Zero é uma afirmação que o servidor não
   fez.
+- **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
+  acontece quando ainda não existe sessão de jogo; o socket só abre depois, com o ticket que a
+  escolha rende. `credentials: 'include'` em toda chamada — a sessão é cookie httpOnly (ADR 0012),
+  e sem ele tudo responde 401 com o sintoma parecendo "não estou logado".
+- **`account` é uma store separada do `hud`**, pela mesma razão que o `hud` é separado do `world`:
+  ritmos diferentes. A lista de personagens muda três vezes por sessão; o HP muda sessenta vezes
+  por segundo.
+- **401 em `/api/auth/me` é a RESPOSTA "ninguém", não uma falha.** Tratá-lo como erro mostraria
+  uma mensagem vermelha para quem só ainda não entrou — o estado de toda primeira visita.
+- **Recusa da API vira frase, e a frase vive em `account/api.ts`.** Traduzir na tela faria a
+  mesma recusa dizer coisas diferentes em cada lugar; e um código que ninguém traduziu ainda
+  aparece cru, porque "algo deu errado" faz o jogador repetir o mesmo erro.
+- **`?character=<id>` fica.** `phase-one-exit.test.ts` e `pnpm load` entram sem tela, e tirá-lo
+  obrigaria os dois a simular login para testar sessão.
