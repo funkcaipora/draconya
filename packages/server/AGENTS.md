@@ -295,6 +295,22 @@ roda há N minutos", e contador que para de subir não dispara nada sozinho.
 `orphan_sessions` é um zero OBSERVADO — a varredura olhou e não achou —, e não o zero de uma
 gauge que ninguém escreve. Foi a pendência da FUN-47.
 
+## Os dois critérios de saída, como teste (FUN-44, FUN-99)
+
+`api/phase-one-exit.test.ts` prova que a sessão **sobrevive**; `api/phase-two-exit.test.ts`
+prova que ela **rende** — e que o número que o jogador lê é o que chega ao banco.
+
+Os dois seguem as mesmas duas regras, e elas valem para qualquer teste que entre aqui:
+
+- **O tempo é dirigido, nunca esperado.** Um teste que dorme dez minutos não roda no CI, e
+  portanto não roda nunca.
+- **Cada passo verifica ESTADO.** "Não lançou exceção" passa com a sessão parada.
+
+O da F2 tem uma asserção que é o motivo de ele existir: o saldo no Postgres é conferido pela
+CONTA — `gold anterior + ganho − gasto` —, e não por "é maior que zero". Bot, loot, ledger e
+analisador têm teste cada um; o que faltava era alguém afirmar que os quatro contam a MESMA
+história sobre a mesma hunt.
+
 ## O critério de saída da Fase 1 (FUN-44)
 
 `src/api/phase-one-exit.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
