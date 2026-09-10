@@ -24,6 +24,7 @@ import { sweepOrphanedSessions } from './orphans.js';
 import type { Progression } from '@draconya/content';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
+import type { SingletonLock } from './lock.js';
 
 export interface JobsDependencies {
   readonly tickets?: TicketService;
@@ -37,6 +38,11 @@ export interface JobsDependencies {
   readonly metrics?: JobsMetrics;
   /** Relógio de parede, para o carimbo de último sucesso. Injetável para teste. */
   readonly now?: () => number;
+  /**
+   * O lock de singleton (FUN-91). Ausente: o ciclo roda sem disputar, que é o comportamento
+   * de antes — e o certo para um `jobs` montado à mão em teste, que não tem par para disputar.
+   */
+  readonly lock?: SingletonLock;
 }
 
 const SCHEDULE_INTERVAL_MS = 10_000;
@@ -62,6 +68,28 @@ export function createJobsCycle(
       metrics?.observeSkipped();
       return;
     }
+
+    // A liderança é decidida A CADA CICLO (FUN-91). Quem está vivo renova; quem morreu perde
+    // por TTL, e o substituto assume sem ninguém precisar detectar a morte.
+    //
+    // Não é paranoia de operador: escrever extrato e varrer ticket já são idempotentes, mas a
+    // varredura de órfã DEVOLVE SLOT, e dois processos podem devolver o mesmo em instantes
+    // diferentes — o segundo derrubando uma sessão que nasceu no intervalo.
+    if (dependencies.lock !== undefined) {
+      let held = false;
+      try {
+        held = await dependencies.lock.acquire();
+      } catch (error) {
+        // Redis fora do ar: NÃO rodar. Assumir a liderança quando não dá para saber quem a
+        // tem é a única forma de ter dois líderes de verdade.
+        logger.error({ error }, 'Could not reach the singleton lock; skipping this cycle');
+        metrics?.observeLock(false);
+        return;
+      }
+      metrics?.observeLock(held);
+      if (!held) return;
+    }
+
     running = true;
     const startedAt = now();
     let slotsReleased = 0;
@@ -170,6 +198,9 @@ export function createJobs(
       if (timer) clearTimeout(timer);
       timer = null;
       while (cycle.running) await new Promise((resolve) => setTimeout(resolve, 50));
+      // Soltar em vez de deixar expirar: num deploy, o substituto assume no ciclo seguinte em
+      // vez de esperar meio minuto de TTL com ninguém varrendo nada.
+      await dependencies.lock?.release().catch(() => undefined);
       if (http !== null) {
         await http.close();
         http = null;

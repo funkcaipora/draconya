@@ -156,6 +156,24 @@ describe('commit', () => {
   });
 });
 
+describe('duração do passo', () => {
+  it('reta e diagonal custam o MESMO hoje, e é decisão — não descuido (FUN-91)', () => {
+    // `movementDuration` recebe `from` e `to` e os ignora. A assinatura existe para que o
+    // custo de diagonal, quando entrar, mude num lugar só — mas parâmetro com `_` é a
+    // convenção de "não usado", e daqui a três meses alguém os limpa sem ler o comentário.
+    //
+    // Este teste é o comentário virando obrigação: no dia em que a diagonal passar a custar
+    // mais, ele falha, e a mudança tem de ser deliberada. No Tibia ela custa mais; aqui ainda
+    // não, e isso é balanceamento, não arquitetura.
+    const mover = at(2, 1);
+    const reta = movementDuration(mover, mover.position, to(3, 1));
+    const diagonal = movementDuration(mover, mover.position, to(3, 2));
+
+    expect(reta).toBe(mover.stepDurationMs);
+    expect(diagonal).toBe(reta);
+  });
+});
+
 describe('colocação (FUN-60)', () => {
   it('não exige adjacência, mas exige a mesma legalidade', () => {
     // Quem chega não está neste mundo ainda: `world()` nasce vazio, e a posição que o herói
