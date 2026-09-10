@@ -378,6 +378,16 @@ export class HuntRuleset implements Ruleset {
   };
 
   /**
+   * As skills indexadas pelo que as alimenta (FUN-75).
+   *
+   * Montado UMA vez, na construção. `map.values()` aloca um iterador por chamada, e
+   * `#scaledPower` e `#gainSkills` rodam a cada golpe e a cada magia — com 5.000 instâncias
+   * isso é o coletor trabalhando para percorrer duas entradas. É a mesma conta que fez o
+   * índice de monstro por subject valer a pena.
+   */
+  readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
+
+  /**
    * O alvo de magia, reaproveitado pela mesma razão que `#botView`.
    *
    * Mutável de propósito: `castSpell` só lê, e quem escreve é `#castSpell`, num lugar só.
@@ -408,6 +418,10 @@ export class HuntRuleset implements Ruleset {
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#exitRules = this.#composeExitRules(options.botConfig);
+    this.#skillsByGain = {
+      'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
+      'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
+    };
     this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
@@ -1300,9 +1314,15 @@ export class HuntRuleset implements Ruleset {
    * nome de uma skill que o conteúdo pode renomear.
    */
   #scaledPower(character: CharacterRuntime, on: Skill['gain']['on'], base: number): number {
+    const definitions = this.#skillsByGain[on];
+    // Nenhuma skill alimentada por esta fonte: devolve o base sem tocar em nada. É o caminho
+    // de um conteúdo sem skills, e ele custa uma comparação.
+    if (definitions.length === 0) return base;
+
     let power = base;
-    for (const definition of this.#options.skills.values()) {
-      if (definition.gain.on !== on || definition.damagePerLevel === 0) continue;
+    for (let i = 0; i < definitions.length; i += 1) {
+      const definition = definitions[i] as Skill;
+      if (definition.damagePerLevel === 0) continue;
       power *= powerMultiplier(definition, character.skills.levelOf(definition));
     }
     return Math.round(power);
@@ -1322,9 +1342,10 @@ export class HuntRuleset implements Ruleset {
     session: Session, character: CharacterRuntime, on: Skill['gain']['on'], amount: number,
   ): void {
     if (amount <= 0) return;
-    for (const definition of this.#options.skills.values()) {
+    const definitions = this.#skillsByGain[on];
+    for (let i = 0; i < definitions.length; i += 1) {
+      const definition = definitions[i] as Skill;
       const gain = definition.gain;
-      if (gain.on !== on) continue;
       const points = gain.on === 'melee-hit' ? gain.points * amount : gain.pointsPerMana * amount;
       if (character.skills.gain(definition, points) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
