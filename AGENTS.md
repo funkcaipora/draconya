@@ -46,13 +46,21 @@ pode morar (ver `docs/harness-plan.md` §1).
    Por quê: sem isso, um deploy no meio de milhares de hunts desanexadas produz resultado
    inconsistente e impossível de auditar.
 
-8. **Todo personagem está sempre em exatamente uma sessão**, cidade inclusive.
+8. **Todo personagem está sempre em exatamente um estado**, cidade inclusive — e um estado
+   ATIVO é sempre exatamente uma sessão hospedada.
    Por quê: transforma "estado exclusivo" de regra policiada em propriedade estrutural — não
    existe lugar onde o personagem esteja em dois estados ao mesmo tempo.
+   O repouso é o estado sem sessão: a Cidade não simula nada (§37), e depois de um prazo sem
+   visualizador a sessão dela é recolhida (ADR 0024). O personagem continua na Cidade por
+   `characters.state`, que é uma linha só e não admite ambiguidade.
 
-9. **Estado quente só é escrito pela sessão dona.** Nenhum outro processo toca.
+9. **Estado QUENTE só é escrito pela sessão dona.** Nenhum outro processo toca o
+   `CharacterRuntime` em memória — isto é absoluto e não tem exceção.
    Por quê: é também o mecanismo de controle de concorrência do gold — não precisa de lock
    adicional porque nunca há duas fontes de escrita ao mesmo tempo.
+   **A linha do Postgres não é estado quente.** Ela é durável, é escrita por `jobs` e por `api`,
+   e o que serializa as duas é a trava de linha mais a chave única do invariante 10 — que já
+   existiam. Ver ADR 0024, inclusive por que essa é a fronteira certa.
 
 10. **Movimentação de valor passa pelo ledger** com `(session_id, seq)` único. Retry nunca
     duplica.

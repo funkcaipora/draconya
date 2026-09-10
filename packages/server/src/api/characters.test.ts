@@ -284,6 +284,47 @@ describe('a tela de seleção liquida antes de ler (FUN-66)', () => {
     expect(response.json()).toMatchObject({ id: created.id, gold: 40 });
   });
 
+  it('NÃO liquida o personagem de outra conta (ADR 0024)', async () => {
+    // Mesma fresta que o ADR 0024 fechou em `POST /api/tickets`, e ela existia aqui também:
+    // `select` liquidava o id do path ANTES de conferir posse. O que o atacante ganhava não
+    // era valor — era disparar escrita no ledger e na linha de um personagem alheio.
+    const settled: string[] = [];
+    const { app, repository, cookie } = await withSettlement(async (id) => {
+      settled.push(id);
+      return { written: 1, failed: 0 };
+    });
+    // Um personagem de OUTRA conta, e o atacante entra com a sessão da conta 'a1'.
+    const alheio = await repository.createCharacter('a2', 'Alheio');
+
+    const response = await app.inject({
+      method: 'POST', url: `/api/characters/${alheio.id}/select`, headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(settled).toEqual([]);
+  });
+
+  it('sem nada pendente, o select faz UMA leitura só', async () => {
+    // A correção de posse não pode custar uma consulta a mais no caso comum: só relê quando a
+    // liquidação escreveu de fato. Sem este teste, "conferir antes" viraria "ler duas vezes".
+    const { app, repository, created, cookie } = await withSettlement(
+      async () => ({ written: 0, failed: 0 }),
+    );
+    let reads = 0;
+    const original = repository.getCharacter.bind(repository);
+    repository.getCharacter = async (accountId: string, characterId: string) => {
+      reads += 1;
+      return original(accountId, characterId);
+    };
+
+    const response = await app.inject({
+      method: 'POST', url: `/api/characters/${created.id}/select`, headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(reads).toBe(1);
+  });
+
   it('liquidação que lança NÃO derruba a resposta: sai o valor atrasado, e o erro vai ao log', async () => {
     // Ao contrário do ticket (FUN-56), que recusa com 503. A tela de personagens é como se
     // chega a qualquer lugar; 503 nela trancaria a conta inteira por uma falha de ledger, e o

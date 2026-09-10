@@ -36,6 +36,7 @@ function build(
       _characterId: string,
       operation: (character: typeof CHARACTER) => unknown,
     ) => operation(CHARACTER),
+    ownsCharacter: async () => true,
     settleProgress: async () => ({ written: 0, failed: 0 }),
     ...overrides,
     // Depois do spread, e mesclado: quase todo teste sobrescreve só o `issue`, e substituir o
@@ -79,6 +80,57 @@ describe('POST /api/tickets', () => {
     // Não 403: distinguir "não existe" de "não é seu" entrega uma lista de personagens.
     const response = await post(build({ withOwnedCharacter: async () => null }), { characterId: 'p1' });
     expect(response.statusCode).toBe(404);
+  });
+
+  it('NÃO liquida o progresso de um personagem que não é do chamador (ADR 0024)', async () => {
+    // A liquidação precisa vir antes da trava de linha, e por isso ela ficava antes da
+    // checagem de posse: uma conta autenticada disparava ação sobre dado de outra conta. Nada
+    // de valor mudava, mas "nada de valor" não é a fronteira certa num endpoint autenticado.
+    const settleProgress = vi.fn(async () => ({ written: 0, failed: 0 }));
+    const resolveNode = vi.fn(async () => ({ ok: true as const, node: NODE }));
+    const response = await post(
+      build({
+        ownsCharacter: async () => false,
+        settleProgress,
+        tickets: { resolveNode } as never,
+      }),
+      { characterId: 'de-outra-conta' },
+    );
+
+    expect(response.statusCode).toBe(404);
+    expect(settleProgress).not.toHaveBeenCalled();
+    // E nem o nó é resolvido: a posse decide se a rota faz ALGUMA coisa, então ela vem antes
+    // de tudo que custa uma ida ao Redis.
+    expect(resolveNode).not.toHaveBeenCalled();
+  });
+
+  it('a posse é conferida DUAS vezes, e a barata vem antes da liquidação', async () => {
+    // Uma não substitui a outra: `ownsCharacter` decide se a rota age, e roda sem travar;
+    // `withOwnedCharacter` decide o que é LIDO, sob a trava que o soft delete também usa.
+    // Colapsar as duas na segunda devolveria a fresta; na primeira, leria linha sem trava.
+    const order: string[] = [];
+    const response = await post(
+      build({
+        ownsCharacter: async () => { order.push('owns'); return true; },
+        settleProgress: async () => { order.push('settle'); return { written: 0, failed: 0 }; },
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => { order.push('lock'); return operation(CHARACTER); }) as never,
+      }),
+      { characterId: 'p1' },
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(order).toEqual(['owns', 'settle', 'lock']);
+  });
+
+  it('recusa servir enquanto a checagem de posse não estiver ligada', async () => {
+    // Falhar fechado, como as outras dependências: uma rota sem `ownsCharacter` liquidaria o
+    // personagem que o corpo pedir. Ausência é 501, nunca "segue sem conferir".
+    const response = await post(build({}, ['ownsCharacter']), { characterId: 'p1' });
+    expect(response.statusCode).toBe(501);
   });
 
   it('uses persisted attributes instead of client supplied progress', async () => {

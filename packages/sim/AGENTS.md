@@ -25,8 +25,10 @@ Esta é a fronteira mais importante do repositório, e o lint a impõe. Ver `doc
   Ver ADR 0003 e ADR 0020.
 - **O resultado não depende de haver alguém assistindo** (invariante 3). Cai a apresentação, nunca
   a matemática.
-- **Estado quente só é escrito pela sessão dona** (invariante 9).
-- **Todo personagem está sempre em exatamente uma sessão** (invariante 8).
+- **Estado quente só é escrito pela sessão dona** (invariante 9). Aqui isso é absoluto e não tem
+  a nuance do ADR 0024: `sim` não conhece Postgres, então tudo que ele toca É estado quente.
+- **Todo personagem está sempre em exatamente uma sessão** (invariante 8), e daqui de dentro isso
+  também é absoluto: um personagem em repouso não tem sessão, e por isso não existe em `sim`.
 
 ## Como testar
 

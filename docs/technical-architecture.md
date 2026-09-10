@@ -53,9 +53,9 @@ navegador ──HTTP──> api ──> [Postgres] [Redis]
 
 ### 3. Modelo de sessão (§45.2) — a decisão central
 
-**Todo personagem está sempre em exatamente uma sessão, cidade inclusive.**
+**Todo personagem está sempre em exatamente um estado, cidade inclusive — e um estado ativo é sempre exatamente uma sessão hospedada.**
 
-Isso transforma o requisito de estado exclusivo do §6 de *regra policiada* em *propriedade estrutural*: não existe lugar onde um personagem possa estar em dois estados, porque não existe personagem fora de uma sessão.
+Isso transforma o requisito de estado exclusivo do §6 de *regra policiada* em *propriedade estrutural*: não existe lugar onde um personagem possa estar em dois estados, porque o estado é sempre uma coisa só — a sessão que o hospeda enquanto ele age, e a coluna `characters.state` enquanto ele repousa. O repouso não precisa de nó: a Cidade não simula nada (§37), e a sessão dela é recolhida depois de um prazo sem visualizador (ADR 0024).
 
 ```
 Sessão

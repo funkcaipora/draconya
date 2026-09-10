@@ -93,8 +93,10 @@ Estes são os invariantes do `CLAUDE.md` raiz. Compare a decisão com cada um:
    servidor→cliente).
 6. `content/` nunca contém arte — só `appearanceId` e `outfitId`.
 7. A versão de conteúdo é fixada na sessão e não muda no meio dela.
-8. Todo personagem está sempre em exatamente uma sessão, cidade inclusive.
-9. Estado quente só é escrito pela sessão dona — nenhum outro processo toca.
+8. Todo personagem está sempre em exatamente um estado, cidade inclusive — e um estado ATIVO é
+   sempre exatamente uma sessão hospedada (ADR 0024).
+9. Estado QUENTE só é escrito pela sessão dona — nenhum outro processo toca o `CharacterRuntime`.
+   A linha do Postgres não é estado quente (ADR 0024).
 10. Movimentação de valor passa pelo ledger com `(session_id, seq)` único — retry nunca duplica.
 11. A automação é legítima — "parece bot" nunca é sinal de punição.
 
