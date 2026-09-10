@@ -1,7 +1,7 @@
 # Bot
 
-**Status:** parcial — vocabulário fechado e versionado implementado (FUN-73); nada executa
-regra ainda, e o compilador é a FUN-80
+**Status:** parcial — vocabulário fechado e versionado (FUN-73) e compilador de regras
+(FUN-80) implementados; nada **executa** ação ainda, porque magia é M7 e supply é M8
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -93,6 +93,31 @@ alcançá-lo sem deploy.
 
 **Nada aqui executa regra.** Isto é o contrato; a avaliação é a FUN-80, e a configuração pelo
 socket é a FUN-81.
+
+## Como a regra vira decisão (FUN-80)
+
+A configuração é **compilada ao entrar na sessão** (ADR 0002), uma vez, para um vetor de funções
+puras `(view) => boolean`. Interpretar o JSON a cada avaliação é o caminho fácil e errado: com
+5.000 hunts e cinco categorias por personagem, cada avaliação alocaria o objeto de condição de
+novo, e alocação por evento é o que custa caro no `sim`.
+
+Três propriedades que o compilador garante, e que têm teste:
+
+- **A avaliação não aloca.** A `BotView` é reaproveitada — os campos são reescritos antes de
+  avaliar —, e a ação devolvida é a mesma referência do vetor compilado, não uma cópia.
+- **Primeira válida executa** (§13.4) é a ordem do vetor, e a avaliação **para** ali: com
+  "HP≤30 → forte", "HP≤55 → média", "HP≤80 → fraca" e HP em 20%, as duas de baixo nem são
+  consultadas.
+- **HP e Mana comparam percentual**, nunca valor absoluto. 40 de 100 e 400 de 1000 disparam a
+  mesma regra — senão a mesma configuração mudaria de comportamento a cada level up.
+
+**Sem alvo, `target-hp` é falsa** — não é erro. "Ataque quando o alvo estiver abaixo de 30%" não
+vale quando não há alvo, e lançar ali derrubaria a sessão por uma regra escrita corretamente.
+
+Quem **executa** a ação escolhida é o motor de magia (M7) e o de supply (M8), por uma interface
+(`BotActuator`) — não por um `if` dentro do compilador que cresce a cada categoria nova. Ela
+devolve `false` quando a ação não aconteceu, porque uma categoria não pode gastar o cooldown de
+uma ação que não aconteceu: seria o bot parando um segundo por ter tentado curar sem mana.
 
 ## Parâmetros de balanceamento
 
