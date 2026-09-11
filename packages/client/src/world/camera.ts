@@ -10,12 +10,39 @@ import type { Point } from '../state/world.js';
 export const TILE = 32;
 
 /**
- * Campo de visão, em tiles. ~18×14 é também o raio de interesse da rede (FUN-33): o que o
- * servidor manda e o que a tela mostra têm que ser a mesma coisa, senão ou se paga banda por
- * algo invisível, ou aparece um buraco onde deveria ter criatura.
+ * Campo de visão MÁXIMO, em tiles. ~18×14 é também o raio de interesse da rede (FUN-33): o que
+ * o servidor manda e o que a tela mostra têm que ser a mesma coisa, senão ou se paga banda por
+ * algo invisível, ou aparece um buraco onde deveria ter criatura. Desde a FUN-115 o mundo
+ * ocupa a tela inteira e o que cabe nela é `viewFor`; estes dois são o teto.
  */
 export const VIEW_WIDTH = 18;
 export const VIEW_HEIGHT = 14;
+
+/**
+ * O zoom inteiro do mundo para uma tela (FUN-115). Pixel art só escala em inteiro — 1,5×
+ * borra —, e o Huntera, que é a referência visual, desenha o tile a 64 px numa tela comum:
+ * é o que faz o rato ter tamanho de rato, e não de formiga num canvas pequeno no meio da
+ * tela. Dois a partir de 560 px de altura (nove tiles inteiros), três a partir de 1 400.
+ */
+export function zoomFor(widthPx: number, heightPx: number): number {
+  const shorter = Math.min(widthPx, heightPx);
+  if (shorter >= 1_400) return 3;
+  if (shorter >= 560) return 2;
+  return 1;
+}
+
+/**
+ * Quantos tiles cabem numa tela, num zoom. FRACIONÁRIO de propósito: a câmera centra o alvo
+ * exatamente no meio do canvas, seja qual for a largura, e `visibleTiles` já pinta a margem.
+ * Teto em `VIEW_WIDTH × VIEW_HEIGHT`: além do raio de interesse não chega criatura, e
+ * desenhar mais chão que isso mostraria um mundo vazio em volta.
+ */
+export function viewFor(widthPx: number, heightPx: number, zoom: number): Viewport {
+  return {
+    widthTiles: Math.min(VIEW_WIDTH, widthPx / (TILE * zoom)),
+    heightTiles: Math.min(VIEW_HEIGHT, heightPx / (TILE * zoom)),
+  };
+}
 
 export interface Viewport {
   readonly widthTiles: number;

@@ -12,8 +12,9 @@
 //
 // A mesma linguagem do analisador — cabeçalho que abre e fecha — e as MESMAS classes: são
 // duas janelas da mesma coluna, e uma folha de estilo por janela é como elas passam a parecer
-// de jogos diferentes. Nasce minimizada pela mesma razão: é progressão de meses, não de
-// minutos, e o que muda em ritmo de hunt cabe no resumo do cabeçalho — o bônus.
+// de jogos diferentes. Nasce aberta (FUN-115): quem decide se a janela existe é a barra do
+// topo, e uma janela que abre minimizada é uma janela que abre vazia. Minimizada, o bônus
+// fica no cabeçalho — é o que muda em ritmo de hunt.
 
 import { useState } from 'react';
 import type { BestiaryConfig, BestiaryCounts, MonsterListing } from '../state/hud.js';
@@ -54,9 +55,9 @@ function Monster({ monster, kills, config }: {
 }
 
 /**
- * O corpo da janela, com o que a tela recebe já resolvido. Exportado à parte porque a janela
- * nasce minimizada e um teste sem DOM não clica: o que vale provar — o rato com a contagem e
- * o próximo marco — é isto.
+ * O corpo da janela, com o que a tela recebe já resolvido. Exportado à parte porque um teste
+ * sem DOM não clica o cabeçalho: o que vale provar — o rato com a contagem e o próximo
+ * marco — é isto.
  */
 export function BestiaryBody({ monsters, counts, config }: {
   monsters: readonly MonsterListing[]; counts: BestiaryCounts; config: BestiaryConfig | null;
@@ -91,12 +92,23 @@ export function BestiaryBody({ monsters, counts, config }: {
 export function Bestiary() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const counts = useHudSlice((state) => state.bestiary);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
-  // Sem catálogo não há o que listar. Sem MONSTRO no catálogo também não: é um nó anterior à
-  // FUN-113, que nunca manda `bestiary` — e um painel com "Bônus +0 %" e lista vazia afirma
-  // um Bestiário que aquele servidor não tem.
-  if (catalogue === null || catalogue.monsters.length === 0) return null;
+  // A janela EXISTE sempre que a barra do topo a abriu (FUN-115): sem catálogo ela diz que
+  // está carregando, e sem MONSTRO no catálogo — um nó anterior à FUN-113, que nunca manda
+  // `bestiary` — ela diz que este servidor não tem Bestiário. Devolver `null` deixava o botão
+  // da barra aceso sem nada acontecer; e um painel com "Bônus +0 %" e lista vazia afirmaria um
+  // Bestiário que aquele servidor não tem — por isso a frase, e não a lista.
+  if (catalogue === null || catalogue.monsters.length === 0) {
+    return (
+      <section className="bestiary" aria-label="bestiário">
+        <header className="analyzer-head">Bestiário</header>
+        <p className="quiet">
+          {catalogue === null ? 'Carregando…' : 'Este servidor não tem Bestiário.'}
+        </p>
+      </section>
+    );
+  }
 
   const config = catalogue.bestiary ?? null;
   // `null` é "ainda não chegou" — o intervalo entre o catálogo e o `bestiary` do attach, que

@@ -402,9 +402,11 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   `catalogue` (`monsters`, `bestiary`). O que a tela calcula é apresentação —
   `shell/bestiary-progress.ts`, puro: "que marco vem depois" e o bônus GLOBAL (DT-01, marcos de
   todos os monstros somados) —, e se divergisse do `sim` a conta do `sim` é a verdadeira. Mesmas
-  classes CSS do analisador, minimizada por padrão com o bônus no cabeçalho. **Sem monstro no
-  catálogo a janela não existe**: é um nó anterior à FUN-113, que nunca manda `bestiary`, e um
-  painel com "+0 %" e lista vazia afirma um Bestiário que aquele servidor não tem. Sem marcos no
+  classes CSS do analisador, aberta por padrão (FUN-115) e com o bônus no cabeçalho quando
+  minimizada. **Sem monstro no catálogo a janela diz "Este servidor não tem Bestiário"**: é um
+  nó anterior à FUN-113, que nunca manda `bestiary`, e um painel com "+0 %" e lista vazia
+  afirmaria um Bestiário que aquele servidor não tem — e sumir deixaria o botão da barra aceso
+  sem nada acontecer. Sem marcos no
   catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
   escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
@@ -444,6 +446,25 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, hunts e bot à
   esquerda, chat embaixo, nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
   atividade faz o jogador procurar a poção no meio da luta.
+- **O mundo ocupa a tela INTEIRA e o resto flutua por cima** (`shell/Shell.tsx`, `shell/TopBar.tsx`,
+  FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
+  da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir
+  de 560 px no lado menor, 3× a partir de 1400 — inteiro porque pixel art a 1,5× é borrão), e
+  a vista em tiles é o que couber (`viewFor`), com teto em 18×14, que continua sendo o campo de
+  visão da rede. **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
+  são escalados por `1 / zoom`, senão um nome de dez pixels a 3× vira letreiro. A barra do topo
+  tem nome, level, vitais, gold e os botões que abrem e fecham cada janela; cada janela é a
+  seção de sempre, posicionada numa coluna absoluta — e a moldura É a seção, para que uma seção
+  que devolve `null` (analisador na Cidade) não deixe moldura vazia. O bot é uma sobreposição
+  fora das colunas: dentro delas ficaria por baixo da barra do topo. Analisador, Bestiário e
+  Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre minimizada é
+  janela que abre vazia. No celular (≤ 720 px) a tela vira página: o mundo numa faixa de 40vh e
+  as janelas empilhadas embaixo, roláveis — o caso de uso móvel é configurar o bot (§5.1).
+- **Num painel oculto o `requestAnimationFrame` roda a ~1 Hz, e a tela parece quebrada sem
+  estar.** Foi meia hora perdida na FUN-115: o rato saía como retângulo em toda captura, o pacote
+  respondia em 5 ms, e o laço de quadro é que só rodava uma vez por segundo — cada quadro novo
+  era pedido e a captura vinha antes do quadro seguinte. Antes de caçar defeito de textura,
+  confira se o painel do navegador está visível (`tabs_context` diz).
 - **`inventory` e `catalogue` SUBSTITUEM, nunca acumulam.** O servidor manda o estado inteiro;
   montar a partir de pedaços daria uma mochila que diverge da dele sem nada acusar.
 - **A arte de UI vem do pacote, pelo CLIENTE, e nunca é versionada** (FUN-108). Moldura, pedra,

@@ -64,6 +64,7 @@ export function Inventory() {
   if (inventory === null || catalogue === null) {
     return (
       <section className="inventory" aria-label="inventário">
+        <header className="analyzer-head">Inventário</header>
         <p className="quiet">Carregando…</p>
       </section>
     );
@@ -73,6 +74,7 @@ export function Inventory() {
 
   return (
     <section className="inventory" aria-label="inventário">
+      <header className="analyzer-head">Inventário</header>
       <ul className="equipment">
         {ITEM_SLOTS.map((slot) => {
           // O equipado vem INTEIRO na mensagem — `instanceId`, `itemId`, `quantity` — porque

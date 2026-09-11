@@ -28,7 +28,7 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, VIEW_HEIGHT, VIEW_WIDTH, compareDrawOrder, toScreen, visibleTiles,
+  TILE, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor,
 } from './camera.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
@@ -131,9 +131,11 @@ export async function mountViewport(
 ): Promise<ViewportHandle> {
   const app = new Application();
   await app.init({
-    width: VIEW_WIDTH * TILE,
-    height: VIEW_HEIGHT * TILE,
-    background: 0x101014,
+    // O mundo ocupa o elemento INTEIRO (FUN-115): o canvas acompanha o tamanho dele, e os
+    // painéis flutuam por cima — como no Huntera, que é a referência visual. Antes era um
+    // canvas de 18×14 tiles a 1× no meio de uma tela preta, e o rato tinha tamanho de formiga.
+    resizeTo: parent,
+    background: 0x000000,
     antialias: false,
     // Pixel art em coordenada fracionária fica borrada, e a causa é difícil de achar depois.
     roundPixels: true,
@@ -143,7 +145,24 @@ export async function mountViewport(
   /** O pacote de agora. `let` porque ele pode chegar depois do Pixi (`setPack`). */
   let pack = options.pack ?? null;
   const book = options.book ?? new TextureBook();
-  const view = { widthTiles: VIEW_WIDTH, heightTiles: VIEW_HEIGHT };
+  /**
+   * O zoom inteiro e a vista em tiles, DA TELA DE AGORA. O stage é escalado pelo zoom, então
+   * todo o resto continua em pixels de tile (32) e só o resultado é ampliado — é o que mantém
+   * `toScreen`, as barras e os quadros iguais em qualquer zoom.
+   */
+  let zoom = zoomFor(app.screen.width, app.screen.height);
+  let view = viewFor(app.screen.width, app.screen.height, zoom);
+  app.stage.scale.set(zoom);
+  app.renderer.on('resize', (width: number, height: number) => {
+    zoom = zoomFor(width, height);
+    view = viewFor(width, height, zoom);
+    app.stage.scale.set(zoom);
+    // O texto NÃO acompanha o zoom (ver `createLabel`); o que já existe é reescalado aqui.
+    for (const entry of overlays.values()) entry.label.scale.set(1 / zoom);
+    for (const label of textLabels.values()) label.scale.set(1 / zoom);
+    // O terreno só repinta quando a chave muda, e a chave não sabe do tamanho da tela.
+    painted = '';
+  });
 
   // Camadas na ordem de desenho: terreno embaixo, criaturas em cima, efeitos sobre elas —
   // a explosão cobre o monstro, não o contrário — e a sobreposição por último.
@@ -315,13 +334,20 @@ export async function mountViewport(
    * sem medir a largura a cada quadro; a âncora vertical é de quem chama.
    */
   function createLabel(text: string, fill: number, anchorY: number): Text {
-    return new Text({
+    const label = new Text({
       text,
       style: { fontFamily: 'Verdana, sans-serif', fontSize: 10, fontWeight: 'bold', fill },
       resolution: 2,
       roundPixels: true,
       anchor: { x: 0.5, y: anchorY },
     });
+    // O texto tem o tamanho DA TELA, não do mundo (FUN-115): o stage amplia tudo pelo zoom, e
+    // um nome de dez pixels ampliado a 3× é um letreiro sobre a criatura. Dividir a escala
+    // pelo zoom o devolve aos dez pixels de tela — como o Tibia, em que o nome não cresce com
+    // o tamanho da janela. A posição continua em pixels de tile, e o stage a amplia como
+    // amplia o sprite.
+    label.scale.set(1 / zoom);
+    return label;
   }
 
   /** A barra e o nome de uma criatura, criados uma vez e reaproveitados a cada quadro. */
