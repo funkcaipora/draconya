@@ -76,6 +76,16 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('o pacote que a tabela cita tem inventário em packs/, e a tabela passa por ele (FUN-21)', () => {
+    // É o que faz o CI conferir os ids sem ter o pacote: `packs/<pack>.json` é a sombra dele
+    // no repositório. Apagar a pasta desligaria a conferência em silêncio — `buildContent`
+    // só a roda quando há inventário —, e este teste é o que impede isso.
+    const content = loadContent(DATA);
+    const pack = content.appearances?.pack;
+    expect(pack).toBeTruthy();
+    expect(readdirSync(join(DATA, 'packs'))).toContain(`${pack}.json`);
+  });
+
   it('nenhum arquivo de entidade guarda id de aparência por conta própria', () => {
     // Mesma ideia da varredura de arte abaixo, e pela mesma razão: o schema já recusa a chave
     // solta, mas a mensagem dele ("chave não reconhecida") não diz PARA ONDE o campo foi. Esta

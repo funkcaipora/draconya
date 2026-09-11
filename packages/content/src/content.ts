@@ -8,14 +8,16 @@ import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
   appearancesSchema,
+  packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
   Appearances, BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina,
-  Supply, Vocation, WallSet,
+  Supply, Vocation,
 } from './schemas.js';
+import { packProblems } from './pack.js';
 
 export interface Content {
   /**
@@ -75,6 +77,8 @@ export interface RawContent {
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
   readonly appearances?: readonly unknown[];
+  /** Inventários de pacote (FUN-21), `packs/<pack>.json`. Só o conteúdo real os tem. */
+  readonly packs?: readonly unknown[];
   readonly maps?: readonly unknown[];
   readonly routes?: readonly unknown[];
   /** `{ mapId }` — qual dos mapas é a Cidade. Explícito, e não um id mágico `"city"`. */
@@ -187,6 +191,24 @@ export function buildContent(raw: RawContent): Content {
     for (const id of Object.keys(appearances.supplies)) {
       if (supplies.has(id)) continue;
       problems.push(`appearances.supplies mapeia supply "${id}", que não existe no conteúdo`);
+    }
+  }
+
+  // O inventário do pacote (FUN-21). É a única conferência de que os NÚMEROS da tabela existem:
+  // tudo acima cruza a tabela com o conteúdo, e nada cruzava a tabela com o pacote — o outfit
+  // 999 passava e virava quadrado invisível em produção. Sem inventário nenhum a conferência
+  // não roda, e é assim que a fixture de combate continua sem falar de arte; com inventários
+  // e nenhum do pacote citado, é erro — o campo `pack` deixou de ser só documentação.
+  const packs = parseAll('pack', raw.packs ?? [], packSchema, problems);
+  if (appearances !== undefined && packs.size > 0) {
+    const pack = packs.get(appearances.pack);
+    if (pack === undefined) {
+      problems.push(
+        `appearances/baseline.json aponta o pacote "${appearances.pack}", e packs/ não tem o `
+          + `inventário dele — rode pnpm assets:inventory com o pacote na máquina`,
+      );
+    } else {
+      problems.push(...packProblems(appearances, pack));
     }
   }
 
@@ -333,22 +355,6 @@ export function buildContent(raw: RawContent): Content {
 }
 
 /**
- * As quatro peças da parede de um mapa (FUN-105), venha `wall` como vier.
- *
- * O schema aceita UM id ou os quatro, e não normaliza — o arquivo diz o que o humano escreveu.
- * Quem desenha precisa sempre das quatro, e é aqui que um número vira as quatro IGUAIS: a
- * regra de vizinhança continua rodando, escolhe uma peça por tile, e todas apontam a mesma
- * arte. É o que faz um mapa com `wall: 1298` desenhar hoje exatamente o que desenhava antes
- * de existir peça por vizinhança.
- */
-export function wallSetOf(wall: number | WallSet): WallSet {
-  if (typeof wall === 'number') {
-    return { vertical: wall, horizontal: wall, corner: wall, pole: wall };
-  }
-  return wall;
-}
-
-/**
  * Uma tabela de aparências DERIVADA do conteúdo, com ids sequenciais (FUN-94).
  *
  * Existe para fixture e para ferramenta de scaffolding, e o nome diz o que ela é: um teste de
@@ -484,7 +490,13 @@ function describeIssues(error: z.ZodError): string {
  * o que se quer é detectar mudança, não resistir a adversário.
  */
 export function computeVersion(raw: RawContent): string {
-  const canonical = JSON.stringify(raw, ordenarChaves);
+  // O inventário do pacote (FUN-21) fica FORA da versão. Ele não é lido por sessão nenhuma —
+  // só confere a tabela no boot —, e regenerá-lo porque o pacote ganhou ids novos não muda o
+  // que ninguém vê. Contá-lo faria um `pnpm assets:inventory` recusar todo snapshot de uma
+  // queda sem drenagem (`createSessionRestorer`) sem que um único número de jogo tenha mudado.
+  // O que muda a arte de uma sessão é o `pack` da tabela, e esse já conta.
+  const { packs: _packs, ...versioned } = raw;
+  const canonical = JSON.stringify(versioned, ordenarChaves);
   let hash = 0x811c_9dc5;
   for (let i = 0; i < canonical.length; i++) {
     hash ^= canonical.charCodeAt(i);

@@ -35,6 +35,9 @@ export function loadContent(dir: string): Content {
     // A tabela de aparências (FUN-94). Uma pasta como as outras, com um `baseline.json` dentro:
     // trocar de pacote de assets é editar ESTE arquivo, e não todo arquivo de conteúdo.
     appearances: readJsonDir(join(dir, 'appearances')),
+    // O inventário de cada pacote (FUN-21): `packs/<pack>.json`, gerado por
+    // `pnpm assets:inventory`. É contra ele que a tabela acima é conferida.
+    packs: readJsonDir(join(dir, 'packs')),
     maps: readJsonDir(join(dir, 'maps')),
     routes: readJsonDir(join(dir, 'routes')),
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura

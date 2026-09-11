@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildContent, computeVersion, ContentError, placeholderAppearances, wallSetOf,
+  buildContent, computeVersion, ContentError, placeholderAppearances,
 } from './content.js';
 import type { RawContent } from './content.js';
+import { wallSetOf } from './schemas.js';
 
 const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
@@ -361,6 +362,54 @@ describe('a tabela de aparências (FUN-94)', () => {
     expect(outroPacote.monsters.get('rat')?.outfitId).toBe(900);
     expect(outroPacote.items.get('spike-sword')?.appearanceId).toBe(901);
     expect(outroPacote.monsters.get('rat')?.health).toBe(20);
+  });
+});
+
+describe('a tabela contra o inventário do pacote (FUN-21)', () => {
+  const inventory = {
+    id: 'tibia-1332', version: '1332', appearancesSha256: 'b'.repeat(64),
+    object: [[100, 167], [169, 370]], outfit: [[1, 134]], effect: [[1, 80]], missile: [[1, 42]],
+  };
+  const tabela = (over: Record<string, unknown> = {}) => [{
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {}, ...over,
+  }];
+
+  it('aceita a tabela cujos ids existem no pacote', () => {
+    const content = buildContent(base({ appearances: tabela(), packs: [inventory] }));
+    expect(content.monsters.get('rat')?.outfitId).toBe(21);
+  });
+
+  it('recusa o id que o pacote não tem, e diz qual entrada e qual id', () => {
+    // O defeito que a issue descreve: o número passa pelo schema, e vira quadrado invisível.
+    expect(() => buildContent(base({ appearances: tabela({ monsters: { rat: 135 } }), packs: [inventory] })))
+      .toThrow('appearances.monsters.rat: outfit 135 não existe no pacote tibia-1332');
+  });
+
+  it('recusa a tabela que cita um pacote sem inventário, quando há inventários', () => {
+    // `pack` deixou de ser só documentação: com inventário no conteúdo, o nome tem que bater.
+    expect(() => buildContent(base({ appearances: tabela({ pack: 'tibia-9999' }), packs: [inventory] })))
+      .toThrow(/aponta o pacote "tibia-9999", e packs\/ não tem o inventário dele/);
+  });
+
+  it('sem inventário NENHUM a conferência não roda — a fixture continua sem falar de arte', () => {
+    // O placeholder aponta o pacote "placeholder", que não existe em lugar nenhum, e os ids
+    // dele são 1, 2, 3… Se isto reprovasse, toda fixture de combate precisaria de inventário.
+    expect(() => buildContent(base())).not.toThrow();
+    expect(() => buildContent(base({ appearances: tabela({ monsters: { rat: 9999 } }) }))).not.toThrow();
+  });
+
+  it('recusa um inventário malformado, e diz qual', () => {
+    expect(() => buildContent(base({ appearances: tabela(), packs: [{ ...inventory, object: [[5, 3]] }] })))
+      .toThrow(/pack "tibia-1332"/);
+  });
+
+  it('o inventário não entra na versão do conteúdo por conta própria: quem muda a arte é a tabela', () => {
+    // Regenerar o inventário porque o pacote ganhou ids novos não muda o que nenhuma sessão vê;
+    // trocar o `pack` da tabela muda (FUN-94), e esse já era o caso.
+    const before = buildContent(base({ appearances: tabela(), packs: [inventory] })).version;
+    const grown = { ...inventory, object: [[100, 167], [169, 370], [372, 394]] };
+    const after = buildContent(base({ appearances: tabela(), packs: [grown] })).version;
+    expect(after).toBe(before);
   });
 });
 

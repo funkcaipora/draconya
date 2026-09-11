@@ -275,6 +275,11 @@ ano é seguro; trocar de versão do pacote é outro caminho, não outro conteúd
 (As imagens de UI não têm hash no nome; mudam só com a versão do pacote, que já está no
 caminho.)
 
+**Trocar a versão do pacote é também regenerar o inventário** em
+`packages/content/data/packs/` (`pnpm assets:inventory`, ver `docs/asset-library.md`): é contra
+ele que o boot recusa um id de aparência que o pacote não tem (FUN-21), e um inventário de
+outra versão recusaria ids que existem — ou aceitaria os que sumiram.
+
 **Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
 desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
 arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo
