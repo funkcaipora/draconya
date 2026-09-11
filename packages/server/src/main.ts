@@ -147,6 +147,10 @@ async function main(): Promise<void> {
       const apiLogger = logger.child({ role: 'api' });
       return createApi(configuration, apiLogger, {
         tickets,
+        // O bot com que o personagem nasce (FUN-114), do conteúdo fixado no boot.
+        ...(content.bot.defaultConfig === undefined
+          ? {}
+          : { defaultBotConfig: content.bot.defaultConfig }),
         ...(auth === null || repository === null || database === null
           ? {}
           : {

@@ -4,6 +4,22 @@
   "categoryCooldownMs": 1000,
   "advancedFromLevel": 50,
   "targetSearchRadius": 8,
-  "slots": { "heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10, "exit": 4 },
-  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código. targetSearchRadius (8 tiles) é provisório: é o quanto o bot enxerga ao decidir para onde ir, e o número certo depende do tamanho das hunts reais."
+  "slots": {"heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10, "exit": 4},
+  "defaultConfig": {
+    "version": 1,
+    "heal": [
+      {"when": {"kind": "hp", "op": "<=", "percent": 70}, "do": {"kind": "spell", "spellId": "heal"}}
+    ],
+    "potion": [
+      {"when": {"kind": "hp", "op": "<=", "percent": 40}, "do": {"kind": "supply", "supplyId": "health-potion"}}
+    ],
+    "attack": [
+      {"when": {"kind": "targets", "op": ">=", "count": 1}, "do": {"kind": "spell", "spellId": "strike"}}
+    ],
+    "rune": [],
+    "support": [],
+    "exit": [],
+    "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}}
+  },
+  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código. targetSearchRadius (8 tiles) é provisório: é o quanto o bot enxerga ao decidir para onde ir, e o número certo depende do tamanho das hunts reais. defaultConfig (FUN-114) é o bot com que todo personagem nasce — cura a 70 %, poção de vida a 40 %, Golpe Arcano com alvo ao alcance — e os limiares são ponto de partida, não balanceamento decidido."
 }

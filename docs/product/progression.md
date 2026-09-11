@@ -131,7 +131,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | HP por level — Druida | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Mana por level — Druida | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | HP inicial (level 1) | 150 `[ABERTO — valor provisório: 150]` | `packages/content/data/progression/baseline.json` |
-| Mana inicial (level 1) | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/progression/baseline.json` |
+| Mana inicial (level 1) | 20 `[ABERTO — valor provisório: 20, uma cura ou um Golpe Arcano no level 1 (FUN-114)]` | `packages/content/data/progression/baseline.json` |
 | Capacidade inicial | 400 `[ABERTO — valor provisório: 400]` | `packages/content/data/progression/baseline.json` |
 | HP por level antes da vocação | 5 `[ABERTO — valor provisório: 5]` | `packages/content/data/progression/baseline.json` |
 | Mana por level antes da vocação | 5 `[ABERTO — valor provisório: 5]` | `packages/content/data/progression/baseline.json` |

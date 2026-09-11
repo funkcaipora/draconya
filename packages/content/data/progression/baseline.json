@@ -1,7 +1,7 @@
 {
   "id": "baseline",
   "startingHealth": 150,
-  "startingMana": 0,
+  "startingMana": 20,
   "startingCapacity": 400,
   "healthPerLevel": 5,
   "manaPerLevel": 5,
@@ -21,5 +21,5 @@
     "healthPerSecond": 1,
     "manaPerSecond": 1
   },
-  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade de passo também. A curva de XP (base 20, expoente 2) também é provisória: o PRD não a define, e ela põe o level 8 a cerca de duas horas de Rat Cellars — cedo o bastante para a escolha de vocação não virar espera. A regeneração (1 HP/s e 1 mana/s) é provisória e não vem do PRD: é o suficiente para uma hunt de Rat Cellars se sustentar sem poção, e poção é o que vai reequilibrar isso quando existir."
+  "_open": "§9.3 — o PRD define só o incremento por vocação. Base, crescimento dos níveis 1–7 e capacidade inicial são provisórios, e a velocidade de passo também. A curva de XP (base 20, expoente 2) também é provisória: o PRD não a define, e ela põe o level 8 a cerca de duas horas de Rat Cellars — cedo o bastante para a escolha de vocação não virar espera. A mana inicial (20, FUN-114) é o bastante para UMA cura ou um Golpe Arcano no level 1, para as magias existirem no primeiro minuto; é provisória como o resto. A regeneração (1 HP/s e 1 mana/s) é provisória e não vem do PRD: é o suficiente para uma hunt de Rat Cellars se sustentar sem poção, e poção é o que vai reequilibrar isso quando existir."
 }

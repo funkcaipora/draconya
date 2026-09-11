@@ -18,6 +18,7 @@ import type {
   Stamina, Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
+import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
 
 export interface Content {
   /**
@@ -350,7 +351,7 @@ export function buildContent(raw: RawContent): Content {
     ...openOf('item', items),
   ];
 
-  return {
+  const content: Content = {
     version: computeVersion(raw),
     bot: bot as BotLimits,
     spells,
@@ -371,6 +372,24 @@ export function buildContent(raw: RawContent): Content {
     ...(appearances === undefined ? {} : { appearances }),
     ...(pack === undefined ? {} : { pack }),
   };
+
+  // A configuração de bot com que o personagem NASCE (FUN-114) passa pelo MESMO juiz que a
+  // do jogador — depois de o conteúdo estar montado, porque o juiz olha os catálogos de
+  // magia e supply. Uma magia que não existe reprova o boot aqui, e não o primeiro
+  // personagem criado: o conteúdo é quem errou.
+  const defaultConfig = content.bot.defaultConfig;
+  if (defaultConfig !== undefined) {
+    // O gate de level é do jogador (§13.2); o padrão nasce no level 1, então é o nível 1 que
+    // ele tem de passar — regra avançada no padrão seria personagem recusado ao entrar.
+    const rejected = [
+      ...validateBotConfig(defaultConfig, content),
+      ...advancedFeaturesUsed(defaultConfig, content.bot)
+        .map((feature) => `usa recurso do bot avançado (${feature}), e o personagem nasce no level 1`),
+    ].map((problem) => `bot/baseline.json defaultConfig: ${problem}`);
+    if (rejected.length > 0) throw new ContentError(rejected);
+  }
+
+  return content;
 }
 
 /**

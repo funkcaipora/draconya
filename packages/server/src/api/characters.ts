@@ -39,6 +39,11 @@ export interface CharacterRouteOptions {
    * derivação de level num segundo lugar; dois lugares divergem.
    */
   readonly settleProgress?: ((characterId: string) => Promise<SettlementResult>) | undefined;
+  /**
+   * A configuração de bot com que todo personagem nasce (FUN-114): `content.bot.defaultConfig`,
+   * já validada no boot. Opaca aqui, como no repositório — o `api` não conhece o vocabulário.
+   */
+  readonly defaultBotConfig?: unknown;
 }
 
 export function registerCharacterRoutes(
@@ -47,7 +52,7 @@ export function registerCharacterRoutes(
   repository: GameRepository,
   options: CharacterRouteOptions = {},
 ): void {
-  const { isCharacterActive, locateSession, settleProgress } = options;
+  const { isCharacterActive, locateSession, settleProgress, defaultBotConfig } = options;
 
   /**
    * Liquida e diz se ALGO foi escrito. Falhar aqui NÃO recusa a resposta, ao contrário do
@@ -101,7 +106,12 @@ export function registerCharacterRoutes(
     }
 
     try {
-      const character = await repository.createCharacter(principal.accountId, name);
+      // Nasce com o bot padrão do conteúdo (FUN-114): é o que faz "magia + poção" existirem
+      // na primeira hunt sem o jogador ter aberto a tela do bot. Sem padrão no conteúdo, nasce
+      // sem — que é o que ele já fazia.
+      const character = await repository.createCharacter(principal.accountId, name, {
+        ...(defaultBotConfig === undefined ? {} : { botConfig: defaultBotConfig }),
+      });
       return reply.code(201).send(toDto(character));
     } catch (error) {
       if (error instanceof CharacterNameTakenError) {

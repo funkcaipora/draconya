@@ -26,6 +26,19 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('o conteúdo real tem o bot padrão do personagem novo, e mana para a primeira magia (FUN-114)', () => {
+    // O MVP é "hunt + magias + poção funcionando" no PRIMEIRO minuto: sem isto o personagem
+    // novo entrava só no golpe básico até abrir a tela do bot, e sem mana até o level 4.
+    const content = loadContent(DATA);
+    const config = content.bot.defaultConfig;
+    expect(config?.heal.map((rule) => rule.do)).toEqual([{ kind: 'spell', spellId: 'heal' }]);
+    expect(config?.potion.map((rule) => rule.do)).toEqual([{ kind: 'supply', supplyId: 'health-potion' }]);
+    expect(config?.attack.map((rule) => rule.do)).toEqual([{ kind: 'spell', spellId: 'strike' }]);
+    // E dá para lançar qualquer uma das duas magias no level 1.
+    const costs = [...content.spells.values()].map((spell) => spell.manaCost);
+    expect(content.progression.startingMana).toBeGreaterThanOrEqual(Math.min(...costs));
+  });
+
   it('subpasta ausente é conjunto vazio, não erro', () => {
     // O conteúdo cresce por partes; a validação de referência cruzada pega o que faltar.
     const semMonstros = join(dirname(fileURLToPath(import.meta.url)), '..', 'data-parcial');

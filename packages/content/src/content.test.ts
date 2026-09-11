@@ -261,6 +261,44 @@ describe('stamina baseline', () => {
   });
 });
 
+describe('o bot com que o personagem nasce (FUN-114)', () => {
+  const spell = { id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1000, effect: { kind: 'heal', amount: 60 } };
+  const config = (over: Record<string, unknown> = {}) => ({
+    version: 1, rune: [], support: [], exit: [],
+    heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }],
+    potion: [], attack: [],
+    targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' } },
+    ...over,
+  });
+  const withDefault = (over: Record<string, unknown> = {}) => base({
+    spells: [spell],
+    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+      advancedOnly: { targetPolicies: ['lowest-hp'] },
+      defaultConfig: config(over) }],
+  });
+
+  it('é OPCIONAL, e quando existe sai montada em `content.bot.defaultConfig`', () => {
+    expect(buildContent(base()).bot.defaultConfig).toBeUndefined();
+    const content = buildContent(withDefault());
+    expect(content.bot.defaultConfig?.heal).toHaveLength(1);
+  });
+
+  it('passa pelo MESMO juiz que a configuração do jogador: magia inexistente reprova o boot', () => {
+    // Mutação que mata: apagar a validação — o defeito viraria "o bot não cura" no primeiro
+    // personagem criado, sem explicação.
+    expect(() => buildContent(withDefault({
+      heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'cura-que-nao-existe' } }],
+    }))).toThrow(/defaultConfig: categoria "heal", slot 1: magia "cura-que-nao-existe" não existe/);
+  });
+
+  it('e não pode usar recurso do bot avançado: o personagem nasce no level 1', () => {
+    expect(() => buildContent(withDefault({
+      targeting: { policy: 'lowest-hp', prioritize: [], ignore: [], posture: { kind: 'stand' } },
+    }))).toThrow(/defaultConfig: usa recurso do bot avançado \(alvo "lowest-hp"\)/);
+  });
+});
+
 describe('o Bestiário (FUN-113, §18)', () => {
   const bestiary = { id: 'baseline', milestones: [10_000, 25_000, 50_000, 100_000, 200_000], xpBonusPercentPerMilestone: 1 };
 
