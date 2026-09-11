@@ -119,8 +119,10 @@ O escopo `deps` é do Dependabot (`.github/dependabot.yml`) e de atualização d
 feita à mão. Existe porque bump de `fastify` em `packages/server` não é `tools`: escopo que
 mente torna o campo inútil justamente no tipo de commit que mais aparece.
 
-`(FUN-nn)` é obrigatório em todo commit, exceto tipo `chore` e `docs`. Um hook recusa o commit que
-não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
+`(FUN-nn)` é obrigatório em todo commit, exceto tipo `chore` e `docs`. Trabalho rastreado em
+milestone do GitHub em vez do Linear (skill `task-github`, ADR 0025) referencia a issue como
+`(#nn)` no mesmo lugar — é referência de issue igual, só muda o rastreador. Um hook recusa o
+commit que não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
 commit feito fora dele (git de linha de comando ou GUI).
 
 **Commit de merge é isento.** Ele não descreve uma mudança, descreve uma junção, e o assunto que o

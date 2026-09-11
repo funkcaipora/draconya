@@ -187,6 +187,25 @@ describe('.githooks/commit-msg', { timeout: TIMEOUT_MS }, () => {
       .toBe(0);
   });
 
+  it('accepts a GitHub issue reference in place of the Linear one', () => {
+    // Trabalho rastreado em milestone do GitHub (skill task-github, ADR 0025) referencia a
+    // issue como `(#nn)`. É referência de issue do mesmo jeito; só muda o rastreador.
+    const dir = repositoryFrom(cleanTemplate);
+    writeFileSync(join(dir, 'file.txt'), 'change\n');
+
+    expect(commit(dir, 'feat(client): load the engine in the shell (#12)').status).toBe(0);
+  });
+
+  it('still rejects a bare number that is not an issue reference', () => {
+    const dir = repositoryFrom(cleanTemplate);
+    writeFileSync(join(dir, 'file.txt'), 'change\n');
+
+    const result = commit(dir, 'feat(client): load the engine in the shell (12)');
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('missing (FUN-nn)');
+  });
+
   it('accepts a merge that applies cleanly', () => {
     // Este caminho já passava antes da isenção, por um motivo que não é mérito do hook: um
     // merge que resolve sozinho não chega a chamar o commit-msg. O caso fica aqui porque a
@@ -256,6 +275,12 @@ describe('.claude/hooks/validate-commit.sh', { timeout: TIMEOUT_MS }, () => {
 
   it('lets a commit in the project format through', () => {
     const command = 'git commit -m "feat(sim): advance simulation using elapsed time (FUN-25)"';
+
+    expect(runHook(repositoryFrom(cleanTemplate), command).status).toBe(0);
+  });
+
+  it('lets a commit that references a GitHub issue through', () => {
+    const command = 'git commit -m "feat(client): load the engine in the shell (#12)"';
 
     expect(runHook(repositoryFrom(cleanTemplate), command).status).toBe(0);
   });
