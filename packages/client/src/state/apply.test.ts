@@ -94,6 +94,61 @@ describe('world deltas', () => {
   });
 });
 
+describe('as cores de outfit (FUN-104)', () => {
+  const colors = { head: 114, body: 3, legs: 40, feet: 95 };
+
+  it('a creature that appears WITH colours keeps them', () => {
+    // É o que o viewport lê para pintar. Mutação que mata: tirar `...colorsOf(message)` do
+    // `case 'creature-appear'` — toda criatura voltaria às cores de reserva sem nada acusar.
+    applyMessage({
+      type: 'creature-appear', id: 1, position: at(0, 0), appearanceId: 128, name: 'me',
+      health: 20, maxHealth: 20, colors,
+    }, 0);
+    expect(world.creatures.get(1)?.colors).toEqual(colors);
+  });
+
+  it('a creature that appears WITHOUT colours has the field ABSENT, not undefined', () => {
+    // "Não disse" é a falta do campo — o viewport escolhe a reserva por `??`, e o store não
+    // inventa cor. A chave explícita também é o que `exactOptionalPropertyTypes` recusa.
+    // Mutação que mata: `colors: message.colors` direto no literal.
+    applyMessage(spawn(1), 0);
+    const creature = world.creatures.get(1);
+    expect(creature).toBeDefined();
+    expect(creature?.colors).toBeUndefined();
+    expect(Object.hasOwn(creature ?? {}, 'colors')).toBe(false);
+  });
+
+  it('a session-state carries them per creature, and only where they came', () => {
+    // O mesmo caminho do `creature-appear` (o protocolo usa o MESMO schema nos dois): a
+    // reconexão não pode devolver o personagem com outra roupa que a que ele tinha antes da
+    // queda. Mutação que mata: tirar `...colorsOf(creature)` do laço do `session-state`.
+    const other = { head: 0, body: 132, legs: 66, feet: 1 };
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+      },
+      world: {
+        mapId: 'rat-cellars',
+        creatures: [
+          { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1, colors },
+          { id: 2, position: at(1, 0), appearanceId: 128, name: 'you', health: 1, maxHealth: 1, colors: other },
+          { id: 3, position: at(2, 0), appearanceId: 21, name: 'rat', health: 1, maxHealth: 1 },
+        ],
+      },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.creatures.get(1)?.colors).toEqual(colors);
+    expect(world.creatures.get(2)?.colors).toEqual(other);
+    expect(world.creatures.get(3)?.colors).toBeUndefined();
+  });
+});
+
 describe('combat transients (FUN-106)', () => {
   // Efeito, projétil e número flutuante NÃO são HUD: chegam dezenas por segundo numa hunt, e o
   // caminho deles termina no `world`, que o viewport lê direto e expira sozinho.

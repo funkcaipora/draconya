@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { Creature } from '../state/world.js';
 import {
   creatureKey, effectKey, effectKeysOf, groundCell, groundKey, missileKey,
 } from './keys.js';
+import { DEFAULT_OUTFIT_COLORS, paintOf } from './outfit-colors.js';
 
 describe('groundKey (FUN-23)', () => {
   it('x=5 e x=1 num padrão de largura 4 são a MESMA chave', () => {
@@ -86,6 +88,36 @@ describe('creatureKey (FUN-23)', () => {
       .not.toBe(creatureKey(128, 'north', true, 1, colors));
     expect(creatureKey(128, 'south', true, 1, colors))
       .not.toBe(creatureKey(128, 'south', true, 2, colors));
+  });
+});
+
+describe('as cores da criatura na chave (FUN-104)', () => {
+  // `creatureTexture` (`viewport.ts`) é uma closure dentro de `mountViewport`, que precisa de
+  // um `Application` do Pixi — WebGL, que o vitest em Node não tem, e nenhum teste do pacote
+  // monta. Por isso a decisão "as dela ou as de reserva" mora em `paintOf`, que é o que se
+  // testa aqui, e o viewport só a chama. E o tipo: `Creature.colors` é o `OutfitColors` do
+  // PROTOCOLO, e `creatureKey` recebe o de `assets/outfit.ts` — se os dois divergirem um dia,
+  // é esta linha que para de compilar.
+  const base: Creature = {
+    id: 1, appearanceId: 128, name: 'me', health: 1, maxHealth: 1,
+    position: { x: 0, y: 0, z: 7 }, step: null,
+  };
+
+  it('uma criatura com cores é pintada com as SUAS, e pede a chave delas', () => {
+    // Mutação que mata: `paintOf` devolver `DEFAULT_OUTFIT_COLORS` sempre — todo mundo com
+    // a roupa de personagem novo, e a tela não acusa porque continua pintada.
+    const own = { head: 114, body: 3, legs: 40, feet: 95 };
+    expect(paintOf({ ...base, colors: own })).toBe(own);
+    expect(creatureKey(128, 'south', false, 0, paintOf({ ...base, colors: own })))
+      .not.toBe(creatureKey(128, 'south', false, 0, DEFAULT_OUTFIT_COLORS));
+  });
+
+  it('uma criatura sem cores é pintada com as de reserva — nunca pede o quadro cru', () => {
+    // Sem cores na chave o quadro pintado cairia na entrada do quadro cru, e o primeiro a
+    // chegar ganharia. Mutação que mata: `paintOf` devolver `creature.colors` sem o `??`.
+    expect(paintOf(base)).toBe(DEFAULT_OUTFIT_COLORS);
+    expect(creatureKey(21, 'south', false, 0, paintOf(base)))
+      .not.toBe(creatureKey(21, 'south', false, 0));
   });
 });
 

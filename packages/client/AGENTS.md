@@ -230,9 +230,15 @@ pnpm tsx scripts/make-sheet-fixture.ts
   quadros diferentes em vez de azulejo. **A barra de vida e o nome moram no `overlay`** e não
   dependem de arte: um par `Graphics` + `Text` por criatura, no mesmo pool por id que o sprite,
   redesenhado só quando vida ou nome mudam (`world/health.ts` é a cor e a largura, em números).
-  **Todo outfit é pintado com `DEFAULT_OUTFIT_COLORS`** (`world/outfit-colors.ts`) até o
-  protocolo carregar as cores de cada criatura — a constante sai dali nesse dia. O que era de
-  antes continua: câmera de 18×14, camadas, ordem de desenho por `y`, pool e interpolação.
+  **O outfit é pintado com as cores DA criatura** (`Creature.colors`, FUN-104), que o
+  protocolo carrega em `creature-appear` e em cada criatura do `session-state`; o store guarda
+  o campo só quando ele veio, tipado pelo PROTOCOLO e não por `assets/outfit.ts` — o store não
+  depende da camada de arte. `DEFAULT_OUTFIT_COLORS` (`world/outfit-colors.ts`) é a RESERVA
+  para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
+  escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
+  sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
+  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera de 18×14,
+  camadas, ordem de desenho por `y`, pool e interpolação.
 - **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
   (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
   hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que

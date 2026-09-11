@@ -12,7 +12,7 @@
 //
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
-import type { S2CProps } from '@draconya/protocol';
+import type { OutfitColors, S2CProps } from '@draconya/protocol';
 
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
@@ -32,6 +32,17 @@ export interface Point {
 export interface Creature {
   readonly id: number;
   readonly appearanceId: number;
+  /**
+   * As cores com que o outfit dela é pintado (FUN-104). O tipo é o do PROTOCOLO, e não o de
+   * `assets/outfit.ts`, de propósito: o store guarda o que o servidor disse, e não pode
+   * depender da camada de arte para descrever isso — é o viewport quem liga um ao outro.
+   *
+   * Ausente quando a criatura chegou sem cores — monstro, que é uma camada só, ou um nó
+   * `game` anterior a esta issue —, e aí é o viewport quem escolhe as de reserva. O store não
+   * inventa: guardar as padrão aqui faria "o servidor não disse" e "o servidor disse estas"
+   * chegarem iguais ao desenho.
+   */
+  readonly colors?: OutfitColors;
   name: string;
   health: number;
   maxHealth: number;

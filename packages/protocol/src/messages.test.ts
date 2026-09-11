@@ -200,7 +200,9 @@ describe('outfit colours on the creature (FUN-104)', () => {
     expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, body: 1.5 } }))).toBeNull();
     const { feet: _feet, ...threeChannels } = colors;
     expect(decodeS2C(encodeS2C({ ...appear, colors: threeChannels as typeof colors }))).toBeNull();
-    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, head: 0 } })))
-      .toEqual([{ ...appear, colors: { ...colors, head: 0 } }]);
+    // Os dois extremos ENTRAM: 0 é a primeira cor da paleta e 132 a última. Sem o 132 aqui,
+    // um `.max(131)` passaria por toda a suíte.
+    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, head: 0, feet: 132 } })))
+      .toEqual([{ ...appear, colors: { ...colors, head: 0, feet: 132 } }]);
   });
 });
