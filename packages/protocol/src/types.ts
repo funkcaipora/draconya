@@ -7,8 +7,20 @@ import type { C2SName, S2CName } from './messages.js';
 const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() });
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
+/** Um índice na paleta de 133 cores do outfit (FUN-20). O cliente é quem sabe que cor é. */
+const PaletteIndex = z.number().int().min(0).max(132);
+
 /**
- * Uma criatura como ela chega no estado completo. Mesmos campos do `creature-appear`, de
+ * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
+ * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
+ */
+export const OutfitColors = z.object({
+  head: PaletteIndex, body: PaletteIndex, legs: PaletteIndex, feet: PaletteIndex,
+});
+export type OutfitColors = z.infer<typeof OutfitColors>;
+
+/**
+ * Uma criatura como ela chega no estado completo. O MESMO schema do `creature-appear`, de
  * propósito: o cliente aplica os dois pelo mesmo caminho, e um campo que só existisse num
  * deles viraria a diferença entre "reconectei" e "vi aparecer".
  */
@@ -19,6 +31,12 @@ const CreatureState = z.object({
   name: z.string(),
   health: z.number(),
   maxHealth: z.number(),
+  /**
+   * **Opcional**, pela mesma razão dos agregados do analisador: um nó `game` anterior manda a
+   * criatura sem cores, e um cliente que as exigisse recusaria a mensagem inteira — em
+   * silêncio. Ausente, o cliente pinta com as cores de personagem novo. Monstro nunca traz.
+   */
+  colors: OutfitColors.optional(),
 });
 
 /** Os agregados da sessão — o que o §16.2 chama de "quanto rendeu". */
@@ -159,11 +177,7 @@ export const S2C_SCHEMAS = {
     notableEvents: z.array(NotableEvent),
   }),
   'instance-enter': z.object({ instanceId: z.string(), map: z.string() }),
-  'creature-appear': z.object({
-    id: z.number().int(),
-    position: Point, appearanceId: z.number().int(), name: z.string(),
-    health: z.number(), maxHealth: z.number(),
-  }),
+  'creature-appear': CreatureState,
   // Um passo é enviado UMA vez, com origem, destino e duração. O cliente interpola o
   // intervalo inteiro — não existe snapshot por tick (ADR 0001, seção de banda).
   'creature-move': z.object({

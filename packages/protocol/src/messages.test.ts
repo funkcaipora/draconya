@@ -168,3 +168,39 @@ describe('the inventory message (FUN-90, FUN-108)', () => {
     expect(SERVER_TO_CLIENT.inventory).toBe(16);
   });
 });
+
+describe('outfit colours on the creature (FUN-104)', () => {
+  const appear: S2CMessage = {
+    type: 'creature-appear', id: 7, position: { x: 1, y: 2, z: 0 }, appearanceId: 128,
+    name: 'Liesh', health: 150, maxHealth: 150,
+  };
+  const colors = { head: 114, body: 90, legs: 20, feet: 3 };
+
+  it('round trips the four colours, and a creature without them: the old game node still speaks', () => {
+    // Mutação que mata: tirar o `.optional()` de `colors` (o segundo caso devolve `null`).
+    expect(decodeS2C(encodeS2C({ ...appear, colors }))).toEqual([{ ...appear, colors }]);
+    expect(decodeS2C(encodeS2C(appear))).toEqual([appear]);
+  });
+
+  it('the session state carries the same creature shape, colours included', () => {
+    const state: S2CMessage = {
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0 },
+      world: { mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+  });
+
+  it('rejects a colour outside the 133-entry palette, a fraction, and a missing channel', () => {
+    // Um índice 133 leria fora da paleta no cliente; melhor recusar no fio que pintar lixo.
+    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, head: 133 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, feet: -1 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, body: 1.5 } }))).toBeNull();
+    const { feet: _feet, ...threeChannels } = colors;
+    expect(decodeS2C(encodeS2C({ ...appear, colors: threeChannels as typeof colors }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...appear, colors: { ...colors, head: 0 } })))
+      .toEqual([{ ...appear, colors: { ...colors, head: 0 } }]);
+  });
+});
