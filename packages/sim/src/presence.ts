@@ -32,6 +32,11 @@ export interface CreatureVanished {
  *
  * `maxHealth` viaja junto porque o runtime do monstro não o guarda (vem da definição), e
  * mandar só `health` obrigaria o hospedeiro a procurar a definição a cada golpe.
+ *
+ * Desde a FUN-109 sai também para o PERSONAGEM (`creatureId` é o id dele), sempre que a vida
+ * dele muda — por golpe, por cura, por regeneração. É o que faz a barra do jogador andar sem
+ * reanexar. O `creature-hit` ou `creature-healed` que explica a mudança sai ANTES deste; a
+ * regeneração passiva é a exceção e não explica nada, porque "+1" por segundo é ruído.
  */
 export interface CreatureHealthChanged {
   readonly kind: 'creature-health-changed';

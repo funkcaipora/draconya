@@ -8,7 +8,7 @@ import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, Session } from '../session.js';
-import type { SessionSnapshot } from '../session.js';
+import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
@@ -981,7 +981,11 @@ describe('movimento com escritor único (FUN-69)', () => {
     // O vencimento seguinte do passo de rota descobre e reentra, em vez de travar.
     run(session, 1000, 100);
     expect(ruleset.routeIndex).not.toBe(antes);
-    expect(session.drainEvents().some((e) => e.creatureId === hero.id)).toBe(true);
+    // O passo, e não "qualquer evento dele": desde a FUN-109 a fila traz eventos sem
+    // `creatureId` (lançamento, supply), e o que este teste afirma é que ele ANDOU.
+    expect(session.drainEvents().some(
+      (e) => e.kind === 'creature-moved' && e.creatureId === hero.id,
+    )).toBe(true);
   });
 
 });
@@ -1381,6 +1385,347 @@ describe('supply (FUN-77)', () => {
     expect(session.aggregates.goldSpent).toBeGreaterThan(0);
     // Nunca gastou mais do que ganhou: o saldo não fica negativo em nenhum instante.
     expect(hero.gold + hero.goldDelta).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// --- o combate chega ao cliente como evento (FUN-109) ----------------------------------------
+
+/** Só os eventos de um tipo, com o tipo estreitado — para não repetir o `filter` com cast. */
+const ofKind = <K extends DomainEvent['kind']>(
+  events: readonly DomainEvent[], kind: K,
+): Extract<DomainEvent, { kind: K }>[] =>
+  events.filter((e): e is Extract<DomainEvent, { kind: K }> => e.kind === kind);
+
+/**
+ * O evento logo DEPOIS de cada um dos dados precisa ser o `creature-health-changed` da mesma
+ * criatura. É a ordem "número antes da barra", que é contrato com o cliente: o número
+ * flutuante acompanha a barra caindo, não o contrário.
+ */
+const followedByHealthOf = (events: readonly DomainEvent[], indexes: readonly number[]) => {
+  for (const index of indexes) {
+    const cause = events[index] as { creatureId: string | number };
+    const next = events[index + 1];
+    expect(next?.kind).toBe('creature-health-changed');
+    expect((next as { creatureId: string | number }).creatureId).toBe(cause.creatureId);
+  }
+};
+
+const indexesOf = (events: readonly DomainEvent[], pick: (e: DomainEvent) => boolean) =>
+  events.map((e, i) => (pick(e) ? i : -1)).filter((i) => i >= 0);
+
+describe('o combate chega ao cliente como evento (FUN-109)', () => {
+  const comEspada: InventoryState = {
+    backpack: [],
+    equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
+  };
+
+  it('o golpe do personagem emite creature-hit com o APLICADO, e antes da barra', () => {
+    // A espada bate 200 num rato de 50: o resolvido é 200, o que saiu da barra é 50. É o
+    // aplicado que flutua sobre o monstro — mostrar 200 sobre um rato que tinha 50 é o cliente
+    // contando uma história que a barra desmente. O recorde de 200 é do extrato.
+    //
+    // Mutação que mata: emitir `result.damage` em vez de `applied` no `#strike` — a espada
+    // faz o rato de pouca vida distinguir os dois (`amount` passa a 200 > 50).
+    const { session } = start({ difficulty: 'professional', inventory: comEspada });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+
+    const golpes = ofKind(events, 'creature-hit')
+      .filter((h) => h.attackerId === 'hero');
+    expect(golpes.length).toBeGreaterThan(0);
+    for (const golpe of golpes) {
+      expect(golpe.source).toBe('melee');
+      expect(String(golpe.creatureId)).toMatch(/^m:/);
+      expect(golpe.amount).toBeGreaterThan(0);
+      expect(golpe.amount).toBeLessThanOrEqual(rat.health);
+      // O `z` é do mapa, como no passo e no nascimento.
+      expect(golpe.position.z).toBe(7);
+    }
+    // O golpe fatal tirou exatamente o que sobrava; o recorde guarda o que foi BATIDO — a
+    // espada, escalada pela skill que sobe a cada golpe (FUN-75), nunca menos que 200.
+    expect(golpes.some((g) => g.amount === rat.health)).toBe(true);
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(200);
+
+    followedByHealthOf(events, indexesOf(
+      events, (e) => e.kind === 'creature-hit' && e.attackerId === 'hero',
+    ));
+  });
+
+  it('o golpe do monstro emite creature-hit E creature-health-changed do personagem, nessa ordem', () => {
+    // Antes disto a vida do personagem só chegava ao cliente no `session-state` da reanexação:
+    // a barra dele ficava parada a hunt inteira enquanto a do monstro andava.
+    //
+    // Mutação que mata: trocar a ordem dos dois `emit` em `#onMonsterAction` — o evento logo
+    // depois do golpe deixa de ser a barra. Apagar o `#emitCharacterHealth` mata também.
+    const { session, hero } = start({ difficulty: 'professional', health: 5_000 });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+
+    const apanhou = ofKind(events, 'creature-hit').filter((h) => h.creatureId === 'hero');
+    expect(apanhou.length).toBeGreaterThan(0);
+    for (const golpe of apanhou) {
+      expect(golpe.source).toBe('melee');
+      expect(String(golpe.attackerId)).toMatch(/^m:/);
+      expect(golpe.amount).toBeGreaterThan(0);
+      expect(golpe.position.z).toBe(7);
+    }
+    followedByHealthOf(events, indexesOf(
+      events, (e) => e.kind === 'creature-hit' && e.creatureId === 'hero',
+    ));
+
+    // E TODA mudança de vida do personagem passou pela fila — golpe e regeneração: a última
+    // barra anunciada é a vida com que ele terminou. Um caminho que muda a vida sem anunciar
+    // deixaria o cliente com uma barra que só a reanexação corrige, que era o defeito inteiro.
+    const barras = ofKind(events, 'creature-health-changed').filter((b) => b.creatureId === 'hero');
+    expect(barras.at(-1)?.health).toBe(hero.health);
+    expect(barras.at(-1)?.maxHealth).toBe(hero.maxHealth);
+  });
+
+  it('o golpe FATAL no personagem carrega o que ele tinha, não o que o monstro bateu', () => {
+    // O rato bate 10 (sem esquiva neste conteúdo, o dano é fixo) num herói de 3: o resolvido
+    // é 10, o que saiu da barra é 3. O teste acima não distingue os dois porque o herói dele
+    // tem 5 000 de vida e nunca chega perto de morrer — aqui a regeneração está desligada
+    // para que os 3 com que ele entrou sejam os 3 que o golpe encontra.
+    //
+    // Mutação que mata: `amount: result.damage` no golpe do monstro em `#onMonsterAction` —
+    // o número passa a 10, maior que a vida que o herói tinha.
+    const semRegen = content({
+      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    });
+    const { session, hero } = start({ loaded: semRegen, difficulty: 'professional', health: 3 });
+    run(session, 20_000, 100);
+    const events = session.drainEvents();
+
+    expect(session.ended).toBe('death');
+    const apanhou = ofKind(events, 'creature-hit').filter((h) => h.creatureId === 'hero');
+    // Um golpe só: morto não apanha, e a sessão encerra na hora.
+    expect(apanhou).toHaveLength(1);
+    const fatal = apanhou[0] as (typeof apanhou)[number];
+    expect(fatal.amount).toBe(3);
+    expect(fatal.amount).toBeLessThan(rat.attack);
+    expect(fatal.amount).toBeLessThanOrEqual(hero.maxHealth);
+    // E a barra logo depois zera: o número e a barra contam a mesma história.
+    const next = events[events.indexOf(fatal) + 1];
+    expect(next).toMatchObject({ kind: 'creature-health-changed', creatureId: 'hero', health: 0 });
+  });
+
+  it('subir de level anuncia a barra com o máximo NOVO — sem esperar golpe nem regeneração', () => {
+    // `retarget` reescreve `health` e `maxHealth` pela tabela no level up, e nada mais toca
+    // a vida do herói depois disso: um rato só (beginner, respawn em 30 s), morto num golpe
+    // de espada, valendo exatamente a XP do level 2 — e regeneração desligada, porque de
+    // vida cheia ela não anunciaria nada e, ferido, anunciaria com o máximo novo por conta
+    // própria, escondendo a falta do anúncio do level up.
+    //
+    // Mutação que mata: tirar o `#emitCharacterHealth` do `#onMonsterDied` — a última barra
+    // do herói volta a ser a do golpe do rato, com o máximo do level 1 (ou nenhuma).
+    const umLevelPorRato = content({
+      monsters: [{ ...rat, experience: 20 }],
+      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    });
+    const { session, hero } = start({ loaded: umLevelPorRato, inventory: comEspada });
+    run(session, 15_000, 100);
+    const events = session.drainEvents();
+
+    expect(hero.level).toBe(2);
+    expect(session.notableEvents.some((e) => e.type === 'level-up')).toBe(true);
+    const novoMaximo = statsForLevel(2, null, progression as Progression).maxHealth;
+    expect(hero.maxHealth).toBe(novoMaximo);
+    const barras = ofKind(events, 'creature-health-changed').filter((b) => b.creatureId === 'hero');
+    expect(barras.at(-1)?.maxHealth).toBe(novoMaximo);
+    expect(barras.at(-1)?.health).toBe(hero.health);
+  });
+
+  it('a penalidade de morte que rebaixa o level anuncia a barra com o máximo NOVO', () => {
+    // O golpe fatal já anunciou "0 / máximo do level 20"; a penalidade desce para o 19 e
+    // reescreve o máximo, e o cliente que ficou só com o golpe mostraria um máximo que o
+    // personagem não tem mais.
+    //
+    // Mutação que mata: tirar o `#emitCharacterHealth` do `#onCharacterDied` — a última
+    // barra do herói passa a ser a do golpe fatal, com o máximo do level 20.
+    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    hero.level = 20;
+    hero.xp = totalXpForLevel(20, progression as Progression);
+    hero.maxHealth = statsForLevel(20, null, progression as Progression).maxHealth;
+    run(session, 60_000, 100);
+    const events = session.drainEvents();
+
+    expect(session.ended).toBe('death');
+    expect(hero.level).toBe(19);
+    const maximoDo19 = statsForLevel(19, null, progression as Progression).maxHealth;
+    expect(hero.maxHealth).toBe(maximoDo19);
+    const barras = ofKind(events, 'creature-health-changed').filter((b) => b.creatureId === 'hero');
+    expect(barras.at(-1)).toEqual({
+      kind: 'creature-health-changed', creatureId: 'hero', health: 0, maxHealth: maximoDo19,
+    });
+  });
+
+  it('a magia de dano emite spell-cast com os alvos e DEPOIS um creature-hit por alvo', () => {
+    // O mesmo cenário da área (FUN-92): três ratos perto do ponto de spawn e um `blast` de
+    // raio 2 no instante zero. Os alvos do `spell-cast` são a mira inteira, na ordem em que os
+    // golpes caem — e cada golpe tem `source: 'spell'`, o aplicado, e a barra logo depois.
+    //
+    // Mutação que mata: mover o `emit` de `spell-cast` para depois do laço — o índice dele
+    // deixa de ser menor que o do primeiro golpe. `targets: []` mata pela contagem.
+    const { session } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'blast' },
+      }],
+    }), { mana: 200 }, 'professional');
+
+    session.advanceBy(50);
+    const events = session.drainEvents();
+
+    const lançamentos = ofKind(events, 'spell-cast');
+    expect(lançamentos).toHaveLength(1);
+    const lançamento = lançamentos[0] as (typeof lançamentos)[number];
+    expect(lançamento.casterId).toBe('hero');
+    expect(lançamento.spellId).toBe('blast');
+    expect(lançamento.casterPosition.z).toBe(7);
+    expect(lançamento.targets.length).toBeGreaterThan(1);
+
+    const golpes = ofKind(events, 'creature-hit').filter((h) => h.source === 'spell');
+    expect(golpes.map((g) => g.creatureId)).toEqual(lançamento.targets.map((t) => t.creatureId));
+    for (const golpe of golpes) {
+      expect(golpe.attackerId).toBe('hero');
+      expect(golpe.amount).toBeGreaterThan(0);
+      expect(golpe.amount).toBeLessThanOrEqual(rat.health);
+    }
+    // O lançamento antes de qualquer golpe dele.
+    const primeiroGolpe = events.findIndex((e) => e.kind === 'creature-hit' && e.source === 'spell');
+    expect(events.indexOf(lançamento)).toBeLessThan(primeiroGolpe);
+    followedByHealthOf(events, indexesOf(
+      events, (e) => e.kind === 'creature-hit' && e.source === 'spell',
+    ));
+  });
+
+  it('a cura emite spell-cast sem alvo, e creature-healed SÓ quando repôs algo', () => {
+    // O que a cura repôs, e não o que o efeito prometia: `castSpell` devolve o que ENTROU na
+    // barra. Com 1 000 de vida entram 60, e é "+60" que flutua, antes da barra subir.
+    //
+    // Mutação que mata: tirar o `if (amount <= 0) return` do `#emitHealed` — a cura em quem
+    // estava cheio passa a produzir um "+0", e a segunda metade do teste o vê.
+    const ferido = withSpells(
+      botConfig({ heal: [healRule(50)] }), { health: 1_000, monsters: false },
+    );
+    ferido.session.advanceBy(50);
+    const events = ferido.session.drainEvents();
+
+    const lançamento = ofKind(events, 'spell-cast')[0];
+    expect(lançamento?.spellId).toBe('heal');
+    expect(lançamento?.targets).toEqual([]);
+    const curas = ofKind(events, 'creature-healed');
+    expect(curas).toHaveLength(1);
+    expect(curas[0]).toMatchObject({ creatureId: 'hero', amount: 60, source: 'spell' });
+    expect(curas[0]?.position.z).toBe(7);
+    // Lançamento, cura, barra — nessa ordem.
+    expect(events.indexOf(lançamento as DomainEvent)).toBeLessThan(events.indexOf(curas[0] as DomainEvent));
+    followedByHealthOf(events, indexesOf(events, (e) => e.kind === 'creature-healed'));
+    expect(ofKind(events, 'creature-health-changed').at(-1)?.health).toBe(1_060);
+
+    // De vida CHEIA a magia sai (a mana prova), repõe zero — e nada flutua, nada de barra.
+    const cheio = withSpells(botConfig({ heal: [healRule(100)] }), { monsters: false });
+    cheio.session.advanceBy(50);
+    const semNada = cheio.session.drainEvents();
+    expect(cheio.hero.mana).toBe(180);
+    expect(ofKind(semNada, 'spell-cast')).toHaveLength(1);
+    expect(ofKind(semNada, 'creature-healed')).toHaveLength(0);
+    expect(ofKind(semNada, 'creature-health-changed')).toHaveLength(0);
+  });
+
+  it('a poção emite supply-used e creature-healed com source supply; a de mana só supply-used', () => {
+    // Mutação que mata: `source: 'spell'` no `#useSupply` — o `toMatchObject` reprova. Apagar o
+    // `emit` de `supply-used` mata pela contagem, nas duas poções.
+    const potionRule = (supplyId: string, kind: 'hp' | 'mana', percent: number) => ({
+      when: { kind, op: '<=' as const, percent },
+      do: { kind: 'supply' as const, supplyId },
+    });
+
+    const vida = withSpells(
+      botConfig({ potion: [potionRule('health-potion', 'hp', 50)] }),
+      { health: 1_000, gold: 100, monsters: false },
+    );
+    vida.session.advanceBy(50);
+    const events = vida.session.drainEvents();
+
+    const usos = ofKind(events, 'supply-used');
+    expect(usos).toHaveLength(1);
+    expect(usos[0]).toMatchObject({ characterId: 'hero', supplyId: 'health-potion' });
+    expect(usos[0]?.position.z).toBe(7);
+    const curas = ofKind(events, 'creature-healed');
+    expect(curas).toHaveLength(1);
+    expect(curas[0]).toMatchObject({ creatureId: 'hero', amount: 80, source: 'supply' });
+    // Uso, cura, barra — nessa ordem.
+    expect(events.indexOf(usos[0] as DomainEvent)).toBeLessThan(events.indexOf(curas[0] as DomainEvent));
+    followedByHealthOf(events, indexesOf(events, (e) => e.kind === 'creature-healed'));
+    expect(ofKind(events, 'creature-health-changed').at(-1)?.health).toBe(1_080);
+
+    const mana = withSpells(
+      botConfig({ potion: [potionRule('mana-potion', 'mana', 50)] }),
+      { mana: 20, gold: 500, monsters: false },
+    );
+    mana.session.advanceBy(50);
+    const soUso = mana.session.drainEvents();
+    expect(mana.hero.mana).toBe(120);
+    expect(ofKind(soUso, 'supply-used')).toHaveLength(1);
+    expect(ofKind(soUso, 'supply-used')[0]?.supplyId).toBe('mana-potion');
+    expect(ofKind(soUso, 'creature-healed')).toHaveLength(0);
+    expect(ofKind(soUso, 'creature-health-changed')).toHaveLength(0);
+  });
+
+  it('a regeneração emite creature-health-changed e NÃO creature-healed', () => {
+    // A barra precisa andar; um "+1" flutuando por segundo a hunt inteira é ruído. E de vida
+    // cheia não sai nada: a vida não mudou, e uma hunt desanexada de oito horas não precisa
+    // produzir um evento por segundo para dizer isso.
+    //
+    // Mutação que mata: chamar `#emitHealed` na regeneração — aparece um `creature-healed`.
+    // Emitir a barra sem o `> 0` mata pela segunda metade: de vida cheia, quatro eventos.
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({ loaded: semSpawn, health: 100 });
+    run(session, 3_000, 100);
+    const events = session.drainEvents();
+
+    // 1 HP/s: vence em 0, 1 000, 2 000 e 3 000 — quatro barras, a última com a vida final.
+    const barras = ofKind(events, 'creature-health-changed');
+    expect(barras).toHaveLength(4);
+    expect(barras.every((b) => b.creatureId === 'hero')).toBe(true);
+    expect(barras.at(-1)?.health).toBe(hero.health);
+    expect(hero.health).toBe(104);
+    expect(ofKind(events, 'creature-healed')).toHaveLength(0);
+    expect(ofKind(events, 'creature-hit')).toHaveLength(0);
+
+    const cheio = start({ loaded: semSpawn });
+    run(cheio.session, 3_000, 100);
+    expect(ofKind(cheio.session.drainEvents(), 'creature-health-changed')).toHaveLength(0);
+  });
+
+  it('desanexada produz exatamente os mesmos eventos de combate que anexada', () => {
+    // O invariante 3, de novo, para o que esta issue acrescentou: `session.emit` não olha para
+    // quem está assistindo, e um `if (temViewer)` em qualquer dos emissores novos apareceria
+    // aqui como uma fila diferente.
+    const completo = botConfig({
+      heal: [healRule(90)],
+      potion: [{
+        when: { kind: 'mana', op: '<=', percent: 40 },
+        do: { kind: 'supply', supplyId: 'mana-potion' },
+      }],
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    });
+    const sozinha = withSpells(completo, { health: 100 }, 'professional');
+    run(sozinha.session, 10_000, 100);
+
+    const assistida = withSpells(completo, { health: 100 }, 'professional');
+    assistida.session.attach('viewer-1');
+    run(assistida.session, 10_000, 100);
+
+    const sozinhaEvents = sozinha.session.drainEvents();
+    expect(assistida.session.drainEvents()).toEqual(sozinhaEvents);
+    // E a fila tem o que esta issue promete, senão o teste compara duas listas de passos.
+    expect(ofKind(sozinhaEvents, 'spell-cast').length).toBeGreaterThan(0);
+    expect(ofKind(sozinhaEvents, 'creature-hit').length).toBeGreaterThan(0);
   });
 });
 
