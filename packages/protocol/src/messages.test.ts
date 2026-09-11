@@ -272,12 +272,55 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // lança dentro do efeito de aquecimento. Mutação que mata: trocar `.default([])` por
     // `.optional()`.
     const withIds = catalogue({ outfitIds: [21, 35] });
-    expect(decodeS2C(encodeS2C(withIds))).toEqual([withIds]);
+    // `monsters` também tem default (FUN-113): o que volta é a mensagem com ele preenchido.
+    expect(decodeS2C(encodeS2C(withIds))).toEqual([{ ...withIds, monsters: [] }]);
     const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[] }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
   });
 
   it('rejects an outfit id of zero: there is no appearance zero', () => {
     expect(decodeS2C(encodeS2C(catalogue({ outfitIds: [0] })))).toBeNull();
+  });
+});
+
+describe('the bestiary (FUN-113, §18)', () => {
+  const counts: S2CMessage = { type: 'bestiary', counts: { rat: 1_234, bat: 0 } };
+
+  it('round trips the counters, and rejects a negative or fractional one', () => {
+    // Mutação que mata: apagar `bestiary: 21` de SERVER_TO_CLIENT.
+    expect(decodeS2C(encodeS2C(counts))).toEqual([counts]);
+    expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { rat: -1 } }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { rat: 1.5 } }))).toBeNull();
+    // A chave VAZIA também: é o que `isBestiaryState` no servidor cita como razão para nunca
+    // deixar uma entrar no ticket — e a razão precisa ser verdade.
+    expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { '': 1 } }))).toBeNull();
+  });
+
+  it('is server-to-client only: the client never reports a kill', () => {
+    expect('bestiary' in S2C_SCHEMAS).toBe(true);
+    expect('bestiary' in C2S_SCHEMAS).toBe(false);
+  });
+
+  it('the catalogue carries the monsters and the milestones, and an older node decodes without them', () => {
+    const base = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+    };
+    const full = {
+      ...base,
+      monsters: [{ id: 'rat', name: 'Rat' }],
+      bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(full))).toEqual([full]);
+    const decoded = decodeS2C(encodeS2C(base as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
+    expect(decoded?.[0]?.['monsters']).toEqual([]);
+    expect(decoded?.[0]).not.toHaveProperty('bestiary');
   });
 });

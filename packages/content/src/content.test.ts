@@ -261,6 +261,35 @@ describe('stamina baseline', () => {
   });
 });
 
+describe('o Bestiário (FUN-113, §18)', () => {
+  const bestiary = { id: 'baseline', milestones: [10_000, 25_000, 50_000, 100_000, 200_000], xpBonusPercentPerMilestone: 1 };
+
+  it('é OPCIONAL: a fixture de combate não fala de progressão permanente', () => {
+    expect(buildContent(base()).bestiary).toBeUndefined();
+  });
+
+  it('monta os marcos e o bônus, para o sim ler', () => {
+    const content = buildContent(base({ bestiary: [bestiary] }));
+    expect(content.bestiary?.milestones).toEqual([10_000, 25_000, 50_000, 100_000, 200_000]);
+    expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
+  });
+
+  it('recusa marcos fora de ordem: "próximo marco" apontaria para trás', () => {
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, milestones: [10_000, 5_000] }] })))
+      .toThrow(/marcos fora de ordem em 1: 10000 antes de 5000/);
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, milestones: [10_000, 10_000] }] })))
+      .toThrow(/fora de ordem/);
+  });
+
+  it('recusa a lista vazia, o bônus negativo e o bônus FRACIONÁRIO', () => {
+    // Meio ponto passaria no schema e quebraria a conta em inteiro de `Bestiary.applyXpBonus`:
+    // a garantia do `floor` depende de `p × marcos` ser inteiro.
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, milestones: [] }] }))).toThrow(/bestiary/);
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: -1 }] }))).toThrow(/bestiary/);
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: 0.5 }] }))).toThrow(/bestiary/);
+  });
+});
+
 describe('ponto de entrada da Cidade (FUN-60)', () => {
   const sala = { id: 'city', z: 7, grid: ['####', '#..#', '#..#', '####'] };
 

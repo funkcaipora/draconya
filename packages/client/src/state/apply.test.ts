@@ -673,6 +673,58 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
 
     expect(notified).not.toHaveBeenCalled();
   });
+
+  it('leva os monstros e os marcos do Bestiário, e sem marcos a chave fica AUSENTE (FUN-113)', () => {
+    // A tela do Bestiário precisa de nome onde o contador tem id, e dos marcos para dizer
+    // "próximo". Mutação que mata: o `case` copiar só `hunts`, `bot` e `items`, como antes.
+    const monsters = [{ id: 'rat', name: 'Rat' }];
+    const bestiary = { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 };
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters, bestiary, bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+
+    expect(hud.get().catalogue?.monsters).toEqual(monsters);
+    expect(hud.get().catalogue?.bestiary).toEqual(bestiary);
+
+    // Servidor sem Bestiário configurado: a chave não existe, e não é `undefined` escrito —
+    // é o que `exactOptionalPropertyTypes` exige e o que "não sei" quer dizer.
+    applyMessage({
+      type: 'catalogue', hunts: [], monsters: [], bot: vocabulary, items: [],
+    } as unknown as S2CMessage, 0);
+    expect(hud.get().catalogue).not.toHaveProperty('bestiary');
+  });
+});
+
+describe('o bestiário (FUN-113, §18)', () => {
+  it('ausente e vazio são coisas DIFERENTES', () => {
+    // `null` é "ainda não chegou": um nó anterior à FUN-113 nunca manda, e o primeiro
+    // segundo de toda conexão também não mandou. Um Bestiário que abre em zero afirma
+    // "nunca matou nada" antes de o servidor dizer.
+    expect(hud.get().bestiary).toBeNull();
+    applyMessage({ type: 'bestiary', counts: {} }, 0);
+    expect(hud.get().bestiary).toEqual({});
+  });
+
+  it('guarda os contadores como vieram, e SUBSTITUI em vez de somar', () => {
+    // É o contador inteiro, não um delta: o servidor manda o total a cada mudança e o
+    // reenvia na reconexão. Somar daria o dobro a cada queda de rede.
+    applyMessage({ type: 'bestiary', counts: { rat: 1_234 } }, 0);
+    expect(hud.get().bestiary).toEqual({ rat: 1_234 });
+
+    applyMessage({ type: 'bestiary', counts: { rat: 1_235, bat: 1 } }, 1_000);
+    expect(hud.get().bestiary).toEqual({ rat: 1_235, bat: 1 });
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    // Chega uma vez por abate numa hunt: não pode redesenhar o inventário nem as barras.
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.inventory, notified);
+    subscribeSlice(hud, (state) => state.health, notified);
+
+    applyMessage({ type: 'bestiary', counts: { rat: 1 } }, 0);
+
+    expect(notified).not.toHaveBeenCalled();
+  });
 });
 
 describe('a resposta do bot (FUN-89)', () => {

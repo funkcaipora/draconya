@@ -61,7 +61,7 @@ body {
    sólida — o `border-image-source: none` deixa o `border` comum aparecer. Sem `border-radius`:
    `border-image` não arredonda, e o fallback segue a mesma forma para não mudar de silhueta
    quando a arte chega. */
-.hunt-menu, .bot-panel, .inventory, .analyzer, .chat, .vitals, .bot-body, .viewport {
+.hunt-menu, .bot-panel, .inventory, .analyzer, .bestiary, .chat, .vitals, .bot-body, .viewport {
   background: var(--window-fallback) var(--ui-background, none) repeat;
   border: 3px solid var(--frame-fallback);
   border-image-source: var(--ui-frame, none);
@@ -146,6 +146,18 @@ body {
 }
 .analyzer-events li { margin: 0 0 2px; }
 .analyzer-event-time { color: var(--text-faint); margin-right: 6px; }
+
+/* O Bestiário (FUN-113): a mesma janela do analisador — cabeçalho, linha, valor —, com o que
+   só ele tem. Duas linhas por monstro, porque nome, abates, próximo marco e marcos não cabem
+   numa só nos 200px da coluna sem cortar o nome. */
+.bestiary { font-variant-numeric: tabular-nums; }
+.bestiary-bonus { color: var(--text); margin-bottom: 6px; }
+.bestiary-monsters { margin: 0; padding: 0; list-style: none; }
+.bestiary-monster { border-top: 1px solid var(--separator); padding: 4px 0; }
+.bestiary-meta {
+  display: flex; justify-content: space-between; gap: 8px;
+  color: var(--text-faint); font-size: 11px;
+}
 
 /* A tela de entrada (FUN-97). Ela não divide espaço com o jogo: ou uma, ou o outro. */
 .entry {

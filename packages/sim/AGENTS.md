@@ -113,6 +113,23 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Skill nunca desce, e `Skills.merge` depende disso.** Ficar com o maior de cada uma é o que
   torna a fusão de extratos comutativa: um extrato antigo processado fora de ordem não rebaixa
   nada, e não é preciso guardar instante como a stamina guarda.
+- **Bestiário é acumulador de ABATE, pelo mesmo argumento** (`bestiary.ts`, FUN-113, §18).
+  Abate é a morte que `resolveDeath` resolve no instante em que vence — evento na fila, não
+  grandeza por tick —, e o módulo é aritmética pura sobre um `Map`. `CharacterState.bestiary`
+  é OPCIONAL, como `skills`: ausente é `{}`, sem bump de `SNAPSHOT_FORMAT_VERSION`. O
+  contador sobe DENTRO do `if` de recompensa de `#onMonsterDied`, e não fora: stamina zero
+  não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
+  divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
+  pela razão de `Skills.merge`.
+- **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
+  Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
+  seria uma segunda regra que ninguém escreveu. E `applyXpBonus` vem antes de `record` (DT-04)
+  porque a ordem inversa faria o abate 10 000 ser o único da vida do personagem a render
+  diferente dos vizinhos. A XP com bônus é calculada em INTEIRO — `floor(xp × (100 + p × n) /
+  100)` —, nunca `floor(xp × 1,13)`: `100 × 1.13` é `112.99999999999999`, e um abate em cada
+  setenta perderia um ponto sem ninguém saber por quê. Por isso o conteúdo exige `p` inteiro,
+  e não existe método que devolva o multiplicador em ponto flutuante: quem mostra o bônus soma
+  os marcos e multiplica por `p` (é o que o cliente faz).
 - **Regra de saída é compilada em `hunt.ts`, não em `bot.ts`** (FUN-86). O predicado lê a
   `HuntView`, e `bot.ts` não conhece ruleset nenhum — o mesmo bot vai valer para quest e boss.
   `CompiledBot.exit` sai cru de propósito; quem tem a view é quem fecha a closure.

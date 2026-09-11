@@ -4,6 +4,8 @@ import { describeEvent } from './event-text.js';
 const names = {
   hunts: new Map([['rat-cellars', 'Rat Cellars']]),
   supplies: new Map([['mana-potion', 'Poção de Mana']]),
+  monsters: new Map([['rat', 'Rato']]),
+  percentPerMilestone: 1,
 };
 
 describe('describeEvent (FUN-110)', () => {
@@ -17,6 +19,7 @@ describe('describeEvent (FUN-110)', () => {
       ['level-down', '9 → 8', 'Perdeu level · 9 → 8'],
       ['xp-penalty', '1200', 'Perdeu 1200 XP'],
       ['skill-up', 'melee/11', 'Corpo a corpo subiu para 11'],
+      ['bestiary-milestone', 'rat/1', 'Bestiário: Rato · marco 1 (+1 % XP)'],
       ['death', 'c1', 'Morreu'],
       ['stamina-exhausted', 'c1', 'Stamina esgotada'],
       ['backpack-full', 'c1', 'Mochila cheia'],
@@ -38,6 +41,17 @@ describe('describeEvent (FUN-110)', () => {
       .toBe('Entrou em rat-cellars · Iniciante');
     expect(describeEvent({ atMs: 0, type: 'supply-unaffordable', detail: 'mana-potion' }))
       .toBe('Gold acabou para mana-potion');
+  });
+
+  it('o marco do Bestiário sem catálogo diz o id e o marco, e NÃO inventa o bônus (FUN-113)', () => {
+    // "+1 %" de cabeça seria afirmar um número que o servidor não mandou — a mesma regra do
+    // "—" nos agregados opcionais. Com o percentual do catálogo, ele entra por extenso.
+    expect(describeEvent({ atMs: 0, type: 'bestiary-milestone', detail: 'rat/3' }))
+      .toBe('Bestiário: rat · marco 3');
+    expect(describeEvent(
+      { atMs: 0, type: 'bestiary-milestone', detail: 'rat/3' },
+      { percentPerMilestone: 0.5 },
+    )).toBe('Bestiário: rat · marco 3 (+0,5 % XP)');
   });
 
   it('tipo que este cliente não conhece sai como veio: pior que frase feia é sumir com o evento', () => {

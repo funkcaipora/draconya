@@ -25,10 +25,20 @@ const REASON_TEXT: Record<string, string> = {
 
 const SKILL_TEXT: Record<string, string> = { melee: 'Corpo a corpo', magic: 'Magia' };
 
+/** `1` e `0,5` — o bônus de um marco em pontos percentuais, como o jogador lê. */
+const percent = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+
 /** `id` do conteúdo em palavras, quando há nome; senão o id mesmo, que ao menos é estável. */
 export interface EventNames {
   readonly hunts?: ReadonlyMap<string, string>;
   readonly supplies?: ReadonlyMap<string, string>;
+  readonly monsters?: ReadonlyMap<string, string>;
+  /**
+   * Quanto vale um marco do Bestiário, em pontos percentuais (`catalogue.bestiary`). Sem ele
+   * a linha diz só o marco: escrever "+1 %" de cabeça seria afirmar um número que o servidor
+   * não mandou — a mesma regra do "—" nos agregados opcionais.
+   */
+  readonly percentPerMilestone?: number;
 }
 
 /**
@@ -51,6 +61,16 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
     case 'skill-up': {
       const [skill = '', level = ''] = detail.split('/');
       return `${SKILL_TEXT[skill] ?? skill} subiu para ${level}`;
+    }
+    case 'bestiary-milestone': {
+      // `monsterId/n` (FUN-113): o marco fecha cinco vezes por monstro na vida inteira do
+      // personagem, e é a única linha do extrato que fala de progressão permanente.
+      const [monsterId = '', milestone = ''] = detail.split('/');
+      const monster = names.monsters?.get(monsterId) ?? monsterId;
+      const bonus = names.percentPerMilestone === undefined
+        ? ''
+        : ` (+${percent.format(names.percentPerMilestone)} % XP)`;
+      return `Bestiário: ${monster} · marco ${milestone}${bonus}`;
     }
     case 'death': return 'Morreu';
     case 'stamina-exhausted': return 'Stamina esgotada';

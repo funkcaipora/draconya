@@ -476,6 +476,43 @@ export const staminaSchema = z.object({
 export type Stamina = z.infer<typeof staminaSchema>;
 
 /**
+ * O Bestiário (§18, FUN-113): os marcos de abates por monstro e o que cada marco vale.
+ *
+ * Só a recompensa PADRÃO — +1 % de XP PvE por marco, global (DT-01 da FUN-113). As
+ * recompensas especiais por monstro (§18.4) entram com o primeiro monstro que as pedir; um
+ * campo hoje seria forma sem uso. Os marcos são CRESCENTES, e o schema o exige: uma lista
+ * fora de ordem faria "próximo marco" apontar para trás.
+ */
+export const bestiarySchema = z.object({
+  id: z.literal('baseline'),
+  /** Os abates de cada marco, em ordem. §18.2: cinco, de 10 000 a 200 000. */
+  milestones: z.array(z.number().int().positive()).min(1).superRefine((milestones, context) => {
+    for (let index = 1; index < milestones.length; index += 1) {
+      const previous = milestones[index - 1];
+      const current = milestones[index];
+      if (previous === undefined || current === undefined || current > previous) continue;
+      context.addIssue({
+        code: 'custom',
+        message: `marcos fora de ordem em ${index}: ${previous} antes de ${current}`,
+      });
+      return;
+    }
+  }),
+  /**
+   * Quanto cada marco acrescenta à XP PvE, em pontos percentuais. §18.3: 1.
+   *
+   * INTEIRO, e é regra de forma que sustenta uma de conta: `Bestiary.applyXpBonus` faz
+   * `floor(xp × (100 + p × marcos) / 100)` em inteiro, e a garantia de que o `floor` acerta
+   * depende de `p × marcos` ser inteiro. Meio ponto percentual voltaria a pôr resíduo de
+   * ponto flutuante na frente do arredondamento — a armadilha que a conta em inteiro evita.
+   */
+  xpBonusPercentPerMilestone: z.number().int().nonnegative(),
+  _open: z.string().optional(),
+});
+
+export type Bestiary = z.infer<typeof bestiarySchema>;
+
+/**
  * Vocabulário do bot (FUN-73, ADR 0002, §13).
  *
  * **Fechado** porque o compilador só transforma em predicado o que conhece: uma linguagem de

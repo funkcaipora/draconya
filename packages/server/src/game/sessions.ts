@@ -180,6 +180,11 @@ export function createCitySessionFactory(
       // Skills vêm do ticket porque escalam o dano DURANTE a hunt (FUN-75). Ausentes, toda
       // skill vale o nível inicial do conteúdo — que é onde um personagem novo começa.
       ...(isSkillsState(initialCharacter.skills) ? { skills: initialCharacter.skills } : {}),
+      // O Bestiário vem do ticket porque o bônus dos marcos escala a XP durante a hunt
+      // (FUN-113). Já validado na emissão e no consumo (`isBestiaryState`), então entra sem
+      // guarda; ausente, o personagem parte de `{}` — nenhum abate contado, sem marco, sem
+      // bônus — e o próximo extrato traz de volta o que ele matar.
+      ...(initialCharacter.bestiary === undefined ? {} : { bestiary: initialCharacter.bestiary }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)

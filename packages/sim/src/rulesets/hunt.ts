@@ -6,7 +6,7 @@
 //   | como entra          | pelo menu, com dificuldade escolhida; instância criada na entrada |
 //   | o que encerra       | ação manual, regra de saída, ou morte (§14.8)                     |
 //   | o que a morte faz   | encerra — devolver à PZ é a FUN-38, do lado do servidor           |
-//   | como recompensa     | loot e XP por abate, bloqueados com stamina zero                  |
+//   | como recompensa     | loot, XP e abate no Bestiário, bloqueados com stamina zero        |
 //
 // Se a Guild War não couber nessa mesma interface depois, ela foi modelada em cima de hunt —
 // e descobrir isso na F5 custa semanas. É por isso que nada aqui pede método novo em
@@ -30,6 +30,7 @@ import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
+import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
@@ -224,6 +225,12 @@ export interface HuntRulesetOptions {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * Os marcos do Bestiário e o bônus por marco (§18, FUN-113). Ausente é uma hunt em que o
+   * abate conta, mas nenhum marco fecha e a XP sai sem bônus — o conteúdo de teste que não
+   * fala de progressão permanente. É a config quem define marco, não quem autoriza contar.
+   */
+  readonly bestiary?: BestiaryConfig;
   readonly player: PlayerProfile;
   readonly exitRules?: readonly HuntExitRule[];
   /**
@@ -1745,10 +1752,16 @@ export class HuntRuleset implements Ruleset {
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
       this.#deliverLoot(session, killer, loot.items);
 
-      const change = grantXp(
-        killer, definition.experience, this.#vocationOf(killer), this.#options.progression,
+      // A XP sai com o bônus de Bestiário de ANTES deste abate (DT-04): o abate que alcança um
+      // marco é pago pela regra que valia quando começou, e o marco vale do próximo em diante.
+      // Por isso `applyXpBonus` vem antes de `record`, e a ordem é contrato — invertida, o
+      // abate 10 000 seria o único da vida do personagem a render diferente dos vizinhos. O
+      // arredondamento é para baixo, e a conta é em inteiro (ver `Bestiary.applyXpBonus`).
+      const experience = killer.bestiary.applyXpBonus(
+        definition.experience, this.#options.bestiary,
       );
-      session.aggregates.xpGained += definition.experience;
+      const change = grantXp(killer, experience, this.#vocationOf(killer), this.#options.progression);
+      session.aggregates.xpGained += experience;
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
       if (change !== null) {
@@ -1758,6 +1771,14 @@ export class HuntRuleset implements Ruleset {
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
         // anuncia nada, então "até a reanexação".
         this.#emitCharacterHealth(session, killer);
+      }
+      // O abate conta no Bestiário DENTRO deste `if`, e não fora (DT-03, §18.6): stamina zero
+      // não conta abate, pela MESMA condição que não paga XP nem loot. Duas condições
+      // divergiriam na primeira mudança em uma delas. E fechar um marco é evento notável, como
+      // o level up: acontece cinco vezes por monstro na vida inteira do personagem.
+      const reached = killer.bestiary.record(monster.monsterId, this.#options.bestiary);
+      if (reached.milestoneReached !== null) {
+        session.record('bestiary-milestone', `${monster.monsterId}/${reached.milestoneReached}`);
       }
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
@@ -2029,6 +2050,9 @@ export function createHuntRuleset(
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
+    // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
+    // `exactOptionalPropertyTypes`.
+    ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,

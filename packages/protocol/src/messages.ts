@@ -69,6 +69,12 @@ export const SERVER_TO_CLIENT = {
    * em zero a hunt inteira — o loop que o M9 fecha não fechava na tela.
    */
   analyzer: 20,
+  /**
+   * O Bestiário do personagem (§18, FUN-113): quantos de cada monstro ele já abateu. Sai no
+   * attach e sempre que um contador muda — é progressão permanente, e a tela precisa ver o
+   * marco chegar.
+   */
+  bestiary: 21,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

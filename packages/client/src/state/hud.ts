@@ -58,6 +58,17 @@ export type Catalogue = S2CProps<'catalogue'>;
 export type HuntListing = Catalogue['hunts'][number];
 export type BotVocabulary = Catalogue['bot'];
 export type ItemDefinition = Catalogue['items'][number];
+export type MonsterListing = Catalogue['monsters'][number];
+/** Os marcos e o bônus por marco (§18). Ausente do catálogo: o servidor não tem Bestiário. */
+export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
+
+/**
+ * O Bestiário do personagem (§18, FUN-113): `id do monstro → abates`, permanente.
+ *
+ * Derivado do protocolo, como os agregados. É o valor INTEIRO que o servidor manda — um
+ * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
+ */
+export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
 
 /**
  * O que o personagem carrega e veste (§21.5, FUN-90).
@@ -140,6 +151,16 @@ export interface HudState {
 
   /** A mochila, o equipado e o peso — tudo calculado pelo servidor (FUN-90). */
   readonly inventory: Inventory | null;
+
+  /**
+   * Abates por monstro (§18, FUN-113). Chega no attach e sempre que um contador muda.
+   *
+   * `null` até chegar, pela mesma razão do inventário: um Bestiário que abre em zero afirma
+   * "nunca matou nada", e o servidor ainda não disse isso — é o primeiro segundo de toda
+   * conexão, e um nó anterior à FUN-113 nunca manda. Monstro sem entrada é zero de verdade:
+   * o `sim` não grava zero para todo monstro do conteúdo.
+   */
+  readonly bestiary: BestiaryCounts | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -156,6 +177,7 @@ export const INITIAL_HUD: HudState = {
   analyzer: INITIAL_ANALYZER,
   catalogue: null,
   inventory: null,
+  bestiary: null,
 };
 
 /**

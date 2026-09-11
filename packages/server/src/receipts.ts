@@ -17,7 +17,9 @@
 // índice troca isso por um `SMEMBERS` que quase sempre volta vazio.
 
 import type { ChainableCommander, Redis } from 'ioredis';
-import type { Aggregates, EndReason, NotableEvent, SkillsState } from '@draconya/sim';
+import type {
+  Aggregates, BestiaryState, EndReason, NotableEvent, SkillsState,
+} from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
 export interface SessionReceipt {
@@ -51,6 +53,16 @@ export interface SessionReceipt {
    * mais de contar duas vezes.
    */
   readonly skills?: SkillsState;
+  /**
+   * Os abates por monstro no fim da sessão (§18, FUN-113): `monsterId → abates`.
+   *
+   * Valor ABSOLUTO, como as skills, e pela mesma razão: abate nunca desce, então o ledger
+   * funde ficando com o MAIOR de cada monstro, e um extrato antigo processado fora de ordem
+   * não tem como rebaixar nada — sem guarda de instante. Absoluto e não delta porque a sessão
+   * já entrou com o valor de verdade (ele vem no ticket): somar delta por cima do que está no
+   * banco daria o mesmo número, com uma chance a mais de contar duas vezes.
+   */
+  readonly bestiary?: BestiaryState;
   /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
@@ -238,6 +250,11 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // erro nenhum. Foi o que aconteceu na primeira vez que escrevi isto.
     ...(typeof value['skills'] === 'object' && value['skills'] !== null
       ? { skills: value['skills'] as SkillsState }
+      : {}),
+    // Bestiário (FUN-113). Lista de PERMISSÃO, como as skills logo acima — e a razão de esta
+    // linha existir é a mesma que a do comentário delas.
+    ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
+      ? { bestiary: value['bestiary'] as BestiaryState }
       : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.

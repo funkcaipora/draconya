@@ -98,7 +98,12 @@ function Numbers({ aggregates, elapsedMs }: {
   );
 }
 
-function Events({ events }: { events: readonly NotableEvent[] }) {
+/**
+ * A lista de eventos notáveis, com os nomes do catálogo. Exportada para o teste: é aqui que o
+ * id do evento vira nome, e um teste de `describeEvent` com um mapa montado à mão não prova
+ * que ESTE mapa é montado (achado da revisão da FUN-113).
+ */
+export function Events({ events }: { events: readonly NotableEvent[] }) {
   // Os nomes de hunt e supply vêm do catálogo: o evento carrega o id, e o id é o que o
   // conteúdo fixou na sessão — a tradução para o nome é apresentação (FUN-110).
   const catalogue = useHudSlice((state) => state.catalogue);
@@ -106,6 +111,12 @@ function Events({ events }: { events: readonly NotableEvent[] }) {
   const names: EventNames = {
     hunts: new Map(catalogue?.hunts.map((hunt) => [hunt.id, hunt.name]) ?? []),
     supplies: new Map(catalogue?.bot.supplies.map((supply) => [supply.id, supply.name]) ?? []),
+    monsters: new Map(catalogue?.monsters.map((monster) => [monster.id, monster.name]) ?? []),
+    // O bônus por marco (FUN-113) só entra quando o catálogo o trouxe: a chave ausente é
+    // "não sei", e `exactOptionalPropertyTypes` não deixa escrever `undefined` no lugar.
+    ...(catalogue?.bestiary === undefined
+      ? {}
+      : { percentPerMilestone: catalogue.bestiary.xpBonusPercentPerMilestone }),
   };
   return (
     <ul className="analyzer-events">

@@ -128,6 +128,18 @@ export const characters = pgTable(
      */
     outfitColors: jsonb('outfit_colors'),
 
+    /**
+     * Abates por monstro, PERMANENTES (§18, FUN-113): `{ monsterId: kills }`. Nulável: quem
+     * nunca abateu nada — ou foi gravado antes do Bestiário — lê `null`, o ticket sai sem o
+     * campo e a sessão parte de `{}`, que é onde um personagem novo começa de qualquer jeito.
+     *
+     * `jsonb` e não uma tabela `(character_id, monster_id, kills)`: o dado é lido INTEIRO na
+     * emissão do ticket e escrito INTEIRO na liquidação do extrato, nunca por monstro — a
+     * mesma forma de `skills`, pela mesma razão. Quem escreve é só o ledger, fundindo pelo
+     * MAIOR de cada monstro (`Bestiary.merge`) na transação do extrato; o `game` nunca toca.
+     */
+    bestiary: jsonb('bestiary'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

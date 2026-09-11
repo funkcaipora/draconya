@@ -109,6 +109,24 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(await store.pendingFor(characterId)).toHaveLength(4);
   });
 
+  it('carries the bestiary through Redis and back, and a receipt without one stays without (FUN-113)', async () => {
+    // `parseReceipt` é lista de PERMISSÃO: campo que não entra nela some no caminho de volta
+    // sem erro nenhum — foi o que aconteceu com as skills na primeira vez. Este teste é o que
+    // pega a mesma omissão para o Bestiário: gravado com o mapa, lido com o mapa, absoluto.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const counts = { rat: 10_000, bat: 3 };
+    await store.save(receiptOf(randomUUID(), characterId, { bestiary: counts }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.bestiary).toEqual(counts);
+    // Sem o campo, sem a chave: o ledger distingue "não veio" (não toca na coluna) de "veio
+    // vazio", e uma chave `undefined` colapsaria os dois.
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

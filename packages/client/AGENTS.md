@@ -396,6 +396,17 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **Campo opcional dos agregados vira "—", nunca zero.** Eles são opcionais porque um nó `game`
   anterior à FUN-78 manda sem eles (deploy em rolagem). Zero é uma afirmação que o servidor não
   fez.
+- **O Bestiário é uma janela como o analisador, e o cliente NÃO conta abate** (`shell/Bestiary.tsx`,
+  FUN-113). Os contadores chegam INTEIROS em `bestiary` — no attach e a cada mudança — e
+  SUBSTITUEM (`hud.bestiary`, `null` até chegar); os marcos e o bônus por marco vêm no
+  `catalogue` (`monsters`, `bestiary`). O que a tela calcula é apresentação —
+  `shell/bestiary-progress.ts`, puro: "que marco vem depois" e o bônus GLOBAL (DT-01, marcos de
+  todos os monstros somados) —, e se divergisse do `sim` a conta do `sim` é a verdadeira. Mesmas
+  classes CSS do analisador, minimizada por padrão com o bônus no cabeçalho. **Sem monstro no
+  catálogo a janela não existe**: é um nó anterior à FUN-113, que nunca manda `bestiary`, e um
+  painel com "+0 %" e lista vazia afirma um Bestiário que aquele servidor não tem. Sem marcos no
+  catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
+  escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem
   acontece quando ainda não existe sessão de jogo; o socket só abre depois, com o ticket que a
   escolha rende. `credentials: 'include'` em toda chamada — a sessão é cookie httpOnly (ADR 0012),

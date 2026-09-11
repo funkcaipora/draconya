@@ -179,9 +179,18 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // Uma vez por sessão: a versão de conteúdo é fixada (invariante 7), então o catálogo não
       // muda enquanto ela vive. SUBSTITUI, e não acumula — reconectar reenvia o mesmo, e
       // concatenar daria hunts duplicadas na tela a cada queda de rede.
+      // `monsters` e `bestiary` são da tela do Bestiário (FUN-113): nome onde o contador tem
+      // id, e os marcos. `bestiary` fica ausente quando o servidor não o mandou — é a tela
+      // quem decide o que mostrar sem marco, não este `case`.
       hud.set((state) => ({
         ...state,
-        catalogue: { hunts: message.hunts, bot: message.bot, items: message.items },
+        catalogue: {
+          hunts: message.hunts,
+          monsters: message.monsters,
+          bot: message.bot,
+          items: message.items,
+          ...(message.bestiary === undefined ? {} : { bestiary: message.bestiary }),
+        },
       }));
       return;
 
@@ -197,6 +206,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           capacity: message.capacity,
         },
       }));
+      return;
+
+    case 'bestiary':
+      // SUBSTITUI, como o inventário: é o contador INTEIRO de cada monstro, não um delta. O
+      // servidor manda no attach e sempre que um contador muda (FUN-113), e somar aqui daria
+      // um Bestiário que diverge do dele na primeira reconexão — que reenvia o mesmo total.
+      hud.set((state) => ({ ...state, bestiary: message.counts }));
       return;
 
     case 'bot-config-result':

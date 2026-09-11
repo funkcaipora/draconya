@@ -50,7 +50,7 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
 | Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | parcial | E6 | §16, §43.10 |
-| Bestiário | [`bestiary.md`](./bestiary.md) | não implementado | E7 | §18 |
+| Bestiário | [`bestiary.md`](./bestiary.md) | parcial | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
 | Economia, supply e Market | [`economy.md`](./economy.md) | parcial | E5, E13 | §20, §32, §33, §43.5 |
 | Itens, equipamento e inventário | [`items.md`](./items.md) | parcial | E5, E7, E11 | §21-§23, §25, §43.6 |

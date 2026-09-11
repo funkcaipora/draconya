@@ -112,6 +112,52 @@ describe.runIf(available)('session ticket', () => {
     }
   });
 
+  it('carries the bestiary, and drops a map it cannot trust (FUN-113)', async () => {
+    // Os abates entram na sessão pelo ticket porque o bônus dos marcos escala a XP DURANTE a
+    // hunt (DT-01) — um personagem que entrasse em `{}` perderia o marco que já cruzou. E um
+    // valor torto vira AUSENTE, nunca ticket recusado: a linha é `jsonb` sem CHECK, e uma
+    // contagem corrompida não pode trancar ninguém fora do jogo. Mutação que mata: aceitar
+    // qualquer objeto (o array e o `-1` passariam), ou recusar o mapa vazio.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const counts = { rat: 10_000, bat: 3 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bestiary: counts });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, bestiary: counts },
+    });
+
+    // O mapa VAZIO é válido: é o personagem que nunca abateu nada, e ele tem que atravessar
+    // igual — distinguir "não veio" de "veio vazio" é do tipo, não do parse.
+    const vazio = await tickets.issue('a1', 'p1', { level: 1, xp: 0, bestiary: {} });
+    if (!vazio.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(vazio.value.ticket, 'n1')).toMatchObject({
+      initialCharacter: { level: 1, xp: 0, bestiary: {} },
+    });
+
+    for (const ruim of [
+      { rat: -1 },
+      { rat: 1.5 },
+      { rat: '10' },
+      { rat: Number.MAX_SAFE_INTEGER + 1 },
+      { '': 4 },
+      [10, 20],
+      'muitos',
+      null,
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, bestiary: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1'), JSON.stringify(ruim)).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('expires in seconds', async () => {
     const { directory, tickets } = build({ ttlMs: SHORT_MS });
     await directory.heartbeat('n1', NODE);
