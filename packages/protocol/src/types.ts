@@ -186,6 +186,16 @@ export const S2C_SCHEMAS = {
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
   /**
+   * O analisador ao vivo: os MESMOS agregados e eventos do `session-state`, mandados quando
+   * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
+   * tempo anda no relógio local da janela, e mandá-lo a cada ciclo seria a banda inteira para
+   * dizer que um segundo passou.
+   */
+  analyzer: z.object({
+    aggregates: Aggregates,
+    notableEvents: z.array(NotableEvent),
+  }),
+  /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
    *
    * Tipado, e não uma frase num `system-message`, porque a TELA precisa da resposta: enquanto

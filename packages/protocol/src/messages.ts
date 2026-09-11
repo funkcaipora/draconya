@@ -63,6 +63,12 @@ export const SERVER_TO_CLIENT = {
   'creature-hit': 17,
   effect: 18,
   missile: 19,
+  /**
+   * O analisador AO VIVO (§16.1): os agregados e os eventos notáveis da sessão, sempre que
+   * um deles muda. Antes só saíam no `session-state` e no `session-ended`, e a janela ficava
+   * em zero a hunt inteira — o loop que o M9 fecha não fechava na tela.
+   */
+  analyzer: 20,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

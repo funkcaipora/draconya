@@ -206,3 +206,32 @@ describe('outfit colours on the creature (FUN-104)', () => {
       .toEqual([{ ...appear, colors: { ...colors, head: 0, feet: 132 } }]);
   });
 });
+
+describe('the live analyzer (FUN-110)', () => {
+  const update: S2CMessage = {
+    type: 'analyzer',
+    aggregates: {
+      durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120, kills: 13, deaths: 0,
+      itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+  };
+
+  it('round trips the aggregates and the notable events', () => {
+    // Mutação que mata: apagar `analyzer: 20` de SERVER_TO_CLIENT (`decodeS2C` devolve `null`).
+    expect(decodeS2C(encodeS2C(update))).toEqual([update]);
+  });
+
+  it('is server-to-client only: the client reads what the hunt yielded, it never reports it', () => {
+    expect('analyzer' in S2C_SCHEMAS).toBe(true);
+    expect('analyzer' in C2S_SCHEMAS).toBe(false);
+  });
+
+  it('accepts the aggregates of an older node, without the FUN-78 fields', () => {
+    const older = {
+      ...update,
+      aggregates: { durationMs: 1, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    };
+    expect(decodeS2C(encodeS2C(older))).toEqual([older]);
+  });
+});

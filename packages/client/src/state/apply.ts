@@ -136,6 +136,21 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, xp: state.xp + message.amount }));
       return;
 
+    case 'analyzer':
+      // O analisador ao vivo (FUN-110): os números novos e o INSTANTE em que chegaram — é o
+      // carimbo que rebaseia o relógio local da janela, como no `session-state`. Sem janela
+      // (a Cidade não credita nada, §37) não há o que atualizar.
+      hud.set((state) => state.analyzer.sessionType === null ? state : ({
+        ...state,
+        analyzer: {
+          ...state.analyzer,
+          aggregates: message.aggregates,
+          notableEvents: message.notableEvents,
+          receivedAtMs: nowMs,
+        },
+      }));
+      return;
+
     case 'chat-message':
       hud.set((state) => ({
         ...state,

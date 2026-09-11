@@ -500,6 +500,57 @@ describe('o analisador (FUN-83)', () => {
   });
 });
 
+describe('o analisador ao vivo (FUN-110)', () => {
+  const live = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'analyzer',
+    aggregates: {
+      durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120,
+      kills: 13, deaths: 0, itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }, { atMs: 640_000, type: 'level-up' }],
+    ...over,
+  } as S2CMessage);
+  const attach = (): void => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
+      self: { creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200 },
+      world: { mapId: 'rat-cellars', creatures: [] },
+      aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
+      notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+    }, 5_000);
+  };
+
+  it('troca os agregados e os eventos, e recarimba o instante — o relógio local rebaseia', () => {
+    // Era o defeito: a janela ficava com os números do `session-attach` a hunt inteira.
+    // Mutação que mata: não recarimbar `receivedAtMs` (o tempo passaria a andar em dobro).
+    attach();
+    applyMessage(live(), 9_000);
+    const { analyzer } = hud.get();
+    expect(analyzer.aggregates?.kills).toBe(13);
+    expect(analyzer.aggregates?.durationMs).toBe(650_000);
+    expect(analyzer.notableEvents).toHaveLength(2);
+    expect(analyzer.receivedAtMs).toBe(9_000);
+    expect(analyzer.sessionType).toBe('hunt');
+    expect(analyzer.ended).toBe(false);
+  });
+
+  it('sem janela — antes de qualquer session-state — não inventa uma', () => {
+    // A Cidade não credita nada (§37) e a janela não existe lá; um `analyzer` perdido não
+    // pode fazê-la aparecer com `sessionType` nulo.
+    applyMessage(live(), 9_000);
+    expect(hud.get().analyzer.sessionType).toBeNull();
+    expect(hud.get().analyzer.aggregates).toBeNull();
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    attach();
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.chat, notified);
+    applyMessage(live(), 9_000);
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
 describe('a derivada por hora (FUN-83, §16.1)', () => {
   it('converte para hora, e é o CLIENTE que faz a conta', () => {
     // O servidor não manda número redundante (FUN-78): mandar `xpGained` e `xpPerHour` é

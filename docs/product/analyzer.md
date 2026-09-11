@@ -1,8 +1,8 @@
 # Analisador de hunt
 
-**Status:** parcial — os agregados existem, atravessam snapshot e extrato, e saem em
-`session-state` (FUN-32, FUN-78); a **janela no cliente** existe, minimizável, com "por hora"
-derivado local (FUN-83); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
+**Status:** parcial — os agregados existem, atravessam snapshot e extrato, saem em
+`session-state` (FUN-32, FUN-78) e ao vivo em `analyzer` quando mudam (FUN-110); a **janela no
+cliente** existe, minimizável, com "por hora" derivado local (FUN-83); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
 qualquer notificação fora do jogo
 **PRD:** §16, §43.10
 **Épico:** E6
@@ -96,8 +96,13 @@ derreter na frente de quem está lendo.
 opcionais no protocolo: um nó `game` antigo, em deploy em rolagem, manda sem eles. Zero é uma
 afirmação, e ele não afirmou nada.
 
-A janela **não pede `session-state`** para se atualizar. Os deltas chegam pelo lote do ciclo e ela
-lê a store; pedir em laço seria tráfego de volta gerado por tráfego de entrada.
+A janela **não pede `session-state`** para se atualizar. O servidor manda `analyzer` — os mesmos
+agregados e eventos do `session-state` — **sempre que um deles muda** (abate, loot, gasto,
+level, morte; FUN-110), no mesmo ciclo que já leva `player-stats`; a janela lê a store. O tempo
+não é gatilho: `durationMs` muda a cada ciclo, e compará-lo mandaria a mensagem dez vezes por
+segundo para dizer que nada aconteceu. Pedir em laço, do outro lado, seria tráfego de volta
+gerado por tráfego de entrada. Até a FUN-110 nada saía entre dois `session-state`, e a janela
+ficava em zero a hunt inteira — foi o achado do passe de QA do MVP.
 
 Ela não aparece na Cidade: a praça não credita nada (§37), e uma janela de "0 XP, 0 gold" ali é
 ruído com aparência de informação.

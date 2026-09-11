@@ -7,9 +7,9 @@
 // período offline, mostra o mesmo mais a lista curta de eventos notáveis. É de propósito: são a
 // mesma pergunta em dois momentos, e duas janelas divergiriam na terceira mudança.
 //
-// **Nada aqui pede `session-state`.** Os agregados chegam pelo lote do ciclo e a janela lê a
-// store; pedir em laço para atualizar um número seria tráfego de volta gerado por tráfego de
-// entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
+// **Nada aqui pede `session-state`.** Os agregados chegam em `analyzer` quando mudam (FUN-110)
+// e a janela lê a store; pedir em laço para atualizar um número seria tráfego de volta gerado
+// por tráfego de entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
 
 import { useEffect, useState } from 'react';
 import { perHour } from '../state/hud.js';
