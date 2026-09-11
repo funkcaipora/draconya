@@ -394,6 +394,29 @@ Se um dia aparecer uma segunda escrita no `game`, o ADR 0021 deixa de valer como
 duas escritas já são um repositório, e aí a pergunta é se a divisão de processos ainda descreve
 o sistema.
 
+## As cores do outfit viajam no ticket, não no snapshot (FUN-104)
+
+`characters.outfit_colors` é `jsonb` nulável (`{ head, body, legs, feet }`, índices da paleta),
+lida pelo `api` na emissão do ticket e adotada pelo `SessionHost` no `prepare` — o mesmo caminho
+do `name`, e pela mesma razão: é dado do personagem que só a APRESENTAÇÃO lê. O `sim` não
+conhece cor, e o snapshot não a carrega; quem a repete é `creature-appear` e a lista de
+criaturas do `session-state`, só para personagem — monstro é uma camada só e nunca traz o campo.
+
+Três coisas que seguem disso:
+
+- **Uma escolha nova aparece na PRÓXIMA entrada**, com o ticket que a trouxer. Quem já está
+  hospedado continua com as cores com que entrou; não há mensagem de "trocou de cor" e não
+  precisa haver enquanto a tela de escolha (§7.4) não existir. Ninguém escreve a coluna ainda.
+- **Valor corrompido vira AUSENTE, nunca login recusado.** A coluna não tem CHECK — a paleta é
+  do pacote de assets, não do schema —, então quem valida é quem monta o ticket
+  (`OutfitColors.safeParse`, no `api` e de novo no `consume`). Sem cores, o cliente pinta o
+  padrão de personagem novo. Chave ausente, e não `colors: undefined`: o codec apagaria a chave
+  e o tipo passaria a mentir sobre o que foi mandado.
+- **Nome e cores são adotados ANTES de `#createLocal`.** O anúncio de chegada ao shard (FUN-71)
+  sai de dentro dele, e lê as duas tabelas. Adotar depois — como o nome era — mandava o
+  recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
+  iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
+
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
 `lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis

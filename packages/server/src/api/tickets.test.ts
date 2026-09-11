@@ -7,7 +7,8 @@ import type { CharacterRecord } from '../db/repository.js';
 const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
-  state: 'city', sessionId: null, botConfig: null, skills: {}, createdAt: new Date(),
+  state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null,
+  createdAt: new Date(),
 };
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -142,6 +143,32 @@ describe('POST /api/tickets', () => {
     expect(issue).toHaveBeenCalledWith(
       'a1', 'p1', expect.objectContaining({ level: 1, xp: 0 }), NODE,
     );
+  });
+
+  it('as cores do outfit da linha entram no ticket; corrompidas ou nulas, ficam de fora (FUN-104)', async () => {
+    // Mesmo caminho do nome e do `botConfig`: a linha é lida sob a trava e o que ela diz vai
+    // no ticket. O `null` de quem nunca escolheu NÃO vira chave — o `game` espalha o que
+    // recebe, e uma chave `undefined` no claim seria mentira no tipo. E a linha é `jsonb` sem
+    // CHECK: um valor fora da paleta cai fora aqui, sem trancar o login por causa de cor.
+    const issuedWith = async (outfitColors: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, outfitColors })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const colors = { head: 78, body: 69, legs: 58, feet: 76 };
+    expect(await issuedWith(colors)).toMatchObject({ outfitColors: colors });
+    expect(await issuedWith(null)).not.toHaveProperty('outfitColors');
+    expect(await issuedWith({ head: 133, body: 69, legs: 58, feet: 76 }))
+      .not.toHaveProperty('outfitColors');
   });
 
   it('resolve o nó ANTES de abrir a trava de linha (FUN-53)', async () => {

@@ -15,6 +15,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
+import { OutfitColors } from '@draconya/protocol';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -83,6 +84,17 @@ export interface InitialCharacter {
    * ticket emitido por um `api` antigo, durante deploy em rolagem — o host assina com o id.
    */
   readonly name?: string;
+  /**
+   * As cores do outfit (FUN-104), como quem está por perto precisa vê-lo pintado.
+   *
+   * Vêm pelo ticket, como o `name`, e pela mesma razão: é dado do personagem que só a
+   * apresentação lê — o `sim` não conhece cor, e o snapshot não a carrega. Ao contrário de
+   * `botConfig`, chegam JÁ VALIDADAS contra o schema do protocolo: a forma é do protocolo, não
+   * de domínio nenhum, e o `game` as repete no `creature-appear` sem olhar. Ausente é
+   * personagem que nunca escolheu (ou ticket de um `api` antigo): o cliente pinta com as
+   * cores de personagem novo.
+   */
+  readonly outfitColors?: OutfitColors;
 }
 
 export interface IssuedTicket {
@@ -432,11 +444,16 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     : {};
   const name = initial['name'];
   const gold = initial['gold'];
+  // Cores fora da paleta ou com peça faltando viram AUSENTES, nunca ticket recusado: a linha
+  // do banco é `jsonb` sem CHECK, e um valor corrompido ali não pode trancar o personagem
+  // fora do jogo por causa de cor. Sem cores o cliente pinta o padrão — degradação, não perda.
+  const colors = OutfitColors.safeParse(initial['outfitColors']);
   return {
     level,
     xp,
     ...stamina,
     ...(typeof name === 'string' && name.length > 0 ? { name } : {}),
+    ...(colors.success ? { outfitColors: colors.data } : {}),
     // Gold inválido vira AUSENTE, não zero implícito com cara de valor: o resultado é o mesmo
     // saldo zero, mas quem lê o ticket consegue distinguir "não veio" de "veio como 0".
     ...(typeof gold === 'number' && Number.isSafeInteger(gold) && gold >= 0 ? { gold } : {}),

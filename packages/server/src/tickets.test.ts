@@ -80,6 +80,38 @@ describe.runIf(available)('session ticket', () => {
     });
   });
 
+  it('carries the outfit colours, and drops a set it cannot trust (FUN-104)', async () => {
+    // As cores vão pelo ticket como o nome: dado do personagem que só a apresentação lê. E um
+    // valor corrompido — índice fora da paleta, peça faltando — vira AUSENTE, nunca ticket
+    // recusado: a linha do banco é `jsonb` sem CHECK, e cor não pode trancar ninguém fora.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+
+    const colors = { head: 78, body: 69, legs: 58, feet: 76 };
+    const bom = await tickets.issue('a1', 'p1', { level: 1, xp: 0, outfitColors: colors });
+    if (!bom.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(bom.value.ticket, 'n1')).toEqual({
+      accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+      initialCharacter: { level: 1, xp: 0, outfitColors: colors },
+    });
+
+    for (const ruim of [
+      { head: 133, body: 69, legs: 58, feet: 76 },
+      { head: 78, body: 69, legs: 58 },
+      { head: 'red', body: 69, legs: 58, feet: 76 },
+      'azul',
+    ]) {
+      const issued = await tickets.issue(
+        'a1', 'p1', { level: 1, xp: 0, outfitColors: ruim } as unknown as InitialCharacter,
+      );
+      if (!issued.ok) throw new Error('expected a ticket');
+      expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+        accountId: 'a1', characterId: 'p1', nodeId: 'n1',
+        initialCharacter: { level: 1, xp: 0 },
+      });
+    }
+  });
+
   it('expires in seconds', async () => {
     const { directory, tickets } = build({ ttlMs: SHORT_MS });
     await directory.heartbeat('n1', NODE);
