@@ -28,6 +28,22 @@ export const wallSetSchema = z.strictObject({
 export type WallSet = z.infer<typeof wallSetSchema>;
 
 /**
+ * As quatro peças da parede de um mapa (FUN-105), venha `wall` como vier.
+ *
+ * O schema aceita UM id ou os quatro, e não normaliza — o arquivo diz o que o humano escreveu.
+ * Quem desenha precisa sempre das quatro, e é aqui que um número vira as quatro IGUAIS: a
+ * regra de vizinhança continua rodando, escolhe uma peça por tile, e todas apontam a mesma
+ * arte. É o que faz um mapa com `wall: 1298` desenhar hoje exatamente o que desenhava antes
+ * de existir peça por vizinhança.
+ */
+export function wallSetOf(wall: number | WallSet): WallSet {
+  if (typeof wall === 'number') {
+    return { vertical: wall, horizontal: wall, corner: wall, pole: wall };
+  }
+  return wall;
+}
+
+/**
  * A TABELA de aparências (FUN-94), o mapa único que o ADR 0008 já previa: *"trocar o pacote de
  * assets no futuro é remapear `appearanceId`/`outfitId` numa tabela, não reescrever
  * `content/`"*.
@@ -107,6 +123,62 @@ export const appearancesSchema = z.object({
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;
+
+/**
+ * Uma faixa INCLUSIVA de ids, `[primeiro, último]`. Um id só é `[n, n]`.
+ *
+ * Faixas, e não a lista: o pacote 13.32 tem 36 mil objetos em 760 faixas, e é a diferença
+ * entre um arquivo que cabe num diff e um que ninguém abre.
+ */
+const idRange = z.tuple([appearanceId, appearanceId]).refine(
+  ([first, last]) => first <= last,
+  { message: 'faixa invertida: o primeiro id passa do último' },
+);
+
+/** Faixas em ordem crescente e sem sobreposição — é o que a busca binária de `packHas` exige. */
+const idRanges = z.array(idRange).superRefine((ranges, context) => {
+  for (let index = 1; index < ranges.length; index += 1) {
+    const previous = ranges[index - 1];
+    const current = ranges[index];
+    if (previous === undefined || current === undefined || current[0] > previous[1]) continue;
+    context.addIssue({
+      code: 'custom',
+      message: `faixas fora de ordem ou sobrepostas em ${index}: `
+        + `[${previous}] antes de [${current}]`,
+    });
+    return;
+  }
+});
+
+/**
+ * O INVENTÁRIO de um pacote de assets (FUN-21): quais ids existem nele, por tipo.
+ *
+ * É a sombra do pacote dentro de `content/`. O pacote em si mora em `things/`, fora do Git, e
+ * o servidor nem o carrega — mas a tabela de aparências aponta para ele, e sem isto nada
+ * conferia que o outfit 21 EXISTE: um id errado passava pelo schema e pelo boot, e virava um
+ * quadrado invisível em produção, longe da causa. `buildContent` cruza a tabela com este
+ * inventário e recusa o id que não está em faixa nenhuma.
+ *
+ * Gerado por `pnpm assets:inventory` a partir do `appearances-<hash>.dat`, nunca à mão; a mesma
+ * ferramenta confere o arquivo versionado contra o pacote local (`--check`, dentro do `pnpm
+ * check`). `id` é o que `appearances.pack` cita; `version` é a pasta em `things/`.
+ *
+ * `strictObject` pela razão de sempre: uma quinta categoria seria descartada em silêncio.
+ * Não é arte (invariante 6): são números, e os mesmos que a tabela já carrega.
+ */
+export const packSchema = z.strictObject({
+  id: z.string().min(1),
+  /** A pasta do pacote em `things/` — é por ela que `--check` o encontra na máquina. */
+  version: z.string().min(1),
+  /** SHA-256 do `.dat` de que este inventário saiu. Proveniência, para quem for regenerar. */
+  appearancesSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  object: idRanges,
+  outfit: idRanges,
+  effect: idRanges,
+  missile: idRanges,
+});
+
+export type Pack = z.infer<typeof packSchema>;
 
 /** Uma linha de loot: cai com `chance`, e quando cai vem entre `min` e `max`. */
 const lootRollSchema = z.object({

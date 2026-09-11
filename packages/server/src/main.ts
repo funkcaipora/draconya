@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
+import { servedPackProblem } from './served-pack.js';
 import { loadConfiguration } from './config.js';
 import { createLogger } from './log.js';
 import { buildCatalogue } from './game/catalogue.js';
@@ -119,8 +120,15 @@ async function main(): Promise<void> {
 
   const contentDir = resolve(configuration.CONTENT_DIR);
   const content = loadContent(contentDir);
+  // A tabela de aparências foi conferida contra o inventário de UM pacote (FUN-21); se o
+  // deploy serve outro, a conferência não vale e o quadrado invisível volta sem erro nenhum.
+  const packProblem = servedPackProblem(content, configuration.THINGS_VERSION);
+  if (packProblem !== null) throw new Error(packProblem);
   logger.info(
-    { contentDir, contentVersion: content.version, monsters: content.monsters.size },
+    {
+      contentDir, contentVersion: content.version, monsters: content.monsters.size,
+      ...(content.pack === undefined ? {} : { pack: content.pack.id }),
+    },
     'Content loaded',
   );
 

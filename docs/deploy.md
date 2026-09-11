@@ -275,6 +275,13 @@ ano é seguro; trocar de versão do pacote é outro caminho, não outro conteúd
 (As imagens de UI não têm hash no nome; mudam só com a versão do pacote, que já está no
 caminho.)
 
+**Trocar a versão do pacote é também regenerar o inventário** em
+`packages/content/data/packs/` (`pnpm assets:inventory`, ver `docs/asset-library.md`): é contra
+ele que o boot recusa um id de aparência que o pacote não tem (FUN-21). A versão servida é
+`THINGS_VERSION` no Coolify (padrão `1332`): o compose deriva `VITE_THINGS_URL` dela, e o
+`app` recusa subir se ela não for a versão do inventário contra o qual o conteúdo foi
+conferido — um deploy apontando outro pacote não passa em silêncio.
+
 **Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
 desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
 arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo

@@ -44,6 +44,32 @@ em vez de centenas de milhares de arquivos pequenos. Cada linha de `sprites.json
 recursos do Qt. Essa etapa exige `xz`, Go e acesso à internet na primeira execução para obter
 `github.com/pgaskin/qrc/cmd/qrc2zip@v0.0.2` (MIT).
 
+## Inventário de ids para `content/`
+
+A tabela de aparências (`packages/content/data/appearances/baseline.json`) aponta ids do
+pacote, e o pacote não está no Git. O que o repositório versiona é a sombra dele — quais ids
+existem em cada registro, como faixas inclusivas — em `packages/content/data/packs/<pack>.json`,
+e é contra esse arquivo que `buildContent` recusa um id que não existe (FUN-21):
+
+```bash
+pnpm assets:inventory                 # lê things/1332 e escreve packs/tibia-1332.json
+pnpm assets:inventory --version 1400  # outro pacote: THINGS_VERSION ou --version
+pnpm assets:inventory --check         # confere cada packs/*.json com o pacote local
+```
+
+`--check` faz parte do `pnpm check`. Sem o pacote na máquina ele avisa e pula (é o caso do CI,
+onde quem confere a tabela é `load.test.ts`, contra o inventário versionado); com o pacote, um
+inventário desatualizado reprova e diz em qual registro e em qual faixa. O arquivo guarda o
+SHA-256 do `.dat` de que saiu, então trocar o pacote sem regenerar o inventário reprova antes
+de qualquer faixa ser comparada.
+
+O inventário é a sombra de UM pacote, e o cliente carrega o de `VITE_THINGS_URL`. Para os dois
+não divergirem, o `game` recusa subir quando `THINGS_VERSION` não é a versão do inventário
+(`packages/server/src/served-pack.ts`), e `compose.coolify.yml` deriva `VITE_THINGS_URL` de
+`THINGS_VERSION`. Trocar de pacote é, portanto: novo `things/<versão>/`, `pnpm
+assets:inventory --version <versão>`, `pack` novo em `appearances/baseline.json` com os ids
+remapeados, e `THINGS_VERSION` novo no deploy.
+
 ## Estrutura para ferramentas
 
 ```text

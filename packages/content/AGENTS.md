@@ -122,6 +122,46 @@ transforma um número nas quatro iguais para quem desenha. `wallSetSchema` é `s
 como item e monstro — uma quinta peça seria descartada em silêncio, no arquivo que existe para
 ninguém conferir arte à mão.
 
+## O inventário do pacote (FUN-21)
+
+```
+data/packs/tibia-1332.json         # quais ids EXISTEM no pacote, por registro, em faixas
+```
+
+A tabela acima diz que o rato é o outfit 21; nada conferia que o outfit 21 **existe**. O
+número passava pelo schema e pelo boot, e o defeito aparecia em produção como um quadrado
+invisível — o cliente pede um quadro que não há e desenha o fallback, a três camadas da
+causa. O pacote em si mora em `things/`, fora do Git, e o servidor nem o carrega; o que entra
+aqui é a **sombra** dele: `[[100,167],[169,370],…]` por `object`, `outfit`, `effect` e
+`missile`. `buildContent` cruza a tabela com essas faixas e recusa o id que não está em
+nenhuma — `appearances.monsters.rat: outfit 9999 não existe no pacote tibia-1332`. Roda no
+boot, no `pnpm content:check` e em `load.test.ts`, que é o que faz o CI reprovar sem ter pacote
+nenhum.
+
+**Gerado, nunca escrito à mão:** `pnpm assets:inventory` lê o `appearances-<hash>.dat` de
+`things/<versão>/` e escreve o arquivo; `pnpm assets:inventory --check` (dentro do `pnpm
+check`) regenera em memória e compara — pacote ausente é aviso e pulo, inventário
+desatualizado é erro. É a única hora em que o arquivo encontra o `.dat` de verdade, e por
+isso trocar de pacote é editar a tabela **e** rodar o gerador.
+
+**A conferência só roda quando há inventário.** Sem nenhum, `buildContent` a pula — é o que
+deixa a fixture de combate com o placeholder (`pack: "placeholder"`, ids 1, 2, 3…) sem falar de
+arte. Com inventário e nenhum do pacote que a tabela cita, é erro: `pack` deixou de ser só
+documentação. `load.test.ts` prende que o conteúdo real tem o inventário do pacote citado,
+senão apagar `packs/` desligaria a conferência em silêncio.
+
+**O pacote SERVIDO tem que ser o conferido.** A sombra é de um pacote; o cliente carrega o de
+`VITE_THINGS_URL`, que é configuração de deploy. `buildContent` expõe `content.pack`, e o
+`game` recusa subir quando `THINGS_VERSION` não bate com `pack.version`
+(`packages/server/src/served-pack.ts`) — o compose deriva `VITE_THINGS_URL` da mesma
+variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1332
+passaria em tudo e desenharia exatamente o quadrado que a conferência existe para impedir.
+
+**Fica fora de `computeVersion`.** O inventário não é lido por sessão nenhuma; regenerá-lo
+porque o pacote ganhou ids não muda o que ninguém vê, e contá-lo faria um `pnpm
+assets:inventory` recusar todo snapshot de uma queda sem drenagem. O que muda a arte de uma
+sessão é o `pack` da tabela, e esse já conta.
+
 ## Loot (FUN-63)
 
 A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e
@@ -188,9 +228,9 @@ entre arquivos resolvem.
 - **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
   moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
   configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.
-- **`itemSchema`, `monsterSchema` e `wallSetSchema` são `strictObject`, e os outros não.** Zod
-  DESCARTA chave desconhecida em silêncio, e depois da FUN-94 é exatamente o que aconteceria com um
-  `appearanceId` escrito no item por hábito: o arquivo pareceria certo, o número não iria a
+- **`itemSchema`, `monsterSchema`, `wallSetSchema` e `packSchema` são `strictObject`, e os
+  outros não.** Zod DESCARTA chave desconhecida em silêncio, e depois da FUN-94 é exatamente o
+  que aconteceria com um `appearanceId` escrito no item por hábito: o arquivo pareceria certo, o número não iria a
   lugar nenhum, e o item apareceria com a arte de outro sem nada acusar. `load.test.ts` varre
   `data/` pela mesma coisa, porque a mensagem do schema não diz PARA ONDE o campo foi.
 - **O `.refine` de `botRingSwapSchema` é regra de jogo, não de forma.** `removeAbove` maior que
