@@ -53,7 +53,7 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Bestiário | [`bestiary.md`](./bestiary.md) | não implementado | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
 | Economia, supply e Market | [`economy.md`](./economy.md) | parcial | E5, E13 | §20, §32, §33, §43.5 |
-| Itens, equipamento e inventário | [`items.md`](./items.md) | não implementado | E5, E7, E11 | §21-§23, §25, §43.6 |
+| Itens, equipamento e inventário | [`items.md`](./items.md) | parcial | E5, E7, E11 | §21-§23, §25, §43.6 |
 | Morte | [`death.md`](./death.md) | implementado | E2 | §26 |
 | Bosses | [`bosses.md`](./bosses.md) | não implementado | E11 | §27, §43.7 |
 | Quests | [`quests.md`](./quests.md) | não implementado | E11 | §28 |
