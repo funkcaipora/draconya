@@ -185,6 +185,39 @@ O Coolify interpreta o Compose com um arquivo de variáveis de build separado. P
 as duas credenciais de runtime aceitam interpolação vazia nessa etapa. Isso não libera o
 boot sem credenciais: a validação do servidor exige WorkOS, e o PostgreSQL exige senha.
 
+## O pacote de arte
+
+O cliente desenha com o pacote do Tibia (`things/<versão>/`, ADR 0008), e **tudo que o
+Draconya usa sai da própria origem** — nenhum CDN, nenhum servidor de terceiros. O pacote não
+está no Git nem na imagem (`things` está no `.gitignore` e no `.dockerignore`; não é nosso para
+redistribuir): a imagem do `web` leva só o caminho, `VITE_THINGS_URL` (padrão `/things/1332`,
+fixado no build do cliente), e o nginx serve o que estiver montado em
+`/usr/share/nginx/html/things` (`deploy/nginx.conf`). Em dev, o Vite serve `things/` da raiz do
+repositório no mesmo caminho — ver `packages/client/vite.config.ts`.
+
+No Coolify o volume se chama `things` (`compose.coolify.yml`). Ele nasce vazio, e povoá-lo é um
+passo manual, uma vez por versão do pacote:
+
+```bash
+rsync -av --exclude library/ things/1332/ root@<servidor>:/root/things/1332/
+```
+
+```bash
+ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1332 /things/'
+```
+
+O que precisa ir: `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as
+folhas `sprites-<hash>.bmp.lzma` (172 MB na 13.32). `library/` é a biblioteca de consulta do
+Claude Code (`docs/asset-library.md`) e não é servida.
+
+Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
+`Cache-Control: immutable`. O hash está no nome de cada folha, então a URL nunca muda de
+conteúdo e o cache de um ano é seguro; trocar de versão do pacote é outro caminho, não outro
+conteúdo no mesmo caminho.
+
+**Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
+desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo.
+
 ## Backup
 
 ```bash
