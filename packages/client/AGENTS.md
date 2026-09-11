@@ -221,11 +221,18 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `state/apply.ts` é a única costura entre socket e estado, e cada `case` dele decide mundo ou
   HUD. **O canvas nunca renderiza através do React**; ele lê `world` direto no laço de render
   (`world/viewport.ts`). Ver ADR 0007.
-- **O mundo é desenhado com RETÂNGULOS por enquanto** (`world/`). O pacote de arte não está no
-  repositório e o pipeline dele é a FUN-16..21. O que existe é tudo o que não depende de arte:
-  câmera de 18×14, camadas, ordem de desenho por `y`, reaproveitamento de sprite e
-  interpolação de passo. Trocar retângulo por sprite é trocar a textura e ligar os
-  `frameGroups`, não reescrever o viewport.
+- **O mundo é desenhado com os SPRITES do pacote, e retângulo é a degradação** (`world/`).
+  `AssetPack` entrega o bitmap e `TextureBook` o vira `Texture` uma vez por chave; enquanto o
+  quadro não chega — ou quando não há pacote — o lugar dele é um retângulo, e a tela nunca
+  fica preta por causa de arte. As chaves são puras (`world/keys.ts`) porque o defeito delas é
+  silencioso: **o chão é pedido por CÉLULA do padrão**, `x % largura, y % altura`, como no
+  cliente do Tibia — um chão de 4×4 são dezesseis texturas, não uma por tile, e vizinhos ganham
+  quadros diferentes em vez de azulejo. **A barra de vida e o nome moram no `overlay`** e não
+  dependem de arte: um par `Graphics` + `Text` por criatura, no mesmo pool por id que o sprite,
+  redesenhado só quando vida ou nome mudam (`world/health.ts` é a cor e a largura, em números).
+  **Todo outfit é pintado com `DEFAULT_OUTFIT_COLORS`** (`world/outfit-colors.ts`) até o
+  protocolo carregar as cores de cada criatura — a constante sai dali nesse dia. O que era de
+  antes continua: câmera de 18×14, camadas, ordem de desenho por `y`, pool e interpolação.
 - **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
   criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
   trabalho 60 vezes por segundo.
@@ -285,9 +292,22 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **`decompressSync` decide entre `string` e `Uint8Array` por HEURÍSTICA** — "parece texto?". A
   folha é binária, e `decodeSheet` normaliza em vez de confiar: a heurística errando num pacote
   devolveria bytes mutilados, que na tela aparecem como sprite corrompido e não como erro.
-- **O alfa do BMP é IGNORADO.** As folhas vêm com alfa 255 em todo pixel, inclusive nos vazios;
-  a transparência é a cor magenta. Confiar no alfa desenharia um retângulo magenta atrás de
-  cada sprite.
+- **O alfa do BMP é IGNORADO.** Há folha com alfa 255 em todo pixel, inclusive nos vazios; a
+  transparência é a cor magenta. Confiar no alfa desenharia um retângulo magenta atrás de cada
+  sprite.
+- **O BMP da folha é de BAIXO para cima** — altura positiva, como manda o formato. Ler as
+  linhas na ordem do arquivo espelha a folha inteira na vertical, e o sintoma é traiçoeiro: chão
+  e parede continuam parecendo chão e parede, mas cada outfit sai de cabeça para baixo, no canto
+  errado do quadro, e os ids de animação passam a cair nas linhas de OUTRA criatura — o rato
+  andando virava um bicho azul. `fromBitmap` lê o sinal da altura; `DECODED_FORMAT` (`cache.ts`)
+  sobe a cada mudança que altere pixels, porque o cache persistente guarda o RESULTADO do decoder
+  e o hash do arquivo não sabe que ele mudou.
+- **O personagem do Tibia é desenhado a 45°, e isso NÃO é defeito.** O quadro `sul` do outfit
+  128 (citizen) tem a cabeça no canto superior esquerdo e os pés no inferior direito — parece
+  deitado, e a primeira reação é achar que o decoder virou a folha. Não virou: a imagem oficial
+  do outfit no TibiaWiki tem a mesma pose e o Huntera desenha igual. Confira contra o dragão
+  (outfit 34) e a leather armor (objeto 3361), que são inconfundíveis, antes de "corrigir" o
+  decoder por causa de um humanoide.
 - **Falha do cache NUNCA é falha do jogo.** Aba anônima, cota estourada e armazenamento
   bloqueado são normais, não excepcionais: leitura que falha vira `null`, gravação que falha
   vira `false`, e paga-se o LZMA de novo — que é o comportamento de antes do cache existir.

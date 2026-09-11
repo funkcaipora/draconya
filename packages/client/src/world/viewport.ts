@@ -8,8 +8,12 @@
 // vira `Texture` pelo `TextureBook`; enquanto um quadro não chega — ou quando o pacote não tem
 // aquele id — o lugar dele é um retângulo, e a tela nunca fica preta por causa de arte. A parte
 // difícil continua a mesma de antes: câmera, camadas, ordem de desenho, pool e interpolação.
+//
+// A barra de vida e o nome NÃO dependem de arte: existem no modo sem pacote também. São
+// `Graphics` e `Text` na camada `overlay`, um par por criatura, no mesmo pool por id que os
+// sprites — nascem no appear e morrem quando a criatura some.
 
-import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { buildTilemap, isBlocked, type Tilemap } from '@draconya/content';
 import type { AssetPack } from '../assets/pack.js';
 import { interpolate, world, type Creature } from '../state/world.js';
@@ -17,6 +21,12 @@ import {
   TILE, VIEW_HEIGHT, VIEW_WIDTH, compareDrawOrder, toScreen, visibleTiles,
 } from './camera.js';
 import { facingOf, walkFrame } from './facing.js';
+import {
+  HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_FILL_HEIGHT, HEALTH_FILL_WIDTH,
+  healthColor, healthPercent, healthWidth,
+} from './health.js';
+import { creatureKey, groundCell, groundKey } from './keys.js';
+import { DEFAULT_OUTFIT_COLORS } from './outfit-colors.js';
 import { TextureBook } from './textures.js';
 
 const COLOR_FLOOR = 0x2b2b33;
@@ -24,6 +34,33 @@ const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
+const COLOR_HEALTH_FRAME = 0x000000;
+
+/**
+ * Onde a barra fica em relação ao TILE, não ao quadro: um quadro de 64 px transborda para
+ * cima, e ancorar nele faria a barra pular quando a criatura troca de quadro.
+ */
+const HEALTH_BAR_ABOVE = 8;
+/** O nome termina um pixel acima da barra. */
+const NAME_GAP = 1;
+/** Metade da barra, arredondada para baixo: ver o comentário em `paintOverlay`. */
+const HEALTH_BAR_HALF = Math.floor(HEALTH_BAR_WIDTH / 2);
+
+/**
+ * O que fica sobre a criatura: barra e nome, e o último estado desenhado de cada um.
+ *
+ * Redesenhar a barra é refazer a geometria e o nome é rasterizar texto de novo — os dois a
+ * cada quadro, por criatura, é o custo que uma hunt com dezenas de monstros não paga. Só a
+ * POSIÇÃO anda todo quadro, junto do sprite.
+ */
+interface CreatureOverlay {
+  readonly bar: Graphics;
+  readonly label: Text;
+  drawnHealth: number;
+  drawnMaxHealth: number;
+  drawnName: string;
+  drawnColor: number;
+}
 
 /** De que o mapa é feito, pela tabela de aparências (FUN-94, `appearances.maps`). */
 export interface MapTiles {
@@ -91,6 +128,8 @@ export async function mountViewport(
    * constante, que é o caso NORMAL do jogo, não a exceção.
    */
   const sprites = new Map<number, Sprite>();
+  /** Barra e nome, pelo mesmo id. Nascem e morrem junto do sprite. */
+  const overlays = new Map<number, CreatureOverlay>();
 
   function target(): { x: number; y: number; z: number } {
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
@@ -101,10 +140,20 @@ export async function mountViewport(
     return { x: 0, y: 0, z: 0 };
   }
 
-  /** A textura de um objeto do mapa, ou `undefined` enquanto não chega. */
-  function tileTexture(appearanceId: number): Texture | null | undefined {
+  /**
+   * A textura de um objeto do mapa NO TILE `(x, y)`, ou `undefined` enquanto não chega.
+   *
+   * A chave e o pedido são pela CÉLULA do padrão: um chão de 4×4 são dezesseis texturas no
+   * livro, não uma por tile — e vizinhos ganham quadros diferentes, que é o que faz o chão do
+   * Tibia não parecer azulejo.
+   */
+  function tileTexture(appearanceId: number, x: number, y: number): Texture | null | undefined {
     if (pack === null) return null;
-    return book.get(`object:${appearanceId}`, () => pack.object(appearanceId));
+    const pattern = pack.objectPattern(appearanceId);
+    const cell = groundCell(x, y, pattern);
+    return book.get(
+      groundKey(appearanceId, x, y, pattern), () => pack.object(appearanceId, cell.x, cell.y),
+    );
   }
 
   function paintTerrain(center: { x: number; y: number }): void {
@@ -124,12 +173,12 @@ export async function mountViewport(
     terrain.x = Math.round(origin.x);
     terrain.y = Math.round(origin.y);
 
-    const floorTexture = tiles === null ? null : tileTexture(tiles.floor);
-    const wallTexture = tiles === null ? null : tileTexture(tiles.wall);
-    // A chave inclui se as texturas JÁ chegaram: o primeiro quadro pinta retângulo, e o quadro
-    // em que a folha resolve precisa repintar mesmo com a janela parada.
-    const key = `${map.id}:${window.minX},${window.minY},${window.maxX},${window.maxY}`
-      + `:${floorTexture instanceof Texture ? 'f' : '-'}${wallTexture instanceof Texture ? 'w' : '-'}`;
+    // A chave inclui a VERSÃO do livro de texturas: o primeiro quadro pinta retângulo, e o
+    // quadro em que uma folha resolve — ou em que um despejo esquece uma célula — precisa
+    // repintar mesmo com a janela parada. Um número, e não uma sondagem célula a célula: a
+    // pergunta "mudou algo?" só muda quando o livro muda, e custar 17 consultas por quadro
+    // para respondê-la era pagar a 60 Hz por um evento raro.
+    const key = `${map.id}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}`;
     if (key === painted) return;
     painted = key;
 
@@ -141,7 +190,9 @@ export async function mountViewport(
         if (outside) continue;
         const local = { x: (x - window.minX) * TILE, y: (y - window.minY) * TILE };
         const blocked = isBlocked(map, x, y);
-        const texture = blocked ? wallTexture : floorTexture;
+        const texture = tiles === null
+          ? null
+          : tileTexture(blocked ? tiles.wall : tiles.floor, x, y);
         if (texture instanceof Texture) {
           let sprite = ground[used];
           if (sprite === undefined) {
@@ -175,8 +226,74 @@ export async function mountViewport(
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
     const frames = pack.framesOf(creature.appearanceId, moving);
     const { phase } = walkFrame(creature, nowMs, frames);
-    const key = `outfit:${creature.appearanceId}:${direction}:${moving ? 'w' : 's'}:${phase}`;
-    return book.get(key, () => pack.outfit(creature.appearanceId, direction, phase, moving));
+    // Toda criatura é pedida COM cores — as padrão, até o protocolo carregar as de cada uma.
+    // O pacote devolve a base como está para quem não tem template (monstro), e a chave leva
+    // as cores para o quadro pintado nunca cair na entrada do quadro cru.
+    const colors = DEFAULT_OUTFIT_COLORS;
+    const key = creatureKey(creature.appearanceId, direction, moving, phase, colors);
+    return book.get(
+      key, () => pack.outfit(creature.appearanceId, direction, phase, moving, colors),
+    );
+  }
+
+  /** A barra e o nome de uma criatura, criados uma vez e reaproveitados a cada quadro. */
+  function createOverlay(): CreatureOverlay {
+    const bar = new Graphics();
+    bar.roundPixels = true;
+    const label = new Text({
+      text: '',
+      style: {
+        fontFamily: 'Verdana, sans-serif', fontSize: 10, fontWeight: 'bold', fill: 0xffffff,
+      },
+      // Rasterizado em dobro: o texto do Pixi é uma textura, e a 1× dez pixels de Verdana
+      // viram borrão sobre um sprite nítido. `anchor` no meio de baixo é o que centra o nome
+      // no tile sem medir o texto a cada quadro.
+      resolution: 2,
+      roundPixels: true,
+      anchor: { x: 0.5, y: 1 },
+    });
+    overlay.addChild(bar, label);
+    return { bar, label, drawnHealth: -1, drawnMaxHealth: -1, drawnName: '', drawnColor: -1 };
+  }
+
+  /**
+   * Redesenha o que MUDOU, e move o que sempre anda.
+   *
+   * A cor do nome segue a da barra: é a leitura de relance do Tibia — um nome vermelho é uma
+   * criatura quase morta, sem olhar a barra.
+   */
+  function paintOverlay(
+    entry: CreatureOverlay, creature: Creature, screen: { x: number; y: number },
+  ): void {
+    const { health, maxHealth, name } = creature;
+    const color = healthColor(healthPercent(health, maxHealth));
+    if (health !== entry.drawnHealth || maxHealth !== entry.drawnMaxHealth) {
+      entry.drawnHealth = health;
+      entry.drawnMaxHealth = maxHealth;
+      entry.bar
+        .clear()
+        .rect(0, 0, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT)
+        .fill(COLOR_HEALTH_FRAME);
+      const width = healthWidth(health, maxHealth, HEALTH_FILL_WIDTH);
+      if (width > 0) entry.bar.rect(1, 1, width, HEALTH_FILL_HEIGHT).fill(color);
+    }
+    if (name !== entry.drawnName) {
+      entry.drawnName = name;
+      entry.label.text = name;
+    }
+    if (color !== entry.drawnColor) {
+      entry.drawnColor = color;
+      entry.label.style.fill = color;
+    }
+    const centerX = screen.x + TILE / 2;
+    const barTop = screen.y - HEALTH_BAR_ABOVE;
+    // Deslocamento INTEIRO em relação ao tile. A barra tem 27 px, e centrá-la a 13,5 px
+    // punha o vértice dela meio pixel fora da grade do sprite: `roundPixels` arredonda cada
+    // um por si, e a barra oscilava um pixel para os lados a cada meio tile de rolagem.
+    entry.bar.x = centerX - HEALTH_BAR_HALF;
+    entry.bar.y = barTop;
+    entry.label.x = centerX;
+    entry.label.y = barTop - NAME_GAP;
   }
 
   function paintCreatures(center: { x: number; y: number; z: number }, nowMs: number): void {
@@ -193,6 +310,12 @@ export async function mountViewport(
       if (seen.has(id)) continue;
       sprite.destroy();
       sprites.delete(id);
+      const gone = overlays.get(id);
+      if (gone !== undefined) {
+        gone.bar.destroy();
+        gone.label.destroy();
+        overlays.delete(id);
+      }
     }
 
     for (const entry of drawable) {
@@ -203,7 +326,13 @@ export async function mountViewport(
         sprites.set(entry.creature.id, sprite);
         creatures.addChild(sprite);
       }
+      let top = overlays.get(entry.creature.id);
+      if (top === undefined) {
+        top = createOverlay();
+        overlays.set(entry.creature.id, top);
+      }
       const screen = toScreen(entry, center, view);
+      paintOverlay(top, entry.creature, screen);
       const texture = creatureTexture(entry.creature, nowMs);
       if (texture instanceof Texture) {
         sprite.texture = texture;
@@ -271,6 +400,11 @@ export async function mountViewport(
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();
       sprites.clear();
+      for (const top of overlays.values()) {
+        top.bar.destroy();
+        top.label.destroy();
+      }
+      overlays.clear();
       for (const sprite of ground) sprite.destroy();
       ground.length = 0;
       overlay.destroy();

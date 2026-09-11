@@ -19,6 +19,14 @@ export class TextureBook {
   /** Por chave de pedido: a textura pronta, `null` para "não existe", ou a promessa em voo. */
   readonly #byKey = new Map<string, Texture | null | Promise<void>>();
   #closed = false;
+  #version = 0;
+
+  /**
+   * Sobe a cada mudança no que está PRONTO: uma textura que chega, uma resposta "não existe",
+   * um `forget`, um `clear`. É o que o viewport põe na chave de repintura do terreno — um
+   * número, em vez de sondar cada célula do padrão a cada quadro para saber se algo mudou.
+   */
+  get version(): number { return this.#version; }
 
   /**
    * A textura de uma chave, ou `undefined` enquanto ela não chega — e dispara o pedido na
@@ -35,10 +43,14 @@ export class TextureBook {
       // trocaria o mapa, e aplicar aqui reviveria uma entrada que ninguém pediu mais.
       if (this.#byKey.get(key) !== flight) return;
       this.#byKey.set(key, bitmap === null ? null : this.#textureOf(bitmap));
+      this.#version += 1;
     }).catch(() => {
       // Folha que o servidor não tem, ou LZMA que não abriu: fica sem quadro, e o viewport
       // desenha o fallback. Rejeição não tratada por criatura por quadro derrubaria a aba.
-      if (this.#byKey.get(key) === flight) this.#byKey.set(key, null);
+      if (this.#byKey.get(key) === flight) {
+        this.#byKey.set(key, null);
+        this.#version += 1;
+      }
     });
     this.#byKey.set(key, flight);
     return undefined;
@@ -53,6 +65,7 @@ export class TextureBook {
       if (value === texture) this.#byKey.delete(key);
     }
     texture.destroy(true);
+    this.#version += 1;
   }
 
   /** Esquece tudo. As texturas são destruídas; os bitmaps são do pacote, que os fecha. */
@@ -62,6 +75,7 @@ export class TextureBook {
       if (value instanceof Texture) value.destroy(true);
     }
     this.#byKey.clear();
+    this.#version += 1;
   }
 
   #textureOf(bitmap: Bitmap): Texture {
