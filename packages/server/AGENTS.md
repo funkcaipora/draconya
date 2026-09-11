@@ -30,7 +30,7 @@ Persistência, diretório de sessão e roteamento.
   a reconstrói **não é `SUM(delta)`**: o crédito tem piso de zero (`Math.max(0, …)` em
   `applyProgress`), então uma sessão que gasta mais do que o personagem tinha grava o delta
   negativo cheio e trunca a coluna. A projeção é a soma DOBRADA NO PISO, linha a linha, na
-  ordem em que entraram — e `ledger.test.ts`, "a coluna `gold` bate com o ledger", é quem
+  ordem em que entraram — e `ledger.postgres.test.ts`, "a coluna `gold` bate com o ledger", é quem
   confere. Quem escrever um caminho novo que credita gold sem linha de ledger reprova ali.
 - **Nenhuma leitura ou escrita de banco no caminho crítico de uma ação.** A simulação vive em
   memória; persistência é write-behind. Postgres no meio do tick mata o tempo de resposta.
@@ -329,7 +329,7 @@ gauge que ninguém escreve. Foi a pendência da FUN-47.
 
 ## Os dois critérios de saída, como teste (FUN-44, FUN-99)
 
-`api/phase-one-exit.test.ts` prova que a sessão **sobrevive**; `api/phase-two-exit.test.ts`
+`api/phase-one-exit.postgres.test.ts` prova que a sessão **sobrevive**; `api/phase-two-exit.postgres.test.ts`
 prova que ela **rende** — e que o número que o jogador lê é o que chega ao banco.
 
 Os dois seguem as mesmas duas regras, e elas valem para qualquer teste que entre aqui:
@@ -345,7 +345,7 @@ história sobre a mesma hunt.
 
 ## O critério de saída da Fase 1 (FUN-44)
 
-`src/api/phase-one-exit.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
+`src/api/phase-one-exit.postgres.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:
 entrar numa hunt, fechar o navegador, render enquanto ninguém olha, voltar e reencontrar a
 sessão, matar o nó sem drenar e retomar em outro, drenar e ver o extrato virar linha de
 personagem.
@@ -454,6 +454,15 @@ mutação manda a linha de comando inteira, com o caminho a partir da raiz.
 Testes de integração que importam: reanexar a uma sessão em andamento; matar o processo e recuperar
 do snapshot; drenar em deploy e conferir o extrato; duas requisições simultâneas competindo pelo
 terceiro slot de personagem.
+
+**Arquivo que abre o Postgres se chama `*.postgres.test.ts`** (FUN-102). O nome é o que o põe no
+projeto `postgres` do `vitest.config.ts` da raiz, onde esses arquivos rodam no máximo dois por
+vez: cada um cria um schema e roda as migrações, e cinco deles ao mesmo tempo contra um Postgres
+de uma CPU (o Docker da máquina de desenvolvimento) reprovava doze testes sortidos por timeout
+com um jogo aberto ao lado. O resto da suíte continua em paralelo. `testing/database.test.ts`
+reprova o arquivo que chama `connectTestDatabase` sem o sufixo — e o que tem o sufixo sem
+chamar. O custo é a suíte inteira ir de 6,5 s para ~14 s: os dois critérios de saída levam
+quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro começar.
 
 ## Armadilhas conhecidas
 

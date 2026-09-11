@@ -408,7 +408,7 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **Recusa da API vira frase, e a frase vive em `account/api.ts`.** Traduzir na tela faria a
   mesma recusa dizer coisas diferentes em cada lugar; e um código que ninguém traduziu ainda
   aparece cru, porque "algo deu errado" faz o jogador repetir o mesmo erro.
-- **`?character=<id>` fica.** `phase-one-exit.test.ts` e `pnpm load` entram sem tela, e tirá-lo
+- **`?character=<id>` fica.** `phase-one-exit.postgres.test.ts` e `pnpm load` entram sem tela, e tirá-lo
   obrigaria os dois a simular login para testar sessão.
 - **`net/current.ts` é como um botão manda intenção** (FUN-79). A conexão nasce e morre num
   efeito, e quem clica está em qualquer lugar da árvore: passar `send` por props atravessaria
