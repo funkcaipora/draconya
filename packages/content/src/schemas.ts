@@ -8,6 +8,26 @@ import { z } from 'zod';
 const appearanceId = z.number().int().positive();
 
 /**
+ * As quatro peças de uma parede (FUN-105), como o Tibia monta muro: o tile bloqueado NÃO tem
+ * uma arte só — a peça é escolhida pela VIZINHANÇA. `vertical` corre de norte a sul,
+ * `horizontal` de leste a oeste, `corner` é onde as duas se encontram e `pole` é a ponta
+ * solta, sem parede em nenhum dos quatro lados. A regra que escolhe é do cliente
+ * (`world/walls.ts`); aqui moram só os quatro ids — nunca um caminho de arquivo (invariante 6).
+ *
+ * `strictObject`, como item e monstro: uma quinta chave (`"diagonal"`, `"end"`) seria uma peça
+ * que ninguém desenha, e Zod a descartaria em silêncio no arquivo que existe para ninguém
+ * conferir arte à mão.
+ */
+export const wallSetSchema = z.strictObject({
+  vertical: appearanceId,
+  horizontal: appearanceId,
+  corner: appearanceId,
+  pole: appearanceId,
+});
+
+export type WallSet = z.infer<typeof wallSetSchema>;
+
+/**
  * A TABELA de aparências (FUN-94), o mapa único que o ADR 0008 já previa: *"trocar o pacote de
  * assets no futuro é remapear `appearanceId`/`outfitId` numa tabela, não reescrever
  * `content/`"*.
@@ -33,6 +53,12 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * Outfits de PERSONAGEM (FUN-103). `default` é o que todo jogador veste enquanto ninguém
+   * escolhe o seu (§7.4 pendente): `CharacterRuntime` não tem outfit e o ticket não carrega
+   * um. Mora aqui, e não numa constante no servidor, porque é arte (invariante 6).
+   */
+  characters: z.object({ default: appearanceId }).optional(),
+  /**
    * `id de mapa → aparência do chão e da parede` (FUN-23).
    *
    * O tilemap é grade de caracteres (`#` bloqueia, o resto é livre) e não guarda id de arte
@@ -42,11 +68,42 @@ export const appearancesSchema = z.object({
    * **Por MAPA, e não um par global.** Uma adega e uma praça não têm o mesmo chão, e um par
    * único faria a Cidade parecer o porão do rato — que é o tipo de coisa que ninguém escreve
    * de propósito e todo mundo vê na primeira tela.
+   *
+   * `wall` é UM id — a mesma peça em todo tile bloqueado — ou as quatro de `wallSetSchema`
+   * (FUN-105). A união fica no schema de propósito, sem normalizar aqui: o arquivo diz o que
+   * o humano escreveu, e quem precisa das quatro chama `wallSetOf`.
    */
   maps: z.record(z.string().min(1), z.object({
     floor: appearanceId,
-    wall: appearanceId,
+    wall: z.union([appearanceId, wallSetSchema]),
   })).default({}),
+  /**
+   * `id de magia → o que ela desenha` (FUN-109). `effect` é a animação no tile do alvo;
+   * `missile` é o projétil do conjurador até ele. Os dois são opcionais e independentes: uma
+   * cura tem efeito e não tem projétil, e uma magia sem entrada nenhuma aqui é magia MUDA —
+   * válida, só não desenha. É por isso que `buildContent` confere UM lado só: toda chave
+   * daqui precisa existir no catálogo, mas o catálogo não precisa estar todo aqui.
+   *
+   * A semântica dos ids é do pacote (`pack`), e é ele quem diz que 13 é "magic blue". Este
+   * arquivo não sabe disso, e não deve: no dia em que o pacote mudar, o 13 vira outro número
+   * e nada aqui precisa entender o que ele desenhava.
+   */
+  spells: z.record(z.string().min(1), z.object({
+    effect: appearanceId.optional(),
+    missile: appearanceId.optional(),
+  })).default({}),
+  /** `id de supply → efeito no tile de quem usou` (FUN-109). Mesma regra de `spells`. */
+  supplies: z.record(z.string().min(1), z.object({
+    effect: appearanceId.optional(),
+  })).default({}),
+  /**
+   * Efeito do golpe sem magia (FUN-109). `melee` é o sangue do corpo a corpo. Objeto, e não
+   * um número solto, porque o golpe à distância (§21.3, munição) vai ter o seu e não cabe em
+   * `spells` nem em `supplies`.
+   */
+  hits: z.object({
+    melee: appearanceId.optional(),
+  }).default({}),
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;

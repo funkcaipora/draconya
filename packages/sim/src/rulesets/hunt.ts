@@ -25,6 +25,7 @@ import type {
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
 import type { CastResult, SpellAim, SpellTarget } from '../casting.js';
+import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -47,7 +48,7 @@ import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { TileOccupancy, canOccupy, move, place } from '../movement.js';
-import type { Movable, MoveResult } from '../movement.js';
+import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier } from '../skills.js';
@@ -101,6 +102,12 @@ const EXIT_RULE_INTERVAL_MS = 250;
  * ao invés de insistir é o que evita um laço quente quando o jogador acampa em cima do ponto.
  */
 const SPAWN_RETRY_MS = 1000;
+
+/**
+ * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
+ * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
+ */
+const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
@@ -475,6 +482,14 @@ export class HuntRuleset implements Ruleset {
     return this.#monsters;
   }
 
+  /**
+   * O andar da instância. Monstro vive numa grade 2D; o `z` é do mapa, e quem monta o
+   * `session-state` precisa dele para pôr o monstro no mesmo andar do personagem (FUN-103).
+   */
+  get floor(): number {
+    return this.#world.map.z;
+  }
+
   get routeIndex(): number {
     return this.#walker.index;
   }
@@ -633,8 +648,15 @@ export class HuntRuleset implements Ruleset {
     const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
     if (perSecond <= 0) return;
 
-    if (what === 'health') character.heal(1);
-    else character.mana = Math.min(character.maxMana, character.mana + 1);
+    if (what === 'health') {
+      // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
+      // inteira é ruído, mas a barra precisa andar. E só quando REPÔS — de vida cheia, nada
+      // mudou, e um evento por segundo para dizer isso é o que uma hunt desanexada de oito
+      // horas não precisa produzir.
+      if (character.heal(1) > 0) this.#emitCharacterHealth(session, character);
+    } else {
+      character.mana = Math.min(character.maxMana, character.mana + 1);
+    }
 
     // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
     // `r * dtMs / 1000` num acumulador fracionário, é o que mantém a conta exata: somar
@@ -672,6 +694,11 @@ export class HuntRuleset implements Ruleset {
     }
     if (penalty.levelChange !== null) {
       session.record('level-down', `${penalty.levelChange.from} → ${penalty.levelChange.to}`);
+      // Descer de level reescreve `maxHealth` pela tabela (`retarget`), e a barra é anunciada
+      // de TODO lugar que a escreve (FUN-109). A vida é zero — ele morreu —, mas o máximo
+      // mudou, e o cliente que só recebeu o golpe fatal ficaria com um "0 / máximo do level
+      // antigo" até a reanexação.
+      this.#emitCharacterHealth(session, character);
     }
 
     // Encerra quando não sobrou ninguém de pé. Com um personagem — o caso de hoje — é a
@@ -818,6 +845,15 @@ export class HuntRuleset implements Ruleset {
     this.#spawner.occupy(request.slot, monster.id);
 
     const subjectOf = monsterSubject(monster.id);
+    // DEPOIS do `place`: é ele que pode recusar o tile, e anunciar uma posição que ainda pode
+    // ser recusada publicaria um monstro onde ele não está (FUN-103).
+    session.emit({
+      kind: 'creature-appeared', creatureId: subjectOf, monsterId: definition.id,
+      // O `z` é do mapa, como o passo faz em `move()`: monstro vive numa grade 2D e o andar é
+      // propriedade da instância, não da criatura.
+      position: { ...monster.position, z: this.#world.map.z },
+      health: monster.health, maxHealth: definition.health,
+    });
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
@@ -1104,10 +1140,31 @@ export class HuntRuleset implements Ruleset {
       // A skill de magia escala o poder, como a de arma escala o golpe (FUN-75).
       this.#scaledPower(character, 'spell-cast', 1),
     );
+    if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
     // não gastou mana, não praticou.
-    if (result.ok) this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
-    if (!result.ok || aim === null) return result;
+    this.#gainSkills(session, character, 'spell-cast', spell.manaCost);
+
+    // UMA vez, ANTES dos golpes (FUN-109): o cliente desenha o efeito no lançador e nos alvos
+    // e só depois faz cada número cair. A ordem é contrato.
+    //
+    // `targets` é um vetor NOVO, e não `#spellHits`: aquele é reaproveitado e limpo a cada
+    // lançamento, e o evento é drenado pelo hospedeiro DEPOIS — quando `#spellHits` já seria a
+    // mira da magia seguinte. É a única alocação por lançamento que este arquivo faz de
+    // propósito, e ela é do tamanho da mira.
+    session.emit({
+      kind: 'spell-cast', casterId: character.id, spellId: spell.id,
+      casterPosition: this.#at(character),
+      targets: aim === null
+        ? NO_SPELL_TARGETS
+        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+    });
+    if (aim === null) {
+      // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
+      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
+      this.#emitHealed(session, character, result.healed, 'spell');
+      return result;
+    }
 
     // Aplicar depois de colher TODOS os alvos, e não durante (FUN-92).
     //
@@ -1124,7 +1181,14 @@ export class HuntRuleset implements Ruleset {
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
       session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
-      recordDamage(monster.contribution, character.id, monster.receiveDamage(damage));
+      const applied = monster.receiveDamage(damage);
+      recordDamage(monster.contribution, character.id, applied);
+      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`.
+      session.emit({
+        kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+        amount: applied, source: 'spell', position: this.#at(monster),
+      });
+      this.#emitHealth(session, monster);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
     return result;
@@ -1192,6 +1256,13 @@ export class HuntRuleset implements Ruleset {
       // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
       // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
       session.aggregates.suppliesUsed += 1;
+      // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
+      // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
+      session.emit({
+        kind: 'supply-used', characterId: character.id, supplyId: supply.id,
+        position: this.#at(character),
+      });
+      this.#emitHealed(session, character, result.healed, 'supply');
       return result;
     }
 
@@ -1439,7 +1510,15 @@ export class HuntRuleset implements Ruleset {
       this.#options.combat,
       session.rng,
     );
-    recordDamage(character.contribution, subject, character.receiveDamage(result.damage));
+    const applied = character.receiveDamage(result.damage);
+    recordDamage(character.contribution, subject, applied);
+    // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
+    // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
+    session.emit({
+      kind: 'creature-hit', creatureId: character.id, attackerId: subject,
+      amount: applied, source: 'melee', position: this.#at(character),
+    });
+    this.#emitCharacterHealth(session, character);
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
@@ -1471,6 +1550,65 @@ export class HuntRuleset implements Ruleset {
       });
     }
     return result;
+  }
+
+  /**
+   * A vida do monstro mudou — uma vez por golpe (FUN-103).
+   *
+   * `creature-health` existia no protocolo sem emissor nenhum: o monstro aparecia, andava e
+   * morria com a barra cheia o tempo todo, e o sintoma parecia bug do cliente.
+   */
+  #emitHealth(session: Session, monster: MonsterRuntime): void {
+    const definition = this.#options.monsters.get(monster.monsterId);
+    session.emit({
+      kind: 'creature-health-changed', creatureId: monster.subject,
+      health: monster.health, maxHealth: definition?.health ?? monster.health,
+    });
+  }
+
+  /**
+   * A vida do PERSONAGEM mudou (FUN-109). O mesmo evento do monstro, com o id dele.
+   *
+   * Sai de todo lugar que escreve `character.health` OU `character.maxHealth` nesta hunt —
+   * golpe, cura, poção, regeneração, level up e penalidade de morte —, e a completude é o
+   * ponto: um caminho que muda a vida sem passar por aqui é a barra do jogador parando de
+   * andar até a próxima reanexação, que era o defeito inteiro. O máximo conta porque
+   * `retarget` (`progression.ts`) reescreve os dois de uma vez.
+   */
+  #emitCharacterHealth(session: Session, character: CharacterRuntime): void {
+    session.emit({
+      kind: 'creature-health-changed', creatureId: character.id,
+      health: character.health, maxHealth: character.maxHealth,
+    });
+  }
+
+  /**
+   * O personagem REPÔS vida: o número que sobe, e depois a barra que sobe (FUN-109).
+   *
+   * Só com `amount > 0`. `castSpell` e `useSupply` devolvem o que REPÔS, não o que o efeito
+   * prometia — e uma cura em quem estava cheio repôs zero. Um "+0" flutuando é ruído, e a
+   * barra que não mudou não tem o que anunciar.
+   */
+  #emitHealed(
+    session: Session, character: CharacterRuntime, amount: number,
+    source: CreatureHealed['source'],
+  ): void {
+    if (amount <= 0) return;
+    session.emit({
+      kind: 'creature-healed', creatureId: character.id, amount, source,
+      position: this.#at(character),
+    });
+    this.#emitCharacterHealth(session, character);
+  }
+
+  /**
+   * Onde a criatura está, com o andar do MAPA — o mesmo `z` que `creature-appeared` e o passo
+   * publicam. O monstro vive numa grade 2D e não carrega `z`; o personagem carrega, mas o mapa
+   * é a única fonte de verdade sobre o andar (`WorldPoint`), e ler de dois lugares é como os
+   * dois divergem.
+   */
+  #at(creature: { readonly position: GridPoint }): WorldPoint {
+    return { x: creature.position.x, y: creature.position.y, z: this.#world.map.z };
   }
 
   #onExitRules(session: Session): void {
@@ -1514,6 +1652,14 @@ export class HuntRuleset implements Ruleset {
     );
     const applied = monster.receiveDamage(result.damage);
     recordDamage(monster.contribution, character.id, applied);
+    // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
+    // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
+    // cliente contando uma história que a barra desmente.
+    session.emit({
+      kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
+      amount: applied, source: 'melee', position: this.#at(monster),
+    });
+    this.#emitHealth(session, monster);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
@@ -1605,7 +1751,14 @@ export class HuntRuleset implements Ruleset {
       session.aggregates.xpGained += definition.experience;
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
-      if (change !== null) session.record('level-up', String(change.to));
+      if (change !== null) {
+        session.record('level-up', String(change.to));
+        // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
+        // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
+        // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
+        // anuncia nada, então "até a reanexação".
+        this.#emitCharacterHealth(session, killer);
+      }
     }
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
@@ -1626,6 +1779,9 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) forgetActor(character.contribution, subject);
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+    // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
+    // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
+    session.emit({ kind: 'creature-vanished', creatureId: subject });
   }
 
   /**

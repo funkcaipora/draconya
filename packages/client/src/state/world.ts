@@ -12,6 +12,8 @@
 //
 // Quem lê isto é o laço de render do canvas (FUN-23), a cada quadro, direto. Nunca por prop.
 
+import type { S2CProps } from '@draconya/protocol';
+
 /** Posição em tiles. Igual à do protocolo. */
 export interface Point {
   x: number;
@@ -48,6 +50,53 @@ export interface CreatureStep {
   readonly pushed: boolean;
 }
 
+/** Como um golpe se lê: `heal` é cura, os outros são dano. Do protocolo, não copiado. */
+export type HitKind = S2CProps<'creature-hit'>['kind'];
+
+/**
+ * Os três TRANSITÓRIOS do combate (FUN-106): o efeito num tile, o projétil de A a B e o número
+ * que flutua sobre a criatura. Vivem em listas aqui — no mundo, nunca no HUD — porque chegam
+ * dezenas por segundo numa hunt e o React não pode saber deles (ADR 0007).
+ *
+ * **Quem os expira é o viewport**, não este módulo: só o laço de quadro sabe que horas são, e
+ * é ele que remove da lista o que acabou de tocar. Aqui só se guarda o INSTANTE em que cada
+ * um começou; o resto é aritmética em `world/effects.ts`.
+ *
+ * O `id` é local e sequencial: é a chave do pool de sprites do viewport, e por isso NUNCA
+ * reinicia — nem ao trocar de instância. Reiniciar faria um efeito novo herdar o sprite de um
+ * antigo que ainda não saiu do pool.
+ */
+export interface Effect {
+  readonly id: number;
+  readonly position: Point;
+  readonly effectId: number;
+  readonly startedAtMs: number;
+}
+
+export interface Missile {
+  readonly id: number;
+  readonly from: Point;
+  readonly to: Point;
+  readonly missileId: number;
+  readonly startedAtMs: number;
+  readonly durationMs: number;
+}
+
+export interface FloatingText {
+  readonly id: number;
+  readonly creatureId: number;
+  readonly amount: number;
+  readonly kind: HitKind;
+  readonly startedAtMs: number;
+  /**
+   * Onde o texto está sendo desenhado: a ÚLTIMA posição conhecida da criatura, que o viewport
+   * atualiza a cada quadro enquanto ela existe. Quando ela some no meio do voo — o golpe que
+   * mata é seguido do `creature-disappear` — o número termina de subir onde ela estava, em vez
+   * de sumir junto. `null` é criatura que este cliente nunca viu: nada a desenhar.
+   */
+  position: Point | null;
+}
+
 export interface World {
   /** Instância em que o personagem está, ou `null` antes de entrar em alguma. */
   instanceId: string | null;
@@ -61,6 +110,9 @@ export interface World {
    */
   selfId: number | null;
   readonly creatures: Map<number, Creature>;
+  readonly effects: Effect[];
+  readonly missiles: Missile[];
+  readonly texts: FloatingText[];
 }
 
 export const world: World = {
@@ -68,7 +120,77 @@ export const world: World = {
   mapId: null,
   selfId: null,
   creatures: new Map(),
+  effects: [],
+  missiles: [],
+  texts: [],
 };
+
+/**
+ * Teto de cada lista de transitórios.
+ *
+ * Com o viewport rodando a lista nunca passa de algumas dezenas: tudo expira em cerca de um
+ * segundo. O teto é para a aba de FUNDO, onde `requestAnimationFrame` para e o socket não —
+ * horas de hunt entrariam sem ninguém expirar nada, e o sintoma seria "o jogo fica lento com
+ * o tempo", que ninguém liga a um efeito de magia. Quando o teto corta, corta o mais antigo,
+ * que é o que já teria acabado de tocar.
+ */
+export const TRANSIENT_CAP = 256;
+
+let lastTransientId = 0;
+
+function pushCapped<T>(list: T[], item: T): void {
+  list.push(item);
+  if (list.length > TRANSIENT_CAP) list.splice(0, list.length - TRANSIENT_CAP);
+}
+
+/** Um efeito começa a tocar em `position` agora. */
+export function addEffect(position: Point, effectId: number, startedAtMs: number): Effect {
+  lastTransientId += 1;
+  const effect: Effect = { id: lastTransientId, position, effectId, startedAtMs };
+  pushCapped(world.effects, effect);
+  return effect;
+}
+
+/** Um projétil sai de `from` para `to` agora, e leva `durationMs` para chegar. */
+export function addMissile(
+  from: Point, to: Point, missileId: number, startedAtMs: number, durationMs: number,
+): Missile {
+  lastTransientId += 1;
+  const missile: Missile = { id: lastTransientId, from, to, missileId, startedAtMs, durationMs };
+  pushCapped(world.missiles, missile);
+  return missile;
+}
+
+/**
+ * Um número começa a subir sobre a criatura agora.
+ *
+ * A posição é fotografada AQUI, e não só no primeiro quadro: o golpe que mata chega no mesmo
+ * lote que o `creature-disappear`, e quando o viewport olhasse a criatura já não existiria —
+ * justamente o número que o jogador mais quer ver ficaria sem lugar para cair.
+ */
+export function addFloatingText(
+  creatureId: number, amount: number, kind: HitKind, startedAtMs: number,
+): FloatingText {
+  lastTransientId += 1;
+  const creature = world.creatures.get(creatureId);
+  const text: FloatingText = {
+    id: lastTransientId,
+    creatureId,
+    amount,
+    kind,
+    startedAtMs,
+    position: creature === undefined ? null : interpolate(creature, startedAtMs),
+  };
+  pushCapped(world.texts, text);
+  return text;
+}
+
+/** Esvazia os três transitórios. O que estava no ar pertence à cena anterior. */
+export function clearTransients(): void {
+  world.effects.length = 0;
+  world.missiles.length = 0;
+  world.texts.length = 0;
+}
 
 /**
  * Troca de instância limpa TUDO. Carregar por cima deixaria criatura do mapa anterior
@@ -79,6 +201,7 @@ export function enterInstance(instanceId: string, mapId: string): void {
   world.mapId = mapId;
   world.selfId = null;
   world.creatures.clear();
+  clearTransients();
 }
 
 /**

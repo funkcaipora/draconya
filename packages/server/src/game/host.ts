@@ -13,11 +13,16 @@
 // que decide a taxa de tick — a sessão sabe SE alguém olha, nunca QUEM.
 
 import { performance } from 'node:perf_hooks';
-import type { EndReason, GridPoint, Receipt, Session, SessionSnapshot, SessionType } from '@draconya/sim';
+import type {
+  CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session, SessionSnapshot,
+  SessionType,
+} from '@draconya/sim';
 import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { BotConfig, Item, ItemSlot } from '@draconya/content';
-import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult } from '@draconya/sim';
+import type { Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
+import type {
+  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult,
+} from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
@@ -109,6 +114,34 @@ export interface SessionHostOptions {
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
   /**
+   * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
+   *
+   * O `sim` não conhece nome nem arte: o evento de nascimento traz só o `monsterId`, e é aqui
+   * que ele vira algo desenhável. Ausente: o monstro aparece sem nome e com outfit 0 — a hunt
+   * continua, mas a tela mostra um buraco onde deveria ter um rato. Lido do conteúdo fixado na
+   * sessão (invariante 7): é um mapa carregado no boot, não uma consulta por criatura.
+   */
+  readonly monsterCatalog?: ReadonlyMap<string, Monster>;
+  /**
+   * O outfit de TODO personagem, enquanto ninguém escolhe o seu (FUN-103, §7.4 pendente).
+   *
+   * `CharacterRuntime` não tem outfit e o ticket não carrega um. Até isso existir, todo jogador
+   * veste o mesmo — e o número vem do conteúdo, não de uma constante aqui, porque é arte e arte
+   * não mora em código (invariante 6).
+   */
+  readonly playerOutfitId?: number;
+  /**
+   * A tabela de aparências (FUN-109), para o que o combate DESENHA: o sangue do golpe, o
+   * projétil e a explosão da magia, o brilho da poção.
+   *
+   * O `sim` emite "houve um golpe", "saiu a magia X", "usou o supply Y" — nunca um id de
+   * arte (invariante 6). É aqui que o `spellId` vira `effect` e `missile`, pela tabela fixada
+   * no boot (invariante 7). Ausente, ou magia sem linha nela: o combate chega MUDO — número
+   * flutuante e barra continuam, só o efeito não sai. Silêncio, não erro: uma magia nova sem
+   * arte ainda é uma magia, e derrubar a apresentação por isso esconderia que ela funcionou.
+   */
+  readonly appearances?: Appearances;
+  /**
    * Onde a Caixa de Loot da Sessão é guardada (FUN-88). Ausente: o que não coube se perde no
    * encerramento, e o log diz. Degradação, não falha.
    */
@@ -170,6 +203,66 @@ function equipmentOf(character: CharacterRuntime): Record<string, string> {
   return equipped;
 }
 
+/** Os vitais do jogador como o HUD os lê. */
+type PlayerStats = S2CProps<'player-stats'>;
+
+/**
+ * Os vitais do jogador, montados UMA vez para os dois caminhos (FUN-109): o `session-state`
+ * da reanexação e o `player-stats` que sai ao vivo quando algo muda. Duas montagens
+ * divergiriam na primeira regra nova — e a barra que a reanexação mostra passaria a discordar
+ * da que o ciclo atualiza.
+ *
+ * O gold é o SALDO — `gold + goldDelta` —, porque é o que o jogador tem para gastar agora:
+ * `gold` é o que entrou com o ticket e a sessão nunca escreve, `goldDelta` é o que ela
+ * movimentou e vira ledger ao encerrar (invariante 10). Mostrar só um dos dois seria mostrar
+ * ou o saldo de antes da hunt ou o rendimento sem base.
+ *
+ * `staminaMs` nulo é personagem que não rastreia stamina (fixture de teste); vai como zero
+ * porque o protocolo não tem "não sei", e zero é o único número que não promete tempo de
+ * recompensa que não existe.
+ */
+function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
+  return {
+    health: character?.health ?? 0,
+    maxHealth: character?.maxHealth ?? 0,
+    mana: character?.mana ?? 0,
+    maxMana: character?.maxMana ?? 0,
+    level: character?.level ?? 0,
+    xp: character?.xp ?? 0,
+    capacity: character?.capacity ?? 0,
+    gold: character === undefined ? 0 : character.gold + character.goldDelta,
+    staminaMs: character?.staminaMs ?? 0,
+  };
+}
+
+/**
+ * Campo a campo, e não `JSON.stringify`: roda a 10 Hz por sessão anexada, e serializar dois
+ * objetos por ciclo para descobrir que nada mudou é o custo que a comparação existe para
+ * evitar. Comparar SÓ a vida seria o defeito silencioso — a mana gasta numa magia nunca
+ * chegaria ao HUD, e o teste de mana em `host.test.ts` é quem pega isso.
+ *
+ * A stamina é comparada no MINUTO, não no milissegundo. O `sim` a queima a cada evento que
+ * vence — as regras de saída vencem a cada 250 ms —, então `staminaMs` muda em TODO ciclo
+ * anexado, e comparar exato fazia a comparação inteira não valer nada: saía um
+ * `player-stats` por ciclo (482 em 120 s medidos em produção, mais que `creature-move`, a
+ * 130 B cada). O HUD mostra horas e minutos, e é essa a granularidade que "mudou" tem para
+ * quem olha; o valor entregue continua em milissegundos, só o gatilho é que arredonda.
+ */
+function sameStats(a: PlayerStats, b: PlayerStats): boolean {
+  return a.health === b.health
+    && a.maxHealth === b.maxHealth
+    && a.mana === b.mana
+    && a.maxMana === b.maxMana
+    && a.level === b.level
+    && a.xp === b.xp
+    && a.capacity === b.capacity
+    && a.gold === b.gold
+    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
+}
+
+/** A stamina como o HUD a mostra: em minutos inteiros. */
+const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
+
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
   | { readonly ok: true; readonly config: BotConfig }
@@ -202,6 +295,19 @@ interface HostedSession {
    */
   sentItemsLooted: number;
   /**
+   * Os últimos vitais ENTREGUES a quem olha cada personagem (FUN-109), por `characterId`.
+   *
+   * É o gatilho do `player-stats` ao vivo, pela mesma lógica de `sentItemsLooted`: comparar
+   * nove números por ciclo custa nada, e mandar os nove a 10 Hz para dizer que nada mudou
+   * custaria a banda inteira que a FUN-13 orça. Entrada ausente é "ninguém recebeu ainda", e
+   * o primeiro ciclo com visualizador manda.
+   *
+   * "Entregues", e não "calculados": só é escrito quando alguém recebeu — no `session-attach`
+   * e no ciclo com visualizador. Sem ninguém olhando não se compara nada, porque a comparação
+   * é apresentação; o `sim` muda o que tem de mudar de qualquer jeito (invariante 3).
+   */
+  readonly sentStats: Map<string, PlayerStats>;
+  /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
    * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
@@ -209,6 +315,14 @@ interface HostedSession {
    * é do servidor — o `sim` não conhece protocolo, e o cliente não pode inventar número.
    */
   readonly creatureIds: Map<string, number>;
+  /**
+   * O próximo id numérico a distribuir. MONOTÔNICO, nunca `size + 1` (FUN-103).
+   *
+   * `size + 1` recicla depois de um `delete`: com {a:1, b:2, c:3}, remover b faz o próximo
+   * receber 3 — e c já é 3. Com personagem isso é raro; com monstro morrendo e renascendo
+   * é rotina, e o cliente passa a desenhar o morto no lugar do vivo.
+   */
+  nextCreatureId: number;
   /**
    * Quem enxerga quem, por célula (FUN-33). `null` na sessão privada.
    *
@@ -557,7 +671,7 @@ export class SessionHost {
         // ser atômica: mandar o estado na frente da fila o colocaria DEPOIS de deltas que já
         // estavam esperando, e o cliente aplicaria um passo antigo por cima do estado atual.
         // A própria fila é a atomicidade — basta não furá-la.
-        viewer.send(this.#sessionState(hosted, viewer.characterId));
+        this.#sendState(hosted, viewer);
         return;
       }
       case 'enter-hunt':
@@ -728,8 +842,8 @@ export class SessionHost {
   }
 
   #ownerOf(characterId: string): CharacterRuntime | undefined {
-    return this.#hostedSession(characterId)?.session.participants
-      .find((p) => p.id === characterId);
+    const hosted = this.#hostedSession(characterId);
+    return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
   }
 
   /**
@@ -754,6 +868,12 @@ export class SessionHost {
    *
    * **O peso é calculado aqui**, e não no cliente: quem sabe o que cabe é quem recusa, e a
    * mesma conta em dois lugares diverge no primeiro item com peso fracionário.
+   *
+   * **O equipado vai INTEIRO** — `instanceId`, `itemId` e `quantity`, como uma entrada da
+   * mochila (FUN-108). O `sim` MOVE o item para o corpo ao equipar, não o copia, então um
+   * `slot → instanceId` não deixava o cliente chegar à definição: o slot vestido ficava sem
+   * nome e sem sprite. O que vai ao extrato (`equipmentOf`) continua `slot → instanceId`,
+   * porque o banco só precisa de onde cada linha está.
    */
   #sendInventory(characterId: string): void {
     const hosted = this.#hostedSession(characterId);
@@ -762,16 +882,17 @@ export class SessionHost {
 
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
     const state = character.inventory.getState();
-    const equipped: Record<string, string> = {};
+    const carried = (item: CarriedItem): S2CProps<'inventory'>['backpack'][number] => ({
+      instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
+    });
+    const equipped: S2CProps<'inventory'>['equipped'] = {};
     for (const [slot, item] of Object.entries(state.equipped)) {
-      if (item !== undefined) equipped[slot] = item.instanceId;
+      if (item !== undefined) equipped[slot] = carried(item);
     }
 
     this.#sendToViewersOf(hosted, characterId, {
       type: 'inventory',
-      backpack: state.backpack.map((item) => ({
-        instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
-      })),
+      backpack: state.backpack.map(carried),
       equipped,
       capacity: { used: character.inventory.weight(catalog), total: character.capacity },
     });
@@ -926,6 +1047,10 @@ export class SessionHost {
       // O mundo que aconteceu neste avanço vira pacote AQUI, e não dentro do `sim` — que não
       // conhece socket nem numeração de criatura do fio (invariante 1, §12).
       this.#presentMoves(hosted);
+      // E os vitais do jogador, se mudaram (FUN-109). DEPOIS dos eventos: o `creature-hit` e o
+      // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
+      // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
+      this.#presentStats(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -956,6 +1081,25 @@ export class SessionHost {
     if (events.length === 0 || hosted.viewers.size === 0) return;
 
     for (const event of events) {
+      // Discriminar por `kind` ANTES de tocar em qualquer campo: a união cresceu na FUN-103 e
+      // de novo na FUN-109, e um cast em vez de um switch aqui leria um nascimento — ou um
+      // golpe — como se fosse um passo. Cada família tem o seu tradutor; o que sobra do
+      // switch é o passo, que segue abaixo.
+      switch (event.kind) {
+        case 'creature-appeared':
+        case 'creature-vanished':
+        case 'creature-health-changed':
+          this.#presentPresence(hosted, event);
+          continue;
+        case 'creature-hit':
+        case 'creature-healed':
+        case 'spell-cast':
+        case 'supply-used':
+          this.#presentCombat(hosted, event);
+          continue;
+        case 'creature-moved':
+          break;
+      }
       // O protocolo exige duração positiva: um passo é enviado UMA vez, com origem, destino e
       // duração, e o cliente interpola o intervalo inteiro (ADR 0001). Duração zero é
       // colocação, não passo — aparecer no mundo é `creature-appear`.
@@ -990,6 +1134,191 @@ export class SessionHost {
         this.#sendToViewersOf(hosted, other, message);
       }
     }
+  }
+
+  /**
+   * Nascimento, sumiço e vida de MONSTRO viram `creature-appear`, `creature-disappear` e
+   * `creature-health` (FUN-103).
+   *
+   * Vai para TODOS os visualizadores da sessão, e não pelo campo de visão: monstro só existe em
+   * hunt, e hunt é privada — `hosted.aoi` é `null` ali, e "todos" já é a resposta certa. Se um
+   * dia um monstro viver num shard, é `#applyVisibility` que precisa aprender a lidar com
+   * criatura sem visualizador, e não este método que precisa de um `if`.
+   *
+   * O `sim` manda só o `monsterId`; nome e `outfitId` saem do catálogo fixado na sessão. Sem
+   * catálogo o monstro ainda aparece — sem nome, outfit 0 —, porque sumir com ele esconderia
+   * de quem olha que a simulação está de pé.
+   *
+   * A vida do PERSONAGEM chega pelo mesmo `creature-health-changed` desde a FUN-109, e sai
+   * pelo mesmo caminho: a chave é o `characterId`, que `#sessionState` já mapeou no
+   * `session-attach`. Sem id é porque ninguém pediu o estado ainda — e quem não tem o mundo
+   * não tem barra para atualizar; o `session-state` que vier traz a vida certa.
+   */
+  #presentPresence(hosted: HostedSession, event: PresenceEvent): void {
+    const key = String(event.creatureId);
+    let message: S2CMessage;
+    if (event.kind === 'creature-appeared') {
+      const definition = this.#options.monsterCatalog?.get(event.monsterId);
+      message = {
+        type: 'creature-appear',
+        id: this.#creatureId(hosted, key),
+        position: event.position,
+        appearanceId: definition?.outfitId ?? 0,
+        name: definition?.name ?? event.monsterId,
+        health: event.health,
+        maxHealth: event.maxHealth,
+      };
+    } else if (event.kind === 'creature-vanished') {
+      const id = hosted.creatureIds.get(key);
+      // Nunca anunciado — morreu antes de alguém olhar. Não há o que retirar da tela.
+      if (id === undefined) return;
+      message = { type: 'creature-disappear', id };
+      // O número NÃO é reaproveitado (ver `nextCreatureId`); só a chave sai do mapa, senão
+      // ele cresce um item por respawn até o fim da hunt.
+      hosted.creatureIds.delete(key);
+    } else {
+      const id = hosted.creatureIds.get(key);
+      if (id === undefined) return;
+      message = { type: 'creature-health', id, health: event.health, maxHealth: event.maxHealth };
+    }
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /**
+   * Golpe, cura, magia e supply viram `creature-hit`, `effect` e `missile` (FUN-109).
+   *
+   * Para TODOS os visualizadores da sessão, pela MESMA decisão de `#presentPresence`: combate
+   * só existe em hunt, hunt é privada, e "todos" já é a resposta certa. No dia em que houver
+   * golpe num shard, é o campo de visão que decide — e é `#applyVisibility` que aprende, não
+   * este método que ganha um `if`.
+   *
+   * O `sim` diz O QUE aconteceu; a tabela de aparências diz o que DESENHAR (invariante 6):
+   *
+   *   creature-hit     → o número, e o sangue do corpo a corpo (`hits.melee`) — só quando
+   *                      saiu vida: golpe absorvido inteiro mostra "0", como no Tibia, mas não
+   *                      sangra, porque sangue é o que a armadura acabou de impedir;
+   *   creature-healed  → o número em verde. O efeito da cura NÃO sai daqui: ele é do
+   *                      lançamento (`spell-cast`) ou do uso (`supply-used`), que vêm antes —
+   *                      senão uma cura que repôs zero não teria efeito e uma que repôs teria,
+   *                      e a magia pareceria falhar quando o jogador estava cheio;
+   *   spell-cast       → o projétil do conjurador ao PRIMEIRO alvo (é um projétil, não uma
+   *                      rajada), e o efeito em CADA alvo — ou no próprio conjurador quando
+   *                      não há alvo, que é a cura;
+   *   supply-used      → o efeito no tile de quem usou.
+   *
+   * Magia ou supply SEM linha na tabela é mudo, e é silêncio, não erro: `buildContent` só
+   * exige que toda linha aponte para algo que existe, não o contrário. Uma magia nova sem
+   * arte ainda bate — o número e a barra provam —, e derrubar a apresentação por isso
+   * esconderia justamente que ela funcionou.
+   *
+   * Sem id numérico para a criatura ninguém a viu ainda (o herói antes do `session-attach`,
+   * o monstro nascido antes do primeiro visualizador): número e efeito são descartados
+   * juntos. O efeito num tile de um mundo que o cliente ainda não montou é ruído.
+   */
+  #presentCombat(hosted: HostedSession, event: CombatEvent): void {
+    const appearances = this.#options.appearances;
+    const messages: S2CMessage[] = [];
+    switch (event.kind) {
+      case 'creature-hit': {
+        const id = hosted.creatureIds.get(String(event.creatureId));
+        if (id === undefined) return;
+        messages.push({ type: 'creature-hit', id, amount: event.amount, kind: event.source });
+        const blood = appearances?.hits.melee;
+        if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
+          messages.push({ type: 'effect', position: event.position, effectId: blood });
+        }
+        break;
+      }
+      case 'creature-healed': {
+        const id = hosted.creatureIds.get(String(event.creatureId));
+        if (id === undefined) return;
+        messages.push({ type: 'creature-hit', id, amount: event.amount, kind: 'heal' });
+        break;
+      }
+      case 'spell-cast': {
+        const look = appearances?.spells[event.spellId];
+        if (look === undefined) return;
+        const first = event.targets[0];
+        if (look.missile !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.casterPosition, to: first.position,
+            missileId: look.missile,
+          });
+        }
+        if (look.effect !== undefined) {
+          const effectId = look.effect;
+          if (event.targets.length === 0) {
+            messages.push({ type: 'effect', position: event.casterPosition, effectId });
+          }
+          for (const target of event.targets) {
+            messages.push({ type: 'effect', position: target.position, effectId });
+          }
+        }
+        break;
+      }
+      case 'supply-used': {
+        const effectId = appearances?.supplies[event.supplyId]?.effect;
+        if (effectId === undefined) return;
+        messages.push({ type: 'effect', position: event.position, effectId });
+        break;
+      }
+    }
+    for (const viewer of hosted.viewers) {
+      for (const message of messages) viewer.send(message);
+    }
+  }
+
+  /**
+   * Os vitais do jogador, para quem olha ELE, quando algum mudou (FUN-109).
+   *
+   * Até aqui `player-stats` existia no protocolo sem emissor: HP, mana, XP e gold do jogador só
+   * chegavam no `session-state` da reanexação, e o HUD ficava parado a hunt inteira enquanto
+   * a barra do monstro andava. A vida já chega por `creature-health`; o resto — mana gasta
+   * numa magia, XP e gold de um abate, level — não tem evento próprio, e não precisa ter:
+   * comparar nove números por ciclo custa menos que um evento por grandeza, e o que o HUD
+   * quer é o valor, não a história.
+   *
+   * SEM visualizador não se compara nada. A comparação é apresentação, e o `sim` já mudou o
+   * que tinha de mudar (invariante 3); quem anexar depois recebe o estado inteiro no
+   * `session-attach`, e é ali que `sentStats` volta a valer.
+   */
+  #presentStats(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      // Por PERSONAGEM, como o inventário e o `session-state`: numa sessão compartilhada os
+      // vitais de um não interessam ao outro, e num shard ninguém chega aqui — a Cidade não
+      // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
+      // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const stats = playerStatsOf(character);
+      const last = hosted.sentStats.get(character.id);
+      if (last !== undefined && sameStats(last, stats)) continue;
+      hosted.sentStats.set(character.id, stats);
+      this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    }
+  }
+
+  /**
+   * O estado COMPLETO para um visualizador: o mundo (`session-state`) e os vitais
+   * (`player-stats`), nessa ordem e pela fila.
+   *
+   * Os dois, porque `session-state.self` leva vida, mana, level e XP, mas gold, capacidade e
+   * stamina só viajam em `player-stats` — e sem esta segunda mensagem quem reconecta vê o gold
+   * do HUD em zero até o próximo loot, e na Cidade, que não tem ciclo, para sempre.
+   *
+   * `sentStats` é atualizado aqui porque o que acabou de sair É o último entregue: o ciclo
+   * seguinte não precisa mandar de novo o que o `session-attach` acabou de dizer.
+   */
+  #sendState(hosted: HostedSession, viewer: Viewer): void {
+    const { characterId } = viewer;
+    viewer.send(this.#sessionState(hosted, characterId));
+    const stats = playerStatsOf(this.#participantOf(hosted, characterId));
+    hosted.sentStats.set(characterId, stats);
+    viewer.send({ type: 'player-stats', ...stats });
+  }
+
+  #participantOf(hosted: HostedSession, characterId: string): CharacterRuntime | undefined {
+    return hosted.session.participants.find((participant) => participant.id === characterId);
   }
 
   /** Esta sessão tem campo de visão por célula? Só shard, e só com a opção ligada (FUN-33). */
@@ -1041,8 +1370,7 @@ export class SessionHost {
       type: 'creature-appear',
       id: this.#creatureId(hosted, characterId),
       position: character?.position ?? { x: 0, y: 0, z: 0 },
-      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
-      appearanceId: 1,
+      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
@@ -1270,11 +1598,12 @@ export class SessionHost {
     // ids de criatura de quem já estava lá.
     const existing = this.#sessions.get(next.id);
     const successor: HostedSession = existing ?? {
-      session: next, viewers: new Set(), creatureIds: new Map(),
+      session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: false,
       sentItemsLooted: next.aggregates.itemsLooted,
+      sentStats: new Map(),
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -1283,7 +1612,7 @@ export class SessionHost {
     for (const viewer of following) {
       successor.viewers.add(viewer);
       next.attach(viewer.id);
-      viewer.send(this.#sessionState(successor, characterId));
+      this.#sendState(successor, viewer);
     }
     this.#restingSince.set(characterId, following.length > 0 ? null : this.#now());
 
@@ -1558,12 +1887,19 @@ export class SessionHost {
     }
   }
 
-  /** Id numérico da criatura, criado na primeira vez que alguém precisa dele. */
-  #creatureId(hosted: HostedSession, characterId: string): number {
-    const existing = hosted.creatureIds.get(characterId);
+  /**
+   * Id numérico da criatura, criado na primeira vez que alguém precisa dele.
+   *
+   * A chave é o `characterId` do personagem ou o `subject` do monstro (`m:<n>`): os dois
+   * moram no mesmo mapa porque o cliente numera criatura num espaço só. Ver `nextCreatureId`
+   * para por que o contador nunca volta.
+   */
+  #creatureId(hosted: HostedSession, key: string): number {
+    const existing = hosted.creatureIds.get(key);
     if (existing !== undefined) return existing;
-    const assigned = hosted.creatureIds.size + 1;
-    hosted.creatureIds.set(characterId, assigned);
+    const assigned = hosted.nextCreatureId;
+    hosted.nextCreatureId += 1;
+    hosted.creatureIds.set(key, assigned);
     return assigned;
   }
 
@@ -1577,7 +1913,9 @@ export class SessionHost {
    */
   #sessionState(hosted: HostedSession, characterId: string): S2CMessage {
     const { session } = hosted;
-    const self = session.participants.find((participant) => participant.id === characterId);
+    // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
+    // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
+    const self = playerStatsOf(this.#participantOf(hosted, characterId));
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -1592,12 +1930,28 @@ export class SessionHost {
     const creatures = visible.map((participant) => ({
       id: this.#creatureId(hosted, participant.id),
       position: participant.position,
-      // FUN-21 traz a indireção `content → appearanceId`; até lá todo mundo é a mesma coisa.
-      appearanceId: 1,
+      appearanceId: this.#options.playerOutfitId ?? 0,
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
     }));
+
+    // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
+    // ver o que já está lá, e não só o que nascer depois. O getter vem do ruleset pelo mesmo
+    // cast que `#applyBotConfig` usa — sessão sem monstro devolve `undefined`, e é o normal.
+    const ruleset = session.ruleset as Partial<HuntRuleset>;
+    for (const monster of ruleset.monsters ?? []) {
+      if (!monster.alive) continue;
+      const definition = this.#options.monsterCatalog?.get(monster.monsterId);
+      creatures.push({
+        id: this.#creatureId(hosted, monster.subject),
+        position: { ...monster.position, z: ruleset.floor ?? 0 },
+        appearanceId: definition?.outfitId ?? 0,
+        name: definition?.name ?? monster.monsterId,
+        health: monster.health,
+        maxHealth: definition?.health ?? monster.health,
+      });
+    }
 
     return {
       type: 'session-state',
@@ -1606,12 +1960,12 @@ export class SessionHost {
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
-        health: self?.health ?? 0,
-        maxHealth: self?.maxHealth ?? 0,
-        mana: self?.mana ?? 0,
-        maxMana: self?.maxMana ?? 0,
-        level: self?.level ?? 0,
-        xp: self?.xp ?? 0,
+        health: self.health,
+        maxHealth: self.maxHealth,
+        mana: self.mana,
+        maxMana: self.maxMana,
+        level: self.level,
+        xp: self.xp,
       },
       world: {
         mapId: null,
@@ -1748,6 +2102,7 @@ export class SessionHost {
       session,
       viewers: new Set(),
       creatureIds: new Map(),
+      nextCreatureId: 1,
       // Só o shard tem AOI (FUN-33): numa hunt de um personagem ela seria índice para nada.
       aoi: this.#interestManaged(session) ? new AreaOfInterest() : null,
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
@@ -1755,6 +2110,7 @@ export class SessionHost {
       lastAdvancedAtMs: this.#now(),
       credited: false,
       sentItemsLooted: session.aggregates.itemsLooted,
+      sentStats: new Map(),
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

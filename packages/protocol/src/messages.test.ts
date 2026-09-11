@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { decodeS2C, encodeS2C } from './codec.js';
 import {
   CLIENT_TO_SERVER, BURNED_OPCODES_C2S, BURNED_OPCODES_S2C,
   OPCODE_TO_NAME_C2S, OPCODE_TO_NAME_S2C, SERVER_TO_CLIENT,
 } from './messages.js';
 import { C2S_SCHEMAS, S2C_SCHEMAS } from './types.js';
+import type { S2CMessage } from './types.js';
 
 describe('English payload contract', () => {
   it('accepts English directions and rejects the legacy payload', () => {
@@ -40,5 +42,129 @@ describe('opcode map', () => {
     for (const name of Object.keys(S2C_SCHEMAS)) {
       expect(SERVER_TO_CLIENT).toHaveProperty(name);
     }
+  });
+});
+
+describe('combat presentation messages (FUN-109)', () => {
+  const hit: S2CMessage = { type: 'creature-hit', id: 42, amount: 40, kind: 'spell' };
+  const effect: S2CMessage = { type: 'effect', position: { x: 10, y: 9, z: 7 }, effectId: 13 };
+  const missile: S2CMessage = {
+    type: 'missile', from: { x: 10, y: 10, z: 7 }, to: { x: 10, y: 7, z: 7 }, missileId: 5,
+  };
+
+  it('round trips the hit, the effect and the missile through the codec', () => {
+    // Três mensagens, e não uma: cada uma tem destino diferente no cliente, e um golpe de
+    // corpo a corpo dispara duas enquanto uma magia dispara as três. O que se prende aqui é
+    // que as três estão nas DUAS tabelas — opcode e schema — e sobrevivem ao fio inteiras.
+    // Mutação que mata: apagar `missile: 19` de SERVER_TO_CLIENT (`decodeS2C` devolve `null`),
+    // ou tirar `'spell'` do enum de `kind`.
+    for (const message of [hit, effect, missile]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('is server-to-client only: the client sees the hit, it never reports one', () => {
+    // Invariante 4. Se um dia alguém precisar mandar "acertei" do cliente, o lugar de
+    // descobrir que isso é errado é aqui, e não na revisão do PR.
+    // Mutação que mata: acrescentar `'creature-hit': 14` a CLIENT_TO_SERVER.
+    for (const name of ['creature-hit', 'effect', 'missile']) {
+      expect(CLIENT_TO_SERVER).not.toHaveProperty(name);
+      expect(C2S_SCHEMAS).not.toHaveProperty(name);
+    }
+  });
+
+  it('rejects a negative amount: healing is a kind, not a sign', () => {
+    // Cura como "dano negativo" seria dois jeitos de dizer a mesma coisa, e o cliente tendo
+    // de reconhecer os dois. Zero passa: o golpe absorvido pela armadura também aparece.
+    // Mutação que mata: remover `.nonnegative()` de `amount` (o negativo passa a decodificar).
+    expect(decodeS2C(encodeS2C({ ...hit, amount: -1 }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...hit, amount: 0 }))).toEqual([{ ...hit, amount: 0 }]);
+  });
+
+  it('rejects an unknown hit kind', () => {
+    // O `kind` é o que decide a cor. Um valor fora da lista chegaria no cliente sem cor
+    // nenhuma, e o número apareceria em branco sobre a criatura — ou não apareceria.
+    // Mutação que mata: `z.enum([...])` → `z.string()` em `kind`.
+    expect(decodeS2C(encodeS2C({ ...hit, kind: 'poison' as 'melee' }))).toBeNull();
+  });
+
+  it('rejects effectId and missileId of zero: there is no appearance zero', () => {
+    // O protocolo não sabe o que o 13 desenha, mas sabe que zero não desenha nada — e uma
+    // mensagem que manda desenhar nada é um bug do servidor que o cliente não deve esconder.
+    // Mutação que mata: `.positive()` → `.nonnegative()` em `effectId` ou em `missileId`.
+    expect(decodeS2C(encodeS2C({ ...effect, effectId: 0 }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...missile, missileId: 0 }))).toBeNull();
+  });
+
+  it('rejects a fractional id and a fractional amount: both are counted, never measured', () => {
+    // `id` é a chave da criatura no cliente, e 1.5 não é chave de nada — a mensagem chegaria
+    // e o número flutuaria sobre um tile vazio. `amount` é o que se desenha em cima da
+    // criatura, e meio ponto de vida não existe: `resolveDamage` arredonda antes de emitir,
+    // então uma fração aqui é o servidor mandando um número que ele mesmo nunca calculou.
+    // Mutação que mata: remover `.int()` de `id` ou de `amount` em `creature-hit`.
+    expect(decodeS2C(encodeS2C({ ...hit, id: 1.5 }))).toBeNull();
+    expect(decodeS2C(encodeS2C({ ...hit, amount: 1.5 }))).toBeNull();
+  });
+
+  it('rejects an effect without position and a missile without origin', () => {
+    // Sem `position`, o efeito não tem tile para nascer; sem `from`, o projétil não tem de
+    // onde partir. Tornar qualquer um dos dois opcional seria admitir a mensagem que o
+    // cliente não consegue desenhar — e o caso de "veio `missile` sem `from`" viraria um
+    // estado possível, que é exatamente o que separar as três mensagens quis evitar.
+    // A omissão é feita por cast porque `encodeS2C` não valida: só o decode confere o schema.
+    // Mutação que mata: `position: Point.optional()` em `effect`, ou `from: Point.optional()`
+    // em `missile`.
+    const effectWithoutPosition = { type: 'effect', effectId: 13 } as S2CMessage;
+    const missileWithoutFrom = {
+      type: 'missile', to: { x: 10, y: 7, z: 7 }, missileId: 5,
+    } as S2CMessage;
+    expect(decodeS2C(encodeS2C(effectWithoutPosition))).toBeNull();
+    expect(decodeS2C(encodeS2C(missileWithoutFrom))).toBeNull();
+  });
+});
+
+describe('the inventory message (FUN-90, FUN-108)', () => {
+  const sword = { instanceId: 'i1', itemId: 'sword', quantity: 1 };
+  const inventory: S2CMessage = {
+    type: 'inventory',
+    backpack: [{ instanceId: 'i2', itemId: 'health-potion', quantity: 5 }],
+    equipped: { hand: sword },
+    capacity: { used: 130, total: 400 },
+  };
+
+  it('round trips the equipped item WHOLE: id, item and quantity, like a backpack entry', () => {
+    // O item vestido não está na mochila — o `sim` o MOVE ao equipar —, então `slot →
+    // instanceId` deixava o cliente sem como chegar à definição: o slot ficava sem nome e
+    // sem sprite. O que se prende aqui é que o equipado atravessa o fio com a mesma forma
+    // de uma entrada da mochila.
+    // Mutação que mata: `equipped: z.record(z.string(), z.string())` (a forma antiga) — o
+    // decode recusa a mensagem e devolve `null`.
+    expect(decodeS2C(encodeS2C(inventory))).toEqual([inventory]);
+    const [decoded] = decodeS2C(encodeS2C(inventory)) ?? [];
+    expect(decoded?.type === 'inventory' && decoded.equipped['hand']).toEqual(sword);
+  });
+
+  it('rejects the legacy `slot → instanceId` shape: a bare id is not an item', () => {
+    // É a mutação que importa do lado do SERVIDOR: um host que voltasse a mandar só o id
+    // seria recusado aqui, em silêncio — e o inventário nunca chegaria à tela. Este teste é o
+    // que transforma o silêncio em falha.
+    // Mutação que mata: aceitar `z.union([CarriedItem, z.string()])` no valor do record.
+    const legacy = { ...inventory, equipped: { hand: 'i1' } } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(legacy))).toBeNull();
+  });
+
+  it('rejects an equipped entry without itemId: the id alone is what the bug was', () => {
+    // Mutação que mata: `itemId: z.string().min(1).optional()` no `CarriedItem`.
+    const withoutItemId = {
+      ...inventory, equipped: { hand: { instanceId: 'i1', quantity: 1 } },
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(withoutItemId))).toBeNull();
+  });
+
+  it('keeps the same opcode: it is the same message, with more inside', () => {
+    // Como o `catalogue` ao ganhar o vocabulário do bot: o assunto não mudou, só o conteúdo.
+    // Um opcode novo queimaria o 16 por uma mensagem que nunca deixou de existir.
+    // Mutação que mata: renumerar `inventory` em SERVER_TO_CLIENT.
+    expect(SERVER_TO_CLIENT.inventory).toBe(16);
   });
 });

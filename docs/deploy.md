@@ -185,6 +185,102 @@ O Coolify interpreta o Compose com um arquivo de variáveis de build separado. P
 as duas credenciais de runtime aceitam interpolação vazia nessa etapa. Isso não libera o
 boot sem credenciais: a validação do servidor exige WorkOS, e o PostgreSQL exige senha.
 
+## O pacote de arte
+
+O cliente desenha com o pacote do Tibia (`things/<versão>/`, ADR 0008), e **tudo que o
+Draconya usa sai da própria origem** — nenhum CDN, nenhum servidor de terceiros. O pacote não
+está no Git nem na imagem (`things` está no `.gitignore` e no `.dockerignore`; não é nosso para
+redistribuir): a imagem do `web` leva só o caminho, `VITE_THINGS_URL` (padrão `/things/1332`,
+fixado no build do cliente), e o nginx serve o que estiver montado em
+`/usr/share/nginx/html/things` (`deploy/nginx.conf`). Em dev, o Vite serve `things/` da raiz do
+repositório no mesmo caminho — ver `packages/client/vite.config.ts`.
+
+No Coolify o volume se chama `things` (`compose.coolify.yml`; no servidor, `<uuid do
+recurso>_things` — em staging, `hzd0uu0cuitkdi4ie0h1mu5g_things`). Ele nasce vazio, e povoá-lo
+é um passo manual, uma vez por versão do pacote. Sem SSH, o **Terminal do Coolify**
+(menu lateral → Terminal → `localhost`) dá um shell de root no servidor e serve igual.
+
+O caminho mais curto é o servidor baixar o pacote direto da origem, sem passar pela sua
+máquina. Em staging foi feito assim em 2026-09-11 (4 173 arquivos, 81 MB, ~4 min):
+
+```bash
+cat > /root/fetch-things.sh <<'EOF'
+#!/bin/sh
+set -u
+SRC=https://huntera.com.br/things/1332
+mkdir -p /things/1332 && cd /things/1332 || exit 1
+curl -sSfO "$SRC/catalog-content.json" || exit 1
+jq -r '.[].file' catalog-content.json > /tmp/files
+fetch() { [ -s "$1" ] || curl -sSf -o "$1" "$SRC/$1" || echo "FAIL $1"; }
+n=0; while read f; do fetch "$f" & n=$((n+1)); [ $((n % 8)) -eq 0 ] && wait; done < /tmp/files
+wait
+echo "DONE $(ls | wc -l) files, $(du -sh . | cut -f1)"
+EOF
+```
+
+```bash
+nohup docker run --rm -v hzd0uu0cuitkdi4ie0h1mu5g_things:/things -v /root/fetch-things.sh:/fetch.sh:ro alpine:3 sh -c 'apk add -q curl jq && sh /fetch.sh' > /root/things-fetch.log 2>&1 &
+```
+
+Três `FAIL` são esperados: `staticdata`, `staticmapdata` e `map` são o minimapa do cliente
+oficial, que a origem não serve e o Draconya não usa.
+
+**Esse caminho NÃO traz a arte de UI.** A casca (moldura, pedra, slot, barras — FUN-108) lê
+`things/<versão>/library/ui/images/*.png`, que é DERIVADO: `pnpm assets:library` extrai
+essas imagens do `graphics_resources.rcc.lzma` na sua máquina (`docs/asset-library.md`), e a
+origem não as serve (`…/library/ui/images/background.png` responde 404). Elas vêm da sua
+máquina, sempre — mesmo quando o resto veio da origem. Só a subpasta, e depois para dentro do
+volume (o `cp -r` funde com o que já está lá):
+
+```bash
+rsync -av things/1332/library/ui/images/ root@<servidor>:/root/things/1332/library/ui/images/
+```
+
+```bash
+ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1332 /things/'
+```
+
+Se a origem sumir, o pacote INTEIRO vem da sua máquina pelo mesmo caminho, com um filtro que
+deixa passar tudo da raiz e, de `library/`, SÓ `ui/images/` (o `cp -r` é o mesmo de cima):
+
+```bash
+rsync -av --include='library/' --include='library/ui/' --include='library/ui/images/***' --exclude='library/*' --exclude='library/ui/*' things/1332/ root@<servidor>:/root/things/1332/
+```
+
+Os dois `--exclude` são necessários: só `--exclude='library/*'` deixaria `library/ui/` passar
+inteira (fontes, cursores, minimapa), porque `ui/` casou no `--include` antes. Foi conferido a
+seco contra a 13.32: da `library/`, entram os dois diretórios e os arquivos de `ui/images/`,
+nada mais. O que precisa estar no volume:
+
+- `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
+  `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
+- `library/ui/images/` (9,4 MB, ~1 000 PNGs na 13.32, subpastas incluídas) — a casca. O
+  cliente lê 17 deles, e é a lista de `UI_SKIN` e `SLOT_IMAGES` em
+  `packages/client/src/assets/ui.ts`: `background.png`, `background-dark.png`,
+  `3pixel-frame-borderimage.png`, `2pixel-up-frame-borderimage.png`, `containerslot.png`,
+  `hitpoints-manapoints-bar-border.png`, `hitpoints-bar-filled.png`, `mana-bar-filled.png`,
+  `inventory-head.png`, `inventory-neck.png`, `inventory-torso.png`, `inventory-legs.png`,
+  `inventory-feet.png`, `inventory-left-hand.png`, `inventory-right-hand.png`,
+  `inventory-finger.png`, `inventory-hip.png`. A subpasta vai inteira porque é pequena e o
+  filtro fica em uma linha; se essa tabela crescer, nada muda aqui.
+
+O resto de `library/` (índices, folhas PNG, quadros por id — 900 MB) é a biblioteca de
+consulta do Claude Code e continua fora: não é servido nem lido pelo cliente.
+
+Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
+`Cache-Control: immutable` — e com
+`curl -sI <APP_ORIGIN>/things/1332/library/ui/images/background.png`, que também tem de dar
+`200`. O hash está no nome de cada folha, então a URL nunca muda de conteúdo e o cache de um
+ano é seguro; trocar de versão do pacote é outro caminho, não outro conteúdo no mesmo caminho.
+(As imagens de UI não têm hash no nome; mudam só com a versão do pacote, que já está no
+caminho.)
+
+**Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
+desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
+arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo
+sai com sprite e a casca sai em cor lisa: o sintoma é só visual, com 404 de PNG na aba de
+rede, e o remédio é o `rsync` acima.
+
 ## Backup
 
 ```bash

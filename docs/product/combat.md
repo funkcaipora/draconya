@@ -151,9 +151,27 @@ evento por segundo para redescobrir a mesma coisa.
 O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
 inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
+## O que o jogador vê (FUN-106, FUN-109)
+
+O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe
+aplicado vira `creature-hit` — o número flutuante sobre a criatura, com o dano **aplicado**, e
+não o resolvido: o golpe fatal mostra o que a criatura tinha, não o que o atacante bateu — e,
+quando houve dano, um efeito de sangue no atingido. Cura vira `creature-hit` com `kind: heal`.
+Magia vira `spell-cast` no `sim` e, pela tabela de aparências fixada na sessão, projétil do
+conjurador ao primeiro alvo e um efeito **por alvo** (ou no conjurador, quando é cura); poção
+vira efeito no tile de quem bebeu. Magia sem linha na tabela é muda, nunca erro. Quais ids são
+esses mora em `packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`),
+e só ids (invariante 6).
+
+Os vitais do personagem saem ao vivo: `creature-health` do personagem em todo lugar que escreve
+a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte), e `player-stats`
+a cada ciclo em que algo mudou — a stamina comparada no minuto, porque ela queima a cada evento
+e comparada exata faria a mensagem sair dez vezes por segundo.
+
 ## Em aberto
 
-Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
+Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
+ficam para quando o protocolo os carregar.
 
 ## Divergências do PRD
 

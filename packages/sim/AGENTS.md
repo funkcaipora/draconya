@@ -188,3 +188,13 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   FUN-33): com 289 tiles ao redor da entrada, duzentas pessoas ficariam ombro a ombro.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
+- **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,
+  FUN-109). `creature-hit`/`creature-healed` saem ANTES do `creature-health-changed` que
+  explicam, e `spell-cast` antes dos golpes dele — o número flutuante acompanha a barra, não o
+  contrário. A vida do personagem é anunciada de TODO lugar que a escreve (golpe, cura, poção,
+  regeneração, level up e penalidade de morte); um caminho novo que mude `character.health`
+  ou `character.maxHealth` sem `#emitCharacterHealth` é a barra do jogador parando até a
+  reanexação. O máximo entra na lista porque `retarget` (`progression.ts`) reescreve os dois
+  de uma vez, e de vida cheia a regeneração não anuncia nada — o level up que não anuncia
+  fica com o máximo velho na barra até a reanexação. `targets` do `spell-cast` é vetor NOVO de
+  propósito: `#spellHits` é reaproveitado, e o evento é drenado depois.

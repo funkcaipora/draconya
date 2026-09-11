@@ -7,8 +7,13 @@ services:
       target: client
       args:
         VITE_API_URL: ''
+        VITE_THINGS_URL: ${VITE_THINGS_URL:-/things/1332}
     restart: unless-stopped
     expose: ['80']
+    # O pacote de arte fica num volume, fora da imagem: `things/<versão>/` do repositório
+    # local vai para cá por `scp`/`rsync` uma vez (docs/deploy.md, "O pacote de arte").
+    # Sem ele o jogo abre e desenha retângulos — nunca falha por causa de arte.
+    volumes: ['things:/usr/share/nginx/html/things:ro']
     depends_on:
       app: { condition: service_healthy }
 
@@ -66,3 +71,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  things:

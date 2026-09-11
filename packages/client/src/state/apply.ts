@@ -20,7 +20,10 @@ const REASON = {
   drain: 'Sua sessão foi encerrada por manutenção',
   completed: 'Concluído',
 } as const;
-import { enterInstance, world, type Creature } from './world.js';
+import { missileDuration } from '../world/effects.js';
+import {
+  addEffect, addFloatingText, addMissile, clearTransients, enterInstance, world, type Creature,
+} from './world.js';
 
 export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
@@ -68,6 +71,28 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
 
     case 'creature-disappear':
       world.creatures.delete(message.id);
+      return;
+
+    // --- transitórios do combate (FUN-106): entram com o instante local, e é o viewport quem
+    // os expira. `startedAtMs = nowMs` porque o relógio que os anima é o do quadro, e um lote
+    // aplicado de uma vez ao voltar de aba de fundo ganha o MESMO instante: tudo toca junto e
+    // acaba junto, em vez de reproduzir dez minutos de golpes (AGENTS.md do pacote).
+    case 'effect':
+      addEffect(message.position, message.effectId, nowMs);
+      return;
+
+    case 'missile':
+      addMissile(
+        message.from, message.to, message.missileId, nowMs,
+        missileDuration(message.from, message.to),
+      );
+      return;
+
+    case 'creature-hit':
+      // Entra mesmo que a criatura já não exista: o texto tem vida própria e some sozinho, e
+      // recusar aqui apagaria o número do golpe que matou — que chega no mesmo lote que o
+      // `creature-disappear`, e é o que o jogador mais quer ver.
+      addFloatingText(message.id, message.amount, message.kind, nowMs);
       return;
 
     // --- HUD: só o que uma pessoa lê ------------------------------------------------------
@@ -182,6 +207,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       world.mapId = message.world.mapId;
       world.selfId = message.self.creatureId;
       world.creatures.clear();
+      // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
+      // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
+      // nunca some — por menos de um segundo, mas no primeiro quadro que o jogador vê.
+      clearTransients();
       for (const creature of message.world.creatures) {
         world.creatures.set(creature.id, {
           id: creature.id,

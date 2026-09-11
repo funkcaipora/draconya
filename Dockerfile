@@ -46,8 +46,11 @@ RUN pnpm exec tsc -b
 RUN test -f packages/server/dist/main.js || (echo 'ERRO: tsc -b não emitiu dist/main.js' && exit 1)
 
 # Cliente para o deploy integrado no Coolify. URL vazia usa a mesma origem do navegador.
+# O pacote de arte NÃO entra na imagem (`things` está no .dockerignore, e não é nosso para
+# redistribuir): o cliente só leva o CAMINHO, e o nginx serve o que estiver montado nele.
 FROM build AS client-build
 ARG VITE_API_URL=
+ARG VITE_THINGS_URL=/things/1332
 RUN pnpm --filter @draconya/client build
 
 # --- dependências de produção -------------------------------------------------------------

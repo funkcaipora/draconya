@@ -213,4 +213,32 @@ describe('SpriteCache (FUN-18)', () => {
     const { cache } = build({ loadSheet: async () => sheetPixels(64, 64) });
     expect(await cache.get(200)).toBeNull();
   });
+
+  it('pixels() é o MESMO recorte de get(), sem bitmap e fora do orçamento', async () => {
+    // O compositor de outfit (FUN-20) lê os bytes da base e do template, e um `ImageBitmap`
+    // é opaco. O id 101 é a segunda coluna da folha: o pixel guarda a própria coluna, então
+    // o canto do recorte tem que ler x = 32.
+    // Mutação que mata: `pixels()` recortar em (0, 0) em vez de `positionInSheet`.
+    const { cache, created } = build();
+    const cut = await cache.pixels(101);
+    expect([cut?.width, cut?.height]).toEqual([32, 32]);
+    expect([cut?.pixels[0], cut?.pixels[1]]).toEqual([32, 0]);
+    // Nenhum bitmap foi criado e nada entrou no orçamento: pixels não são quadro.
+    expect(created).toHaveLength(0);
+    expect(cache.bytes).toBe(0);
+  });
+
+  it('pixels() e get() pedidos juntos carregam a folha UMA vez', async () => {
+    // A base e o template de um outfit são ids vizinhos, pedidos ao mesmo tempo. Um segundo
+    // caminho até a folha decodificaria o LZMA duas vezes por personagem.
+    // Mutação que mata: `#cut` chamar `loadSheet` direto em vez de `#sheetPixels`.
+    const loadSheet = vi.fn(async () => sheetPixels());
+    const { cache } = build({ loadSheet });
+    await Promise.all([cache.get(100), cache.pixels(101), cache.pixels(102)]);
+    expect(loadSheet).toHaveBeenCalledTimes(1);
+  });
+
+  it('pixels() devolve null para id que nenhuma folha cobre', async () => {
+    expect(await build().cache.pixels(99)).toBeNull();
+  });
 });

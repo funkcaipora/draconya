@@ -7,4 +7,6 @@ coverage/
 !.env.example
 .DS_Store
 .vite/
-things/
+# Sem a barra final: numa worktree `things` pode ser um symlink para o pacote de outra, e
+# `things/` só casa diretório de verdade.
+things

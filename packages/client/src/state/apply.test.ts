@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
 import { INITIAL_BOT, bot } from '../bot/store.js';
-import { interpolate, world } from './world.js';
+import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
+import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
 
@@ -11,6 +12,7 @@ beforeEach(() => {
   world.creatures.clear();
   world.instanceId = null;
   world.mapId = null;
+  clearTransients();
   hud.set(() => INITIAL_HUD);
 });
 
@@ -89,6 +91,149 @@ describe('world deltas', () => {
     applyMessage(spawn(1), 0);
     applyMessage({ type: 'creature-disappear', id: 1 }, 0);
     expect(world.creatures.has(1)).toBe(false);
+  });
+});
+
+describe('combat transients (FUN-106)', () => {
+  // Efeito, projétil e número flutuante NÃO são HUD: chegam dezenas por segundo numa hunt, e o
+  // caminho deles termina no `world`, que o viewport lê direto e expira sozinho.
+
+  it('an effect enters the world stamped with the LOCAL instant it arrived', () => {
+    // O relógio que anima é o do quadro, não o do servidor: um lote aplicado de uma vez ao
+    // voltar de aba de fundo ganha o MESMO instante, e tudo toca junto em vez de reproduzir
+    // dez minutos de golpes. Mutação que mata: `startedAtMs: 0` fixo em `addEffect`.
+    applyMessage({ type: 'effect', position: at(3, 4), effectId: 12 }, 5_000);
+
+    expect(world.effects).toHaveLength(1);
+    expect(world.effects[0]).toMatchObject({ position: at(3, 4), effectId: 12, startedAtMs: 5_000 });
+  });
+
+  it('a missile enters with its flight time computed from the distance', () => {
+    // A duração é do cliente — o servidor manda de onde para onde, e o tempo de voo é
+    // apresentação (ADR 0007). Mutação que mata: `durationMs: 0` no `case 'missile'`.
+    applyMessage({ type: 'missile', from: at(0, 0), to: at(3, 1), missileId: 5 }, 2_000);
+
+    expect(world.missiles).toHaveLength(1);
+    expect(world.missiles[0]).toMatchObject({
+      from: at(0, 0), to: at(3, 1), missileId: 5, startedAtMs: 2_000,
+      durationMs: MISSILE_BASE_MS + 3 * MISSILE_PER_TILE_MS,
+    });
+  });
+
+  it('a hit becomes a floating text over where the creature IS, mid-step included', () => {
+    // A posição é fotografada ao entrar, pela interpolação do instante: um golpe no meio do
+    // passo nasce no meio do passo, não no tile de onde a criatura saiu.
+    // Mutação que mata: `position: creature.position` em vez de `interpolate(...)`.
+    applyMessage(spawn(1, at(0, 0)), 0);
+    applyMessage(
+      { type: 'creature-move', id: 1, from: at(0, 0), to: at(1, 0), durationMs: 400 },
+      1_000,
+    );
+    applyMessage({ type: 'creature-hit', id: 1, amount: 37, kind: 'melee' }, 1_200);
+
+    expect(world.texts).toHaveLength(1);
+    expect(world.texts[0]).toMatchObject({
+      creatureId: 1, amount: 37, kind: 'melee', startedAtMs: 1_200, position: { x: 0.5, y: 0, z: 7 },
+    });
+  });
+
+  it('a hit on a creature that already left STILL enters: the killing blow is the one to see', () => {
+    // O golpe que mata chega no mesmo lote que o `creature-disappear`, e recusar aqui apagaria
+    // justamente o número que o jogador mais quer ver. O texto some sozinho, pelo viewport.
+    // Mutação que mata: `if (!world.creatures.has(message.id)) return;` no `case`.
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 99, kind: 'spell' }, 100);
+    applyMessage({ type: 'creature-disappear', id: 1 }, 100);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 5, kind: 'heal' }, 100);
+
+    expect(world.texts).toHaveLength(2);
+    expect(world.texts[0]?.position).toEqual(at(2, 2));
+    // Criatura que este cliente NUNCA viu: entra sem lugar, e o viewport não desenha.
+    expect(world.texts[1]?.position).toBeNull();
+    // O TIPO do golpe viaja com o número: é ele que escolhe a cor — roxo de magia, verde de
+    // cura — e os outros testes só mandam `melee`, então um `kind` fixo passava em todos.
+    // Mutação que mata: `'melee'` no lugar de `message.kind` no `case 'creature-hit'`.
+    expect(world.texts[0]?.kind).toBe('spell');
+    expect(world.texts[1]?.kind).toBe('heal');
+  });
+
+  it('never reaches a HUD subscriber', () => {
+    // A mesma prova do movimento: dano é o que mais chega numa hunt, e um commit do React
+    // por golpe é o que o ADR 0007 existe para evitar.
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state, notified);
+
+    applyMessage(spawn(1), 0);
+    for (let i = 0; i < 100; i++) {
+      applyMessage({ type: 'creature-hit', id: 1, amount: i, kind: 'melee' }, i);
+      applyMessage({ type: 'effect', position: at(0, 0), effectId: 1 }, i);
+      applyMessage({ type: 'missile', from: at(0, 0), to: at(1, 1), missileId: 1 }, i);
+    }
+
+    expect(notified).toHaveBeenCalledTimes(0);
+  });
+
+  it('local ids are sequential and never reused, even across instances', () => {
+    // O id é a chave do pool de sprites do viewport. Reiniciar ao trocar de instância faria um
+    // efeito novo herdar o sprite de um antigo que ainda não saiu do pool.
+    // Mutação que mata: zerar `lastTransientId` em `clearTransients`.
+    applyMessage({ type: 'effect', position: at(0, 0), effectId: 1 }, 0);
+    const first = world.effects[0]?.id ?? -1;
+    applyMessage({ type: 'instance-enter', instanceId: 'i2', map: 'rat-cellars' }, 0);
+    applyMessage({ type: 'effect', position: at(0, 0), effectId: 1 }, 0);
+
+    expect(world.effects[0]?.id).toBeGreaterThan(first);
+  });
+
+  it('entering another instance clears the three lists', () => {
+    // O que estava no ar pertence à cena anterior: um efeito do mapa velho tocando sobre o
+    // novo é o mesmo defeito do monstro que nunca some, no primeiro quadro que o jogador vê.
+    // Mutação que mata: tirar `clearTransients()` de `enterInstance`.
+    applyMessage(spawn(1), 0);
+    applyMessage({ type: 'effect', position: at(0, 0), effectId: 1 }, 0);
+    applyMessage({ type: 'missile', from: at(0, 0), to: at(1, 0), missileId: 1 }, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 1, kind: 'melee' }, 0);
+    applyMessage({ type: 'instance-enter', instanceId: 'i2', map: 'rat-cellars' }, 0);
+
+    expect(world.effects).toHaveLength(0);
+    expect(world.missiles).toHaveLength(0);
+    expect(world.texts).toHaveLength(0);
+  });
+
+  it('a session-state clears them too: it replaces the scene, transients included', () => {
+    // Mutação que mata: tirar `clearTransients()` do `case 'session-state'`.
+    applyMessage({ type: 'effect', position: at(0, 0), effectId: 1 }, 0);
+    applyMessage({ type: 'missile', from: at(0, 0), to: at(1, 0), missileId: 1 }, 0);
+    applyMessage({ type: 'creature-hit', id: 7, amount: 1, kind: 'melee' }, 0);
+    applyMessage({
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1',
+        health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
+      },
+      world: { mapId: 'rat-cellars', creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+
+    expect(world.effects).toHaveLength(0);
+    expect(world.missiles).toHaveLength(0);
+    expect(world.texts).toHaveLength(0);
+  });
+
+  it('each list is capped, dropping the OLDEST', () => {
+    // Em aba de fundo o `requestAnimationFrame` para e o socket não: horas de hunt entrariam
+    // sem ninguém expirar nada. O mais antigo é o que já teria acabado de tocar.
+    // Mutação que mata: `list.splice(0, ...)` → `list.length = TRANSIENT_CAP` (cortaria o novo).
+    for (let i = 0; i < TRANSIENT_CAP + 10; i++) {
+      applyMessage({ type: 'effect', position: at(0, 0), effectId: i }, i);
+    }
+
+    expect(world.effects).toHaveLength(TRANSIENT_CAP);
+    expect(world.effects[0]?.effectId).toBe(10);
+    expect(world.effects.at(-1)?.effectId).toBe(TRANSIENT_CAP + 9);
   });
 });
 
@@ -396,7 +541,9 @@ describe('o inventário (FUN-90)', () => {
   const inventory = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'inventory',
     backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
-    equipped: { chest: 'i2' },
+    // O equipado vem INTEIRO (FUN-108): ele não está na mochila, então só o id não bastava
+    // para a tela achar a definição.
+    equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
     capacity: { used: 130, total: 400 },
     ...over,
   } as S2CMessage);
@@ -407,7 +554,9 @@ describe('o inventário (FUN-90)', () => {
     applyMessage(inventory(), 0);
 
     expect(hud.get().inventory?.capacity).toEqual({ used: 130, total: 400 });
-    expect(hud.get().inventory?.equipped).toEqual({ chest: 'i2' });
+    expect(hud.get().inventory?.equipped).toEqual({
+      chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 },
+    });
   });
 
   it('ausente e vazio são coisas DIFERENTES', () => {

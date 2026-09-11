@@ -55,10 +55,13 @@ function duration(ms: number): string {
  * pessimista que se corrige do que uma otimista inventada aqui.
  */
 function useElapsedMs(base: number, since: number, running: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
+  // `performance.now()`, e não `Date.now()`: `since` é o `receivedAtMs` que `applyMessage`
+  // carimba com o relógio monotônico. Subtrair dele o relógio de calendário mostrava
+  // "496968 h" — a época Unix em horas — na primeira vez que a janela abriu.
+  const [now, setNow] = useState(() => performance.now());
   useEffect(() => {
     if (!running) return;
-    const timer = setInterval(() => { setNow(Date.now()); }, 1_000);
+    const timer = setInterval(() => { setNow(performance.now()); }, 1_000);
     return () => { clearInterval(timer); };
   }, [running]);
   if (!running) return base;

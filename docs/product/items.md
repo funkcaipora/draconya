@@ -226,9 +226,21 @@ Ela sai ao **anexar**, depois de **equipar ou tirar**, e quando **cai loot** dur
 último detectado por `aggregates.itemsLooted` mudar, que é um inteiro a comparar por ciclo em vez
 de serializar a mochila dez vezes por segundo.
 
-**Sem arte ainda.** Cada item tem `appearanceId` resolvido da tabela, e o pipeline que o
-transforma em sprite é o M2.
-Até lá, a inicial do nome num quadrado — um placeholder que não finge ser arte.
+**O slot desenha o sprite do item** (FUN-108). Cada item tem `appearanceId` resolvido da
+tabela, e o inventário o desenha com o MESMO quadro que o mundo usa: `ItemSprite`
+(`packages/client/src/shell/ItemSprite.tsx`) é um canvas de 32 px por item, pintado uma vez
+com `pack.object(appearanceId)` — DOM, sem Pixi, porque HUD é DOM (ADR 0007). A inicial do
+nome num quadrado só aparece sem pacote de arte, enquanto o quadro está em voo, ou quando o
+pacote não tem a aparência; ela é a degradação, não o desenho.
+
+Para isso o **equipado leva `itemId` no protocolo** desde esta task. O `sim` MOVE o item para
+o corpo ao equipar — ele sai da mochila —, e `inventory.equipped` era só `slot → instanceId`:
+o cliente procurava o item vestido na mochila, não achava, e o slot saía com a inicial de
+"item" e o tooltip "Tirar item". Agora cada entrada de `equipped` tem a mesma forma de uma
+entrada da mochila (`instanceId`, `itemId`, `quantity`), o cliente resolve a definição por
+`itemId` e o tooltip volta a ter o nome. O opcode não muda: é a mesma mensagem, com mais
+dentro. O extrato que vai ao ledger continua `slot → instanceId`, porque o banco só precisa
+saber onde cada linha está.
 
 ### A action bar não entrou, e por quê
 

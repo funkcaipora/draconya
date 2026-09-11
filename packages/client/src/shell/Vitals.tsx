@@ -1,29 +1,35 @@
 import { useHudSlice } from '../state/useSlice.js';
 
 /**
- * Indicador circular de HP e mana.
+ * As barras de HP e mana, como no Tibia (FUN-108): duas barras horizontais, vermelha e azul,
+ * com o número dentro. O trilho e o preenchimento vêm do pacote por variável CSS
+ * (`--ui-bar-track`, `--ui-hp-bar`, `--ui-mana-bar`); sem pacote a estrutura é a mesma e só
+ * o `background-image` some — barra de cor lisa.
+ *
+ * O preenchimento é um elemento com a LARGURA da fração e a imagem no tamanho da barra
+ * inteira, ancorada à esquerda: o que se vê é a barra cheia CORTADA na fração, como o
+ * cliente do Tibia faz com o retângulo de recorte — a ponta esquerda fica, a direita some.
  *
  * `throttleMs` porque numa luta esses valores mudam dezenas de vezes por segundo numa barra
  * que anda três pixels: sem ele, cada golpe vira um render do React.
  */
-function Ring({ label, value, max, color }: {
-  label: string; value: number; max: number; color: string;
+function Bar({ label, value, max, kind }: {
+  label: string; value: number; max: number; kind: 'hp' | 'mana';
 }) {
   const fraction = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-  const radius = 22;
-  const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="ring" title={`${label} ${value}/${max}`}>
-      <svg width="56" height="56" viewBox="0 0 56 56" aria-label={`${label} ${value} de ${max}`}>
-        <circle cx="28" cy="28" r={radius} className="ring-track" />
-        <circle
-          cx="28" cy="28" r={radius} stroke={color} className="ring-value"
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
-        />
-      </svg>
-      <span className="ring-label">{value}</span>
+    <div
+      className={`bar bar-${kind}`}
+      title={`${label} ${value}/${max}`}
+      role="meter"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={value}
+    >
+      <span className="bar-fill" style={{ width: `${(fraction * 100).toFixed(2)}%` }} />
+      <span className="bar-label">{value}</span>
     </div>
   );
 }
@@ -36,8 +42,8 @@ export function Vitals() {
 
   return (
     <div className="vitals">
-      <Ring label="HP" value={health} max={maxHealth} color="#c25b4a" />
-      <Ring label="Mana" value={mana} max={maxMana} color="#4a7fc2" />
+      <Bar label="HP" value={health} max={maxHealth} kind="hp" />
+      <Bar label="Mana" value={mana} max={maxMana} kind="mana" />
     </div>
   );
 }
