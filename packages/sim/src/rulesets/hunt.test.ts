@@ -817,10 +817,10 @@ describe('eventos de domínio (FUN-69)', () => {
     const { session } = start();
     run(session, 3000, 100);
 
-    const eventos = session.drainEvents();
+    // Desde a FUN-103 a fila também traz nascimento, sumiço e vida: aqui só os passos.
+    const eventos = session.drainEvents().filter((e) => e.kind === 'creature-moved');
     expect(eventos.length).toBeGreaterThan(0);
     for (const evento of eventos) {
-      expect(evento.kind).toBe('creature-moved');
       expect(evento.durationMs).toBeGreaterThan(0);
       // O andar vem do MAPA, e vai junto: quem lê isto do lado de fora precisa de `z`.
       expect(evento.to.z).toBe(7);
@@ -829,6 +829,55 @@ describe('eventos de domínio (FUN-69)', () => {
     const quemAndou = new Set(eventos.map((e) => String(e.creatureId)));
     expect(quemAndou.has('hero')).toBe(true);
     expect([...quemAndou].some((id) => id.startsWith('m:'))).toBe(true);
+  });
+
+  it('o monstro que NASCE é anunciado, com posição, vida e o id de conteúdo (FUN-103)', () => {
+    // Antes disto o passo do monstro atravessava o fio com um id que ninguém tinha anunciado,
+    // e o cliente descartava em silêncio: a hunt rodava inteira e a tela ficava vazia.
+    const { session } = start();
+    run(session, 100, 100);
+
+    const nascidos = session.drainEvents().filter((e) => e.kind === 'creature-appeared');
+    expect(nascidos.length).toBeGreaterThan(0);
+    for (const nascido of nascidos) {
+      expect(String(nascido.creatureId)).toMatch(/^m:/);
+      expect(nascido.monsterId).toBe('rat');
+      // Da fixture, não um literal: o número certo é o que o conteúdo diz.
+      expect(nascido.health).toBe(rat.health);
+      expect(nascido.maxHealth).toBe(rat.health);
+      // O `z` é do mapa, como no passo — sem ele o cliente não sabe em que andar desenhar.
+      expect(nascido.position.z).toBe(7);
+    }
+  });
+
+  it('o monstro que MORRE some, e a vida dele mudou antes disso', () => {
+    const { session, hero } = start();
+    // Tempo bastante para o herói matar pelo menos um rato.
+    run(session, 60_000, 100);
+    const eventos = session.drainEvents();
+
+    const vidas = eventos.filter((e) => e.kind === 'creature-health-changed');
+    const sumidos = eventos.filter((e) => e.kind === 'creature-vanished');
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(sumidos.length).toBe(session.aggregates.kills);
+    // Cada abate foi precedido de ao menos um golpe que mudou a vida — e o último deles
+    // deixou zero. Sem `creature-health`, a barra ficaria cheia até o monstro sumir.
+    for (const sumido of sumidos) {
+      const dele = vidas.filter((v) => v.creatureId === sumido.creatureId);
+      expect(dele.length).toBeGreaterThan(0);
+      expect(dele[dele.length - 1]?.health).toBe(0);
+      expect(dele[0]?.maxHealth).toBe(rat.health);
+    }
+    expect(hero.alive).toBe(true);
+  });
+
+  it('a lista de monstros VIVOS e o andar ficam expostos para quem monta o session-state', () => {
+    // Quem reanexa no meio da hunt precisa ver o que já está lá, não só o que nascer depois.
+    const { session, ruleset } = start();
+    run(session, 100, 100);
+    expect(ruleset.monsters.length).toBeGreaterThan(0);
+    expect(ruleset.monsters.every((m) => m.alive)).toBe(true);
+    expect(ruleset.floor).toBe(7);
   });
 
   it('desanexada produz exatamente os mesmos eventos que anexada', () => {

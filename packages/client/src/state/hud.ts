@@ -73,6 +73,10 @@ export type Inventory = S2CProps<'inventory'>;
  * **`receivedAtMs` é o instante local em que este pacote chegou**, e é ele que faz o relógio
  * andar entre dois `session-state`. Sem isso, o tempo de hunt ficaria congelado entre uma
  * atualização e outra — e o "por hora", que é uma divisão por ele, ficaria congelado junto.
+ *
+ * **É `performance.now()`, o relógio de `applyMessage`, e não `Date.now()`.** Quem lê este
+ * campo tem que subtrair do MESMO relógio: misturar os dois deu "496968 h" na janela, que é
+ * a época Unix em horas — o sintoma de subtrair um instante monotônico de um de calendário.
  */
 export interface AnalyzerState {
   readonly sessionType: string | null;

@@ -33,6 +33,12 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * Outfits de PERSONAGEM (FUN-103). `default` é o que todo jogador veste enquanto ninguém
+   * escolhe o seu (§7.4 pendente): `CharacterRuntime` não tem outfit e o ticket não carrega
+   * um. Mora aqui, e não numa constante no servidor, porque é arte (invariante 6).
+   */
+  characters: z.object({ default: appearanceId }).optional(),
+  /**
    * `id de mapa → aparência do chão e da parede` (FUN-23).
    *
    * O tilemap é grade de caracteres (`#` bloqueia, o resto é livre) e não guarda id de arte

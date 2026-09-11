@@ -20,6 +20,8 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs-check && pnpm source-policy",
     "dev": "tsx watch --env-file=.env packages/server/src/main.ts",
     "content:check": "tsc -b && pnpm --filter @draconya/tools content:check",
+    "assets:library": "tsx scripts/build-asset-library.ts",
+    "assets:fetch:1098": "tsx scripts/fetch-open-tibia-assets.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
     "bench:city": "tsc -b && pnpm --filter @draconya/tools bench:city",

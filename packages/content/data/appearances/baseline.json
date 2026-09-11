@@ -4,13 +4,16 @@
   "monsters": {
     "rat": 21
   },
+  "characters": {
+    "default": 128
+  },
   "items": {
     "arrow": 3447,
     "leather-armor": 3361,
     "spike-sword": 3271
   },
   "maps": {
-    "rat-cellars": { "floor": 357, "wall": 441 },
-    "city": { "floor": 357, "wall": 439 }
+    "rat-cellars": { "floor": 355, "wall": 1298 },
+    "city": { "floor": 429, "wall": 1298 }
   }
 }
