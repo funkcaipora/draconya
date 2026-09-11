@@ -8,7 +8,7 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { S2CMessage } from '@draconya/protocol';
+import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
 import { botResult } from '../bot/store.js';
 
@@ -25,6 +25,22 @@ import {
   addEffect, addFloatingText, addMissile, clearTransients, enterInstance, world, type Creature,
 } from './world.js';
 
+/**
+ * As cores de outfit de uma criatura, SÓ quando o servidor as mandou (FUN-104).
+ *
+ * Sem elas o campo fica AUSENTE do `Creature`, e não `undefined`: "não disse" é a falta do
+ * campo, e é o viewport quem põe as de reserva no lugar. O tipo do protocolo admite
+ * `undefined` (é o que `.optional()` do zod infere) e o do store não
+ * (`exactOptionalPropertyTypes`) — pela razão certa —, e é por isso que os dois `case` que
+ * montam criatura (`creature-appear` e `session-state`) passam por aqui em vez de copiar
+ * `message.colors` no literal.
+ */
+function colorsOf(
+  creature: { readonly colors?: OutfitColors | undefined },
+): Pick<Creature, 'colors'> {
+  return creature.colors === undefined ? {} : { colors: creature.colors };
+}
+
 export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
@@ -36,6 +52,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       world.creatures.set(message.id, {
         id: message.id,
         appearanceId: message.appearanceId,
+        ...colorsOf(message),
         name: message.name,
         health: message.health,
         maxHealth: message.maxHealth,
@@ -215,6 +232,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         world.creatures.set(creature.id, {
           id: creature.id,
           appearanceId: creature.appearanceId,
+          ...colorsOf(creature),
           name: creature.name,
           health: creature.health,
           maxHealth: creature.maxHealth,

@@ -17,7 +17,7 @@ import type {
   CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session, SessionSnapshot,
   SessionType,
 } from '@draconya/sim';
-import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
+import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
 import type {
@@ -381,6 +381,14 @@ export class SessionHost {
   /** Nome de exibição, do ticket. Só o chat lê; o `sim` não conhece nome (FUN-58). */
   readonly #nameByCharacter = new Map<string, string>();
   /**
+   * As cores do outfit, do ticket (FUN-104). Só `creature-appear` e `session-state` leem; o
+   * `sim` não conhece cor, e o snapshot não a carrega — é apresentação, não simulação. Como o
+   * nome, entram quando a sessão é preparada e vivem até `release`: uma escolha nova feita no
+   * meio da sessão só aparece na próxima entrada, com o ticket que a trouxer. Ausente é o
+   * padrão do cliente — personagem que nunca escolheu, ou ticket de um `api` antigo.
+   */
+  readonly #colorsByCharacter = new Map<string, OutfitColors>();
+  /**
    * A configuração do bot vigente, por personagem (FUN-81).
    *
    * Nasce do ticket e é substituída pela mensagem `bot-config`. Vive aqui, e não no
@@ -637,6 +645,7 @@ export class SessionHost {
     this.#sessionIdByCharacter.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
+    this.#colorsByCharacter.delete(characterId);
     this.#botByCharacter.delete(characterId);
     this.#restingSince.delete(characterId);
 
@@ -1374,7 +1383,20 @@ export class SessionHost {
       name: this.#nameByCharacter.get(characterId) ?? characterId,
       health: character?.health ?? 0,
       maxHealth: character?.maxHealth ?? 0,
+      ...this.#colorsOf(characterId),
     };
+  }
+
+  /**
+   * As cores de um PERSONAGEM para o fio, ou nada (FUN-104). Espalhado, e não `colors:
+   * undefined`: a chave ausente é o que o cliente lê como "pinte o padrão", e uma chave com
+   * `undefined` não sobrevive ao JSON de qualquer jeito — o codec a apagaria em silêncio, e o
+   * tipo passaria a mentir sobre o que foi mandado. Monstro nunca passa por aqui: é uma camada
+   * só, e a tabela é indexada por `characterId`.
+   */
+  #colorsOf(characterId: string): { colors?: OutfitColors } {
+    const colors = this.#colorsByCharacter.get(characterId);
+    return colors === undefined ? {} : { colors };
   }
 
   /**
@@ -1934,6 +1956,9 @@ export class SessionHost {
       name: this.#nameByCharacter.get(participant.id) ?? participant.id,
       health: participant.health,
       maxHealth: participant.maxHealth,
+      // As cores do ticket (FUN-104), pelo MESMO espalhamento do `creature-appear`: o cliente
+      // aplica os dois pelo mesmo caminho, e o reanexado precisa ver o vizinho pintado igual.
+      ...this.#colorsOf(participant.id),
     }));
 
     // Os monstros VIVOS da hunt entram na mesma lista (FUN-103): quem reanexa no meio precisa
@@ -1989,8 +2014,16 @@ export class SessionHost {
     const resumed = await this.#resume(characterId, accountId);
     const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
     await this.#register(characterId, session, accountId);
-    this.#createLocal(characterId, session, accountId);
+    // Nome e cores ANTES de hospedar: `#createLocal` anuncia a chegada a quem já está na praça
+    // (FUN-71), e o `creature-appear` desse anúncio lê as duas tabelas. Depois, quem já
+    // estava veria o recém-chegado com o id no lugar do nome e sem cores — e só o próximo
+    // `session-state` corrigiria. Passou despercebido enquanto o único leitor era o chat, que
+    // só fala depois. Depois do `#register`, porém: registro recusado não pode deixar rastro.
     if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    if (initialCharacter?.outfitColors !== undefined) {
+      this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
+    }
+    this.#createLocal(characterId, session, accountId);
     this.#adoptTicketBotConfig(characterId, session, initialCharacter);
     if (resumed !== null) {
       this.#resumedGapMs.set(characterId, resumed.gapMs);

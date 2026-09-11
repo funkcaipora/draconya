@@ -117,6 +117,17 @@ export const characters = pgTable(
      */
     botConfig: jsonb('bot_config'),
 
+    /**
+     * As cores do outfit (FUN-104): `{ head, body, legs, feet }`, cada um um índice da paleta.
+     * Nulável: personagem que nunca escolheu lê `null`, e o cliente o pinta com as cores de
+     * personagem novo — que é o que ele já fazia com todo mundo.
+     *
+     * `jsonb` e não quatro colunas: as quatro só existem JUNTAS, e a forma é a do protocolo
+     * (`OutfitColors`), não do banco. Quem valida é quem monta o ticket; aqui é só a linha.
+     * Ninguém escreve ainda — a escolha (§7.4) é tela que não existe.
+     */
+    outfitColors: jsonb('outfit_colors'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

@@ -57,6 +57,31 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     expect(character.createdAt).toBeInstanceOf(Date);
   });
 
+  it('as cores do outfit nascem nulas e voltam como foram gravadas (FUN-104)', async () => {
+    // Sem método de escrita ainda — a escolha (§7.4) não tem tela —, então a linha é escrita
+    // por SQL, como a tela um dia vai escrever. O que se afirma é o caminho de LEITURA que o
+    // ticket usa: `null` para quem nunca escolheu, e o documento inteiro, sem o repositório
+    // opinar sobre a forma — quem valida contra a paleta é quem monta o ticket.
+    const account = await repository.ensureAccount({
+      externalAuthId: 'user_colors', email: 'colors@example.com',
+    });
+    const character = await repository.createCharacter(account.id, 'Painted Hero');
+    expect(character.outfitColors).toBeNull();
+    expect((await repository.getCharacter(account.id, character.id))?.outfitColors).toBeNull();
+
+    const colors = { head: 78, body: 69, legs: 58, feet: 76 };
+    await testDatabase.database.db.execute(
+      sql`update ${characters} set outfit_colors = ${JSON.stringify(colors)}::jsonb where id = ${character.id}`,
+    );
+
+    expect((await repository.getCharacter(account.id, character.id))?.outfitColors).toEqual(colors);
+    const locked = await repository.withOwnedCharacter(
+      account.id, character.id, async (row) => row.outfitColors,
+    );
+    expect(locked).toEqual(colors);
+    expect((await repository.listCharacters(account.id))[0]?.outfitColors).toEqual(colors);
+  });
+
   it('uses the external identity as the account key under concurrent login', async () => {
     const results = await Promise.all([
       repository.ensureAccount({ externalAuthId: 'user_same', email: 'same@example.com' }),

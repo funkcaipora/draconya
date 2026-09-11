@@ -2,6 +2,7 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { OutfitColors } from '@draconya/protocol';
 import type { IssueFailure, TicketService } from '../tickets.js';
 import type { GameRepository } from '../db/repository.js';
 
@@ -151,6 +152,11 @@ export function createTicketHandler(
         // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
         // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
         ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
+        // As cores do outfit viajam no ticket como o nome (FUN-104): dado do personagem que só
+        // a apresentação lê, e o `game` não fala com o Postgres. Validadas AQUI, e não só no
+        // consumo: é o que faz o tipo do ticket dizer a verdade sem cast, e a linha é `jsonb`
+        // sem CHECK — um valor corrompido vira ausente, nunca personagem trancado fora.
+        ...outfitColorsOf(character.outfitColors),
         // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
         skills: character.skills,
         // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
@@ -177,6 +183,20 @@ export function createTicketHandler(
       expiresAtMs: issued.value.expiresAtMs,
     });
   };
+}
+
+/**
+ * As cores do outfit como o ticket as carrega, ou nada (FUN-104).
+ *
+ * `null` é personagem que nunca escolheu, e é o caso comum enquanto a tela (§7.4) não existe.
+ * Qualquer outra coisa que não bata no schema do protocolo — peça faltando, índice fora da
+ * paleta — cai no mesmo "nada": o cliente pinta o padrão, e a emissão do ticket não é o lugar
+ * de recusar um login por causa de cor.
+ */
+function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
+  if (stored === null || stored === undefined) return {};
+  const parsed = OutfitColors.safeParse(stored);
+  return parsed.success ? { outfitColors: parsed.data } : {};
 }
 
 /**

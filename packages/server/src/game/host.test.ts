@@ -5,7 +5,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema } from '@draconya/content';
 import type { Appearances, BotConfig, RawContent } from '@draconya/content';
-import type { S2CMessage } from '@draconya/protocol';
+import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -2466,6 +2466,175 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const appears = received().filter((m) => m.type === 'creature-appear');
     expect(appears.length).toBeGreaterThan(0);
     expect(appears[0]).toMatchObject({ name: 'rat', appearanceId: 0 });
+  });
+});
+
+describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
+  const COLORS: OutfitColors = { head: 78, body: 69, legs: 58, feet: 76 };
+  const PAINTED: OutfitColors = { head: 114, body: 20, legs: 3, feet: 132 };
+
+  type Creature = { name: string; colors?: OutfitColors };
+  /** O `session-state` é PEDIDO pelo cliente (`session-attach`), não vem no attach. */
+  const stateOf = (host: SessionHost, socket: FakeSocket, viewer: ReturnType<SessionHost['attach']>) => {
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    return socket.received().filter((m) => m.type === 'session-state').at(-1) as
+      { world: { creatures: Creature[] } } | undefined;
+  };
+  const appearsOn = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'creature-appear') as unknown as Creature[];
+
+  /**
+   * A praça de verdade (como na FUN-71), mas entrando por `prepare`: é o TICKET que traz as
+   * cores, e `attach` sem preparo monta a sessão sem ticket nenhum. Sem diretório o preparo
+   * não registra nada — o que se exercita é só a adoção do que o ticket carrega.
+   *
+   * O nome de exibição é DIFERENTE do id de propósito. O da FUN-71 usa os dois iguais, e por
+   * isso nunca viu que o anúncio de chegada saía antes de o nome do ticket ser adotado.
+   */
+  const praca = () => {
+    const content = testContent();
+    const now = () => 0;
+    const shard = new CityShard(content, now);
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, now,
+      createSession: createCitySessionFactory(content, now, shard),
+    });
+    const enter = async (characterId: string, outfitColors?: OutfitColors) => {
+      await host.prepare(characterId, {
+        level: 1, xp: 0, name: `Nome de ${characterId}`,
+        ...(outfitColors === undefined ? {} : { outfitColors }),
+      }, 'a1');
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, characterId);
+      return { socket, viewer };
+    };
+    return { host, enter };
+  };
+
+  it('quem chega pintado aparece pintado para quem já estava, e no session-state de quem reanexa', async () => {
+    // Os dois caminhos pelos quais um personagem chega à tela de outro, e o cliente aplica
+    // os dois pelo mesmo `CreatureState`: um sem cores viraria a diferença entre "vi chegar"
+    // e "reconectei".
+    const { host, enter } = praca();
+    const primeiro = await enter('p1', COLORS);
+    primeiro.socket.frames.length = 0;
+
+    const segundo = await enter('p2', PAINTED);
+    host.flush();
+
+    // `received()` passa pelo codec de verdade: o campo sobreviveu ao protocolo, não só ao
+    // objeto em memória.
+    expect(appearsOn(primeiro.socket)).toEqual([
+      expect.objectContaining({ name: 'Nome de p2', colors: PAINTED }),
+    ]);
+
+    const visto = stateOf(host, segundo.socket, segundo.viewer);
+    expect(visto?.world.creatures.find((c) => c.name === 'Nome de p1')?.colors).toEqual(COLORS);
+    expect(visto?.world.creatures.find((c) => c.name === 'Nome de p2')?.colors).toEqual(PAINTED);
+  });
+
+  it('sem cores no ticket a chave NÃO existe — nem como undefined', async () => {
+    // Personagem que nunca escolheu, ou ticket de um `api` antigo. O cliente lê a AUSÊNCIA como
+    // "pinte o padrão"; uma chave `undefined` seria apagada pelo JSON de qualquer jeito, e o
+    // tipo passaria a mentir sobre o que foi mandado.
+    const { host, enter } = praca();
+    const primeiro = await enter('p1');
+    primeiro.socket.frames.length = 0;
+    const segundo = await enter('p2');
+    host.flush();
+
+    const [appear] = appearsOn(primeiro.socket);
+    expect(appear).toMatchObject({ name: 'Nome de p2' });
+    expect(appear).not.toHaveProperty('colors');
+
+    const visto = stateOf(host, segundo.socket, segundo.viewer);
+    expect(visto?.world.creatures).toHaveLength(2);
+    for (const creature of visto?.world.creatures ?? []) expect(creature).not.toHaveProperty('colors');
+  });
+
+  it('sair apaga as cores: quem volta com um ticket sem elas volta sem elas', async () => {
+    // As cores vivem com o nome, e morrem com ele. Sem o `delete` no `release`, uma escolha
+    // desfeita continuaria pintando o personagem até o nó reiniciar.
+    const { host, enter } = praca();
+    const primeiro = await enter('p1');
+    await enter('p2', PAINTED);
+    await host.release('p2');
+    // Esvazia o que a primeira entrada e a saída enfileiraram ANTES de limpar: o visualizador
+    // só escreve no socket no `flush`, e limpar antes dele deixaria o aparecimento pintado na
+    // frente do que se quer ler.
+    host.flush();
+    primeiro.socket.frames.length = 0;
+
+    await enter('p2');
+    host.flush();
+
+    const appears = appearsOn(primeiro.socket);
+    expect(appears).toHaveLength(1);
+    expect(appears[0]).toMatchObject({ name: 'Nome de p2' });
+    expect(appears[0]).not.toHaveProperty('colors');
+  });
+
+  it('o monstro NUNCA traz cores, mesmo ao lado de um herói pintado', async () => {
+    // O rato é uma camada só: o campo é de personagem, e a tabela é indexada por
+    // `characterId`. Mandar `colors` num monstro faria o cliente tentar pintar o que não
+    // tem máscara — e o herói pintado ao lado prova que a tabela estava povoada.
+    // Um rato que AGUENTA, como no fixture da FUN-109: o herói de teste mata o comum num
+    // golpe, e o `session-state` só lista monstro vivo — com o rato comum a lista vinha
+    // vazia e o laço abaixo não afirmava nada (a mutação que sobreviveu na revisão).
+    const raw = rawTestContent();
+    const content = buildContent({
+      ...raw,
+      monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+        m['id'] === 'rat' ? { ...m, health: 100_000 } : m),
+    });
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      monsterCatalog: content.monsters,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return session;
+      },
+    });
+    await host.prepare('hero', { level: 8, xp: 0, name: 'hero', outfitColors: COLORS }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    for (let t = 0; t < 300; t += 100) { now += 100; host.cycle(); }
+    host.flush();
+
+    const ratos = appearsOn(socket).filter((c) => c.name === 'Rat');
+    expect(ratos.length).toBeGreaterThan(0);
+    for (const rato of ratos) expect(rato).not.toHaveProperty('colors');
+
+    const visto = stateOf(host, socket, viewer);
+    expect(visto?.world.creatures.find((c) => c.name === 'hero')?.colors).toEqual(COLORS);
+    const vivos = visto?.world.creatures.filter((c) => c.name === 'Rat') ?? [];
+    expect(vivos.length).toBeGreaterThan(0);
+    for (const rato of vivos) expect(rato).not.toHaveProperty('colors');
+  });
+
+  it('quem já está hospedado continua com as cores com que entrou, mesmo com ticket novo', async () => {
+    // O que o `packages/server/AGENTS.md` promete, prendido: `#prepare` de um personagem já
+    // hospedado devolve `created: false` sem ler o ticket novo, então uma escolha feita no
+    // meio da sessão só aparece na PRÓXIMA entrada. Se a §7.4 decidir o contrário um dia, é
+    // este teste que vai virar, de propósito e à vista.
+    const { host, enter } = praca();
+    const { socket, viewer } = await enter('p1', COLORS);
+    const again = await host.prepare('p1', { level: 1, xp: 0, name: 'Outro nome', outfitColors: PAINTED }, 'a1');
+    expect(again.created).toBe(false);
+    const visto = stateOf(host, socket, viewer);
+    const eu = visto?.world.creatures.find((c) => c.name === 'Nome de p1');
+    expect(eu).toBeDefined();
+    expect(eu?.colors).toEqual(COLORS);
   });
 });
 

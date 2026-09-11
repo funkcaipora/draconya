@@ -41,7 +41,7 @@ import {
 import {
   creatureKey, effectKey, effectKeysOf, groundCell, groundKey, missileKey,
 } from './keys.js';
-import { DEFAULT_OUTFIT_COLORS } from './outfit-colors.js';
+import { paintOf } from './outfit-colors.js';
 import { TextureBook } from './textures.js';
 import { wallPiece, wallsOf } from './walls.js';
 
@@ -295,10 +295,12 @@ export async function mountViewport(
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
     const frames = art.framesOf(creature.appearanceId, moving);
     const { phase } = walkFrame(creature, nowMs, frames);
-    // Toda criatura é pedida COM cores — as padrão, até o protocolo carregar as de cada uma.
-    // O pacote devolve a base como está para quem não tem template (monstro), e a chave leva
-    // as cores para o quadro pintado nunca cair na entrada do quadro cru.
-    const colors = DEFAULT_OUTFIT_COLORS;
+    // As cores são as DA CRIATURA, que o protocolo carrega desde a FUN-104; a reserva é para
+    // quem chegou sem — um nó `game` anterior, ou monstro, que nunca traz (`paintOf`). Toda
+    // criatura é pedida COM cores mesmo assim: o pacote devolve a base como está para quem
+    // não tem template (monstro), então passar cores a ele é inofensivo, e a chave leva as
+    // cores para o quadro pintado nunca cair na entrada do quadro cru.
+    const colors = paintOf(creature);
     const key = creatureKey(creature.appearanceId, direction, moving, phase, colors);
     return book.get(
       key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors),

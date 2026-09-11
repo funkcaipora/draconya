@@ -32,6 +32,13 @@ export interface CharacterRecord {
   readonly botConfig: unknown;
   /** Skills que sobem por uso (§9.4, FUN-75). A coluna já existia; o que faltava era quem a usasse. */
   readonly skills: unknown;
+  /**
+   * As cores do outfit, como vieram do banco (FUN-104). `unknown` pela mesma razão de
+   * `botConfig`: a forma é do protocolo (`OutfitColors`), e quem a valida é quem monta o
+   * ticket — o repositório não é lugar de conhecer paleta. `null` é personagem que nunca
+   * escolheu. Sem método de escrita: a escolha (§7.4) ainda não tem tela.
+   */
+  readonly outfitColors: unknown;
   readonly createdAt: Date;
 }
 
@@ -357,6 +364,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     sessionId: row.sessionId,
     botConfig: row.botConfig,
     skills: row.skills,
+    outfitColors: row.outfitColors,
     createdAt: row.createdAt,
   };
 }
