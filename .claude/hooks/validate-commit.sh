@@ -5,12 +5,13 @@
 # `git commit` com mensagem inline (-m ou --message), valida o formato contra o padrao do
 # projeto (docs/harness-plan.md secao 4.1, CLAUDE.md):
 #
-#   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
+#   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn | #nn)
 #
 #   tipo:   feat | fix | refactor | perf | docs | test | chore
 #   escopo: sim | protocol | content | server | client | tools | docs | deps
 #
-# (FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
+# (FUN-nn) ou (#nn) e obrigatorio, exceto para tipo chore ou docs. FUN-nn e issue do Linear;
+# #nn e issue do GitHub, para trabalho rastreado la (skill task-github, ADR 0025).
 #
 # Contrato do hook: exit 0 deixa a chamada passar; exit 2 bloqueia a chamada e devolve o
 # stderr para o modelo. Na duvida -- JSON que nao parseia, comando que nao e git commit,
@@ -41,12 +42,13 @@ fail() {
 commit rejected by hook validate-commit: $1
 
 expected format:
-  <type>(<scope>): <imperative description in English> (FUN-nn)
+  <type>(<scope>): <imperative description in English> (FUN-nn | #nn)
 
   type:   feat | fix | refactor | perf | docs | test | chore
   scope: sim | protocol | content | server | client | tools | docs | deps
 
-(FUN-nn) is required except for chore and docs commits.
+(FUN-nn) or (#nn) is required except for chore and docs commits.
+FUN-nn is a Linear issue; #nn is a GitHub issue (task-github skill).
 example: feat(sim): advance simulation using elapsed time (FUN-25)
 MSG
   exit 2
@@ -206,7 +208,7 @@ if [[ "$subject" =~ ^([A-Za-z0-9_-]+)\(([A-Za-z0-9_-]+)\):[[:space:]]*(.*)$ ]]; 
   scope="${BASH_REMATCH[2]}"
   remainder="${BASH_REMATCH[3]}"
 else
-  fail "\"$subject\" does not match <type>(<scope>): <description> (FUN-nn)"
+  fail "\"$subject\" does not match <type>(<scope>): <description> (FUN-nn | #nn)"
 fi
 
 if [[ ! "$type" =~ ^($TYPES)$ ]]; then
@@ -219,7 +221,7 @@ fi
 
 description="$remainder"
 has_issue=0
-if [[ "$remainder" =~ ^(.*[^[:space:]])[[:space:]]+\(FUN-[0-9]+\)[[:space:]]*$ ]]; then
+if [[ "$remainder" =~ ^(.*[^[:space:]])[[:space:]]+\((FUN-[0-9]+|#[0-9]+)\)[[:space:]]*$ ]]; then
   has_issue=1
   description="${BASH_REMATCH[1]}"
 fi
@@ -229,7 +231,7 @@ if [ -z "$description" ]; then
 fi
 
 if [[ "$type" != "chore" && "$type" != "docs" && "$has_issue" -eq 0 ]]; then
-  fail "missing (FUN-nn) in \"$subject\" -- required for type '$type' (only chore and docs are exempt)"
+  fail "missing (FUN-nn) or (#nn) in \"$subject\" -- required for type '$type' (only chore and docs are exempt)"
 fi
 
 exit 0
