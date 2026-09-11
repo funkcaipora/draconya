@@ -124,7 +124,8 @@ body {
 }
 .windows > section > *:not(header) { padding-left: 10px; padding-right: 10px; }
 .windows > section > *:last-child:not(header) { padding-bottom: 8px; }
-.windows > section > .quiet { color: var(--text-faint); margin: 8px 10px; }
+/* O inset horizontal já vem da regra de cima; aqui só o vertical. */
+.windows > section > .quiet { color: var(--text-faint); margin: 8px 0; }
 
 /* O chat: janela fixa no canto inferior esquerdo, como no Huntera. */
 .chat {
@@ -133,28 +134,6 @@ body {
   background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px);
   font-size: 12px;
-}
-
-/* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
-   embaixo, roláveis. Duas colunas flutuantes de 300px não cabem em 375px, e o caso de uso
-   móvel é configurar o bot e ler o extrato — não jogar de olho no mundo. */
-@media (max-width: 720px) {
-  body { overflow: auto; }
-  .shell { position: static; height: auto; overflow: visible; }
-  .viewport { position: relative; height: 40vh; }
-  .topbar {
-    position: sticky; height: auto; flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px;
-  }
-  .topbar-name { max-width: 120px; }
-  .bar { width: 96px; }
-  .bar-hp .bar-fill, .bar-mana .bar-fill { background-size: 96px 18px; }
-  .topbar-nav { margin-left: 0; width: 100%; justify-content: space-between; }
-  .topbar-button { min-width: 0; flex: 1 1 0; }
-  .windows, .windows-left, .windows-right {
-    position: static; width: auto; margin: 10px 10px 0; pointer-events: auto;
-  }
-  .windows > section { max-height: none; overflow: visible; }
-  .chat { position: static; width: auto; margin: 10px; }
 }
 
 .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
@@ -395,3 +374,28 @@ body {
   display: grid; grid-template-columns: repeat(auto-fill, 34px); gap: 3px;
 }
 .backpack .quiet { grid-column: 1 / -1; }
+
+/* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
+   embaixo, roláveis. Duas colunas flutuantes de 300px não cabem em 375px, e o caso de uso
+   móvel é configurar o bot e ler o extrato — não jogar de olho no mundo.
+   Fica no FIM da folha de propósito: as regras daqui têm a mesma especificidade das de cima,
+   e na cascata quem vem depois ganha — no meio da folha, `.bar { width: 96px }` perdia para o
+   `.bar { width: 150px }` declarado depois. */
+@media (max-width: 720px) {
+  body { overflow: auto; }
+  .shell { position: static; height: auto; overflow: visible; }
+  .viewport { position: relative; height: 40vh; }
+  .topbar {
+    position: sticky; height: auto; flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px;
+  }
+  .topbar-name { max-width: 120px; }
+  .bar { width: 96px; }
+  .bar-hp .bar-fill, .bar-mana .bar-fill { background-size: 96px 18px; }
+  .topbar-nav { margin-left: 0; width: 100%; justify-content: space-between; }
+  .topbar-button { min-width: 0; flex: 1 1 0; }
+  .windows, .windows-left, .windows-right {
+    position: static; width: auto; margin: 10px 10px 0; pointer-events: auto;
+  }
+  .windows > section { max-height: none; overflow: visible; }
+  .chat { position: static; width: auto; margin: 10px; }
+}

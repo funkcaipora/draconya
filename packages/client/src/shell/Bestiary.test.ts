@@ -94,13 +94,20 @@ describe('o corpo do Bestiário (FUN-113)', () => {
 });
 
 describe('a janela do Bestiário (FUN-113)', () => {
-  it('não existe sem catálogo, nem num servidor sem monstros', async () => {
-    // Sem catálogo não há o que listar. Um nó anterior à FUN-113 manda o catálogo sem
-    // monstros e nunca manda `bestiary`: um painel ali afirmaria um Bestiário que ele não tem.
-    expect(await render(createElement(Bestiary))).toBe('');
+  it('sem catálogo diz que carrega; num servidor sem monstros, que não há Bestiário', async () => {
+    // A janela existe sempre que a barra do topo a abriu (FUN-115) — sumir deixava o botão
+    // aceso sem nada acontecer. Um nó anterior à FUN-113 manda o catálogo sem monstros e nunca
+    // manda `bestiary`: uma lista vazia com "+0 %" afirmaria um Bestiário que ele não tem, e a
+    // frase não.
+    const loading = await render(createElement(Bestiary));
+    expect(loading).toContain('Bestiário');
+    expect(loading).toContain('Carregando…');
 
     hud.set((state) => ({ ...state, catalogue: catalogue({ monsters: [] }) }));
-    expect(await render(createElement(Bestiary))).toBe('');
+    const absent = await render(createElement(Bestiary));
+    expect(absent).toContain('Este servidor não tem Bestiário.');
+    expect(absent).not.toContain('Bônus');
+    expect(absent).not.toContain('próximo marco');
   });
 
   it('nasce aberta, com o bônus na primeira linha do corpo (FUN-115)', async () => {

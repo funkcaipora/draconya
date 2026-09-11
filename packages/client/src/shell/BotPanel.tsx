@@ -247,22 +247,36 @@ export function BotPanel({ onClose }: { onClose: () => void }) {
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
 
-  if (catalogue === null) return null;
+  // Sem catálogo o diálogo EXISTE e diz que carrega: devolver `null` deixava o botão da barra
+  // aceso sem nada na tela, e o segundo clique — "não fez nada" — fechava o que ia abrir.
+  const header = (
+    <header className="bot-title">
+      <strong>Configuração do bot</strong>
+      <span className="analyzer-summary">
+        {save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : ''}
+      </span>
+      <button type="button" className="entry-quiet" onClick={onClose}>
+        fechar
+      </button>
+    </header>
+  );
+  if (catalogue === null) {
+    return (
+      <div className="bot-overlay" role="dialog" aria-label="configuração do bot">
+        <div className="bot-body">
+          {header}
+          <p className="quiet">Carregando…</p>
+        </div>
+      </div>
+    );
+  }
   const vocabulary = catalogue.bot;
   const advanced = level >= vocabulary.advancedFromLevel;
 
   return (
     <div className="bot-overlay" role="dialog" aria-label="configuração do bot">
       <div className="bot-body">
-        <header className="bot-title">
-          <strong>Configuração do bot</strong>
-          <span className="analyzer-summary">
-            {save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : ''}
-          </span>
-          <button type="button" className="entry-quiet" onClick={onClose}>
-            fechar
-          </button>
-        </header>
+        {header}
         {!advanced && (
           // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
           // que o jogador descubra montando uma configuração inteira e levando um não.

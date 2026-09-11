@@ -402,9 +402,11 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   `catalogue` (`monsters`, `bestiary`). O que a tela calcula é apresentação —
   `shell/bestiary-progress.ts`, puro: "que marco vem depois" e o bônus GLOBAL (DT-01, marcos de
   todos os monstros somados) —, e se divergisse do `sim` a conta do `sim` é a verdadeira. Mesmas
-  classes CSS do analisador, minimizada por padrão com o bônus no cabeçalho. **Sem monstro no
-  catálogo a janela não existe**: é um nó anterior à FUN-113, que nunca manda `bestiary`, e um
-  painel com "+0 %" e lista vazia afirma um Bestiário que aquele servidor não tem. Sem marcos no
+  classes CSS do analisador, aberta por padrão (FUN-115) e com o bônus no cabeçalho quando
+  minimizada. **Sem monstro no catálogo a janela diz "Este servidor não tem Bestiário"**: é um
+  nó anterior à FUN-113, que nunca manda `bestiary`, e um painel com "+0 %" e lista vazia
+  afirmaria um Bestiário que aquele servidor não tem — e sumir deixaria o botão da barra aceso
+  sem nada acontecer. Sem marcos no
   catálogo, "—" e não "0/0" — a regra do "—" de sempre. O `bestiary-milestone` do extrato só
   escreve o "+n %" quando o catálogo trouxe o percentual (`EventNames.percentPerMilestone`).
 - **A entrada (`account/`) é HTTP puro, e vem ANTES do socket** (FUN-97). Escolher personagem

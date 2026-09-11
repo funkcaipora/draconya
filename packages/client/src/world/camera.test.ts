@@ -44,6 +44,8 @@ describe('o mundo na tela inteira (FUN-115)', () => {
     expect(zoomFor(800, 500)).toBe(1);
     expect(zoomFor(1024, 560)).toBe(2);
     expect(zoomFor(1440, 900)).toBe(2);
+    expect(zoomFor(2560, 1399)).toBe(2);
+    expect(zoomFor(2560, 1400)).toBe(3);
     expect(zoomFor(2560, 1440)).toBe(3);
     // É o lado MENOR que decide: uma tela larga e baixa não ganha zoom pela largura.
     expect(zoomFor(3000, 500)).toBe(1);

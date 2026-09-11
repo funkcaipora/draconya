@@ -69,12 +69,13 @@ Este sistema não define parâmetros numéricos de balanceamento — é uma espe
 
 ## A janela (FUN-83)
 
-Mora no painel da direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
+Mora numa janela à direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
 mundo em canvas. Nada nela toca `world`.
 
-**Nasce minimizada** (§16.1). Uma hunt idle não precisa dela aberta ocupando a tela, e a linha do
-cabeçalho já diz há quanto tempo a sessão roda. Ao encerrar ela abre sozinha: aí o extrato é a
-notícia, e escondê-lo seria a sessão sumir em silêncio.
+**Nasce aberta** (FUN-115; o §16.1 dizia minimizada). Quem decide se a janela existe é a barra
+do topo, e uma janela que abre minimizada é uma janela que abre vazia. Quem a minimizar tem há
+quanto tempo a sessão roda na linha do cabeçalho. Ao encerrar ela reabre sozinha: aí o extrato é
+a notícia, e escondê-lo seria a sessão sumir em silêncio.
 
 **Uma janela, duas telas.** Durante a hunt mostra o que está rendendo; ao voltar de um período
 offline mostra o mesmo, mais a lista curta de eventos notáveis (§16.2). São a mesma pergunta em

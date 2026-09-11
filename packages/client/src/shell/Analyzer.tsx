@@ -134,9 +134,10 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
 
 export function Analyzer() {
   const analyzer = useHudSlice((state) => state.analyzer);
-  // **Minimizada por padrão** (§16.1): a janela existe durante a hunt inteira, e uma hunt idle
-  // não precisa dela aberta ocupando a tela. Ao encerrar, ela abre sozinha — aí o extrato é a
-  // notícia, e escondê-lo seria a sessão sumir em silêncio.
+  // **Nasce aberta** (FUN-115): quem decide se a janela existe é a barra do topo, e uma janela
+  // que abre minimizada é uma janela que abre vazia. Quem a minimizou tem o tempo no cabeçalho;
+  // ao encerrar, ela reabre sozinha — aí o extrato é a notícia, e escondê-lo seria a sessão
+  // sumir em silêncio.
   const [open, setOpen] = useState(true);
   useEffect(() => {
     if (analyzer.ended) setOpen(true);

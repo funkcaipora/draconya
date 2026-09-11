@@ -25,9 +25,11 @@ Fechar um marco é evento notável, como o level up: aparece na lista curta do a
 sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 
 **O que a tela mostra.** A janela do Bestiário mora na coluna da direita, abaixo do analisador,
-com a mesma linguagem — cabeçalho que abre e fecha, minimizada por padrão. Cada monstro do
-catálogo tem uma linha: nome, abates, "próximo marco" (ou "—" depois do último) e "marcos n/5";
-a primeira linha do corpo é "Bônus de XP PvE: +n %", e minimizada o bônus fica no cabeçalho.
+com a mesma linguagem — cabeçalho que abre e fecha, aberta por padrão desde a FUN-115 (a barra
+do topo é quem a mostra e esconde). Cada monstro do catálogo tem uma linha: nome, abates,
+"próximo marco" (ou "—" depois do último) e "marcos n/5"; a primeira linha do corpo é "Bônus de
+XP PvE: +n %", e minimizada o bônus fica no cabeçalho. Num servidor sem monstros no catálogo a
+janela diz "Este servidor não tem Bestiário" em vez de uma lista vazia com "+0 %".
 Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre que um muda); os
 marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7). O cliente
 não conta nada — o que ele calcula é "que marco vem depois", e se divergisse do `sim` a conta
