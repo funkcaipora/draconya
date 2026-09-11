@@ -10,12 +10,12 @@ import {
   appearancesSchema,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
+  bestiarySchema, itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  Appearances, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression, Skill, Spell, Stamina,
-  Supply, Vocation,
+  Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression, Skill, Spell,
+  Stamina, Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 
@@ -34,6 +34,12 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /**
+   * Os marcos do Bestiário e o bônus por marco (§18, FUN-113). Opcional: sem ele o abate
+   * continua contado no personagem, só não há marco nem bônus — é o conteúdo de teste que
+   * não fala de progressão permanente. O conteúdo REAL o tem, e `load.test.ts` prende.
+   */
+  readonly bestiary?: Bestiary;
   /** Vocabulário e limites do bot (§13). Sem ele não há automação, que é o produto. */
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
@@ -78,6 +84,7 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly bestiary?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
   readonly supplies?: readonly unknown[];
@@ -132,6 +139,7 @@ export function buildContent(raw: RawContent): Content {
   }
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
+  const bestiary = parseAll('bestiary', raw.bestiary ?? [], bestiarySchema, problems).get('baseline');
   // Ausente é ERRO pela mesma razão dos outros dois: a stamina é o TETO DE SIMULAÇÃO do
   // projeto (ADR 0001), e um default em código faria o número que sustenta a projeção de
   // custo morar onde ninguém procura por ele.
@@ -335,6 +343,7 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...openOf('spell', spells),
     ...openOf('supply', supplies),
     ...openOf('skill', skills),
@@ -354,6 +363,7 @@ export function buildContent(raw: RawContent): Content {
     progression: progression as Progression,
     combat: combat as Combat,
     stamina: stamina as Stamina,
+    ...(bestiary === undefined ? {} : { bestiary }),
     maps,
     routes,
     openValues,

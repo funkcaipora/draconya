@@ -18,6 +18,14 @@ describe('loadContent', () => {
     expect(content.version).toMatch(/^[0-9a-f]{8}$/);
   });
 
+  it('carrega o Bestiário real: cinco marcos crescentes e +1 % por marco (FUN-113, §18)', () => {
+    // Opcional no `buildContent` (fixture), obrigatório no conteúdo de verdade: sem ele o
+    // abate conta e nunca vale nada. Mutação que mata: apagar `bestiary/` de `load.ts`.
+    const content = loadContent(DATA);
+    expect(content.bestiary?.milestones).toEqual([10_000, 25_000, 50_000, 100_000, 200_000]);
+    expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
+  });
+
   it('subpasta ausente é conjunto vazio, não erro', () => {
     // O conteúdo cresce por partes; a validação de referência cruzada pega o que faltar.
     const semMonstros = join(dirname(fileURLToPath(import.meta.url)), '..', 'data-parcial');

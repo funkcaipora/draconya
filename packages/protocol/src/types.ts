@@ -208,6 +208,14 @@ export const S2C_SCHEMAS = {
     notableEvents: z.array(NotableEvent),
   }),
   /**
+   * O Bestiário do personagem (§18, FUN-113): `id do monstro → abates`, o valor inteiro e
+   * atual — é um contador permanente, e a tela mostra o total, não um delta. Os marcos e o
+   * bônus por marco vêm no `catalogue`, porque são conteúdo fixado na sessão (invariante 7).
+   */
+  bestiary: z.object({
+    counts: z.record(z.string().min(1), z.number().int().nonnegative()),
+  }),
+  /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
    *
    * Tipado, e não uma frase num `system-message`, porque a TELA precisa da resposta: enquanto
@@ -276,6 +284,23 @@ export const S2C_SCHEMAS = {
        */
       outfitIds: z.array(z.number().int().positive()).default([]),
     })),
+    /**
+     * Os monstros que existem, para a tela do Bestiário (FUN-113) ter nome onde o contador
+     * tem id. Só id e nome: a arte de cada um chega pelo `creature-appear`, e o resto é
+     * balanceamento que o cliente não simula (invariante 4). `default([])`: nó anterior.
+     */
+    monsters: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+    })).default([]),
+    /**
+     * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
+     * sessão. Ausente: o servidor não tem Bestiário configurado, e a tela mostra só a contagem.
+     */
+    bestiary: z.object({
+      milestones: z.array(z.number().int().positive()),
+      xpBonusPercentPerMilestone: z.number().nonnegative(),
+    }).optional(),
     /**
      * O que a UI do bot pode oferecer (§13.3, FUN-89).
      *

@@ -1,0 +1,5 @@
+{
+  "id": "baseline",
+  "milestones": [10000, 25000, 50000, 100000, 200000],
+  "xpBonusPercentPerMilestone": 1
+}
