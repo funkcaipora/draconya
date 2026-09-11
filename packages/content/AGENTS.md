@@ -114,6 +114,14 @@ nascer com número, que é a ordem errada. Por isso o placeholder emite as três
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
 
+**`maps.<id>.wall` é UM id ou as quatro peças** (FUN-105): `{ vertical, horizontal, corner,
+pole }`, como o Tibia monta muro — o tile bloqueado não tem uma arte só, e a peça é escolhida
+pela vizinhança. A regra que escolhe é do CLIENTE (`world/walls.ts`); aqui moram os quatro ids,
+e o schema não normaliza: o arquivo diz o que o humano escreveu, e `wallSetOf(wall)` é quem
+transforma um número nas quatro iguais para quem desenha. `wallSetSchema` é `strictObject`,
+como item e monstro — uma quinta peça seria descartada em silêncio, no arquivo que existe para
+ninguém conferir arte à mão.
+
 ## Loot (FUN-63)
 
 A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e
@@ -180,8 +188,8 @@ entre arquivos resolvem.
 - **`lure` e `ringSwap` são configuração de PERSONAGEM, não conteúdo** (FUN-87). Os schemas
   moram aqui porque o vocabulário do bot mora aqui; os valores vêm do `bot_config` de quem
   configurou. Nenhum arquivo de `data/` os define, e nenhum deveria.
-- **`itemSchema` e `monsterSchema` são `strictObject`, e os outros não.** Zod DESCARTA chave
-  desconhecida em silêncio, e depois da FUN-94 é exatamente o que aconteceria com um
+- **`itemSchema`, `monsterSchema` e `wallSetSchema` são `strictObject`, e os outros não.** Zod
+  DESCARTA chave desconhecida em silêncio, e depois da FUN-94 é exatamente o que aconteceria com um
   `appearanceId` escrito no item por hábito: o arquivo pareceria certo, o número não iria a
   lugar nenhum, e o item apareceria com a arte de outro sem nada acusar. `load.test.ts` varre
   `data/` pela mesma coisa, porque a mensagem do schema não diz PARA ONDE o campo foi.

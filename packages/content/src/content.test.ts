@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildContent, computeVersion, ContentError, placeholderAppearances } from './content.js';
+import {
+  buildContent, computeVersion, ContentError, placeholderAppearances, wallSetOf,
+} from './content.js';
 import type { RawContent } from './content.js';
 
 const rat = {
@@ -461,6 +463,89 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     expect(() => buildContent(withCatalogue({
       appearances: tabela({ hits: { melee: 0 } }),
     }))).toThrow(ContentError);
+  });
+});
+
+describe('wall pieces by neighbourhood in the appearance table (FUN-105)', () => {
+  const map = { id: 'rat-cellars', z: 7, grid: ['####', '#..#', '#..#', '####'] };
+  const route = {
+    id: 'rat-cellars', mapId: 'rat-cellars',
+    tiles: [
+      { x: 1, y: 1, z: 7 }, { x: 2, y: 1, z: 7 }, { x: 2, y: 2, z: 7 }, { x: 1, y: 2, z: 7 },
+    ],
+  };
+  const pieces = { vertical: 1294, horizontal: 1295, corner: 1298, pole: 1296 };
+  // A tabela é EXPLÍCITA, como nos blocos da FUN-94 e da FUN-109: é do campo `wall` dela que
+  // este bloco fala, e o placeholder só escreve um número.
+  const tabela = (wall: unknown) => [{
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {},
+    maps: { 'rat-cellars': { floor: 355, wall } },
+  }];
+  const withWall = (wall: unknown): RawContent =>
+    base({ maps: [map], routes: [route], appearances: tabela(wall) });
+
+  it('wallSetOf turns ONE id into the four pieces, all the same', () => {
+    // É o que mantém um mapa com `wall: 1298` desenhando o que desenhava antes da FUN-105: a
+    // regra de vizinhança escolhe uma peça por tile, e as quatro apontam a mesma arte.
+    // Mutação que mata: `pole: wall` → `pole: 0` (ou qualquer uma das quatro).
+    expect(wallSetOf(1298)).toEqual({ vertical: 1298, horizontal: 1298, corner: 1298, pole: 1298 });
+  });
+
+  it('wallSetOf returns the four pieces as written, each in its own place', () => {
+    // Cada campo conferido por si: `toEqual` com o objeto inteiro deixaria passar uma troca
+    // de `vertical` por `horizontal` se a fixture tivesse os dois iguais — daí os quatro
+    // números serem diferentes.
+    // Mutação que mata: `return wall` → `return { ...wall, vertical: wall.horizontal }`.
+    const set = wallSetOf(pieces);
+    expect(set.vertical).toBe(1294);
+    expect(set.horizontal).toBe(1295);
+    expect(set.corner).toBe(1298);
+    expect(set.pole).toBe(1296);
+  });
+
+  it('the table accepts a single id OR the four pieces, and exposes what was written', () => {
+    // Sem normalizar: o arquivo diz o que o humano escreveu, e quem precisa das quatro chama
+    // `wallSetOf`. Um schema que normalizasse faria `computeVersion` de dois arquivos
+    // diferentes coincidir ou divergir por um detalhe de forma que ninguém decidiu.
+    // Mutação que mata: `wall: z.union([appearanceId, wallSetSchema])` → só `appearanceId`
+    // (a segunda expectativa) ou só `wallSetSchema` (a primeira).
+    expect(buildContent(withWall(1298)).appearances?.maps['rat-cellars']?.wall).toBe(1298);
+    expect(buildContent(withWall(pieces)).appearances?.maps['rat-cellars']?.wall).toEqual(pieces);
+  });
+
+  it('rejects a set with a piece missing: the rule needs all four, or it draws a hole', () => {
+    // `wallSetOf` não tem como inventar a peça que falta, e um `?? corner` em código seria a
+    // arte decidida onde ninguém procura por ela (invariante 6, ao contrário).
+    //
+    // As QUATRO, uma por vez: tirar só `pole` deixava `corner: appearanceId.optional()`
+    // passar, porque o schema é um campo por peça e cada campo erra sozinho.
+    // Mutação que mata: `corner: appearanceId` → `corner: appearanceId.optional()` (ou
+    // qualquer uma das outras três).
+    for (const piece of ['vertical', 'horizontal', 'corner', 'pole'] as const) {
+      const { [piece]: _missing, ...threePieces } = pieces;
+      expect(() => buildContent(withWall(threePieces)), `without ${piece}`)
+        .toThrow(/maps\.rat-cellars\.wall/);
+    }
+  });
+
+  it('a piece is an ID, never a path — invariant 6 holds for each of the four', () => {
+    // As QUATRO, uma por vez, pela mesma razão do teste acima: um caminho só em `vertical`
+    // deixava `horizontal` aceitar string sem ninguém notar.
+    // Mutação que mata: `horizontal: appearanceId` → `z.union([appearanceId, z.string()])`
+    // (ou qualquer uma das outras três).
+    for (const piece of ['vertical', 'horizontal', 'corner', 'pole'] as const) {
+      expect(() => buildContent(withWall({ ...pieces, [piece]: `walls/stone-${piece}.png` })),
+        `path in ${piece}`)
+        .toThrow(/maps\.rat-cellars\.wall/);
+    }
+  });
+
+  it('rejects a fifth piece: nobody draws it, and Zod would drop it in silence', () => {
+    // `strictObject`, como item e monstro. Uma chave `"diagonal"` descartada em silêncio é
+    // exatamente o defeito que a tabela existe para ninguém ter de conferir à mão.
+    // Mutação que mata: `z.strictObject` → `z.object` em `wallSetSchema`.
+    expect(() => buildContent(withWall({ ...pieces, diagonal: 1297 })))
+      .toThrow(/maps\.rat-cellars\.wall/);
   });
 });
 

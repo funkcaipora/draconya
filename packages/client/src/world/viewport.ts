@@ -20,7 +20,9 @@
 // pacote, pela mesma regra do resto: retângulo é a degradação, tela vazia não.
 
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { buildTilemap, isBlocked, type Tilemap } from '@draconya/content';
+import {
+  buildTilemap, isBlocked, wallSetOf, type Tilemap, type WallSet,
+} from '@draconya/content';
 import type { AssetPack } from '../assets/pack.js';
 import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
@@ -41,6 +43,7 @@ import {
 } from './keys.js';
 import { DEFAULT_OUTFIT_COLORS } from './outfit-colors.js';
 import { TextureBook } from './textures.js';
+import { wallPiece, wallsOf } from './walls.js';
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
@@ -95,7 +98,11 @@ interface EffectEntry {
 /** De que o mapa é feito, pela tabela de aparências (FUN-94, `appearances.maps`). */
 export interface MapTiles {
   readonly floor: number;
-  readonly wall: number;
+  /**
+   * UMA peça — a mesma em todo tile bloqueado — ou as quatro, escolhidas pela vizinhança
+   * (FUN-105). É o campo como está na tabela; `setMap` o normaliza com `wallSetOf`.
+   */
+  readonly wall: number | WallSet;
 }
 
 export interface ViewportOptions {
@@ -108,6 +115,14 @@ export interface ViewportOptions {
 export interface ViewportHandle {
   /** Troca o mapa desenhado, e diz de que ele é feito. */
   setMap(map: Tilemap | null, tiles?: MapTiles | null): void;
+  /**
+   * Troca o pacote de arte; `null` volta ao modo sem assets.
+   *
+   * Existe porque o Pixi sobe ANTES de a arte chegar (`shell/Viewport.tsx`, FUN-108): o
+   * catálogo leva o que a rede levar, e a tela não espera por ele. O caminho normal é UMA
+   * chamada, de `null` para o pacote, quando ele carrega.
+   */
+  setPack(pack: AssetPack | null): void;
   destroy(): void;
 }
 
@@ -125,7 +140,8 @@ export async function mountViewport(
   });
   parent.appendChild(app.canvas);
 
-  const pack = options.pack ?? null;
+  /** O pacote de agora. `let` porque ele pode chegar depois do Pixi (`setPack`). */
+  let pack = options.pack ?? null;
   const book = options.book ?? new TextureBook();
   const view = { widthTiles: VIEW_WIDTH, heightTiles: VIEW_HEIGHT };
 
@@ -139,6 +155,13 @@ export async function mountViewport(
 
   let map: Tilemap | null = null;
   let tiles: MapTiles | null = null;
+  /**
+   * As quatro peças da parede, resolvidas UMA vez no `setMap` (FUN-105): um id vira as quatro
+   * iguais, e o laço de pintura só indexa. Junto, o predicado de parede do mapa — `isBlocked`
+   * com fora-do-mapa valendo "não é parede", senão a borda inteira sai como canto.
+   */
+  let wallPieces: WallSet | null = null;
+  let walls: (x: number, y: number) => boolean = () => false;
   // Última janela desenhada. O terreno só é redesenhado quando ela muda — redesenhar a cada
   // quadro é o desperdício óbvio, e num mapa grande é o que come o orçamento de quadro.
   let painted = '';
@@ -188,11 +211,13 @@ export async function mountViewport(
    * Tibia não parecer azulejo.
    */
   function tileTexture(appearanceId: number, x: number, y: number): Texture | null | undefined {
-    if (pack === null) return null;
-    const pattern = pack.objectPattern(appearanceId);
+    // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
+    const art = pack;
+    if (art === null) return null;
+    const pattern = art.objectPattern(appearanceId);
     const cell = groundCell(x, y, pattern);
     return book.get(
-      groundKey(appearanceId, x, y, pattern), () => pack.object(appearanceId, cell.x, cell.y),
+      groundKey(appearanceId, x, y, pattern), () => art.object(appearanceId, cell.x, cell.y),
     );
   }
 
@@ -230,9 +255,12 @@ export async function mountViewport(
         if (outside) continue;
         const local = { x: (x - window.minX) * TILE, y: (y - window.minY) * TILE };
         const blocked = isBlocked(map, x, y);
-        const texture = tiles === null
+        // A parede é uma das quatro peças, pela vizinhança (FUN-105); o chão é o chão. As
+        // peças têm padrão de 2×1 e 1×2, e `tileTexture` já pede por célula do padrão — a
+        // chave continua sendo id + célula, e não há nada novo a repintar.
+        const texture = tiles === null || wallPieces === null
           ? null
-          : tileTexture(blocked ? tiles.wall : tiles.floor, x, y);
+          : tileTexture(blocked ? wallPieces[wallPiece(walls, x, y)] : tiles.floor, x, y);
         if (texture instanceof Texture) {
           let sprite = ground[used];
           if (sprite === undefined) {
@@ -261,10 +289,11 @@ export async function mountViewport(
 
   /** O quadro de uma criatura agora: direção, fase e parado/andando saem do passo dela. */
   function creatureTexture(creature: Creature, nowMs: number): Texture | null | undefined {
-    if (pack === null || creature.appearanceId <= 0) return null;
+    const art = pack;
+    if (art === null || creature.appearanceId <= 0) return null;
     const direction = facingOf(creature);
     const moving = creature.step !== null && walkFrame(creature, nowMs, 1).moving;
-    const frames = pack.framesOf(creature.appearanceId, moving);
+    const frames = art.framesOf(creature.appearanceId, moving);
     const { phase } = walkFrame(creature, nowMs, frames);
     // Toda criatura é pedida COM cores — as padrão, até o protocolo carregar as de cada uma.
     // O pacote devolve a base como está para quem não tem template (monstro), e a chave leva
@@ -272,7 +301,7 @@ export async function mountViewport(
     const colors = DEFAULT_OUTFIT_COLORS;
     const key = creatureKey(creature.appearanceId, direction, moving, phase, colors);
     return book.get(
-      key, () => pack.outfit(creature.appearanceId, direction, phase, moving, colors),
+      key, () => art.outfit(creature.appearanceId, direction, phase, moving, colors),
     );
   }
 
@@ -478,17 +507,20 @@ export async function mountViewport(
         entry = { sprite, phases };
         effectSprites.set(effect.id, entry);
         effects.addChild(sprite);
-        if (pack !== null) {
+        const art = pack;
+        if (art !== null) {
           const { effectId } = effect;
           for (const [p, key] of effectKeysOf(effectId, phases.length).entries()) {
-            book.get(key, () => pack.effect(effectId, p));
+            book.get(key, () => art.effect(effectId, p));
           }
         }
       }
       alive.add(effect.id);
-      const texture = pack === null
+      // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
+      const art = pack;
+      const texture = art === null
         ? null
-        : book.get(effectKey(effect.effectId, phase), () => pack.effect(effect.effectId, phase));
+        : book.get(effectKey(effect.effectId, phase), () => art.effect(effect.effectId, phase));
       entry.sprite.visible = texture !== undefined;
       if (texture === undefined) continue;
       placeOnTile(
@@ -527,10 +559,11 @@ export async function mountViewport(
       alive.add(missile.id);
       const dx = missile.to.x - missile.from.x;
       const dy = missile.to.y - missile.from.y;
-      const texture = pack === null
+      const art = pack;
+      const texture = art === null
         ? null
         : book.get(
-          missileKey(missile.missileId, dx, dy), () => pack.missile(missile.missileId, dx, dy),
+          missileKey(missile.missileId, dx, dy), () => art.missile(missile.missileId, dx, dy),
         );
       // A mesma regra do efeito: quadro em VOO é sprite invisível, não um quadrado branco
       // voando. Um projétil vive ~300 ms e o primeiro de cada folha chega depois disso — o
@@ -622,7 +655,24 @@ export async function mountViewport(
     setMap(next, nextTiles = null) {
       map = next;
       tiles = nextTiles;
+      wallPieces = nextTiles === null ? null : wallSetOf(nextTiles.wall);
+      walls = next === null ? () => false : wallsOf(next);
       painted = '';
+    },
+    setPack(next) {
+      pack = next;
+      // O terreno só repinta quando a chave muda, e a chave não sabe do pacote: sem isto, a
+      // arte chegava e o chão continuava em retângulo até a câmera andar um tile.
+      //
+      // **O livro NÃO precisa ser limpo, porque com `pack === null` ele nunca é consultado**:
+      // toda chamada a `book.get` está atrás de `pack === null`, então nada foi guardado
+      // enquanto não havia arte — não existe entrada "não existe" envenenada para o pacote
+      // que chega agora. (Limpar também não daria: `clear()` fecha o livro para sempre.)
+      painted = '';
+      // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
+      // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
+      for (const entry of effectSprites.values()) entry.sprite.destroy();
+      effectSprites.clear();
     },
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();
