@@ -233,91 +233,75 @@ function Category({ category, vocabulary, level }: {
   );
 }
 
-export function BotPanel() {
+/**
+ * A configuração do bot é uma SOBREPOSIÇÃO, e não uma janela de coluna: uma linha de regra
+ * tem condição, operador, valor e ação — não cabe numa janela de 300px, e espremer daria seis
+ * caixinhas ilegíveis. Abrir por cima resolve o desktop e É a resposta para o celular (§5.1):
+ * configurar o bot é o caso de uso móvel do jogo — o jogador ajusta e fecha, sem precisar de
+ * jogabilidade completa. Quem abre e fecha é a barra do topo (FUN-115); `onClose` é o botão
+ * de fechar daqui avisando a mesma coisa.
+ */
+export function BotPanel({ onClose }: { onClose: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
-  const [open, setOpen] = useState(false);
 
   if (catalogue === null) return null;
   const vocabulary = catalogue.bot;
   const advanced = level >= vocabulary.advancedFromLevel;
 
-  // **Sobreposição, e não coluna.** Uma linha de regra tem condição, operador, valor e ação —
-  // não cabe nos 200px do painel lateral, e espremer daria seis caixinhas ilegíveis. Abrir por
-  // cima resolve o desktop e É a resposta para o celular (§5.1): configurar o bot é o caso de
-  // uso móvel do jogo — o jogador ajusta e fecha, sem precisar de jogabilidade completa.
   return (
-    <section className="bot-panel" aria-label="bot">
-      <header className="analyzer-head">
-        <button
-          type="button"
-          className="analyzer-toggle"
-          aria-expanded={open}
-          onClick={() => { setOpen((value) => !value); }}
-        >
-          {open ? '▾' : '▸'} Bot
-        </button>
-        <span className="analyzer-summary">
-          {save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : ''}
-        </span>
-      </header>
+    <div className="bot-overlay" role="dialog" aria-label="configuração do bot">
+      <div className="bot-body">
+        <header className="bot-title">
+          <strong>Configuração do bot</strong>
+          <span className="analyzer-summary">
+            {save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : ''}
+          </span>
+          <button type="button" className="entry-quiet" onClick={onClose}>
+            fechar
+          </button>
+        </header>
+        {!advanced && (
+          // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
+          // que o jogador descubra montando uma configuração inteira e levando um não.
+          <p className="quiet">
+            {`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}
+          </p>
+        )}
 
-      {open && (
-        <div className="bot-overlay" role="dialog" aria-label="configuração do bot">
-        <div className="bot-body">
-          <header className="bot-title">
-            <strong>Configuração do bot</strong>
-            <button
-              type="button"
-              className="entry-quiet"
-              onClick={() => { setOpen(false); }}
-            >
-              fechar
-            </button>
-          </header>
-          {!advanced && (
-            // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
-            // que o jogador descubra montando uma configuração inteira e levando um não.
-            <p className="quiet">
-              {`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}
-            </p>
-          )}
+        {BOT_CATEGORIES.map((category) => (
+          <Category
+            key={category}
+            category={category}
+            vocabulary={vocabulary}
+            level={level}
+          />
+        ))}
 
-          {BOT_CATEGORIES.map((category) => (
-            <Category
-              key={category}
-              category={category}
-              vocabulary={vocabulary}
-              level={level}
-            />
-          ))}
-
-          <div className="bot-actions">
-            <button
-              type="button"
-              onClick={() => {
-                bot.set((state) => ({ ...state, save: 'pending', reason: null }));
-                // Intenção (invariante 4): o cliente manda a configuração, e quem decide se
-                // ela vale é o servidor. A resposta vem em `bot-config-result`.
-                if (!sendIntent({ type: 'bot-config', config: toConfig(bot.get().draft) })) {
-                  bot.set((state) => ({
-                    ...state, save: 'refused', reason: 'Sem conexão. Tente de novo.',
-                  }));
-                }
-              }}
-            >
-              Salvar
-            </button>
-          </div>
-
-          {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
-              "corrija isto" — apagar justamente o que precisa ser corrigido. */}
-          {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+        <div className="bot-actions">
+          <button
+            type="button"
+            onClick={() => {
+              bot.set((state) => ({ ...state, save: 'pending', reason: null }));
+              // Intenção (invariante 4): o cliente manda a configuração, e quem decide se
+              // ela vale é o servidor. A resposta vem em `bot-config-result`.
+              if (!sendIntent({ type: 'bot-config', config: toConfig(bot.get().draft) })) {
+                bot.set((state) => ({
+                  ...state, save: 'refused', reason: 'Sem conexão. Tente de novo.',
+                }));
+              }
+            }}
+          >
+            Salvar
+          </button>
         </div>
-        </div>
-      )}
-    </section>
+
+        {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
+            "corrija isto" — apagar justamente o que precisa ser corrigido. */}
+        {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+      </div>
+    </div>
   );
 }

@@ -137,7 +137,7 @@ export function Analyzer() {
   // **Minimizada por padrão** (§16.1): a janela existe durante a hunt inteira, e uma hunt idle
   // não precisa dela aberta ocupando a tela. Ao encerrar, ela abre sozinha — aí o extrato é a
   // notícia, e escondê-lo seria a sessão sumir em silêncio.
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   useEffect(() => {
     if (analyzer.ended) setOpen(true);
   }, [analyzer.ended]);

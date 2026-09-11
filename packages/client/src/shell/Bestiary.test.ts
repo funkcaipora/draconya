@@ -103,19 +103,21 @@ describe('a janela do Bestiário (FUN-113)', () => {
     expect(await render(createElement(Bestiary))).toBe('');
   });
 
-  it('nasce minimizada, com o bônus no cabeçalho', async () => {
-    // Progressão de meses, não de minutos: o que muda em ritmo de hunt é o bônus, e ele cabe
-    // na linha do cabeçalho.
+  it('nasce aberta, com o bônus na primeira linha do corpo (FUN-115)', async () => {
+    // Quem decide se a janela EXISTE é a barra do topo; uma janela que abre minimizada é uma
+    // janela que abre vazia. Aberta, o bônus é a primeira linha do corpo e o cabeçalho não o
+    // repete — dizer o mesmo número duas vezes na mesma janela.
     hud.set((state) => ({ ...state, catalogue: catalogue(), bestiary: { rat: 25_000 } }));
     const html = await render(createElement(Bestiary));
 
     expect(html).toContain('Bestiário');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain('+2 % XP');
-    expect(html).not.toContain('próximo marco');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('Bônus de XP PvE: +2 %');
+    expect(html).not.toContain('+2 % XP');
+    expect(html).toContain('próximo marco');
   });
 
-  it('antes do primeiro `bestiary` a contagem vale ZERO: com marcos, o cabeçalho diz +0 %', async () => {
+  it('antes do primeiro `bestiary` a contagem vale ZERO: com marcos, o bônus diz +0 %', async () => {
     // O attach ainda está em voo e o mapa não chegou: a tela não pode inventar contagem, mas
     // também não pode sumir com o bônus — e zero é a resposta certa para os dois. Mutação
     // que mata: `bonus` virar `null` sempre que `counts` for `null`.
@@ -123,16 +125,16 @@ describe('a janela do Bestiário (FUN-113)', () => {
     const html = await render(createElement(Bestiary));
 
     expect(html).toContain('Bestiário');
-    expect(html).toContain('+0 % XP');
+    expect(html).toContain('Bônus de XP PvE: +0 %');
   });
 
-  it('sem marcos no catálogo o cabeçalho fica sem bônus — não há o que calcular', async () => {
+  it('sem marcos no catálogo a janela fica sem bônus — não há o que calcular', async () => {
     // A chave AUSENTE, como `apply.ts` a deixa quando o servidor não mandou.
     const { bestiary: _absent, ...withoutMilestones } = catalogue();
     hud.set((state) => ({ ...state, catalogue: withoutMilestones as Catalogue }));
     const html = await render(createElement(Bestiary));
 
     expect(html).toContain('Bestiário');
-    expect(html).not.toContain('% XP');
+    expect(html).not.toContain('Bônus');
   });
 });

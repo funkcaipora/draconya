@@ -55,7 +55,7 @@ function Hunt({ hunt, level }: { hunt: HuntListing; level: number }) {
 export function HuntMenu() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   // Quem está numa hunt vê "sair"; quem está na cidade vê a lista. O `sessionType` do
   // analisador é o que o servidor disse por último — o cliente não adivinha onde está.

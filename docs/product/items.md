@@ -205,10 +205,12 @@ Vazio por enquanto. É aqui que vai o que foi construído diferente do especific
 
 ## A tela (FUN-90)
 
-Mochila, nove lugares de equipamento e a capacidade, no painel da direita. **A geografia é fixa**
+Mochila, nove lugares de equipamento e a capacidade, numa janela à direita. **A geografia é fixa**
 (§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda, chat embaixo — nos
 mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao trocar de atividade; em
-PvP manual, procurar onde a poção foi parar é o que custa a luta.
+PvP manual, procurar onde a poção foi parar é o que custa a luta. Desde a FUN-115 o mundo ocupa a
+tela inteira e as janelas flutuam por cima, abertas e fechadas pela barra do topo — a geografia
+do Huntera.
 
 **Nada é calculado no cliente.** Peso, capacidade e o que cabe vêm do servidor: quem sabe o que
 cabe é quem recusa, e a mesma conta em dois lugares diverge no primeiro item com peso

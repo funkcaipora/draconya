@@ -35,50 +35,127 @@
 
 body {
   margin: 0;
-  background: #0b0b0f;
+  background: #000;
   color: var(--text);
-  font: 13px/1.4 system-ui, sans-serif;
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow: hidden;
 }
 
+/* A geografia do Huntera (FUN-115): o mundo ocupa a tela INTEIRA, e o que não é mundo flutua
+   por cima. Nada de colunas: cada janela é absoluta, o canvas fica embaixo de tudo. */
 .shell {
-  display: grid;
-  grid-template-columns: 212px 1fr 212px;
-  grid-template-rows: 1fr auto;
-  gap: 8px;
-  min-height: 100vh;
-  padding: 8px;
+  position: fixed; inset: 0;
+  overflow: hidden;
+  --window-bg: rgba(13, 15, 24, 0.9);
+  --window-line: rgba(140, 150, 180, 0.28);
+  --window-head: rgba(24, 28, 42, 0.95);
+  --accent: #e2b84a;
+  --topbar-h: 46px;
+}
+
+/* O mundo: o canvas acompanha o elemento, e o elemento é a tela. */
+.viewport { position: absolute; inset: 0; line-height: 0; overflow: hidden; background: #000; }
+.viewport canvas { display: block; }
+
+/* ---- A barra do topo -------------------------------------------------------------------- */
+.topbar {
+  position: absolute; top: 0; left: 0; right: 0; height: var(--topbar-h);
+  display: flex; align-items: center; gap: 14px; padding: 0 12px;
   box-sizing: border-box;
+  background: linear-gradient(rgba(10, 12, 20, 0.96), rgba(10, 12, 20, 0.86));
+  border-bottom: 1px solid var(--window-line);
+  z-index: 20;
+}
+.topbar-identity { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.topbar-name {
+  font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 180px;
+}
+.topbar-level { font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
+.topbar-gold {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(226, 184, 74, 0.35);
+  color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.topbar-coin {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffe08a, #b8860b 70%, #7a5a08);
+}
+.topbar-nav { display: flex; gap: 4px; margin-left: auto; }
+.topbar-button {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 56px; padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; border-radius: 6px;
+  color: var(--text-muted); font: inherit; font-size: 10px; cursor: pointer;
+}
+.topbar-button:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.topbar-button-open { border-color: rgba(226, 184, 74, 0.5); color: #fff; }
+.topbar-icon { font-size: 15px; line-height: 1; }
+
+/* ---- As janelas -------------------------------------------------------------------------- */
+.windows {
+  position: absolute; top: calc(var(--topbar-h) + 10px); bottom: 10px;
+  display: flex; flex-direction: column; gap: 10px; width: 300px;
+  pointer-events: none; z-index: 10;
+}
+/* A coluna da esquerda para acima do chat; a da direita vai até embaixo. */
+.windows-left { left: 10px; bottom: 190px; }
+.windows-right { right: 10px; }
+.windows > section {
+  pointer-events: auto;
+  background: var(--window-bg);
+  border: 1px solid var(--window-line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  overflow: hidden auto;
+  max-height: 100%;
+  display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0;
+}
+/* O cabeçalho de cada seção é a barra de título da janela. */
+.windows > section > header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 10px;
+  background: var(--window-head);
+  border-bottom: 1px solid var(--window-line);
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: #fff;
+  position: sticky; top: 0;
+}
+.windows > section > *:not(header) { padding-left: 10px; padding-right: 10px; }
+.windows > section > *:last-child:not(header) { padding-bottom: 8px; }
+.windows > section > .quiet { color: var(--text-faint); margin: 8px 10px; }
+
+/* O chat: janela fixa no canto inferior esquerdo, como no Huntera. */
+.chat {
+  position: absolute; left: 10px; bottom: 10px; width: 340px; max-height: 170px;
+  overflow-y: auto; padding: 8px 10px; box-sizing: border-box; z-index: 10;
+  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px);
+  font-size: 12px;
 }
 
-/* As colunas laterais: pedra escura atrás das janelas, como a barra lateral do Tibia. */
-.panel {
-  background: #0e0e13 var(--ui-background-dark, none) repeat;
-  min-height: 120px;
-  padding: 4px;
+/* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
+   embaixo, roláveis. Duas colunas flutuantes de 300px não cabem em 375px, e o caso de uso
+   móvel é configurar o bot e ler o extrato — não jogar de olho no mundo. */
+@media (max-width: 720px) {
+  body { overflow: auto; }
+  .shell { position: static; height: auto; overflow: visible; }
+  .viewport { position: relative; height: 40vh; }
+  .topbar {
+    position: sticky; height: auto; flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px;
+  }
+  .topbar-name { max-width: 120px; }
+  .bar { width: 96px; }
+  .bar-hp .bar-fill, .bar-mana .bar-fill { background-size: 96px 18px; }
+  .topbar-nav { margin-left: 0; width: 100%; justify-content: space-between; }
+  .topbar-button { min-width: 0; flex: 1 1 0; }
+  .windows, .windows-left, .windows-right {
+    position: static; width: auto; margin: 10px 10px 0; pointer-events: auto;
+  }
+  .windows > section { max-height: none; overflow: visible; }
+  .chat { position: static; width: auto; margin: 10px; }
 }
-
-/* Uma JANELA: pedra em azulejo e a moldura de 3 px do pacote. Sem pacote, cor lisa e borda
-   sólida — o `border-image-source: none` deixa o `border` comum aparecer. Sem `border-radius`:
-   `border-image` não arredonda, e o fallback segue a mesma forma para não mudar de silhueta
-   quando a arte chega. */
-.hunt-menu, .bot-panel, .inventory, .analyzer, .bestiary, .chat, .vitals, .bot-body, .viewport {
-  background: var(--window-fallback) var(--ui-background, none) repeat;
-  border: 3px solid var(--frame-fallback);
-  border-image-source: var(--ui-frame, none);
-  border-image-slice: 3;
-  border-image-width: 3px;
-  border-image-repeat: repeat;
-  border-radius: 0;
-}
-
-.stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.stage-top {
-  display: flex; justify-content: space-between; align-items: center;
-  width: 100%; max-width: 582px;
-}
-.character { color: var(--text-muted); }
-
-.viewport { line-height: 0; overflow: hidden; }
 
 .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
 .badge-connected { color: #6fc28a; border-color: #2f5a3c; }
@@ -90,9 +167,9 @@ body {
    fração e a imagem no tamanho da barra inteira, ancorada à esquerda — a barra cheia cortada
    na fração, ponta esquerda fica, direita some. Com pacote o `var()` resolve para a imagem;
    sem, para a cor lisa: é a MESMA declaração `background`, trocando só o primeiro valor. */
-.vitals { display: flex; gap: 12px; padding: 5px 10px; }
+.vitals { display: flex; gap: 8px; }
 .bar {
-  position: relative; width: 188px; height: 22px; overflow: hidden; border-radius: 4px;
+  position: relative; width: 150px; height: 18px; overflow: hidden; border-radius: 4px;
   background: var(--ui-bar-track, #23232c) no-repeat 0 0 / 100% 100%;
   image-rendering: pixelated;
 }
@@ -101,8 +178,8 @@ body {
   transition: width 120ms linear;
   image-rendering: pixelated;
 }
-.bar-hp .bar-fill { background: var(--ui-hp-bar, #c25b4a) no-repeat 0 0 / 188px 22px; }
-.bar-mana .bar-fill { background: var(--ui-mana-bar, #4a7fc2) no-repeat 0 0 / 188px 22px; }
+.bar-hp .bar-fill { background: var(--ui-hp-bar, #c25b4a) no-repeat 0 0 / 150px 18px; }
+.bar-mana .bar-fill { background: var(--ui-mana-bar, #4a7fc2) no-repeat 0 0 / 150px 18px; }
 .bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
   font-size: 12px; font-weight: 600; color: #fff; line-height: 1;
@@ -111,10 +188,7 @@ body {
   text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
 }
 
-.chat {
-  grid-column: 1 / 2; grid-row: 2;
-  padding: 6px 8px; min-height: 96px; max-height: 160px; overflow-y: auto;
-}
+
 .chat p { margin: 0 0 2px; }
 .chat .quiet { color: var(--text-faint); }
 .system-warning { color: #e0c25a; }
@@ -131,7 +205,7 @@ body {
   color: inherit; font: inherit; cursor: pointer;
 }
 .analyzer-summary { color: var(--text-muted); }
-.analyzer-body { padding: 0 6px 6px; }
+.analyzer-body { padding: 4px 0 0; }
 .analyzer-row { display: flex; gap: 8px; align-items: baseline; }
 /* O rótulo QUEBRA em vez de ser cortado. Reticências escondem informação — "Maior ma…" e
    "Te…" não dizem nada —, e num painel estreito duas linhas custam menos que isso. */
@@ -206,7 +280,7 @@ body {
 }
 
 /* A seleção de hunt (FUN-79). Mesma linguagem do analisador: cabeçalho que abre e fecha. */
-.hunt-list { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 6px; }
+.hunt-list { list-style: none; margin: 0; padding: 4px 0 0; display: grid; gap: 6px; }
 .hunt { border-top: 1px solid var(--separator); padding-top: 6px; }
 .hunt-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .hunt-warn { color: #e0c25a; }
@@ -214,19 +288,21 @@ body {
 .hunt-difficulties button { padding: 2px 6px; }
 
 /* A configuração do bot (FUN-89). Densa de propósito: são cinco categorias na mesma coluna. */
-.panel-left { display: flex; flex-direction: column; gap: 8px; }
 /* Sobreposição: a linha de regra não cabe nos 200px da coluna, e configurar o bot é o caso de
    uso do celular (§5.1). Uma tela só serve aos dois. */
 .bot-overlay {
-  position: fixed; inset: 0; z-index: 10;
+  position: fixed; inset: 0; z-index: 30;
   background: rgba(6, 6, 10, 0.86);
   display: grid; place-items: start center; padding: 16px; overflow-y: auto;
 }
 .bot-body {
   width: 100%; max-width: 520px; box-sizing: border-box;
   padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-.bot-title { display: flex; justify-content: space-between; align-items: baseline; }
+.bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bot-title strong { flex: 1 1 auto; }
 .bot-category-head { display: flex; justify-content: space-between; align-items: baseline; }
 .bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
 .bot-rule { display: flex; align-items: center; gap: 2px; }
@@ -254,8 +330,8 @@ body {
 /* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: o quadrado de pedra do
    pacote (34×34, o topo de `containerslot.png`), o ícone cinza do lugar quando vazio, o sprite
    do item quando cheio. Sem pacote: quadrado de cor lisa, sem ícone, com a inicial do nome. */
-.panel-right { display: flex; flex-direction: column; gap: 8px; }
-.inventory { padding: 6px 4px; display: flex; flex-direction: column; gap: 6px; }
+.inventory { display: flex; flex-direction: column; gap: 6px; }
+.inventory > .equipment { margin-top: 6px; }
 .inventory .quiet { color: var(--text-faint); }
 
 /* O equipamento no desenho de corpo do Tibia: cabeça em cima, mãos ao lado do peito, pés

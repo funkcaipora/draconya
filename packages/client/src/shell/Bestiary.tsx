@@ -54,9 +54,9 @@ function Monster({ monster, kills, config }: {
 }
 
 /**
- * O corpo da janela, com o que a tela recebe já resolvido. Exportado à parte porque a janela
- * nasce minimizada e um teste sem DOM não clica: o que vale provar — o rato com a contagem e
- * o próximo marco — é isto.
+ * O corpo da janela, com o que a tela recebe já resolvido. Exportado à parte porque um teste
+ * sem DOM não clica o cabeçalho: o que vale provar — o rato com a contagem e o próximo
+ * marco — é isto.
  */
 export function BestiaryBody({ monsters, counts, config }: {
   monsters: readonly MonsterListing[]; counts: BestiaryCounts; config: BestiaryConfig | null;
@@ -91,7 +91,7 @@ export function BestiaryBody({ monsters, counts, config }: {
 export function Bestiary() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const counts = useHudSlice((state) => state.bestiary);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   // Sem catálogo não há o que listar. Sem MONSTRO no catálogo também não: é um nó anterior à
   // FUN-113, que nunca manda `bestiary` — e um painel com "Bônus +0 %" e lista vazia afirma

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { cameraOrigin, compareDrawOrder, toScreen, visibleTiles, TILE } from './camera.js';
+import {
+  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor, TILE,
+} from './camera.js';
 
 const view = { widthTiles: 18, heightTiles: 14 };
 const at = (x: number, y: number) => ({ x, y, z: 7 });
@@ -32,5 +34,36 @@ describe('camera', () => {
       { x: 5, y: 3 }, { x: 1, y: 3 }, { x: 9, y: 1 },
     ].sort(compareDrawOrder);
     expect(creatures).toEqual([{ x: 9, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
+  });
+});
+
+describe('o mundo na tela inteira (FUN-115)', () => {
+  it('o zoom é inteiro, e sobe com a altura da tela: 1, 2 e 3', () => {
+    // Pixel art a 1,5× borra; o Huntera desenha o tile a 64 px numa tela comum.
+    // Mutação que mata: devolver `height / 448` sem arredondar, ou 2 sempre.
+    expect(zoomFor(800, 500)).toBe(1);
+    expect(zoomFor(1024, 560)).toBe(2);
+    expect(zoomFor(1440, 900)).toBe(2);
+    expect(zoomFor(2560, 1440)).toBe(3);
+    // É o lado MENOR que decide: uma tela larga e baixa não ganha zoom pela largura.
+    expect(zoomFor(3000, 500)).toBe(1);
+  });
+
+  it('a vista é o que cabe na tela, fracionária, com teto no raio de interesse', () => {
+    expect(viewFor(1024, 768, 2)).toEqual({ widthTiles: 16, heightTiles: 12 });
+    expect(viewFor(1000, 700, 2).widthTiles).toBeCloseTo(15.625);
+    // 4K a 3×: 4096/96 = 42 tiles caberiam, mas só chegam criaturas em 18×14.
+    expect(viewFor(4096, 2160, 3)).toEqual({ widthTiles: VIEW_WIDTH, heightTiles: VIEW_HEIGHT });
+  });
+
+  it('com a vista fracionária a câmera continua centrada no alvo', () => {
+    const view = viewFor(1000, 700, 2);
+    const origin = cameraOrigin({ x: 10, y: 10, z: 7 }, view);
+    // O alvo fica no meio do canvas: metade da largura em tiles para cada lado.
+    expect(10 - origin.x).toBeCloseTo((view.widthTiles - 1) / 2);
+    // E o CENTRO do tile do alvo cai no centro do canvas, em pixels de tela (zoom 2).
+    const screen = toScreen({ x: 10, y: 10 }, { x: 10, y: 10, z: 7 }, view);
+    expect((screen.x + TILE / 2) * 2).toBeCloseTo(1000 / 2);
+    expect((screen.y + TILE / 2) * 2).toBeCloseTo(700 / 2);
   });
 });
