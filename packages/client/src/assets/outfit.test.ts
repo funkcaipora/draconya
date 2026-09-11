@@ -138,21 +138,32 @@ describe('colorize (FUN-20)', () => {
 });
 
 describe('outfitKey (FUN-20)', () => {
-  it('distingue por outfit, por CADA cor, por direção e por fase', () => {
+  it('distingue por outfit, por CADA cor, por grupo, por direção e por fase', () => {
     // A issue pedia chave por `(outfitId, cores)` — mas um bitmap é de UM quadro. Sem direção
     // e fase na chave, o personagem andaria sempre com o mesmo desenho, olhando para o norte.
+    // Mutação que mata: tirar qualquer um dos campos do template de `outfitKey`.
     const base = { head: 1, body: 2, legs: 3, feet: 4 };
     const chaves = new Set([
-      outfitKey(1, base, 0, 0),
-      outfitKey(2, base, 0, 0),
-      outfitKey(1, { ...base, head: 9 }, 0, 0),
-      outfitKey(1, { ...base, body: 9 }, 0, 0),
-      outfitKey(1, { ...base, legs: 9 }, 0, 0),
-      outfitKey(1, { ...base, feet: 9 }, 0, 0),
-      outfitKey(1, base, 1, 0),
-      outfitKey(1, base, 0, 1),
+      outfitKey(1, base, 0, 0, 0),
+      outfitKey(2, base, 0, 0, 0),
+      outfitKey(1, { ...base, head: 9 }, 0, 0, 0),
+      outfitKey(1, { ...base, body: 9 }, 0, 0, 0),
+      outfitKey(1, { ...base, legs: 9 }, 0, 0, 0),
+      outfitKey(1, { ...base, feet: 9 }, 0, 0, 0),
+      outfitKey(1, base, 1, 0, 0),
+      outfitKey(1, base, 0, 1, 0),
+      outfitKey(1, base, 0, 0, 1),
     ]);
-    expect(chaves.size).toBe(8);
+    expect(chaves.size).toBe(9);
+  });
+
+  it('o grupo é um campo PRÓPRIO, não uma soma com a fase', () => {
+    // Parado (grupo 0) e andando (grupo 1) têm fase 0 cada um. Codificar o grupo somando-o à
+    // fase — `phase + group` — faria "andando fase 0" colidir com "parado fase 1", e a fase
+    // 0 do passo receberia o quadro parado: o personagem congela no começo de cada passo.
+    // Mutação que mata: `${group + phase}` no lugar de `${group}:${phase}`.
+    const base = { head: 1, body: 2, legs: 3, feet: 4 };
+    expect(outfitKey(1, base, 1, 0, 0)).not.toBe(outfitKey(1, base, 0, 0, 1));
   });
 });
 
@@ -182,31 +193,31 @@ describe('OutfitComposer (FUN-20)', () => {
     // de composições por segundo, todas idênticas.
     return (async () => {
       const { composer, created } = build();
-      await composer.get(1, colors, 0, 0);
-      await composer.get(1, colors, 0, 0);
+      await composer.get(1, colors, 0, 0, 0);
+      await composer.get(1, colors, 0, 0, 0);
       expect(created).toHaveLength(1);
     })();
   });
 
   it('dez pedidos SIMULTÂNEOS da mesma combinação compõem uma vez', async () => {
     const { composer, created } = build();
-    await Promise.all(Array.from({ length: 10 }, async () => composer.get(1, colors, 0, 0)));
+    await Promise.all(Array.from({ length: 10 }, async () => composer.get(1, colors, 0, 0, 0)));
     expect(created).toHaveLength(1);
   });
 
   it('cor diferente é composição diferente', async () => {
     const { composer, created } = build();
-    await composer.get(1, colors, 0, 0);
-    await composer.get(1, { ...colors, head: 99 }, 0, 0);
+    await composer.get(1, colors, 0, 0, 0);
+    await composer.get(1, { ...colors, head: 99 }, 0, 0, 0);
     expect(created).toHaveLength(2);
   });
 
   it('despeja por bytes e FECHA o despejado', async () => {
     let clock = 0;
     const { composer, created } = build({ maxBytes: spriteBytes(2, 2) * 2, now: () => clock });
-    clock = 1; await composer.get(1, colors, 0, 0);
-    clock = 2; await composer.get(1, colors, 1, 0);
-    clock = 3; await composer.get(1, colors, 2, 0);
+    clock = 1; await composer.get(1, colors, 0, 0, 0);
+    clock = 2; await composer.get(1, colors, 0, 1, 0);
+    clock = 3; await composer.get(1, colors, 0, 2, 0);
     expect(created[0]?.closed).toBe(true);
     expect(composer.bytes).toBe(spriteBytes(2, 2) * 2);
   });
@@ -216,15 +227,53 @@ describe('OutfitComposer (FUN-20)', () => {
       maxBytes: 1_000, layersOf: async () => null,
       createBitmap: async () => new FakeBitmap(1, 1),
     });
-    expect(await composer.get(1, colors, 0, 0)).toBeNull();
+    expect(await composer.get(1, colors, 0, 0, 0)).toBeNull();
   });
 
   it('clear() fecha tudo', async () => {
     const { composer, created } = build();
-    await composer.get(1, colors, 0, 0);
+    await composer.get(1, colors, 0, 0, 0);
     composer.clear();
     expect(created[0]?.closed).toBe(true);
     expect(composer.bytes).toBe(0);
+  });
+
+  it('parado fase 0 e andando fase 0 são composições DIFERENTES', async () => {
+    // Os dois grupos têm uma fase 0, e a mesma direção e as mesmas cores. Sem o grupo na
+    // chave, o segundo pedido recebe o bitmap do primeiro — e ninguém vê erro, só um
+    // personagem que congela no primeiro quadro de cada passo.
+    // Mutação que mata: `outfitKey` ignorar `group`.
+    const { composer, created, layersOf } = build();
+    const parado = await composer.get(1, colors, 0, 0, 0);
+    const andando = await composer.get(1, colors, 1, 0, 0);
+    expect(parado).not.toBe(andando);
+    expect(created).toHaveLength(2);
+    expect(layersOf).toHaveBeenLastCalledWith(1, 1, 0, 0);
+    // Direção e fase DIFERENTES entre si: com os dois iguais, trocar um pelo outro na
+    // chamada de `layersOf` passaria. Mutação que mata: `layersOf(outfitId, group, phase,
+    // direction)`.
+    await composer.get(1, colors, 1, 2, 1);
+    expect(layersOf).toHaveBeenLastCalledWith(1, 1, 2, 1);
+  });
+
+  it('avisa por onEvict ANTES de fechar o composto despejado', async () => {
+    // O viewport constrói `Texture` sobre o bitmap composto exatamente como sobre um quadro
+    // da folha, e precisa do mesmo aviso — com o bitmap ainda vivo.
+    // Mutação que mata: não repassar `onEvict` ao `BitmapBudget` do compositor.
+    const avisos: Array<{ key: string; closedAtNotice: boolean }> = [];
+    let clock = 0;
+    const composer = new OutfitComposer({
+      maxBytes: spriteBytes(2, 2),
+      layersOf: async () => layers(),
+      createBitmap: async (_p, w, h) => new FakeBitmap(w, h),
+      now: () => clock,
+      onEvict: (key, sprite) => {
+        avisos.push({ key, closedAtNotice: (sprite as FakeBitmap).closed });
+      },
+    });
+    clock = 1; await composer.get(1, colors, 0, 0, 0);
+    clock = 2; await composer.get(1, colors, 0, 1, 0);
+    expect(avisos).toEqual([{ key: outfitKey(1, colors, 0, 0, 0), closedAtNotice: false }]);
   });
 });
 

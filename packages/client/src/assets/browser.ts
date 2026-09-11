@@ -51,5 +51,8 @@ export async function loadBrowserPack(
     ...(store === undefined ? {} : { store }),
     ...(onEvict === undefined ? {} : { onEvict }),
   });
-  return { pack, close: () => { loader.close(); } };
+  // Fechar é fechar os DOIS orçamentos de bitmap (quadros e composições) e o worker. Sem o
+  // `clear()`, cada desmonte do viewport deixava até 80 MB de `ImageBitmap` vivos — e o
+  // `onEvict` que ele dispara é o que avisa o `TextureBook` para destruir as texturas junto.
+  return { pack, close: () => { pack.clear(); loader.close(); } };
 }
