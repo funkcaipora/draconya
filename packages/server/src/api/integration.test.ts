@@ -385,11 +385,13 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     // estar ocupado por quem chegou antes, e o personagem entra no livre mais próximo. Achar
     // a PRÓPRIA criatura pelo `self.creatureId` é o que mantém este teste falando do
     // personagem deste teste, e não de quem mais estiver na praça.
-    const before = receive(socket);
+    // `awaitMessage`, e não "o próximo quadro": o catálogo e o inventário do `attach` chegam
+    // pela fila, num quadro que pode cair entre o `welcome` e o `session-state` — era a corrida
+    // que a FUN-102 registrou como "não é timeout" (falhava em 150 ms, sob carga).
     socket.send(encodeC2S({ type: 'session-attach' }));
     // A posição vai em `world.creatures`, nunca em `self`: o cliente não decide onde está.
-    const initial = decodeS2C(await before)?.find((m) => m.type === 'session-state');
-    if (initial?.type !== 'session-state') throw new Error('não veio session-state');
+    const initial = await awaitMessage(socket, 'session-state');
+    if (initial.type !== 'session-state') throw new Error('não veio session-state');
     const mine = initial.world.creatures.find((c) => c.id === initial.self.creatureId);
     if (mine === undefined) throw new Error('o personagem não está no próprio session-state');
     expect(mine.position.z).toBe(7);
@@ -399,16 +401,14 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
 
     // INTENÇÃO: uma direção. Quem resolve o tile é o servidor (invariante 4).
     const from = mine.position;
-    const moved = receive(socket);
     socket.send(encodeC2S({ type: 'walk', direction: 'east' }));
-    expect(decodeS2C(await moved)).toContainEqual(expect.objectContaining({
+    expect(await awaitMessage(socket, 'creature-move')).toEqual(expect.objectContaining({
       type: 'creature-move', from, to: { ...from, x: from.x + 1 },
     }));
 
-    const after = receive(socket);
     socket.send(encodeC2S({ type: 'session-attach' }));
-    const state = decodeS2C(await after)?.find((m) => m.type === 'session-state');
-    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const state = await awaitMessage(socket, 'session-state');
+    if (state.type !== 'session-state') throw new Error('não veio session-state');
     expect(state.world.creatures.find((c) => c.id === state.self.creatureId)?.position)
       .toEqual({ ...from, x: from.x + 1 });
   });
@@ -424,9 +424,8 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     socket.binaryType = 'arraybuffer';
     await receive(socket);                                            // welcome
 
-    const echoed = receive(socket);
     socket.send(encodeC2S({ type: 'say', channel: 'local', text: 'olá, sessão' }));
-    expect(decodeS2C(await echoed)).toContainEqual({
+    expect(await awaitMessage(socket, 'chat-message')).toEqual({
       type: 'chat-message', channel: 'local', author: 'Chatter', text: 'olá, sessão',
     });
   });
