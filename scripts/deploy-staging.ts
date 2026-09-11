@@ -44,11 +44,20 @@ export async function deployStaging(
     throw new Error('POSTGRES_PASSWORD must contain at least 32 hexadecimal characters.');
   }
 
+  // Três tentativas para falha de REDE (fetch que lança: DNS, TCP, timeout de 30 s), com uma
+  // pausa entre elas. O Coolify em staging derrubou o primeiro `deploy` de dois merges seguidos
+  // com "failed or timed out" e aceitou o rerun manual um minuto depois — o Traefik do host
+  // fecha a conexão enquanto reinicia um contêiner. Resposta HTTP, mesmo 5xx, NÃO é retentada:
+  // um PATCH de segredos que chegou não deve ser mandado de novo às cegas.
   const request = async (url: string, init: RequestInit = {}): Promise<Response> => {
-    try {
-      return await dependencies.fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
-    } catch {
-      throw new Error('Deployment request failed or timed out.');
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await dependencies.fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+      } catch {
+        if (attempt >= 3) throw new Error('Deployment request failed or timed out.');
+        console.log(`Request to ${new URL(url).host} failed (attempt ${attempt}); retrying.`);
+        await dependencies.sleep(10_000);
+      }
     }
   };
   const api = async (path: string, method = 'GET', body?: unknown): Promise<Record<string, unknown>> => {
