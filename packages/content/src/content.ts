@@ -45,9 +45,10 @@ export interface Content {
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
-   * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23): o `game` lê o
-   * outfit padrão do jogador, e o cliente lê chão e parede por mapa. Monstro e item NÃO se
-   * consultam por aqui — eles já saem resolvidos em `monsters` e `items`.
+   * A tabela de aparências (FUN-94), agora com quem a use (FUN-103, FUN-23, FUN-109): o
+   * `game` lê o outfit padrão do jogador e os efeitos de magia, supply e golpe que o `sim`
+   * emite; o cliente lê chão e parede por mapa. Monstro e item NÃO se consultam por aqui —
+   * eles já saem resolvidos em `monsters` e `items`.
    *
    * `undefined` só em conteúdo de teste sem monstro nem item, que dispensa a tabela.
    */
@@ -174,6 +175,18 @@ export function buildContent(raw: RawContent): Content {
     for (const id of Object.keys(appearances.maps)) {
       if (mapData.has(id)) continue;
       problems.push(`appearances.maps mapeia mapa "${id}", que não existe no conteúdo`);
+    }
+    // Magia e supply (FUN-109) são conferidos de UM lado só, ao contrário de monstro, item e
+    // mapa: a linha órfã continua sendo recusada — é o defeito que a tabela introduz —, mas
+    // magia sem efeito é magia MUDA, e muda é válida. Exigir o outro lado obrigaria cada
+    // magia nova a nascer com arte antes de nascer com número, que é a ordem errada.
+    for (const id of Object.keys(appearances.spells)) {
+      if (spells.has(id)) continue;
+      problems.push(`appearances.spells mapeia magia "${id}", que não existe no conteúdo`);
+    }
+    for (const id of Object.keys(appearances.supplies)) {
+      if (supplies.has(id)) continue;
+      problems.push(`appearances.supplies mapeia supply "${id}", que não existe no conteúdo`);
     }
   }
 
@@ -349,6 +362,12 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
         : `#${index}`,
       { floor: index * 2 + 1, wall: index * 2 + 2 },
     ])),
+    // Vazios de propósito (FUN-109): magia e supply são conferidos de um lado só, então a
+    // fixture não precisa inventar efeito nenhum — e um teste de combate que precise de um
+    // passa a tabela explícita, como o de aparência já faz.
+    spells: {},
+    supplies: {},
+    hits: {},
   };
 }
 

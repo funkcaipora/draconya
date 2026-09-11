@@ -53,6 +53,33 @@ export const appearancesSchema = z.object({
     floor: appearanceId,
     wall: appearanceId,
   })).default({}),
+  /**
+   * `id de magia → o que ela desenha` (FUN-109). `effect` é a animação no tile do alvo;
+   * `missile` é o projétil do conjurador até ele. Os dois são opcionais e independentes: uma
+   * cura tem efeito e não tem projétil, e uma magia sem entrada nenhuma aqui é magia MUDA —
+   * válida, só não desenha. É por isso que `buildContent` confere UM lado só: toda chave
+   * daqui precisa existir no catálogo, mas o catálogo não precisa estar todo aqui.
+   *
+   * A semântica dos ids é do pacote (`pack`), e é ele quem diz que 13 é "magic blue". Este
+   * arquivo não sabe disso, e não deve: no dia em que o pacote mudar, o 13 vira outro número
+   * e nada aqui precisa entender o que ele desenhava.
+   */
+  spells: z.record(z.string().min(1), z.object({
+    effect: appearanceId.optional(),
+    missile: appearanceId.optional(),
+  })).default({}),
+  /** `id de supply → efeito no tile de quem usou` (FUN-109). Mesma regra de `spells`. */
+  supplies: z.record(z.string().min(1), z.object({
+    effect: appearanceId.optional(),
+  })).default({}),
+  /**
+   * Efeito do golpe sem magia (FUN-109). `melee` é o sangue do corpo a corpo. Objeto, e não
+   * um número solto, porque o golpe à distância (§21.3, munição) vai ter o seu e não cabe em
+   * `spells` nem em `supplies`.
+   */
+  hits: z.object({
+    melee: appearanceId.optional(),
+  }).default({}),
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;

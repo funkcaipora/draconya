@@ -106,6 +106,14 @@ apagar a entidade levava o id junto; com a tabela, a linha fica para trás.
 sequenciais, e o nome diz o que ela é: um teste de combate não fala de arte, e os números dela
 não apontam aparência que exista em pacote nenhum.
 
+**`spells`, `supplies` e `hits` são conferidos de UM lado só** (FUN-109). São os efeitos que o
+combate desenha — `effect` é a animação no tile, `missile` o projétil do conjurador ao alvo —, e
+a linha órfã continua sendo recusada pela mesma razão de sempre. Mas magia sem entrada é magia
+MUDA, e muda é válida: exigir o outro lado obrigaria cada magia nova a nascer com arte antes de
+nascer com número, que é a ordem errada. Por isso o placeholder emite as três seções vazias, e
+por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
+tem efeito hoje.
+
 ## Loot (FUN-63)
 
 A tabela do monstro separa **moeda** de **item**: `loot.gold` é `{ chance, min, max }` e

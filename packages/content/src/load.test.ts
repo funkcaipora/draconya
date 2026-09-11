@@ -55,6 +55,27 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('carries the real spell, supply and hit effects, all as ids (FUN-109)', () => {
+    // O contrato que o `game` lê para transformar o que o `sim` emite em `effect` e
+    // `missile` no fio. Os números são do pacote 1332 e foram conferidos visualmente; o que
+    // se prende aqui é que o arquivo REAL passa pelo schema e pela referência cruzada — e
+    // que `strike` tem projétil, porque é a única magia à distância do catálogo.
+    // Mutação que mata: trocar `"missile": 5` por `"missile": 6` em `baseline.json`.
+    const content = loadContent(DATA);
+    expect(content.appearances?.spells['strike']).toEqual({ effect: 12, missile: 5 });
+    expect(content.appearances?.supplies['health-potion']).toEqual({ effect: 14 });
+    expect(content.appearances?.hits.melee).toBe(1);
+    // Toda magia e todo supply do repositório TÊM efeito. Não é regra do carregador — magia
+    // muda é válida —, é o estado do conteúdo hoje, e a asserção existe para a magia nova
+    // que nascer sem efeito ser uma decisão, e não um esquecimento.
+    for (const id of content.spells.keys()) {
+      expect(content.appearances?.spells[id]?.effect, `spell "${id}"`).toBeGreaterThan(0);
+    }
+    for (const id of content.supplies.keys()) {
+      expect(content.appearances?.supplies[id]?.effect, `supply "${id}"`).toBeGreaterThan(0);
+    }
+  });
+
   it('nenhum arquivo de entidade guarda id de aparência por conta própria', () => {
     // Mesma ideia da varredura de arte abaixo, e pela mesma razão: o schema já recusa a chave
     // solta, mas a mensagem dele ("chave não reconhecida") não diz PARA ONDE o campo foi. Esta

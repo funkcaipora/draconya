@@ -362,6 +362,108 @@ describe('a tabela de aparências (FUN-94)', () => {
   });
 });
 
+describe('effects of spells, supplies and hits in the appearance table (FUN-109)', () => {
+  const heal = {
+    id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000,
+    effect: { kind: 'heal', amount: 60 },
+  };
+  const potion = {
+    id: 'health-potion', name: 'Poção de Vida', price: 45,
+    effect: { kind: 'heal', amount: 80 },
+  };
+  // Uma magia de DANO, porque é ela que tem projétil: o teste de `missile` precisa de uma
+  // magia que exista no catálogo, senão a linha órfã é recusada antes de o tipo do campo
+  // importar — e a mutação no schema passaria escondida atrás da mensagem certa.
+  const strike = {
+    id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
+    effect: { kind: 'damage', power: 40, range: 3 },
+  };
+  // A base já traz o placeholder com as três seções vazias; aqui a tabela é EXPLÍCITA, como
+  // no bloco da FUN-94, porque é dela que o teste fala.
+  const tabela = (over: Record<string, unknown> = {}) => [{
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {}, ...over,
+  }];
+  const withCatalogue = (over: Partial<RawContent> = {}): RawContent =>
+    base({ spells: [heal], supplies: [potion], ...over });
+
+  it('exposes effect and missile by spell id, and the effect by supply id', () => {
+    // Só ids (invariante 6): quem sabe que 13 é "magic blue" é o pacote, nunca este arquivo.
+    // Mutação que mata: apagar `spells`/`supplies`/`hits` do schema (Zod descarta a chave e
+    // `appearances.spells` vira `undefined`).
+    const content = buildContent(withCatalogue({
+      appearances: tabela({
+        spells: { heal: { effect: 13, missile: 5 } },
+        supplies: { 'health-potion': { effect: 14 } },
+        hits: { melee: 1 },
+      }),
+    }));
+    expect(content.appearances?.spells['heal']).toEqual({ effect: 13, missile: 5 });
+    expect(content.appearances?.supplies['health-potion']).toEqual({ effect: 14 });
+    expect(content.appearances?.hits.melee).toBe(1);
+  });
+
+  it('rejects a spell effect for a spell that does not exist, and names it', () => {
+    // A linha órfã: o defeito que a tabela introduz. Com o id inline, apagar a magia levaria
+    // o efeito junto; com a tabela, a linha fica para trás e sobrevive a três trocas de pacote.
+    // Mutação que mata: apagar o laço sobre `appearances.spells` em `buildContent`.
+    expect(() => buildContent(withCatalogue({
+      appearances: tabela({ spells: { 'exura-vita': { effect: 13 } } }),
+    }))).toThrow(/appearances\.spells mapeia magia "exura-vita", que não existe no conteúdo/);
+  });
+
+  it('rejects a supply effect for a supply that does not exist, and names it', () => {
+    // Mutação que mata: apagar o laço sobre `appearances.supplies` em `buildContent`.
+    expect(() => buildContent(withCatalogue({
+      appearances: tabela({ supplies: { 'ultimate-potion': { effect: 14 } } }),
+    }))).toThrow(/appearances\.supplies mapeia supply "ultimate-potion", que não existe no conteúdo/);
+  });
+
+  it('ACCEPTS a spell with no entry in the table: a silent spell is still a spell', () => {
+    // Um lado só, ao contrário de monstro e mapa. Exigir o outro obrigaria cada magia nova a
+    // nascer com arte antes de nascer com número, que é a ordem errada — e o placeholder das
+    // fixtures, que é vazio de propósito, deixaria de montar qualquer conteúdo com magia.
+    // Mutação que mata: acrescentar em `buildContent` o laço inverso (`spells` sem linha em
+    // `appearances.spells` vira problema).
+    const content = buildContent(withCatalogue({ appearances: tabela() }));
+    expect(content.spells.get('heal')?.manaCost).toBe(20);
+    expect(content.appearances?.spells).toEqual({});
+    expect(content.supplies.get('health-potion')?.price).toBe(45);
+  });
+
+  it('the placeholder table carries the three sections, empty', () => {
+    // É o que deixa toda fixture que fala de magia continuar montando sem escrever tabela à
+    // mão — e o que garante que `appearances.spells` nunca é `undefined` para quem consome.
+    // Mutação que mata: apagar `spells: {}` de `placeholderAppearances`.
+    const placeholder = placeholderAppearances({ spells: [heal], supplies: [potion] });
+    expect(placeholder.spells).toEqual({});
+    expect(placeholder.supplies).toEqual({});
+    expect(placeholder.hits).toEqual({});
+  });
+
+  it('an effect is an ID, never a path — invariant 6 holds for effects as for outfits', () => {
+    // Quatro campos, quatro expectativas: cada um é um `appearanceId.optional()` separado no
+    // schema, e afrouxar um não afrouxa os outros. Só `heal.effect` aqui deixaria
+    // `strike.missile` e `health-potion.effect` aceitarem caminho sem nada acusar.
+    // A mensagem é conferida pelo CAMINHO do campo, e não só pelo tipo do erro: `strike` e
+    // `health-potion` existem no catálogo, então a única recusa possível é a do schema.
+    // Mutação que mata: `effect: appearanceId.optional()` → aceitar `z.string()` também;
+    // o mesmo em `missile` de `spells` e em `effect` de `supplies`.
+    expect(() => buildContent(withCatalogue({
+      appearances: tabela({ spells: { heal: { effect: 'effects/magic-blue.png' } } }),
+    }))).toThrow(/spells\.heal\.effect/);
+    expect(() => buildContent(withCatalogue({
+      spells: [heal, strike],
+      appearances: tabela({ spells: { strike: { effect: 12, missile: 'missiles/energy.png' } } }),
+    }))).toThrow(/spells\.strike\.missile/);
+    expect(() => buildContent(withCatalogue({
+      appearances: tabela({ supplies: { 'health-potion': { effect: 'effects/red-shimmer.png' } } }),
+    }))).toThrow(/supplies\.health-potion\.effect/);
+    expect(() => buildContent(withCatalogue({
+      appearances: tabela({ hits: { melee: 0 } }),
+    }))).toThrow(ContentError);
+  });
+});
+
 describe('catálogo de itens (FUN-76)', () => {
   const espada = {
     id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
