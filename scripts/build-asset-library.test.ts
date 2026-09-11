@@ -120,9 +120,14 @@ describe('asset library build', () => {
         availableSpriteCount: 1,
       });
       expect(manifest.appearances).toEqual({ object: 100, outfit: 20, effect: 10, missile: 5 });
-      expect(readFileSync(join(output, 'sprites.jsonl'), 'utf8'))
-        .toContain('"id":1,"atlas":"atlases/000000-000001.png","x":32');
-      expect(readFileSync(join(output, 'atlases/000000-000001.png')).subarray(0, 8))
+      // A tabela tem duas entradas: a entrada 0 é o id 1 (vazio) e a entrada 1 é o id 2, o
+      // único desenhado — que cai no SEGUNDO quadro do atlas. Os ids do `.spr` começam em 1;
+      // numerar a partir de 0 chamaria de id 1 o que o `.dat` chama de id 2.
+      const index = readFileSync(join(output, 'sprites.jsonl'), 'utf8');
+      expect(index).toContain('"id":1,"atlas":"atlases/000001-000002.png","x":0,"y":0,"width":32,"height":32,"available":false');
+      expect(index).toContain('"id":2,"atlas":"atlases/000001-000002.png","x":32,"y":0,"width":32,"height":32,"available":true');
+      expect(index).not.toContain('"id":0,');
+      expect(readFileSync(join(output, 'atlases/000001-000002.png')).subarray(0, 8))
         .toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     } finally {
       rmSync(temp, { recursive: true, force: true });

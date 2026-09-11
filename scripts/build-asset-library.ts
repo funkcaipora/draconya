@@ -305,15 +305,19 @@ export async function buildLegacySpriteLibrary(
   const spriteRecords: unknown[] = [];
   const sheetRecords: unknown[] = [];
 
+  // **Os ids do `.spr` começam em 1.** A entrada `i` da tabela de endereços é o sprite `i + 1`;
+  // o id 0 é "sem sprite" no `.dat`, e não tem entrada. Numerar a partir de 0 deslocava a
+  // biblioteca inteira em um: o id que o `.dat` chama de rato virado para o norte mostrava o
+  // rato virado para o leste, e nenhum teste de "o PNG existe" pega isso.
   for (let page = 0; page < pageCount; page++) {
-    const firstSpriteId = page * pageSize;
-    const lastSpriteId = Math.min(spriteCount - 1, firstSpriteId + pageSize - 1);
+    const firstSpriteId = page * pageSize + 1;
+    const lastSpriteId = Math.min(spriteCount, firstSpriteId + pageSize - 1);
     const atlasName = `${String(firstSpriteId).padStart(6, '0')}-${String(lastSpriteId).padStart(6, '0')}.png`;
     const atlasPath = `atlases/${atlasName}`;
     const pixels = new Uint8Array(atlasWidth * atlasHeight * 4);
 
     for (let spriteId = firstSpriteId; spriteId <= lastSpriteId; spriteId++) {
-      const offset = source.readUInt32LE(8 + spriteId * 4);
+      const offset = source.readUInt32LE(8 + (spriteId - 1) * 4);
       const slot = spriteId - firstSpriteId;
       const x = (slot % atlasColumns) * 32;
       const y = Math.floor(slot / atlasColumns) * 32;
