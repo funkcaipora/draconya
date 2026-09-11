@@ -223,28 +223,63 @@ nohup docker run --rm -v hzd0uu0cuitkdi4ie0h1mu5g_things:/things -v /root/fetch-
 ```
 
 Três `FAIL` são esperados: `staticdata`, `staticmapdata` e `map` são o minimapa do cliente
-oficial, que a origem não serve e o Draconya não usa. Se a origem sumir, o outro caminho é
-copiar da sua máquina:
+oficial, que a origem não serve e o Draconya não usa.
+
+**Esse caminho NÃO traz a arte de UI.** A casca (moldura, pedra, slot, barras — FUN-108) lê
+`things/<versão>/library/ui/images/*.png`, que é DERIVADO: `pnpm assets:library` extrai
+essas imagens do `graphics_resources.rcc.lzma` na sua máquina (`docs/asset-library.md`), e a
+origem não as serve (`…/library/ui/images/background.png` responde 404). Elas vêm da sua
+máquina, sempre — mesmo quando o resto veio da origem. Só a subpasta, e depois para dentro do
+volume (o `cp -r` funde com o que já está lá):
 
 ```bash
-rsync -av --exclude library/ things/1332/ root@<servidor>:/root/things/1332/
+rsync -av things/1332/library/ui/images/ root@<servidor>:/root/things/1332/library/ui/images/
 ```
 
 ```bash
 ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1332 /things/'
 ```
 
-O que precisa ir: `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as
-folhas `sprites-<hash>.bmp.lzma` (81 MB na 13.32). `library/` é a biblioteca de consulta do
-Claude Code (`docs/asset-library.md`) e não é servida.
+Se a origem sumir, o pacote INTEIRO vem da sua máquina pelo mesmo caminho, com um filtro que
+deixa passar tudo da raiz e, de `library/`, SÓ `ui/images/` (o `cp -r` é o mesmo de cima):
+
+```bash
+rsync -av --include='library/' --include='library/ui/' --include='library/ui/images/***' --exclude='library/*' --exclude='library/ui/*' things/1332/ root@<servidor>:/root/things/1332/
+```
+
+Os dois `--exclude` são necessários: só `--exclude='library/*'` deixaria `library/ui/` passar
+inteira (fontes, cursores, minimapa), porque `ui/` casou no `--include` antes. Foi conferido a
+seco contra a 13.32: da `library/`, entram os dois diretórios e os arquivos de `ui/images/`,
+nada mais. O que precisa estar no volume:
+
+- `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
+  `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
+- `library/ui/images/` (9,4 MB, ~1 000 PNGs na 13.32, subpastas incluídas) — a casca. O
+  cliente lê 17 deles, e é a lista de `UI_SKIN` e `SLOT_IMAGES` em
+  `packages/client/src/assets/ui.ts`: `background.png`, `background-dark.png`,
+  `3pixel-frame-borderimage.png`, `2pixel-up-frame-borderimage.png`, `containerslot.png`,
+  `hitpoints-manapoints-bar-border.png`, `hitpoints-bar-filled.png`, `mana-bar-filled.png`,
+  `inventory-head.png`, `inventory-neck.png`, `inventory-torso.png`, `inventory-legs.png`,
+  `inventory-feet.png`, `inventory-left-hand.png`, `inventory-right-hand.png`,
+  `inventory-finger.png`, `inventory-hip.png`. A subpasta vai inteira porque é pequena e o
+  filtro fica em uma linha; se essa tabela crescer, nada muda aqui.
+
+O resto de `library/` (índices, folhas PNG, quadros por id — 900 MB) é a biblioteca de
+consulta do Claude Code e continua fora: não é servido nem lido pelo cliente.
 
 Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
-`Cache-Control: immutable`. O hash está no nome de cada folha, então a URL nunca muda de
-conteúdo e o cache de um ano é seguro; trocar de versão do pacote é outro caminho, não outro
-conteúdo no mesmo caminho.
+`Cache-Control: immutable` — e com
+`curl -sI <APP_ORIGIN>/things/1332/library/ui/images/background.png`, que também tem de dar
+`200`. O hash está no nome de cada folha, então a URL nunca muda de conteúdo e o cache de um
+ano é seguro; trocar de versão do pacote é outro caminho, não outro conteúdo no mesmo caminho.
+(As imagens de UI não têm hash no nome; mudam só com a versão do pacote, que já está no
+caminho.)
 
 **Sem o pacote o jogo abre.** O cliente avisa no console (`pacote de arte indisponível`) e
-desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo.
+desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
+arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo
+sai com sprite e a casca sai em cor lisa: o sintoma é só visual, com 404 de PNG na aba de
+rede, e o remédio é o `rsync` acima.
 
 ## Backup
 

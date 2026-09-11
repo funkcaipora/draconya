@@ -122,3 +122,49 @@ describe('combat presentation messages (FUN-109)', () => {
     expect(decodeS2C(encodeS2C(missileWithoutFrom))).toBeNull();
   });
 });
+
+describe('the inventory message (FUN-90, FUN-108)', () => {
+  const sword = { instanceId: 'i1', itemId: 'sword', quantity: 1 };
+  const inventory: S2CMessage = {
+    type: 'inventory',
+    backpack: [{ instanceId: 'i2', itemId: 'health-potion', quantity: 5 }],
+    equipped: { hand: sword },
+    capacity: { used: 130, total: 400 },
+  };
+
+  it('round trips the equipped item WHOLE: id, item and quantity, like a backpack entry', () => {
+    // O item vestido não está na mochila — o `sim` o MOVE ao equipar —, então `slot →
+    // instanceId` deixava o cliente sem como chegar à definição: o slot ficava sem nome e
+    // sem sprite. O que se prende aqui é que o equipado atravessa o fio com a mesma forma
+    // de uma entrada da mochila.
+    // Mutação que mata: `equipped: z.record(z.string(), z.string())` (a forma antiga) — o
+    // decode recusa a mensagem e devolve `null`.
+    expect(decodeS2C(encodeS2C(inventory))).toEqual([inventory]);
+    const [decoded] = decodeS2C(encodeS2C(inventory)) ?? [];
+    expect(decoded?.type === 'inventory' && decoded.equipped['hand']).toEqual(sword);
+  });
+
+  it('rejects the legacy `slot → instanceId` shape: a bare id is not an item', () => {
+    // É a mutação que importa do lado do SERVIDOR: um host que voltasse a mandar só o id
+    // seria recusado aqui, em silêncio — e o inventário nunca chegaria à tela. Este teste é o
+    // que transforma o silêncio em falha.
+    // Mutação que mata: aceitar `z.union([CarriedItem, z.string()])` no valor do record.
+    const legacy = { ...inventory, equipped: { hand: 'i1' } } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(legacy))).toBeNull();
+  });
+
+  it('rejects an equipped entry without itemId: the id alone is what the bug was', () => {
+    // Mutação que mata: `itemId: z.string().min(1).optional()` no `CarriedItem`.
+    const withoutItemId = {
+      ...inventory, equipped: { hand: { instanceId: 'i1', quantity: 1 } },
+    } as unknown as S2CMessage;
+    expect(decodeS2C(encodeS2C(withoutItemId))).toBeNull();
+  });
+
+  it('keeps the same opcode: it is the same message, with more inside', () => {
+    // Como o `catalogue` ao ganhar o vocabulário do bot: o assunto não mudou, só o conteúdo.
+    // Um opcode novo queimaria o 16 por uma mensagem que nunca deixou de existir.
+    // Mutação que mata: renumerar `inventory` em SERVER_TO_CLIENT.
+    expect(SERVER_TO_CLIENT.inventory).toBe(16);
+  });
+});

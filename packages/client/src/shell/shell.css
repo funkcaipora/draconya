@@ -1,16 +1,48 @@
-/* Geografia do §5.3. Sem tema ainda — o que importa aqui é onde cada coisa fica. */
-:root { color-scheme: dark; }
+/* Geografia do §5.3 e a skin do Tibia (FUN-108).
+ *
+ * A arte de UI entra por variável CSS — `--ui-background`, `--ui-frame`, `--ui-slot`,
+ * `--ui-bar-track`, `--ui-hp-bar`, `--ui-mana-bar`, `--ui-slot-<slot>` —, definidas no `:root`
+ * por `applyUiSkin` (`assets/ui.ts`) a partir do caminho do pacote. **Sem pacote, nenhuma
+ * existe**, e cada regra cai no fallback do `var()`: cor lisa, mesma estrutura. Nunca há
+ * `url()` de arte escrito nesta folha — o caminho é do pacote, e o pacote não é versionado.
+ *
+ * Os números vêm dos PNGs, medidos pixel a pixel (não a olho):
+ *   3pixel-frame-borderimage.png   102×102, moldura de 3 px em cada lado (de dentro para
+ *                                  fora: claro 116, escuro 57, mais escuro 41) → slice 3
+ *   2pixel-up-frame-borderimage.png 100×100, bisel "em relevo" de 2 px: claro (116) em cima e
+ *                                  à esquerda, escuro (38) embaixo e à direita → slice 2
+ *   containerslot.png              34×44; o slot é o quadrado de 34×34 do TOPO (as linhas
+ *                                  33–42 repetem as 23–32; a 43 é a aresta clara de baixo)
+ *   background.png                 96×96, pedra, brilho médio 70; background-dark.png, 56
+ *   hitpoints-bar-filled.png       94×11, a barra vermelha CHEIA, com as pontas arredondadas
+ *   mana-bar-filled.png            94×11 com alfa, a azul cheia
+ *   hitpoints-manapoints-bar-border.png 94×11, o TRILHO vazio (não é preenchimento)
+ * As barras são desenhadas a 2× (188×22) com `image-rendering: pixelated`.
+ */
+:root {
+  color-scheme: dark;
+  /* Texto sobre pedra (brilho ~70) precisa de mais contraste que sobre o fundo quase preto.
+     Os tons valem para os dois casos: no fallback só ficam um pouco mais claros que antes. */
+  --text: #e2e2e8;
+  --text-muted: #b4b4c0;
+  --text-faint: #8c8c9a;
+  --line: #2a2a35;
+  /* Separador DENTRO de uma janela: branco translúcido lê sobre a pedra e sobre o fallback. */
+  --separator: rgba(255, 255, 255, 0.09);
+  --frame-fallback: #24242e;
+  --window-fallback: #14141a;
+}
 
 body {
   margin: 0;
   background: #0b0b0f;
-  color: #d6d6de;
+  color: var(--text);
   font: 13px/1.4 system-ui, sans-serif;
 }
 
 .shell {
   display: grid;
-  grid-template-columns: 200px 1fr 200px;
+  grid-template-columns: 212px 1fr 212px;
   grid-template-rows: 1fr auto;
   gap: 8px;
   min-height: 100vh;
@@ -18,55 +50,78 @@ body {
   box-sizing: border-box;
 }
 
-/* Os painéis laterais. O da direita já tem o analisador (FUN-83); o da esquerda continua
-   reservado para inventário e bot. */
+/* As colunas laterais: pedra escura atrás das janelas, como a barra lateral do Tibia. */
 .panel {
-  border: 1px dashed #2a2a35;
-  border-radius: 4px;
+  background: #0e0e13 var(--ui-background-dark, none) repeat;
   min-height: 120px;
   padding: 4px;
+}
+
+/* Uma JANELA: pedra em azulejo e a moldura de 3 px do pacote. Sem pacote, cor lisa e borda
+   sólida — o `border-image-source: none` deixa o `border` comum aparecer. Sem `border-radius`:
+   `border-image` não arredonda, e o fallback segue a mesma forma para não mudar de silhueta
+   quando a arte chega. */
+.hunt-menu, .bot-panel, .inventory, .analyzer, .chat, .vitals, .bot-body, .viewport {
+  background: var(--window-fallback) var(--ui-background, none) repeat;
+  border: 3px solid var(--frame-fallback);
+  border-image-source: var(--ui-frame, none);
+  border-image-slice: 3;
+  border-image-width: 3px;
+  border-image-repeat: repeat;
+  border-radius: 0;
 }
 
 .stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .stage-top {
   display: flex; justify-content: space-between; align-items: center;
-  width: 100%; max-width: 576px;
+  width: 100%; max-width: 582px;
 }
-.character { color: #8f8fa0; }
+.character { color: var(--text-muted); }
 
-.viewport { line-height: 0; border: 1px solid #2a2a35; border-radius: 4px; overflow: hidden; }
+.viewport { line-height: 0; overflow: hidden; }
 
-.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid #2a2a35; }
+.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
 .badge-connected { color: #6fc28a; border-color: #2f5a3c; }
 .badge-connecting, .badge-reconnecting { color: #c2a54a; border-color: #5a4f2f; }
 .badge-failed { color: #c25b4a; border-color: #5a3430; }
 .badge-idle { color: #7a7a88; }
 
-.vitals { display: flex; gap: 16px; }
-.ring { position: relative; width: 56px; height: 56px; }
-.ring svg { transform: rotate(-90deg); }
-.ring-track { fill: none; stroke: #23232c; stroke-width: 6; }
-.ring-value { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 120ms linear; }
-.ring-label {
+/* HP e mana (FUN-108): duas barras como as do Tibia, a 2×. O preenchimento tem a LARGURA da
+   fração e a imagem no tamanho da barra inteira, ancorada à esquerda — a barra cheia cortada
+   na fração, ponta esquerda fica, direita some. Com pacote o `var()` resolve para a imagem;
+   sem, para a cor lisa: é a MESMA declaração `background`, trocando só o primeiro valor. */
+.vitals { display: flex; gap: 12px; padding: 5px 10px; }
+.bar {
+  position: relative; width: 188px; height: 22px; overflow: hidden; border-radius: 4px;
+  background: var(--ui-bar-track, #23232c) no-repeat 0 0 / 100% 100%;
+  image-rendering: pixelated;
+}
+.bar-fill {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  transition: width 120ms linear;
+  image-rendering: pixelated;
+}
+.bar-hp .bar-fill { background: var(--ui-hp-bar, #c25b4a) no-repeat 0 0 / 188px 22px; }
+.bar-mana .bar-fill { background: var(--ui-mana-bar, #4a7fc2) no-repeat 0 0 / 188px 22px; }
+.bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 12px; font-weight: 600; color: #fff; line-height: 1;
   font-variant-numeric: tabular-nums;
+  /* Contorno preto, como o número dentro da barra do Tibia: lê sobre o vermelho e sobre o azul. */
+  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
 }
 
 .chat {
   grid-column: 1 / 2; grid-row: 2;
-  border: 1px solid #2a2a35; border-radius: 4px;
   padding: 6px 8px; min-height: 96px; max-height: 160px; overflow-y: auto;
 }
 .chat p { margin: 0 0 2px; }
-.chat .quiet { color: #4a4a56; }
-.system-warning { color: #c2a54a; }
-.system-error { color: #c25b4a; }
+.chat .quiet { color: var(--text-faint); }
+.system-warning { color: #e0c25a; }
+.system-error { color: #e07060; }
 
 /* O analisador (FUN-83). Nasce minimizado: ocupa uma linha até alguém abrir. */
-.analyzer {
-  border: 1px solid #2a2a35; border-radius: 4px;
-  font-variant-numeric: tabular-nums;
-}
+.analyzer { font-variant-numeric: tabular-nums; }
 .analyzer-head {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 4px 6px;
@@ -75,22 +130,22 @@ body {
   background: none; border: none; padding: 0;
   color: inherit; font: inherit; cursor: pointer;
 }
-.analyzer-summary { color: #6a6a78; }
+.analyzer-summary { color: var(--text-muted); }
 .analyzer-body { padding: 0 6px 6px; }
 .analyzer-row { display: flex; gap: 8px; align-items: baseline; }
 /* O rótulo QUEBRA em vez de ser cortado. Reticências escondem informação — "Maior ma…" e
    "Te…" não dizem nada —, e num painel estreito duas linhas custam menos que isso. */
-.analyzer-label { flex: 1 1 auto; min-width: 0; color: #8a8a98; }
+.analyzer-label { flex: 1 1 auto; min-width: 0; color: var(--text-muted); }
 /* O VALOR alinha em coluna; a taxa vai atrás e não reserva largura. Reservar espaço para uma
    taxa que a linha não tem espremia o rótulo no painel de 200px, e "Maior magia" quebrava. */
 .analyzer-value { flex: 0 0 auto; min-width: 52px; text-align: right; }
-.analyzer-rate { flex: 0 0 auto; color: #6a6a78; }
+.analyzer-rate { flex: 0 0 auto; color: var(--text-faint); }
 .analyzer-events {
   margin: 8px 0 0; padding: 0; list-style: none;
-  border-top: 1px solid #2a2a35; padding-top: 6px; color: #8a8a98;
+  border-top: 1px solid var(--separator); padding-top: 6px; color: var(--text-muted);
 }
 .analyzer-events li { margin: 0 0 2px; }
-.analyzer-event-time { color: #4a4a56; margin-right: 6px; }
+.analyzer-event-time { color: var(--text-faint); margin-right: 6px; }
 
 /* A tela de entrada (FUN-97). Ela não divide espaço com o jogo: ou uma, ou o outro. */
 .entry {
@@ -99,45 +154,55 @@ body {
 }
 .entry h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.04em; }
 .entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.entry .quiet { color: #6a6a78; margin: 0; }
+.entry .quiet { color: var(--text-faint); margin: 0; }
 .entry button {
-  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 4px;
+  background: #1b1b23; border: 1px solid var(--line); border-radius: 4px;
   padding: 6px 12px; color: inherit; font: inherit; cursor: pointer;
 }
 .entry button:hover:not(:disabled) { border-color: #3a3a48; }
 .entry button:disabled { opacity: 0.5; cursor: default; }
-.entry-quiet { background: none !important; border: none !important; color: #6a6a78 !important; }
+.entry-quiet { background: none !important; border: none !important; color: var(--text-faint) !important; }
 .entry-characters { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .entry-character {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  border: 1px solid #2a2a35; border-radius: 4px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
 }
-.entry-meta { color: #6a6a78; }
+.entry-meta { color: var(--text-faint); }
 .entry-create { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.entry-create label { color: #6a6a78; }
+.entry-create label { color: var(--text-faint); }
 .entry-create-row { display: flex; gap: 8px; }
 .entry-create input {
   flex: 1 1 auto; min-width: 0;
-  background: #131319; border: 1px solid #2a2a35; border-radius: 4px;
+  background: #131319; border: 1px solid var(--line); border-radius: 4px;
   padding: 6px 8px; color: inherit; font: inherit;
 }
 
-/* A seleção de hunt (FUN-79). Mesma linguagem do analisador: cabeçalho que abre e fecha. */
-.hunt-menu { border: 1px solid #2a2a35; border-radius: 4px; }
-.hunt-list { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 6px; }
-.hunt { border-top: 1px solid #2a2a35; padding-top: 6px; }
-.hunt-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.hunt-warn { color: #c2a54a; }
-.hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.hunt-difficulties button {
-  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 3px;
-  padding: 2px 6px; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
+/* Um BOTÃO dentro de uma janela: o bisel em relevo de 2 px do pacote sobre a pedra. Sem
+   pacote, a cor e a borda de antes. */
+.hunt-difficulties button, .bot-add, .bot-actions button {
+  background: #1b1b23 var(--ui-background, none) repeat;
+  border: 2px solid var(--line);
+  border-image-source: var(--ui-frame-up, none);
+  border-image-slice: 2;
+  border-image-width: 2px;
+  border-image-repeat: repeat;
+  border-radius: 0;
+  color: inherit; font: inherit; font-size: 12px; cursor: pointer;
 }
-.hunt-difficulties button:hover:not(:disabled) { border-color: #3a3a48; }
+.hunt-difficulties button:hover:not(:disabled), .bot-add:hover, .bot-actions button:hover {
+  filter: brightness(1.2);
+}
+
+/* A seleção de hunt (FUN-79). Mesma linguagem do analisador: cabeçalho que abre e fecha. */
+.hunt-list { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 6px; }
+.hunt { border-top: 1px solid var(--separator); padding-top: 6px; }
+.hunt-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.hunt-warn { color: #e0c25a; }
+.hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.hunt-difficulties button { padding: 2px 6px; }
 
 /* A configuração do bot (FUN-89). Densa de propósito: são cinco categorias na mesma coluna. */
 .panel-left { display: flex; flex-direction: column; gap: 8px; }
-.bot-panel { border: 1px solid #2a2a35; border-radius: 4px; }
 /* Sobreposição: a linha de regra não cabe nos 200px da coluna, e configurar o bot é o caso de
    uso do celular (§5.1). Uma tela só serve aos dois. */
 .bot-overlay {
@@ -146,8 +211,7 @@ body {
   display: grid; place-items: start center; padding: 16px; overflow-y: auto;
 }
 .bot-body {
-  width: 100%; max-width: 520px;
-  background: #0f0f14; border: 1px solid #2a2a35; border-radius: 6px;
+  width: 100%; max-width: 520px; box-sizing: border-box;
   padding: 12px; display: flex; flex-direction: column; gap: 10px;
 }
 .bot-title { display: flex; justify-content: space-between; align-items: baseline; }
@@ -157,7 +221,7 @@ body {
 .bot-rule-order { display: flex; flex-direction: column; }
 .bot-rule-order button {
   background: none; border: none; padding: 0; line-height: 1;
-  color: #6a6a78; font-size: 9px; cursor: pointer;
+  color: var(--text-muted); font-size: 9px; cursor: pointer;
 }
 .bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
 /* No celular a linha quebra em vez de espremer: seis caixinhas de 30px não são configuráveis
@@ -167,39 +231,79 @@ body {
   .bot-rule select[aria-label="ação"] { flex-basis: 100%; }
 }
 .bot-rule select, .bot-rule input {
-  background: #131319; border: 1px solid #2a2a35; border-radius: 3px;
+  background: #131319; border: 1px solid var(--line); border-radius: 3px;
   padding: 1px 2px; color: inherit; font: inherit; font-size: 11px; min-width: 0;
 }
 .bot-rule select[aria-label="ação"] { flex: 1 1 auto; }
 .bot-rule input { width: 52px; }
-.bot-add, .bot-actions button {
-  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 3px;
-  padding: 2px 8px; color: inherit; font: inherit; font-size: 12px; cursor: pointer;
-}
+.bot-add, .bot-actions button { padding: 2px 8px; }
 .bot-actions { display: flex; gap: 6px; }
 
-/* Inventário e equipamento (FUN-90). Sem arte: o pipeline de sprite é o M2. */
+/* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: o quadrado de pedra do
+   pacote (34×34, o topo de `containerslot.png`), o ícone cinza do lugar quando vazio, o sprite
+   do item quando cheio. Sem pacote: quadrado de cor lisa, sem ícone, com a inicial do nome. */
 .panel-right { display: flex; flex-direction: column; gap: 8px; }
-.inventory {
-  border: 1px solid #2a2a35; border-radius: 4px; padding: 6px;
-  display: flex; flex-direction: column; gap: 6px;
-}
+.inventory { padding: 6px 4px; display: flex; flex-direction: column; gap: 6px; }
+.inventory .quiet { color: var(--text-faint); }
+
+/* O equipamento no desenho de corpo do Tibia: cabeça em cima, mãos ao lado do peito, pés
+   embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. */
 .equipment {
+  list-style: none; margin: 0 auto; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 34px); gap: 3px;
+  grid-template-areas:
+    "neck head ."
+    "hand chest shield"
+    "finger legs ammo"
+    ". feet .";
+}
+.slot-head { grid-area: head; }
+.slot-neck { grid-area: neck; }
+.slot-chest { grid-area: chest; }
+.slot-legs { grid-area: legs; }
+.slot-feet { grid-area: feet; }
+.slot-hand { grid-area: hand; }
+.slot-shield { grid-area: shield; }
+.slot-finger { grid-area: finger; }
+.slot-ammo { grid-area: ammo; }
+
+.slot {
+  position: relative; width: 34px; height: 34px; box-sizing: border-box;
+  /* `0 0` e sem `background-size`: o quadrado é o TOPO da imagem de 34×44, em pixel exato. */
+  background: #1e1e27 var(--ui-slot, none) no-repeat 0 0;
+}
+.slot-button, .slot-item, .slot-empty {
+  position: absolute; inset: 0; margin: 0; padding: 0;
+  background: none; border: none; color: inherit; font: inherit;
+}
+.slot-button { cursor: pointer; }
+.slot-button:hover, .slot-button:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -1px; }
+/* O ícone do lugar vazio, a 40 %: `--slot-icon` vem inline de `Inventory.tsx` e aponta para a
+   `--ui-slot-<slot>` daquele lugar. Sem pacote a variável não resolve e o `var()` cai em
+   `none` — quadrado vazio, sem ícone quebrado. */
+.slot-empty {
+  inset: 1px;
+  background: var(--slot-icon, none) no-repeat center;
+  opacity: 0.4;
+}
+.item-sprite {
+  position: absolute; inset: 1px; width: 32px; height: 32px;
+  display: grid; place-items: center;
+}
+.item-sprite canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
+.item-initial { font-size: 13px; color: var(--text-muted); }
+/* A quantidade da pilha no canto inferior direito, com contorno, como o Tibia. */
+.slot-count {
+  position: absolute; right: 2px; bottom: 1px;
+  font-size: 10px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums;
+  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
+  pointer-events: none;
+}
+
+.capacity { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; padding: 0 2px; }
+/* A mochila: grade de slots iguais, quantos couberem na largura. */
+.backpack {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(auto-fill, 34px); gap: 3px;
 }
-.equipment-slot { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; }
-.equipment-slot button { background: none; border: none; padding: 0; cursor: pointer; }
-.equipment-empty { color: #3a3a48; }
-.item-icon {
-  display: grid; place-items: center; width: 22px; height: 22px;
-  border: 1px solid #2a2a35; border-radius: 3px; background: #17171e; font-size: 11px;
-}
-.capacity { color: #6a6a78; font-variant-numeric: tabular-nums; text-align: right; }
-.backpack { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.backpack-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
-.backpack-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.backpack-item button {
-  background: #1b1b23; border: 1px solid #2a2a35; border-radius: 3px;
-  padding: 1px 6px; color: inherit; font: inherit; font-size: 11px; cursor: pointer;
-}
+.backpack .quiet { grid-column: 1 / -1; }

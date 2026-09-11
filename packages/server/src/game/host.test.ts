@@ -2231,7 +2231,31 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
     expect(sent.filter((m) => m.type === 'inventory')).toHaveLength(1);
     expect(sent.some((m) => m.type === 'system-message')).toBe(false);
     const inventory = sent.find((m) => m.type === 'inventory');
-    expect(inventory?.type === 'inventory' && inventory.equipped['hand']).toBe('i1');
+    expect(inventory?.type === 'inventory' && inventory.equipped['hand']?.instanceId).toBe('i1');
+  });
+
+  it('o equipado vai INTEIRO: id, item e quantidade, como uma entrada da mochila (FUN-108)', () => {
+    // O `sim` MOVE o item para o corpo ao equipar — ele some da mochila. Com `slot →
+    // instanceId` o cliente não tinha como chegar à definição, e o slot vestido ficava sem
+    // nome e sem sprite. `received()` decodifica pelo schema do protocolo: um host que
+    // voltasse a mandar só o id seria recusado em silêncio e o inventário NUNCA chegaria.
+    // Mutação que mata: `equipped[slot] = item.instanceId` em `#sendInventory` — a
+    // mensagem some do `received()` e `inventory` fica `undefined`.
+    const host = comMochila();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'equip', instanceId: 'i1' });
+    host.flush();
+
+    const inventory = socket.received().find((m) => m.type === 'inventory');
+    expect(inventory?.type === 'inventory' && inventory.equipped).toEqual({
+      hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 },
+    });
+    // Saiu da mochila: o mesmo item não pode estar nos dois lugares.
+    expect(inventory?.type === 'inventory' && inventory.backpack).toEqual([]);
   });
 
   it('a recusa vira MENSAGEM, e a mochila não é reenviada', () => {
