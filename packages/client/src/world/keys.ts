@@ -4,7 +4,7 @@
 // uma chave errada não quebra nada, só faz o cache guardar uma textura por tile em vez de uma
 // por célula do padrão, e a tela continua certa enquanto a memória de GPU sobe.
 
-import type { Direction } from '../assets/pack.js';
+import { missileCell, type Direction } from '../assets/pack.js';
 import type { OutfitColors } from '../assets/outfit.js';
 
 /** As dimensões do padrão de um objeto, como `AssetPack.objectPattern` devolve. */
@@ -52,6 +52,42 @@ export function creatureKey(
     ? '-'
     : `${colors.head},${colors.body},${colors.legs},${colors.feet}`;
   return `outfit:${appearanceId}:${direction}:${moving ? 'w' : 's'}:${phase}:${paint}`;
+}
+
+/**
+ * A chave de textura de um quadro de EFEITO (FUN-106): o id e a fase. Um efeito de dez fases
+ * são dez texturas, compartilhadas por todo tile em que ele toca.
+ */
+export function effectKey(effectId: number, phase: number): string {
+  return `effect:${effectId}:${phase}`;
+}
+
+/**
+ * As chaves de TODAS as fases de um efeito, da 0 à última, para o viewport pedi-las ao livro de
+ * uma vez quando o efeito nasce (FUN-106). `phaseCount` é o tamanho de `AssetPack.effectPhases`.
+ *
+ * É a regra do "prefetch", em números: uma fase real tem 40 ms — dois quadros a 60 Hz — e
+ * pedida só no quadro em que chega, cada uma passava o primeiro quadro sem textura, e o efeito
+ * inteiro piscava fase a fase na primeira vez que tocava. Pedidas todas ao nascer, a fase 1 já
+ * está no livro quando a 0 acaba. O índice de cada chave É a fase: quem itera sabe o que pedir.
+ */
+export function effectKeysOf(effectId: number, phaseCount: number): string[] {
+  const keys: string[] = [];
+  for (let phase = 0; phase < phaseCount; phase++) keys.push(effectKey(effectId, phase));
+  return keys;
+}
+
+/**
+ * A chave de textura de um PROJÉTIL voando de `dx`, `dy` (FUN-106).
+ *
+ * **Pela CÉLULA do padrão, não pelo delta** — a mesma razão de `groundKey`: um tiro de três
+ * tiles e um de um tile na mesma direção são o mesmo quadro, e dar a cada delta sua chave
+ * pediria o mesmo bitmap ao pacote uma vez por distância de tiro. A célula é por OCTANTE
+ * (`missileCell`): `(3, 1)` e `(1, 0)` são o mesmo quadro de leste.
+ */
+export function missileKey(missileId: number, dx: number, dy: number): string {
+  const cell = missileCell(dx, dy);
+  return `missile:${missileId}:${cell.x}:${cell.y}`;
 }
 
 function modulo(value: number, size: number): number {

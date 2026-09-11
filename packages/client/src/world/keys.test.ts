@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { creatureKey, groundCell, groundKey } from './keys.js';
+import {
+  creatureKey, effectKey, effectKeysOf, groundCell, groundKey, missileKey,
+} from './keys.js';
 
 describe('groundKey (FUN-23)', () => {
   it('x=5 e x=1 num padrão de largura 4 são a MESMA chave', () => {
@@ -84,5 +86,75 @@ describe('creatureKey (FUN-23)', () => {
       .not.toBe(creatureKey(128, 'north', true, 1, colors));
     expect(creatureKey(128, 'south', true, 1, colors))
       .not.toBe(creatureKey(128, 'south', true, 2, colors));
+  });
+});
+
+describe('effectKey (FUN-106)', () => {
+  it('a fase entra na chave: um efeito de três fases são três texturas', () => {
+    // Mutação que mata: tirar `phase` do template — todo quadro do efeito viraria o primeiro.
+    expect(effectKey(12, 0)).not.toBe(effectKey(12, 1));
+  });
+
+  it('o id entra na chave', () => {
+    expect(effectKey(12, 0)).not.toBe(effectKey(13, 0));
+  });
+
+  it('as quatro famílias têm PREFIXOS distintos: efeito não colide com objeto, outfit nem projétil', () => {
+    // Quatro registros SEPARADOS no pacote: o efeito 1 e o objeto 1 são bitmaps diferentes, e
+    // o livro de texturas só tem a chave para os distinguir — e o que distingue é o PREFIXO,
+    // porque o resto são números que se repetem entre famílias. Comparar chaves inteiras não
+    // prova nada: `object:1:0:0` tem quatro segmentos e `effect:1:0` três, então as duas nunca
+    // colidiriam mesmo com o mesmo prefixo (este teste já foi assim, e não matava nada). O que
+    // se afirma é o primeiro segmento de cada família, com os MESMOS números nas quatro.
+    // Mutação que mata: trocar `effect:` por `object:` em `effectKey`, ou `missile:` por
+    // `outfit:` em `missileKey`.
+    const familyOf = (key: string) => key.slice(0, key.indexOf(':'));
+    const families = [
+      groundKey(1, 0, 0, { width: 1, height: 1 }),
+      creatureKey(1, 'north', false, 0),
+      effectKey(1, 0),
+      missileKey(1, 0, 0),
+    ].map(familyOf);
+    expect(new Set(families).size).toBe(4);
+  });
+});
+
+describe('effectKeysOf (FUN-106)', () => {
+  it('é uma chave por fase, da 0 à última, na ordem em que tocam', () => {
+    // É o que o viewport pede ao livro quando o efeito nasce. Perder a última fase é ela
+    // voltar a piscar; perder a primeira é o efeito nascer invisível por um quadro a mais.
+    // Mutação que mata: `phase < phaseCount - 1`, ou começar em `phase = 1`.
+    expect(effectKeysOf(12, 3)).toEqual(['effect:12:0', 'effect:12:1', 'effect:12:2']);
+  });
+
+  it('sem fases, nenhuma chave', () => {
+    expect(effectKeysOf(12, 0)).toEqual([]);
+  });
+});
+
+describe('missileKey (FUN-106)', () => {
+  it('é pela CÉLULA do padrão: três tiles a leste e um tile a leste são a MESMA chave', () => {
+    // A mesma razão de `groundKey`: dar a cada delta sua chave pediria o mesmo bitmap ao
+    // pacote uma vez por distância de tiro. Mutação que mata: pôr `dx`/`dy` crus na chave.
+    expect(missileKey(5, 3, 0)).toBe(missileKey(5, 1, 0));
+    expect(missileKey(5, 2, -4)).toBe(missileKey(5, 1, -1));
+    // E a célula é por OCTANTE: (3, 1) é quase horizontal e divide a chave com (1, 0), não
+    // com a diagonal. Mutação que mata: `missileCell` pelo sinal de cada eixo.
+    expect(missileKey(5, 3, 1)).toBe(missileKey(5, 1, 0));
+    expect(missileKey(5, 3, 1)).not.toBe(missileKey(5, 1, 1));
+  });
+
+  it('as nove células do padrão são nove chaves', () => {
+    // Leste e sul, leste e oeste, e o parado do meio: cada célula é um bitmap diferente no
+    // pacote, e uma chave que colapsasse duas desenharia o projétil de costas. (Trocar os
+    // eixos entre si na chave NÃO é defeito — continua injetiva — e por isso não é testado.)
+    // Mutação que mata: `missileCell` sem o sentido negativo (oeste vira "nenhum").
+    const keys = new Set<string>();
+    for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) keys.add(missileKey(5, dx, dy));
+    expect(keys.size).toBe(9);
+  });
+
+  it('o id entra na chave', () => {
+    expect(missileKey(5, 1, 0)).not.toBe(missileKey(6, 1, 0));
   });
 });

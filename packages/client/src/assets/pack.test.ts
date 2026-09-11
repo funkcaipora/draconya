@@ -72,6 +72,29 @@ const DAT = encodeAppearances({
       ],
     }),
   ],
+  // Um efeito de três fases com durações DIFERENTES, e mínimo diferente do máximo: é o que
+  // separa "leu o mínimo de cada fase" de "leu o máximo" e de "leu a primeira três vezes".
+  effect: [
+    appearance({
+      id: 12,
+      frameGroups: [frameGroup({
+        spriteIds: [200, 201, 202], phases: [[100, 200], [150, 300], [250, 400]],
+      })],
+    }),
+    appearance({ id: 13, frameGroups: [frameGroup({ spriteIds: [205] })] }),
+    // E um efeito de UMA fase só, com duração: é diferente de "sem animação" (o 13, sem
+    // `phases`), e a diferença é o que um `length <= 1` no lugar de `=== 0` apagaria.
+    appearance({
+      id: 14, frameGroups: [frameGroup({ spriteIds: [206], phases: [[500, 500]] })],
+    }),
+  ],
+  // Um projétil com o padrão 3×3 do pacote real: ids 210..218, indexados por `y × 3 + x`.
+  missile: [
+    appearance({
+      id: 5,
+      frameGroups: [frameGroup({ patternWidth: 3, patternHeight: 3, spriteIds: ids(210, 9) })],
+    }),
+  ],
 });
 
 type Rgba = readonly [r: number, g: number, b: number, a: number];
@@ -359,6 +382,75 @@ describe('AssetPack (FUN-23)', () => {
     expect(avisos[0]?.closedAtNotice).toBe(false);
   });
 
+  it('`effect` anda pela FASE, e só por ela (FUN-106)', async () => {
+    // Efeito não tem direção nem addon: o padrão é todo zero e o que escolhe o quadro é a
+    // fase. Mutação que mata: `phase: 0` fixo na chamada de `#frame`.
+    const { pack } = await build();
+    expect(idOf(await pack.effect(12, 0))).toBe(200);
+    expect(idOf(await pack.effect(12, 1))).toBe(201);
+    expect(idOf(await pack.effect(12, 2))).toBe(202);
+    // Fase além do fim dá a volta, como no outfit: o viewport nunca pede, mas não pode explodir.
+    expect(idOf(await pack.effect(12, 3))).toBe(200);
+  });
+
+  it('`effectPhases` é a duração MÍNIMA de cada fase, na ordem (FUN-106)', async () => {
+    // Mutação que mata: `durationMaxMs` no lugar de `durationMinMs` — daria [200, 300, 400].
+    const { pack } = await build();
+    expect(pack.effectPhases(12)).toEqual([100, 150, 250]);
+  });
+
+  it('`effectPhases` é vazio para efeito sem animação e para id que não existe', async () => {
+    // O viewport decide o que fazer com um efeito sem tempo; o pacote só diz que não tem.
+    const { pack } = await build();
+    expect(pack.effectPhases(13)).toEqual([]);
+    expect(pack.effectPhases(99_999)).toEqual([]);
+  });
+
+  it('`effectPhases` de um efeito de UMA fase é essa fase, não vazio', async () => {
+    // Uma fase com duração é uma linha do tempo de verdade: o efeito toca 500 ms e acaba.
+    // Devolver vazio aqui mandaria o viewport para a linha de reserva (300 ms), e o efeito
+    // acabaria antes da hora sem nada acusar — o teste de três fases não distingue "vazio
+    // só para zero fases" de "vazio para uma fase ou menos".
+    // Mutação que mata: `group.phases.length <= 1 ? [] : …` em `effectPhases`.
+    const { pack } = await build();
+    expect(pack.effectPhases(14)).toEqual([500]);
+  });
+
+  it('`missile` escolhe a célula do 3×3 pela DIREÇÃO do voo (FUN-106)', async () => {
+    // A coluna é o sentido horizontal (0 oeste, 1 nenhum, 2 leste) e a linha é o vertical
+    // (0 norte, 1 nenhum, 2 sul), como o cliente do Tibia guarda. Os ids da fixture são
+    // `210 + y × 3 + x`. Mutação que mata: trocar x por y na chamada de `#frame` — leste
+    // (1, 0) daria 217 em vez de 215.
+    const { pack } = await build();
+    expect(idOf(await pack.missile(5, 1, 0))).toBe(215); // leste: (2, 1)
+    expect(idOf(await pack.missile(5, 0, 1))).toBe(217); // sul: (1, 2)
+    expect(idOf(await pack.missile(5, -1, 0))).toBe(213); // oeste: (0, 1)
+    expect(idOf(await pack.missile(5, 0, -1))).toBe(211); // norte: (1, 0)
+    expect(idOf(await pack.missile(5, 1, 1))).toBe(218); // sudeste: (2, 2)
+    expect(idOf(await pack.missile(5, -1, -1))).toBe(210); // noroeste: (0, 0)
+    expect(idOf(await pack.missile(5, 0, 0))).toBe(214); // parado: o meio
+  });
+
+  it('`missile` escolhe pelo OCTANTE, não pelo sinal: (3, 1) é quase horizontal e sai de leste', async () => {
+    // O pacote tem oito direções, uma a cada 45°. Um tiro de (3, 1) está a 18°, e o quadro
+    // dele é o de leste — pelo sinal sairia o de sudeste, torto em relação ao voo. É a regra
+    // de `Position::getDirectionFromPosition` do OTClient: o eixo maior manda quando é mais
+    // que o dobro do menor; senão é diagonal. E a distância continua não importando: três
+    // tiles a leste e um são o MESMO bitmap.
+    // Mutação que mata: voltar ao sinal (`{ x: side(dx), y: side(dy) }` sem os dois `if`) —
+    // (3, 1) daria 218 e (1, 3) daria 218 também.
+    const { pack } = await build();
+    expect(await pack.missile(5, 3, 0)).toBe(await pack.missile(5, 1, 0));
+    expect(idOf(await pack.missile(5, 3, 1))).toBe(215); // leste: (2, 1)
+    expect(idOf(await pack.missile(5, 1, 3))).toBe(217); // sul: (1, 2)
+    expect(idOf(await pack.missile(5, 2, 2))).toBe(218); // sudeste: (2, 2)
+    // Na fronteira, (2, 1) ainda é diagonal: `>`, não `>=` — 26° está mais perto de 45° do que
+    // de 0°. Mutação que mata: `ax >= 2 * ay`.
+    expect(idOf(await pack.missile(5, 2, 1))).toBe(218);
+    expect(idOf(await pack.missile(5, -3, 1))).toBe(213); // oeste: (0, 1)
+    expect(idOf(await pack.missile(5, 1, -3))).toBe(211); // norte: (1, 0)
+  });
+
   it('devolve null para aparência que não existe', async () => {
     // Conteúdo apontando arte que saiu do pacote. Uma criatura sem sprite é melhor que uma
     // tela que não abre.
@@ -366,6 +458,8 @@ describe('AssetPack (FUN-23)', () => {
     expect(await pack.object(99_999)).toBeNull();
     expect(await pack.outfit(99_999, 'north', 0)).toBeNull();
     expect(await pack.outfit(99_999, 'north', 0, false, COLORS)).toBeNull();
+    expect(await pack.effect(99_999, 0)).toBeNull();
+    expect(await pack.missile(99_999, 1, 0)).toBeNull();
   });
 
   it('recusa índice que o servidor não entregou', async () => {
