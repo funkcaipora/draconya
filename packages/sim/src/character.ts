@@ -1,6 +1,8 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
+import { Bestiary } from './bestiary.js';
+import type { BestiaryState } from './bestiary.js';
 import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
@@ -76,6 +78,12 @@ export interface CharacterState {
    */
   readonly skills?: SkillsState;
   /**
+   * Abates por monstro, PERMANENTES (§18, FUN-113). Ausente é snapshot ou personagem anterior
+   * ao Bestiário — nenhum abate contado, que é onde um personagem novo começa. Opcional, então
+   * o `SNAPSHOT_FORMAT_VERSION` não precisou subir (DT-06), exatamente como `skills`.
+   */
+  readonly bestiary?: BestiaryState;
+  /**
    * Quanto ele aguenta carregar (§21.5). Vem da tabela de progressão, como `maxHealth`.
    *
    * Opcional: personagem e snapshot anteriores ao inventário não têm a chave, e zero seria
@@ -128,6 +136,8 @@ export class CharacterRuntime {
   stepDurationMs: number;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
+  /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
+  readonly bestiary: Bestiary;
   capacity: number;
   /** Mutado ao equipar e ao receber item. Só a sessão dona escreve (invariante 9). */
   readonly inventory: Inventory;
@@ -157,6 +167,7 @@ export class CharacterRuntime {
     // duração zero nunca chega ao fio — o protocolo exige duração positiva.
     this.stepDurationMs = state.stepDurationMs ?? 0;
     this.skills = Skills.fromState(state.skills);
+    this.bestiary = Bestiary.fromState(state.bestiary);
     this.capacity = state.capacity ?? 0;
     this.inventory = Inventory.fromState(state.inventory);
     this.lootBox = [...(state.lootBox ?? [])];
@@ -183,6 +194,7 @@ export class CharacterRuntime {
       goldDelta: this.goldDelta,
       alive: this.alive,
       skills: this.skills.getState(),
+      bestiary: this.bestiary.getState(),
       capacity: this.capacity,
       inventory: this.inventory.getState(),
       lootBox: this.lootBox,

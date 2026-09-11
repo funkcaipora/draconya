@@ -2,6 +2,7 @@ import { buildContent, isBlocked, placeholderAppearances } from '@draconya/conte
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { huntListings } from '../hunt/catalogue.js';
@@ -167,6 +168,7 @@ const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(ov
 const character = (
   over: Partial<{
     health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
+    bestiary: BestiaryState;
   }> = {},
 ): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
@@ -179,6 +181,7 @@ const character = (
     capacity: 1_000,
     ...(over.skills === undefined ? {} : { skills: over.skills }),
     ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
+    ...(over.bestiary === undefined ? {} : { bestiary: over.bestiary }),
   });
 };
 
@@ -191,7 +194,7 @@ interface Started {
 function start(
   options: { difficulty?: 'beginner' | 'professional'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
-    inventory?: InventoryState } = {},
+    inventory?: InventoryState; bestiary?: BestiaryState } = {},
 ): Started {
   const session = createHuntSession({
     id: 'session-1',
@@ -206,6 +209,7 @@ function start(
     ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs }),
     ...(options.skills === undefined ? {} : { skills: options.skills }),
     ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
+    ...(options.bestiary === undefined ? {} : { bestiary: options.bestiary }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset };
@@ -2491,6 +2495,138 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
+  });
+});
+
+describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () => {
+  // Marcos curtos e bônus alto de propósito: com [3, 5] e 20 % dá para contar os abates na mão,
+  // e um rato de 5 XP passa a render 6 no primeiro marco e 7 no segundo — números que se
+  // conferem a olho. Com o 1 % do conteúdo real, `floor(5 × 1,01)` continua 5 e o teste não
+  // distinguiria bônus de nada.
+  const bestiary = { id: 'baseline', milestones: [3, 5], xpBonusPercentPerMilestone: 20 };
+  const withBestiary = () => content({ bestiary: [bestiary] });
+
+  /**
+   * A XP que CADA abate rendeu, na ordem. Avança em passos de 100 ms e anota a diferença de XP
+   * sempre que a contagem de abates sobe — e ela sobe de um em um, porque um golpe mata no
+   * máximo um rato e há um golpe por vencimento.
+   */
+  const xpPerKill = (started: Started, kills: number): number[] => {
+    const { session, hero } = started;
+    const perKill: number[] = [];
+    let seenKills = 0;
+    let seenXp = hero.xp;
+    while (perKill.length < kills && session.nowMs < 600_000) {
+      session.advanceBy(100);
+      if (session.aggregates.kills === seenKills) continue;
+      expect(session.aggregates.kills).toBe(seenKills + 1);
+      perKill.push(hero.xp - seenXp);
+      seenKills = session.aggregates.kills;
+      seenXp = hero.xp;
+    }
+    return perKill;
+  };
+
+  it('cada abate conta no Bestiário do matador, e o extrato leva o número ABSOLUTO', () => {
+    const { session, hero } = start({ difficulty: 'professional' });
+    run(session, 60_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.bestiary.killsOf('rat')).toBe(session.aggregates.kills);
+    expect(hero.getState().bestiary).toEqual({ rat: session.aggregates.kills });
+  });
+
+  it('sem config no conteúdo o abate conta, mas nenhum marco fecha e a XP sai sem bônus', () => {
+    // O conteúdo de teste não tem `bestiary/`. A config é quem define marco, não quem autoriza
+    // contar — e sem ela a XP é a de sempre, rato a rato.
+    const { session, hero } = start({ difficulty: 'professional' });
+    run(session, 60_000, 100);
+    expect(hero.bestiary.killsOf('rat')).toBeGreaterThanOrEqual(3);
+    expect(session.notableEvents.filter((e) => e.type === 'bestiary-milestone')).toHaveLength(0);
+    expect(hero.xp).toBe(session.aggregates.kills * rat.experience);
+  });
+
+  it('abate com stamina zero NÃO conta — e continua sem XP e sem loot', () => {
+    // §18.6, DT-03: é o MESMO `if` que bloqueia a recompensa. Prender os três aqui é o que
+    // impede alguém de mover o contador para fora dele "porque abate é abate".
+    const { session, hero } = start({
+      difficulty: 'professional', staminaMs: 0, loaded: withBestiary(),
+    });
+    run(session, 60_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.bestiary.getState()).toEqual({});
+    expect(hero.xp).toBe(0);
+    expect(session.aggregates.xpGained).toBe(0);
+    expect(hero.goldDelta).toBe(0);
+  });
+
+  it('o abate que ALCANÇA o marco sai com a XP de antes; o seguinte já sai com o bônus', () => {
+    // DT-04. Invertida a ordem, o terceiro abate seria o único da vida do personagem a render
+    // diferente dos vizinhos.
+    const started = start({ difficulty: 'professional', loaded: withBestiary() });
+    const perKill = xpPerKill(started, 6);
+
+    //                    1  2  3  4  5  6
+    //                          ^marco 1  ^marco 2
+    expect(perKill).toEqual([5, 5, 5, 6, 6, 7]);
+    expect(started.hero.bestiary.killsOf('rat')).toBe(6);
+    expect(started.session.aggregates.xpGained).toBe(started.hero.xp);
+
+    const milestones = started.session.notableEvents.filter((e) => e.type === 'bestiary-milestone');
+    expect(milestones.map((e) => e.detail)).toEqual(['rat/1', 'rat/2']);
+  });
+
+  it('o bônus é GLOBAL: um marco de outro monstro já vale para o primeiro rato (DT-01)', () => {
+    // O personagem chega do ticket com três morcegos no Bestiário — um marco. O primeiro rato
+    // rende 6, não 5: "XP PvE permanente", não "XP daquele monstro".
+    const started = start({
+      difficulty: 'professional', loaded: withBestiary(), bestiary: { bat: 3 },
+    });
+    expect(xpPerKill(started, 1)).toEqual([6]);
+    expect(started.hero.bestiary.getState()).toEqual({ bat: 3, rat: 1 });
+  });
+
+  it('o Bestiário atravessa o snapshot', () => {
+    const { session, hero } = start({ difficulty: 'professional', loaded: withBestiary() });
+    run(session, 60_000, 100);
+    const before = hero.bestiary.getState();
+    expect(before['rat']).toBeGreaterThan(0);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, withBestiary()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(resumed.participants[0]?.bestiary.getState()).toEqual(before);
+  });
+
+  it('personagem SEM Bestiário gravado começa do zero, e não quebra', () => {
+    // É o personagem de antes desta issue. Campo opcional, sem bump de formato (DT-06).
+    const { session } = start();
+    run(session, 5_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    delete (snapshot.participants[0] as { bestiary?: unknown }).bestiary;
+
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(resumed.participants[0]?.bestiary.getState()).toEqual({});
+    expect(() => run(resumed, 5_000, 100)).not.toThrow();
+  });
+
+  it('1 Hz e 10 Hz contam o MESMO — abate é evento, não tick', () => {
+    const at = (stepMs: number) => {
+      const { session, hero } = start({ difficulty: 'professional', loaded: withBestiary() });
+      run(session, 120_000, stepMs);
+      return { bestiary: hero.bestiary.getState(), xp: hero.xp };
+    };
+    const fast = at(100);
+    expect(at(1_000)).toEqual(fast);
+    expect(fast.bestiary['rat']).toBeGreaterThanOrEqual(5);
   });
 });
 
