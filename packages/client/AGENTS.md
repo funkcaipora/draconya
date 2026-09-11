@@ -385,7 +385,8 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   tente animar dez minutos de eventos.
 - **O analisador é DOM e tem FATIA PRÓPRIA** (`state/hud.ts`, FUN-83). Ler o estado inteiro faria
   a janela re-renderizar a cada golpe, que é exatamente o que o ADR 0007 existe para evitar.
-- **Entre dois `session-state`, só o TEMPO anda.** O "por hora" é uma divisão cujo denominador é
+- **Entre duas entregas — `session-state` ou `analyzer` (FUN-110) —, só o TEMPO anda.** O "por
+  hora" é uma divisão cujo denominador é
   um relógio local; o numerador é sempre o último número que o servidor mandou. Extrapolar XP ou
   gold mostraria progresso que talvez não tenha acontecido — e o valor andaria PARA TRÁS na
   atualização seguinte. A taxa caindo devagar entre duas atualizações é o lado certo para errar.

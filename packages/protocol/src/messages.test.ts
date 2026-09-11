@@ -253,3 +253,31 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
     expect(decodeS2C(encodeS2C(state))).toEqual([state]);
   });
 });
+
+describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () => {
+  const catalogue = (hunt: Record<string, unknown>): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'], ...hunt }],
+    bot: {
+      vocabularyVersion: 1, advancedFromLevel: 50,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+      advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+      spells: [], supplies: [],
+    },
+    items: [],
+  } as unknown as S2CMessage);
+
+  it('round trips the outfit ids, and an older node without them decodes to an EMPTY list', () => {
+    // O cliente itera `hunt.outfitIds` sem guarda: `undefined` aqui seria um `for..of` que
+    // lança dentro do efeito de aquecimento. Mutação que mata: trocar `.default([])` por
+    // `.optional()`.
+    const withIds = catalogue({ outfitIds: [21, 35] });
+    expect(decodeS2C(encodeS2C(withIds))).toEqual([withIds]);
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
+  });
+
+  it('rejects an outfit id of zero: there is no appearance zero', () => {
+    expect(decodeS2C(encodeS2C(catalogue({ outfitIds: [0] })))).toBeNull();
+  });
+});

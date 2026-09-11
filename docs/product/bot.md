@@ -356,8 +356,10 @@ enquanto roda.
 **E ela volta para a tela** (FUN-111): o `session-state` leva a configuração em vigor — a do
 ticket ou a última aceita —, e a tela do bot abre com ela. Até aí a tela nascia vazia a cada
 carregamento, e um "Salvar" dali apagava as regras que a hunt estava executando. A tela só a
-adota quando o rascunho local está pristino ou salvo: um rascunho editado e não salvo sobrevive
-à reconexão, pela mesma razão que sobrevive a uma recusa.
+adota quando o rascunho local está intocado ou salvo: um rascunho tocado e não salvo — editado,
+pendente ou recusado, mesmo que apagado até ficar igual ao vazio — sobrevive à reconexão, pela
+mesma razão que sobrevive a uma recusa. `lure` e `ringSwap`, que nenhuma tela edita, passam
+opacos pelo rascunho: um "Salvar" de quem só mexeu na cura não apaga o anel.
 
 ### O gate de level (§13.2)
 

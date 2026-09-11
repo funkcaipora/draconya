@@ -194,10 +194,14 @@ export const S2C_SCHEMAS = {
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
   /**
-   * O analisador ao vivo: os MESMOS agregados e eventos do `session-state`, mandados quando
+   * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
    * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
    * tempo anda no relógio local da janela, e mandá-lo a cada ciclo seria a banda inteira para
-   * dizer que um segundo passou.
+   * dizer que cem milissegundos passaram.
+   *
+   * `notableEvents` são só os NOVOS desde a última entrega — o `session-state` ou o
+   * `analyzer` anterior —, e o cliente os acrescenta. A lista inteira a cada abate custava,
+   * medido, 13 MB numa hunt de oito horas, 99 % deles repetição do que a tela já tinha.
    */
   analyzer: z.object({
     aggregates: Aggregates,

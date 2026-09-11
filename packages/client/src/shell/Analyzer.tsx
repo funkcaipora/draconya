@@ -15,19 +15,8 @@ import { useEffect, useState } from 'react';
 import { perHour } from '../state/hud.js';
 import type { Aggregates, NotableEvent } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
-
-/** Como cada tipo de evento notável aparece para o jogador. */
-const EVENT_TEXT: Record<string, string> = {
-  'entered-city': 'Voltou para a cidade',
-  death: 'Morreu',
-  ended: 'Sessão encerrada',
-  'stamina-exhausted': 'Stamina esgotada',
-  'level-up': 'Subiu de level',
-  'backpack-full': 'Mochila cheia',
-  'out-of-gold': 'Gold acabou',
-  'ring-equipped': 'Equipou o anel',
-  'ring-removed': 'Tirou o anel',
-};
+import { describeEvent } from './event-text.js';
+import type { EventNames } from './event-text.js';
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
@@ -44,7 +33,8 @@ function duration(ms: number): string {
 }
 
 /**
- * O relógio local que faz o tempo de hunt andar entre dois `session-state`.
+ * O relógio local que faz o tempo de hunt andar entre duas entregas — `session-state` ou
+ * `analyzer` (FUN-110), que recarimba o instante junto com os números.
  *
  * **Só o TEMPO anda.** XP, gold e abates são sempre o último número que o servidor mandou —
  * extrapolar qualquer um deles mostraria progresso que talvez não tenha acontecido, e o jogador
@@ -109,7 +99,14 @@ function Numbers({ aggregates, elapsedMs }: {
 }
 
 function Events({ events }: { events: readonly NotableEvent[] }) {
+  // Os nomes de hunt e supply vêm do catálogo: o evento carrega o id, e o id é o que o
+  // conteúdo fixou na sessão — a tradução para o nome é apresentação (FUN-110).
+  const catalogue = useHudSlice((state) => state.catalogue);
   if (events.length === 0) return null;
+  const names: EventNames = {
+    hunts: new Map(catalogue?.hunts.map((hunt) => [hunt.id, hunt.name]) ?? []),
+    supplies: new Map(catalogue?.bot.supplies.map((supply) => [supply.id, supply.name]) ?? []),
+  };
   return (
     <ul className="analyzer-events">
       {/* Do mais recente para o mais antigo: a tela de retorno responde "o que aconteceu",
@@ -117,8 +114,7 @@ function Events({ events }: { events: readonly NotableEvent[] }) {
       {[...events].reverse().slice(0, 12).map((event, index) => (
         <li key={`${event.atMs}-${event.type}-${String(index)}`}>
           <span className="analyzer-event-time">{duration(event.atMs)}</span>
-          {EVENT_TEXT[event.type] ?? event.type}
-          {event.detail !== undefined && event.detail !== '' && ` · ${event.detail}`}
+          {describeEvent(event, names)}
         </li>
       ))}
     </ul>

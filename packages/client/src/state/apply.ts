@@ -141,14 +141,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
 
     case 'analyzer':
       // O analisador ao vivo (FUN-110): os números novos e o INSTANTE em que chegaram — é o
-      // carimbo que rebaseia o relógio local da janela, como no `session-state`. Sem janela
+      // carimbo que rebaseia o relógio local da janela, como no `session-state`. Os eventos
+      // vêm só os NOVOS, e entram no fim da lista que o `session-state` trouxe. Sem janela
       // (a Cidade não credita nada, §37) não há o que atualizar.
       hud.set((state) => state.analyzer.sessionType === null ? state : ({
         ...state,
         analyzer: {
           ...state.analyzer,
           aggregates: message.aggregates,
-          notableEvents: message.notableEvents,
+          notableEvents: message.notableEvents.length === 0
+            ? state.analyzer.notableEvents
+            : [...state.analyzer.notableEvents, ...message.notableEvents],
           receivedAtMs: nowMs,
         },
       }));

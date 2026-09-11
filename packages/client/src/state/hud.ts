@@ -71,7 +71,8 @@ export type Inventory = S2CProps<'inventory'>;
  * O analisador (§16.1, §16.2, FUN-83).
  *
  * **`receivedAtMs` é o instante local em que este pacote chegou**, e é ele que faz o relógio
- * andar entre dois `session-state`. Sem isso, o tempo de hunt ficaria congelado entre uma
+ * andar entre duas entregas — `session-state` ou `analyzer` (FUN-110), que o recarimba junto
+ * com os números. Sem isso, o tempo de hunt ficaria congelado entre uma
  * atualização e outra — e o "por hora", que é uma divisão por ele, ficaria congelado junto.
  *
  * **É `performance.now()`, o relógio de `applyMessage`, e não `Date.now()`.** Quem lê este

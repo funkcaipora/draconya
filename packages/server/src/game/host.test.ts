@@ -2446,13 +2446,54 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const updates = received().filter((m) => m.type === 'analyzer') as unknown as
       Array<{ aggregates: { kills: number; xpGained: number; durationMs: number }; notableEvents: unknown[] }>;
     expect(updates.length).toBeGreaterThan(0);
-    // A ÚLTIMA diz o que a sessão diz agora, tempo incluído — é o que rebaseia o relógio da janela.
+    // A ÚLTIMA diz o que a sessão diz agora; o tempo dela é o do ciclo em que saiu, nunca à
+    // frente do da sessão — é o que rebaseia o relógio da janela sem o fazer andar para trás.
     expect(updates.at(-1)?.aggregates.kills).toBe(session?.aggregates.kills);
     expect(updates.at(-1)?.aggregates.xpGained).toBe(session?.aggregates.xpGained);
-    expect(updates.at(-1)?.aggregates.durationMs).toBe(session?.aggregates.durationMs);
+    expect(updates.at(-1)?.aggregates.durationMs).toBeGreaterThan(0);
+    expect(updates.at(-1)?.aggregates.durationMs).toBeLessThanOrEqual(session?.aggregates.durationMs ?? 0);
     // E os abates sobem entre uma e outra: cada mensagem é uma mudança, não um eco.
     const kills = updates.map((u) => u.aggregates.kills);
     expect(new Set(kills).size).toBe(kills.length);
+  });
+
+  it('cada um dos NOVE agregados é gatilho sozinho — e o session-attach zera a comparação', () => {
+    // O passe de QA pegou "Mortos 0"; o que este teste impede é o mesmo defeito num campo só:
+    // uma poção usada, um gasto, um golpe de magia que não mata. Mutação que mata: apagar
+    // qualquer comparação de `sameAnalyzer`, ou o `#sendState` deixar de gravar `sentAnalyzer`
+    // (o ciclo depois do attach mandaria um eco do que o `session-state` acabou de levar).
+    const { host, runFor, received, viewer } = hunt({ tanky: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const count = () => received().filter((m) => m.type === 'analyzer').length;
+
+    // Depois do primeiro golpe (bestBasicHit), o attach leva tudo e zera: o ciclo seguinte,
+    // em que só o tempo anda (o próximo golpe é a 2 000 ms), não manda NADA.
+    runFor(100);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const afterAttach = count();
+    runFor(100);
+    expect(count()).toBe(afterAttach);
+
+    const fields = [
+      'xpGained', 'goldGained', 'goldSpent', 'kills', 'deaths', 'itemsLooted', 'suppliesUsed',
+      'bestBasicHit', 'bestSpellHit',
+    ] as const;
+    for (const field of fields) {
+      const before = count();
+      session.aggregates[field] += 1;
+      runFor(100);
+      expect(count(), field).toBe(before + 1);
+    }
+    // E um evento notável novo, sozinho, também — e chega SÓ ele, não a lista inteira.
+    const before = count();
+    session.record('level-up', '99');
+    runFor(100);
+    expect(count()).toBe(before + 1);
+    const last = received().filter((m) => m.type === 'analyzer').at(-1) as unknown as
+      { notableEvents: Array<{ type: string; detail?: string }> };
+    expect(last.notableEvents).toEqual([{ atMs: expect.any(Number), type: 'level-up', detail: '99' }]);
   });
 
   it('o tempo NÃO é gatilho: toda mensagem do analisador é uma mudança, nunca um tique', () => {

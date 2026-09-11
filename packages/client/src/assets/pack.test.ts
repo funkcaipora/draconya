@@ -503,6 +503,30 @@ describe('warmOutfit (FUN-112)', () => {
     expect(await pack.outfit(128, 'south', 0, false, COLORS)).not.toBeNull();
   });
 
+  it('aquece a BASE e o TEMPLATE de um outfit de duas camadas — um bitmap por quadro por camada', async () => {
+    // O template é o que o compositor multiplica pela cor; aquecer só a base deixaria metade
+    // das folhas do jogador para a primeira pintura. Contado em bitmaps criados, porque é o
+    // único lado observável sem IndexedDB. Mutação que mata: `const layers = [LAYER_BASE]`.
+    let created = 0;
+    const fetched = vi.fn(async (url: string | URL | Request) => {
+      const name = String(url).split('/').pop() ?? '';
+      if (name === 'catalog-content.json') return new Response(JSON.stringify(CATALOG));
+      if (name === 'app.dat') return new Response(DAT.buffer as ArrayBuffer);
+      return new Response(new ArrayBuffer(8));
+    }) as unknown as typeof globalThis.fetch;
+    const pack = await AssetPack.load({
+      baseUrl: 'https://exemplo/things/1332', fetch: fetched,
+      loader: { decode: async () => sheetWith() },
+      createBitmap: async (p, w, h) => { created += 1; return new FakeBitmap(w, h, p); },
+    });
+    // O 21 tem uma camada: 4 parado + 4 × 3 andando = 16 quadros, 16 bitmaps.
+    await pack.warmOutfit(21);
+    expect(created).toBe(16);
+    // O 128 tem duas: (4 parado + 4 × 2 andando) × 2 camadas = 24 bitmaps a mais.
+    await pack.warmOutfit(128);
+    expect(created).toBe(16 + 24);
+  });
+
   it('outfit que o pacote não tem não pede nada', async () => {
     const { pack, baixadas } = await build();
     await pack.warmOutfit(9_999);

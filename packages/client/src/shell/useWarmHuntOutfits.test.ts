@@ -6,9 +6,10 @@ const catalogue = (hunts: Array<{ id: string; outfitIds: number[] }>) => ({
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { conditions: [], actions: [], targeting: [] },
+    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [], supplies: [],
   },
+  items: [],
 });
 
 describe('outfitsToWarm (FUN-112)', () => {

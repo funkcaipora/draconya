@@ -535,18 +535,30 @@ describe('o analisador ao vivo (FUN-110)', () => {
     }, 5_000);
   };
 
-  it('troca os agregados e os eventos, e recarimba o instante — o relógio local rebaseia', () => {
+  it('troca os agregados, ACRESCENTA os eventos novos e recarimba o instante — o relógio local rebaseia', () => {
     // Era o defeito: a janela ficava com os números do `session-attach` a hunt inteira.
-    // Mutação que mata: não recarimbar `receivedAtMs` (o tempo passaria a andar em dobro).
+    // Os eventos vêm só os novos (a lista inteira a cada abate custava 13 MB em oito horas),
+    // então entram no fim dos que o `session-state` trouxe. Mutação que mata: não recarimbar
+    // `receivedAtMs` (o tempo andaria em dobro), ou SUBSTITUIR a lista (o level-up do começo
+    // sumiria).
     attach();
-    applyMessage(live(), 9_000);
+    applyMessage(live({ notableEvents: [{ atMs: 640_000, type: 'level-up', detail: '9' }] }), 9_000);
     const { analyzer } = hud.get();
     expect(analyzer.aggregates?.kills).toBe(13);
     expect(analyzer.aggregates?.durationMs).toBe(650_000);
-    expect(analyzer.notableEvents).toHaveLength(2);
+    expect(analyzer.notableEvents).toEqual([
+      { atMs: 1_000, type: 'level-up' }, { atMs: 640_000, type: 'level-up', detail: '9' },
+    ]);
     expect(analyzer.receivedAtMs).toBe(9_000);
     expect(analyzer.sessionType).toBe('hunt');
     expect(analyzer.ended).toBe(false);
+  });
+
+  it('sem evento novo, a lista fica a mesma — e o mesmo objeto, para a janela não redesenhar', () => {
+    attach();
+    const before = hud.get().analyzer.notableEvents;
+    applyMessage(live({ notableEvents: [] }), 9_000);
+    expect(hud.get().analyzer.notableEvents).toBe(before);
   });
 
   it('sem janela — antes de qualquer session-state — não inventa uma', () => {

@@ -264,9 +264,10 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
  * O que o analisador entregou por último (FUN-110): os agregados e QUANTOS eventos notáveis.
  *
  * `durationMs` fica de fora da comparação de propósito, pela mesma razão da stamina em
- * `sameStats`: ele muda em todo ciclo, e compará-lo faria a mensagem sair a 4 Hz para dizer
- * que um quarto de segundo passou. O tempo anda no relógio local da janela; o que a janela não
- * tem como saber sozinha é abate, loot, gasto, level e morte — e é isso que dispara.
+ * `sameStats`: ele muda em todo ciclo — dez por segundo numa hunt anexada —, e compará-lo
+ * faria a mensagem sair a 10 Hz para dizer que cem milissegundos passaram. O tempo anda no
+ * relógio local da janela; o que a janela não tem como saber sozinha é abate, loot, gasto,
+ * level e morte — e é isso que dispara.
  */
 interface SentAnalyzer {
   readonly aggregates: Aggregates;
@@ -1353,11 +1354,15 @@ export class SessionHost {
     const { aggregates, notableEvents } = hosted.session;
     const sent = hosted.sentAnalyzer;
     if (sent !== null && sameAnalyzer(sent, aggregates, notableEvents.length)) return;
+    // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e mandá-la
+    // inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo repetição.
+    // Sem entrega anterior (ninguém recebeu nada ainda) vai tudo, que é o que a tela precisa.
+    const since = sent?.eventCount ?? 0;
     hosted.sentAnalyzer = { aggregates: { ...aggregates }, eventCount: notableEvents.length };
     const message: S2CMessage = {
       type: 'analyzer',
       aggregates: { ...aggregates },
-      notableEvents: notableEvents.map((event) => ({ ...event })),
+      notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
     };
     for (const viewer of hosted.viewers) viewer.send(message);
   }

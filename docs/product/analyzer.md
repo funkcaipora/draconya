@@ -81,7 +81,8 @@ offline mostra o mesmo, mais a lista curta de eventos notáveis (§16.2). São a
 dois momentos, e duas janelas divergiriam na terceira mudança.
 
 **Só o TEMPO anda entre duas atualizações.** O "por hora" é uma divisão, e o denominador é um
-relógio local que corre desde o instante em que o último `session-state` chegou. XP, gold e abates
+relógio local que corre desde a última entrega — o `session-state` ou o `analyzer` mais recente
+(FUN-110), que rebaseia o relógio junto com os números. XP, gold e abates
 são sempre o último número que o servidor mandou — extrapolar qualquer um mostraria progresso que
 talvez não tenha acontecido, e o jogador veria o valor ANDAR PARA TRÁS na atualização seguinte.
 
