@@ -31,3 +31,4 @@ leitura do PRD confrontada com o que foi de fato construído, inclusive os ponto
 a implementação teve que resolver sozinha, sem esperar resposta.
 - [`infrastructure.md`](infrastructure.md) — fornecedores, recursos e custo estimado em três estágios. Vivo.
 - [`deploy.md`](deploy.md) — como subir local e na VPS, os três papéis, drenagem e backup. Vivo.
+- [`otclient-web-client-plan.md`](otclient-web-client-plan.md) — plano para adotar o cliente web do tibia-idle (OTClient em WebAssembly) como renderizador do mundo, com o que colide nos ADRs e as fases. Instantâneo; proposta aguardando decisão.
