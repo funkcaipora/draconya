@@ -31,8 +31,10 @@ React como dono de tudo que é do Draconya — a forma C do plano:
    fala Tibia 13.10 com a engine e leva só o mundo: mapa, criaturas, passos, vida, stats, chat e
    efeitos. O `SessionHost` trata os dois como visualizadores da mesma sessão; a simulação não
    sabe que existem dois protocolos.
-2. **Versão 13.10** de pacote de assets e de protocolo — a combinação que o tibia-idle validou
-   ponta a ponta. A tabela de aparências e `THINGS_VERSION` migram de 13.32 para 13.10.
+2. **Versão 13.32** de pacote de assets e de protocolo — a que a tabela de aparências, o
+   `THINGS_DIR` de quem desenvolve e o volume do staging já usam, com tag pública
+   (`dudantas/tibia-client@13.32.14520`). Um pacote só para os dois renderizadores, sem
+   remapear id nenhum. Ver a emenda abaixo: o plano recomendava 13.10.
 3. **HUD do Draconya em DOM**, não em Lua. O que fica dentro do canvas é o que o Tibia já
    desenha: nomes, barras, efeitos, recipientes, menu de contexto. Cada informação tem um dono só.
 4. **Upstream fixado por commit, com patches no repositório**, não fork. O único patch de C++
@@ -53,9 +55,10 @@ dele.
   Lua cinco telas já entregues e testadas em React, para sistemas que não existem no Tibia.
 - **Só inspiração, manter o Pixi** — descartada: não usa o cliente; continua sendo construir um
   renderizador do zero.
-- **13.32**, o pacote que a tabela de aparências cita hoje — descartada: nenhuma combinação
-  engine + assets + servidor foi validada nessa versão, e o custo de trocar é uma tabela de
-  duas linhas.
+- **13.10**, a combinação que o tibia-idle validou ponta a ponta — era a recomendação do plano;
+  descartada em 2026-09-11, quando a tabela de aparências deixou de ter duas linhas (ver emenda).
+  O que o tibia-idle validou continua valendo como referência de forma; a versão é um botão só
+  (`engine.lock.json`, `TIBIA_PROTOCOL_VERSION`), e voltar a 13.10 custa um remap de tabela.
 - **Fork do upstream** — adiada: patches sobre commit fixado bastam enquanto forem poucos; virar
   fork é decisão nova.
 - **Websockify** entre navegador e `game` — descartada: o `game` já é um servidor WebSocket, e o
@@ -92,3 +95,36 @@ Nenhum muda. O invariante 4 ganha um segundo decodificador de intenção (opcode
 invariante 5 ganha uma segunda tabela, no mesmo pacote e num arquivo só; o invariante 7 passa a
 ser conferido também contra o pacote de assets que a engine carrega (`welcome` diz qual, a casca
 recusa ligar a engine com outro).
+
+## Emenda — 2026-09-11: a `main` andou, e a versão é 13.32
+
+Entre a escrita do plano (base `a3c34ce`) e a abertura das tarefas, a `main` recebeu ~20 commits
+de outras sessões: sprites reais no viewport Pixi, com outfits, nomes e barras de vida (FUN-23,
+FUN-103); efeitos, mísseis e dano flutuante como mensagens de protocolo (`creature-hit`,
+`effect`, `missile` — FUN-106, FUN-109); paredes montadas por vizinhança (FUN-105); a HUD com a
+skin do Tibia e o sprite de cada item no inventário (FUN-108); stats ao vivo; e a tabela de
+aparências, que tinha duas linhas, passou a mapear personagem, magias, supplies, golpes, chão e
+quatro peças de parede — tudo em ids do pacote **13.32**, que é o que está em `things/1332` de
+quem desenvolve e no volume de staging.
+
+Duas consequências para esta decisão:
+
+1. **A versão passa a ser 13.32** (decisão 2 acima). A recomendação de 13.10 vinha de duas
+   coisas: a validação do tibia-idle e uma tabela de duas linhas fácil de remapear. A segunda
+   deixou de ser verdade, e a primeira é substituída pelo spike da Fase 0, que valida a versão
+   escolhida contra a engine real — é para isso que ele existe. O pacote 13.32 tem tag pública no
+   mesmo repositório que o 13.10 (`dudantas/tibia-client@13.32.14520`), então o build da engine
+   continua reproduzível. As diferenças de layout entre 1310 e 1332 estão documentadas no parser
+   do upstream (`features.lua`: ≥1314, ≥1320, ≥1332) e são a primeira coisa que o spike fixa.
+2. **A comparação que decide este ADR mudou de régua.** O plano dizia que a engine entregava
+   "tudo que a FUN-23 ainda teria de construir"; boa parte disso foi construída no Pixi enquanto o
+   plano era escrito. O que a engine ainda oferece e o Pixi não tem — andares, luz, animações por
+   `frameGroups` completas, projéteis e efeitos com todas as fases, empilhamento de itens,
+   recipientes, menu de contexto — continua valendo, mas o critério de aceitação da Fase 2 passa a
+   ser lido **contra o Pixi de hoje**, não contra retângulos. A decisão 5 (o Pixi sai) só se
+   sustenta se, na tela, a engine for melhor do que ele é agora — e é o encerramento do teste
+   (última tarefa do milestone) quem responde.
+
+O pipeline de assets em TypeScript deixou de ser "validação e o resto dormente": o inventário
+desenha o sprite de cada item e a casca lê a skin de UI do pacote. Ele fica, com consumidor, em
+qualquer desfecho.

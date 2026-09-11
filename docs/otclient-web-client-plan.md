@@ -5,6 +5,15 @@
 **Natureza:** instantâneo. O que for decidido vira ADR (seção 10); o que for construído
 vira `docs/product/` e `AGENTS.md` do pacote.
 
+> **Atualização 2026-09-11.** Este plano foi escrito sobre a base `a3c34ce`. No mesmo dia a `main`
+> recebeu sprites reais no Pixi, monstro no fio, efeitos/mísseis/dano flutuante, stats ao vivo,
+> paredes por vizinhança e a HUD com skin do Tibia (FUN-23, 103, 105, 106, 108, 109). Duas coisas
+> deste texto mudaram por isso e estão registradas na emenda do
+> [ADR 0025](adr/0025-otclient-web-as-world-renderer.md): a versão recomendada passa a ser
+> **13.32** (a tabela de aparências, o `things/` local e o staging já são 13.32, e a tag pública
+> existe), e a régua da Fase 2 é o Pixi **de hoje**, não retângulos. O que segue está como foi
+> escrito; as tarefas do milestone "OTClient web · teste local" já refletem a atualização.
+
 Fontes examinadas, com commit, para que cada afirmação abaixo seja conferível:
 
 | O quê | Onde | Versão |
@@ -298,11 +307,12 @@ Hoje as duas pontas não concordam: `.env.example` diz `THINGS_VERSION=1332` e a
 aparências diz `"pack": "tibia-1332"`, enquanto o tibia-idle validou **13.10** (`13.10.12892`).
 Os layouts de pacote mudam entre versões; escolher é obrigatório, e a escolha é do plano:
 
-**Recomendação: 13.10.** É a única combinação engine + assets + flags de protocolo validada
-end-to-end no navegador, documentada (`docs/PROTOCOLO-1310.md` deles) e com tag pública de
-assets. O custo é remapear `data/appearances/baseline.json`, hoje com duas linhas, e trocar
-`THINGS_VERSION`. Se a decisão for 13.32, a Fase 0 (§8) precisa incluir a validação que o
-tibia-idle já fez para o 13.10.
+**Recomendação original: 13.10** — a única combinação engine + assets + flags validada
+end-to-end pelo tibia-idle, com o custo de remapear uma tabela de duas linhas.
+**Revisada em 2026-09-11 para 13.32** (emenda do ADR 0025): a tabela cresceu para dezenas de ids
+13.32, o pacote 13.32 é o que está nas máquinas e no staging, e existe tag pública
+(`dudantas/tibia-client@13.32.14520`). A validação que o tibia-idle fez para o 13.10 é substituída
+pelo spike da Fase 0, que valida a versão escolhida contra a engine real.
 
 ### 6.3 O que acontece com o pipeline de assets em TypeScript (FUN-16 a FUN-20)
 
@@ -495,7 +505,7 @@ emenda o ADR 0016.
 
 | Pergunta | Recomendação | O que muda se for o contrário |
 |---|---|---|
-| Versão de pacote e protocolo: **13.10** ou 13.32? | 13.10 (§6.2) | Fase 0 cresce para validar o 13.32 do zero |
+| Versão de pacote e protocolo: 13.10 ou **13.32**? | 13.32 (§6.2, revisada em 2026-09-11) | Voltar a 13.10 é trocar o lock e remapear a tabela de aparências |
 | HUD do Draconya: DOM (forma C) ou Lua (forma A)? | DOM | Reescrever cinco telas em OTUI; ponte carrega dados de HUD |
 | Upstream: patches sobre commit fixado, ou fork? | patches | Fork exige repositório e processo de rebase próprios |
 | Pixi: sai na Fase 3, ou fica como modo leve? | sai | Dois renderizadores, dois conjuntos de defeitos, um ADR dizendo por quê |
