@@ -226,9 +226,10 @@ Ela sai ao **anexar**, depois de **equipar ou tirar**, e quando **cai loot** dur
 último detectado por `aggregates.itemsLooted` mudar, que é um inteiro a comparar por ciclo em vez
 de serializar a mochila dez vezes por segundo.
 
-**Sem arte ainda.** Cada item tem `appearanceId` resolvido da tabela, e o pipeline que o
-transforma em sprite é o M2.
-Até lá, a inicial do nome num quadrado — um placeholder que não finge ser arte.
+**Sem arte no inventário ainda.** Cada item tem `appearanceId` resolvido da tabela, e o
+pipeline que o transforma em sprite existe desde a FUN-23 — o mundo já desenha com ele. O
+inventário ainda não o usa (FUN-108): até lá, a inicial do nome num quadrado — um placeholder
+que não finge ser arte.
 
 ### A action bar não entrou, e por quê
 
