@@ -175,6 +175,14 @@ export const S2C_SCHEMAS = {
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+    /**
+     * A configuração de bot EM VIGOR para este personagem (FUN-111), opaca como a que sobe
+     * em `bot-config`: o schema de verdade é `botConfigSchema`, em `content`. É o que a tela
+     * do bot mostra ao abrir — sem isto ela nascia vazia a cada carregamento, e "Salvar" do
+     * vazio apagava as regras que a hunt estava executando. Ausente: nunca configurou, ou nó
+     * `game` anterior.
+     */
+    botConfig: z.unknown().optional(),
   }),
   'instance-enter': z.object({ instanceId: z.string(), map: z.string() }),
   'creature-appear': CreatureState,

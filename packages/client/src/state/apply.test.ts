@@ -2,7 +2,7 @@ import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
-import { INITIAL_BOT, bot } from '../bot/store.js';
+import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
 import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
@@ -14,6 +14,7 @@ beforeEach(() => {
   world.mapId = null;
   clearTransients();
   hud.set(() => INITIAL_HUD);
+  bot.set(() => INITIAL_BOT);
 });
 
 function spawn(id: number, position = at(0, 0)): S2CMessage {
@@ -548,6 +549,34 @@ describe('o analisador ao vivo (FUN-110)', () => {
     subscribeSlice(hud, (state) => state.chat, notified);
     applyMessage(live(), 9_000);
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('a configuração do bot no session-state (FUN-111)', () => {
+  const state = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: { creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+    world: { mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+    ...over,
+  } as S2CMessage);
+
+  it('carrega a configuração em vigor na store do bot', () => {
+    applyMessage(state({
+      botConfig: {
+        ...toConfig(emptyDraft()),
+        heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }],
+      },
+    }), 0);
+    expect(bot.get().draft.rules.heal).toHaveLength(1);
+    expect(bot.get().save).toBe('saved');
+  });
+
+  it('sem configuração no estado, a store do bot não muda', () => {
+    applyMessage(state(), 0);
+    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().save).toBe('idle');
   });
 });
 

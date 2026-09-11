@@ -10,7 +10,7 @@
 
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
-import { botResult } from '../bot/store.js';
+import { botResult, loadConfig } from '../bot/store.js';
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
@@ -257,6 +257,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           step: null,
         });
       }
+      // A configuração de bot em vigor (FUN-111), para a tela abrir com o que a hunt executa.
+      // Store própria, pela mesma razão do resto do bot: o HP mexendo não redesenha um campo.
+      if (message.botConfig !== undefined) loadConfig(message.botConfig);
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,

@@ -1633,6 +1633,43 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
 
     expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && !m.ok)).toBe(true);
   });
+
+  it('a configuração em vigor volta no session-state — a tela abre com o que a hunt executa (FUN-111)', () => {
+    // Era o defeito do passe de QA do MVP: salvo, reanexado, e a tela do bot vazia — um
+    // "Salvar" dali apagava as regras em execução. Mutação que mata: tirar `botConfig` de
+    // `#sessionState`.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { acceptBotConfig: accepting });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const stateOf = () => {
+      host.handle(viewer, { type: 'session-attach' });
+      host.flush();
+      return socket.received().filter((m) => m.type === 'session-state').at(-1) as
+        { botConfig?: unknown } | undefined;
+    };
+
+    // Antes de configurar: sem chave, e não `undefined` — "nunca configurou" é a ausência.
+    expect(stateOf()).not.toHaveProperty('botConfig');
+
+    host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    host.flush();
+    expect(stateOf()?.botConfig).toEqual(CONFIG);
+  });
+
+  it('a configuração do TICKET também volta no session-state (FUN-111)', async () => {
+    // Quem reanexa depois de um deploy entra pelo ticket, e a configuração dele é a que vale.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { acceptBotConfig: accepting });
+    await host.prepare('p2', { level: 1, xp: 0, botConfig: CONFIG }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p2');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1) as
+      { botConfig?: unknown } | undefined;
+    expect(state?.botConfig).toEqual(CONFIG);
+  });
 });
 
 describe('equipar pelo socket (FUN-82)', () => {

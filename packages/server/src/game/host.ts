@@ -2059,6 +2059,12 @@ export class SessionHost {
       },
       aggregates: { ...session.aggregates },
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
+      // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
+      // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
+      // "Salvar" dali apagava as regras que a hunt estava executando.
+      ...(this.#botByCharacter.has(characterId)
+        ? { botConfig: this.#botByCharacter.get(characterId) }
+        : {}),
     };
   }
 

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
-import { INITIAL_BOT, bot, botResult, edit, emptyDraft, toConfig } from './store.js';
+import {
+  INITIAL_BOT, bot, botResult, draftFrom, edit, emptyDraft, isPristine, loadConfig, toConfig,
+} from './store.js';
 
 const rule = (percent: number) => ({
   when: { kind: 'hp' as const, op: '<=' as const, percent },
@@ -68,5 +70,67 @@ describe('salvar é uma INTENÇÃO (FUN-89)', () => {
     edit((draft) => draft);
 
     expect(bot.get().reason).toBeNull();
+  });
+});
+
+describe('a configuração em vigor chega do servidor (FUN-111)', () => {
+  const config = () => ({
+    ...toConfig(emptyDraft()),
+    heal: [rule(70)],
+    attack: [{
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'strike' },
+    }],
+    exit: [{ kind: 'hp-below' as const, percent: 10 }],
+  });
+
+  it('draftFrom é o inverso de toConfig: a configuração dá a volta inteira sem perder nada', () => {
+    // Mutação que mata: `draftFrom` esquecer uma categoria, `exit` ou `targeting`.
+    const original = config();
+    expect(toConfig(draftFrom(original))).toEqual(original);
+  });
+
+  it('com a tela pristina, a configuração vira o rascunho, já como "salvo"', () => {
+    // Era o defeito: a tela nascia vazia a cada carregamento, e "Salvar" dali apagava as
+    // regras que a hunt estava executando.
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.heal).toHaveLength(1);
+    expect(state.draft.rules.attack).toHaveLength(1);
+    expect(state.draft.exit).toHaveLength(1);
+    expect(state.save).toBe('saved');
+    expect(state.reason).toBeNull();
+  });
+
+  it('um rascunho editado e NÃO salvo sobrevive à reconexão', () => {
+    // Mutação que mata: carregar sempre — uma reconexão no meio da digitação apagaria o
+    // que o jogador escreveu, pela mesma razão que uma recusa não pode.
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.potion).toHaveLength(1);
+    expect(state.draft.rules.heal).toHaveLength(0);
+    expect(state.save).toBe('idle');
+  });
+
+  it('um rascunho SALVO é substituído: o que está nele é o que o servidor tem', () => {
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    botResult(true, null);
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.potion).toHaveLength(0);
+    expect(state.draft.rules.heal).toHaveLength(1);
+    expect(state.save).toBe('saved');
+  });
+
+  it('configuração que este cliente não entende é ignorada, e a tela fica como estava', () => {
+    loadConfig({ version: 'x', heal: 'nope' });
+    expect(isPristine(bot.get().draft)).toBe(true);
+    expect(bot.get().save).toBe('idle');
+  });
+
+  it('isPristine: só o rascunho vazio é pristino', () => {
+    expect(isPristine(emptyDraft())).toBe(true);
+    expect(isPristine({ ...emptyDraft(), exit: [{ kind: 'out-of-gold' }] })).toBe(false);
   });
 });

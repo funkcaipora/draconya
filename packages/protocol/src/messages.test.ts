@@ -235,3 +235,21 @@ describe('the live analyzer (FUN-110)', () => {
     expect(decodeS2C(encodeS2C(older))).toEqual([older]);
   });
 });
+
+describe('the bot configuration in force rides the session state (FUN-111)', () => {
+  const state: S2CMessage = {
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+    world: { mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+  };
+
+  it('round trips an opaque configuration, and a state without one', () => {
+    // Opaca aqui, como a que sobe em `bot-config`: quem a valida é `botConfigSchema`.
+    // Mutação que mata: tirar o `.optional()` (o segundo caso devolve `null`).
+    const config = { version: 1, heal: [{ when: { kind: 'hp', op: '<=', percent: 50 } }] };
+    expect(decodeS2C(encodeS2C({ ...state, botConfig: config }))).toEqual([{ ...state, botConfig: config }]);
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+  });
+});
