@@ -14,8 +14,8 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session, SessionSnapshot,
-  SessionType,
+  Aggregates, CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session,
+  SessionSnapshot, SessionType,
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
@@ -260,6 +260,34 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
 }
 
+/**
+ * O que o analisador entregou por último (FUN-110): os agregados e QUANTOS eventos notáveis.
+ *
+ * `durationMs` fica de fora da comparação de propósito, pela mesma razão da stamina em
+ * `sameStats`: ele muda em todo ciclo — dez por segundo numa hunt anexada —, e compará-lo
+ * faria a mensagem sair a 10 Hz para dizer que cem milissegundos passaram. O tempo anda no
+ * relógio local da janela; o que a janela não tem como saber sozinha é abate, loot, gasto,
+ * level e morte — e é isso que dispara.
+ */
+interface SentAnalyzer {
+  readonly aggregates: Aggregates;
+  readonly eventCount: number;
+}
+
+function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: number): boolean {
+  const a = sent.aggregates;
+  return sent.eventCount === eventCount
+    && a.xpGained === aggregates.xpGained
+    && a.goldGained === aggregates.goldGained
+    && a.goldSpent === aggregates.goldSpent
+    && a.kills === aggregates.kills
+    && a.deaths === aggregates.deaths
+    && a.itemsLooted === aggregates.itemsLooted
+    && a.suppliesUsed === aggregates.suppliesUsed
+    && a.bestBasicHit === aggregates.bestBasicHit
+    && a.bestSpellHit === aggregates.bestSpellHit;
+}
+
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
@@ -307,6 +335,12 @@ interface HostedSession {
    * é apresentação; o `sim` muda o que tem de mudar de qualquer jeito (invariante 3).
    */
   readonly sentStats: Map<string, PlayerStats>;
+  /**
+   * O último analisador ENTREGUE (FUN-110), por sessão — os agregados são da sessão, não do
+   * personagem. `null` é "ninguém recebeu ainda", e o primeiro ciclo com visualizador manda;
+   * o `session-attach`, que já leva tudo no `session-state`, também o escreve.
+   */
+  sentAnalyzer: SentAnalyzer | null;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -1060,6 +1094,9 @@ export class SessionHost {
       // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
       // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
       this.#presentStats(hosted);
+      // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
+      // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
+      this.#presentAnalyzer(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -1308,6 +1345,29 @@ export class SessionHost {
   }
 
   /**
+   * O analisador ao vivo (FUN-110): os agregados e os eventos notáveis para TODOS os
+   * visualizadores da sessão, quando mudaram desde a última entrega. Por sessão, e não por
+   * personagem, porque os agregados são da sessão — e numa hunt há um jogador só.
+   */
+  #presentAnalyzer(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const { aggregates, notableEvents } = hosted.session;
+    const sent = hosted.sentAnalyzer;
+    if (sent !== null && sameAnalyzer(sent, aggregates, notableEvents.length)) return;
+    // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e mandá-la
+    // inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo repetição.
+    // Sem entrega anterior (ninguém recebeu nada ainda) vai tudo, que é o que a tela precisa.
+    const since = sent?.eventCount ?? 0;
+    hosted.sentAnalyzer = { aggregates: { ...aggregates }, eventCount: notableEvents.length };
+    const message: S2CMessage = {
+      type: 'analyzer',
+      aggregates: { ...aggregates },
+      notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
+    };
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /**
    * O estado COMPLETO para um visualizador: o mundo (`session-state`) e os vitais
    * (`player-stats`), nessa ordem e pela fila.
    *
@@ -1324,6 +1384,11 @@ export class SessionHost {
     const stats = playerStatsOf(this.#participantOf(hosted, characterId));
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    // O `session-state` acabou de levar os agregados: o ciclo seguinte não precisa repetir.
+    hosted.sentAnalyzer = {
+      aggregates: { ...hosted.session.aggregates },
+      eventCount: hosted.session.notableEvents.length,
+    };
   }
 
   #participantOf(hosted: HostedSession, characterId: string): CharacterRuntime | undefined {
@@ -1626,6 +1691,7 @@ export class SessionHost {
       credited: false,
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentAnalyzer: null,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -1998,6 +2064,12 @@ export class SessionHost {
       },
       aggregates: { ...session.aggregates },
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
+      // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
+      // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
+      // "Salvar" dali apagava as regras que a hunt estava executando.
+      ...(this.#botByCharacter.has(characterId)
+        ? { botConfig: this.#botByCharacter.get(characterId) }
+        : {}),
     };
   }
 
@@ -2144,6 +2216,7 @@ export class SessionHost {
       credited: false,
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentAnalyzer: null,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

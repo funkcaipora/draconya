@@ -353,6 +353,14 @@ O banco é a fonte para **começar** uma hunt; o snapshot é a fonte para **cont
 estava rodando. Não é duplicação — são dois instantes da mesma coisa, e a sessão é a dona
 enquanto roda.
 
+**E ela volta para a tela** (FUN-111): o `session-state` leva a configuração em vigor — a do
+ticket ou a última aceita —, e a tela do bot abre com ela. Até aí a tela nascia vazia a cada
+carregamento, e um "Salvar" dali apagava as regras que a hunt estava executando. A tela só a
+adota quando o rascunho local está intocado ou salvo: um rascunho tocado e não salvo — editado,
+pendente ou recusado, mesmo que apagado até ficar igual ao vazio — sobrevive à reconexão, pela
+mesma razão que sobrevive a uma recusa. `lure` e `ringSwap`, que nenhuma tela edita, passam
+opacos pelo rascunho: um "Salvar" de quem só mexeu na cura não apaga o anel.
+
 ### O gate de level (§13.2)
 
 Até o level 49 vale o bot **básico**; do 50 em diante, o avançado. O recorte é **dado**, em

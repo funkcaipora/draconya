@@ -206,3 +206,78 @@ describe('outfit colours on the creature (FUN-104)', () => {
       .toEqual([{ ...appear, colors: { ...colors, head: 0, feet: 132 } }]);
   });
 });
+
+describe('the live analyzer (FUN-110)', () => {
+  const update: S2CMessage = {
+    type: 'analyzer',
+    aggregates: {
+      durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120, kills: 13, deaths: 0,
+      itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+  };
+
+  it('round trips the aggregates and the notable events', () => {
+    // Mutação que mata: apagar `analyzer: 20` de SERVER_TO_CLIENT (`decodeS2C` devolve `null`).
+    expect(decodeS2C(encodeS2C(update))).toEqual([update]);
+  });
+
+  it('is server-to-client only: the client reads what the hunt yielded, it never reports it', () => {
+    expect('analyzer' in S2C_SCHEMAS).toBe(true);
+    expect('analyzer' in C2S_SCHEMAS).toBe(false);
+  });
+
+  it('accepts the aggregates of an older node, without the FUN-78 fields', () => {
+    const older = {
+      ...update,
+      aggregates: { durationMs: 1, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    };
+    expect(decodeS2C(encodeS2C(older))).toEqual([older]);
+  });
+});
+
+describe('the bot configuration in force rides the session state (FUN-111)', () => {
+  const state: S2CMessage = {
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+    world: { mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+  };
+
+  it('round trips an opaque configuration, and a state without one', () => {
+    // Opaca aqui, como a que sobe em `bot-config`: quem a valida é `botConfigSchema`.
+    // Mutação que mata: tirar o `.optional()` (o segundo caso devolve `null`).
+    const config = { version: 1, heal: [{ when: { kind: 'hp', op: '<=', percent: 50 } }] };
+    expect(decodeS2C(encodeS2C({ ...state, botConfig: config }))).toEqual([{ ...state, botConfig: config }]);
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+  });
+});
+
+describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () => {
+  const catalogue = (hunt: Record<string, unknown>): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'], ...hunt }],
+    bot: {
+      vocabularyVersion: 1, advancedFromLevel: 50,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+      advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+      spells: [], supplies: [],
+    },
+    items: [],
+  } as unknown as S2CMessage);
+
+  it('round trips the outfit ids, and an older node without them decodes to an EMPTY list', () => {
+    // O cliente itera `hunt.outfitIds` sem guarda: `undefined` aqui seria um `for..of` que
+    // lança dentro do efeito de aquecimento. Mutação que mata: trocar `.default([])` por
+    // `.optional()`.
+    const withIds = catalogue({ outfitIds: [21, 35] });
+    expect(decodeS2C(encodeS2C(withIds))).toEqual([withIds]);
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
+  });
+
+  it('rejects an outfit id of zero: there is no appearance zero', () => {
+    expect(decodeS2C(encodeS2C(catalogue({ outfitIds: [0] })))).toBeNull();
+  });
+});

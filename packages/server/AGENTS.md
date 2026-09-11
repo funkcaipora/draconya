@@ -519,6 +519,12 @@ terceiro slot de personagem.
   ciclo — 482 em 120 s medidos, mais que `creature-move`. O HUD mostra horas e minutos, e o
   valor entregue continua em milissegundos; só o gatilho arredonda. O herói do helper da
   FUN-109 tem stamina justamente para o teste de "ciclo sem mudança" queimar como a produção.
+- **`sentAnalyzer` é o mesmo mecanismo para o analisador** (FUN-110), por SESSÃO — os agregados
+  são da sessão, não do personagem. Compara nove agregados e a contagem de eventos notáveis,
+  e `durationMs` fica de fora pela mesma razão da stamina: muda em todo ciclo. Até a FUN-110
+  os agregados só saíam no `session-state` e no `session-ended`, e a janela ficava em zero a
+  hunt inteira — três abates, level 2, gold no HUD, e "Mortos 0" — porque `docs/product` e o
+  `Analyzer.tsx` diziam que "os deltas chegam pelo lote do ciclo" e nenhuma mensagem os levava.
 - **Combate e vida do personagem vão para TODOS os visualizadores da sessão** (FUN-109), pela
   mesma decisão de `#presentPresence`: combate só existe em hunt, e hunt é privada. Magia ou
   supply sem linha na tabela de aparências é MUDO, não erro — `buildContent` só exige que toda

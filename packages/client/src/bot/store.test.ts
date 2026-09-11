@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
-import { INITIAL_BOT, bot, botResult, edit, emptyDraft, toConfig } from './store.js';
+import {
+  INITIAL_BOT, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, toConfig,
+} from './store.js';
 
 const rule = (percent: number) => ({
   when: { kind: 'hp' as const, op: '<=' as const, percent },
@@ -68,5 +70,111 @@ describe('salvar é uma INTENÇÃO (FUN-89)', () => {
     edit((draft) => draft);
 
     expect(bot.get().reason).toBeNull();
+  });
+});
+
+describe('a configuração em vigor chega do servidor (FUN-111)', () => {
+  const config = () => ({
+    ...toConfig(emptyDraft()),
+    heal: [rule(70)],
+    attack: [{
+      when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
+      do: { kind: 'spell' as const, spellId: 'strike' },
+    }],
+    exit: [{ kind: 'hp-below' as const, percent: 10 }],
+  });
+
+  it('draftFrom é o inverso de toConfig: a configuração dá a volta inteira sem perder nada', () => {
+    // Mutação que mata: `draftFrom` esquecer uma categoria, `exit` ou `targeting`.
+    const original = config();
+    expect(toConfig(draftFrom(original))).toEqual(original);
+  });
+
+  it('o bot AVANÇADO dá a volta também: lure e ringSwap passam opacos pelo rascunho', () => {
+    // Era a metade que faltava: a tela carregava a configuração de um level 50 sem `ringSwap`,
+    // chamava de "salvo", e o próximo "Salvar" apagava o anel que a hunt trocava. Mutação que
+    // mata: `draftFrom` sem `advanced`, ou `toConfig` sem o espalhamento.
+    const advanced = {
+      ...config(),
+      lure: { min: 2, max: 4 },
+      ringSwap: { itemId: 'life-ring', equipBelow: 40, removeAbove: 70, manaFloor: 0, restorePrevious: true },
+    };
+    expect(toConfig(draftFrom(advanced))).toEqual(advanced);
+    // E sem eles a chave não aparece: `undefined` numa configuração é uma chave a mais no JSON.
+    expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('lure');
+  });
+
+  it('com a tela pristina, a configuração vira o rascunho, já como "salvo"', () => {
+    // Era o defeito: a tela nascia vazia a cada carregamento, e "Salvar" dali apagava as
+    // regras que a hunt estava executando.
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.heal).toHaveLength(1);
+    expect(state.draft.rules.attack).toHaveLength(1);
+    expect(state.draft.exit).toHaveLength(1);
+    expect(state.save).toBe('saved');
+    expect(state.reason).toBeNull();
+  });
+
+  it('um rascunho editado e NÃO salvo sobrevive à reconexão', () => {
+    // Mutação que mata: carregar sempre — uma reconexão no meio da digitação apagaria o
+    // que o jogador escreveu, pela mesma razão que uma recusa não pode.
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.potion).toHaveLength(1);
+    expect(state.draft.rules.heal).toHaveLength(0);
+    expect(state.save).toBe('idle');
+  });
+
+  it('um rascunho SALVO é substituído: o que está nele é o que o servidor tem', () => {
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    botResult(true, null);
+    loadConfig(config());
+    const state = bot.get();
+    expect(state.draft.rules.potion).toHaveLength(0);
+    expect(state.draft.rules.heal).toHaveLength(1);
+    expect(state.save).toBe('saved');
+  });
+
+  it('configuração que este cliente não entende é ignorada, e a tela fica como estava', () => {
+    // A partir de um rascunho EDITADO: "ignorada" e "zerada" são indistinguíveis numa tela vazia.
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    loadConfig({ version: 'x', heal: 'nope' });
+    expect(bot.get().draft.rules.potion).toHaveLength(1);
+    expect(bot.get().save).toBe('idle');
+    expect(bot.get().touched).toBe(true);
+  });
+
+  it('um rascunho RECUSADO sobrevive à reconexão: é o que o jogador precisa corrigir', () => {
+    // Mutação que mata: `loadConfig` só poupar `idle` — a reconexão logo depois da recusa
+    // apagaria justamente o que a mensagem de recusa mandou consertar.
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    botResult(false, 'bot avançado exige level 50');
+    loadConfig(config());
+    expect(bot.get().draft.rules.potion).toHaveLength(1);
+    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().save).toBe('refused');
+    expect(bot.get().reason).toBe('bot avançado exige level 50');
+  });
+
+  it('um rascunho PENDENTE sobrevive à reconexão: o que está em voo não é substituído', () => {
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    bot.set((state) => ({ ...state, save: 'pending', reason: null }));
+    loadConfig(config());
+    expect(bot.get().draft.rules.potion).toHaveLength(1);
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('um rascunho apagado até ficar vazio, e não salvo, NÃO é intocado: fica', () => {
+    // "Vazio" e "intocado" não são a mesma coisa: quem apagou todas as regras querendo salvar
+    // o vazio veria a configuração antiga voltar na próxima reconexão. Mutação que mata:
+    // decidir pela FORMA do rascunho em vez de por `touched`.
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [rule(40)] } }));
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, potion: [] } }));
+    expect(JSON.stringify(bot.get().draft)).toBe(JSON.stringify(emptyDraft()));
+    loadConfig(config());
+    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().save).toBe('idle');
   });
 });

@@ -175,6 +175,14 @@ export const S2C_SCHEMAS = {
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+    /**
+     * A configuração de bot EM VIGOR para este personagem (FUN-111), opaca como a que sobe
+     * em `bot-config`: o schema de verdade é `botConfigSchema`, em `content`. É o que a tela
+     * do bot mostra ao abrir — sem isto ela nascia vazia a cada carregamento, e "Salvar" do
+     * vazio apagava as regras que a hunt estava executando. Ausente: nunca configurou, ou nó
+     * `game` anterior.
+     */
+    botConfig: z.unknown().optional(),
   }),
   'instance-enter': z.object({ instanceId: z.string(), map: z.string() }),
   'creature-appear': CreatureState,
@@ -185,6 +193,20 @@ export const S2C_SCHEMAS = {
     from: Point, to: Point, durationMs: z.number().positive(), pushed: z.boolean().optional(),
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
+  /**
+   * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
+   * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
+   * tempo anda no relógio local da janela, e mandá-lo a cada ciclo seria a banda inteira para
+   * dizer que cem milissegundos passaram.
+   *
+   * `notableEvents` são só os NOVOS desde a última entrega — o `session-state` ou o
+   * `analyzer` anterior —, e o cliente os acrescenta. A lista inteira a cada abate custava,
+   * medido, 13 MB numa hunt de oito horas, 99 % deles repetição do que a tela já tinha.
+   */
+  analyzer: z.object({
+    aggregates: Aggregates,
+    notableEvents: z.array(NotableEvent),
+  }),
   /**
    * O que o servidor decidiu sobre a configuração de bot que chegou (FUN-89).
    *
@@ -246,6 +268,13 @@ export const S2C_SCHEMAS = {
       name: z.string().min(1),
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
+      /**
+       * Os outfits dos monstros desta hunt (FUN-112), para o cliente AQUECER as folhas deles
+       * na Cidade, antes de o primeiro aparecer — sem isto o rato era um quadrado por seis a
+       * dez segundos na primeira entrada. Só ids (invariante 6), resolvidos pelo servidor do
+       * conteúdo. `default([])`: um nó `game` anterior manda sem, e nada se aquece.
+       */
+      outfitIds: z.array(z.number().int().positive()).default([]),
     })),
     /**
      * O que a UI do bot pode oferecer (§13.3, FUN-89).

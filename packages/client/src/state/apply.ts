@@ -10,11 +10,14 @@
 
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
-import { botResult } from '../bot/store.js';
+import { botResult, loadConfig } from '../bot/store.js';
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
-  'manual-exit': 'Você saiu do jogo',
+  // `manual-exit` é o `leave-hunt` E o `logout`, mas só o primeiro chega a ser LIDO: o logout
+  // fecha o socket. Dizer "saiu do jogo" a quem acabou de voltar para a Cidade era o que o
+  // extrato dizia até o passe de QA do MVP.
+  'manual-exit': 'Você saiu da hunt',
   'exit-rule': 'A hunt encerrou por uma regra de saída',
   death: 'Você morreu',
   drain: 'Sua sessão foi encerrada por manutenção',
@@ -136,6 +139,24 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, xp: state.xp + message.amount }));
       return;
 
+    case 'analyzer':
+      // O analisador ao vivo (FUN-110): os números novos e o INSTANTE em que chegaram — é o
+      // carimbo que rebaseia o relógio local da janela, como no `session-state`. Os eventos
+      // vêm só os NOVOS, e entram no fim da lista que o `session-state` trouxe. Sem janela
+      // (a Cidade não credita nada, §37) não há o que atualizar.
+      hud.set((state) => state.analyzer.sessionType === null ? state : ({
+        ...state,
+        analyzer: {
+          ...state.analyzer,
+          aggregates: message.aggregates,
+          notableEvents: message.notableEvents.length === 0
+            ? state.analyzer.notableEvents
+            : [...state.analyzer.notableEvents, ...message.notableEvents],
+          receivedAtMs: nowMs,
+        },
+      }));
+      return;
+
     case 'chat-message':
       hud.set((state) => ({
         ...state,
@@ -242,6 +263,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           step: null,
         });
       }
+      // A configuração de bot em vigor (FUN-111), para a tela abrir com o que a hunt executa.
+      // Store própria, pela mesma razão do resto do bot: o HP mexendo não redesenha um campo.
+      if (message.botConfig !== undefined) loadConfig(message.botConfig);
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,

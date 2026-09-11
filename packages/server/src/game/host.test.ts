@@ -1633,6 +1633,43 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
 
     expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && !m.ok)).toBe(true);
   });
+
+  it('a configuração em vigor volta no session-state — a tela abre com o que a hunt executa (FUN-111)', () => {
+    // Era o defeito do passe de QA do MVP: salvo, reanexado, e a tela do bot vazia — um
+    // "Salvar" dali apagava as regras em execução. Mutação que mata: tirar `botConfig` de
+    // `#sessionState`.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { acceptBotConfig: accepting });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    const stateOf = () => {
+      host.handle(viewer, { type: 'session-attach' });
+      host.flush();
+      return socket.received().filter((m) => m.type === 'session-state').at(-1) as
+        { botConfig?: unknown } | undefined;
+    };
+
+    // Antes de configurar: sem chave, e não `undefined` — "nunca configurou" é a ausência.
+    expect(stateOf()).not.toHaveProperty('botConfig');
+
+    host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    host.flush();
+    expect(stateOf()?.botConfig).toEqual(CONFIG);
+  });
+
+  it('a configuração do TICKET também volta no session-state (FUN-111)', async () => {
+    // Quem reanexa depois de um deploy entra pelo ticket, e a configuração dele é a que vale.
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, { acceptBotConfig: accepting });
+    await host.prepare('p2', { level: 1, xp: 0, botConfig: CONFIG }, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p2');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1) as
+      { botConfig?: unknown } | undefined;
+    expect(state?.botConfig).toEqual(CONFIG);
+  });
 });
 
 describe('equipar pelo socket (FUN-82)', () => {
@@ -2395,6 +2432,90 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     for (const id of passos) expect(id === heroi || anunciados.has(id)).toBe(true);
     // E o monstro de fato andou: ao menos um passo é de um id anunciado.
     expect(passos.some((id) => anunciados.has(id))).toBe(true);
+  });
+
+  it('o analisador chega ao vivo: um abate durante a hunt vira mensagem, sem reconectar (FUN-110)', () => {
+    // Era o defeito do passe de QA do MVP: três abates, level 2, 39 de gold no HUD — e a
+    // janela em zero, porque os agregados só saíam no `session-state`. Mutação que mata:
+    // apagar a chamada de `#presentAnalyzer` no ciclo.
+    const { host, runFor, received } = hunt();
+    runFor(60_000);
+    const session = host.sessionFor('hero');
+    expect(session?.aggregates.kills).toBeGreaterThan(0);
+
+    const updates = received().filter((m) => m.type === 'analyzer') as unknown as
+      Array<{ aggregates: { kills: number; xpGained: number; durationMs: number }; notableEvents: unknown[] }>;
+    expect(updates.length).toBeGreaterThan(0);
+    // A ÚLTIMA diz o que a sessão diz agora; o tempo dela é o do ciclo em que saiu, nunca à
+    // frente do da sessão — é o que rebaseia o relógio da janela sem o fazer andar para trás.
+    expect(updates.at(-1)?.aggregates.kills).toBe(session?.aggregates.kills);
+    expect(updates.at(-1)?.aggregates.xpGained).toBe(session?.aggregates.xpGained);
+    expect(updates.at(-1)?.aggregates.durationMs).toBeGreaterThan(0);
+    expect(updates.at(-1)?.aggregates.durationMs).toBeLessThanOrEqual(session?.aggregates.durationMs ?? 0);
+    // E os abates sobem entre uma e outra: cada mensagem é uma mudança, não um eco.
+    const kills = updates.map((u) => u.aggregates.kills);
+    expect(new Set(kills).size).toBe(kills.length);
+  });
+
+  it('cada um dos NOVE agregados é gatilho sozinho — e o session-attach zera a comparação', () => {
+    // O passe de QA pegou "Mortos 0"; o que este teste impede é o mesmo defeito num campo só:
+    // uma poção usada, um gasto, um golpe de magia que não mata. Mutação que mata: apagar
+    // qualquer comparação de `sameAnalyzer`, ou o `#sendState` deixar de gravar `sentAnalyzer`
+    // (o ciclo depois do attach mandaria um eco do que o `session-state` acabou de levar).
+    const { host, runFor, received, viewer } = hunt({ tanky: true });
+    const session = host.sessionFor('hero');
+    if (session === undefined) throw new Error('sem sessão');
+    const count = () => received().filter((m) => m.type === 'analyzer').length;
+
+    // Depois do primeiro golpe (bestBasicHit), o attach leva tudo e zera: o ciclo seguinte,
+    // em que só o tempo anda (o próximo golpe é a 2 000 ms), não manda NADA.
+    runFor(100);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const afterAttach = count();
+    runFor(100);
+    expect(count()).toBe(afterAttach);
+
+    const fields = [
+      'xpGained', 'goldGained', 'goldSpent', 'kills', 'deaths', 'itemsLooted', 'suppliesUsed',
+      'bestBasicHit', 'bestSpellHit',
+    ] as const;
+    for (const field of fields) {
+      const before = count();
+      session.aggregates[field] += 1;
+      runFor(100);
+      expect(count(), field).toBe(before + 1);
+    }
+    // E um evento notável novo, sozinho, também — e chega SÓ ele, não a lista inteira.
+    const before = count();
+    session.record('level-up', '99');
+    runFor(100);
+    expect(count()).toBe(before + 1);
+    const last = received().filter((m) => m.type === 'analyzer').at(-1) as unknown as
+      { notableEvents: Array<{ type: string; detail?: string }> };
+    expect(last.notableEvents).toEqual([{ atMs: expect.any(Number), type: 'level-up', detail: '99' }]);
+  });
+
+  it('o tempo NÃO é gatilho: toda mensagem do analisador é uma mudança, nunca um tique', () => {
+    // `durationMs` muda em todo ciclo; compará-lo mandaria a mensagem a 10 Hz para dizer que
+    // cem milissegundos passaram. Com um rato que aguenta não há abate nem loot em vinte
+    // ciclos — só o primeiro golpe, que sobe `bestBasicHit` uma vez e É mudança.
+    // Mutação que mata: comparar `durationMs` em `sameAnalyzer` (vinte mensagens em vez de ≤ 2).
+    const { host, runFor, received, viewer } = hunt({ tanky: true });
+    // O `session-attach` leva os agregados e zera a comparação; a partir daqui só mudança manda.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const before = received().filter((m) => m.type === 'analyzer').length;
+    runFor(2_000);
+    const updates = received().filter((m) => m.type === 'analyzer').slice(before) as unknown as
+      Array<{ aggregates: Record<string, number> }>;
+    expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
+    expect(updates.length).toBeLessThanOrEqual(2);
+    // E cada uma difere da anterior em algo que NÃO é o tempo.
+    const stripped = updates.map(({ aggregates: { durationMs: _duration, ...rest } }) => JSON.stringify(rest));
+    for (let index = 1; index < stripped.length; index += 1) {
+      expect(stripped[index]).not.toBe(stripped[index - 1]);
+    }
   });
 
   it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {

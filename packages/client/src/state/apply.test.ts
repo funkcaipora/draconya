@@ -2,7 +2,7 @@ import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
-import { INITIAL_BOT, bot } from '../bot/store.js';
+import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
 import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
@@ -14,6 +14,7 @@ beforeEach(() => {
   world.mapId = null;
   clearTransients();
   hud.set(() => INITIAL_HUD);
+  bot.set(() => INITIAL_BOT);
 });
 
 function spawn(id: number, position = at(0, 0)): S2CMessage {
@@ -403,6 +404,20 @@ describe('session-ended', () => {
     expect(line?.text).toContain('750 gold');
   });
 
+  it('leaving the hunt says "hunt", not "game": the player is standing in the city reading it', () => {
+    // `manual-exit` também é o logout, mas esse fecha o socket e ninguém lê o extrato. Quem
+    // lê é quem apertou "sair da hunt" — e "Você saiu do jogo" era o que ele lia (QA do MVP).
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 120_000, xpGained: 155, goldGained: 73, goldSpent: 250, kills: 31, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    expect(line?.text).toContain('saiu da hunt');
+    expect(line?.text).not.toContain('jogo');
+    expect(line?.text).toContain('-177 gold');
+  });
+
   it('does not clear the world along with the notice', () => {
     // A última coisa verdadeira fica na tela por trás da mensagem, em vez de o canvas
     // piscar vazio junto com a notícia.
@@ -497,6 +512,97 @@ describe('o analisador (FUN-83)', () => {
     } }), 1_000);
 
     expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('o analisador ao vivo (FUN-110)', () => {
+  const live = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'analyzer',
+    aggregates: {
+      durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120,
+      kills: 13, deaths: 0, itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+    },
+    notableEvents: [{ atMs: 1_000, type: 'level-up' }, { atMs: 640_000, type: 'level-up' }],
+    ...over,
+  } as S2CMessage);
+  const attach = (): void => {
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
+      self: { creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200 },
+      world: { mapId: 'rat-cellars', creatures: [] },
+      aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
+      notableEvents: [{ atMs: 1_000, type: 'level-up' }],
+    }, 5_000);
+  };
+
+  it('troca os agregados, ACRESCENTA os eventos novos e recarimba o instante — o relógio local rebaseia', () => {
+    // Era o defeito: a janela ficava com os números do `session-attach` a hunt inteira.
+    // Os eventos vêm só os novos (a lista inteira a cada abate custava 13 MB em oito horas),
+    // então entram no fim dos que o `session-state` trouxe. Mutação que mata: não recarimbar
+    // `receivedAtMs` (o tempo andaria em dobro), ou SUBSTITUIR a lista (o level-up do começo
+    // sumiria).
+    attach();
+    applyMessage(live({ notableEvents: [{ atMs: 640_000, type: 'level-up', detail: '9' }] }), 9_000);
+    const { analyzer } = hud.get();
+    expect(analyzer.aggregates?.kills).toBe(13);
+    expect(analyzer.aggregates?.durationMs).toBe(650_000);
+    expect(analyzer.notableEvents).toEqual([
+      { atMs: 1_000, type: 'level-up' }, { atMs: 640_000, type: 'level-up', detail: '9' },
+    ]);
+    expect(analyzer.receivedAtMs).toBe(9_000);
+    expect(analyzer.sessionType).toBe('hunt');
+    expect(analyzer.ended).toBe(false);
+  });
+
+  it('sem evento novo, a lista fica a mesma — e o mesmo objeto, para a janela não redesenhar', () => {
+    attach();
+    const before = hud.get().analyzer.notableEvents;
+    applyMessage(live({ notableEvents: [] }), 9_000);
+    expect(hud.get().analyzer.notableEvents).toBe(before);
+  });
+
+  it('sem janela — antes de qualquer session-state — não inventa uma', () => {
+    // A Cidade não credita nada (§37) e a janela não existe lá; um `analyzer` perdido não
+    // pode fazê-la aparecer com `sessionType` nulo.
+    applyMessage(live(), 9_000);
+    expect(hud.get().analyzer.sessionType).toBeNull();
+    expect(hud.get().analyzer.aggregates).toBeNull();
+  });
+
+  it('não avisa quem assina outra fatia', () => {
+    attach();
+    const notified = vi.fn();
+    subscribeSlice(hud, (state) => state.chat, notified);
+    applyMessage(live(), 9_000);
+    expect(notified).not.toHaveBeenCalled();
+  });
+});
+
+describe('a configuração do bot no session-state (FUN-111)', () => {
+  const state = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: { creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+    world: { mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+    ...over,
+  } as S2CMessage);
+
+  it('carrega a configuração em vigor na store do bot', () => {
+    applyMessage(state({
+      botConfig: {
+        ...toConfig(emptyDraft()),
+        heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }],
+      },
+    }), 0);
+    expect(bot.get().draft.rules.heal).toHaveLength(1);
+    expect(bot.get().save).toBe('saved');
+  });
+
+  it('sem configuração no estado, a store do bot não muda', () => {
+    applyMessage(state(), 0);
+    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().save).toBe('idle');
   });
 });
 

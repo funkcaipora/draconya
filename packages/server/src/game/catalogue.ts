@@ -33,6 +33,7 @@ export function buildCatalogue(content: Content): Catalogue {
       // Cópia mutável: `HuntListing` traz a união fechada e `readonly`, e a mensagem leva
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
+      outfitIds: monsterOutfitsOf(content, hunt.id),
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
@@ -77,4 +78,24 @@ export function buildCatalogue(content: Content): Catalogue {
       slot: item.slot ?? null,
     })),
   };
+}
+
+/**
+ * Os outfits de todo monstro que pode nascer nesta hunt, em qualquer dificuldade (FUN-112).
+ *
+ * Únicos e em ordem, para a mensagem ser a mesma a cada boot: é o que o cliente aquece na
+ * Cidade, e um id repetido seria uma folha pedida duas vezes. Vem do conteúdo fixado na
+ * sessão (invariante 7) — o `outfitId` já resolvido pela tabela de aparências (FUN-94).
+ */
+function monsterOutfitsOf(content: Content, huntId: string): number[] {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const outfits = new Set<number>();
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const outfit = content.monsters.get(entry.monsterId)?.outfitId;
+      if (outfit !== undefined) outfits.add(outfit);
+    }
+  }
+  return [...outfits].sort((a, b) => a - b);
 }

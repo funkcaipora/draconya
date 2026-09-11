@@ -1,6 +1,7 @@
+import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { buildCatalogue } from './catalogue.js';
-import { testContent } from '../testing/content.js';
+import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
 
 const content = testContent();
 
@@ -21,8 +22,50 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
 
     for (const hunt of hunts) {
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'name', 'recommendedLevel']);
+        .toEqual(['difficulties', 'id', 'name', 'outfitIds', 'recommendedLevel']);
     }
+  });
+
+  it('leva os outfits dos monstros de cada hunt, únicos e em ordem, para o cliente aquecer (FUN-112)', () => {
+    // O rato era um quadrado por seis a dez segundos na primeira entrada: as folhas dele só
+    // decodificavam quando ele aparecia. Com os ids no catálogo o cliente as pede na Cidade.
+    // Mutação que mata: devolver `[]`, ou não deduplicar (o rato está em toda dificuldade).
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    const rat = content.monsters.get('rat')?.outfitId;
+    expect(rat).toBeGreaterThan(0);
+    expect(arena?.outfitIds).toEqual([rat]);
+  });
+
+  it('o mesmo monstro em duas dificuldades sai UMA vez, e a lista vem em ordem de id', () => {
+    // Um id repetido seria uma folha pedida duas vezes; a ordem é o que faz a mensagem ser a
+    // mesma a cada boot. Mutação que mata: `push` num array em vez do `Set`, ou sem o `sort`.
+    // O morcego entra ANTES do rato no conteúdo cru (placeholder: outfit 1), mas a hunt o lista
+    // depois — a ordem do catálogo tem que ser a do id, não a da composição.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    const twoTiers = {
+      ...raw,
+      monsters: [bat, rat],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          beginner: { perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          hero: {
+            perSpawnPoint: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
+    const ratId = content.monsters.get('rat')?.outfitId ?? -1;
+    const batId = content.monsters.get('bat')?.outfitId ?? -1;
+    expect(batId).toBeLessThan(ratId);
+
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
   it('leva o vocabulário do bot, e é ele que a tela oferece', () => {
