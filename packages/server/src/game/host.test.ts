@@ -1,10 +1,11 @@
 import {
-  CharacterRuntime, Rng, Session, createHuntSession,
+  CharacterRuntime, Rng, Session, createHuntSession, statsForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildContent, itemSchema } from '@draconya/content';
-import type { RawContent } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema } from '@draconya/content';
+import type { Appearances, BotConfig, RawContent } from '@draconya/content';
+import type { S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -15,7 +16,9 @@ import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
 import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
-import { TEST_MAP, rawTestContent, testContent } from '../testing/content.js';
+import {
+  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, rawTestContent, testContent,
+} from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
 
@@ -543,11 +546,19 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    expect(viewer.queued).toBe(1);
+    // Dois: o mundo (`session-state`) e os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // e stamina só viajam na segunda. Os dois na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(2);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
     expect(state).toBeDefined();
+    // E os vitais vêm DEPOIS do mundo, nunca antes: o HUD que recebe o número novo por cima
+    // de um mundo antigo mostra uma barra que o mundo desmente.
+    //
+    // Mutação que mata: trocar a ordem dos dois `send` em `#sendState`.
+    const types = socket.received().map((m) => m.type);
+    expect(types.indexOf('player-stats')).toBeGreaterThan(types.indexOf('session-state'));
     if (state?.type !== 'session-state') return;
     expect(state.self.characterId).toBe('p1');
     expect(state.self.creatureId).toBe(1);
@@ -2431,5 +2442,599 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const appears = received().filter((m) => m.type === 'creature-appear');
     expect(appears.length).toBeGreaterThan(0);
     expect(appears[0]).toMatchObject({ name: 'rat', appearanceId: 0 });
+  });
+});
+
+describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
+  /**
+   * Magia de dano e poção de mana, que o conteúdo de teste não tem: `strike` tira 40 num rato
+   * de 20 — mata num golpe, e é o que faz o `creature-hit` de magia aparecer cedo.
+   */
+  const STRIKE = {
+    id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
+    effect: { kind: 'damage', power: 40, range: 3 },
+  };
+  /**
+   * A magia de ÁREA (FUN-92): raio 1 a partir do alvo. Na arena de 2×2 todo tile interior é
+   * vizinho de todo outro, então dois ratos vivos são sempre dois alvos do mesmo lançamento.
+   */
+  const BLAST = {
+    id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 2_000,
+    effect: { kind: 'damage', power: 40, range: 3, area: { radius: 1 } },
+  };
+  /** A tabela de aparências do teste. Números do contrato, para o teste ler igual ao real. */
+  const TABLE = {
+    spells: {
+      heal: { effect: 13 }, strike: { effect: 12, missile: 5 }, blast: { effect: 15, missile: 6 },
+    },
+    supplies: { 'health-potion': { effect: 14 } },
+    hits: { melee: 1 },
+  } as const;
+  /** Um dia inteiro de stamina — o teto de `TEST_STAMINA`, e exatamente 24:00 no HUD. */
+  const FULL_STAMINA_MS = 86_400_000;
+  /** Stamina no MEIO de um minuto: três segundos de hunt não viram o mostrador. */
+  const MID_MINUTE_STAMINA_MS = FULL_STAMINA_MS - 30_000;
+  /** A stamina como o HUD a mostra, e como `sameStats` a compara: em minutos inteiros. */
+  const staminaMinute = (staminaMs: number) => Math.floor(staminaMs / 60_000);
+
+  const rules = (over: Partial<BotConfig>): BotConfig => botConfigSchema.parse({
+    version: BOT_VOCABULARY_VERSION,
+    heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
+  const ofType = <T extends S2CMessage['type']>(messages: readonly S2CMessage[], type: T) =>
+    messages.filter((m): m is Extract<S2CMessage, { type: T }> => m.type === type);
+
+  /**
+   * Uma hunt de verdade, como na FUN-103, mais o que esta issue precisa: a tabela de
+   * aparências, uma configuração de bot, e um herói que pode nascer ferido, sem mana ou com
+   * gold — porque é assim que se força uma cura, uma poção ou uma magia num teste curto.
+   *
+   * O herói nasce no LEVEL 1, com os máximos que a progressão dá ao level 1 — e não "level 8
+   * com 50 de mana" como o helper da FUN-103. Aquele herói é inconsistente de propósito e
+   * ninguém notava: no primeiro abate `grantXp` recalcula o level a partir da XP (zero → 1) e
+   * os máximos voltam à tabela, o que zera a mana. Para uma hunt de golpe não faz diferença;
+   * para uma que precisa lançar magia, faz toda — o bot nunca teria com quê.
+   *
+   * A mana inicial vem de uma progressão com `startingMana` alto, como o `withSpells` do
+   * `sim`: a de teste nasce com zero, e um herói sem mana não testa magia nenhuma.
+   *
+   * E o herói TEM stamina — um dia inteiro, o teto. O helper da FUN-103 não tem, e foi assim
+   * que a comparação exata de `staminaMs` passou pelo teste de "ciclo sem mudança": sem
+   * stamina não há o que queimar, e o `sim` queima a cada evento que vence. Aqui ela queima
+   * como em produção, e o teste que conta `player-stats` conta o que a produção manda.
+   */
+  function hunt(over: Partial<{
+    table: boolean; bot: BotConfig; health: number; mana: number; gold: number;
+    /** Sem spawn: uma hunt em que NADA acontece, para provar que nada é enviado. */
+    monsters: boolean;
+    /** Um rato que aguenta (como na FUN-103): o herói mata o comum num golpe e para de andar. */
+    tanky: boolean;
+    /** Quanto a hunt corre SEM NINGUÉM olhando antes de o visualizador chegar. */
+    beforeMs: number;
+    /** Sem `session-attach`: o socket está ligado, mas o cliente nunca pediu o mundo. */
+    state: boolean;
+    /** A stamina de nascença, em ms. Padrão: o dia inteiro, que é exatamente 24:00 no HUD. */
+    stamina: number;
+    /** Campos do rato trocados por cima do de teste: armadura, ataque, loot. */
+    rat: Record<string, unknown>;
+    /** Coeficientes de combate trocados por cima de `TEST_COMBAT`: o piso de dano, sobretudo. */
+    combat: Record<string, unknown>;
+    /** Quantos ratos por ponto de spawn. Padrão: um. */
+    perSpawnPoint: number;
+    /** `false` desliga a regeneração: vida e mana ficam paradas quando nada as toca. */
+    regen: boolean;
+  }> = {}) {
+    const raw = rawTestContent();
+    const ratOverride = {
+      ...(over.tanky === true ? { health: 100_000 } : {}),
+      ...(over.rat ?? {}),
+    };
+    const content = buildContent({
+      ...raw,
+      spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      progression: [{
+        ...TEST_PROGRESSION, startingMana: 200,
+        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+      }],
+      ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
+      ...(over.perSpawnPoint === undefined
+        ? {}
+        : {
+          hunts: [{
+            ...TEST_HUNT,
+            difficulties: {
+              beginner: { ...TEST_HUNT.difficulties.beginner, perSpawnPoint: over.perSpawnPoint },
+            },
+          }],
+        }),
+      ...(over.monsters === false
+        ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] }
+        : {}),
+      ...(Object.keys(ratOverride).length > 0
+        ? {
+          monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+            m['id'] === 'rat' ? { ...m, ...ratOverride } : m),
+        }
+        : {}),
+    });
+    const appearances = { ...(content.appearances as Appearances), ...TABLE };
+    const stats = statsForLevel(1, null, content.progression);
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      ...(over.table === false ? {} : { appearances }),
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner',
+          createdAtMs: 0,
+          ...(over.bot === undefined ? {} : { botConfig: over.bot }),
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+          mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
+          level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
+          staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
+        }));
+        return session;
+      },
+    });
+    const runFor = (ms: number, step = 100) => {
+      for (let t = 0; t < ms; t += step) { now += step; host.cycle(); }
+      host.flush();
+    };
+    // A sessão precisa existir para correr sem ninguém: `attach` é quem a cria neste host sem
+    // diretório, então o visualizador entra e sai, e só depois o de verdade chega.
+    if (over.beforeMs !== undefined) {
+      host.detach(host.attach(new FakeSocket(), 'hero'));
+      runFor(over.beforeMs);
+    }
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    // O `session-state` é pedido pelo cliente; é ele que dá ao herói o id numérico — sem isto
+    // nenhum golpe no herói teria como ser apresentado, e o teste mediria o vazio.
+    if (over.state !== false) host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = ofType(socket.received(), 'session-state').at(-1);
+    if (over.state !== false && state === undefined) throw new Error('session-attach não respondeu');
+    const heroId = state?.self.creatureId ?? -1;
+    const hero = () => host.sessionFor('hero')?.participants[0] as CharacterRuntime;
+    /**
+     * Onde o cliente DESENHA o herói no instante da mensagem `at`: o destino do último passo
+     * dele antes dela, ou o tile de entrada se ainda não andou. A rota tem dois tiles no
+     * mínimo, então o herói anda desde o primeiro instante — e "no tile do conjurador" só
+     * pode ser conferido contra o que o cliente viu, não contra a posição inicial.
+     */
+    const heroTileAt = (all: readonly S2CMessage[], at: number) => {
+      const last = ofType(all.slice(0, at), 'creature-move').filter((m) => m.id === heroId).at(-1);
+      return last?.to ?? { x: 1, y: 1, z: 7 };
+    };
+    return {
+      host, socket, viewer, heroId, runFor, hero, heroTileAt, maxHealth: stats.maxHealth,
+      maxMana: stats.maxMana, received: () => socket.received(),
+    };
+  }
+
+  it('o golpe do monstro vira creature-hit e creature-health do herói, e DEPOIS player-stats com o HP novo', () => {
+    // Antes disto a vida do jogador só chegava no `session-state` da reanexação: a barra dele
+    // ficava parada a hunt inteira enquanto a do rato andava, e quem olhava não sabia se
+    // estava apanhando.
+    //
+    // Mutação que mata: apagar a chamada de `#presentStats` no ciclo — sobra só o
+    // `player-stats` do `session-attach`, com a vida cheia. Mover `#presentStats` para
+    // ANTES de `#presentMoves` mata pela ordem: o HP novo chega antes do golpe que o causou.
+    // Descartar em `#presentPresence` o `creature-health-changed` cuja chave não é de monstro
+    // mata pela barra: o herói apanha e `creature-health` do id dele nunca sai.
+    const { runFor, received, heroId, hero } = hunt();
+    runFor(10_000);
+
+    // UMA leitura: `received()` decodifica os frames de novo a cada chamada, e a ordem entre
+    // mensagens só faz sentido dentro da mesma lista.
+    const all = received();
+    const hits = ofType(all, 'creature-hit').filter((h) => h.id === heroId);
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) {
+      expect(hit.kind).toBe('melee');
+      expect(hit.amount).toBeGreaterThan(0);
+    }
+    const bars = ofType(all, 'creature-health').filter((h) => h.id === heroId);
+    expect(bars.length).toBeGreaterThan(0);
+    // A barra é a vida com que ele terminou — o golpe passou pela fila, não só pelo `sim`.
+    expect(bars.at(-1)?.health).toBe(hero().health);
+
+    const stats = ofType(all, 'player-stats');
+    const ferido = stats.find((s) => s.health < s.maxHealth);
+    expect(ferido).toBeDefined();
+    expect(stats.at(-1)?.health).toBe(hero().health);
+    // O golpe explica o número: o primeiro `player-stats` ferido vem DEPOIS do primeiro golpe.
+    expect(all.indexOf(ferido as S2CMessage)).toBeGreaterThan(all.indexOf(hits[0] as S2CMessage));
+  });
+
+  it('a mana gasta numa magia chega em player-stats, mesmo sem a vida mudar', () => {
+    // É a mutação que o campo a campo existe para pegar: comparar só `health` deixaria a cura
+    // de vida cheia — que gasta 20 de mana e repõe zero — sem nenhum `player-stats`, e o HUD
+    // mostraria mana cheia depois de dez curas.
+    //
+    // Mutação que mata: `sameStats` devolvendo `a.health === b.health` só.
+    const { runFor, received, maxHealth, maxMana } = hunt({
+      monsters: false,
+      bot: rules({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'heal' },
+      }] }),
+    });
+    runFor(300);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats.some((s) => s.mana < maxMana)).toBe(true);
+    // E a vida não mexeu — o teste é sobre mana, e precisa provar que só ela mudou.
+    expect(stats.every((s) => s.health === maxHealth)).toBe(true);
+  });
+
+  it('ciclo sem mudança NÃO manda player-stats nenhum a mais — a stamina queimando inclusive', () => {
+    // Nove números a 10 Hz para dizer que nada mudou é a banda inteira que a FUN-13 orça. O
+    // herói TEM stamina, e o `sim` a queima a cada evento que vence (as regras de saída, a
+    // cada 250 ms): comparar `staminaMs` exato mandava um `player-stats` por ciclo — em
+    // produção, 482 em 120 s, mais que `creature-move`. O HUD mostra horas e minutos, e é no
+    // minuto que a comparação olha.
+    //
+    // O helper nasce com o dia inteiro, que é EXATAMENTE 24:00: a primeira queima vira o
+    // mostrador para 23:59, e esse é o único `player-stats` legítimo além do `session-attach`
+    // em três segundos de hunt vazia.
+    //
+    // Mutação que mata: `a.staminaMs === b.staminaMs` de volta em `sameStats` — sobem para
+    // treze (um por vencimento das regras de saída). Tirar o `sameStats` do `#presentStats`
+    // (mandar sempre) sobe para trinta e um.
+    const { runFor, received, hero } = hunt({ monsters: false });
+    runFor(3_000);
+
+    const stats = ofType(received(), 'player-stats');
+    expect(stats.length).toBeLessThanOrEqual(2);
+    // A stamina QUEIMOU — o `sim` não a poupou, só o fio não a repetiu a cada ciclo.
+    expect(hero().staminaMs).toBeLessThan(FULL_STAMINA_MS);
+    expect(hero().staminaMs).toBeGreaterThan(0);
+    // E a hunt de fato correu: o relógio da sessão andou, só não havia o que contar.
+    expect(ofType(received(), 'creature-move').length).toBeGreaterThan(0);
+  });
+
+  it('o player-stats entregue é a referência da comparação: uma mudança, e depois silêncio', () => {
+    // O rato bate UMA vez e nunca mais (intervalo de ataque maior que o teste), a regeneração
+    // está desligada, e a stamina nasce no meio de um minuto: depois do golpe, dez segundos em
+    // que os nove campos não mexem. Se `#presentStats` compara com o que ENTREGOU, sai um
+    // `player-stats` pelo golpe e nenhum depois; se compara com o do `session-attach` para
+    // sempre, cada ciclo redescobre que a vida caiu e manda de novo — cem vezes.
+    //
+    // Mutação que mata: apagar o `hosted.sentStats.set(...)` de `#presentStats` — sobem
+    // para cento e um, um por ciclo depois do golpe.
+    const { runFor, received, maxHealth } = hunt({
+      tanky: true, regen: false, stamina: MID_MINUTE_STAMINA_MS,
+      rat: { attackIntervalMs: 600_000 },
+    });
+    runFor(10_000);
+
+    const stats = ofType(received(), 'player-stats');
+    // O golpe chegou ao HUD — senão o teste mediria uma hunt em que nada aconteceu.
+    expect(stats.some((s) => s.health < maxHealth)).toBe(true);
+    // O do `session-attach` e o do golpe. Nem um a mais.
+    expect(stats.length).toBeLessThanOrEqual(2);
+    // Dito de outro jeito, e vale para qualquer roteiro: nenhum repete o que veio antes.
+    for (let i = 1; i < stats.length; i += 1) {
+      const [before, after] = [stats[i - 1], stats[i]] as [typeof stats[number], typeof stats[number]];
+      expect({ ...after, staminaMs: staminaMinute(after.staminaMs) })
+        .not.toEqual({ ...before, staminaMs: staminaMinute(before.staminaMs) });
+    }
+  });
+
+  it('o abate chega ao HUD: o player-stats leva a XP e o level do herói, não zero', () => {
+    // O `session-state` também leva XP e level, e por isso um `xp: 0` fixo em `playerStatsOf`
+    // passava pelos testes de reanexação — o HUD só ficava errado DEPOIS, quando o ciclo
+    // atualizava. Seis abates dão 30 de XP, e 20 é o level 2: o último `player-stats` tem
+    // de dizer a XP acumulada e o level que o `sim` calculou a partir dela.
+    //
+    // Mutação que mata: `xp: 0` em `playerStatsOf` (a XP do fio fica em zero com o herói em
+    // 30); `level: 0` idem, pelo level.
+    const { runFor, received, hero } = hunt();
+    runFor(10_000);
+
+    expect(hero().xp).toBeGreaterThan(0);
+    expect(hero().level).toBeGreaterThan(1);
+    const last = ofType(received(), 'player-stats').at(-1);
+    expect(last?.xp).toBe(hero().xp);
+    expect(last?.level).toBe(hero().level);
+  });
+
+  it('uma mudança SÓ de XP gera player-stats — a comparação olha a XP', () => {
+    // O rato não machuca (`attack: 0`), não larga gold, a regeneração está desligada, e a
+    // stamina nasce no meio de um minuto: dos nove campos, o abate mexe na XP e em nada mais.
+    // Se `sameStats` não olhar a XP, o HUD fica em zero a hunt inteira — e nenhum outro teste
+    // pega, porque em todos os outros o abate vem com gold junto.
+    //
+    // Mutação que mata: tirar `a.xp === b.xp` de `sameStats` — sobra só o `player-stats`
+    // do `session-attach`, com XP zero.
+    const { runFor, received, hero } = hunt({
+      regen: false, stamina: MID_MINUTE_STAMINA_MS,
+      rat: { attack: 0, loot: { items: [] } },
+    });
+    runFor(3_000);
+
+    const stats = ofType(received(), 'player-stats');
+    const first = stats[0] as (typeof stats)[number];
+    expect(hero().xp).toBeGreaterThan(0);
+    expect(stats.at(-1)?.xp).toBe(hero().xp);
+    expect(stats.length).toBeGreaterThan(1);
+    // E foi SÓ a XP: os outros oito campos são os do `session-attach`, em todos.
+    for (const s of stats) {
+      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs) })
+        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs) });
+    }
+  });
+
+  it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
+    // O `sim` diz "saiu `strike` contra o rato"; a tabela diz que isso é o projétil 5 e a
+    // explosão 12 (invariante 6). A ordem é a do Tibia: o projétil voa, o efeito estoura no
+    // tile de chegada, o número cai.
+    //
+    // Na arena de 2×2 o rato nasce colado e o primeiro morre no golpe engatilhado do herói,
+    // antes de bater; o segundo nasce com esse golpe em cooldown e bate primeiro — e é o dano
+    // levado que acorda a categoria `attack` do bot (é assim que o `sim` a arma). A magia sai
+    // aí, com `targets ≥ 1`, e por isso a hunt precisa de alguns segundos.
+    //
+    // Mutação que mata: trocar `from` e `to` no `missile` — o `effect` deixa de estourar
+    // onde o projétil chegou. `effectId: look.missile` mata pelo id.
+    const { runFor, received } = hunt({
+      bot: rules({ attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
+      }] }),
+    });
+    runFor(5_000);
+
+    const all = received();
+    const missile = ofType(all, 'missile')[0];
+    expect(missile).toBeDefined();
+    expect(missile?.missileId).toBe(5);
+    expect(missile?.from).not.toEqual(missile?.to);
+    // O efeito estoura ONDE o projétil chegou, e logo depois dele.
+    const at = all.indexOf(missile as S2CMessage);
+    const effect = all[at + 1];
+    expect(effect?.type).toBe('effect');
+    if (effect?.type !== 'effect') return;
+    expect(effect.effectId).toBe(12);
+    expect(effect.position).toEqual(missile?.to);
+    // E o número, com `kind: 'spell'`, vem depois dos dois — é o golpe do lançamento.
+    const hit = all.slice(at).find((m) => m.type === 'creature-hit' && m.kind === 'spell');
+    expect(hit).toBeDefined();
+  });
+
+  it('a magia de ÁREA estoura um effect em CADA alvo, e não só no primeiro', () => {
+    // Dois ratos que aguentam, colados um no outro na arena de 2×2, e um `blast` de raio 1:
+    // cada lançamento mira os dois. O projétil é UM (vai ao primeiro alvo — é um projétil,
+    // não uma rajada), mas a explosão é uma por alvo, no tile de cada um — e o número que
+    // cai também. Com dois ratos sempre vivos, são duas explosões por projétil.
+    //
+    // Mutação que mata: trocar o laço por alvo do `spell-cast` por "só o primeiro" — a
+    // contagem de `effect` cai para a de `missile`, metade dos golpes.
+    const { runFor, received } = hunt({
+      tanky: true, perSpawnPoint: 2,
+      bot: rules({ attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'blast' },
+      }] }),
+    });
+    runFor(3_000);
+
+    const all = received();
+    const missiles = ofType(all, 'missile').filter((m) => m.missileId === 6);
+    const explosoes = ofType(all, 'effect').filter((e) => e.effectId === 15);
+    const golpes = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
+    expect(missiles.length).toBeGreaterThan(0);
+    expect(explosoes).toHaveLength(golpes.length);
+    expect(explosoes).toHaveLength(2 * missiles.length);
+    // Em tiles DIFERENTES: cada rato levou a sua.
+    const tiles = new Set(explosoes.map((e) => `${e.position.x},${e.position.y}`));
+    expect(tiles.size).toBe(2);
+  });
+
+  it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {
+    // Uma magia nova sem arte ainda bate — o `creature-hit` prova — e derrubar a
+    // apresentação por isso esconderia justamente que ela funcionou. Silêncio, não erro.
+    //
+    // Mutação que mata: ler `appearances.spells[spellId].effect` sem a guarda de `undefined`
+    // — o ciclo explode num `TypeError` no primeiro lançamento.
+    const { runFor, received } = hunt({
+      table: false,
+      bot: rules({ attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'strike' },
+      }] }),
+    });
+    expect(() => runFor(5_000)).not.toThrow();
+
+    expect(ofType(received(), 'creature-hit').some((h) => h.kind === 'spell')).toBe(true);
+    expect(ofType(received(), 'effect')).toHaveLength(0);
+    expect(ofType(received(), 'missile')).toHaveLength(0);
+  });
+
+  it('golpe em criatura que o cliente ainda NÃO conhece é descartado; o session-attach é quem a apresenta', () => {
+    // O rato nasceu com ninguém olhando: o `creature-appear` dele foi drenado para o nada, e
+    // ele não tem id numérico. Quem chega depois liga o socket mas ainda não pediu o mundo —
+    // e nesse intervalo o número flutuante não tem sobre quem cair. Descartar é a resposta:
+    // mandar com um id inventado é um número num tile vazio, e o id ainda poderia colidir
+    // com o de alguém de verdade. O rato aguenta (`tanky`) para continuar sendo ELE quando o
+    // cliente enfim pedir o estado — e aí os golpes chegam, com o id que o estado deu.
+    //
+    // Mutação que mata: `hosted.creatureIds.get(...) ?? 0` no ramo de `creature-hit` (mandar
+    // com id 0 em vez de descartar) — aparece um golpe antes do `session-state`.
+    const { host, viewer, runFor, received } = hunt({ state: false, tanky: true, beforeMs: 1_000 });
+    runFor(3_000);
+
+    const antes = received();
+    expect(ofType(antes, 'creature-appear')).toHaveLength(0);
+    expect(ofType(antes, 'creature-hit')).toHaveLength(0);
+    expect(ofType(antes, 'creature-health')).toHaveLength(0);
+    // A luta aconteceu — o `sim` não espera ninguém (invariante 3): o HUD já mostra o dano.
+    expect(ofType(antes, 'player-stats').some((s) => s.health < s.maxHealth)).toBe(true);
+
+    host.handle(viewer, { type: 'session-attach' });
+    runFor(3_000);
+
+    const all = received();
+    const state = ofType(all, 'session-state')[0];
+    expect(state).toBeDefined();
+    if (state === undefined) return;
+    const known = new Set(state.world.creatures.map((c) => c.id));
+    expect(known.size).toBe(2);
+    const depois = all.slice(all.indexOf(state));
+    const hits = ofType(depois, 'creature-hit');
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) expect(known.has(hit.id)).toBe(true);
+    // Dos dois lados: o rato apanha do herói e o herói apanha do rato.
+    expect(hits.some((h) => h.id === state.self.creatureId)).toBe(true);
+    expect(hits.some((h) => h.id !== state.self.creatureId)).toBe(true);
+  });
+
+  it('cura em herói que o cliente ainda NÃO conhece é descartada; o session-attach é quem o apresenta', () => {
+    // O espelho do teste de golpe, para a cura: o herói nasce ferido, o bot cura a cada
+    // segundo, e o socket está ligado sem ter pedido o mundo — o herói não tem id numérico. O
+    // "+60" em verde não tem sobre quem cair, e é descartado pela mesma razão do golpe:
+    // mandar com id inventado é um número num tile vazio, que ainda pode colidir com o id de
+    // alguém de verdade. A cura continua (a vida sobe a cada segundo até a metade), então
+    // depois do `session-state` ela chega, com o id que o estado deu.
+    //
+    // O rato aguenta e nasceu sem ninguém olhando, como no teste de golpe: é ele que segura o
+    // herói no lugar. Numa hunt vazia o herói percorre a rota, e o PASSO dele numera a
+    // criatura antes de o estado sair — a cura teria id antes da hora, e o teste mediria
+    // outra coisa.
+    //
+    // Mutação que mata: `hosted.creatureIds.get(...) ?? 0` no ramo de `creature-healed`
+    // (mandar com id 0 em vez de descartar) — aparece uma cura antes do `session-state`.
+    const { host, viewer, runFor, received, hero } = hunt({
+      state: false, tanky: true, beforeMs: 1_000, health: 100,
+      bot: rules({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
+      }] }),
+    });
+    runFor(3_000);
+
+    const antes = received();
+    expect(ofType(antes, 'session-state')).toHaveLength(0);
+    expect(ofType(antes, 'creature-hit')).toHaveLength(0);
+    // A cura ACONTECEU — o `sim` não espera ninguém (invariante 3): a vida subiu e a mana
+    // desceu, e o HUD já sabe.
+    expect(hero().health).toBeGreaterThan(100);
+    expect(ofType(antes, 'player-stats').some((s) => s.mana < s.maxMana)).toBe(true);
+
+    host.handle(viewer, { type: 'session-attach' });
+    runFor(3_000);
+
+    const all = received();
+    const state = ofType(all, 'session-state')[0];
+    expect(state).toBeDefined();
+    if (state === undefined) return;
+    const depois = all.slice(all.indexOf(state));
+    const curas = ofType(depois, 'creature-hit').filter((h) => h.kind === 'heal');
+    expect(curas.length).toBeGreaterThan(0);
+    for (const cura of curas) expect(cura).toMatchObject({ id: state.self.creatureId, amount: 60 });
+  });
+
+  it('o golpe absorvido inteiro mostra "0" e NÃO sangra', () => {
+    // Um rato blindado (armadura 100 contra 25 de ataque) e o piso de dano em zero: todo golpe
+    // do herói resolve zero. O número cai — como no Tibia, senão o jogador não vê que está
+    // tentando — mas sangue é o que a armadura acabou de impedir. O rato, por sua vez, bate 6
+    // no herói sem armadura, e esses sangram: a contagem de `effect` é EXATAMENTE a dos golpes
+    // que tiraram vida, e há golpes dos dois tipos na mesma hunt.
+    //
+    // Mutação que mata: tirar `event.amount > 0 &&` da guarda do sangue — os zeros passam a
+    // sangrar e a contagem de `effect` sobe para a de TODOS os golpes.
+    const { runFor, received } = hunt({
+      rat: { armor: 100 }, combat: { minimumDamageFraction: 0 },
+    });
+    runFor(10_000);
+
+    const all = received();
+    const hits = ofType(all, 'creature-hit');
+    for (const hit of hits) expect(hit.kind).toBe('melee');
+    expect(hits.some((h) => h.amount === 0)).toBe(true);
+    expect(hits.some((h) => h.amount > 0)).toBe(true);
+    const effects = ofType(all, 'effect');
+    expect(effects).toHaveLength(hits.filter((h) => h.amount > 0).length);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('o golpe corpo a corpo sangra com hits.melee, uma vez por golpe que tirou vida', () => {
+    // Sem magia nem poção, todo `effect` é sangue: um por `creature-hit` de corpo a corpo que
+    // saiu da barra, com o id que a tabela deu ao sangue — e nenhum outro.
+    //
+    // Mutação que mata: mandar o sangue com `appearances.spells` ou com id fixo — o
+    // `effectId` deixa de ser 1. Tirar a guarda `amount > 0` não muda esta fixture (armadura
+    // zero, esquiva zero), e é por isso que a contagem é contra os golpes com vida tirada.
+    const { runFor, received } = hunt();
+    runFor(10_000);
+
+    const effects = ofType(received(), 'effect');
+    const golpes = ofType(received(), 'creature-hit')
+      .filter((h) => h.kind === 'melee' && h.amount > 0);
+    expect(golpes.length).toBeGreaterThan(0);
+    expect(effects).toHaveLength(golpes.length);
+    for (const effect of effects) expect(effect.effectId).toBe(1);
+  });
+
+  it('a cura vira creature-hit com kind heal, e o efeito dela sai no tile do conjurador', () => {
+    // O número em verde é o que a cura REPÔS (60), com o id do herói; o efeito 13 não vem do
+    // `creature-healed`, vem do `spell-cast` sem alvo — é por isso que ele estoura no
+    // conjurador, e é por isso que uma cura de vida cheia ainda brilha.
+    //
+    // "No tile do conjurador" é conferido contra o passo que o cliente já recebeu, e não
+    // contra a posição de entrada: o herói anda desde o instante zero, e o passo vence antes
+    // do bot no mesmo instante — o efeito precisa cair onde a tela mostra o herói.
+    //
+    // Mutação que mata: `kind: event.source` no ramo de `creature-healed` — sai `spell`, não
+    // `heal`. Apagar o ramo de "sem alvo" do `spell-cast` mata pelo efeito 13; mandar o
+    // efeito da cura em `targets[0]?.position ?? casterPosition` sobrevive, e é por isso
+    // que a posição é conferida contra o tile do herói.
+    const { runFor, received, heroId, heroTileAt } = hunt({
+      monsters: false, health: 100,
+      bot: rules({ heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
+      }] }),
+    });
+    runFor(300);
+
+    const all = received();
+    const cura = ofType(all, 'creature-hit').find((h) => h.kind === 'heal');
+    expect(cura).toMatchObject({ id: heroId, amount: 60, kind: 'heal' });
+    const effect = ofType(all, 'effect').find((e) => e.effectId === 13);
+    expect(effect).toBeDefined();
+    expect(effect?.position).toEqual(heroTileAt(all, all.indexOf(effect as S2CMessage)));
+    // Sem alvo, sem projétil.
+    expect(ofType(all, 'missile')).toHaveLength(0);
+  });
+
+  it('a poção vira effect com supplies.<id>.effect, cura em verde, e o gold do player-stats é o SALDO', () => {
+    // Três coisas de uma poção só: o brilho (14) no tile de quem bebeu, o "+80" em verde, e
+    // o gold do HUD caindo 45 — que é `gold + goldDelta`, o saldo, e não o que entrou com o
+    // ticket nem o que a sessão movimentou.
+    //
+    // Mutação que mata: `gold: character.gold` em `playerStatsOf` — o HUD fica em 100 depois
+    // de pagar 45. Ler o supply na tabela de `spells` em vez de `supplies` mata pelo brilho
+    // 14, que deixa de existir.
+    const { runFor, received, heroId, heroTileAt } = hunt({
+      monsters: false, health: 100, gold: 100,
+      bot: rules({ potion: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'supply', supplyId: 'health-potion' },
+      }] }),
+    });
+    runFor(300);
+
+    const all = received();
+    const brilho = ofType(all, 'effect').find((e) => e.effectId === 14);
+    expect(brilho).toBeDefined();
+    expect(brilho?.position).toEqual(heroTileAt(all, all.indexOf(brilho as S2CMessage)));
+    const cura = ofType(all, 'creature-hit').find((h) => h.kind === 'heal');
+    expect(cura).toMatchObject({ id: heroId, amount: 80 });
+    const stats = ofType(all, 'player-stats');
+    expect(stats[0]?.gold).toBe(100);
+    expect(stats.at(-1)?.gold).toBe(55);
   });
 });

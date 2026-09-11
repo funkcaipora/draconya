@@ -421,6 +421,13 @@ que a FUN-56 registrou: o `SCAN` de uma varredura não pode pegar a chave da out
 pnpm vitest run packages/server
 ```
 
+**Da RAIZ do repositório, sempre.** De dentro do pacote, o vitest resolve `@draconya/*` pelo
+`dist/` de cada pacote — o que foi compilado da última vez, não o que está no editor. Um teste
+daqui que atravessa para o `sim` (toda hunt de verdade em `host.test.ts`) passa com o `sim`
+velho e, pior, uma mutação aplicada no `sim` fica invisível para ele: o teste "mata" a
+mutação sem nunca tê-la visto. Foi um achado de revisão, e é por isso que a disciplina de
+mutação manda a linha de comando inteira, com o caminho a partir da raiz.
+
 Testes de integração que importam: reanexar a uma sessão em andamento; matar o processo e recuperar
 do snapshot; drenar em deploy e conferir o extrato; duas requisições simultâneas competindo pelo
 terceiro slot de personagem.
@@ -476,6 +483,31 @@ terceiro slot de personagem.
   a partir de um tile em que a criatura nunca esteve, para ele.
 - **A AOI só existe no shard.** Numa hunt de um personagem ela seria índice para nada, no caminho
   quente das 5.000 instâncias que a FUN-46 mediu.
+- **`sentStats` guarda o que foi ENTREGUE, nunca o que foi calculado** (FUN-109). O
+  `player-stats` ao vivo sai da comparação campo a campo entre os vitais de agora e os últimos
+  que algum visualizador recebeu — no `session-attach` e no ciclo com visualizador. Sem
+  ninguém olhando não se compara nada: a comparação é apresentação, e o `sim` muda o que tem
+  de mudar de qualquer jeito (invariante 3). Escrever `sentStats` num ciclo sem visualizador
+  faria quem reanexa perder a primeira mudança depois do estado. E a comparação é dos NOVE
+  campos: comparar só a vida deixa a mana gasta numa magia fora do HUD, e o teste de mana em
+  `host.test.ts` é quem pega. **A stamina é comparada no MINUTO**, não no milissegundo: o
+  `sim` a queima a cada evento que vence (as regras de saída, a cada 250 ms), então
+  `staminaMs` muda em TODO ciclo anexado, e a comparação exata mandava um `player-stats` por
+  ciclo — 482 em 120 s medidos, mais que `creature-move`. O HUD mostra horas e minutos, e o
+  valor entregue continua em milissegundos; só o gatilho arredonda. O herói do helper da
+  FUN-109 tem stamina justamente para o teste de "ciclo sem mudança" queimar como a produção.
+- **Combate e vida do personagem vão para TODOS os visualizadores da sessão** (FUN-109), pela
+  mesma decisão de `#presentPresence`: combate só existe em hunt, e hunt é privada. Magia ou
+  supply sem linha na tabela de aparências é MUDO, não erro — `buildContent` só exige que toda
+  linha aponte para algo que existe, não o contrário; uma magia nova sem arte ainda bate, e o
+  número e a barra provam. Golpe em criatura sem id numérico (nasceu sem ninguém olhando, e o
+  cliente ainda não pediu o `session-state`) é descartado, não mandado com id inventado.
+- **O herói "level 8 com XP zero" do helper da FUN-103 é inconsistente, e a mana some no
+  primeiro abate.** `grantXp` recalcula o level a partir da XP acumulada (zero → 1) e devolve os
+  máximos à tabela de progressão — cuja mana inicial de teste é zero. Para golpe não faz
+  diferença; para uma hunt que precisa lançar magia, o bot nunca tem com quê. O helper da
+  FUN-109 nasce no level 1, com os máximos de `statsForLevel(1)` e uma progressão de teste com
+  `startingMana` alto — e é ele que se copia para o próximo teste com magia.
 
 ## Testes de autenticação e admissão
 
