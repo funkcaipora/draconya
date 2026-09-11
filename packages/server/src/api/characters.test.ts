@@ -45,7 +45,9 @@ class MemoryRepository implements GameRepository {
   async ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord> {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
-  async createCharacter(accountId: string, name: string): Promise<CharacterRecord> {
+  async createCharacter(
+    accountId: string, name: string, initial: { readonly botConfig?: unknown } = {},
+  ): Promise<CharacterRecord> {
     if ([...this.characters.values()].some((character) => character.name.toLowerCase() === name.toLowerCase())) {
       throw new CharacterNameTakenError();
     }
@@ -53,7 +55,8 @@ class MemoryRepository implements GameRepository {
     const character: CharacterRecord = {
       id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
-      state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
+      state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
+      outfitColors: null, bestiary: null,
       createdAt: now,
     };
     this.characters.set(character.id, character);
@@ -126,6 +129,32 @@ describe('character routes', () => {
     expect((await app.inject({
       method: 'POST', url: `/api/characters/${id}/select`, headers: { cookie },
     })).statusCode).toBe(404);
+  });
+
+  it('nasce com o bot padrão do conteúdo, e sem padrão nasce sem bot (FUN-114)', async () => {
+    // O MVP é "magia + poção funcionando" na primeira hunt, sem abrir a tela do bot. O `api`
+    // não conhece o vocabulário: o que recebe do conteúdo, grava. Mutação que mata: não passar
+    // `botConfig` ao repositório.
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const app = Fastify();
+    const defaultBotConfig = { version: 1, heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }] };
+    registerCharacterRoutes(app, auth, repository, { defaultBotConfig });
+    const cookie = `${SESSION_COOKIE}=token`;
+
+    const created = await app.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie }, payload: { name: 'Novato' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(repository.characters.get(created.json().id as string)?.botConfig).toEqual(defaultBotConfig);
+
+    const { app: bare, cookie: bareCookie, repository: bareRepository } = await build();
+    const bareCreated = await bare.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie: bareCookie }, payload: { name: 'Sem Bot' },
+    });
+    expect(bareRepository.characters.get(bareCreated.json().id as string)?.botConfig).toBeNull();
   });
 
   it('normalizes names and rejects a case-insensitive duplicate', async () => {

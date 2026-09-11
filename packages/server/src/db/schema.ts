@@ -109,8 +109,9 @@ export const characters = pgTable(
     staminaUpdatedAt: timestamp('stamina_updated_at', { withTimezone: true }).notNull().defaultNow(),
 
     /**
-     * A configuração do bot (§13, FUN-81). Nulável: personagem que nunca configurou entra na
-     * hunt sem bot, que é o que ele já fazia.
+     * A configuração do bot (§13, FUN-81). Nulável — mas desde a FUN-114 o `api` grava a
+     * padrão do conteúdo ao criar, então `null` é personagem anterior a isso, que entra na
+     * hunt sem bot, como sempre entrou.
      *
      * A versão do vocabulário vai DENTRO do documento (`config.version`), não numa coluna ao
      * lado — um segundo lugar para a versão é um segundo lugar para ela divergir.

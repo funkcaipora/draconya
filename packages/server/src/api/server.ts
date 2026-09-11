@@ -15,6 +15,8 @@ import { createTicketHandler, type TicketRouteDependencies } from './tickets.js'
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
   readonly repository?: GameRepository;
+  /** O bot com que o personagem nasce (FUN-114). Ver `CharacterRouteOptions`. */
+  readonly defaultBotConfig?: unknown;
   readonly isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>;
   /** Onde o personagem está agora, segundo o diretório de sessões (FUN-30). */
   readonly locateSession?: (
@@ -115,6 +117,9 @@ export function buildApi(
       isCharacterActive: dependencies.isCharacterActive,
       locateSession: dependencies.locateSession,
       settleProgress: dependencies.settleProgress,
+      ...(dependencies.defaultBotConfig === undefined
+        ? {}
+        : { defaultBotConfig: dependencies.defaultBotConfig }),
     });
   }
 

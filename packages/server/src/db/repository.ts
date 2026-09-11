@@ -74,7 +74,14 @@ export type CharacterActiveCheck = (
 
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
-  createCharacter(accountId: string, name: string): Promise<CharacterRecord>;
+  /**
+   * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
+   * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
+   * hunt curando e atacando sem ter aberto tela nenhuma. Opaca, como em `saveBotConfig`.
+   */
+  createCharacter(
+    accountId: string, name: string, initial?: { readonly botConfig?: unknown },
+  ): Promise<CharacterRecord>;
   listCharacters(accountId: string): Promise<readonly CharacterRecord[]>;
   getCharacter(accountId: string, characterId: string): Promise<CharacterRecord | null>;
   ownsCharacter(accountId: string, characterId: string): Promise<boolean>;
@@ -156,11 +163,16 @@ export class DrizzleGameRepository implements GameRepository {
     }
   }
 
-  async createCharacter(accountId: string, name: string): Promise<CharacterRecord> {
+  async createCharacter(
+    accountId: string, name: string, initial: { readonly botConfig?: unknown } = {},
+  ): Promise<CharacterRecord> {
     try {
       const [created] = await this.#db
         .insert(characters)
-        .values({ id: randomUUID(), accountId, name })
+        .values({
+          id: randomUUID(), accountId, name,
+          ...(initial.botConfig === undefined ? {} : { botConfig: initial.botConfig }),
+        })
         .returning();
       if (created === undefined) throw new Error('failed to create character');
       return toCharacter(created);

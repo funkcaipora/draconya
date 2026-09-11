@@ -57,6 +57,16 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     expect(character.createdAt).toBeInstanceOf(Date);
   });
 
+  it('o bot padrão entra na linha ao criar, e sem padrão a coluna nasce nula (FUN-114)', async () => {
+    const account = await repository.ensureAccount({ externalAuthId: 'ext-bot', email: 'bot@example.com' });
+    const config = { version: 1, heal: [], potion: [], attack: [], rune: [], support: [] };
+    const withBot = await repository.createCharacter(account.id, 'Com Bot', { botConfig: config });
+    expect(withBot.botConfig).toEqual(config);
+    expect((await repository.getCharacter(account.id, withBot.id))?.botConfig).toEqual(config);
+    const without = await repository.createCharacter(account.id, 'Sem Bot');
+    expect(without.botConfig).toBeNull();
+  });
+
   it('as cores do outfit nascem nulas e voltam como foram gravadas (FUN-104)', async () => {
     // Sem método de escrita ainda — a escolha (§7.4) não tem tela —, então a linha é escrita
     // por SQL, como a tela um dia vai escrever. O que se afirma é o caminho de LEITURA que o

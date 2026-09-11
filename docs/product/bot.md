@@ -328,8 +328,16 @@ exige que a configuração seja **durável** e que o processo que hospeda a sess
 
 | | quem | como |
 |---|---|---|
+| nascer | `api` | `createCharacter` grava `bot_config` com `content.bot.defaultConfig` (FUN-114) |
 | escrever | `game` | mensagem `bot-config` no socket → `UPDATE character SET bot_config` |
 | ler | `api` | lê a linha ao emitir o ticket; a configuração viaja em `InitialCharacter` |
+
+**Todo personagem nasce com o bot padrão do conteúdo** (FUN-114): cura a 70 % de HP, poção de
+vida a 40 %, Golpe Arcano com alvo ao alcance — `bot/baseline.json`, campo `defaultConfig`,
+validado no boot pelo mesmo juiz que julga a configuração do jogador. Até aí o personagem novo
+entrava na primeira hunt só no golpe básico até abrir a tela e escrever regras, e "magia + poção"
+do MVP não existiam no primeiro minuto. Personagem criado antes disso continua como estava: a
+coluna dele é dele. Os limiares são ponto de partida (`_open`), não balanceamento decidido.
 
 Os dois caminhos não se cruzam, e a decisão está no [ADR 0021](../adr/0021-the-game-process-writes-the-bot-configuration.md).
 A escrita é uma instrução só, sem `SELECT` antes: "o jogador salvou isto" é última-escrita-vence

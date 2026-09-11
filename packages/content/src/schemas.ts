@@ -820,6 +820,17 @@ export const botSchema = z.object({
    * gravados antes desta issue continuarem válidos.
    */
   targetSearchRadius: z.number().int().positive().default(8),
+  /**
+   * A configuração com que todo personagem NASCE (FUN-114): a que o `api` grava em
+   * `bot_config` ao criar. Sem ela o personagem novo entrava na hunt só no golpe básico até
+   * abrir a tela e escrever regras — e "magia + poção" do MVP não existia no primeiro minuto.
+   *
+   * É uma `BotConfig` inteira, validada no boot pelo MESMO `validateBotConfig` que julga a do
+   * jogador: magia ou supply que não existe reprova o conteúdo, não o personagem. Opcional
+   * porque conteúdo de teste não fala de onboarding; o conteúdo real a tem. `z.lazy` porque
+   * `botConfigSchema` é declarado mais abaixo.
+   */
+  defaultConfig: z.lazy(() => botConfigSchema).optional(),
   /** Slots por categoria. §13.3: cura 3, poção 4, ataque 10, runa 10, suporte 10. */
   slots: z.object({
     heal: z.number().int().nonnegative(),
