@@ -254,6 +254,28 @@ pnpm tsx scripts/make-sheet-fixture.ts
   por FASE e por CÉLULA do padrão 3×3 — a célula é a direção do voo, por OCTANTE
   (`missileCell`, a regra de `Position::getDirectionFromPosition` do OTClient): `(3, 1)` está
   a 18° e sai com o quadro de leste, não com a diagonal que o sinal de cada eixo daria.
+- **A parede é montada pela VIZINHANÇA, como o Tibia monta muro** (`world/walls.ts`, FUN-105).
+  O tilemap só diz "bloqueia"; qual das quatro peças vai em cada `#` — vertical, horizontal,
+  canto ou poste — é `wallPiece` quem decide, olhando SÓ os vizinhos de NORTE e OESTE: parede
+  ao norte é vertical, a oeste é horizontal, as duas é canto, nenhuma é poste. Sul e leste NÃO
+  entram, e isso não é simplificação: o sprite de parede do pacote tem 64×64 e espalha para
+  CIMA e para a ESQUERDA do tile dono, então o trecho até o vizinho de sul é desenhado pelo
+  vizinho de sul, e o trecho até o de leste, pelo de leste. É por isso que o canto de
+  cima-esquerda de todo retângulo é POSTE e o de baixo-direita é canto — e é isso que o pacote
+  espera. A regra é a tabela de vizinhança de meia-borda do Remere's Map Editor
+  (`WallBrush::half_border_types`), reproduzida como REGRA DE DOMÍNIO — qual peça cada par de
+  vizinhos escolhe — e não como código: o RME é GPL, e o limite do ADR 0019 vale para ele.
+  **A versão espelhada (norte OU sul, leste OU oeste) parecia certa no papel e estava errada
+  na tela:** canto nas quatro quinas e um toco de muro saindo de cada ponta, porque cada
+  canto estendia trechos para tiles sem parede. Os ids das peças vêm de
+  `appearances.maps.<id>.wall`, e `wallSetOf` (de `content`) faz um id só virar as quatro
+  iguais. **Fora do mapa NÃO é parede** (`wallsOf`): `isBlocked` diz que é, e para andar está
+  certo — para a peça, a borda inteira do mapa sairia como canto. A diagonal também não conta;
+  um `#` com vizinho só na diagonal é poste. `walls.test.ts` prende o histograma da regra
+  sobre o `rat-cellars` real (27 verticais, 27 horizontais, 3 cantos, 3 postes), e a fixture
+  de `wallsOf` é RETANGULAR de propósito — num mapa quadrado, trocar `width` por `height`
+  passa em silêncio. A chave de textura continua sendo id + célula do padrão: as peças têm
+  padrão 2×1 e 1×2, e `tileTexture` já resolve isso.
 - **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
   criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
   trabalho 60 vezes por segundo.
@@ -397,3 +419,35 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   atividade faz o jogador procurar a poção no meio da luta.
 - **`inventory` e `catalogue` SUBSTITUEM, nunca acumulam.** O servidor manda o estado inteiro;
   montar a partir de pedaços daria uma mochila que diverge da dele sem nada acusar.
+- **A arte de UI vem do pacote, pelo CLIENTE, e nunca é versionada** (FUN-108). Moldura, pedra,
+  slot, ícone de slot vazio e barras de HP/mana são PNGs de
+  `things/<versão>/library/ui/images/`, servidos pelo mesmo caminho que os sprites
+  (`VITE_THINGS_URL`). `assets/ui.ts` é a única tabela — variável CSS → arquivo — e
+  `applyUiSkin` a põe no `:root` uma vez, ao montar o `Shell`; `shell.css` consome por
+  `var(--ui-x, <cor lisa>)` e **nunca escreve `url()` de arte**. Sem pacote, nenhuma variável
+  existe e a tela sai em cor lisa com a mesma estrutura — arte que não carrega não é razão de
+  a tela não abrir. Em `content/` continua entrando só `appearanceId` (invariante 6). **Em
+  produção, `library/ui/images` precisa estar no volume `things`** (o nginx serve o volume
+  inteiro, `deploy/nginx.conf`): um volume só com `catalog-content.json`, `.dat` e as folhas
+  desenha o mundo e deixa a casca lisa — o sintoma é só visual, com 404 de PNG na rede. E
+  **a origem não serve essa subpasta** — ela é derivada do `.rcc` pelo `pnpm assets:library`
+  —, então o script que baixa o pacote da origem não a traz; ela sobe da sua máquina, com o
+  `rsync` de `docs/deploy.md` ("O pacote de arte"), que exclui o resto de `library/`.
+- **O pacote de arte é UM, montado no `Shell` e entregue por contexto** (`shell/useBrowserPack.ts`,
+  `shell/AssetPackContext.tsx`). O viewport desenha o mundo com ele e o inventário desenha o
+  sprite de cada item (`shell/ItemSprite.tsx`, um canvas de 32 px por item, `pack.object`);
+  um pacote por consumidor seria dois workers de LZMA e dois orçamentos de bitmap. Contexto do
+  React aqui NÃO fere o ADR 0007: o pacote muda uma vez, ao carregar, e nada de estado de jogo
+  passa por ele. **O `TextureBook` continua sendo do viewport, por montagem:** `destroy()` o
+  fecha para sempre (`book.clear()`), e o StrictMode monta o viewport duas vezes com o mesmo
+  contexto — um livro compartilhado chegaria fechado à segunda montagem e a tela ficaria em
+  retângulos sem erro. O pacote avisa os despejos por `subscribeEvictions`, e cada livro se
+  inscreve e desinscreve com a montagem dele. **O viewport NÃO espera o pacote para subir**
+  (`shell/Viewport.tsx`): o Pixi monta na hora com `pack: null`, desenha o mapa em retângulos,
+  e recebe a arte por `handle.setPack` quando o contexto resolve — são dois efeitos, um por
+  ciclo de vida (montagem e contexto), e um efeito só dependente do contexto remontaria o
+  canvas quando a arte chegasse. Esperar deixava a área do mundo VAZIA pelo tempo que o
+  catálogo levasse para baixar. `setPack` não limpa o livro, e não precisa: com `pack === null`
+  nenhum `book.get` roda, então nada foi guardado antes da arte — não há entrada envenenada.
+  Conferido no navegador segurando o `catalog-content.json` por 15 s: retângulos até lá,
+  sprites depois, sem a câmera andar.

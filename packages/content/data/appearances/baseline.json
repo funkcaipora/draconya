@@ -13,8 +13,14 @@
     "spike-sword": 3271
   },
   "maps": {
-    "rat-cellars": { "floor": 355, "wall": 1298 },
-    "city": { "floor": 429, "wall": 1298 }
+    "rat-cellars": {
+      "floor": 355,
+      "wall": { "vertical": 1294, "horizontal": 1295, "corner": 1298, "pole": 1296 }
+    },
+    "city": {
+      "floor": 429,
+      "wall": { "vertical": 1294, "horizontal": 1295, "corner": 1298, "pole": 1296 }
+    }
   },
   "spells": {
     "heal": { "effect": 13 },

@@ -8,6 +8,26 @@ import { z } from 'zod';
 const appearanceId = z.number().int().positive();
 
 /**
+ * As quatro peças de uma parede (FUN-105), como o Tibia monta muro: o tile bloqueado NÃO tem
+ * uma arte só — a peça é escolhida pela VIZINHANÇA. `vertical` corre de norte a sul,
+ * `horizontal` de leste a oeste, `corner` é onde as duas se encontram e `pole` é a ponta
+ * solta, sem parede em nenhum dos quatro lados. A regra que escolhe é do cliente
+ * (`world/walls.ts`); aqui moram só os quatro ids — nunca um caminho de arquivo (invariante 6).
+ *
+ * `strictObject`, como item e monstro: uma quinta chave (`"diagonal"`, `"end"`) seria uma peça
+ * que ninguém desenha, e Zod a descartaria em silêncio no arquivo que existe para ninguém
+ * conferir arte à mão.
+ */
+export const wallSetSchema = z.strictObject({
+  vertical: appearanceId,
+  horizontal: appearanceId,
+  corner: appearanceId,
+  pole: appearanceId,
+});
+
+export type WallSet = z.infer<typeof wallSetSchema>;
+
+/**
  * A TABELA de aparências (FUN-94), o mapa único que o ADR 0008 já previa: *"trocar o pacote de
  * assets no futuro é remapear `appearanceId`/`outfitId` numa tabela, não reescrever
  * `content/`"*.
@@ -48,10 +68,14 @@ export const appearancesSchema = z.object({
    * **Por MAPA, e não um par global.** Uma adega e uma praça não têm o mesmo chão, e um par
    * único faria a Cidade parecer o porão do rato — que é o tipo de coisa que ninguém escreve
    * de propósito e todo mundo vê na primeira tela.
+   *
+   * `wall` é UM id — a mesma peça em todo tile bloqueado — ou as quatro de `wallSetSchema`
+   * (FUN-105). A união fica no schema de propósito, sem normalizar aqui: o arquivo diz o que
+   * o humano escreveu, e quem precisa das quatro chama `wallSetOf`.
    */
   maps: z.record(z.string().min(1), z.object({
     floor: appearanceId,
-    wall: appearanceId,
+    wall: z.union([appearanceId, wallSetSchema]),
   })).default({}),
   /**
    * `id de magia → o que ela desenha` (FUN-109). `effect` é a animação no tile do alvo;

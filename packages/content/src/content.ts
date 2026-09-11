@@ -14,7 +14,7 @@ import {
 } from './schemas.js';
 import type {
   Appearances, BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina,
-  Supply, Vocation,
+  Supply, Vocation, WallSet,
 } from './schemas.js';
 
 export interface Content {
@@ -330,6 +330,22 @@ export function buildContent(raw: RawContent): Content {
     ...(city === undefined ? {} : { city }),
     ...(appearances === undefined ? {} : { appearances }),
   };
+}
+
+/**
+ * As quatro peças da parede de um mapa (FUN-105), venha `wall` como vier.
+ *
+ * O schema aceita UM id ou os quatro, e não normaliza — o arquivo diz o que o humano escreveu.
+ * Quem desenha precisa sempre das quatro, e é aqui que um número vira as quatro IGUAIS: a
+ * regra de vizinhança continua rodando, escolhe uma peça por tile, e todas apontam a mesma
+ * arte. É o que faz um mapa com `wall: 1298` desenhar hoje exatamente o que desenhava antes
+ * de existir peça por vizinhança.
+ */
+export function wallSetOf(wall: number | WallSet): WallSet {
+  if (typeof wall === 'number') {
+    return { vertical: wall, horizontal: wall, corner: wall, pole: wall };
+  }
+  return wall;
 }
 
 /**

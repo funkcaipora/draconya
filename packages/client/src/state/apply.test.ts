@@ -541,7 +541,9 @@ describe('o inventário (FUN-90)', () => {
   const inventory = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'inventory',
     backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
-    equipped: { chest: 'i2' },
+    // O equipado vem INTEIRO (FUN-108): ele não está na mochila, então só o id não bastava
+    // para a tela achar a definição.
+    equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },
     capacity: { used: 130, total: 400 },
     ...over,
   } as S2CMessage);
@@ -552,7 +554,9 @@ describe('o inventário (FUN-90)', () => {
     applyMessage(inventory(), 0);
 
     expect(hud.get().inventory?.capacity).toEqual({ used: 130, total: 400 });
-    expect(hud.get().inventory?.equipped).toEqual({ chest: 'i2' });
+    expect(hud.get().inventory?.equipped).toEqual({
+      chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 },
+    });
   });
 
   it('ausente e vazio são coisas DIFERENTES', () => {

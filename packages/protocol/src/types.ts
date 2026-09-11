@@ -56,6 +56,21 @@ const NotableEvent = z.object({
   detail: z.string().optional(),
 });
 
+/**
+ * Uma instância de item onde quer que ela esteja — na mochila ou no corpo (§21.5, FUN-90).
+ *
+ * É a MESMA forma nos dois lugares, de propósito. O item equipado sai da mochila quando
+ * veste (`Inventory.equip` do `sim` o move, não o copia), então `slot → instanceId` deixava o
+ * cliente sem `itemId` para achar a definição no catálogo — o slot vestido desenhava a
+ * inicial de "item" e o tooltip dizia "Tirar item", sem nome e sem sprite. Leva só o que
+ * MUDA; nome, peso e aparência continuam no catálogo.
+ */
+const CarriedItem = z.object({
+  instanceId: z.string().min(1),
+  itemId: z.string().min(1),
+  quantity: z.number().int().positive(),
+});
+
 export const C2S_SCHEMAS = {
   authenticate: z.object({ ticket: z.string().min(1), clientVersion: z.string() }),
   ping: z.object({ t: z.number() }),
@@ -178,13 +193,16 @@ export const S2C_SCHEMAS = {
    * atributo base, fixo por id (§21.2), e vêm no catálogo.
    */
   inventory: z.object({
-    backpack: z.array(z.object({
-      instanceId: z.string().min(1),
-      itemId: z.string().min(1),
-      quantity: z.number().int().positive(),
-    })),
-    /** `slot` → `instanceId` do que está vestido ali. */
-    equipped: z.record(z.string(), z.string()),
+    backpack: z.array(CarriedItem),
+    /**
+     * `slot` → o que está vestido ali, com a MESMA forma de uma entrada da mochila.
+     *
+     * Nasceu como `slot → instanceId` (FUN-90) e ganhou `itemId` e `quantity` na FUN-108,
+     * quando o slot passou a desenhar o sprite: o equipado não está na mochila, então só o
+     * id não dava ao cliente como chegar à definição. **O opcode não muda** — é a mesma
+     * mensagem, com mais dentro, como o `catalogue` fez ao ganhar o vocabulário do bot.
+     */
+    equipped: z.record(z.string(), CarriedItem),
     /** Peso carregado e o teto. O teto sobe com o level (§9.3). */
     capacity: z.object({ used: z.number(), total: z.number() }),
   }),

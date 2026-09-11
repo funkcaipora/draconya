@@ -20,7 +20,9 @@ import type {
 import type { C2SMessage, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
-import type { CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult } from '@draconya/sim';
+import type {
+  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult,
+} from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
@@ -866,6 +868,12 @@ export class SessionHost {
    *
    * **O peso é calculado aqui**, e não no cliente: quem sabe o que cabe é quem recusa, e a
    * mesma conta em dois lugares diverge no primeiro item com peso fracionário.
+   *
+   * **O equipado vai INTEIRO** — `instanceId`, `itemId` e `quantity`, como uma entrada da
+   * mochila (FUN-108). O `sim` MOVE o item para o corpo ao equipar, não o copia, então um
+   * `slot → instanceId` não deixava o cliente chegar à definição: o slot vestido ficava sem
+   * nome e sem sprite. O que vai ao extrato (`equipmentOf`) continua `slot → instanceId`,
+   * porque o banco só precisa de onde cada linha está.
    */
   #sendInventory(characterId: string): void {
     const hosted = this.#hostedSession(characterId);
@@ -874,16 +882,17 @@ export class SessionHost {
 
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
     const state = character.inventory.getState();
-    const equipped: Record<string, string> = {};
+    const carried = (item: CarriedItem): S2CProps<'inventory'>['backpack'][number] => ({
+      instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
+    });
+    const equipped: S2CProps<'inventory'>['equipped'] = {};
     for (const [slot, item] of Object.entries(state.equipped)) {
-      if (item !== undefined) equipped[slot] = item.instanceId;
+      if (item !== undefined) equipped[slot] = carried(item);
     }
 
     this.#sendToViewersOf(hosted, characterId, {
       type: 'inventory',
-      backpack: state.backpack.map((item) => ({
-        instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
-      })),
+      backpack: state.backpack.map(carried),
       equipped,
       capacity: { used: character.inventory.weight(catalog), total: character.capacity },
     });
