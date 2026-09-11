@@ -417,6 +417,33 @@ Três coisas que seguem disso:
   recém-chegado com o id no lugar do nome, e o teste da FUN-71 não via porque usa os dois
   iguais. O da FUN-104 usa nomes diferentes dos ids de propósito.
 
+## O Bestiário viaja como as skills: ticket → runtime → extrato → ledger (FUN-113)
+
+`characters.bestiary` é `jsonb` nulável (`{ monsterId: kills }`), e percorre o MESMO caminho
+das skills (FUN-75), pela mesma razão — é progressão que escala a hunt DURANTE a hunt (o bônus
+dos marcos multiplica a XP, DT-01), então precisa entrar na sessão e não só sair dela:
+
+- **`api` lê a linha e põe no ticket**, VALIDADO (`isBestiaryState`, em `tickets.ts`, a mesma
+  régua que o `consume` usa). Ao contrário das skills, chega tipado: a forma é um mapa de
+  inteiros, e conferir isso não é conhecer domínio nenhum. Valor corrompido vira AUSENTE, nunca
+  login recusado — a linha não tem CHECK. `null` na linha NÃO vira chave no ticket.
+- **`createCitySessionFactory` põe no `CharacterState`**; ausente é `{}`, que é onde um
+  personagem novo começa. A hunt é o mesmo objeto (transição), e o `sim` conta o abate.
+- **O extrato leva o mapa ABSOLUTO** (`#saveReceipt`), e `parseReceipt` é lista de
+  PERMISSÃO — campo que não entra nela some no caminho de volta sem erro nenhum, e o teste de
+  ida e volta em `receipts.test.ts` é quem pega a omissão.
+- **O ledger funde pelo MAIOR de cada monstro** (`Bestiary.merge`), na mesma transação de XP e
+  gold. Abate nunca desce: um extrato antigo fora de ordem não rebaixa nada, sem guarda de
+  instante. Extrato SEM o campo (Cidade, nó antigo em deploy) não toca na coluna — gravar
+  `{}` por cima apagaria abates que ninguém pediu para apagar.
+
+A mensagem `bestiary` é APRESENTAÇÃO, pelo mecanismo de `sentStats`: sai no `#sendState` e no
+ciclo com visualizador quando a SOMA dos contadores mudou (`sentBestiary`, por personagem). A
+soma basta porque abate só sobe — muda se, e só se, algum contador mudou. Sem ninguém olhando
+não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálogo leva
+`monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
+só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
+
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
 `lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis

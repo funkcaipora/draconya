@@ -39,6 +39,13 @@ export interface CharacterRecord {
    * escolheu. Sem método de escrita: a escolha (§7.4) ainda não tem tela.
    */
   readonly outfitColors: unknown;
+  /**
+   * Abates por monstro, como vieram do banco (§18, FUN-113). `unknown` pela mesma razão de
+   * `skills`: a forma (`BestiaryState`) é do `sim`, e quem a confere é quem monta o ticket.
+   * `null` é personagem que nunca abateu nada, ou gravado antes do Bestiário — os dois entram
+   * na sessão com `{}`. Sem método de escrita: quem escreve é o ledger, na transação do extrato.
+   */
+  readonly bestiary: unknown;
   readonly createdAt: Date;
 }
 
@@ -365,6 +372,7 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     botConfig: row.botConfig,
     skills: row.skills,
     outfitColors: row.outfitColors,
+    bestiary: row.bestiary,
     createdAt: row.createdAt,
   };
 }

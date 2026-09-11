@@ -7,7 +7,7 @@ import type { CharacterRecord } from '../db/repository.js';
 const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
-  state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null,
+  state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
   createdAt: new Date(),
 };
 
@@ -169,6 +169,32 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('outfitColors');
     expect(await issuedWith({ head: 133, body: 69, legs: 58, feet: 76 }))
       .not.toHaveProperty('outfitColors');
+  });
+
+  it('os abates da linha entram no ticket; nulos ou corrompidos, ficam de fora (FUN-113)', async () => {
+    // Mesmo caminho das skills: a linha é lida sob a trava e o que ela diz vai no ticket —
+    // é assim que o bônus dos marcos vale DURANTE a hunt, e não só depois dela. O `null` de
+    // quem nunca abateu nada NÃO vira chave (o `game` espalha o que recebe), e a linha é
+    // `jsonb` sem CHECK: uma contagem torta cai fora aqui, sem trancar o login por causa dela.
+    const issuedWith = async (bestiary: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, bestiary })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    const counts = { rat: 10_000, bat: 3 };
+    expect(await issuedWith(counts)).toMatchObject({ bestiary: counts });
+    expect(await issuedWith(null)).not.toHaveProperty('bestiary');
+    expect(await issuedWith({ rat: -1 })).not.toHaveProperty('bestiary');
+    expect(await issuedWith([10_000])).not.toHaveProperty('bestiary');
   });
 
   it('resolve o nó ANTES de abrir a trava de linha (FUN-53)', async () => {

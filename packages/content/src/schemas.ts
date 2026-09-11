@@ -498,8 +498,15 @@ export const bestiarySchema = z.object({
       return;
     }
   }),
-  /** Quanto cada marco acrescenta à XP PvE, em pontos percentuais. §18.3: 1. */
-  xpBonusPercentPerMilestone: z.number().nonnegative(),
+  /**
+   * Quanto cada marco acrescenta à XP PvE, em pontos percentuais. §18.3: 1.
+   *
+   * INTEIRO, e é regra de forma que sustenta uma de conta: `Bestiary.applyXpBonus` faz
+   * `floor(xp × (100 + p × marcos) / 100)` em inteiro, e a garantia de que o `floor` acerta
+   * depende de `p × marcos` ser inteiro. Meio ponto percentual voltaria a pôr resíduo de
+   * ponto flutuante na frente do arredondamento — a armadilha que a conta em inteiro evita.
+   */
+  xpBonusPercentPerMilestone: z.number().int().nonnegative(),
   _open: z.string().optional(),
 });
 

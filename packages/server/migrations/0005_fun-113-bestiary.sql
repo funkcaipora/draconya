@@ -1,0 +1,19 @@
+-- FUN-113: os abates por monstro são progressão PERMANENTE do personagem (§18), e sobrevivem
+-- à sessão como as skills — o abate 10 000 de um rato vale para sempre, não até o logout.
+--
+-- Aditiva por construção (ADR 0014): coluna nova, nulável, sem default. Personagem gravado
+-- antes disto lê `null`, o ticket sai sem o campo, e a sessão parte de `{}` — nenhum abate
+-- contado, que é onde um personagem novo começa de qualquer jeito. Nada é reescrito, nada é
+-- preenchido: quem lê trata `null` e `{}` como a mesma coisa, então forçar `{}` em toda linha
+-- existente seria trabalho de migração para nenhuma diferença de leitura.
+--
+-- `jsonb` e não tabela própria `(character_id, monster_id, kills)`: o dado é lido INTEIRO na
+-- emissão do ticket e escrito INTEIRO na liquidação do extrato, fundido pelo MAIOR de cada
+-- monstro — nunca uma linha por monstro, nunca um `UPDATE … SET kills = kills + 1`. É a forma
+-- que `skills` já usa, pela mesma razão, e a contagem cabe numa linha: dezenas de monstros por
+-- personagem, não milhares.
+--
+-- Quem valida a forma é quem monta o ticket, não o banco: um valor corrompido vira AUSENTE no
+-- ticket, nunca uma linha que não se consegue ler. Um CHECK aqui amarraria a lista de monstros
+-- — que é conteúdo, versionado à parte — a uma migração.
+ALTER TABLE character ADD COLUMN bestiary jsonb;

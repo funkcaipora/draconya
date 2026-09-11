@@ -16,6 +16,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import { OutfitColors } from '@draconya/protocol';
+import type { BestiaryState } from '@draconya/sim';
 import type { NodeStatus, SessionDirectory } from './directory.js';
 
 export interface TicketClaim {
@@ -95,6 +96,19 @@ export interface InitialCharacter {
    * cores de personagem novo.
    */
   readonly outfitColors?: OutfitColors;
+  /**
+   * Abates por monstro (§18, FUN-113), JÁ VALIDADOS: `monsterId → abates`.
+   *
+   * Entram na sessão, e não só saem dela, porque o bônus dos marcos escala a XP DURANTE a
+   * hunt (DT-01): um personagem que entrasse sempre em `{}` ganharia XP sem bônus a hunt
+   * inteira, e o marco que ele cruzou ontem não valeria nada hoje. Vêm do banco pelo mesmo
+   * caminho que level, XP e skills, e pela mesma razão (invariante 4).
+   *
+   * Tipados, ao contrário de `skills`: a forma é um mapa de inteiros, e conferir isso não é
+   * conhecer domínio nenhum — é o que faz o `game` espalhar sem cast. Ausente é personagem que
+   * nunca abateu nada (ou ticket de um `api` antigo): a sessão parte de `{}`.
+   */
+  readonly bestiary?: BestiaryState;
 }
 
 export interface IssuedTicket {
@@ -469,7 +483,32 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['inventory'] === 'object' && initial['inventory'] !== null
       ? { inventory: initial['inventory'] }
       : {}),
+    // O Bestiário passa VALIDADO, como as cores e ao contrário das skills: a forma é um mapa
+    // de inteiros, e um valor torto vira AUSENTE — a sessão parte de `{}` — em vez de virar
+    // `NaN` dentro do motor ou de recusar o ticket por causa de uma contagem.
+    ...(isBestiaryState(initial['bestiary']) ? { bestiary: initial['bestiary'] } : {}),
   };
+}
+
+/**
+ * A forma de `BestiaryState` (§18, FUN-113): objeto cujos valores são inteiros seguros, não
+ * negativos, sob chaves não vazias.
+ *
+ * Um valor que não bate vira AUSENTE, nunca ticket recusado: a linha do banco é `jsonb` sem
+ * CHECK, e uma contagem corrompida não pode trancar o personagem fora do jogo. Array fica de
+ * fora de propósito — `Object.values` de um array daria contagens sem monstro. A chave vazia
+ * também: o schema do protocolo a recusa, e a mensagem `bestiary` inteira sumiria em silêncio.
+ *
+ * Exportada para o `api` conferir a linha com a MESMA régua que o `consume` usa — duas réguas
+ * divergiriam na primeira mudança em uma delas.
+ */
+export function isBestiaryState(value: unknown): value is BestiaryState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([monsterId, kills]) =>
+    monsterId.length > 0
+    && typeof kills === 'number'
+    && Number.isSafeInteger(kills)
+    && kills >= 0);
 }
 
 function parseMember(member: string): { accountId: string; characterId: string } | null {

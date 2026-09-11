@@ -91,16 +91,21 @@ const staminaUpdatedAt = async (
 
 const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
-): Promise<{ xp: number; gold: number; level: number; staminaMs: number; skills: unknown }> => {
+): Promise<{
+  xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+}> => {
   const [row] = await database.database.db
     .select({
       xp: characters.xp, gold: characters.gold, level: characters.level,
       skills: characters.skills,
+      bestiary: characters.bestiary,
       staminaMs: characters.staminaMs,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
-  return row as { xp: number; gold: number; level: number; staminaMs: number; skills: unknown };
+  return row as {
+    xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+  };
 };
 
 describe('credit of a receipt', () => {
@@ -535,6 +540,78 @@ describe.runIf(ready)('as skills chegam ao Postgres pelo extrato (FUN-75)', () =
 
     expect((await characterRow(database, characterId)).skills)
       .toEqual({ melee: { level: 15, points: 1 } });
+  });
+});
+
+describe.runIf(ready)('o Bestiário chega ao Postgres pelo extrato (FUN-113)', () => {
+  it('grava os abates da hunt, e a coluna nasce nula', async () => {
+    // O critério da issue em uma linha: ticket → runtime → extrato → ledger → linha. Abate que
+    // não chega ao banco é abate que some no próximo logout, e o marco 10 000 nunca chegaria.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).bestiary).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      bestiary: { rat: 12 },
+    });
+
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).bestiary).toEqual({ rat: 12 });
+  });
+
+  it('um extrato ANTIGO não rebaixa um contador que já subiu, e um monstro novo entra', async () => {
+    // Abate nunca desce, e é isso que torna o `max` a fusão certa (DT-02) — a preocupação da
+    // guarda de instante da stamina, resolvida sem instante nenhum. Mutação que mata: gravar
+    // o extrato por cima (`rat` cairia para 5), ou fundir só as chaves que já existiam (o
+    // `bat` sumiria).
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      bestiary: { rat: 9 },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      bestiary: { rat: 5, bat: 2 },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).bestiary).toEqual({ rat: 9, bat: 2 });
+  });
+
+  it('extrato SEM Bestiário não apaga os abates que já estavam lá', async () => {
+    // É o extrato de uma sessão de Cidade, ou de um nó antigo durante deploy em rolagem.
+    // Gravar `{}` — ou `null` — por cima apagaria progressão que ninguém pediu para apagar.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      bestiary: { rat: 15 },
+    });
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    await receipts.save(receiptOf(randomUUID(), characterId));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    expect((await characterRow(database, characterId)).bestiary).toEqual({ rat: 15 });
   });
 });
 

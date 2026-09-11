@@ -8,8 +8,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { Skills, levelForXp } from '@draconya/sim';
-import type { SkillsState } from '@draconya/sim';
+import { Bestiary, Skills, levelForXp } from '@draconya/sim';
+import type { BestiaryState, SkillsState } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
 import { characters, itemInstances, ledger } from '../db/schema.js';
@@ -150,6 +150,7 @@ async function applyProgression(
       xp: characters.xp,
       gold: characters.gold,
       skills: characters.skills,
+      bestiary: characters.bestiary,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
     .from(characters)
@@ -188,6 +189,18 @@ async function applyProgression(
     ? {}
     : { skills: Skills.merge(current.skills as SkillsState | undefined, receipt.skills) };
 
+  // O Bestiário funde pelo MAIOR de cada monstro (FUN-113, DT-02), pela mesma razão das
+  // skills: abate nunca desce. A coluna é nulável — `null` é quem nunca abateu nada — e o
+  // extrato SEM o campo (sessão de Cidade, nó antigo em deploy) não toca na coluna: gravar
+  // `{}` por cima apagaria abates que ninguém pediu para apagar.
+  const bestiary = receipt.bestiary === undefined
+    ? {}
+    : {
+      bestiary: Bestiary.merge(
+        (current.bestiary as BestiaryState | null) ?? undefined, receipt.bestiary,
+      ),
+    };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -223,6 +236,7 @@ async function applyProgression(
       xp,
       gold,
       ...skills,
+      ...bestiary,
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),

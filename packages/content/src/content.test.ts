@@ -281,9 +281,12 @@ describe('o Bestiário (FUN-113, §18)', () => {
       .toThrow(/fora de ordem/);
   });
 
-  it('recusa a lista vazia e o bônus negativo', () => {
+  it('recusa a lista vazia, o bônus negativo e o bônus FRACIONÁRIO', () => {
+    // Meio ponto passaria no schema e quebraria a conta em inteiro de `Bestiary.applyXpBonus`:
+    // a garantia do `floor` depende de `p × marcos` ser inteiro.
     expect(() => buildContent(base({ bestiary: [{ ...bestiary, milestones: [] }] }))).toThrow(/bestiary/);
     expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: -1 }] }))).toThrow(/bestiary/);
+    expect(() => buildContent(base({ bestiary: [{ ...bestiary, xpBonusPercentPerMilestone: 0.5 }] }))).toThrow(/bestiary/);
   });
 });
 

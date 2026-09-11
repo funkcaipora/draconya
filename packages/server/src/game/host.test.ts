@@ -136,6 +136,30 @@ describe('session host', () => {
     expect(extrato.reason).toBe('drain');
   });
 
+  it('the receipt carries the bestiary of the owner, absolute (FUN-113)', async () => {
+    // Abate que não chega ao extrato é abate que some no próximo logout — e o marco 10 000
+    // nunca chegaria. Absoluto, como as skills: o ledger funde pelo maior de cada monstro.
+    // Mutação que mata: apagar a linha do `bestiary` em `#saveReceipt` (a lista de permissão
+    // do `parseReceipt` está coberta em `receipts.test.ts`; esta é a outra ponta).
+    const saved: Array<{ bestiary?: Record<string, number> }> = [];
+    const receipts = {
+      save: async (r: { bestiary?: Record<string, number> }) => { saved.push(r); },
+    } as unknown as ReceiptStore;
+    const directory = { register: async () => true } as unknown as SessionDirectory;
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { directory, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const owner = sessions[0]?.participants[0];
+    if (owner === undefined) throw new Error('sem personagem');
+    owner.bestiary.record('rat');
+    owner.bestiary.record('rat');
+    owner.bestiary.record('bat');
+
+    await host.drainAll('drain');
+
+    expect(saved[0]?.bestiary).toEqual({ rat: 2, bat: 1 });
+  });
+
   it('saves the receipt before telling the player', async () => {
     // A ordem é a diferença entre as duas metades ruins. Gravado e não avisado: o jogador
     // perdeu a mensagem, mas o crédito está no Redis esperando o `jobs`. Avisado e não
@@ -546,9 +570,10 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Dois: o mundo (`session-state`) e os vitais (`player-stats`, FUN-109) — gold, capacidade
-    // e stamina só viajam na segunda. Os dois na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(2);
+    // Três: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // e stamina só viajam na segunda — e o Bestiário (`bestiary`, FUN-113), que só viaja na
+    // terceira. Os três na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(3);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -1338,6 +1363,42 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
     expect(removed).toEqual(['p1']);
     // E o personagem entra numa sessão nova, em vez de ficar sem nenhuma.
     expect(host.sessionFor('p1')).toBeDefined();
+  });
+
+  it('a progressão PERMANENTE do snapshot vai no extrato: skills e Bestiário (FUN-113)', async () => {
+    // Achado da revisão da FUN-113: o extrato levava XP, gold e stamina, e deixava skills e
+    // Bestiário no snapshot que estava prestes a ser apagado — a XP era creditada e o abate
+    // 9 999 voltava a ser o 5 000 do banco. Os dois são absolutos e monotônicos, e o ledger
+    // funde pelo maior, então levá-los nunca rebaixa nada. Mutação que mata: tirar qualquer
+    // dos dois espalhamentos de `#creditUnrestorable`.
+    const snapshot = stored();
+    const participant = snapshot.participants[0] as SessionSnapshot['participants'][number];
+    const withProgress: SessionSnapshot = {
+      ...snapshot,
+      participants: [{
+        ...participant,
+        skills: { melee: { level: 12, points: 3 } },
+        bestiary: { rat: 9_999 },
+      }],
+    };
+    const receipts: Array<Record<string, unknown>> = [];
+    const { snapshots } = withSnapshots(withProgress);
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots,
+      receipts: { save: async (receipt: Record<string, unknown>) => { receipts.push(receipt); } } as unknown as ReceiptStore,
+      restoreSession: () => null,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      reason: 'drain',
+      skills: { melee: { level: 12, points: 3 } },
+      bestiary: { rat: 9_999 },
+    });
   });
 
   it('o `seq` sai do snapshot, e é ele que impede creditar duas vezes', async () => {
@@ -2516,6 +2577,82 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     for (let index = 1; index < stripped.length; index += 1) {
       expect(stripped[index]).not.toBe(stripped[index - 1]);
     }
+  });
+
+  it('o Bestiário chega no session-attach, DEPOIS dos vitais, mesmo sem abate nenhum (FUN-113)', () => {
+    // Progressão que só viaja em mensagem própria: sem ela quem reconecta veria a contagem em
+    // zero até o próximo abate — na Cidade, que não tem ciclo, para sempre. Vai pela FILA,
+    // atrás do `session-state` e do `player-stats`, como tudo que responde ao attach.
+    // Mutação que mata: apagar o `viewer.send` do Bestiário em `#sendState`.
+    const { socket, viewer, stateOf, received } = hunt();
+    stateOf(socket, viewer);
+
+    const types = received().map((m) => m.type);
+    const bestiary = received().filter((m) => m.type === 'bestiary');
+    expect(bestiary).toHaveLength(1);
+    expect(bestiary[0]).toEqual({ type: 'bestiary', counts: {} });
+    expect(types.indexOf('bestiary')).toBeGreaterThan(types.indexOf('player-stats'));
+  });
+
+  it('o abate sobe o contador ao vivo: cada mensagem é uma mudança, e a última diz o que o sim diz (FUN-113)', () => {
+    // O contador sobe no `sim` com ou sem visualizador (invariante 3); a mensagem é
+    // apresentação, e sai quando a SOMA mudou desde a última entrega. Mutação que mata:
+    // apagar a chamada de `#presentBestiary` no ciclo (nenhuma mensagem além do attach), ou
+    // apagar a comparação com `sentBestiary` (uma por ciclo, e a lista teria repetição).
+    const { host, socket, viewer, stateOf, runFor, received } = hunt();
+    stateOf(socket, viewer);
+    runFor(60_000);
+    const hero = host.sessionFor('hero')?.participants[0];
+    const kills = hero?.bestiary.killsOf('rat') ?? 0;
+    expect(kills).toBeGreaterThan(1);
+
+    const updates = received().filter((m) => m.type === 'bestiary') as unknown as
+      Array<{ counts: Record<string, number> }>;
+    // A do attach (vazia) e pelo menos uma por abate contado depois dela.
+    expect(updates.length).toBeGreaterThan(1);
+    expect(updates.at(-1)?.counts).toEqual({ rat: kills });
+    const totals = updates.map((u) => u.counts['rat'] ?? 0);
+    expect(new Set(totals).size).toBe(totals.length);
+    // E o `sim` conta o mesmo que o analisador viu morrer: nenhum abate com stamina cheia
+    // fica de fora do Bestiário.
+    expect(kills).toBe(host.sessionFor('hero')?.aggregates.kills);
+  });
+
+  it('quem reanexa depois dos abates recebe o mapa CHEIO no session-attach (FUN-113)', () => {
+    // Todo attach dos outros testes acontece antes do primeiro abate, então `{}` era o único
+    // mapa jamais afirmado no attach — e um `#sendState` que mandasse `{}` sempre passava
+    // (mutação que sobrevivia na revisão). Aqui o attach vem DEPOIS de sessenta segundos de
+    // hunt, e o mapa tem que ser o do `sim`.
+    const { host, socket, viewer, stateOf, runFor, received } = hunt();
+    runFor(60_000);
+    const kills = host.sessionFor('hero')?.participants[0]?.bestiary.killsOf('rat') ?? 0;
+    expect(kills).toBeGreaterThan(1);
+    const before = received().filter((m) => m.type === 'bestiary').length;
+
+    stateOf(socket, viewer);
+    const messages = received().filter((m) => m.type === 'bestiary') as unknown as
+      Array<{ counts: Record<string, number> }>;
+    expect(messages.length).toBe(before + 1);
+    expect(messages.at(-1)?.counts).toEqual({ rat: kills });
+    // E o attach zerou a comparação: um ciclo sem abate não manda de novo.
+    runFor(100, 100);
+    expect(host.sessionFor('hero')?.participants[0]?.bestiary.killsOf('rat')).toBe(kills);
+    expect(received().filter((m) => m.type === 'bestiary').length).toBe(before + 1);
+  });
+
+  it('sem abate não sai Bestiário nenhum — o tempo não é gatilho (FUN-113)', () => {
+    // Um rato que aguenta: vinte ciclos com golpe, dano e passo, e o contador parado. O
+    // `session-attach` leva o mapa e zera a comparação; a partir daí só mudança manda.
+    // Mutação que mata: comparar com `undefined` em vez da soma entregue (uma por ciclo).
+    const { host, socket, viewer, stateOf, runFor, received } = hunt({ tanky: true });
+    stateOf(socket, viewer);
+    const before = received().filter((m) => m.type === 'bestiary').length;
+    expect(before).toBe(1);
+
+    runFor(2_000);
+
+    expect(host.sessionFor('hero')?.aggregates.kills).toBe(0);
+    expect(received().filter((m) => m.type === 'bestiary')).toHaveLength(before);
   });
 
   it('a vida do monstro desce por creature-health, e a morte vira creature-disappear', () => {

@@ -236,6 +236,29 @@ describe('o gold de entrada vem do TICKET, nunca do cliente (FUN-77)', () => {
   });
 });
 
+describe('o Bestiário de entrada vem do TICKET, nunca do cliente (FUN-113)', () => {
+  const content = testContent();
+
+  it('os abates persistidos chegam ao personagem da sessão', () => {
+    // O bônus dos marcos escala a XP DURANTE a hunt (DT-01): um personagem que entrasse em
+    // `{}` perderia o marco que já cruzou. E vem do ticket pela mesma razão do gold
+    // (invariante 4) — um contador vindo do socket seria marco de graça.
+    const session = createCitySessionFactory(content)('p1', {
+      level: 1, xp: 0, bestiary: { rat: 10_000, bat: 3 },
+    });
+
+    expect(session.participants[0]?.bestiary.killsOf('rat')).toBe(10_000);
+    expect(session.participants[0]?.bestiary.getState()).toEqual({ rat: 10_000, bat: 3 });
+  });
+
+  it('ticket sem Bestiário entra com nada contado', () => {
+    // É o personagem anterior à issue, ou o ticket de um `api` antigo em deploy em rolagem:
+    // parte de `{}`, e o próximo extrato traz de volta o que ele matar.
+    const session = createCitySessionFactory(content)('p1', { level: 1, xp: 0 });
+    expect(session.participants[0]?.bestiary.getState()).toEqual({});
+  });
+});
+
 describe('stamina nas fronteiras da sessão (FUN-39)', () => {
   const content = testContent();
   const HOUR = 3_600_000;

@@ -68,6 +68,37 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
+  it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
+    // O contador chega por id; sem esta lista a tela mostraria "rat: 12" em vez de "Rat". Só
+    // id e nome: vida, ataque e XP são balanceamento que o cliente não simula (invariante 4).
+    // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    // O rato ANTES do morcego no conteúdo cru: a ordem do catálogo tem que ser a do id.
+    const twoMonsters = { ...raw, monsters: [rat, bat] };
+    const content = buildContent({ ...twoMonsters, appearances: [placeholderAppearances(twoMonsters)] });
+
+    const { monsters } = buildCatalogue(content);
+
+    expect(monsters).toEqual([{ id: 'bat', name: 'Bat' }, { id: 'rat', name: 'Rat' }]);
+  });
+
+  it('leva os marcos e o bônus do Bestiário quando o conteúdo os tem, e a chave some quando não (FUN-113)', () => {
+    // Os marcos são conteúdo fixado na sessão (invariante 7), e a tela mostra "próximo marco"
+    // a partir deles. O conteúdo de teste não tem Bestiário — a chave fica AUSENTE, não
+    // `undefined`: o codec apagaria a chave e o tipo passaria a mentir. E só os dois campos
+    // atravessam: `id` e `_open` são do carregador.
+    expect(buildCatalogue(content)).not.toHaveProperty('bestiary');
+
+    const withBestiary = buildContent({
+      ...rawTestContent(),
+      bestiary: [{ id: 'baseline', milestones: [3, 5], xpBonusPercentPerMilestone: 20 }],
+    });
+    expect(buildCatalogue(withBestiary).bestiary)
+      .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
+  });
+
   it('leva o vocabulário do bot, e é ele que a tela oferece', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
     // configura o que o bot recusa — e descobre pelo extrato que não fecha.

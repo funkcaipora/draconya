@@ -3,6 +3,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
+import type { BestiaryState } from '@draconya/sim';
+import { isBestiaryState } from '../tickets.js';
 import type { IssueFailure, TicketService } from '../tickets.js';
 import type { GameRepository } from '../db/repository.js';
 
@@ -159,6 +161,10 @@ export function createTicketHandler(
         ...outfitColorsOf(character.outfitColors),
         // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
         skills: character.skills,
+        // E o Bestiário, porque o bônus dos marcos escala a XP durante a hunt (FUN-113).
+        // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
+        // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
+        ...bestiaryOf(character.bestiary),
         // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
         // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
         inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),
@@ -197,6 +203,18 @@ function outfitColorsOf(stored: unknown): { outfitColors?: OutfitColors } {
   if (stored === null || stored === undefined) return {};
   const parsed = OutfitColors.safeParse(stored);
   return parsed.success ? { outfitColors: parsed.data } : {};
+}
+
+/**
+ * Os abates por monstro como o ticket os carrega, ou nada (FUN-113).
+ *
+ * `null` é personagem que nunca abateu nada, ou gravado antes do Bestiário — e o `game`
+ * trata ausência como `{}`. Qualquer outra coisa que não seja um mapa de inteiros cai no mesmo
+ * "nada": a emissão do ticket não é o lugar de recusar um login por causa de uma contagem, e
+ * a chave só existe quando há valor, por causa do `exactOptionalPropertyTypes`.
+ */
+function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
+  return isBestiaryState(stored) ? { bestiary: stored } : {};
 }
 
 /**

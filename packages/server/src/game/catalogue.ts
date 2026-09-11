@@ -77,6 +77,25 @@ export function buildCatalogue(content: Content): Catalogue {
       // a confundiria com "o servidor não disse".
       slot: item.slot ?? null,
     })),
+    // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
+    // (FUN-113). Só id e nome, em ordem de id para a mensagem ser a mesma a cada boot: a arte
+    // chega pelo `creature-appear`, e o resto — vida, ataque, XP — é balanceamento que o
+    // cliente não simula (invariante 4).
+    monsters: [...content.monsters.values()]
+      .map((monster) => ({ id: monster.id, name: monster.name }))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
+    // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o
+    // conteúdo de teste, que não fala de progressão permanente. Só os dois campos: `id` e
+    // `_open` são assunto do carregador, não do cliente.
+    ...(content.bestiary === undefined
+      ? {}
+      : {
+        bestiary: {
+          milestones: [...content.bestiary.milestones],
+          xpBonusPercentPerMilestone: content.bestiary.xpBonusPercentPerMilestone,
+        },
+      }),
   };
 }
 

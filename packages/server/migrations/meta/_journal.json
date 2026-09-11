@@ -36,6 +36,13 @@
       "when": 1789300000000,
       "tag": "0004_fun-104-outfit-colors",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0005_fun-113-bestiary",
+      "breakpoints": true
     }
   ]
 }

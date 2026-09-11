@@ -291,6 +291,20 @@ function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: nu
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
+/**
+ * A soma dos abates do Bestiário: o gatilho da mensagem `bestiary` ao vivo (FUN-113).
+ *
+ * Um número só, e não a comparação monstro a monstro, porque abate nunca desce: a soma muda
+ * se, e só se, algum contador mudou. É o `sentItemsLooted` do Bestiário — comparar um inteiro
+ * por ciclo custa nada, e serializar o mapa a 10 Hz para dizer que nada mudou custaria a
+ * banda que a FUN-13 orça.
+ */
+function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
+  let total = 0;
+  for (const kills of Object.values(counts)) total += kills;
+  return total;
+}
+
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
   | { readonly ok: true; readonly config: BotConfig }
@@ -341,6 +355,13 @@ interface HostedSession {
    * o `session-attach`, que já leva tudo no `session-state`, também o escreve.
    */
   sentAnalyzer: SentAnalyzer | null;
+  /**
+   * A soma dos abates do Bestiário ENTREGUE a quem olha cada personagem (FUN-113), por
+   * `characterId` — o mesmo mecanismo de `sentStats`, para uma grandeza que só sobe. Entrada
+   * ausente é "ninguém recebeu ainda"; escrita só quando alguém recebeu, no `session-attach`
+   * e no ciclo com visualizador, pela razão registrada em `sentStats`.
+   */
+  readonly sentBestiary: Map<string, number>;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -1097,6 +1118,9 @@ export class SessionHost {
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
       this.#presentAnalyzer(hosted);
+      // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
+      // ver o marco chegar sem reconectar.
+      this.#presentBestiary(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -1368,6 +1392,24 @@ export class SessionHost {
   }
 
   /**
+   * O Bestiário ao vivo (FUN-113): os abates por monstro, para quem olha CADA personagem,
+   * quando a soma mudou desde a última entrega. Por personagem, como `#presentStats`, porque
+   * o Bestiário é do personagem — e pela mesma regra: sem visualizador não se compara nada,
+   * o `sim` conta o abate de qualquer jeito (invariante 3).
+   */
+  #presentBestiary(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const counts = character.bestiary.getState();
+      const total = bestiaryTotal(counts);
+      if (hosted.sentBestiary.get(character.id) === total) continue;
+      hosted.sentBestiary.set(character.id, total);
+      this.#sendToViewersOf(hosted, character.id, { type: 'bestiary', counts });
+    }
+  }
+
+  /**
    * O estado COMPLETO para um visualizador: o mundo (`session-state`) e os vitais
    * (`player-stats`), nessa ordem e pela fila.
    *
@@ -1381,9 +1423,17 @@ export class SessionHost {
   #sendState(hosted: HostedSession, viewer: Viewer): void {
     const { characterId } = viewer;
     viewer.send(this.#sessionState(hosted, characterId));
-    const stats = playerStatsOf(this.#participantOf(hosted, characterId));
+    const participant = this.#participantOf(hosted, characterId);
+    const stats = playerStatsOf(participant);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    // E o Bestiário (FUN-113), pela mesma razão dos vitais: é progressão que só viaja em
+    // mensagem própria, e sem ela quem reconecta veria a contagem em zero até o próximo abate
+    // — na Cidade, que não tem ciclo, para sempre. `sentBestiary` é escrito aqui porque o que
+    // acabou de sair É o último entregue.
+    const counts = participant?.bestiary.getState() ?? {};
+    hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
+    viewer.send({ type: 'bestiary', counts });
     // O `session-state` acabou de levar os agregados: o ciclo seguinte não precisa repetir.
     hosted.sentAnalyzer = {
       aggregates: { ...hosted.session.aggregates },
@@ -1692,6 +1742,7 @@ export class SessionHost {
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
       sentAnalyzer: null,
+      sentBestiary: new Map(),
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -1926,6 +1977,9 @@ export class SessionHost {
       // As skills do dono também (FUN-75). Sem elas, o que ele praticou na hunt nunca chegaria
       // ao banco — e a hunt seguinte começaria do zero de novo, sem nada explicando.
       ...(owner === undefined ? {} : { skills: owner.skills.getState() }),
+      // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
+      // some no próximo logout, e o marco 10 000 nunca chegaria.
+      ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -2185,6 +2239,12 @@ export class SessionHost {
             staminaMs: owner.staminaMs,
             staminaUpdatedAtMs: owner.staminaUpdatedAtMs ?? 0,
           }),
+        // As skills e o Bestiário estão no `CharacterState` do snapshot, e sem eles aqui a
+        // progressão da sessão inteira sumia: a XP era creditada e o abate 9 999 voltava a
+        // ser o 5 000 (achado da revisão da FUN-113 — as skills sofriam o mesmo). Ambos são
+        // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
+        ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
+        ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
       });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
@@ -2217,6 +2277,7 @@ export class SessionHost {
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
       sentAnalyzer: null,
+      sentBestiary: new Map(),
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

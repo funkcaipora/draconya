@@ -291,6 +291,9 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodeS2C(encodeS2C(counts))).toEqual([counts]);
     expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { rat: -1 } }))).toBeNull();
     expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { rat: 1.5 } }))).toBeNull();
+    // A chave VAZIA também: é o que `isBestiaryState` no servidor cita como razão para nunca
+    // deixar uma entrar no ticket — e a razão precisa ser verdade.
+    expect(decodeS2C(encodeS2C({ type: 'bestiary', counts: { '': 1 } }))).toBeNull();
   });
 
   it('is server-to-client only: the client never reports a kill', () => {

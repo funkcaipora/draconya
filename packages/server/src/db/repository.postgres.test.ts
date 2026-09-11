@@ -82,6 +82,31 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     expect((await repository.listCharacters(account.id))[0]?.outfitColors).toEqual(colors);
   });
 
+  it('o Bestiário nasce nulo e volta como foi gravado (FUN-113)', async () => {
+    // O repositório não escreve a coluna — quem escreve é o ledger, na transação do extrato —,
+    // então a linha é escrita por SQL, como o ledger escreve. O que se afirma é o caminho de
+    // LEITURA que o ticket usa: `null` para quem nunca abateu nada, e o documento inteiro, sem
+    // o repositório opinar sobre a forma — quem valida é quem monta o ticket.
+    const account = await repository.ensureAccount({
+      externalAuthId: 'user_bestiary', email: 'bestiary@example.com',
+    });
+    const character = await repository.createCharacter(account.id, 'Hunter Hero');
+    expect(character.bestiary).toBeNull();
+    expect((await repository.getCharacter(account.id, character.id))?.bestiary).toBeNull();
+
+    const counts = { rat: 10_000, bat: 3 };
+    await testDatabase.database.db.execute(
+      sql`update ${characters} set bestiary = ${JSON.stringify(counts)}::jsonb where id = ${character.id}`,
+    );
+
+    expect((await repository.getCharacter(account.id, character.id))?.bestiary).toEqual(counts);
+    const locked = await repository.withOwnedCharacter(
+      account.id, character.id, async (row) => row.bestiary,
+    );
+    expect(locked).toEqual(counts);
+    expect((await repository.listCharacters(account.id))[0]?.bestiary).toEqual(counts);
+  });
+
   it('uses the external identity as the account key under concurrent login', async () => {
     const results = await Promise.all([
       repository.ensureAccount({ externalAuthId: 'user_same', email: 'same@example.com' }),
