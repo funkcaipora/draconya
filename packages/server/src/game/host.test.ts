@@ -4,6 +4,7 @@ import {
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildContent, itemSchema } from '@draconya/content';
+import type { RawContent } from '@draconya/content';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -2252,7 +2253,7 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
    * para para lutar, o rato já está ao alcance. Para ver passo de monstro é preciso distância,
    * e um rato com raio de agressão bastante para ir buscá-la.
    */
-  function wideArena(): Record<string, unknown> {
+  function wideArena(): RawContent {
     const raw = rawTestContent();
     const grid = ['########', '#......#', '#......#', '#......#', '#......#', '#......#', '#......#', '########'];
     // O anel interno, no sentido horário a partir de (1,1): 20 tiles, fechando um laço.
@@ -2281,7 +2282,7 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
   }> = {}) {
     const raw = rawTestContent();
     const content = over.wide === true
-      ? buildContent(wideArena() as Parameters<typeof buildContent>[0])
+      ? buildContent(wideArena())
       : over.tanky === true
         ? buildContent({
           ...raw,
