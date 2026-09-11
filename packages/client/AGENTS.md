@@ -233,6 +233,27 @@ pnpm tsx scripts/make-sheet-fixture.ts
   **Todo outfit é pintado com `DEFAULT_OUTFIT_COLORS`** (`world/outfit-colors.ts`) até o
   protocolo carregar as cores de cada criatura — a constante sai dali nesse dia. O que era de
   antes continua: câmera de 18×14, camadas, ordem de desenho por `y`, pool e interpolação.
+- **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
+  (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
+  hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que
+  chegaram e empurra na lista; nada passa pelo React, e um `creature-hit` não pode causar render
+  porque não há caminho dele até o React. O laço de quadro é o único lugar que sabe que horas
+  são, então é ele quem remove da lista o que acabou de tocar — e destrói o sprite junto. A
+  conta é pura (`world/effects.ts`): fase pelo tempo decorrido, projétil interpolado de A a B,
+  número subindo da posição INTERPOLADA da criatura e continuando de onde ela estava se ela
+  sumir no meio — o golpe que mata chega no mesmo lote que o `creature-disappear`, e é o número
+  que o jogador mais quer ver. **O instante é o da chegada, não o do servidor:** um lote aplicado
+  de uma vez ao voltar de aba de fundo toca junto e acaba junto, em vez de reproduzir dez minutos
+  de golpes; e cada lista tem teto (`TRANSIENT_CAP`) porque em aba de fundo o socket anda e o
+  `requestAnimationFrame` não. O texto não depende de arte; efeito e projétil viram retângulo
+  sem pacote, pela regra de sempre — mas **quadro a caminho NÃO vira retângulo**: as fases de
+  um efeito são pedidas TODAS ao livro quando ele nasce (`effectKeysOf`), e enquanto uma ainda
+  não chegou o sprite fica invisível. Uma fase real tem 40 ms, e pedida só no quadro em que
+  chegava cada uma piscava um quadro amarelo antes da textura. O retângulo é para quadro que
+  não existe, nunca para quadro em voo. As chaves de textura (`effectKey`, `missileKey`) são
+  por FASE e por CÉLULA do padrão 3×3 — a célula é a direção do voo, por OCTANTE
+  (`missileCell`, a regra de `Position::getDirectionFromPosition` do OTClient): `(3, 1)` está
+  a 18° e sai com o quadro de leste, não com a diagonal que o sinal de cada eixo daria.
 - **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
   criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
   trabalho 60 vezes por segundo.

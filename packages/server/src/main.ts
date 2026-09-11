@@ -193,6 +193,10 @@ async function main(): Promise<void> {
       ...(content.appearances?.characters === undefined
         ? {}
         : { playerOutfitId: content.appearances.characters.default }),
+      // E o que o combate desenha (FUN-109): sangue, projétil, explosão, brilho da poção. A
+      // tabela inteira, e não os ids soltos, porque o host resolve por `spellId` e `supplyId`
+      // na hora em que o `sim` emite — e a tabela é do conteúdo fixado no boot (invariante 7).
+      ...(content.appearances === undefined ? {} : { appearances: content.appearances }),
       // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
       // expirar precisa significar que o item nunca existiu.
       lootBoxes,

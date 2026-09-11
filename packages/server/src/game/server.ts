@@ -49,6 +49,8 @@ export interface GameDependencies {
   readonly monsterCatalog?: SessionHostOptions['monsterCatalog'];
   /** O outfit de todo jogador, até alguém escolher o seu (FUN-103). */
   readonly playerOutfitId?: SessionHostOptions['playerOutfitId'];
+  /** A tabela de aparências, para o que o combate desenha (FUN-109). */
+  readonly appearances?: SessionHostOptions['appearances'];
   /** Onde a Caixa de Loot da Sessão é guardada (FUN-88). */
   readonly lootBoxes?: SessionHostOptions['lootBoxes'];
   /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
@@ -130,6 +132,9 @@ export function createGame(
       ...(dependencies.playerOutfitId === undefined
         ? {}
         : { playerOutfitId: dependencies.playerOutfitId }),
+      ...(dependencies.appearances === undefined
+        ? {}
+        : { appearances: dependencies.appearances }),
       ...(dependencies.catalogue === undefined
         ? {}
         : { catalogue: dependencies.catalogue }),

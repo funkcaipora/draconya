@@ -47,6 +47,46 @@ const LAYER_TEMPLATE = 1;
 export const DIRECTIONS = ['north', 'east', 'south', 'west'] as const;
 export type Direction = (typeof DIRECTIONS)[number];
 
+/** Uma célula do padrão 3×3 de um projétil: coluna e linha. */
+export interface MissileCell {
+  readonly x: 0 | 1 | 2;
+  readonly y: 0 | 1 | 2;
+}
+
+/**
+ * Em que célula do padrão 3×3 de um projétil um voo de `(dx, dy)` cai (FUN-106).
+ *
+ * **O padrão do projétil é a direção do voo, e é assim que o cliente do Tibia o guarda:** a
+ * coluna é o sentido horizontal (0 oeste, 1 nenhum, 2 leste) e a linha é o vertical (0 norte,
+ * 1 nenhum, 2 sul). A célula do meio, `(1, 1)`, é o projétil parado — nunca desenhada num voo
+ * de verdade.
+ *
+ * **A escolha é pelo OCTANTE, não pelo sinal de cada eixo.** O pacote tem oito direções, uma a
+ * cada 45°, e um tiro de `(3, 1)` está a 18° — quase horizontal — então o quadro dele é o de
+ * leste, não o da diagonal: pelo sinal ele sairia com o sprite de sudeste, torto em relação
+ * ao voo, e é assim que o sinal erra em todo tiro que não é reto nem exatamente diagonal. A
+ * regra é a de `Position::getDirectionFromPosition` do OTClient (`opentibiabr/otclient`, MIT;
+ * lemos de lá a regra, não o código): o eixo maior manda quando o menor é pequeno perto dele,
+ * e senão é diagonal. O corte aqui é `|dx| > 2|dy|` — inteiro, sem trigonometria; o do
+ * OTClient é tan(22,5°) ≈ 0,414 ≈ 1/2,414, e os dois só divergem em tiros como `(7, 3)`, a
+ * 23°, que lá cai na diagonal. É a escolha de um quadro, não geometria do voo: o projétil
+ * anda a mesma reta nos dois.
+ */
+export function missileCell(dx: number, dy: number): MissileCell {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax > 2 * ay) return { x: side(dx), y: 1 };
+  if (ay > 2 * ax) return { x: 1, y: side(dy) };
+  return { x: side(dx), y: side(dy) };
+}
+
+/** O sentido de um eixo: 0 negativo (oeste/norte), 2 positivo (leste/sul), 1 parado. */
+function side(delta: number): 0 | 1 | 2 {
+  if (delta > 0) return 2;
+  if (delta < 0) return 0;
+  return 1;
+}
+
 export interface PackOptions {
   /** Onde o pacote está servido, com a versão no caminho. Ver `VITE_THINGS_URL`. */
   readonly baseUrl: string;
@@ -281,6 +321,47 @@ export class AssetPack {
       ? appearance.frameGroups[1]
       : appearance?.frameGroups[0];
     return group === undefined ? 1 : framesIn(group);
+  }
+
+  /**
+   * O quadro de um EFEITO — a explosão da magia, o sangue do golpe — na fase pedida (FUN-106).
+   *
+   * Efeito não tem direção nem addon: é o grupo 0 com o padrão em zero, e só a FASE anda.
+   * A fase sai de `effectPhases` pelo tempo decorrido, não do relógio de parede — ver
+   * `effectPhaseAt` em `world/effects.ts`.
+   */
+  async effect(effectId: number, phase: number): Promise<Sprite | null> {
+    const group = this.#appearances.effect.get(effectId)?.frameGroups[0];
+    return this.#frame(group, { x: 0, y: 0, z: 0, phase, layer: LAYER_BASE });
+  }
+
+  /**
+   * A duração de cada fase de um efeito, em ms, na ordem em que tocam: é a linha do tempo que
+   * o viewport percorre para saber que quadro pedir e quando descartar o efeito. Vazio para
+   * efeito sem animação e para id que o pacote não tem — e aí o viewport decide o que fazer
+   * com um efeito sem tempo (`FALLBACK_EFFECT_PHASES`).
+   *
+   * **A duração MÍNIMA.** Um efeito de combate tem mínimo e máximo iguais no pacote; onde
+   * diferem, a duração variável é para animação AMBIENTE (a tocha que não pisca no compasso
+   * da vizinha), e num efeito o mínimo é o lado seguro: ele acaba antes, nunca fica pendurado.
+   */
+  effectPhases(effectId: number): readonly number[] {
+    const group = this.#appearances.effect.get(effectId)?.frameGroups[0];
+    if (group === undefined) return [];
+    return group.phases.map((phase) => phase.durationMinMs);
+  }
+
+  /**
+   * O quadro de um PROJÉTIL voando de `dx`, `dy` (FUN-106).
+   *
+   * O padrão do projétil é 3×3 e a célula é a DIREÇÃO do voo — `missileCell` diz como. O
+   * viewport chama com o delta inteiro do tiro (`to - from`), e é o octante dele que escolhe.
+   * Projétil não anima: é a fase 0 sempre, e o movimento é o sprite andando pela tela.
+   */
+  async missile(missileId: number, dx: number, dy: number): Promise<Sprite | null> {
+    const group = this.#appearances.missile.get(missileId)?.frameGroups[0];
+    const cell = missileCell(dx, dy);
+    return this.#frame(group, { x: cell.x, y: cell.y, z: 0, phase: 0, layer: LAYER_BASE });
   }
 
   /**

@@ -195,8 +195,36 @@ fixado no build do cliente), e o nginx serve o que estiver montado em
 `/usr/share/nginx/html/things` (`deploy/nginx.conf`). Em dev, o Vite serve `things/` da raiz do
 repositório no mesmo caminho — ver `packages/client/vite.config.ts`.
 
-No Coolify o volume se chama `things` (`compose.coolify.yml`). Ele nasce vazio, e povoá-lo é um
-passo manual, uma vez por versão do pacote:
+No Coolify o volume se chama `things` (`compose.coolify.yml`; no servidor, `<uuid do
+recurso>_things` — em staging, `hzd0uu0cuitkdi4ie0h1mu5g_things`). Ele nasce vazio, e povoá-lo
+é um passo manual, uma vez por versão do pacote. Sem SSH, o **Terminal do Coolify**
+(menu lateral → Terminal → `localhost`) dá um shell de root no servidor e serve igual.
+
+O caminho mais curto é o servidor baixar o pacote direto da origem, sem passar pela sua
+máquina. Em staging foi feito assim em 2026-09-11 (4 173 arquivos, 81 MB, ~4 min):
+
+```bash
+cat > /root/fetch-things.sh <<'EOF'
+#!/bin/sh
+set -u
+SRC=https://huntera.com.br/things/1332
+mkdir -p /things/1332 && cd /things/1332 || exit 1
+curl -sSfO "$SRC/catalog-content.json" || exit 1
+jq -r '.[].file' catalog-content.json > /tmp/files
+fetch() { [ -s "$1" ] || curl -sSf -o "$1" "$SRC/$1" || echo "FAIL $1"; }
+n=0; while read f; do fetch "$f" & n=$((n+1)); [ $((n % 8)) -eq 0 ] && wait; done < /tmp/files
+wait
+echo "DONE $(ls | wc -l) files, $(du -sh . | cut -f1)"
+EOF
+```
+
+```bash
+nohup docker run --rm -v hzd0uu0cuitkdi4ie0h1mu5g_things:/things -v /root/fetch-things.sh:/fetch.sh:ro alpine:3 sh -c 'apk add -q curl jq && sh /fetch.sh' > /root/things-fetch.log 2>&1 &
+```
+
+Três `FAIL` são esperados: `staticdata`, `staticmapdata` e `map` são o minimapa do cliente
+oficial, que a origem não serve e o Draconya não usa. Se a origem sumir, o outro caminho é
+copiar da sua máquina:
 
 ```bash
 rsync -av --exclude library/ things/1332/ root@<servidor>:/root/things/1332/
@@ -207,7 +235,7 @@ ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)"
 ```
 
 O que precisa ir: `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as
-folhas `sprites-<hash>.bmp.lzma` (172 MB na 13.32). `library/` é a biblioteca de consulta do
+folhas `sprites-<hash>.bmp.lzma` (81 MB na 13.32). `library/` é a biblioteca de consulta do
 Claude Code (`docs/asset-library.md`) e não é servida.
 
 Confira com `curl -sI <APP_ORIGIN>/things/1332/catalog-content.json` — `200` com
