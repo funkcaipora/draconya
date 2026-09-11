@@ -25,6 +25,7 @@ import { ConnectionBadge } from './ConnectionBadge.js';
 import { Vitals } from './Vitals.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
+import { Bestiary } from './Bestiary.js';
 import { HuntMenu } from './HuntMenu.js';
 import { BotPanel } from './BotPanel.js';
 import { Inventory } from './Inventory.js';
@@ -60,6 +61,7 @@ export function Shell() {
         <aside className="panel panel-right" aria-label="painéis à direita">
           <Inventory />
           <Analyzer />
+          <Bestiary />
         </aside>
         <Chat />
       </div>
