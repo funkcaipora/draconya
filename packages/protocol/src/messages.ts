@@ -48,6 +48,21 @@ export const SERVER_TO_CLIENT = {
   catalogue: 14,
   'bot-config-result': 15,
   inventory: 16,
+  /**
+   * O que o combate MOSTRA (FUN-109): o número que flutua sobre a criatura, a animação no
+   * tile e o projétil de A a B.
+   *
+   * **Três mensagens, e não uma com campos opcionais.** Cada uma tem destino diferente no
+   * cliente — o número vai na criatura, o efeito vai no tile, o projétil vai entre dois —, e
+   * uma magia dispara as três de uma vez enquanto um golpe de corpo a corpo dispara duas.
+   * Uma mensagem só faria o cliente inspecionar quais campos vieram para decidir o que
+   * desenhar, e a combinação "veio `missile` sem `to`" passaria a ser um estado possível.
+   *
+   * Só S2C, de propósito (invariante 4): o cliente não diz "acertei 40", ele vê que acertou.
+   */
+  'creature-hit': 17,
+  effect: 18,
+  missile: 19,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

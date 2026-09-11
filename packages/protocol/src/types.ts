@@ -268,6 +268,35 @@ export const S2C_SCHEMAS = {
     })),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
+  /**
+   * O número que flutua sobre a criatura (FUN-109). É APRESENTAÇÃO do que `creature-health`
+   * já disse: a vida nova vai na outra mensagem, e esta leva só o quanto mudou e como.
+   *
+   * `amount` é sempre `>= 0`, e `kind` diz o sinal: `heal` é cura (verde), o resto é dano.
+   * Um número negativo aqui seria "cura escrita como dano negativo" — dois jeitos de dizer a
+   * mesma coisa, e o cliente tendo de reconhecer os dois. Zero é permitido de propósito: o
+   * golpe que a armadura absorveu inteiro também aparece, como no Tibia, senão o jogador
+   * não vê que o monstro está tentando.
+   */
+  'creature-hit': z.object({
+    id: z.number().int(),
+    amount: z.number().int().nonnegative(),
+    kind: z.enum(['melee', 'spell', 'heal']),
+  }),
+  /**
+   * Uma animação de efeito num tile (FUN-109): a explosão da magia, o sangue do golpe, o
+   * brilho da poção. Vai no TILE, e não na criatura, porque é onde o Tibia desenha — e
+   * porque um efeito de área acontece em tiles onde não há ninguém.
+   *
+   * `effectId` é id do pacote de assets, resolvido pela tabela de aparências em `content/`
+   * (invariante 6). O protocolo não sabe o que o 13 desenha; só sabe que zero não é nada.
+   */
+  effect: z.object({ position: Point, effectId: z.number().int().positive() }),
+  /**
+   * Um projétil de `from` a `to` (FUN-109). O cliente anima o trajeto; o servidor já resolveu
+   * o acerto — a mensagem não diz se acertou, porque o `creature-hit` que vem junto é quem diz.
+   */
+  missile: z.object({ from: Point, to: Point, missileId: z.number().int().positive() }),
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
