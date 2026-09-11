@@ -471,3 +471,46 @@ describe('AssetPack (FUN-23)', () => {
     })).rejects.toThrow(/catalog-content\.json respondeu 500/);
   });
 });
+
+describe('warmOutfit (FUN-112)', () => {
+  it('pede todos os quadros do outfit: a folha é baixada UMA vez, e depois todo quadro vem do cache', async () => {
+    // O rato era um quadrado por seis a dez segundos na primeira entrada: cada folha só
+    // decodificava quando o primeiro quadro dela era desenhado. Mutação que mata: aquecer
+    // só o grupo parado (o quadro andando abaixo voltaria a pedir folha), ou só a base de um
+    // outfit de duas camadas.
+    const decode = vi.fn(async () => sheetWith());
+    const { pack, baixadas } = await build({ decode });
+    const downloads = () => baixadas.filter((name) => name === 'folha.bmp.lzma').length;
+    // Dezesseis quadros do rato numa folha só: a folha desce UMA vez (a cache deduplica o voo).
+    await pack.warmOutfit(21);
+    expect(downloads()).toBe(1);
+    expect(decode).toHaveBeenCalledTimes(1);
+
+    // Parado e andando, todas as direções: nada disto volta à rede nem ao decoder.
+    for (const direction of DIRECTIONS) {
+      expect(await pack.outfit(21, direction, 0, false)).not.toBeNull();
+      expect(await pack.outfit(21, direction, 2, true)).not.toBeNull();
+    }
+    expect(downloads()).toBe(1);
+    expect(decode).toHaveBeenCalledTimes(1);
+
+    // O outfit de DUAS camadas aquece base E template. O quadro pintado passa por `pixels()`,
+    // que volta à folha — no navegador, à cópia decodificada no IndexedDB (FUN-19), que é o
+    // que o aquecimento enche; aqui, sem IndexedDB, à rede. O que se prende é que o
+    // aquecimento pediu a folha do 128 (que é a mesma do fixture) e não lançou.
+    await pack.warmOutfit(128);
+    expect(downloads()).toBeGreaterThanOrEqual(2);
+    expect(await pack.outfit(128, 'south', 0, false, COLORS)).not.toBeNull();
+  });
+
+  it('outfit que o pacote não tem não pede nada', async () => {
+    const { pack, baixadas } = await build();
+    await pack.warmOutfit(9_999);
+    expect(baixadas).toEqual(['catalog-content.json', 'app.dat']);
+  });
+
+  it('folha que não abre não derruba o aquecimento', async () => {
+    const { pack } = await build({ decode: async () => { throw new Error('LZMA corrompido'); } });
+    await expect(pack.warmOutfit(21)).resolves.toBeUndefined();
+  });
+});

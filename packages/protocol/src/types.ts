@@ -264,6 +264,13 @@ export const S2C_SCHEMAS = {
       name: z.string().min(1),
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
+      /**
+       * Os outfits dos monstros desta hunt (FUN-112), para o cliente AQUECER as folhas deles
+       * na Cidade, antes de o primeiro aparecer — sem isto o rato era um quadrado por seis a
+       * dez segundos na primeira entrada. Só ids (invariante 6), resolvidos pelo servidor do
+       * conteúdo. `default([])`: um nó `game` anterior manda sem, e nada se aquece.
+       */
+      outfitIds: z.array(z.number().int().positive()).default([]),
     })),
     /**
      * O que a UI do bot pode oferecer (§13.3, FUN-89).

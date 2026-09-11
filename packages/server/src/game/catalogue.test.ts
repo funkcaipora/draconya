@@ -21,8 +21,19 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
 
     for (const hunt of hunts) {
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'name', 'recommendedLevel']);
+        .toEqual(['difficulties', 'id', 'name', 'outfitIds', 'recommendedLevel']);
     }
+  });
+
+  it('leva os outfits dos monstros de cada hunt, únicos e em ordem, para o cliente aquecer (FUN-112)', () => {
+    // O rato era um quadrado por seis a dez segundos na primeira entrada: as folhas dele só
+    // decodificavam quando ele aparecia. Com os ids no catálogo o cliente as pede na Cidade.
+    // Mutação que mata: devolver `[]`, ou não deduplicar (o rato está em toda dificuldade).
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    const rat = content.monsters.get('rat')?.outfitId;
+    expect(rat).toBeGreaterThan(0);
+    expect(arena?.outfitIds).toEqual([rat]);
   });
 
   it('leva o vocabulário do bot, e é ele que a tela oferece', () => {

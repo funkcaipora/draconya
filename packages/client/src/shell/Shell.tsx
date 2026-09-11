@@ -19,6 +19,7 @@ import { applyUiSkin } from '../assets/ui.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
+import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { Viewport } from './Viewport.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
 import { Vitals } from './Vitals.js';
@@ -31,6 +32,9 @@ import { Inventory } from './Inventory.js';
 export function Shell() {
   const characterId = useHudSlice((state) => state.characterId);
   const loaded = useBrowserPack();
+  // As folhas dos monstros das hunts, decodificadas na Cidade (FUN-112): sem isto o rato era
+  // um quadrado por seis a dez segundos na primeira entrada.
+  useWarmHuntOutfits(loaded?.pack ?? null);
 
   useEffect(() => {
     // As variáveis vivem no `:root` e valem para a casca inteira. Não dependem do pacote ter

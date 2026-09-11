@@ -152,6 +152,15 @@ razão — trocar de mapa sem ele vaza a tela anterior inteira.
 em cena criam um bitmap, não dez) e por FOLHA em voo (dez quadros da mesma folha a baixam e
 descomprimem uma vez). Sem a primeira, nove bitmaps vazam porque só um fica no cache.
 
+**Sob demanda tem um preço na PRIMEIRA vez, e ele é pago na Cidade** (FUN-112). Com o cache
+vazio, o rato era um quadrado por seis a dez segundos na primeira entrada numa hunt — cada
+folha do outfit dele só passava pelo Worker quando o primeiro quadro dela era desenhado. O
+catálogo traz os outfits dos monstros de cada hunt (`catalogue.hunts[].outfitIds`), e
+`useWarmHuntOutfits` chama `AssetPack.warmOutfit` para todos assim que o pacote está pronto:
+todos os quadros, grupos, direções e camadas, em segundo plano, no tempo em que o jogador está
+configurando o bot. O resultado é só o cache cheio; na segunda visita o IndexedDB já bastava.
+Medido: com o cache limpo, os quatro ratos saem em sprite a 1,5 s da entrada.
+
 ## Colorização de outfit (FUN-20)
 
 Um outfit tem a camada BASE e uma camada TEMPLATE em que cada cor marca uma região:

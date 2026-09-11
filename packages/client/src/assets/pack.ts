@@ -312,6 +312,38 @@ export class AssetPack {
   }
 
   /**
+   * AQUECE um outfit (FUN-112): pede todo quadro dele — cada grupo, direção, fase e camada —
+   * para as folhas estarem baixadas, decodificadas e no cache antes de a criatura aparecer.
+   *
+   * Sem isto o rato era um quadrado por seis a dez segundos na primeira entrada numa hunt:
+   * o outfit dele espalha doze quadros por onze folhas LZMA, e cada uma só decodificava
+   * quando o primeiro quadro dela era desenhado. O `Shell` chama isto na Cidade, para os
+   * outfits que o catálogo diz que as hunts têm — tempo em que o jogador está configurando
+   * o bot e nada mais pede folha. Só a BASE e o TEMPLATE do padrão sem addon nem montaria: é
+   * o que `outfit()` desenha hoje. Outfit desconhecido não pede nada; folha que não abre
+   * não derruba o aquecimento — o quadro dela cai no fallback como cairia sem aquecer.
+   */
+  async warmOutfit(outfitId: number): Promise<void> {
+    const appearance = this.#appearances.outfit.get(outfitId);
+    if (appearance === undefined) return;
+    const requests: Promise<unknown>[] = [];
+    for (const group of appearance.frameGroups) {
+      const frames = framesIn(group);
+      const layers = group.layers >= 2 ? [LAYER_BASE, LAYER_TEMPLATE] : [LAYER_BASE];
+      for (let column = 0; column < group.patternWidth; column++) {
+        for (let phase = 0; phase < frames; phase++) {
+          for (const layer of layers) {
+            requests.push(
+              this.#frame(group, { x: column, y: 0, z: 0, phase, layer }).catch(() => null),
+            );
+          }
+        }
+      }
+    }
+    await Promise.all(requests);
+  }
+
+  /**
    * Em quantas fases o ciclo de caminhada se divide, para o viewport mapear o progresso do
    * passo em quadro. `1` quando a criatura não anima — e aí qualquer fase cai no mesmo quadro.
    */
