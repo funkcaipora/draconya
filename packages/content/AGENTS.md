@@ -150,6 +150,13 @@ arte. Com inventário e nenhum do pacote que a tabela cita, é erro: `pack` deix
 documentação. `load.test.ts` prende que o conteúdo real tem o inventário do pacote citado,
 senão apagar `packs/` desligaria a conferência em silêncio.
 
+**O pacote SERVIDO tem que ser o conferido.** A sombra é de um pacote; o cliente carrega o de
+`VITE_THINGS_URL`, que é configuração de deploy. `buildContent` expõe `content.pack`, e o
+`game` recusa subir quando `THINGS_VERSION` não bate com `pack.version`
+(`packages/server/src/served-pack.ts`) — o compose deriva `VITE_THINGS_URL` da mesma
+variável. Sem isso, um deploy apontando `/things/1400` com o conteúdo conferido contra o 1332
+passaria em tudo e desenharia exatamente o quadrado que a conferência existe para impedir.
+
 **Fica fora de `computeVersion`.** O inventário não é lido por sessão nenhuma; regenerá-lo
 porque o pacote ganhou ids não muda o que ninguém vê, e contá-lo faria um `pnpm
 assets:inventory` recusar todo snapshot de uma queda sem drenagem. O que muda a arte de uma

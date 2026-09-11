@@ -62,6 +62,11 @@ const EnvironmentSchema = z.object({
    */
   CONTENT_DIR: z.string().default('./packages/content/data'),
 
+  /**
+   * A versão do pacote de arte que o deploy SERVE (`/things/<versão>`, o mesmo número de
+   * `VITE_THINGS_URL`). O boot a compara com o inventário contra o qual o conteúdo foi
+   * conferido (FUN-21, `served-pack.ts`): divergência é recusa, não aviso.
+   */
   THINGS_VERSION: z.string().default('1332'),
   THINGS_DIR: z.string().default('./things'),
 

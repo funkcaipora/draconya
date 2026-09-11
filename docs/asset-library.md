@@ -57,10 +57,18 @@ pnpm assets:inventory --version 1400  # outro pacote: THINGS_VERSION ou --versio
 pnpm assets:inventory --check         # confere cada packs/*.json com o pacote local
 ```
 
-`--check` faz parte do `pnpm check`. Sem o pacote na máquina ele avisa e pula (é o caso do CI);
-com o pacote, um inventário desatualizado reprova e diz em qual registro. O arquivo guarda o
+`--check` faz parte do `pnpm check`. Sem o pacote na máquina ele avisa e pula (é o caso do CI,
+onde quem confere a tabela é `load.test.ts`, contra o inventário versionado); com o pacote, um
+inventário desatualizado reprova e diz em qual registro e em qual faixa. O arquivo guarda o
 SHA-256 do `.dat` de que saiu, então trocar o pacote sem regenerar o inventário reprova antes
 de qualquer faixa ser comparada.
+
+O inventário é a sombra de UM pacote, e o cliente carrega o de `VITE_THINGS_URL`. Para os dois
+não divergirem, o `game` recusa subir quando `THINGS_VERSION` não é a versão do inventário
+(`packages/server/src/served-pack.ts`), e `compose.coolify.yml` deriva `VITE_THINGS_URL` de
+`THINGS_VERSION`. Trocar de pacote é, portanto: novo `things/<versão>/`, `pnpm
+assets:inventory --version <versão>`, `pack` novo em `appearances/baseline.json` com os ids
+remapeados, e `THINGS_VERSION` novo no deploy.
 
 ## Estrutura para ferramentas
 

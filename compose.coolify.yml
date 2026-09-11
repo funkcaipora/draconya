@@ -7,7 +7,10 @@ services:
       target: client
       args:
         VITE_API_URL: ''
-        VITE_THINGS_URL: ${VITE_THINGS_URL:-/things/1332}
+        # Derivado de THINGS_VERSION, e não uma variável à parte: é o MESMO número que o
+        # `app` compara com o inventário do conteúdo no boot (FUN-21). Duas variáveis
+        # seriam duas identidades para um pacote só, e a conferência veria uma delas.
+        VITE_THINGS_URL: /things/${THINGS_VERSION:-1332}
     restart: unless-stopped
     expose: ['80']
     # O pacote de arte fica num volume, fora da imagem: `things/<versão>/` do repositório
@@ -37,6 +40,9 @@ services:
       WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:?configure WORKOS_CLIENT_ID}
       WORKOS_REDIRECT_URI: ${APP_ORIGIN}/api/auth/callback
       AUTH_DEV_MODE: 'false'
+      # O pacote de arte servido pelo `web` (`/things/<versão>`). O boot recusa subir se o
+      # conteúdo foi conferido contra outro (packages/server/src/served-pack.ts).
+      THINGS_VERSION: ${THINGS_VERSION:-1332}
       LOG_LEVEL: info
     depends_on:
       postgres: { condition: service_healthy }

@@ -119,14 +119,25 @@ describe('packSchema', () => {
     expect(packSchema.safeParse({ ...valid, object: [[1, 1], [3, 5]] }).success).toBe(true);
   });
 
-  it('recusa faixa invertida', () => {
-    expect(packSchema.safeParse({ ...valid, object: [[5, 3]] }).success).toBe(false);
+  const messages = (input: unknown): string[] => {
+    const parsed = packSchema.safeParse(input);
+    return parsed.success ? [] : parsed.error.issues.map((issue) => `${issue.path.join('.')} ${issue.message}`);
+  };
+
+  it('recusa faixa invertida, e diz qual', () => {
+    expect(messages({ ...valid, object: [[5, 3]] }))
+      .toEqual(['object.0 faixa invertida: o primeiro id passa do último']);
   });
 
-  it('recusa faixas fora de ordem ou sobrepostas — a busca binária depende disso', () => {
-    expect(packSchema.safeParse({ ...valid, object: [[10, 20], [1, 5]] }).success).toBe(false);
-    expect(packSchema.safeParse({ ...valid, object: [[1, 5], [5, 9]] }).success).toBe(false);
-    expect(packSchema.safeParse({ ...valid, object: [[1, 5], [3, 9]] }).success).toBe(false);
+  it('recusa faixas fora de ordem ou sobrepostas — a busca binária depende disso — e diz onde', () => {
+    // O índice e as duas faixas na mensagem: num arquivo de 760 faixas, "sobrepostas" sem
+    // dizer onde manda ler o arquivo inteiro.
+    expect(messages({ ...valid, object: [[10, 20], [1, 5]] }))
+      .toEqual(['object faixas fora de ordem ou sobrepostas em 1: [10,20] antes de [1,5]']);
+    expect(messages({ ...valid, object: [[1, 5], [5, 9]] }))
+      .toEqual(['object faixas fora de ordem ou sobrepostas em 1: [1,5] antes de [5,9]']);
+    expect(messages({ ...valid, outfit: [[1, 5], [3, 9], [20, 30]] }))
+      .toEqual(['outfit faixas fora de ordem ou sobrepostas em 1: [1,5] antes de [3,9]']);
   });
 
   it('faixas ENCOSTADAS são válidas, só não são o que o gerador escreve', () => {

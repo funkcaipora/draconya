@@ -1,4 +1,7 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import {
+  cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -84,6 +87,26 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     const pack = content.appearances?.pack;
     expect(pack).toBeTruthy();
     expect(readdirSync(join(DATA, 'packs'))).toContain(`${pack}.json`);
+    expect(content.pack?.id).toBe(pack);
+  });
+
+  it('o CARREGADOR leva o inventário até a conferência: um id fora dele reprova pelo loadContent (FUN-21)', () => {
+    // O teste acima prende que o arquivo existe; este prende que `load.ts` o LÊ. Sem ele,
+    // apagar a linha `packs:` do carregador deixaria a suíte verde com a conferência
+    // desligada — a mutação que sobreviveu na revisão. O conteúdo real é copiado e um id
+    // que o pacote 1332 não tem entra na tabela; o resto do repositório fica como está.
+    const copy = mkdtempSync(join(tmpdir(), 'draconya-content-'));
+    try {
+      cpSync(DATA, copy, { recursive: true });
+      const table = join(copy, 'appearances', 'baseline.json');
+      const text = readFileSync(table, 'utf8');
+      expect(text).toMatch(/"rat": 21/);
+      writeFileSync(table, text.replace('"rat": 21', '"rat": 999999'));
+      expect(() => loadContent(copy))
+        .toThrow('appearances.monsters.rat: outfit 999999 não existe no pacote tibia-1332');
+    } finally {
+      rmSync(copy, { recursive: true, force: true });
+    }
   });
 
   it('nenhum arquivo de entidade guarda id de aparência por conta própria', () => {

@@ -14,7 +14,7 @@ import {
   tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  Appearances, BotLimits, Combat, Hunt, Item, Monster, Progression, Skill, Spell, Stamina,
+  Appearances, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression, Skill, Spell, Stamina,
   Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
@@ -55,6 +55,13 @@ export interface Content {
    * `undefined` só em conteúdo de teste sem monstro nem item, que dispensa a tabela.
    */
   readonly appearances?: Appearances;
+  /**
+   * O inventário do pacote que a tabela cita (FUN-21), e contra o qual ela foi conferida. O
+   * `game` compara `pack.version` com o pacote que o deploy SERVE (`THINGS_VERSION`) e recusa
+   * subir se divergem: a conferência contra a sombra de um pacote só vale para quem carrega
+   * esse pacote. `undefined` sem inventário — o conteúdo de teste.
+   */
+  readonly pack?: Pack;
   /**
    * O mapa da Cidade, com ponto de entrada (FUN-60). Opcional porque conteúdo de teste que só
    * fala de hunt não precisa dele — mas o conteúdo REAL precisa, e `load.ts` exige.
@@ -200,8 +207,9 @@ export function buildContent(raw: RawContent): Content {
   // não roda, e é assim que a fixture de combate continua sem falar de arte; com inventários
   // e nenhum do pacote citado, é erro — o campo `pack` deixou de ser só documentação.
   const packs = parseAll('pack', raw.packs ?? [], packSchema, problems);
+  let pack: Pack | undefined;
   if (appearances !== undefined && packs.size > 0) {
-    const pack = packs.get(appearances.pack);
+    pack = packs.get(appearances.pack);
     if (pack === undefined) {
       problems.push(
         `appearances/baseline.json aponta o pacote "${appearances.pack}", e packs/ não tem o `
@@ -351,6 +359,7 @@ export function buildContent(raw: RawContent): Content {
     openValues,
     ...(city === undefined ? {} : { city }),
     ...(appearances === undefined ? {} : { appearances }),
+    ...(pack === undefined ? {} : { pack }),
   };
 }
 

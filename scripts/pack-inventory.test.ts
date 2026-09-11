@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readAppearances } from '../packages/client/src/assets/appearances.js';
 import { appearance, appearances } from '../packages/client/src/assets/testing.js';
@@ -95,9 +95,22 @@ describe('differenceBetween', () => {
       .toMatch(/o \.dat mudou/);
   });
 
-  it('diz em qual registro as faixas divergem', () => {
+  it('diz em qual registro e em qual faixa o arquivo e o pacote divergem', () => {
     expect(differenceBetween(pack, { ...pack, effect: [[1, 80], [158, 158]] }))
-      .toBe('effect: 1 faixas no arquivo, 2 no pacote');
+      .toBe('effect, faixa 1: nada no arquivo, [158,158] no pacote');
+    expect(differenceBetween({ ...pack, missile: [[1, 42], [44, 45]] }, pack))
+      .toBe('missile, faixa 1: [44,45] no arquivo, nada no pacote');
+  });
+
+  it('uma faixa com o mesmo tamanho e outro limite é diferença — contar faixas não basta', () => {
+    // É a divergência que um decoder novo produz sem o .dat mudar: mesmo sha, outra faixa.
+    expect(differenceBetween(pack, { ...pack, effect: [[1, 81]] }))
+      .toBe('effect, faixa 0: [1,80] no arquivo, [1,81] no pacote');
+  });
+
+  it('o id do inventário tem que ser o que o pacote produz', () => {
+    expect(differenceBetween({ ...pack, id: 'tibia-1400' }, pack))
+      .toBe('id: "tibia-1400" no arquivo, "tibia-1332" no pacote');
   });
 });
 
@@ -142,6 +155,10 @@ describe('readPackInventory e checkInventories, contra um pacote em disco', () =
     writePack(things, '1500', { object: [100, 101, 102], outfit: [21] });
     writeFileSync(join(packs, 'tibia-1500.json'), formatInventory({ ...fresh, id: 'tibia-1500', version: '1500' }));
 
+    // Uma nota ao lado dos inventários não é inventário — e o `--check` roda no `pnpm check`,
+    // então o primeiro README na pasta derrubaria a verificação inteira com um SyntaxError.
+    writeFileSync(join(packs, 'README.md'), '# notas\n');
+
     expect(checkInventories(packs, things)).toEqual([
       { file: 'tibia-1332.json', status: 'fresh' },
       { file: 'tibia-1400.json', status: 'absent' },
@@ -149,19 +166,45 @@ describe('readPackInventory e checkInventories, contra um pacote em disco', () =
     ]);
   });
 
+  it('confere um inventário desatualizado nas FAIXAS, com o mesmo .dat', () => {
+    const things = scratch();
+    const packs = join(scratch(), 'packs');
+    mkdirSync(packs);
+    writePack(things, '1332', { object: [100, 101, 102], outfit: [21] });
+    const fresh = readPackInventory(things, '1332');
+    if (fresh === null) throw new Error('pacote sintético não foi lido');
+    writeFileSync(join(packs, 'tibia-1332.json'), formatInventory({ ...fresh, object: [[100, 101]] }));
+    expect(checkInventories(packs, things)).toEqual([
+      { file: 'tibia-1332.json', status: 'stale', detail: 'object, faixa 0: [100,101] no arquivo, [100,102] no pacote' },
+    ]);
+  });
+
   it('sem pasta de inventários não há o que conferir', () => {
     expect(checkInventories(join(scratch(), 'nao-existe'), scratch())).toEqual([]);
   });
 
-  it('o inventário versionado do repositório é o que o pacote 1332 produz — quando ele está aqui', () => {
-    // O mesmo `--check` do `pnpm check`, como teste: pula sem pacote (CI), reprova com o
-    // pacote e o inventário desatualizados. É o único lugar em que o arquivo em
-    // `packages/content/data/packs` encontra o `.dat` de verdade.
-    const packs = join(import.meta.dirname, '..', 'packages', 'content', 'data', 'packs');
-    const things = process.env.THINGS_DIR ?? join(import.meta.dirname, '..', 'things');
-    for (const outcome of checkInventories(packs, things)) {
-      expect(outcome.status, `${outcome.file}: ${outcome.detail ?? ''}`).not.toBe('stale');
-    }
-    expect(JSON.parse(readFileSync(join(packs, 'tibia-1332.json'), 'utf8'))).toMatchObject({ id: 'tibia-1332' });
+});
+
+// O mesmo `--check` do `pnpm check`, como teste: é o único lugar em que o arquivo em
+// `packages/content/data/packs` encontra o `.dat` de verdade. Sem o pacote na máquina (o CI)
+// o bloco PULA, e aparece como pulado — teste que passa sem conferir nada é falsa confiança,
+// e `appearances.pack.test.ts` já faz o mesmo para o mesmo pacote.
+const ROOT = join(import.meta.dirname, '..');
+const THINGS = resolve(ROOT, process.env.THINGS_DIR ?? 'things');
+const REAL_PACKS = join(ROOT, 'packages', 'content', 'data', 'packs');
+const hasRealPack = existsSync(join(THINGS, '1332', 'catalog-content.json'));
+
+describe.skipIf(!hasRealPack)('o inventário versionado contra o pacote 1332 desta máquina', () => {
+  it('é exatamente o que o gerador produz do pacote — senão, rode pnpm assets:inventory', () => {
+    const outcomes = checkInventories(REAL_PACKS, THINGS);
+    const own = outcomes.find((outcome) => outcome.file === 'tibia-1332.json');
+    expect(own, 'packs/tibia-1332.json existe').toBeDefined();
+    expect(own?.status, own?.detail ?? '').toBe('fresh');
+  });
+});
+
+describe.skipIf(hasRealPack)('sem o pacote 1332 nesta máquina', () => {
+  it('o inventário versionado não é conferido contra o .dat — só contra a tabela, em load.test.ts', () => {
+    expect(checkInventories(REAL_PACKS, THINGS).map((outcome) => outcome.status)).toEqual(['absent']);
   });
 });

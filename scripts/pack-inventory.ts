@@ -14,7 +14,8 @@
 // A sombra pode envelhecer: o pacote sobe de versão e o inventário fica para trás. `--check`
 // existe para isso, e faz parte do `pnpm check`: com o pacote na máquina, regenera o inventário
 // em memória e compara com o arquivo; sem o pacote — o CI, uma máquina nova — avisa e pula, e o
-// que segura é o teste de conteúdo contra o arquivo versionado.
+// que segura é o teste de conteúdo contra o arquivo versionado. E a sombra é de UM pacote: o
+// `game` recusa subir se `THINGS_VERSION` não é a versão dela (`server/src/served-pack.ts`).
 
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -150,10 +151,19 @@ export function differenceBetween(committed: Pack, actual: Pack): string | null 
       + `${actual.appearancesSha256.slice(0, 12)}… no pacote`;
   }
   for (const kind of KINDS) {
-    const before = JSON.stringify(committed[kind]);
-    const after = JSON.stringify(actual[kind]);
-    if (before !== after) {
-      return `${kind}: ${committed[kind].length} faixas no arquivo, ${actual[kind].length} no pacote`;
+    const before = committed[kind];
+    const after = actual[kind];
+    const length = Math.max(before.length, after.length);
+    for (let index = 0; index < length; index += 1) {
+      const mine = before[index];
+      const theirs = after[index];
+      if (mine !== undefined && theirs !== undefined && mine[0] === theirs[0] && mine[1] === theirs[1]) {
+        continue;
+      }
+      // A PRIMEIRA faixa que difere, e não só a contagem: `[1,80]` contra `[1,81]` são uma
+      // faixa de cada lado, e "1 faixa no arquivo, 1 no pacote" diria que nada mudou.
+      return `${kind}, faixa ${index}: ${mine === undefined ? 'nada' : `[${mine}]`} no arquivo, `
+        + `${theirs === undefined ? 'nada' : `[${theirs}]`} no pacote`;
     }
   }
   return null;
