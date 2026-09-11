@@ -404,6 +404,20 @@ describe('session-ended', () => {
     expect(line?.text).toContain('750 gold');
   });
 
+  it('leaving the hunt says "hunt", not "game": the player is standing in the city reading it', () => {
+    // `manual-exit` também é o logout, mas esse fecha o socket e ninguém lê o extrato. Quem
+    // lê é quem apertou "sair da hunt" — e "Você saiu do jogo" era o que ele lia (QA do MVP).
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 120_000, xpGained: 155, goldGained: 73, goldSpent: 250, kills: 31, deaths: 0 },
+      notableEvents: [],
+    }, 0);
+    const line = hud.get().systemMessages.at(-1);
+    expect(line?.text).toContain('saiu da hunt');
+    expect(line?.text).not.toContain('jogo');
+    expect(line?.text).toContain('-177 gold');
+  });
+
   it('does not clear the world along with the notice', () => {
     // A última coisa verdadeira fica na tela por trás da mensagem, em vez de o canvas
     // piscar vazio junto com a notícia.

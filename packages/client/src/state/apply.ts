@@ -14,7 +14,10 @@ import { botResult, loadConfig } from '../bot/store.js';
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
-  'manual-exit': 'Você saiu do jogo',
+  // `manual-exit` é o `leave-hunt` E o `logout`, mas só o primeiro chega a ser LIDO: o logout
+  // fecha o socket. Dizer "saiu do jogo" a quem acabou de voltar para a Cidade era o que o
+  // extrato dizia até o passe de QA do MVP.
+  'manual-exit': 'Você saiu da hunt',
   'exit-rule': 'A hunt encerrou por uma regra de saída',
   death: 'Você morreu',
   drain: 'Sua sessão foi encerrada por manutenção',
