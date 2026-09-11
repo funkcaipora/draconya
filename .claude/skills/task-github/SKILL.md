@@ -113,12 +113,26 @@ quem o executa, porque abre um fluxo de autorização no navegador:
 gh auth refresh -s project,read:project
 ```
 
-Com o escopo, o quadro é criado uma vez por iniciativa e cada issue entra nele:
+Com o escopo, a issue entra no quadro do repositório. **Existe um quadro só**, o "Draconya"
+(`https://github.com/users/funkcaipora/projects/3`, número `3`, dono `funkcaipora`); a iniciativa
+é o milestone, não um quadro novo — dois quadros é o mesmo item em dois lugares, e um deles fica
+para trás. Cada issue entra uma vez (`item-list` antes de `item-add`, para não duplicar) e recebe
+`Status` e `Size`:
 
 ```bash
-gh project create --owner <owner> --title "<nome>" --format json --jq .number
-gh project item-add <número> --owner <owner> --url <url da issue>
+gh project item-list 3 --owner funkcaipora --limit 200 --format json \
+  --jq '.items[] | select(.content.number != null) | [.content.number, .id] | @tsv'   # o que já está lá
+item=$(gh project item-add 3 --owner funkcaipora --url <url da issue> --format json --jq .id)
+gh project field-list 3 --owner funkcaipora --format json \
+  --jq '.fields[] | select(.name=="Status" or .name=="Size") | {name, id, options: [.options[] | {name, id}]}'
+gh project item-edit --project-id <id do quadro> --id "$item" --field-id <id do campo> --single-select-option-id <id da opção>
 ```
+
+| Campo | Regra |
+|---|---|
+| `Status` | `Todo` ao entrar; `In progress` ao começar, à mão, junto com a label `em andamento` (o quadro só o põe sozinho quando uma PR é ligada à issue — tarde demais para quem olha o quadro); `Done` é automático quando a issue fecha ou a PR que a fecha é mesclada. Os fluxos do quadro (`Item added`, `Pull request linked`, `Item closed`, `Pull request merged`, `Auto-close issue`) estão ligados; mover para `Done` à mão FECHA a issue — não use como "quase" |
+| `Size` | o `Tamanho` da spec: `P` → `S`, `M` → `M`, `G` → `L`. O quadro tem `XS` e `XL`; a spec não, de propósito — o que não cabe em `G` é duas issues |
+| `Priority`, `Iteration`, datas | não são preenchidos por esta skill; são de quem planeja a semana |
 
 O campo `Status` do quadro é o estado de execução; label e milestone não o substituem.
 
