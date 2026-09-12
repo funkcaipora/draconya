@@ -119,6 +119,49 @@ describe.skipIf(pack === null)('o leitor contra o pacote real (FUN-16)', () => {
       .flatMap((group) => group.spriteIds);
     expect(Math.max(...ids)).toBeGreaterThan(100_000);
   });
+
+  it('as flags batem com o que o mapa precisa: chão tem bank, parede tem unpass (FUN-117)', () => {
+    // Os ids são os de `packages/content/data/appearances/baseline.json`: os dois chãos
+    // (`rat-cellars` 355, `city` 429) e as quatro peças de parede. Um número de campo errado
+    // em `readAppearanceFlags` não dá erro — dá `false` em tudo, e o importador do OTBM
+    // marcaria Thais inteira como andável.
+    for (const floorId of [355, 429]) {
+      expect(packed().object.get(floorId)?.flags?.bankWaypoints).toBeGreaterThan(0);
+      expect(packed().object.get(floorId)?.flags?.unpass).toBe(false);
+    }
+    for (const wallId of [1294, 1295, 1296, 1298]) {
+      const wall = packed().object.get(wallId)?.flags;
+      expect(wall?.unpass).toBe(true);
+      expect(wall?.bottom).toBe(true);
+      expect(wall?.unsight).toBe(true);
+      expect(wall?.bankWaypoints).toBeUndefined();
+    }
+    // O rato: outfit, sem chão nem bloqueio.
+    expect(packed().outfit.get(21)?.flags?.bankWaypoints).toBeUndefined();
+    expect(packed().outfit.get(21)?.flags?.unpass ?? false).toBe(false);
+  });
+
+  it('as flags aparecem em contagens plausíveis no catálogo inteiro', () => {
+    // Milhares de chãos e de bloqueios; centenas de elevações e de deslocamentos. Zero em
+    // qualquer um deles é número de campo errado.
+    let bank = 0, unpass = 0, elevation = 0, shift = 0, top = 0, clip = 0;
+    for (const appearance of packed().object.values()) {
+      const flags = appearance.flags;
+      if (flags === undefined) continue;
+      if (flags.bankWaypoints !== undefined) bank += 1;
+      if (flags.unpass) unpass += 1;
+      if (flags.elevation !== undefined) elevation += 1;
+      if (flags.shiftX !== undefined) shift += 1;
+      if (flags.top) top += 1;
+      if (flags.clip) clip += 1;
+    }
+    expect(bank).toBeGreaterThan(1_000);
+    expect(unpass).toBeGreaterThan(5_000);
+    expect(elevation).toBeGreaterThan(500);
+    expect(shift).toBeGreaterThan(100);
+    expect(top).toBeGreaterThan(100);
+    expect(clip).toBeGreaterThan(1_000);
+  });
 });
 
 // Quando o pacote não está aqui, isto é o que aparece no lugar do bloco acima: uma linha que
