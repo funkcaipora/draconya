@@ -47,6 +47,19 @@ describe('loadContent', () => {
     expect(semMonstros).toBeTruthy();
   });
 
+  it('city/city.json ausente é erro: a Cidade não pode subir sem mapa (FUN-120)', () => {
+    // "Subpasta ausente é conjunto vazio" vale para o que cresce por partes; a Cidade não é
+    // uma parte — sem ela ninguém tem onde nascer, e o boot não acusava nada.
+    const dir = mkdtempSync(join(tmpdir(), 'content-'));
+    try {
+      cpSync(DATA, dir, { recursive: true });
+      rmSync(join(dir, 'city'), { recursive: true, force: true });
+      expect(() => loadContent(dir)).toThrow(/city\/city\.json ausente/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('RAIZ ausente é erro, e não conjunto vazio', () => {
     // A distinção importa: sem ela, um caminho errado reporta \"conteúdo válido, 0 monstros\",
     // que é falso verde e só aparece quando o jogo sobe sem nada dentro.

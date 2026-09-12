@@ -291,9 +291,12 @@ const CARDINALS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0
  * com o templo de Thais lotado, ele colocaria quem chega do lado de fora do prédio — ou numa
  * sala dos fundos sem porta. Aqui a busca é em largura pelos tiles andáveis, quatro vizinhos,
  * no andar do ponto pedido, e para no primeiro livre; `limit` é quantos tiles ela visita antes
- * de desistir, que é a praça cheia. Escada não entra na fila: ela leva a outro andar.
+ * de desistir, que é a praça cheia — e o tile pedido é sempre tentado, mesmo com `limit`
+ * zero, como `placeNear` sempre tenta o centro. Escada não entra na fila: ela leva a outro
+ * andar.
  *
- * A hunt continua com `placeNear`: ponto de spawn é lugar aberto, e o anel é mais barato.
+ * A hunt não precisa disto: o spawn é um `place` seco num ponto aberto (`hunt.ts`), e
+ * `placeNear` fica como a busca em anel para quem tiver um lugar sem paredes.
  */
 export function placeReachable<P extends GridPoint>(
   world: MovementWorld, mover: Movable<P>, at: P, limit: number,
@@ -302,7 +305,8 @@ export function placeReachable<P extends GridPoint>(
   const queue: P[] = [at];
   const seen = new Set<number>([tileKey(at.x, at.y, z)]);
   let last: MoveRejection = 'out-of-bounds';
-  for (let head = 0; head < queue.length && head < limit; head++) {
+  const visits = Math.max(1, limit);
+  for (let head = 0; head < queue.length && head < visits; head++) {
     const tile = queue[head] as P;
     const rejection = place(world, mover, tile);
     if (rejection === null) return null;

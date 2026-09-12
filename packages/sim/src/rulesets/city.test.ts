@@ -58,6 +58,20 @@ describe('chegar na Cidade (FUN-120)', () => {
     expect(people[6]?.position).toEqual({ x: 1, y: 4, z: 7 });
   });
 
+  it('a posição que o personagem traz de outro mapa não ocupa tile nenhum da Cidade', () => {
+    // O `Session.enter` já o pôs em `participants` quando o `onEnter` roda, com a posição da
+    // sessão anterior. Contá-la na ocupação marcava um tile da praça por ninguém — e quando
+    // ela caía no ponto de entrada, o primeiro a chegar numa praça VAZIA era desviado.
+    const session = new Session({
+      id: 'thais', contentVersion: 'v1', ruleset: createCityRuleset({ map: temple, stepDurationMs: 150 }),
+      rng: Rng.fromSeed('c'), createdAtMs: 0,
+    });
+    const person = citizen('p0');
+    person.position = { x: 2, y: 2, z: 7 };
+    session.enter(person);
+    expect(person.position).toEqual({ x: 2, y: 2, z: 7 });
+  });
+
   it('a Cidade diz qual mapa desenhar', () => {
     expect(createCityRuleset({ map: temple }).mapId).toBe('templo');
     expect(createCityRuleset().mapId).toBeUndefined();

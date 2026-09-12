@@ -206,7 +206,8 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   do prédio. A busca é em largura pelos tiles andáveis, quatro vizinhos, no andar da entrada,
   sem entrar em escada; o teto de 1.089 tiles visitados (o quadrado do anel de 16 de antes) vem
   do TETO DE POPULAÇÃO por cópia (200, na FUN-33): com 289, duzentas pessoas ficariam ombro a
-  ombro. A hunt continua com `placeNear`: ponto de spawn é lugar aberto, e o anel é mais barato.
+  ombro. A hunt não passa por nenhum dos dois: o spawn é um `place` seco num ponto aberto, e
+  `placeNear` fica como a busca em anel para quem tiver um lugar sem paredes.
 - **`Ruleset.mapId` é o mapa que o cliente desenha** (FUN-120): a hunt devolve o do
   `TileOccupancy`, a Cidade o de `options.map`. Ausente é sessão sem mapa — só fixture. O
   hospedeiro o manda em `instance-enter` antes do `session-state`, e em `world.mapId`.

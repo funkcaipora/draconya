@@ -57,7 +57,8 @@ a parede: o vigésimo a chegar apareceria do lado de fora do prédio, ou numa sa
 o lotado transborda pela porta. A busca visita até **1 089 tiles** (o quadrado do anel de 16), e o
 número vem do teto de população: com os 289 de antes, duzentas pessoas ficariam ombro a ombro, sem
 conseguir andar. Não é um raio de espalhamento — a busca começa na entrada, então quem chega num
-templo vazio entra no tile de entrada. A hunt continua com o anel: ponto de spawn é lugar aberto.
+templo vazio entra no tile de entrada. A hunt não busca nada: o spawn é um `place` seco num ponto
+aberto.
 
 Sair é `Session.leave`, não `end`. Antes da FUN-71 sair só sabia ser encerrar, e um jogador
 fechando o jogo na praça levaria a praça junto. Quando o **último** sai, a cópia é descartada; a
@@ -92,11 +93,12 @@ entrada e as escadas:
 
 - **Nasce-se no templo**, em `(94, 88, 7)` — o `(32369, 32241, 7)` do mapa real, o mesmo tile
   em que o Huntera põe quem chega (§13 do estudo).
-- **Cada escada é um par de `floorChanges`**, ida e volta: o degrau (aparência 1947) leva ao tile
-  ao norte, um andar acima; o tile em cima do degrau leva ao tile ao sul do degrau, no andar do
-  degrau. É o que o Huntera mostrou no depot — subir de `(75,73,7)` chega em `(75,72,6)`, descer
-  de `(75,73,6)` chega em `(75,74,7)` — e vale para as 45 escadas do recorte, 90 entradas, todas
-  com o destino andável. `load.test.ts` prende que toda escada tem a volta.
+- **Cada escada é um par de `floorChanges`**, ida e volta: o degrau (aparência 1947, ou a
+  variante 1958, que aparece uma vez) leva ao tile ao norte, um andar acima; o tile em cima do
+  degrau leva ao tile ao sul do degrau, no andar do degrau. É o que o Huntera mostrou no depot —
+  subir de `(75,73,7)` chega em `(75,72,6)`, descer de `(75,73,6)` chega em `(75,74,7)` — e vale
+  para as 46 escadas do recorte, 92 entradas, todas com os quatro tiles andáveis. `load.test.ts`
+  prende que toda escada tem a volta.
 - **O templo não tem escada para cima**, e a do porão dele leva ao andar 8, que fica fora do
   recorte: pisar nela hoje é pisar num tile comum.
 
@@ -157,8 +159,9 @@ entrada:
 
 Na hora do login a AOI corta pouco — quinhentas pessoas no templo é uma multidão, e quem está ao
 alcance da vista É a multidão. Espalhadas pelas ruas, quinhentas pessoas custam 44 vizinhos por
-passo: mais que os 11 da praça sintética de 316×316, porque a Thais de 184×139 tem 21 mil tiles
-andáveis e ruas estreitas que concentram, e ainda assim onze vezes menos que a sessão inteira.
+passo: mais que os 11 da praça sintética de 313×313, porque o andar 7 da Thais de 184×139 tem
+15 mil tiles andáveis, dos quais 11 mil alcançáveis a pé do templo, e ruas estreitas que
+concentram — e ainda assim onze vezes menos que a sessão inteira.
 
 **O Huntera usa um raio fixo de 16 tiles** (§13 do estudo); a nossa célula de 10 com dois limiares
 dá um alcance efetivo entre 10 e 30 tiles, conforme a posição dentro da célula. Não mudamos agora:
@@ -196,7 +199,7 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
 | Mapa e ponto de entrada | `thais`, entrada no templo `(94, 88, 7)` | `packages/content/data/city/city.json` (`mapId`), `packages/content/data/maps/thais.json` (`entryPoint`) |
-| Escadas | 90 `floorChanges` (45 escadas, ida e volta) | `packages/content/data/maps/thais.json` — autorado; o resto do arquivo é gerado |
+| Escadas | 92 `floorChanges` (46 escadas, ida e volta) | `packages/content/data/maps/thais.json` — autorado; o resto do arquivo é gerado |
 | Velocidade de passo | 150 ms por tile, fixo para todos (cópia do Huntera) | `packages/content/data/city/city.json`, `stepDurationMs` |
 | Tiles visitados na busca de lugar na chegada | 1 089, a pé | `packages/sim/src/rulesets/city.ts` — geometria, não balanceamento |
 | Carência de repouso | 5 min | `packages/server/src/game/host.ts` |

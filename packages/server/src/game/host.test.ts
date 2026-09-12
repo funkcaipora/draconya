@@ -1016,6 +1016,30 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
+  it('a volta da hunt anuncia a Cidade de novo: instance-enter com o mapa e a instância da praça, antes do estado (FUN-120)', async () => {
+    // O caminho em que o anúncio de chegada corre antes de o visualizador entrar na sessão
+    // nova — o que o recém-chegado vê tem de vir inteiro do `#sendState`, e na ordem certa.
+    const { build } = builder();
+    const { host } = cityHost({ buildSession: build });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
+    host.flush();
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'leave-hunt' });
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('city'));
+    host.flush();
+
+    const received = socket.received();
+    const enter = received.findIndex((m) => m.type === 'instance-enter');
+    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'city-2', map: 'city' });
+    expect(received[enter + 1]).toMatchObject({ type: 'session-state', sessionType: 'city', world: { mapId: 'city' } });
+    expect(socket.ended).toBeNull();
+  });
+
   it('destino que este servidor não constrói deixa o personagem onde estava', async () => {
     // Construir ANTES de encerrar: se o destino não existe, a sessão antiga não pode já ter
     // sido fechada — senão o personagem fica sem nenhuma.
@@ -1478,6 +1502,28 @@ describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
     const enter = received.findIndex((m) => m.type === 'instance-enter');
     expect(received[enter]).toMatchObject({ type: 'instance-enter', map: 'city' });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'city' } });
+  });
+
+  it('a segunda aba recebe a própria cena, e a primeira não recebe nada de novo (FUN-120)', () => {
+    // Duas abas do mesmo personagem são dois visualizadores da MESMA sessão: cada
+    // `session-attach` leva a cena a quem pediu — e só a ele.
+    const host = cityHost();
+    const first = new FakeSocket();
+    const firstViewer = host.attach(first, 'p1');
+    host.handle(firstViewer, { type: 'session-attach' });
+    host.flush();
+    first.frames.length = 0;
+
+    const second = new FakeSocket();
+    const secondViewer = host.attach(second, 'p1');
+    host.handle(secondViewer, { type: 'session-attach' });
+    host.flush();
+
+    const received = second.received();
+    const enter = received.findIndex((m) => m.type === 'instance-enter');
+    expect(received[enter]).toMatchObject({ type: 'instance-enter', map: 'city' });
+    expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'city' } });
+    expect(first.received().filter((m) => m.type === 'instance-enter' || m.type === 'session-state')).toEqual([]);
   });
 
   it('move o personagem e quem está olhando recebe UM creature-move, com duração', () => {

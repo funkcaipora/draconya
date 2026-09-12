@@ -473,6 +473,13 @@ describe('placeReachable (FUN-120)', () => {
     expect(world.occupied(1, 4)).toBe(true);
   });
 
+  it('tenta o tile pedido mesmo com `limit` zero, como `placeNear` sempre tenta o centro', () => {
+    const world = new TileOccupancy(temple);
+    const mover = at(5, 5);
+    expect(placeReachable(world, mover, entry, 0)).toBeNull();
+    expect(mover.position).toEqual(entry);
+  });
+
   it('desiste depois de visitar `limit` tiles, e devolve a última recusa', () => {
     const world = new TileOccupancy(temple);
     for (const tile of leftRoom) place(world, at(5, 5), tile);

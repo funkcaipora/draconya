@@ -49,9 +49,17 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       : { fixedStepMs: options.stepDurationMs });
   let occupancyStale = true;
 
-  const rebuild = (session: Session): void => {
+  /**
+   * Remonta a ocupação a partir de quem está na sessão — MENOS quem está entrando agora. O
+   * `Session.enter` já pôs o personagem em `participants` quando o `onEnter` roda, e a
+   * posição que ele traz é da sessão anterior, num mapa que não é este: a hunt de onde
+   * voltou, ou fora do mapa para um personagem novo. Contá-la aqui marcava um tile da praça
+   * como ocupado por ninguém — e, quando ela caía por acaso no ponto de entrada, o primeiro
+   * a chegar numa praça vazia era desviado para o vizinho. O mesmo filtro que a hunt faz.
+   */
+  const rebuild = (session: Session, arriving?: CharacterRuntime): void => {
     occupancyStale = false;
-    world?.reset(session.participants);
+    world?.reset(session.participants.filter((p) => p !== arriving));
   };
 
   return {
@@ -77,7 +85,7 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       // validado no carregamento do conteúdo contra `isBlocked`, então uma recusa aqui é
       // outra criatura em cima dele — e nesse caso o personagem fica onde estava.
       if (world !== null && options.map?.entryPoint !== undefined) {
-        if (occupancyStale) rebuild(session);
+        if (occupancyStale) rebuild(session, character);
         // No tile de entrada, ou no livre mais próximo dele A PÉ (FUN-120).
         //
         // A praça é COMPARTILHADA (FUN-71): o segundo a chegar encontra o primeiro parado

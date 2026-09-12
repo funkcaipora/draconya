@@ -1754,6 +1754,11 @@ export class SessionHost {
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
+    // ANTES de os visualizadores dele entrarem em `successor.viewers`, de propósito: o que o
+    // anúncio manda é o `creature-appear` de quem chega para quem JÁ estava na praça. O que
+    // ele mandaria ao recém-chegado — os vizinhos que ele passa a ver — ninguém recebe, e
+    // não faz falta: o `#sendState` logo abaixo leva a cena inteira (`instance-enter` e
+    // `session-state`, que substitui tudo), e um `appear` antes dela seria apagado pela troca.
     this.#announceArrival(successor, characterId);
 
     for (const viewer of following) {
