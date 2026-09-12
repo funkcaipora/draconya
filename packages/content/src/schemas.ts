@@ -69,6 +69,12 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de munição → appearanceId` (ADR 0026, decisão 3). O objeto da flecha no pacote: é o
+   * ícone que o seletor mostra no slot do escudo e a origem do projétil. Conferido dos dois
+   * lados, como item — munição sem arte não tem como ser escolhida na tela.
+   */
+  ammunition: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * `id de monstro → aparência do cadáver` (FUN-123). O `sim` diz que um monstro morreu; é
    * aqui que o rato morto vira o objeto 5964 no chão — arte, logo tabela (invariante 6).
    * Monstro sem linha não deixa cadáver: válido, só não desenha.
@@ -211,7 +217,7 @@ export const lootTableSchema = z.object({
  * personagem não tem é conteúdo quebrado, e o boot é o lugar de descobrir isso.
  */
 export const ITEM_SLOTS = [
-  'head', 'neck', 'chest', 'legs', 'feet', 'hand', 'shield', 'finger', 'ammo',
+  'head', 'neck', 'chest', 'legs', 'feet', 'hand', 'shield', 'finger', 'ammo', 'back',
 ] as const;
 export type ItemSlot = (typeof ITEM_SLOTS)[number];
 
@@ -238,8 +244,18 @@ export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 export const itemSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
-  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'ammunition', 'other']),
+  /**
+   * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
+   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). Munição
+   * NÃO é item (decisão 3): é `ammunitionSchema`, uma seleção que debita gold por tiro.
+   */
+  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other']),
   slot: z.enum(ITEM_SLOTS).optional(),
+  /**
+   * Ocupa as duas mãos (o bow): equipar recusa escudo, e vice-versa — a regra é do `sim`
+   * (issue #152); aqui só a forma. Fora de arma é conteúdo quebrado, e o boot recusa.
+   */
+  twoHanded: z.boolean().default(false),
   /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
   weight: z.number().nonnegative(),
   /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
@@ -270,6 +286,36 @@ export const itemSchema = z.strictObject({
 
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type ItemDefinition = z.infer<typeof itemSchema>;
+
+/** As famílias de munição do Tibia: flecha para bow, virote para crossbow. */
+export const AMMO_FAMILIES = ['arrow', 'bolt'] as const;
+export type AmmoFamily = (typeof AMMO_FAMILIES)[number];
+
+/**
+ * Munição (ADR 0026, decisão 3 — o modelo do Huntera). NÃO é item: não tem peso, pilha nem
+ * instância. É uma SELEÇÃO por família, mostrada no slot do escudo com o bow na mão; a grátis
+ * (`price: 0`) é o padrão da família, e cada tiro das outras debita `price` do gold do
+ * personagem, pelo caminho do supply (§20.1). Quem atira é o `sim` (issue #152); aqui ficam
+ * os números. Estrito, como o item, e pela mesma razão: `appearanceId` escrito aqui por hábito
+ * iria para lugar nenhum em silêncio.
+ */
+export const ammunitionSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  family: z.enum(AMMO_FAMILIES),
+  /** O dano do tiro é este `attack` pela skill de distância — o bow não tem attack próprio. */
+  attack: z.number().int().nonnegative(),
+  /** Gold debitado por tiro. Zero é a munição grátis, e toda família precisa de uma. */
+  price: z.number().int().nonnegative(),
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+  }).default(() => ({})),
+  _open: z.string().optional(),
+});
+
+export type AmmunitionDefinition = z.infer<typeof ammunitionSchema>;
+/** A munição pronta para uso, com a aparência (o projétil e o ícone) resolvida no boot. */
+export type Ammunition = AmmunitionDefinition & { readonly appearanceId: number };
 
 /**
  * O item pronto para uso, com a aparência já resolvida por `buildContent`.

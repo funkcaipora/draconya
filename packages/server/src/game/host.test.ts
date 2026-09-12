@@ -1854,7 +1854,7 @@ describe('equipar pelo socket (FUN-82)', () => {
   const catalogo = new Map([
     ['sword', {
       id: 'sword', name: 'Sword', appearanceId: 1, kind: 'weapon' as const, slot: 'hand' as const,
-      weight: 10, stackable: false, attack: 20, armor: 0,
+      weight: 10, stackable: false, twoHanded: false, attack: 20, armor: 0,
       requires: { level: 20 },
     }],
   ]);

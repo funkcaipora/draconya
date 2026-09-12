@@ -54,7 +54,7 @@ describe('uiImageUrl (FUN-108)', () => {
 });
 
 describe('SLOT_IMAGES (FUN-108)', () => {
-  it('é ESTA tabela, os nove pares, e nenhum outro', () => {
+  it('é ESTA tabela, os dez pares, e nenhum outro', () => {
     // A tabela inteira, literal, porque cada linha é uma decisão conferida contra o pacote:
     // `hand` é a MÃO ESQUERDA (a arma), `shield` a direita, `ammo` é o cinto (`hip`), e
     // `chest` é `torso`. Um `toBe` por linha deixaria passar a linha trocada que ninguém
@@ -70,6 +70,8 @@ describe('SLOT_IMAGES (FUN-108)', () => {
       shield: 'inventory-right-hand.png',
       finger: 'inventory-finger.png',
       ammo: 'inventory-hip.png',
+      // As costas (ADR 0026, #151): o PNG existe no pacote com este nome exato.
+      back: 'inventory-back.png',
     });
   });
 });
@@ -103,6 +105,7 @@ describe('UI_SKIN (FUN-108)', () => {
       { variable: '--ui-slot-shield', image: 'inventory-right-hand.png' },
       { variable: '--ui-slot-finger', image: 'inventory-finger.png' },
       { variable: '--ui-slot-ammo', image: 'inventory-hip.png' },
+      { variable: '--ui-slot-back', image: 'inventory-back.png' },
     ]);
   });
 

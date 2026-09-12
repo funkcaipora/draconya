@@ -1,0 +1,8 @@
+{
+  "id": "leather-boots",
+  "name": "Leather Boots",
+  "kind": "armor",
+  "slot": "feet",
+  "weight": 9,
+  "armor": 1
+}

@@ -24,7 +24,7 @@ const UI_IMAGES_PATH = 'library/ui/images';
  * sem ícone que ninguém nota.
  *
  * `hand` é a arma (mão esquerda no pacote) e `shield` a mão direita; `ammo` é o cinto
- * (`hip`), que no pacote é onde a munição e a bolsa ficam.
+ * (`hip`), que no pacote é onde a munição e a bolsa ficam; `back` é a mochila (ADR 0026).
  */
 export const SLOT_IMAGES: Readonly<Record<ItemSlot, string>> = {
   head: 'inventory-head.png',
@@ -36,6 +36,7 @@ export const SLOT_IMAGES: Readonly<Record<ItemSlot, string>> = {
   shield: 'inventory-right-hand.png',
   finger: 'inventory-finger.png',
   ammo: 'inventory-hip.png',
+  back: 'inventory-back.png',
 };
 
 /** Uma variável CSS e a imagem do pacote que a preenche. */

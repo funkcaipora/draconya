@@ -1,0 +1,9 @@
+{
+  "id": "sniper-arrow",
+  "name": "Sniper Arrow",
+  "family": "arrow",
+  "attack": 28,
+  "price": 5,
+  "requires": { "level": 20 },
+  "_open": "Preço por tiro provisório: o preço de compra no NPC do Tibia (TibiaWiki) — conferir; attack 28 e level 20 são do TibiaWiki."
+}

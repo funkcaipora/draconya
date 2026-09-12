@@ -2,6 +2,6 @@
   "id": "sorcerer",
   "name": "Sorcerer",
   "healthPerLevel": 5,
-  "manaPerLevel": 25,
+  "manaPerLevel": 30,
   "capacityPerLevel": 10
 }

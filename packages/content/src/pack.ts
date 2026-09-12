@@ -55,6 +55,9 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.items)) {
     check(`items.${id}`, 'object', object);
   }
+  for (const [id, object] of Object.entries(appearances.ammunition)) {
+    check(`ammunition.${id}`, 'object', object);
+  }
   for (const [id, object] of Object.entries(appearances.corpses)) {
     check(`corpses.${id}`, 'object', object);
   }

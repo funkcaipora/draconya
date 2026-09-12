@@ -3,7 +3,6 @@
   "name": "Leather Armor",
   "kind": "armor",
   "slot": "chest",
-  "weight": 90,
-  "armor": 4,
-  "_open": "Atributos de referência. Sem requisito de level: é a peça que o personagem novo veste."
+  "weight": 60,
+  "armor": 4
 }

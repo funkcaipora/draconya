@@ -6,7 +6,7 @@
 
 ## Comportamento
 
-Poções, runas e munições comuns não existem como itens físicos carregados durante a hunt: usar um supply desconta gold diretamente, sem gerenciar pilha nem reposição. Quando um monstro "dropa" um item desse tipo, o valor correspondente entra na economia como gold, não como pilha física de consumível. Os preços de poções e runas usam o Tibia como referência inicial de balanceamento; o preço de arrows e demais munições ainda não foi definido. Todos os valores devem ser configuráveis.
+Poções, runas e munições comuns não existem como itens físicos carregados durante a hunt: usar um supply desconta gold diretamente, sem gerenciar pilha nem reposição. Quando um monstro "dropa" um item desse tipo, o valor correspondente entra na economia como gold, não como pilha física de consumível. Os preços de poções e runas usam o Tibia como referência inicial de balanceamento. A munição tem catálogo próprio desde o ADR 0026 (decisão 3, #151): é uma seleção por família, a `arrow` é grátis e cada tiro das outras debita o preço dela — o modelo do Huntera, ver `items.md`. Todos os valores devem ser configuráveis.
 
 Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar os supplies necessários e pode morrer (ver `bot.md`, §13.9).
 
@@ -22,7 +22,7 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
   (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — e a lista precisa ser
   vazia até existir catálogo de itens; o carregador recusa o resto.
-- Supplies comuns (poções, runas, munições) não existem fisicamente; uso debita gold diretamente.
+- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente: é uma seleção (`packages/content/data/ammunition/`), e cada tiro da munição paga debita o preço dela.
 - Drop de supply por monstro credita gold, não gera pilha física.
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
 - Com a regra ativa: personagem sai da hunt quando o gold acaba.
@@ -39,11 +39,11 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
 | Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json` |
 | Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json` |
-| Preço de arrows e demais munições | `[ABERTO]` | caminho previsto: `packages/content/data/supplies` |
+| Preço por tiro da munição | arrow 0 (grátis), sniper arrow 5 `[ABERTO — valor provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — valor provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/*.json`, `price` |
 
 ## Em aberto
 
-- Preço de arrows e demais munições, ainda não definido (§20.2, §43.5).
+- ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a arrow é grátis e as outras debitam por tiro (ADR 0026, decisão 3); os valores 5 e 7 são provisórios, em `packages/content/data/ammunition/`.
 
 ## Supply abstrato, na prática (FUN-77)
 

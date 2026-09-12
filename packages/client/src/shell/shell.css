@@ -319,11 +319,12 @@ body {
   list-style: none; margin: 0 auto; padding: 0;
   display: grid; grid-template-columns: repeat(3, 34px); gap: 3px;
   grid-template-areas:
-    "neck head ."
+    "neck head back"
     "hand chest shield"
     "finger legs ammo"
     ". feet .";
 }
+.slot-back { grid-area: back; }
 .slot-head { grid-area: head; }
 .slot-neck { grid-area: neck; }
 .slot-chest { grid-area: chest; }

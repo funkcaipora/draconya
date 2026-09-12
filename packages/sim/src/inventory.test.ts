@@ -16,7 +16,8 @@ const catalog = new Map<string, Item>([
   ['sword', define({ id: 'sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24 })],
   ['armor', define({ id: 'armor', kind: 'armor', slot: 'chest', weight: 90, armor: 4 })],
   ['helmet', define({ id: 'helmet', kind: 'armor', slot: 'head', weight: 20, armor: 2 })],
-  ['arrow', define({ id: 'arrow', kind: 'ammunition', slot: 'ammo', weight: 1, stackable: true })],
+  // Empilhável: o queijo — munição deixou de ser item (ADR 0026), e o schema já não a aceita.
+  ['arrow', define({ id: 'arrow', kind: 'other', weight: 1, stackable: true })],
   ['rock', define({ id: 'rock', kind: 'other', weight: 5 })],
   ['great-sword', define({
     id: 'great-sword', kind: 'weapon', slot: 'hand', weight: 60, attack: 40,
