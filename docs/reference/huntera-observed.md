@@ -385,3 +385,83 @@ na hunt), `staminaDraining`, `staminaRefillCost/GainMs/RefillsLeft`, e um
 - **Entrar na hunt é andar até um portal**, não um teletransporte do menu — a caminhada
   automática pela cidade (A*, §11 da referência OpenTibia) entra na conta.
 - **Campo de visão de 16 tiles**, contra a nossa célula de 10 com dois limiares (FUN-33).
+
+# Parte III — 2026-09-12: o inventário, a munição e o gold, lidos da mesma captura
+
+As mensagens abaixo estavam na captura da Parte II (`huntera-walk-frames.json` e
+`huntera-hunt-frames.json`, o gancho do §12) e não tinham sido lidas. Elas respondem "como o
+Huntera organiza bolsa e mochila", que o ADR 0026 precisava.
+
+## 18. `player-inventory`: dez slots, uma mochila de 20 e uma bolsa de 10
+
+Sai no attach, inteiro:
+
+```json
+{ "type": "player-inventory",
+  "slots": [ { "uid": 1367652, "itemId": 3607, "count": 72, "cumulative": true, "name": "cheese",
+               "attack": 0, "defense": 0, "armor": 0, "weight": 400 }, null, null, … ],   // 20
+  "satchel": [ null, null, null, null, null, null, null, null, null, null ],             // 10
+  "equipment": { "helmet": null, "amulet": null, "backpack": { "uid": 1367653, "itemId": 2854,
+                 "count": 1, "name": "backpack", "weight": 1800, "slot": "backpack",
+                 "imbuementSlots": 1, "imbuable": [ { "category": "capacity", "maxTier": 3 } ] },
+                 "armor": null, "weapon": { "uid": 1367654, "itemId": 3074, "count": 1,
+                 "name": "wand of vortex", "attack": 0, "range": 3, "weight": 1900, "slot": "weapon" },
+                 "shield": null, "ring": null, "legs": null, "boots": null, "ammo": null },
+  "gold": 602 }
+```
+
+- **Dez chaves de equipamento**, as do Tibia: `helmet, amulet, backpack, armor, weapon, shield,
+  ring, legs, boots, ammo`.
+- **`slots` é a mochila**, um vetor posicional de 20 (`slotCount: 20` no delta); **`satchel` é
+  uma bolsa fixa de 10** (`satchelCount: 10`), que não aparece em nenhum slot de equipamento — é
+  do personagem, não é item.
+- **O item leva `uid` (a instância), `itemId` (o id do cliente 13.x: queijo 3607, mochila 2854,
+  wand of vortex 3074, gold coin 3031), `count` e `cumulative`** (empilha) — e os atributos base
+  repetidos por item (`attack, defense, armor, weight`, `range` na arma), que nós mandamos pelo
+  catálogo uma vez.
+- **O gold fica fora dos containers** (`gold: 602`): é saldo, não item.
+- O personagem level 7, `vocation: null`, segurava a wand of vortex com `weaponAttack: 0` no
+  `player-stats`: **arma de vocação não bate sem vocação**, mas pode ser carregada.
+
+## 19. `inventory-delta`: o loot cai na mochila por índice
+
+A cada abate com loot, um delta por container e índice — o queijo indo de 71 para 72 no lugar 0:
+
+```json
+{ "type": "inventory-delta",
+  "changes": [ { "container": "backpack", "index": 0,
+                 "item": { "uid": 1388145, "itemId": 3607, "count": 72, "cumulative": true, … } } ],
+  "slotCount": 20, "satchelCount": 10, "gold": 594 }
+```
+
+O gold do loot vai direto no campo `gold` do mesmo delta (`loot-drop { item: gold coin, count:
+2 }` chega ao lado, só para a animação). Não há mensagem de "bolsa cheia" na captura; com 72
+queijos numa pilha só, ela nunca encheu.
+
+## 20. `ammo-selection`: munição é uma escolha, não uma pilha
+
+```json
+{ "type": "ammo-selection", "arrow": null, "bolt": null }
+```
+
+Uma seleção por **família** — `arrow` para bow, `bolt` para crossbow —, e não um item no slot
+`ammo` (que existe na `equipment` e ficou `null` o tempo todo). Sem paladino na captura, os
+dois ficaram nulos; o que se conclui é a forma: a munição escolhida é um id por família, e o
+consumo dela não passa pelo inventário. É a decisão 3 do ADR 0026.
+
+## 21. O que mais estava lá, sem ser lido a fundo
+
+`hunt-sell-rules { onCapacityFull: true, everyHalfHour: false }` e `quick-sell-update { itemIds:
+[3607] }` — a autovenda deles é por regra (vender ao lotar a capacidade, ou a cada meia hora) e
+por lista de itens; `auto-loot-update { disabledItemIds: [] }` — o auto-loot é liga/desliga por
+item; `action-bar-update` com 20 slots e uma poção condicionada a `health <= 70%`. Ficam como
+referência para a autovenda (§22) e para a action bar, quando entrarem.
+
+## 22. O que isto muda para o Draconya
+
+- **Mochila e bolsa são dois vetores posicionais**, não uma lista plana — o cliente desenha
+  lugar vazio, e mover item é trocar índices. O Draconya adota os dois com 20 e 10 lugares
+  iniciais, e cresce por linhas enquanto houver capacidade (ADR 0026, decisão 6).
+- **A munição é seleção por família**, com a grátis por padrão e as pagas debitando gold por
+  tiro (ADR 0026, decisão 3).
+- **O gold não ocupa lugar**, como já era aqui.

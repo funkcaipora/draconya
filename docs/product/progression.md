@@ -122,14 +122,12 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
-| HP por level — Cavaleiro | +20 | caminho previsto: `packages/content/vocations` |
-| Mana por level — Cavaleiro | +5 | caminho previsto: `packages/content/vocations` |
-| HP por level — Arqueiro | +15 | caminho previsto: `packages/content/vocations` |
-| Mana por level — Arqueiro | +10 | caminho previsto: `packages/content/vocations` |
-| HP por level — Feiticeiro/Mago | +5 | caminho previsto: `packages/content/vocations` |
-| Mana por level — Feiticeiro/Mago | +25 | caminho previsto: `packages/content/vocations` |
-| HP por level — Druida | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
-| Mana por level — Druida | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
+| HP / mana / capacidade por level — Knight | +15 / +5 / +25 (o Tibia; ADR 0026, decisão 5) | `packages/content/data/vocations/knight.json` |
+| HP / mana / capacidade por level — Paladin | +10 / +15 / +20 (o Tibia; ADR 0026) | `packages/content/data/vocations/paladin.json` |
+| HP / mana / capacidade por level — Sorcerer | +5 / +30 / +10 (o Tibia; ADR 0026) | `packages/content/data/vocations/sorcerer.json` |
+| HP / mana / capacidade por level — Druid | +5 / +30 / +10 (o Tibia; ADR 0026) | `packages/content/data/vocations/druid.json` |
+| Arma inicial de cada vocação | steel axe / bow / wand of vortex / snakebite rod (ADR 0026, decisão 3) | `packages/content/data/vocations/*.json`, `startingWeaponItemId` (a criar) |
+| Skill de distância — início, curva, dano por nível | como a corpo a corpo `[ABERTO — valores provisórios]` (ADR 0026, decisão 4) | `packages/content/data/skills/distance.json` (a criar) |
 | HP inicial (level 1) | 150 `[ABERTO — valor provisório: 150]` | `packages/content/data/progression/baseline.json` |
 | Mana inicial (level 1) | 20 `[ABERTO — valor provisório: 20, uma cura ou um Golpe Arcano no level 1 (FUN-114)]` | `packages/content/data/progression/baseline.json` |
 | Capacidade inicial | 400 `[ABERTO — valor provisório: 400]` | `packages/content/data/progression/baseline.json` |
@@ -155,7 +153,8 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
 
 ## Em aberto
 
-- HP/Mana por level do Druida ainda não definidos (§9.3).
+- ~~[ABERTO] HP/Mana por level do Druida (§9.3)~~ → **Resolvido:** +5 / +30 / +10, o do Tibia (ADR 0026, decisão 5), em `packages/content/data/vocations/druid.json`.
+- Skills separadas por tipo de arma (sword/axe/club), como no Tibia: continua uma skill corpo a corpo só, mais `distance` (ADR 0026, decisão 4).
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Os valores em
   `progression/baseline.json` são provisórios e estão marcados como tal no próprio arquivo.
@@ -182,7 +181,20 @@ não avisa.
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+- **§9.3 — ganho por level por vocação.** O PRD fixava Cavaleiro +20 HP/+5 mana, Arqueiro
+  +15/+10, Feiticeiro +5/+25 e deixava o Druida em aberto. Decisão do usuário em 2026-09-12
+  (ADR 0026, decisão 5): copiar o Tibia — Knight 15/5/25, Paladin 10/15/20, Sorcerer e Druid
+  5/30/10 (HP / mana / capacidade), sem vocação 5/5/10 —, "qualquer coisa eu edito depois". Os
+  números moram em `packages/content/data/vocations/*.json` e entram pela issue #151.
+
+## Como a vocação é escolhida (ADR 0026, decisões 1 e 3)
+
+Pelo jogador, no level 8 ou depois, **uma vez**, por uma intenção `choose-vocation` do cliente —
+na Cidade ou numa hunt, sem NPC, altar ou lugar. Ao escolher, a arma da vocação vai para a mão
+e a machete do kit de nascimento volta para a mochila; a vocação é escrita no banco uma vez, pelo
+extrato, e volta pelo ticket. Quem passa do 8 sem escolher continua crescendo pela tabela base
+(ver abaixo). Não há troca de vocação: passiva tem respec (§9.5), vocação não. Implementação na
+issue #154.
 
 ## Skills sobem pelo USO (FUN-75)
 

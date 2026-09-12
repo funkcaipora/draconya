@@ -185,6 +185,16 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 
 Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
 
+## Decidido (ADR 0026): painel fixo, interruptor por regra, runa
+
+- **A tela vira um painel fixo na coluna da esquerda**, abaixo da lista de hunts, no estilo do
+  vBot do OTClientV8 (MIT): uma linha compacta por regra com um interruptor liga/desliga, a
+  edição fina (condição, operador, valor, ação) por cima; minimizável pela barra do topo, nunca
+  removível. A regra ganha `enabled` (default `true`) e o compilador pula a desligada. É o PRD
+  §5.3 (bot à esquerda). Issue #162.
+- **A categoria `rune` ganha o que lançar**: a Avalanche entra como supply de ataque em área
+  (decisão 8), com requisito de level e magic level e preço por uso. Issue #165.
+
 ## Quem executa: magia e supply (FUN-74, FUN-77)
 
 O atuador embutido é a **própria hunt**, e não uma classe à parte. Tudo o que ele precisa já está

@@ -201,7 +201,23 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+- **§21.1 — equipamento só por drop.** O kit de nascimento (machete, leather helmet/armor/
+  legs/boots, mochila) e a arma de vocação no level 8 são **dados** ao personagem — `origin:
+  'starting-kit'` e `'vocation-choice'` em `item_instance` —, não dropados (ADR 0026, decisões
+  2 e 3). São as duas únicas exceções; tudo o mais continua vindo de monstro.
+
+## Decidido (ADR 0026): munição, containers e runa
+
+- **Munição é seleção, não item** (decisão 3, o Huntera): o bow mostra no slot do escudo a
+  munição escolhida da família `arrow`; a `arrow` é grátis e cada tiro das outras debita o
+  preço dela do gold, pelo caminho do supply (§20.1). Sem gold, o tiro sai com a grátis. A
+  seleção viaja no extrato e volta pelo ticket. Issues #151, #152, #161.
+- **Mochila e bolsa elásticas** (decisão 6): a mochila é o item no slot `back`, a bolsa é fixa
+  do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
+  peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o
+  que não cabe no peso. Sem bolsa dentro de mochila. Issues #160, #161.
+- **Runa é supply de ataque** (decisão 8): a Avalanche é a primeira, com `requires { level,
+  magicLevel }` e preço por uso; a categoria `rune` do bot a lança. Issue #165.
 
 ## A tela (FUN-90)
 

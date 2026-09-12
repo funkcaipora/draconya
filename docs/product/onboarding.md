@@ -1,6 +1,6 @@
 # Onboarding e tutorial
 
-**Status:** parcial — criação inicial de personagem implementada; tutorial e escolha de vocação pendentes
+**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação está decidida (ADR 0026) e entra pela issue #154; o kit de nascimento pela #153; tutorial pendente
 **PRD:** §7.4, §8
 **Épico:** E14 (tutorial guiado do level 1 ao 8 com escolha de vocação). E0 cobre o que precede o tutorial — CRUD e criação inicial de personagem.
 
@@ -33,6 +33,16 @@ No level 8, o jogador recebe uma explicação curta de cada uma das quatro voca�
 ## Em aberto
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de cada preset de hotkeys por vocação/estágio não está detalhado no PRD, mas também não está marcado como decisão pendente — é tratado como trabalho de conteúdo a ser produzido, não como lacuna de design.
+
+## Decidido (ADR 0026)
+
+- **Como se escolhe:** o jogo oferece as quatro vocações quando `level >= 8` e a vocação ainda
+  é nula — um diálogo com nome, papel, os três ganhos por level e a arma inicial de cada uma —,
+  em qualquer sessão (Cidade ou hunt), sem NPC nem lugar; um clique manda `choose-vocation`, e a
+  escolha é uma só, sem troca. O texto curto de cada vocação é o deste documento.
+- **Com o que se nasce:** machete na mão, leather helmet/armor/legs/boots no corpo e a mochila
+  nas costas — dados na criação do personagem, não dropados (a exceção ao §21.1 registrada em
+  `items.md`). No level 8 a arma da vocação troca de lugar com a machete.
 
 ## Divergências do PRD
 
