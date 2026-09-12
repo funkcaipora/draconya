@@ -203,3 +203,154 @@ loot. O começo do jogo deles é deliberadamente rápido.
 Cada linha da §3 e da §6 que diverge é candidata a issue de balanceamento — em especial a
 lista de políticas de alvo (§13.2, hoje vazia) e a regeneração fora de hunt, que é regra e não
 número.
+
+---
+
+# Parte II — 2026-09-11: Thais, o bueiro e o protocolo, lidos do socket
+
+**Data da observação:** 2026-09-11
+**Fonte:** a mesma conta de teste, personagem `Liesh Onshaw`, agora level 7, no navegador
+embutido do Claude Code
+**Como foi lido:** desta vez não só a tela e o HTTP — o **WebSocket** foi capturado e
+decodificado, e o bundle do cliente foi lido para nomear as mensagens. Continua valendo a
+regra da Parte I: isto é especificação de domínio (ADR 0019), não alvo a copiar. E continua
+sem dizer nada sobre o servidor deles além do que o protocolo mostra.
+
+## 12. Como o socket foi capturado — para repetir sem redescobrir
+
+O jogo fala num único WebSocket (`wss://w1.huntera.com.br/ws/<n>/`) que **não é recriado**
+ao entrar ou sair de caçada: o mesmo socket atravessa Cidade e hunt. Por isso um gancho no
+construtor de `WebSocket` só pega o que nasce depois dele — e a página recarrega no login,
+levando o gancho junto. O que funcionou foi interceptar **`WebSocket.prototype.send`**: a
+primeira chamada (o `ping`, a cada 5 s) entrega a instância viva, e aí basta
+`addEventListener('message')` nela. Vale para o socket que já existia antes do gancho.
+
+Cada frame é binário: `u32 seed` (LE) + o resto mascarado por um xorshift semeado por
+`seed ^ 1213550164` (uma palavra de máscara a cada 4 bytes), e dentro `u8 flags` + corpo.
+`flags & 1` é corpo comprimido com **deflate cru** (fflate, nível 3, acima de 8 KiB);
+`flags == 2` é **lote**: sequência de `u32 len` + frame completo (com seed e flags próprios).
+O corpo é JSON `[opcode, props]`, e a tabela `opcode → nome` está no bundle
+(`chunk-BPR2FEWZ.js`, objetos `ut` para servidor→cliente e `je` para cliente→servidor). É o
+mesmo desenho do nosso `protocol/` — opcode numérico, compressão acima de um limiar, lote —
+com uma máscara por cima que não é segurança, é ofuscação.
+
+## 13. A Cidade é Thais de verdade, vinda de um OTBM
+
+Ao entrar, o servidor manda **uma vez por conexão** `scenario-terrain` e depois
+`instance-enter`:
+
+```
+scenario-terrain { terrainId: "otbm:thais.otbm:769c4551e28c", tiles: [...] }
+instance-enter   { instanceId: "city-global", scenarioId: "main-city",
+                   ambience: "surface", terrainId: "otbm:thais.otbm:769c4551e28c",
+                   groundItems: [] }
+```
+
+O `terrainId` diz de onde o mapa veio: **um arquivo `thais.otbm`** — o formato do Remere's
+Map Editor —, identificado pelo hash. E os tiles confirmam que é o mapa real: com o templo
+deles em `(1071, 1067, 7)` e o templo de Thais no mapa comunitário do Canary em
+`(32369, 32241, 7)`, o deslocamento é `(+31298, +31174)`, e sob ele os 40.485 tiles existem
+no recorte `x ∈ [32275, 32458]`, `y ∈ [32153, 32291]` do `otservbr.otbm` (release v3.6.1 do
+Canary): **83% dos chãos e 97% das pilhas de itens são idênticos tile a tile**; o resto são
+retoques do editor deles ou outra versão do mesmo mapa — os totais por andar batem (z0 27,
+z1 40, z2 78, z3 214 nos dois).
+
+O terreno inteiro:
+
+| | |
+|---|---|
+| tiles | **40.485**, numa caixa de 184 × 139 |
+| andares | z0 (27) · z1 (40) · z2 (78) · z3 (214) · z4 (1.756) · z5 (6.447) · z6 (8.361) · **z7 (23.562)** |
+| bloqueados / com itens | 18.977 / 19.173 (pilha de até 8 itens) |
+| ids de aparência distintos | 1.259 |
+
+Cada tile é `{ position: {x, y, z}, ground: { uid, appearanceId }, items: [{ uid,
+appearanceId }], blocked }` — **o bloqueio já vem decidido pelo servidor**, o cliente não
+deriva nada de flag. O mesmo formato serve a tela de personagens (`/assets/gate/
+temple-terrain.json`, 1.189 tiles, com uma lista `standable` de tiles em que a câmera pode
+parar).
+
+**Andares, e o que se vê de cada um.** O terreno traz z0–z7 e o cliente desenha só do andar
+do jogador **para baixo** (`t.z < eye.z` é oculto): em z7 não há telhado — o interior das
+casas aparece —, e em z6 (o segundo andar do depot) a rua de z7 continua visível por baixo,
+escurecida por um véu por andar. Elevação é `height.elevation` acumulada com teto de 24 px;
+`top` desenha acima das criaturas; `clip` é borda de chão; `shift` desloca o sprite. O
+cliente (Phaser, não Pixi) monta o terreno em pedaços de 24 × 24 tiles e só constrói os que a
+janela toca.
+
+## 14. Andar por Thais
+
+Setas **e** WASD (os dois estão no bundle, `walkKeys`). O cliente manda **um** `walk
+{ direction }` ao apertar e **um** `walk-stop` ao soltar; quem repete o passo enquanto a tecla
+está presa é o servidor. Também existe `walk-to { target }` para o clique.
+
+Os passos voltam como `creature-move { id, from, to, durationMs }`, e na Cidade a duração é
+**150 ms por tile, para todo mundo** — Liesh tem `speed: 292` e um level 328 tem 850, e os dois
+andam a 150 ms na praça. Não é a fórmula do Tibia; é uma escolha de produto: a Cidade não é
+simulação, e andar nela é navegação.
+
+**Trocar de andar é um `creature-move` só**, com `z` diferente e, como no Tibia, o tile de
+chegada deslocado: subir pela escada do depot foi `(1051,1052,7) → (1052,1051,6)`; descer,
+`(1052,1051,6) → (1052,1053,7)`. Nenhuma outra mensagem acompanha — o terreno já tinha os
+dois andares.
+
+**Campo de visão de 16 tiles**: todo `creature-appear` durante a caminhada chegou a exatamente
+16 de distância de Chebyshev, e o `creature-disappear` correspondente ao sair. `creature-turn`
+muda só a direção; `creature-resync` reenvia a lista.
+
+## 15. A caçada, do catálogo à saída
+
+`hunt-catalog` traz as 58 hunts, e cada uma é `{ id, name, description, monsters: [{ name,
+outfitId, bestiaryId, elements }], tiers: [{ name, monsterCount, monsterIndexes, loot }],
+loot: [{ itemId, name, rarity, … }], bests }`. **"Tamanho do pull" é `monsterCount`**:
+Cautious 2, Bold 5, Reckless 8 em todas as hunts de um monstro só; Orc Fortress tem um quarto,
+Suicidal. Rat Cellars: `id: "rat-hunt"`, loot gold coin (3031) e cheese (3607), recorde solo
+2.066 XP/h e 1.293 gp/h.
+
+A entrada:
+
+```
+→ start-hunt { huntId: "rat-hunt", tier: 0 }
+← hunt-pending { hunt: { huntId, tier } }        o personagem ANDA até o portal na cidade
+← hunt-pending { hunt: null }                     ~4,6 s depois
+← instance-enter { instanceId: "rat-hunt-681", scenarioId: "rat-hunt",
+                   ambience: "cavern", terrainId: "otbm:rook-rats.otbm:e99a63cac841" }
+← hunt-analyzer-session { startedAt, durationMs: 0 }
+→ client-ready
+```
+
+Dois fatos que o nome do arquivo entrega. **A Rat Cellars é Rookgaard**, não o bueiro de
+Thais: `rook-rats.otbm`, 9.396 tiles numa caixa de 118 × 80, um andar só (z7 local, o bueiro
+de ratos de Rookgaard é z8 no mapa real), 2.041 tiles livres. E cada hunt é **um OTBM
+próprio, com coordenadas locais** — o mesmo x ≈ 1050 aparece em Thais, na tela de
+personagens e no bueiro, porque cada recorte foi salvo do editor como mapa independente.
+
+Dentro dela, o passo segue a fórmula do Tibia: Liesh a `speed 292` andou a **450, 550 e 700
+ms** conforme o chão (velocidade de chão 130, 160 e 200: `1000 × chão / speed`, arredondado
+para cima em múltiplos de 50), e a **diagonal custou 3×** (2.100 ms). Os ratos (`speed 172`)
+andaram a 700–1.200 ms. Cada abate deixa **cadáver no chão** (`ground-item-appear` com
+aparência 5964, que some sozinho), o loot vai à caixa da sessão (`loot-drop`, `loot-update`),
+o golpe é `creature-hit { attackerId, targetId, value, effect }` e o projétil
+`projectile-move { kind, from, to, durationMs }` (180 ms para 3 tiles). `experience-gain`
+por abate; `bestiary-progress { kills, stages, killsRequired }`.
+
+Sair: `leave-hunt` → `hunt-leave-pending { remainingMs: 5000 }` → cinco segundos depois,
+`instance-enter` de volta a `city-global`, no mesmo socket.
+
+`player-stats` numa hunt, level 7 sem arma (`attackSkill: "fist"`, skill 10): `attackMin 9,
+attackMax 19`; `healthRegen 10, manaRegen 5` — zero fora da hunt, como a Parte I já dizia;
+`capacity 156766` (1.567,66 oz); `staminaMs 43200000` (12 h); `speed 292`;
+`levelBonusPercent 192`; e um **`huntSessionRemainingMs` de ~4 h** — a sessão de caçada tem
+teto, que a tela não mostra.
+
+## 16. O que isto muda para o Draconya
+
+- **Cidade e hunt vêm do mesmo mapa comunitário que já temos como referência**, recortados
+  com o editor. O caminho é um importador de OTBM, não um editor de mapa nosso.
+- **A pilha de itens por tile é o produto**, não chão + parede. Sem ela, Thais não é Thais.
+- **Andares existem desde o primeiro dia**: o depot tem escada, e a troca é um passo com `z`.
+- **A Cidade anda rápido e igual para todos**; a hunt anda pela fórmula do Tibia (chão ×
+  1000 / speed, diagonal × 3). São dois regimes, e os dois são conteúdo.
+- **Entrar na hunt é andar até um portal**, não um teletransporte do menu — a caminhada
+  automática pela cidade (A*, §11 da referência OpenTibia) entra na conta.
+- **Campo de visão de 16 tiles**, contra a nossa célula de 10 com dois limiares (FUN-33).
