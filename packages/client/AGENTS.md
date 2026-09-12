@@ -303,6 +303,16 @@ pnpm tsx scripts/make-sheet-fixture.ts
   ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao
   receber a cena, `AssetPack.warmObjects` aquece as folhas dos ids da janela inicial, como
   `warmOutfit` faz com os monstros.
+- **Setas e WASD andam, e a repetição da tecla presa é do CLIENTE** (`shell/walk-keys.ts`,
+  puro; `shell/useWalkKeys.ts`, a casca; FUN-122). Só as quatro cardeais, a última tecla
+  pressionada vence, nunca diagonal — o que o Huntera faz. O hook ouve a JANELA (o canvas
+  não tem foco), ignora `input`/`textarea`/`select`/`contentEditable` e modificadores, e
+  solta tudo no `blur` — o `keyup` de um Alt+Tab nunca chega. Um `walk` sai no `keydown`;
+  o próximo sai quando o passo PRÓPRIO acabar (o `creature-move` lido do `world` no timer —
+  ADR 0007, ninguém avisa, quem quer saber olha) ou 150 ms depois se nenhum chegou. É um
+  `setTimeout` por passo, nunca `setInterval`: o intervalo é o do último passo que o servidor
+  deu, e mandar antes é ser recusado pela cadência dele. Cada `walk` é a intenção de UM tile
+  (invariante 4); o servidor decide.
 - **A parede é montada pela VIZINHANÇA, como o Tibia monta muro** (`world/walls.ts`, FUN-105).
   O tilemap só diz "bloqueia"; qual das quatro peças vai em cada `#` — vertical, horizontal,
   canto ou poste — é `wallPiece` quem decide, olhando SÓ os vizinhos de NORTE e OESTE: parede

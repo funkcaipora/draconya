@@ -471,6 +471,14 @@ export class SessionHost {
    * recolhida por isto, e é o ADR 0001 em uma linha.
    */
   readonly #restingSince = new Map<string, number | null>();
+  /**
+   * Até quando cada personagem está DANDO um passo, no relógio deste processo (FUN-122). O
+   * teclado do cliente repete o `walk` no ritmo do passo, mas o ritmo é do servidor: um `walk`
+   * que chega antes de o passo anterior acabar é recusado em silêncio — senão um cliente que
+   * mandasse mil por segundo atravessaria a Cidade em meio segundo, porque a Cidade não tem
+   * relógio (`hz` 0) e o `move` do `sim` não sabe que horas são.
+   */
+  readonly #walkingUntil = new Map<string, number>();
 
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
@@ -698,6 +706,7 @@ export class SessionHost {
     }
 
     this.#sessionIdByCharacter.delete(characterId);
+    this.#walkingUntil.delete(characterId);
     this.#accountIdByCharacter.delete(characterId);
     this.#nameByCharacter.delete(characterId);
     this.#colorsByCharacter.delete(characterId);
@@ -859,6 +868,10 @@ export class SessionHost {
     if (ruleset.requestMove === undefined) return;
     const character = session.participants.find((p) => p.id === viewer.characterId);
     if (character === undefined || !character.alive) return;
+    // Um passo por vez (FUN-122): o anterior ainda está em curso, e este chegou cedo demais —
+    // a rajada de uma tecla presa, ou um cliente que manda mais rápido do que anda.
+    const now = this.#now();
+    if (now < (this.#walkingUntil.get(viewer.characterId) ?? 0)) return;
 
     const from = character.position;
     const to = typeof target === 'string'
@@ -867,6 +880,7 @@ export class SessionHost {
 
     const result = ruleset.requestMove(session, viewer.characterId, to);
     if (!result.ok) return;
+    this.#walkingUntil.set(viewer.characterId, now + result.durationMs);
     // A Cidade não tem ciclo (`hz` 0): o evento precisa virar pacote agora, senão ele fica
     // no buffer da sessão até alguém drenar — e ninguém drena o que não tica.
     this.#presentMoves(hosted);
