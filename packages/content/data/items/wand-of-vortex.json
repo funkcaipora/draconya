@@ -1,0 +1,9 @@
+{
+  "id": "wand-of-vortex",
+  "name": "Wand of Vortex",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 19,
+  "requires": { "vocationId": "sorcerer" },
+  "_open": "A arma inicial do Sorcerer (ADR 0026, decisão 3): alcance 3, 2 de mana por golpe, dano 8–18 de energia (TibiaWiki) — entra no motor pela issue #152; até lá bate como arma sem attack."
+}

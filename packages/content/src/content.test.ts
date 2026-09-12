@@ -708,18 +708,61 @@ describe('catálogo de itens (FUN-76)', () => {
   });
 
   it('item empilhável e item com carga cabem no mesmo schema', () => {
-    const flecha = {
-      id: 'arrow', name: 'Arrow', kind: 'ammunition', slot: 'ammo',
-      weight: 0.7, stackable: true, attack: 7,
+    // O empilhável é o queijo, não a flecha: munição deixou de ser item (ADR 0026, decisão 3).
+    const queijo = {
+      id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, stackable: true,
     };
     const anel = {
       id: 'time-ring', name: 'Time Ring', kind: 'ring', slot: 'finger',
       weight: 1, durationMs: 600_000,
     };
-    const content = buildContent(base({ items: [flecha, anel] }));
-    expect(content.items.get('arrow')?.stackable).toBe(true);
+    const content = buildContent(base({ items: [queijo, anel] }));
+    expect(content.items.get('cheese')?.stackable).toBe(true);
     // Declarado e ainda não consumido por ninguém — §21.3, e a mecânica é issue própria.
     expect(content.items.get('time-ring')?.durationMs).toBe(600_000);
+  });
+});
+
+describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)', () => {
+  const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, attack: 10 };
+
+  it('a mochila é container e se veste em `back`; as duas coisas andam juntas', () => {
+    const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18 };
+    expect(buildContent(base({ items: [mochila] })).items.get('backpack')?.slot).toBe('back');
+    // Container fora das costas, e costas sem container: os dois são conteúdo quebrado.
+    expect(() => buildContent(base({ items: [{ ...mochila, slot: 'hand' }] }))).toThrow(/slot "back"/);
+    expect(() => buildContent(base({ items: [{ ...espada, slot: 'back' }] }))).toThrow(/só container/);
+  });
+
+  it('`twoHanded` só em arma', () => {
+    expect(buildContent(base({ items: [{ ...espada, twoHanded: true }] })).items.get('sword')?.twoHanded).toBe(true);
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.twoHanded).toBe(false);
+    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, twoHanded: true };
+    expect(() => buildContent(base({ items: [capacete] }))).toThrow(/twoHanded/);
+  });
+
+  it('munição é catálogo próprio, com aparência conferida dos DOIS lados', () => {
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const content = buildContent(base({ ammunition: [flecha] }));
+    expect(content.ammunition.get('arrow')?.appearanceId).toBeGreaterThan(0);
+    // Sem linha na tabela é erro, como item; linha órfã também.
+    const raw = base({ ammunition: [flecha] });
+    const semLinha = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
+    expect(() => buildContent(semLinha)).toThrow(/munição "arrow" não tem aparência/);
+    const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: { arrow: 1, bolt: 2 } }] };
+    expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia munição "bolt"/);
+  });
+
+  it('toda família de munição precisa da grátis — é o que o bow dispara quando o gold acaba', () => {
+    const paga = { id: 'onyx-arrow', name: 'Onyx Arrow', family: 'arrow', attack: 38, price: 7 };
+    expect(() => buildContent(base({ ammunition: [paga] }))).toThrow(/não tem munição grátis/);
+    const gratis = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    expect(buildContent(base({ ammunition: [paga, gratis] })).ammunition.size).toBe(2);
+  });
+
+  it('a aparência NÃO mora na munição: escrevê-la ali é recusado', () => {
+    const comAparencia = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447 };
+    expect(() => buildContent(base({ ammunition: [comAparencia] }))).toThrow(ContentError);
   });
 });
 

@@ -33,6 +33,8 @@ export function loadContent(dir: string): Content {
     supplies: readJsonDir(join(dir, 'supplies')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
+    // Munição (ADR 0026, decisão 3): seleção por família, não item — pasta própria.
+    ammunition: readJsonDir(join(dir, 'ammunition')),
     // A tabela de aparências (FUN-94). Uma pasta como as outras, com um `baseline.json` dentro:
     // trocar de pacote de assets é editar ESTE arquivo, e não todo arquivo de conteúdo.
     appearances: readJsonDir(join(dir, 'appearances')),

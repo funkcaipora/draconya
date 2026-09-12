@@ -128,8 +128,56 @@ describe('loadContent', () => {
     expect(floorChangeAt(city, 75, 73, 6)).toEqual({ x: 75, y: 74, z: 7 });
   });
 
-  it('reporta o Druida como valor em aberto', () => {
-    expect(loadContent(DATA).openValues.some((v) => v.startsWith('vocation/druid'))).toBe(true);
+  it('nenhuma vocação está em aberto: os ganhos por level são os do Tibia (ADR 0026, decisão 5)', () => {
+    // Knight 15/5/25, Paladin 10/15/20, Sorcerer e Druid 5/30/10 — HP, mana e capacidade por
+    // level, decididos pelo usuário em 2026-09-12. O `_open` do Druida saiu junto: um valor
+    // decidido que continua marcado como provisório é o que faz ninguém acreditar na marca.
+    const content = loadContent(DATA);
+    expect(content.openValues.some((v) => v.startsWith('vocation/'))).toBe(false);
+    const gains = [...content.vocations.values()]
+      .map((v) => [v.id, v.healthPerLevel, v.manaPerLevel, v.capacityPerLevel]);
+    expect(gains).toEqual([
+      ['druid', 5, 30, 10], ['knight', 15, 5, 25], ['paladin', 10, 15, 20], ['sorcerer', 5, 30, 10],
+    ]);
+  });
+
+  it('carrega o kit inicial e as armas de vocação com os ids do pacote 13.32, conferidos de olho (#151)', () => {
+    // Os ids foram conferidos abrindo o PNG de cada objeto na biblioteca (skill /assets): o
+    // índice não tem nome, e um id errado desenha outra coisa sem erro nenhum. O que se prende
+    // aqui é o número; mutação que mata: trocar qualquer id em `appearances/baseline.json`.
+    const content = loadContent(DATA);
+    const ids = Object.fromEntries([...content.items.values()].map((i) => [i.id, i.appearanceId]));
+    expect(ids).toMatchObject({
+      machete: 3308, 'leather-helmet': 3355, 'leather-armor': 3361, 'leather-legs': 3559,
+      'leather-boots': 3552, backpack: 2854, 'steel-axe': 7773, bow: 3350,
+      'wand-of-vortex': 3074, 'snakebite-rod': 3066,
+    });
+    // O kit não exige nada (o personagem nasce level 1, sem vocação); cada arma de vocação
+    // exige a sua; o bow ocupa as duas mãos; a mochila é o container das costas.
+    for (const id of ['machete', 'leather-helmet', 'leather-armor', 'leather-legs', 'leather-boots', 'backpack']) {
+      expect(content.items.get(id)?.requires, id).toEqual({});
+    }
+    expect(content.items.get('steel-axe')?.requires.vocationId).toBe('knight');
+    expect(content.items.get('bow')?.requires.vocationId).toBe('paladin');
+    expect(content.items.get('bow')?.twoHanded).toBe(true);
+    expect(content.items.get('wand-of-vortex')?.requires.vocationId).toBe('sorcerer');
+    expect(content.items.get('snakebite-rod')?.requires.vocationId).toBe('druid');
+    expect(content.items.get('backpack')).toMatchObject({ kind: 'container', slot: 'back' });
+    expect(content.items.get('leather-armor')?.weight).toBe(60);
+  });
+
+  it('carrega a munição como seleção: a arrow é grátis, as outras debitam gold por tiro (ADR 0026, decisão 3)', () => {
+    const content = loadContent(DATA);
+    const ammo = [...content.ammunition.values()].map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId]);
+    expect(ammo).toEqual([
+      ['arrow', 'arrow', 25, 0, 3447],
+      ['onyx-arrow', 'arrow', 38, 7, 7365],
+      ['sniper-arrow', 'arrow', 28, 5, 7364],
+    ]);
+    expect(content.ammunition.get('sniper-arrow')?.requires.level).toBe(20);
+    expect(content.ammunition.get('onyx-arrow')?.requires.level).toBe(40);
+    // A flecha física saiu do catálogo de itens: munição não tem peso, pilha nem instância.
+    expect(content.items.has('arrow')).toBe(false);
   });
 });
 

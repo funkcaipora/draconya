@@ -23,7 +23,7 @@ import { useHudSlice } from '../state/useSlice.js';
 import type { ItemDefinition } from '../state/hud.js';
 import { ItemSprite } from './ItemSprite.js';
 
-/** Os nove lugares do §21.3, em português e na ordem em que o corpo os usa. */
+/** Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa. */
 const SLOT_TEXT: Record<string, string> = {
   head: 'Cabeça',
   neck: 'Pescoço',
@@ -34,6 +34,7 @@ const SLOT_TEXT: Record<string, string> = {
   shield: 'Escudo',
   finger: 'Dedo',
   ammo: 'Munição',
+  back: 'Mochila',
 };
 
 /**

@@ -236,6 +236,38 @@ porque catálogo não existia; agora o que decide é a referência existir.
 `charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
 para o catálogo não mudar quando a mecânica existir.
 
+**O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
+que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
+biblioteca (`things/<versão>/library/appearances/object.jsonl`) não tem nome, e um id errado
+desenha outra coisa sem erro nenhum; a regra é abrir o PNG do primeiro `spriteId` do objeto
+antes de gravar a linha. Os números do Tibia (TibiaWiki) e os ids do pacote 13.32:
+
+| item | id | atributos |
+|---|---|---|
+| machete | 3308 | attack 12, 16,5 oz — a arma de todo mundo até o level 8 |
+| leather helmet / armor / legs / boots | 3355 / 3361 / 3559 / 3552 | armor 1 / 4 / 1 / 1; 22 / 60 / 18 / 9 oz |
+| backpack | 2854 | `kind: container`, `slot: back`, 18 oz |
+| steel axe (Knight) | 7773 | attack 21, 41 oz |
+| bow (Paladin) | 3350 | `twoHanded`, 31 oz — sem attack: o dano é da munição |
+| wand of vortex (Sorcerer) / snakebite rod (Druid) | 3074 / 3066 | 19 oz — alcance, mana e dano entram no motor pela #152 |
+
+`kind: 'container'` e `slot: 'back'` andam juntos, e `twoHanded` só em arma — `buildContent`
+recusa o resto. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a
+segura até o level 8: o personagem nasce sem vocação.
+
+## Munição (#151, ADR 0026)
+
+`ammunition/*.json` é um catálogo à parte, e **munição não é item**: não tem peso, pilha nem
+instância. É uma seleção por família (`arrow` para bow, `bolt` para crossbow), o modelo do
+Huntera (`ammo-selection { arrow, bolt }`, `docs/reference/huntera-observed.md` §20): a de
+`price: 0` é a grátis e o padrão da família, e cada tiro das outras debita `price` do gold do
+personagem, pelo caminho do supply (§20.1). `buildContent` exige uma grátis por família — é
+ela que o bow dispara quando o gold acaba, e sem ela o bot pararia de atirar (invariante 11).
+A aparência vive em `appearances.ammunition`, conferida dos dois lados como a do item: é o
+ícone que o seletor mostra. Hoje: arrow (3447, attack 25, grátis), sniper arrow (7364, 28,
+level 20) e onyx arrow (7365, 38, level 40); os preços por tiro são `_open` até serem
+conferidos no TibiaWiki. Quem atira é o `sim` (#152).
+
 ## Como testar
 
 ```

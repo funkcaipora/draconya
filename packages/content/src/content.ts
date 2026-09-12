@@ -10,12 +10,12 @@ import {
   appearancesSchema,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  bestiarySchema, itemSchema, skillSchema, spellSchema, staminaSchema, supplySchema,
-  tilemapSchema, vocationSchema,
+  ammunitionSchema, bestiarySchema, itemSchema, skillSchema, spellSchema, staminaSchema,
+  supplySchema, tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression, Skill, Spell,
-  Stamina, Supply, Vocation,
+  Ammunition, Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression,
+  Skill, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -51,6 +51,11 @@ export interface Content {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (§21.2). Atributos base fixos: item melhor é item diferente. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * Catálogo de munição (ADR 0026, decisão 3): a seleção por família que o bow dispara, com
+   * a grátis e as que debitam gold por tiro. Vazio é um jogo sem arma de distância.
+   */
+  readonly ammunition: ReadonlyMap<string, Ammunition>;
   readonly maps: ReadonlyMap<string, Tilemap>;
   readonly routes: ReadonlyMap<string, Route>;
   /**
@@ -93,6 +98,7 @@ export interface RawContent {
   readonly supplies?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
+  readonly ammunition?: readonly unknown[];
   readonly appearances?: readonly unknown[];
   /** Inventários de pacote (FUN-21), `packs/<pack>.json`. Só o conteúdo real os tem. */
   readonly packs?: readonly unknown[];
@@ -180,6 +186,28 @@ export function buildContent(raw: RawContent): Content {
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   const itemDefinitions = parseAll('item', raw.items ?? [], itemSchema, problems);
+  const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema, problems);
+  // A forma do item que o schema sozinho não fecha (ADR 0026): a mochila é o único item que
+  // se veste nas costas, e o que se veste nas costas é a mochila; e só arma ocupa as duas
+  // mãos. Um `back` numa espada equiparia a espada nas costas sem nada acusar.
+  for (const item of itemDefinitions.values()) {
+    if (item.kind === 'container' && item.slot !== 'back') {
+      problems.push(`item "${item.id}": container tem de ter slot "back" — é a mochila`);
+    }
+    if (item.slot === 'back' && item.kind !== 'container') {
+      problems.push(`item "${item.id}": só container se veste em "back"`);
+    }
+    if (item.twoHanded && item.kind !== 'weapon') {
+      problems.push(`item "${item.id}": twoHanded só faz sentido em arma`);
+    }
+  }
+  // Toda família com munição precisa da grátis: é ela que o bow dispara quando o gold acaba
+  // (decisão 3), e sem ela o bot pararia de atirar — o oposto do invariante 11.
+  for (const family of new Set([...ammunitionDefinitions.values()].map((ammo) => ammo.family))) {
+    const free = [...ammunitionDefinitions.values()]
+      .some((ammo) => ammo.family === family && ammo.price === 0);
+    if (!free) problems.push(`munição: a família "${family}" não tem munição grátis (price 0)`);
+  }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 
@@ -192,7 +220,8 @@ export function buildContent(raw: RawContent): Content {
   const appearanceTables = parseAll('appearances', raw.appearances ?? [], appearancesSchema,
     problems);
   const appearances = appearanceTables.get('baseline');
-  if (appearances === undefined && (monsterDefinitions.size > 0 || itemDefinitions.size > 0)) {
+  if (appearances === undefined
+    && (monsterDefinitions.size > 0 || itemDefinitions.size > 0 || ammunitionDefinitions.size > 0)) {
     problems.push(
       'appearances/baseline.json ausente: sem ele monstro e item não têm aparência, e trocar de '
         + 'pacote de assets voltaria a ser reescrever conteúdo (ADR 0008)',
@@ -252,6 +281,9 @@ export function buildContent(raw: RawContent): Content {
   appearances?.corpses, problems);
   const items: ReadonlyMap<string, Item> = resolveAppearance(
     'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
+  const ammunition: ReadonlyMap<string, Ammunition> = resolveAppearance(
+    'munição', 'ammunition', ammunitionDefinitions, appearances?.ammunition, 'appearanceId',
+    problems);
 
   const maps = new Map<string, Tilemap>();
   for (const data of mapData.values()) {
@@ -395,6 +427,7 @@ export function buildContent(raw: RawContent): Content {
     ...openOf('supply', supplies),
     ...openOf('skill', skills),
     ...openOf('item', items),
+    ...openOf('munição', ammunition),
   ];
 
   const content: Content = {
@@ -404,6 +437,7 @@ export function buildContent(raw: RawContent): Content {
     supplies,
     skills,
     items,
+    ammunition,
     monsters,
     hunts,
     vocations,
@@ -463,6 +497,7 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
     items: sequential(raw.items),
+    ammunition: sequential(raw.ammunition),
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [

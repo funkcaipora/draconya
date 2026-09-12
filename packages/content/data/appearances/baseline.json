@@ -8,10 +8,23 @@
     "default": 128
   },
   "items": {
-    "arrow": 3447,
+    "machete": 3308,
+    "leather-helmet": 3355,
     "leather-armor": 3361,
+    "leather-legs": 3559,
+    "leather-boots": 3552,
+    "backpack": 2854,
+    "steel-axe": 7773,
+    "bow": 3350,
+    "wand-of-vortex": 3074,
+    "snakebite-rod": 3066,
     "spike-sword": 3271,
     "cheese": 3607
+  },
+  "ammunition": {
+    "arrow": 3447,
+    "sniper-arrow": 7364,
+    "onyx-arrow": 7365
   },
   "corpses": {
     "rat": 5964

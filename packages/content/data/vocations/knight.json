@@ -1,7 +1,7 @@
 {
   "id": "knight",
   "name": "Knight",
-  "healthPerLevel": 20,
+  "healthPerLevel": 15,
   "manaPerLevel": 5,
   "capacityPerLevel": 25
 }

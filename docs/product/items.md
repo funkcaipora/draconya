@@ -221,7 +221,7 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 
 ## A tela (FUN-90)
 
-Mochila, nove lugares de equipamento e a capacidade, numa janela à direita. **A geografia é fixa**
+Mochila, dez lugares de equipamento (o décimo, `back`, é o das costas — a mochila do kit, desde a #151) e a capacidade, numa janela à direita. **A geografia é fixa**
 (§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda, chat embaixo — nos
 mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao trocar de atividade; em
 PvP manual, procurar onde a poção foi parar é o que custa a luta. Desde a FUN-115 o mundo ocupa a
