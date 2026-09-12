@@ -14,7 +14,7 @@ Skills sobem pelo uso, seguindo o paradigma do Tibia, e não automaticamente com
 
 Cada personagem recebe pontos de passiva ao longo da progressão, distribuídos numa árvore própria da vocação. A árvore permite caminhos como dano, suporte e sustain. Os pontos podem ser redistribuídos livremente em PZ, quantas vezes o jogador quiser — não há custo nem limite de respec.
 
-O catálogo de magias do jogo usa como referência de escopo funcional as magias do Tibia até aproximadamente o level 120, sem reproduzir catálogo proprietário, nomes, assets ou código — o conteúdo final precisa ser definido/licenciado de forma própria.
+O catálogo de magias do jogo usa como referência de escopo funcional as magias do Tibia — até o level 80 no M12 (ADR 0026, decisão 5: as magias instantâneas que o motor expressa, por Base Power), e até aproximadamente o level 120 depois, sem reproduzir catálogo proprietário, nomes, assets ou código — o conteúdo final precisa ser definido/licenciado de forma própria.
 
 ## Regras
 
@@ -140,7 +140,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Base da curva de XP | 20 `[ABERTO — valor provisório: 20]` | `packages/content/data/progression/baseline.json`, `xp.base` |
 | Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
 | Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera]` | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
-| Referência de catálogo de magias | Tibia até ~level 120 (referência funcional; catálogo final próprio) | `packages/content/data/spells/` |
+| Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Corpo a Corpo — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/melee.json` |
 | Magia — início, curva, dano por nível | 0 / 400×1,1 / +3% `[ABERTO — valores provisórios]` | `packages/content/data/skills/magic.json` |
 | Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |

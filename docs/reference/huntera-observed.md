@@ -425,18 +425,19 @@ Sai no attach, inteiro:
 
 ## 19. `inventory-delta`: o loot cai na mochila por índice
 
-A cada abate com loot, um delta por container e índice — o queijo indo de 71 para 72 no lugar 0:
+A cada abate com loot, um delta por container e índice — o queijo passando a 71 no lugar 0 (mensagem 98 de `huntera-hunt-frames.json`):
 
 ```json
 { "type": "inventory-delta",
   "changes": [ { "container": "backpack", "index": 0,
-                 "item": { "uid": 1388145, "itemId": 3607, "count": 72, "cumulative": true, … } } ],
+                 "item": { "uid": 1388145, "itemId": 3607, "count": 71, "cumulative": true, … } } ],
   "slotCount": 20, "satchelCount": 10, "gold": 594 }
 ```
 
-O gold do loot vai direto no campo `gold` do mesmo delta (`loot-drop { item: gold coin, count:
-2 }` chega ao lado, só para a animação). Não há mensagem de "bolsa cheia" na captura; com 72
-queijos numa pilha só, ela nunca encheu.
+O gold do loot vai direto no campo `gold` do mesmo delta (o `loot-drop { item: gold coin, count:
+4 }` da mensagem 96 chega logo antes, só para a animação; o delta seguinte com o queijo, na
+mensagem 263, leva `count: 72` e `gold: 602`). Não há mensagem de "bolsa cheia" na captura; com
+72 queijos numa pilha só, ela nunca encheu.
 
 ## 20. `ammo-selection`: munição é uma escolha, não uma pilha
 
