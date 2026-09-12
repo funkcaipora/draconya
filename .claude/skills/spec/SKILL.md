@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Use para transformar uma issue rasa do Linear numa especificação executável por qualquer agente — audita o código antes de escrever, valida a premissa da issue, e grava na própria issue o escopo por pacote, os contratos, o design com código real, os casos de borda, os testes e critérios de aceite verificáveis. Acione com "detalha a FUN-nn", "cria a spec da FUN-nn", "essa task está rasa demais", "prepara essa issue para outro agente executar", "especifica isso antes de eu começar".
+description: Use para transformar uma issue rasa do GitHub numa especificação executável por qualquer agente — audita o código antes de escrever, valida a premissa da issue, e grava na própria issue o escopo por pacote, os contratos, o design com código real, os casos de borda, os testes e critérios de aceite verificáveis; também diz como uma issue nova entra no milestone, nas labels, nas dependências e no quadro. Acione com "detalha a #nn", "cria a spec da #nn", "essa task está rasa demais", "prepara essa issue para outro agente executar", "abre as issues do milestone X", "especifica isso antes de eu começar".
 ---
 
 # Especificar uma task para execução autônoma
@@ -18,8 +18,9 @@ Se a resposta for não, a spec não está pronta. Caminho que ele teria que proc
 teria que adivinhar, decisão que ele teria que tomar sozinho — cada um desses é uma falha da spec,
 não do executor.
 
-A spec vive **na descrição da issue no Linear**. Não existe documento separado: arquivo solto
-diverge da issue no primeiro ajuste, e aí passam a existir duas verdades.
+A spec vive **no corpo da issue no GitHub** (`funkcaipora/draconya`). Não existe documento separado:
+arquivo solto diverge da issue no primeiro ajuste, e aí passam a existir duas verdades. (Até
+2026-09-12 a issue vivia no Linear — FUN-1 a FUN-124; é histórico, não se grava mais lá.)
 
 ## Regra que vale para todos os passos
 
@@ -35,18 +36,25 @@ vai escrever" é metade do valor do documento.
 
 ## Passo 1 — reler a issue AGORA, e conferir se ela já tem dono
 
-Leia a issue no Linear (`get_issue`) **imediatamente antes de escrever**, mesmo que você a tenha
-lido nesta conversa, e mesmo que você mesmo a tenha criado. Confira quatro campos antes de
-qualquer outra coisa:
+Leia a issue **imediatamente antes de escrever**, mesmo que você a tenha lido nesta conversa, e
+mesmo que você mesmo a tenha criado:
+
+```bash
+gh issue view <n> --json state,title,assignees,labels,milestone,url,body \
+  --jq '{state, title, assignees: [.assignees[].login], labels: [.labels[].name], milestone: .milestone.title}'
+gh pr list --search "#<n> in:body" --state all --json number,title,state,url
+```
+
+Confira quatro coisas antes de qualquer outra:
 
 | Campo | O que ele impede |
 |---|---|
-| `status` | Escrever spec de coisa que já está `In Progress` ou `In Review` |
-| `assignee` | Reescrever o trabalho de outra pessoa |
-| `attachments` | Ignorar uma PR aberta que já implementa a task |
-| `blockedBy` / `blocks` | Especificar fora de ordem |
+| `state` fechada | Escrever spec de coisa entregue |
+| `assignees` | Reescrever o trabalho de outra pessoa |
+| PR que cita `#<n>` | Ignorar uma implementação em andamento |
+| label `em andamento` | Mudar o alvo debaixo de quem já começou |
 
-**Se a issue não está em `Backlog` ou `Todo`, PARE.** Uma issue em andamento tem uma
+**Se a issue tem dono, PR aberta ou a label `em andamento`, PARE.** Uma issue em andamento tem uma
 implementação sendo escrita contra a descrição atual; trocá-la por uma spec — mesmo uma boa —
 muda o alvo debaixo de quem está mirando. Relate ao usuário e pergunte.
 
@@ -101,24 +109,73 @@ Use o template abaixo. Corte seção que não se aplica — seção vazia com `N
 **nunca** corte a 8 (invariantes), a 10 (aceite) ou a 11 (fora do escopo): são as três que
 transformam a issue em contrato.
 
-## Passo 5 — gravar no Linear
+## Passo 5 — gravar no GitHub
 
-**Releia a issue uma última vez** (`get_issue`) antes de gravar. Entre o passo 1 e aqui pode ter
-passado meia hora de auditoria, e meia hora é tempo suficiente para alguém abrir uma PR. Se
-`status`, `assignee` ou `attachments` mudaram desde o passo 1, pare e relate.
+**Releia a issue uma última vez** (o comando do Passo 1) antes de gravar. Entre o passo 1 e aqui
+pode ter passado meia hora de auditoria, e meia hora é tempo suficiente para alguém abrir uma PR.
+Se dono, PR ou label mudaram desde o passo 1, pare e relate.
 
-Grave com `save_issue` na descrição da issue. Se a gravação for recusada por tamanho, o Design
-técnico (seção 6) desce para sub-issues, uma por pacote — nunca trunque, nunca divida a spec em
-duas issues.
+```bash
+gh issue edit <n> --body-file /caminho/da/spec.md
+```
+
+O corpo aceita até 65.536 caracteres. Se a spec passar disso, o Design técnico (seção 6) desce
+para sub-issues, uma por pacote — nunca trunque, nunca divida a spec em duas issues.
+
+Para **criar** uma issue já com a spec, o cabeçalho dela é o do milestone (o primeiro parágrafo em
+citação: milestone, branch, ADR, quadro; e a linha "Commits desta task: `<tipo>(<escopo>):
+<descrição> (#n)`; label `em andamento` ao começar; comentário do que foi verificado e `Closes #n`
+na PR"), e depois:
+
+```bash
+gh issue create --title "<título>" --body-file /caminho/da/spec.md \
+  --milestone "<milestone>" --label "<épico>" --label "<escopo>"
+```
 
 Uma spec que não cabe numa tela de revisão também não é lida. Se ela passar disso, provavelmente a
 issue é grande demais e o que falta é quebrá-la, não resumi-la.
 
-## Passo 6 — sub-issues, quando fizer sentido
+## Passo 6 — organização: labels, milestone, dependências, sub-issues e quadro
 
-Crie sub-issues (`parentId`) só quando houver **paralelismo real** ou fatias que fecham sozinhas.
-Uma sub-issue por pacote quando a task cruza `sim` → `server` → `client`. Não crie sub-issue para
-etapa sequencial de um mesmo arquivo: isso é lista de tarefas, e o lugar dela é a seção 10.
+**Labels** — toda issue leva uma de épico (`E0 · Fundação` … `E15 · Operação`, os nomes do
+`docs/technical-architecture.md` §17; uma iniciativa fora dele cria a sua, como `E16 · Engine web`)
+e uma de escopo (`sim`, `protocol`, `content`, `server`,
+`client`, `tools`, `docs` — a do commit que a fecha). `em andamento` é de quem pega a issue. Label
+nova: `gh label create "<nome>" --color <hex> --description "<uma linha>"`.
+
+**Milestone** — um por marco (`M12 · …`), com a descrição no formato dos marcos anteriores: um ou
+dois parágrafos de escopo e a frase final `**Pronto quando:**` com a cena verificável.
+
+```bash
+gh api -X POST repos/funkcaipora/draconya/milestones -f title="<nome>" -f due_on="AAAA-MM-DDT00:00:00Z" -f description="<escopo… **Pronto quando:** …>"
+```
+
+**Dependências** — "bloqueada por" é relação de verdade, não só texto; a API pede o `id` numérico:
+
+```bash
+blocker_id=$(gh api repos/funkcaipora/draconya/issues/<m> --jq .id)
+gh api -X POST repos/funkcaipora/draconya/issues/<n>/dependencies/blocked_by -F issue_id="$blocker_id"
+```
+
+A linha **Bloqueada por** da spec continua existindo: quem lê não deve precisar abrir a relação.
+
+**Sub-issues** — só com **paralelismo real** ou fatias que fecham sozinhas; uma por pacote quando a
+task cruza `sim` → `server` → `client`. Não para etapa sequencial de um mesmo arquivo: isso é lista
+de tarefas, e o lugar dela é a seção 10.
+
+```bash
+child_id=$(gh api repos/funkcaipora/draconya/issues/<filha> --jq .id)
+gh api -X POST repos/funkcaipora/draconya/issues/<pai>/sub_issues -F sub_issue_id="$child_id"
+```
+
+**Quadro** — existe um só, "Draconya" (`https://github.com/users/funkcaipora/projects/3`); o marco
+é o milestone, não um quadro novo. Cada issue entra uma vez (`item-list` antes de `item-add`) e o
+`Status` (`Todo` → `In progress` → `Done`) é o estado de execução: `In progress` à mão ao começar,
+junto com a label; `Done` é automático quando a PR que a fecha é mesclada.
+
+```bash
+gh project item-add 3 --owner funkcaipora --url https://github.com/funkcaipora/draconya/issues/<n>
+```
 
 ---
 
@@ -132,8 +189,8 @@ a solução depois: quem lê precisa saber por que isto existe antes de saber o 
 
 ## Rastreabilidade
 
-- **Bloqueada por:** {{FUN-nn, ou "nenhuma"}}
-- **Bloqueia:** {{FUN-nn, ou "nenhuma"}}
+- **Bloqueada por:** {{#nn, ou "nenhuma"}}
+- **Bloqueia:** {{#nn, ou "nenhuma"}}
 - **ADRs que regem esta task:** {{ADR 00nn — título; ou "nenhum"}}
 - **Documentação de produto:** {{docs/product/<sistema>.md §<seção>; ou "nenhuma ainda"}}
 - **Referência de domínio (ADR 0019):** {{docs/reference/opentibia-engine-reference.md §nn;

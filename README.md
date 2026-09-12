@@ -24,8 +24,9 @@ O próximo critério de aceite é o **M1 — Fundação e conexão**: autenticar
 receber um ticket de uso único e aparecer num mapa de teste com retângulos. Auth, personagem,
 ticket e socket já existem no servidor; falta fechar a demonstração pelo cliente. Os snapshots do núcleo
 ainda não provam recuperação após queda do processo; persistência, retomada e drenagem com crédito
-continuam como integrações pendentes. O andamento das tarefas fica no
-[Linear](https://linear.app/funkcaipora/project/draconya-8ad404c2226c).
+continuam como integrações pendentes. O andamento das tarefas fica nas
+[issues e milestones](https://github.com/funkcaipora/draconya/milestones) e no
+[quadro](https://github.com/users/funkcaipora/projects/3) do GitHub (até 2026-09-12 era o Linear, FUN-1 a FUN-124).
 
 ---
 
@@ -133,19 +134,20 @@ identificadores em inglês. Commits e títulos de PR também ficam em inglês. V
 **Commit:**
 
 ```
-<type>(<scope>): <imperative description in English> (FUN-nn)
+<type>(<scope>): <imperative description in English> (#nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
 scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
-A referência `(FUN-nn)` aponta a issue no Linear e é obrigatória, exceto em `chore` e `docs`.
-O formato é validado por hook — nas duas pontas, dentro e fora do Claude Code.
+A referência `(#nn)` aponta a issue no GitHub e é obrigatória, exceto em `chore` e `docs`
+(`(FUN-nn)`, a issue do Linear, só vale para branch aberta antes de 2026-09-12). O formato é
+validado por hook — nas duas pontas, dentro e fora do Claude Code.
 
-Exemplo: `refactor(sim): standardize runtime identifiers in English (FUN-49)`.
+Exemplo: `feat(content): add the starter kit items with pack appearances (#151)`.
 
-**Branch:** use a que o Linear gera para a issue (`funkcaipora/fun-25-...`), que fecha o
-vínculo entre commit, PR e issue sem trabalho manual.
+**Branch:** `<n>-<slug>`, a que `gh issue develop <n>` cria a partir da issue; a PR leva
+`Closes #n`, que fecha a issue no merge e liga as duas sem trabalho manual.
 
 **Entrega:** sempre por PR com destino à `main`, usando a branch da issue; sem push direto na
 `main`.
