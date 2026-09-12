@@ -236,12 +236,25 @@ volume (o `cp -r` funde com o que já está lá):
 rsync -av things/1332/library/ui/images/ root@<servidor>:/root/things/1332/library/ui/images/
 ```
 
+**Nem a pilha dos mapas.** Desde a FUN-121 o cliente desenha o mundo a partir de
+`things/<versão>/maps/<mapId>.json` — a pilha de aparências por tile de cada mapa do conteúdo
+(Thais e a Rat Cellars), que `pnpm map:import` deriva do OTBM na sua máquina (ADR 0025) e que
+nunca é versionada nem vai na imagem. A origem não a serve, e sem ela o jogo abre com a grade
+lisa de reserva: templo sem chão, bueiro sem parede, e nenhum erro além do 404 na aba de rede.
+Ela sobe pelo MESMO caminho das imagens de UI — é a subpasta `maps/` inteira, dois arquivos
+por versão hoje (1,0 MB na 13.32):
+
+```bash
+rsync -av things/1332/maps/ root@<servidor>:/root/things/1332/maps/
+```
+
 ```bash
 ssh root@<servidor> 'docker run --rm -v "$(docker volume ls -q | grep _things$)":/things -v /root/things:/src alpine cp -r /src/1332 /things/'
 ```
 
 Se a origem sumir, o pacote INTEIRO vem da sua máquina pelo mesmo caminho, com um filtro que
-deixa passar tudo da raiz e, de `library/`, SÓ `ui/images/` (o `cp -r` é o mesmo de cima):
+deixa passar tudo da raiz — `maps/` incluída — e, de `library/`, SÓ `ui/images/` (o `cp -r` é
+o mesmo de cima):
 
 ```bash
 rsync -av --include='library/' --include='library/ui/' --include='library/ui/images/***' --exclude='library/*' --exclude='library/ui/*' things/1332/ root@<servidor>:/root/things/1332/
@@ -254,6 +267,12 @@ nada mais. O que precisa estar no volume:
 
 - `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
   `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
+- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`; 1,0 MB na 13.32) —
+  a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e não só o
+  `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar o mesmo
+  hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra região ou
+  outro OTBM muda de conteúdo no mesmo caminho, e o `Cache-Control` de um ano esconde a troca
+  de quem já o tinha — por isso a conferência é pelo hash;
 - `library/ui/images/` (9,4 MB, ~1 000 PNGs na 13.32, subpastas incluídas) — a casca. O
   cliente lê 17 deles, e é a lista de `UI_SKIN` e `SLOT_IMAGES` em
   `packages/client/src/assets/ui.ts`: `background.png`, `background-dark.png`,
@@ -286,7 +305,10 @@ conferido — um deploy apontando outro pacote não passa em silêncio.
 desenha retângulos: a arte é apresentação, e falta de arte nunca é falha de jogo. **Sem só a
 arte de UI** — volume com catálogo, `.dat` e folhas, mas sem `library/ui/images` — o mundo
 sai com sprite e a casca sai em cor lisa: o sintoma é só visual, com 404 de PNG na aba de
-rede, e o remédio é o `rsync` acima.
+rede, e o remédio é o `rsync` acima. **Sem só os mapas**, o contrário: casca certa e mundo
+em grade lisa, com 404 de `maps/<mapId>.json` — e o remédio é o outro `rsync`. Em staging os
+dois faltaram por vezes diferentes (2026-09-11 a casca, 2026-09-12 os mapas), e cada um
+parecia um defeito do cliente até alguém abrir a aba de rede.
 
 ## Backup
 
