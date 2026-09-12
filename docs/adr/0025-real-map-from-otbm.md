@@ -87,12 +87,17 @@ itens de cada tile.** Em nove pontos:
 7. **`instance-enter` deixa de ser opcode morto.** O `game` o emite em toda entrada e
    reanexação, com `{ instanceId, map }`, e `session-state.world.mapId` para de ser `null`. É
    por ele que o cliente sabe qual arquivo de `things/maps/` buscar.
-8. **A Rat Cellars é o bueiro de ratos de Rookgaard**, como no Huntera — z8 do mapa real,
-   `x ∈ [32120, 32270]`, `y ∈ [31990, 32140]` —, **decidido pelo usuário em 2026-09-11**
-   ("Rookgaard, copiar"). A entrada continua **pelo menu, abrindo uma instância**: sem portal na
-   cidade. **Três tamanhos de pull** com os nomes do Huntera (Cauteloso/Ousado/Agressivo) e
-   `monsterCount` total (2/5/8) no lugar das quatro dificuldades do PRD §14.5. **Cadáver no
-   chão, só visual, sem loot** — o loot continua na caixa da sessão.
+8. **A Rat Cellars é o bueiro de ratos de Rookgaard**, como no Huntera — z8 do mapa real —,
+   **decidido pelo usuário em 2026-09-11** ("Rookgaard, copiar"). A janela de recorte
+   `x ∈ [32120, 32270]`, `y ∈ [31990, 32140]` (150×150) vem dos spawns de rato do mapa real
+   (`otservbr-monster.xml`: 50 blocos em `x 32135–32252`, `y 32007–32126`, z8) e é só a
+   janela: o importador apara o recorte à componente conexa dos corredores, que é o que o
+   Huntera serve (9.396 tiles numa caixa de 118×80). A entrada continua **pelo menu, abrindo
+   uma instância**: sem portal na cidade. **Três tamanhos de pull** com os nomes do Huntera
+   (Cauteloso/Ousado/Agressivo) e `monsterCount` total (2/5/8) no lugar das quatro
+   dificuldades do PRD §14.5. **Cadáver no chão, só visual, sem loot** — o loot continua na
+   caixa da sessão. Isto **reverte** o "sem cadáver" que o ADR 0019 lista como decisão nossa
+   (ele ganha a emenda); "sem loot no chão" continua valendo.
 9. **Regra de conflito no OTBM.** Um mesmo tile pode aparecer em mais de um `OTBM_TILE_AREA`
    (verificado no arquivo real, centenas de blocos com a mesma base). O importador acumula por
    coordenada absoluta e **o último vence**, contando e reportando conflitos — resultado
@@ -152,5 +157,7 @@ Nenhum. A decisão precisa respeitar dois, e respeita:
 - **7 (versão de conteúdo fixada na sessão)** — o mapa versionado entra no `computeVersion`;
   trocar o recorte muda a versão, e uma hunt que começou no recorte antigo termina nele.
 
-Emenda o ADR 0008 (mapa na mesma classe da arte) e o ADR 0009 continua de pé: a rota da hunt
-segue fixa e sem pathfinding, agora sobre uma grade importada.
+Emenda o ADR 0008 (mapa na mesma classe da arte) e o ADR 0019 (o cadáver visual deixa de ser
+"decisão nossa em que o TFS é o exemplo do que não fazer"; o loot no chão continua sendo). O
+ADR 0009 continua de pé: a rota da hunt segue fixa e sem pathfinding, agora sobre uma grade
+importada.

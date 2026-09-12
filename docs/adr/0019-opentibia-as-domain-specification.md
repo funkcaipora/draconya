@@ -113,3 +113,11 @@ Nenhum muda. Dois ganham mecanismo de verificação que não tinham:
   assistindo) passam a ter teste de invariância de frequência como contrato, em vez de dependerem
   de cada chamador lembrar de consumir o tempo decorrido inteiro. Foi a ausência desse contrato
   que deixou a FUN-67 passar por um teste que afirmava exatamente a propriedade que estava quebrada.
+
+## Emenda — 2026-09-12 (ADR 0025): o cadáver volta, só visual
+
+A lista acima cita "sem cadáver" entre as decisões nossas em que o TFS é o exemplo do que não
+fazer. O ADR 0025 reverte essa parte por decisão do usuário: o abate passa a deixar o cadáver
+no tile, **só visual** — some sozinho e **não carrega loot**, que continua indo à caixa da
+sessão. "Sem loot no chão" e "Cidade inerte" continuam de pé, e o limite de licença deste ADR
+não muda.
