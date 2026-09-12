@@ -212,8 +212,8 @@ describe('as flags de aparência (FUN-117)', () => {
         appearance({
           id: 7, frameGroups: [frameGroup({ spriteIds: [3] })],
           flags: flags({
-            clip: true, top: true, avoid: true, take: true, hang: true, hookEast: 1,
-            shift: { x: 8, y: 4 }, elevation: 8, lyingObject: true, animateAlways: true,
+            clip: true, top: true, avoid: true, noMovementAnimation: true, take: true, hang: true,
+            hookEast: 1, shift: { x: 8, y: 4 }, elevation: 8, lyingObject: true, animateAlways: true,
           }),
         }),
       ],
@@ -225,9 +225,12 @@ describe('as flags de aparência (FUN-117)', () => {
     expect(wall?.bankWaypoints).toBeUndefined();
     const odd = catalogue.object.get(7)?.flags;
     expect(odd).toMatchObject({
-      clip: true, top: true, avoid: true, take: true, hang: true, hookEast: 1,
-      shiftX: 8, shiftY: 4, elevation: 8, lyingObject: true, animateAlways: true,
+      clip: true, top: true, avoid: true, noMovementAnimation: true, take: true, hang: true,
+      hookEast: 1, shiftX: 8, shiftY: 4, elevation: 8, lyingObject: true, animateAlways: true,
     });
+    // O que NÃO foi ligado fica falso — um número de campo trocado ligaria a flag errada.
+    expect(odd).toMatchObject({ bottom: false, unpass: false, unmove: false, unsight: false, fullbank: false });
+    expect(odd?.hookSouth).toBeUndefined();
   });
 
   it('chão sem waypoints continua sendo chão: bank vazio dá zero, não undefined', () => {

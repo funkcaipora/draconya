@@ -103,6 +103,7 @@ export interface FlagsFixture {
   readonly unmove?: boolean;
   readonly unsight?: boolean;
   readonly avoid?: boolean;
+  readonly noMovementAnimation?: boolean;
   readonly take?: boolean;
   readonly hang?: boolean;
   readonly hookSouth?: number;
@@ -125,7 +126,8 @@ export function flags(fixture: FlagsFixture): Field {
   }
   const bools: ReadonlyArray<readonly [number, boolean | undefined]> = [
     [2, fixture.clip], [3, fixture.bottom], [4, fixture.top], [13, fixture.unpass],
-    [14, fixture.unmove], [15, fixture.unsight], [16, fixture.avoid], [18, fixture.take],
+    [14, fixture.unmove], [15, fixture.unsight], [16, fixture.avoid],
+    [17, fixture.noMovementAnimation], [18, fixture.take],
     [20, fixture.hang], [28, fixture.lyingObject], [29, fixture.animateAlways],
     [32, fixture.fullbank],
   ];
