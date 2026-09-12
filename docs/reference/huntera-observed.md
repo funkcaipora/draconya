@@ -270,6 +270,11 @@ deriva nada de flag. O mesmo formato serve a tela de personagens (`/assets/gate/
 temple-terrain.json`, 1.189 tiles, com uma lista `standable` de tiles em que a câmera pode
 parar).
 
+**`ground` pode ser `null`, e o tile continua existindo**: 5.149 dos 40.485 tiles (12,7 %)
+não têm chão — todos têm ao menos um item, 90 % são bloqueados (muro, água funda), e 507 são
+andáveis, como os degraus de escada em que o item É o chão. Um importador que descarte "tile
+sem chão" apaga escadas.
+
 **Andares, e o que se vê de cada um.** O terreno traz z0–z7 e o cliente desenha só do andar
 do jogador **para baixo** (`t.z < eye.z` é oculto): em z7 não há telhado — o interior das
 casas aparece —, e em z6 (o segundo andar do depot) a rua de z7 continua visível por baixo,
@@ -280,9 +285,11 @@ janela toca.
 
 ## 14. Andar por Thais
 
-Setas **e** WASD (os dois estão no bundle, `walkKeys`). O cliente manda **um** `walk
-{ direction }` ao apertar e **um** `walk-stop` ao soltar; quem repete o passo enquanto a tecla
-está presa é o servidor. Também existe `walk-to { target }` para o clique.
+Setas **e** WASD (os dois estão no bundle, `walkKeys`), só nas **quatro direções cardeais**:
+com duas teclas presas vale a pressionada por último, e nenhuma combinação vira diagonal — das
+29 mensagens `walk` capturadas, nenhuma é diagonal; diagonal só sai do `walk-to { target }`
+do clique. O cliente manda **um** `walk { direction }` ao apertar e **um** `walk-stop` ao
+soltar; quem repete o passo enquanto a tecla está presa é o servidor.
 
 Os passos voltam como `creature-move { id, from, to, durationMs }`, e na Cidade a duração é
 **150 ms por tile, para todo mundo** — Liesh tem `speed: 292` e um level 328 tem 850, e os dois
@@ -302,10 +309,11 @@ muda só a direção; `creature-resync` reenvia a lista.
 
 `hunt-catalog` traz as 58 hunts, e cada uma é `{ id, name, description, monsters: [{ name,
 outfitId, bestiaryId, elements }], tiers: [{ name, monsterCount, monsterIndexes, loot }],
-loot: [{ itemId, name, rarity, … }], bests }`. **"Tamanho do pull" é `monsterCount`**:
-Cautious 2, Bold 5, Reckless 8 em todas as hunts de um monstro só; Orc Fortress tem um quarto,
-Suicidal. Rat Cellars: `id: "rat-hunt"`, loot gold coin (3031) e cheese (3607), recorde solo
-2.066 XP/h e 1.293 gp/h.
+loot: [{ itemId, name, rarity, … }] }`, com `bests` (recorde) e `portrait` só quando existem
+— 1 hunt em 58 traz cada um. **"Tamanho do pull" é `monsterCount`**: Cautious 2, Bold 5,
+Reckless 8 em 34 das 35 hunts de um monstro só (Haunted Tomb é 1/2/4); Orc Fortress tem um
+quarto, Suicidal. Rat Cellars: `id: "rat-hunt"`, loot gold coin (3031) e cheese (3607),
+recorde solo 2.066 XP/h e 1.293 gp/h.
 
 A entrada:
 
@@ -319,6 +327,9 @@ A entrada:
 → client-ready
 ```
 
+`ambience` é só apresentação: `cavern` liga o escurecimento por mapa de luz no cliente, e
+nada no jogo (regeneração, stamina) lê o campo.
+
 Dois fatos que o nome do arquivo entrega. **A Rat Cellars é Rookgaard**, não o bueiro de
 Thais: `rook-rats.otbm`, 9.396 tiles numa caixa de 118 × 80, um andar só (z7 local, o bueiro
 de ratos de Rookgaard é z8 no mapa real), 2.041 tiles livres. E cada hunt é **um OTBM
@@ -328,7 +339,7 @@ personagens e no bueiro, porque cada recorte foi salvo do editor como mapa indep
 Dentro dela, o passo segue a fórmula do Tibia: Liesh a `speed 292` andou a **450, 550 e 700
 ms** conforme o chão (velocidade de chão 130, 160 e 200: `1000 × chão / speed`, arredondado
 para cima em múltiplos de 50), e a **diagonal custou 3×** (2.100 ms). Os ratos (`speed 172`)
-andaram a 700–1.200 ms. Cada abate deixa **cadáver no chão** (`ground-item-appear` com
+andaram a 700–1.200 ms na reta e 3.500 na diagonal — os mesmos 3×. Cada abate deixa **cadáver no chão** (`ground-item-appear` com
 aparência 5964, que some sozinho), o loot vai à caixa da sessão (`loot-drop`, `loot-update`),
 o golpe é `creature-hit { attackerId, targetId, value, effect }` e o projétil
 `projectile-move { kind, from, to, durationMs }` (180 ms para 3 tiles). `experience-gain`
@@ -337,13 +348,32 @@ por abate; `bestiary-progress { kills, stages, killsRequired }`.
 Sair: `leave-hunt` → `hunt-leave-pending { remainingMs: 5000 }` → cinco segundos depois,
 `instance-enter` de volta a `city-global`, no mesmo socket.
 
-`player-stats` numa hunt, level 7 sem arma (`attackSkill: "fist"`, skill 10): `attackMin 9,
-attackMax 19`; `healthRegen 10, manaRegen 5` — zero fora da hunt, como a Parte I já dizia;
-`capacity 156766` (1.567,66 oz); `staminaMs 43200000` (12 h); `speed 292`;
-`levelBonusPercent 192`; e um **`huntSessionRemainingMs` de ~4 h** — a sessão de caçada tem
-teto, que a tela não mostra.
+`player-stats` é o personagem inteiro, a cada mudança: `health/maxHealth`, `mana/maxMana`,
+`healthRegen/manaRegen` (10 e 5 na hunt, **zero na Cidade**, como a Parte I já dizia),
+`manaShield*`, `level`, `speed` (292 no 7), `speedBonus`, `magicLevel/magicProgress/
+magicProgressNeeded`, `experience/experienceNeeded`, `skills` e `skillProgress/
+skillProgressNeeded` por perícia (fist, club, sword, axe, distance, shielding, fishing),
+`skillBonuses`, `capacity` (156766 = 1.567,66 oz), os cinco `*BonusPercent` de XP
+(`levelBonusPercent 192`), `vocation: null`, um bloco `combat` (`armor, defense, attackMin 9,
+attackMax 19, weaponAttack, attackSkill: "fist", criticalChance/Extra, lifeLeech,
+manaLeech, bestiaryDamage, protection`), `cooldowns` (`attack, heal, support, item,
+spells`), e a stamina: `staminaMs` (43.200.000 = 12 h cheia, na Cidade; 43.158.502 e caindo
+na hunt), `staminaDraining`, `staminaRefillCost/GainMs/RefillsLeft`, e um
+**`huntSessionRemainingMs` de ~4 h** — a sessão de caçada tem teto, que a tela não mostra.
 
-## 16. O que isto muda para o Draconya
+## 16. O que NÃO dá para concluir daqui
+
+- **Nada sobre o servidor deles**, como na Parte I: o protocolo mostra o que sai, não como é
+  calculado — nem se a hunt roda desanexada, nem a que taxa.
+- **Nada sobre a licença do mapa.** O `otservbr.otbm` é uma reprodução comunitária do mapa da
+  CipSoft, na mesma classe de risco do pacote de arte (ADR 0008), e a Parte II só mostra que o
+  Huntera o usa. A decisão de usá-lo, e de nunca versioná-lo, é do ADR 0025 (FUN-116), não
+  desta observação. A fonte de um importador nosso seria esse mapa comunitário — **nunca os
+  recortes do Huntera**, que são deles.
+- **Nada sobre o que está fora da janela**: 16 tiles de raio é o que o servidor manda; o
+  resto do comportamento dos outros jogadores não foi visto.
+
+## 17. O que isto muda para o Draconya
 
 - **Cidade e hunt vêm do mesmo mapa comunitário que já temos como referência**, recortados
   com o editor. O caminho é um importador de OTBM, não um editor de mapa nosso.
