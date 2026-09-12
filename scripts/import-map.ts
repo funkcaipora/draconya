@@ -51,7 +51,11 @@ export interface ImportOptions {
   readonly region: Region;
   /** As flags de um objeto do pacote; `null` quando o id não existe nele. */
   readonly flagsOf: (appearanceId: number) => AppearanceFlags | null;
-  /** Nome do objeto no pacote, só para o relatório de candidatos a escada. */
+  /**
+   * Nome do objeto no pacote, para o relatório de candidatos a escada. Os nomes do pacote
+   * 13.x são os do mercado/cyclopedia (7.183 objetos, nenhum "stairs"), então o critério que
+   * vale de verdade é o geométrico: tile andável SEM chão — o degrau é um item que se pisa.
+   */
   readonly nameOf?: (appearanceId: number) => string | undefined;
   /** Onde se nasce, em coordenadas do mapa real. */
   readonly entryPoint?: { readonly x: number; readonly y: number; readonly z: number };
@@ -86,7 +90,7 @@ export interface ImportReport {
   readonly distinctIds: number;
   readonly unknownIds: readonly number[];
   readonly flaggedTiles: number;
-  readonly stairCandidates: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number; readonly id: number; readonly name: string }>;
+  readonly stairCandidates: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number; readonly id: number; readonly name?: string }>;
   readonly region: Region;
 }
 
@@ -137,11 +141,23 @@ function walkableComponent(
   tiles: Map<string, RegionTile>, blocked: Map<string, boolean>, seed: { x: number; y: number; z: number },
 ): Set<string> {
   const seen = new Set<string>();
-  const start = key(seed.x, seed.y, seed.z);
-  if (!tiles.has(start) || blocked.get(start) === true) {
-    throw new Error(`--keep-from (${seed.x},${seed.y},${seed.z}) não é um tile andável do recorte`);
+  // A semente pode cair numa parede — um centro de spawn, uma coordenada de wiki. Aceitamos o
+  // andável mais próximo até três tiles, do mais perto para o mais longe, em ordem fixa.
+  let origin: { x: number; y: number; z: number } | null = null;
+  for (let radius = 0; radius <= 3 && origin === null; radius++) {
+    for (let dy = -radius; dy <= radius && origin === null; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const k = key(seed.x + dx, seed.y + dy, seed.z);
+        if (tiles.has(k) && blocked.get(k) !== true) { origin = { x: seed.x + dx, y: seed.y + dy, z: seed.z }; break; }
+      }
+    }
   }
-  const queue = [seed];
+  if (origin === null) {
+    throw new Error(`--keep-from (${seed.x},${seed.y},${seed.z}) não tem tile andável a até 3 tiles`);
+  }
+  const start = key(origin.x, origin.y, origin.z);
+  const queue = [origin];
   seen.add(start);
   while (queue.length > 0) {
     const at = queue.shift() as { x: number; y: number; z: number };
@@ -256,20 +272,26 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
   const ids = new Set<number>();
   const stackTiles: Array<[number, number, number, number, Array<number | [number, number]>]> = [];
   const sortedTiles = [...collected.tiles.values()].sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
-  const stairCandidates: ImportReport['stairCandidates'] = [];
+  const stairCandidates: Array<{ x: number; y: number; z: number; id: number; name?: string }> = [];
   for (const tile of sortedTiles) {
     if (tile.ground !== null) ids.add(tile.ground);
     for (const item of tile.items) ids.add(item.id);
     const items = tile.items.map((item) =>
       (item.count === undefined || item.count <= 1 ? item.id : [item.id, item.count] as [number, number]));
     stackTiles.push([tile.x - region.x[0], tile.y - region.y[0], tile.z, tile.ground ?? 0, items]);
-    if (options.nameOf !== undefined) {
+    // Candidato a escada: tile andável sem chão (o item É o degrau), ou item cujo nome no
+    // pacote diga escada — o segundo caso quase não acontece no 13.x, mas custa nada.
+    const local = { x: tile.x - region.x[0], y: tile.y - region.y[0], z: tile.z };
+    const walkable = blocked.get(key(tile.x, tile.y, tile.z)) !== true;
+    if (walkable && tile.ground === null && tile.items[0] !== undefined) {
+      const id = tile.items[0].id;
+      const name = options.nameOf?.(id);
+      stairCandidates.push(name === undefined ? { ...local, id } : { ...local, id, name });
+    } else if (options.nameOf !== undefined) {
       for (const id of [tile.ground, ...tile.items.map((i) => i.id)]) {
         if (id === null) continue;
         const name = options.nameOf(id);
-        if (name !== undefined && STAIR_NAME.test(name)) {
-          stairCandidates.push({ x: tile.x - region.x[0], y: tile.y - region.y[0], z: tile.z, id, name });
-        }
+        if (name !== undefined && STAIR_NAME.test(name)) stairCandidates.push({ ...local, id, name });
       }
     }
   }
@@ -531,8 +553,8 @@ if (import.meta.main) {
   for (const floor of report.perFloor) console.log(`  z${floor.z}: ${floor.tiles} tiles, ${floor.walkable} andáveis, ${floor.blocked} bloqueados`);
   console.log(`  aparências distintas: ${report.distinctIds}; desconhecidas no pacote: ${report.unknownIds.length}${report.unknownIds.length > 0 ? ` (${report.unknownIds.slice(0, 20).join(', ')})` : ''}`);
   console.log(`  candidatos a escada (autorar em floorChanges): ${report.stairCandidates.length}`);
-  for (const candidate of report.stairCandidates.slice(0, 60)) {
-    console.log(`    (${candidate.x},${candidate.y},${candidate.z}) ${candidate.id} ${candidate.name}`);
+  for (const candidate of report.stairCandidates.slice(0, 80)) {
+    console.log(`    (${candidate.x},${candidate.y},${candidate.z}) ${candidate.id}${candidate.name === undefined ? '' : ` ${candidate.name}`}`);
   }
   console.log(`  escrito: ${contentPath}`);
   console.log(`  escrito: ${stackPath}`);

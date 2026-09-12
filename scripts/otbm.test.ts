@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NODE, OtbmError, otbmNode, readOtbmHeader, readOtbmTiles, u16, u32, u8 } from './otbm.js';
+import type { Region } from './otbm.js';
 
 // Um OTBM sintético, montado a partir do formato — nunca um arquivo real de 184 MB. A fixture
 // é a estrutura, escrita em código, para o dia em que ela reprovar dizer o que dizia.
@@ -25,7 +26,8 @@ const count = (n: number): number[] => [0x0f, ...u8(n)];
 const file = (areas: number[][]): Uint8Array =>
   Uint8Array.from([...header(), ...root([mapData(areas)])]);
 
-const all = (bytes: Uint8Array, region = { x: [0, 65535] as const, y: [0, 65535] as const, z: [0, 15] as const }) =>
+const EVERYWHERE: Region = { x: [0, 65535], y: [0, 65535], z: [0, 15] };
+const all = (bytes: Uint8Array, region: Region = EVERYWHERE) =>
   [...readOtbmTiles(bytes, region)];
 
 describe('readOtbmHeader', () => {
@@ -75,7 +77,7 @@ describe('readOtbmTiles', () => {
       area(32256, 32000, 7, [tile(0, 0, ground(3))]),
       area(32000, 32000, 8, [tile(1, 1, ground(4))]),
     ]);
-    const region = { x: [32000, 32100] as const, y: [32000, 32100] as const, z: [7, 7] as const };
+    const region: Region = { x: [32000, 32100], y: [32000, 32100], z: [7, 7] };
     expect(all(bytes, region).map((t) => t.ground)).toEqual([1]);
   });
 

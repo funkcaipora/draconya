@@ -331,6 +331,16 @@ describe('o Bestiário (FUN-113, §18)', () => {
 describe('ponto de entrada da Cidade (FUN-60)', () => {
   const sala = { id: 'city', z: 7, grid: ['####', '#..#', '#..#', '####'] };
 
+  it('mapa importado (com `source`) dispensa a linha em appearances.maps — a pilha mora em things/ (FUN-118)', () => {
+    const imported = {
+      id: 'thais', z: 7, floors: { '7': { grid: ['###', '#.#', '###'] } },
+      source: { file: 'otservbr.otbm', sha256: 'a'.repeat(64), region: { x: [0, 2] as [number, number], y: [0, 2] as [number, number], z: [7, 7] as [number, number] } },
+    };
+    const withEntry = { ...sala, entryPoint: { x: 1, y: 1 } };
+    const content = buildContent(base({ hunts: [], maps: [withEntry, imported], city: { mapId: 'city', stepDurationMs: 500 } }));
+    expect(content.maps.get('thais')?.source?.file).toBe('otservbr.otbm');
+  });
+
   it('aceita um entryPoint em chão livre e o expõe como a Cidade', () => {
     // Sem hunt: a de base aponta o mapa `rat-cellars`, e com um mapa presente a referência
     // cruzada passa a ser checada — o que aqui seria ruído.
