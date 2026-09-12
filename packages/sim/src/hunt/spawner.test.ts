@@ -9,7 +9,7 @@ const cautious: HuntDifficulty = {
   respawnDelayMs: 30_000,
 };
 const points: Point[] = [{ x: 5, y: 5, z: 7 }, { x: 15, y: 5, z: 7 }];
-const positionOf = (i: number) => points[i] as Point;
+const positionOf = (i: number) => ({ at: points[i] as Point, radius: 3 });
 const open = () => false;
 
 describe('pickByWeight', () => {
@@ -75,6 +75,28 @@ describe('Spawner', () => {
     const spawner = new Spawner(points.length, cautious);
     expect(spawner.slots).toHaveLength(cautious.monsterCount);
     expect(fillAll(spawner, cautious)).toHaveLength(cautious.monsterCount);
+  });
+
+  it('spreads the total over the whole loop, evenly, and never piles it on the first points (FUN-123)', () => {
+    // Com 3 monstros em 14 pontos, o rodízio `i % pontos` deixava 11 pontos sem nada e os três
+    // amontoados no começo do laço; espalhados, cobrem o laço inteiro em intervalos iguais.
+    const three = { ...cautious, monsterCount: 3 };
+    expect(new Spawner(14, three).slots.map((s) => s.pointIndex)).toEqual([0, 4, 9]);
+    const eight = { ...cautious, monsterCount: 8 };
+    expect(new Spawner(14, eight).slots.map((s) => s.pointIndex)).toEqual([0, 1, 3, 5, 7, 8, 10, 12]);
+    // Mais monstros que pontos: a mesma quantidade em cada um.
+    expect(new Spawner(2, { ...cautious, monsterCount: 6 }).slots.map((s) => s.pointIndex)).toEqual([0, 0, 0, 1, 1, 1]);
+    expect(new Spawner(0, cautious).slots).toEqual([]);
+  });
+
+  it('searches a free tile up to the radius of the POINT, not a constant (FUN-123)', () => {
+    // A rota autora o raio; um raio 0 é "neste tile ou nada".
+    const tight = (i: number) => ({ at: points[i] as Point, radius: 0 });
+    const spawner = new Spawner(points.length, cautious);
+    const onCenter = spawner.fill(0, cautious, tight, open, Rng.fromSeed('a'));
+    expect(onCenter?.position).toEqual(points[0]);
+    const centerTaken = (x: number, y: number) => x === 5 && y === 5;
+    expect(spawner.fill(0, cautious, tight, centerTaken, Rng.fromSeed('a'))).toBeNull();
   });
 
   it('puts the same monster in the same tile every time', () => {

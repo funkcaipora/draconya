@@ -327,8 +327,8 @@ export const HUNT_DIFFICULTY_NAMES = ['cautious', 'bold', 'reckless'] as const;
 export const huntDifficultySchema = z.object({
   /**
    * Quantos monstros a instância mantém vivos, NO TOTAL — o `monsterCount` do Huntera (2, 5
-   * e 8 no bueiro), distribuído pelos pontos de spawn da rota em rodízio (`Spawner`). Sem
-   * variação aleatória de densidade no MVP (§14.5).
+   * e 8 no bueiro), espalhado pelos pontos de spawn da rota (`Spawner`: o lugar `i` no ponto
+   * `⌊i × pontos / total⌋`). Sem variação aleatória de densidade no MVP (§14.5).
    */
   monsterCount: z.number().int().positive(),
   composition: z.array(

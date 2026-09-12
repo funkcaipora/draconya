@@ -38,6 +38,9 @@ do `sim` é a verdadeira.
 ## Regras
 
 - Cinco marcos de abates por monstro: 10 000 / 25 000 / 50 000 / 100 000 / 200 000.
+- O que conta é o abate, não o cadáver: o rato do Tibia (FUN-123 — 20 HP, 5 XP, cadáver só
+  visual por dez segundos) rende um abate por morte, e os 10 000 do primeiro marco são
+  10 000 ratos, a 5 XP cada antes do bônus.
 - Cada marco alcançado dá **+1 % de XP PvE permanente**, somado com os demais — de todos os
   monstros (DT-01, ver Divergências).
 - A XP de um abate é `floor(xp × (100 + 1 × marcos) / 100)`, em inteiro: `100 × 1,13` em ponto

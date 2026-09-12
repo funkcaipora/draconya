@@ -363,52 +363,75 @@ export async function mountViewport(
       }
     }
 
+    /**
+     * Pinta a pilha de um tile na posição de tela `local`, sob o véu de `below` andares. É o
+     * mesmo pintor para o tile do mapa e para o item do chão sem mapa (o cadáver que caiu
+     * antes de a cena chegar): um caminho de desenho.
+     */
+    const paintStack = (
+      stack: TileStack, mx: number, my: number, below: number, local: { x: number; y: number },
+      withPlaceholder: boolean,
+    ): number => {
+      const tint = veilTint(below);
+      const drawn = drawTile(stack, mx, my, objectInfo);
+      // O retângulo de reserva do tile, sob o mesmo véu do andar: chão é chão, e tile bloqueado
+      // — parede, pilar — é escuro. Sem pacote é tudo o que há; com pacote, é o que segura o
+      // lugar do PRIMEIRO objeto da pilha enquanto o quadro dele não chega — o chão, ou a
+      // parede de um tile sem chão. A tela nunca fica preta por causa de arte, e um item de
+      // cima sem quadro não é nada. O item do chão sobre a grade de reserva não tem retângulo:
+      // a grade já é o chão dele.
+      const placeholder = (): void => {
+        if (!withPlaceholder) return;
+        groundFallback
+          .rect(local.x, local.y, TILE, TILE)
+          .fill(shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below))
+          .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
+      };
+      if (pack === null) {
+        placeholder();
+        return drawn.creatureElevation;
+      }
+      for (const [index, object] of drawn.objects.entries()) {
+        const texture = objectTexture(object.appearanceId, object.cell);
+        if (!(texture instanceof Texture)) {
+          if (index === 0) placeholder();
+          continue;
+        }
+        const sprite = object.layer === 'top'
+          ? take(top, usedTop++, above)
+          : take(ground, usedGround++, terrain);
+        sprite.texture = texture;
+        sprite.tint = tint;
+        // Ancorado no canto INFERIOR DIREITO do tile, transbordando para cima e para a
+        // esquerda, como no Tibia; a elevação e o shift deslocam mais para lá.
+        sprite.x = local.x + TILE - texture.width + object.dx;
+        sprite.y = local.y + TILE - texture.height + object.dy;
+      }
+      return drawn.creatureElevation;
+    };
+
+    if (scene === null) {
+      // Sem cena, o que está no chão do andar do jogador aparece mesmo assim (FUN-123): o
+      // cadáver que caiu enquanto o mapa carregava tem prazo, e esperar a cena era perdê-lo.
+      for (const [at, items] of groundItemsAt) {
+        const [x, y, z] = at.split(',').map(Number) as [number, number, number];
+        if (z !== floor || x < window.minX || x > window.maxX || y < window.minY || y > window.maxY) continue;
+        paintStack({ ground: 0, items }, x, y, 0, { x: (x - window.minX) * TILE, y: (y - window.minY) * TILE }, false);
+      }
+    }
+
     // Do andar mais fundo ao do jogador (FUN-121): o de cima cobre o de baixo. Um andar `below`
     // níveis abaixo aparece deslocado `below` tiles para baixo e para a direita — a perspectiva
     // do Tibia —, e sob um véu que escurece a cada nível.
     for (const z of scene === null ? [] : floorsBelow(scene.floors, floor)) {
       const below = z - floor;
-      const tint = veilTint(below);
       for (let sy = window.minY; sy <= window.maxY; sy++) {
         for (let sx = window.minX; sx <= window.maxX; sx++) {
           const stack = stackAt(sx - below, sy - below, z);
           if (stack === null) continue;
           const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
-          const drawn = drawTile(stack, sx - below, sy - below, objectInfo);
-          if (below === 0 && drawn.creatureElevation > 0) {
-            elevations.set(`${sx},${sy},${z}`, drawn.creatureElevation);
-          }
-          // O retângulo de reserva do tile, sob o mesmo véu do andar: chão é chão, e tile
-          // bloqueado — parede, pilar — é escuro. Sem pacote é tudo o que há; com pacote, é
-          // o que segura o lugar do PRIMEIRO objeto da pilha enquanto o quadro dele não chega
-          // — o chão, ou a parede de um tile sem chão. A tela nunca fica preta por causa de
-          // arte, e um item de cima sem quadro não é nada.
-          const placeholder = (): void => {
-            groundFallback
-              .rect(local.x, local.y, TILE, TILE)
-              .fill(shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below))
-              .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
-          };
-          if (pack === null) {
-            placeholder();
-            continue;
-          }
-          for (const [index, object] of drawn.objects.entries()) {
-            const texture = objectTexture(object.appearanceId, object.cell);
-            if (!(texture instanceof Texture)) {
-              if (index === 0) placeholder();
-              continue;
-            }
-            const sprite = object.layer === 'top'
-              ? take(top, usedTop++, above)
-              : take(ground, usedGround++, terrain);
-            sprite.texture = texture;
-            sprite.tint = tint;
-            // Ancorado no canto INFERIOR DIREITO do tile, transbordando para cima e para a
-            // esquerda, como no Tibia; a elevação e o shift deslocam mais para lá.
-            sprite.x = local.x + TILE - texture.width + object.dx;
-            sprite.y = local.y + TILE - texture.height + object.dy;
-          }
+          const elevation = paintStack(stack, sx - below, sy - below, below, local, true);
+          if (below === 0 && elevation > 0) elevations.set(`${sx},${sy},${z}`, elevation);
         }
       }
     }

@@ -857,7 +857,10 @@ export class HuntRuleset implements Ruleset {
     const request = this.#spawner.fill(
       slot,
       this.#difficulty,
-      (pointIndex) => (this.#options.route.spawnPoints[pointIndex] as SpawnPoint).at,
+      (pointIndex) => {
+        const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
+        return { at: point.at, radius: point.radius };
+      },
       this.#spawnBlocked,
       session.rng,
     );

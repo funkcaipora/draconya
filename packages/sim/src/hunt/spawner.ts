@@ -63,10 +63,12 @@ export class Spawner {
 
   /**
    * Um lugar por monstro previsto: `monsterCount` da dificuldade — o TOTAL da instância, como
-   * o Huntera conta (2, 5 e 8 no bueiro; FUN-123) —, distribuído pelos pontos da rota em
-   * rodízio: o lugar `i` fica no ponto `i % pontos`. Determinístico, e por isso igual em dois
-   * servidores com o mesmo conteúdo. A conta acontece UMA vez, na entrada — densidade não muda
-   * durante a hunt. Rota sem ponto de spawn é uma hunt sem monstro.
+   * o Huntera conta (2, 5 e 8 no bueiro; FUN-123) —, ESPALHADO pelos pontos da rota: o lugar
+   * `i` fica no ponto `⌊i × pontos / total⌋`. Com menos monstros que pontos, eles cobrem o
+   * laço inteiro em intervalos iguais (2 em 14 pontos: o 0 e o 7) em vez de se amontoarem nos
+   * primeiros; com mais, cada ponto recebe a mesma quantidade. Determinístico, e por isso
+   * igual em dois servidores com o mesmo conteúdo. A conta acontece UMA vez, na entrada —
+   * densidade não muda durante a hunt. Rota sem ponto de spawn é uma hunt sem monstro.
    */
   constructor(pointCount: number, difficulty: HuntDifficulty, state?: SpawnerState) {
     if (state !== undefined) {
@@ -75,8 +77,9 @@ export class Spawner {
     }
     this.#slots = [];
     if (pointCount === 0) return;
-    for (let i = 0; i < difficulty.monsterCount; i++) {
-      this.#slots.push({ pointIndex: i % pointCount, occupantId: null });
+    const total = difficulty.monsterCount;
+    for (let i = 0; i < total; i++) {
+      this.#slots.push({ pointIndex: Math.floor((i * pointCount) / total) % pointCount, occupantId: null });
     }
   }
 
@@ -102,7 +105,7 @@ export class Spawner {
   fill(
     slotIndex: number,
     difficulty: HuntDifficulty,
-    positionOf: (pointIndex: number) => Point,
+    spawnPointOf: (pointIndex: number) => SpawnArea,
     blocked: Blocked,
     rng: Rng,
   ): SpawnRequest | null {
@@ -112,7 +115,8 @@ export class Spawner {
     const monsterId = pickByWeight(difficulty.composition, rng);
     if (monsterId === null) return null;
 
-    const position = this.#freeTile(positionOf(slot.pointIndex), blocked);
+    const area = spawnPointOf(slot.pointIndex);
+    const position = this.#freeTile(area.at, area.radius, blocked);
     // Sem lugar livre agora — outro monstro ocupou o ponto, ou o jogador está em cima.
     // Quem chama tenta de novo mais tarde; empilhar dois monstros no mesmo tile é pior.
     if (position === null) return null;
@@ -142,8 +146,15 @@ export class Spawner {
     return index;
   }
 
-  #freeTile(center: Point, blocked: Blocked): Point | null {
-    for (const tile of tilesAround(center, SPAWN_RADIUS)) {
+  /**
+   * O tile livre mais próximo do ponto, até o `radius` DO PONTO (FUN-123) — o que a rota
+   * autora, e que até então era dado morto: a busca usava uma constante e o número do arquivo
+   * não mudava nada. Ficar pequeno é o certo — monstro que nasce longe do ponto deixa de
+   * guardar o trecho da rota que ele existe para guardar —, e é por isso que o raio é de quem
+   * escreve a rota, tile a tile, e não de uma constante daqui.
+   */
+  #freeTile(center: Point, radius: number, blocked: Blocked): Point | null {
+    for (const tile of tilesAround(center, radius)) {
       if (blocked(tile.x, tile.y)) continue;
       return tile;
     }
@@ -151,11 +162,8 @@ export class Spawner {
   }
 }
 
-/**
- * Até onde procurar um tile livre em volta do ponto.
- *
- * Não é o `radius` do ponto de spawn da rota, que descreve onde os monstros PODEM estar; este
- * é só o alcance da busca por um lugar desocupado, e ficar pequeno é o certo — monstro que
- * nasce longe do ponto deixa de guardar o trecho da rota que ele existe para guardar.
- */
-const SPAWN_RADIUS = 3;
+/** Um ponto de spawn como o `Spawner` o vê: o tile, e até onde procurar lugar em volta dele. */
+export interface SpawnArea {
+  readonly at: Point;
+  readonly radius: number;
+}

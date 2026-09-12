@@ -145,9 +145,12 @@ num andar só, e o carregador recusa rota que pise em escada.
 
 Os pontos de respawn são definidos por design, na rota. Quantos monstros a instância mantém
 vivos — o `monsterCount` TOTAL do pull escolhido, como o Huntera conta (FUN-123) — **não varia**:
-o §14.5 é explícito que não há variação aleatória de densidade no MVP. O total é distribuído
-pelos pontos de spawn da rota em rodízio (`Spawner`): o lugar `i` fica no ponto `i % pontos`,
-determinístico. Na Rat Cellars, 2/5/8 ratos sobre 14 pontos.
+o §14.5 é explícito que não há variação aleatória de densidade no MVP. O total é ESPALHADO
+pelos pontos de spawn da rota (`Spawner`): o lugar `i` fica no ponto `⌊i × pontos / total⌋`,
+determinístico — com menos monstros que pontos eles cobrem o laço inteiro em intervalos iguais,
+com mais cada ponto recebe a mesma quantidade. Na Rat Cellars, 2/5/8 ratos sobre 14 pontos: o
+Cauteloso nasce nos pontos 0 e 7, o Agressivo em oito dos catorze. O `radius` de cada ponto é
+até onde o monstro procura tile livre para nascer.
 
 O único sorteio do spawn é **qual** monstro, dentro dos pesos da composição. Peso zero é
 permitido e significa "não sai": é como se desliga uma variante sem apagar a linha, e apagar
@@ -351,7 +354,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, distribuído pelos pontos em rodízio (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
@@ -360,7 +363,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
-| O rato (números do mapa real, Canary) | 20 HP, 5 XP, ataque 0–8 sorteado por golpe, armadura 1, speed 172 | `data/monsters/rat.json` |
+| O rato (números do mapa real, Canary) | 20 HP, 5 XP, ataque 0–8 sorteado por golpe, armadura 1, speed 172; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
 | Loot por abate | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
 
 ## Em aberto
