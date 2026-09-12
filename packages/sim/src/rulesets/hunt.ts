@@ -1018,13 +1018,23 @@ export class HuntRuleset implements Ruleset {
    * Um jogador pediu para andar (FUN-69). Mesmo caminho do bot, mesma razão de recusa.
    *
    * Não mexe no walker: se o passo tirou o personagem da rota, o vencimento seguinte de
-   * `PLAYER_STEP` descobre e reentra pelo tile mais próximo.
+   * `PLAYER_STEP` descobre e reentra pelo tile mais próximo. Mas o passo manual É um passo
+   * (FUN-122): o próximo vencimento do bot conta a partir dele. Sem isto, o `PLAYER_STEP` já
+   * agendado — com a cadência do passo anterior — vencia logo depois, e o personagem dava
+   * dois passos dentro da duração de um.
    */
   requestMove(session: Session, characterId: string, to: GridPoint): MoveResult {
     const character = findById(session.participants, characterId);
     if (character === null) return { ok: false, reason: 'tile-blocked' };
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
-    return this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
+    if (result.ok) {
+      session.cancelEvent(PLAYER_STEP, characterId);
+      session.scheduleIn(PLAYER_STEP, result.durationMs, {
+        priority: EventPriority.Movement, subject: characterId,
+      });
+    }
+    return result;
   }
 
   /**

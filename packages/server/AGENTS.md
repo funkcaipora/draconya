@@ -493,6 +493,16 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
 
 ## Armadilhas conhecidas
 
+- **Um passo por vez, por personagem, no relógio do PROCESSO** (`#walkingUntil` em
+  `host.ts`, FUN-122). A Cidade não tem relógio (`hz` 0) e o `move` do `sim` não sabe que horas
+  são: sem esta trava no hospedeiro, um cliente mandando mil `walk` por segundo atravessaria a
+  praça em meio segundo. O `walk` que chega antes de o passo anterior acabar é recusado em
+  silêncio — o teclado do cliente repete no ritmo do passo, e o ritmo é daqui. Vale para
+  TODA sessão, hunt inclusive: `#requestWalk` é a porta única do `walk`, e antes da trava a
+  hunt também aceitava a rajada — o jogador andava mais rápido que a fórmula do Tibia. Teste
+  que dá muitos passos em sequência precisa de um `now` que ande (a praça da FUN-33 avança o
+  relógio a cada consulta).
+
 - Ações do jogador são processadas **na chegada**, não enfileiradas para o tick. Enfileirar
   adiciona até 100 ms de jitter em cima do ping — irrelevante na hunt, fatal no PvP manual.
 - `uWebSockets.js` não é a API do `ws`. Não presuma compatibilidade. O `HttpRequest` do

@@ -19,6 +19,7 @@ import { applyUiSkin } from '../assets/ui.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
+import { useWalkKeys } from './useWalkKeys.js';
 import { Viewport } from './Viewport.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
@@ -41,6 +42,8 @@ export function Shell() {
   // As folhas dos monstros das hunts, decodificadas na Cidade (FUN-112): sem isto o rato era
   // um quadrado por seis a dez segundos na primeira entrada.
   useWarmHuntOutfits(loaded?.pack ?? null);
+  // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
+  useWalkKeys();
 
   useEffect(() => {
     // As variáveis vivem no `:root` e valem para a casca inteira. Não dependem do pacote ter

@@ -992,6 +992,37 @@ describe('movimento com escritor único (FUN-69)', () => {
     )).toBe(true);
   });
 
+  it('o passo manual também é um passo: o bot não dá o dele dentro da mesma duração (FUN-122)', () => {
+    // O `PLAYER_STEP` já agendado — com a cadência do passo anterior — venceria logo depois
+    // do passo manual, e o personagem daria dois passos na duração de um. Reagendado a partir
+    // do passo manual, o próximo passo de quem quer que seja vem só quando ele acaba.
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, ruleset, hero } = start({ loaded: semSpawn });
+    session.advanceBy(100);
+    session.drainEvents();
+    // Um instante antes de o passo de rota vencer (o herói de teste anda a 500 ms).
+    session.advanceBy(350);
+    session.drainEvents();
+
+    const manual = ruleset.requestMove(session, hero.id, { x: 2, y: 2 });
+    expect(manual.ok).toBe(true);
+    const duration = manual.ok ? manual.durationMs : 0;
+    expect(duration).toBeGreaterThan(0);
+    // O evento do próprio passo manual sai daqui; o que se conta é o que vier DEPOIS dele.
+    session.drainEvents();
+
+    // Até o fim do passo manual, nenhum outro passo do herói.
+    session.advanceBy(duration - 50);
+    expect(session.drainEvents().filter(
+      (e) => e.kind === 'creature-moved' && e.creatureId === hero.id,
+    )).toHaveLength(0);
+    // Depois dele, o bot volta a andar — a rota não ficou órfã.
+    run(session, 2000, 50);
+    expect(session.drainEvents().some(
+      (e) => e.kind === 'creature-moved' && e.creatureId === hero.id,
+    )).toBe(true);
+  });
+
 });
 
 // --- as cinco categorias do bot (FUN-84) -----------------------------------------------------

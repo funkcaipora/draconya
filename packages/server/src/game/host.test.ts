@@ -1530,6 +1530,38 @@ describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
     expect(first.received().filter((m) => m.type === 'instance-enter' || m.type === 'session-state')).toEqual([]);
   });
 
+  it('um passo por vez: a rajada de walk anda UM tile, e o próximo só quando o passo acabar (FUN-122)', () => {
+    // O teclado do cliente repete o `walk` no ritmo do passo; o ritmo, porém, é do servidor.
+    // Sem isto, um cliente mandando mil `walk` por segundo atravessaria a praça em meio segundo.
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      createSession: createCitySessionFactory(testContent()),
+      now: () => now,
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    socket.frames.length = 0;
+
+    for (let i = 0; i < 10; i++) host.handle(viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+    const moves = () => socket.received().filter((m) => m.type === 'creature-move');
+    expect(moves()).toHaveLength(1);
+    expect(host.sessionFor('p1')?.participants[0]?.position).toEqual({ x: 3, y: 2, z: 7 });
+    expect(socket.ended).toBeNull();
+
+    // O passo da Cidade de teste dura 500 ms: aos 499 ainda não; aos 500, anda.
+    now = 499;
+    host.handle(viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+    expect(moves()).toHaveLength(1);
+    now = 500;
+    host.handle(viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+    expect(moves()).toHaveLength(2);
+    expect(host.sessionFor('p1')?.participants[0]?.position).toEqual({ x: 4, y: 2, z: 7 });
+  });
+
   it('move o personagem e quem está olhando recebe UM creature-move, com duração', () => {
     // `creature-move` não tinha emissor nenhum antes desta issue. Um passo é enviado uma vez,
     // com origem, destino e duração — o cliente interpola o intervalo inteiro (ADR 0001).
@@ -2122,10 +2154,13 @@ describe('a praça não manda tudo para todos (FUN-33)', () => {
       city: { mapId: 'city', stepDurationMs: 500 },
     });
     const shard = new CityShard(content, () => 0);
+    // O relógio anda um passo a cada consulta (FUN-122): um passo por vez é a regra do
+    // hospedeiro, e esta praça de teste dá centenas deles em sequência.
+    let clock = 0;
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: 'v-test', logger,
       createSession: createCitySessionFactory(content, () => 0, shard),
-      now: () => 0,
+      now: () => (clock += 1_000),
       ...options,
     });
     /** Entra e caminha até `to`, um tile por vez. Sem isto todos nascem colados na entrada. */
@@ -2555,6 +2590,20 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     const enter = received.findIndex((m) => m.type === 'instance-enter');
     expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena' });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
+  });
+
+  it('na hunt também é um passo por vez: a rajada de walk anda um tile por duração de passo (FUN-122)', () => {
+    // O `walk` do jogador entra pelo mesmo `#requestWalk` em qualquer sessão, e antes da
+    // trava a hunt aceitava a rajada — o personagem andava mais rápido que a fórmula do Tibia.
+    const { host, socket, viewer } = hunt({ wide: true });
+    host.flush();
+    socket.frames.length = 0;
+    const before = { ...host.sessionFor('hero')?.participants[0]?.position };
+    for (let i = 0; i < 10; i++) host.handle(viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+    const after = host.sessionFor('hero')?.participants[0]?.position;
+    expect(after?.x).toBe((before.x ?? 0) + 1);
+    expect(socket.received().filter((m) => m.type === 'creature-move' && m.id === 1)).toHaveLength(1);
   });
 
   it('o monstro que nasce vira creature-appear, com nome e outfit do catálogo', () => {
