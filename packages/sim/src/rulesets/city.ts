@@ -18,7 +18,10 @@ export interface CityRulesetOptions {
    * personagem nascia em `(0,0)` porque não havia mapa para dizer que isso é parede.
    */
   readonly map?: Tilemap;
-  /** Milissegundos por tile ao andar na Cidade. Vem de `progression.stepDurationMs`. */
+  /**
+   * Milissegundos por tile ao andar na Cidade — FIXO, para todo mundo (FUN-119, ADR 0025).
+   * Vem de `city.stepDurationMs`; a Cidade é navegação, não simulação.
+   */
   readonly stepDurationMs?: number;
   /** Até onde procurar tile livre ao chegar. Ver `ENTRY_RADIUS`. */
   readonly entryRadius?: number;
@@ -38,7 +41,11 @@ export interface CityRulesetOptions {
 const ENTRY_RADIUS = 16;
 
 export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
-  const world = options.map === undefined ? null : new TileOccupancy(options.map);
+  const world = options.map === undefined
+    ? null
+    : new TileOccupancy(options.map, options.stepDurationMs === undefined
+      ? {}
+      : { fixedStepMs: options.stepDurationMs });
   let occupancyStale = true;
 
   const rebuild = (session: Session): void => {
@@ -62,7 +69,6 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       character.health = character.maxHealth;
       character.mana = character.maxMana;
       character.alive = true;
-      if (options.stepDurationMs !== undefined) character.stepDurationMs = options.stepDurationMs;
 
       // A colocação passa pela MESMA legalidade que um passo (FUN-69). O ponto de entrada é
       // validado no carregamento do conteúdo contra `isBlocked`, então uma recusa aqui é
@@ -74,8 +80,7 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
         // A praça é COMPARTILHADA (FUN-71): o segundo a chegar encontra o primeiro parado
         // exatamente no ponto de entrada, e um `place` seco recusaria — o personagem ficaria
         // fora do mapa, invisível e sem andar, com o log dizendo que ele entrou.
-        placeNear(world, character, { ...options.map.entryPoint, z: options.map.z },
-          options.entryRadius ?? ENTRY_RADIUS);
+        placeNear(world, character, options.map.entryPoint, options.entryRadius ?? ENTRY_RADIUS);
       }
       session.record('entered-city', character.id);
     },

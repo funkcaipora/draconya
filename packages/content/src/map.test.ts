@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildRoute, buildTilemap, isBlocked, validateRoute } from './map.js';
-import type { RouteData, TilemapData } from './schemas.js';
+import type { RouteData, TilemapInput } from './schemas.js';
 
-const mapData: TilemapData = {
+const mapData: TilemapInput = {
   id: 'm', z: 7,
   grid: [
     '#####',

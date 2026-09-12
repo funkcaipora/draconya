@@ -7,7 +7,7 @@
   "attack": 6,
   "armor": 0,
   "attackIntervalMs": 2000,
-  "stepDurationMs": 500,
+  "speed": 172,
   "aggroRadius": 4,
   "loot": { "gold": { "chance": 0.9, "min": 1, "max": 4 }, "items": [] }
 }

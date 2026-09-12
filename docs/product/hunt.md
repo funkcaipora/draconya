@@ -128,8 +128,18 @@ A colocação inicial passa pela mesma legalidade. O personagem nasce no `entryP
 Cidade — conteúdo, validado no boot contra `isBlocked` — e não mais no literal `(0,0)`, que é
 parede na borda de qualquer tilemap (FUN-60).
 
-A duração do passo é **uma função** (`movementDuration`), usada por humano, bot e monstro. Hoje a
-diagonal custa o mesmo que a reta; mudar isso é balanceamento, e muda num lugar só.
+A duração do passo é **uma função** (`movementDuration`), usada por humano, bot e monstro. Desde
+a FUN-119 (ADR 0025) ela é a fórmula do Tibia: `chão × 1000 / speed`, com a velocidade do chão
+do tile de **destino**, arredondada para cima em múltiplos de 50 ms, e a **diagonal custa 3×**
+antes do arredondamento — os números medidos no Huntera (speed 292 em chão 130/160/200 → 450/
+550/700 ms; diagonal 2.100) são a fixture de `movement.test.ts`. A cadência de quem parou é a de
+um passo dali. A Cidade não usa nada disso: anda a um passo fixo (`city.json`), porque é
+navegação e não simulação.
+
+**O mapa tem andares** (FUN-119): `floors` por `z`, e pisar numa escada (`floorChanges`) é um
+passo cujo destino está em outro andar — como no Tibia, o tile de chegada pode não ser o
+adjacente. O monstro não usa escada: para quem não carrega `z`, o degrau é parede. A rota fica
+num andar só, e o carregador recusa rota que pise em escada.
 
 ## Spawn: densidade é dado, composição é sorteio
 
@@ -343,7 +353,9 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
-| Velocidade de passo do personagem | [ABERTO — valor provisório: 500 ms por tile] | `data/progression/baseline.json`, `stepDurationMs` |
+| Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
+| Velocidade do rato | 172 | `data/monsters/rat.json`, `speed` |
 | Loot por abate (gold: chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
 
 ## Em aberto

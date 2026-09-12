@@ -285,8 +285,11 @@ export const monsterSchema = z.strictObject({
   armor: z.number().int().nonnegative(),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
-  /** Tiles por passo de movimento, em milissegundos. */
-  stepDurationMs: z.number().int().positive(),
+  /**
+   * Velocidade, na escala do Tibia (FUN-119, ADR 0025): o passo dura
+   * `ceil50(chão × 1000 / speed)` ms, diagonal × 3. O rato do mapa real tem 172.
+   */
+  speed: z.number().int().positive(),
   /** Raio de agressão, em tiles. */
   aggroRadius: z.number().int().nonnegative(),
   /**
@@ -371,10 +374,13 @@ export const progressionSchema = z.object({
   /** Level em que a vocação é escolhida, e a partir do qual ela passa a reger o crescimento. */
   vocationLevel: z.number().int().positive(),
   /**
-   * Milissegundos por tile andado. Fica aqui, e não em `combat`, porque velocidade é
-   * atributo do personagem: quando haste e botas existirem, elas modificam ESTE número.
+   * Velocidade inicial e ganho por level, na escala do Tibia (FUN-119, ADR 0025). A duração
+   * do passo na hunt é `ceil50(chão × 1000 / speed)` ms, diagonal × 3; a Cidade não usa isto
+   * (`city.stepDurationMs`). Fica aqui, e não em `combat`, porque velocidade é atributo do
+   * personagem: quando haste e botas existirem, elas modificam ESTE número.
    */
-  stepDurationMs: z.number().int().positive(),
+  startingSpeed: z.number().int().positive(),
+  speedPerLevel: z.number().int().nonnegative(),
   /**
    * Regeneração passiva, em pontos por segundo (FUN-36, FUN-68).
    *
@@ -993,17 +999,53 @@ const point = z.object({
  * blob base64 mostra que "o mapa mudou". O custo é tamanho de arquivo, que não importa para
  * dezenas de mapas — e a conversão para bitmap acontece uma vez, no carregamento.
  */
+/**
+ * Um andar (FUN-119, ADR 0025): a grade de bloqueio e, opcionalmente, a de velocidade de
+ * chão — um caractere por tile, resolvido por `speedPalette`. Sem `speed`, todo tile anda a
+ * `DEFAULT_GROUND_SPEED`; é o caso dos mapas autorados à mão.
+ */
+const floorSchema = z.object({
+  grid: z.array(z.string().min(1)).min(1),
+  speed: z.array(z.string().min(1)).optional(),
+});
+
 export const tilemapSchema = z.object({
   id: z.string().min(1),
+  /** O andar padrão: o de um mapa de grade única, e onde um `entryPoint` sem `z` cai. */
   z: z.number().int(),
-  grid: z.array(z.string().min(1)).min(1),
+  /** A forma de um andar só — açúcar para `floors: { [z]: { grid } }`. */
+  grid: z.array(z.string().min(1)).min(1).optional(),
+  /** Vários andares, pela chave `z` (FUN-119). Exatamente um de `grid`/`floors`. */
+  floors: z.record(z.string().regex(/^-?\d+$/), floorSchema).optional(),
+  /** Caractere da grade de velocidade → `bank.waypoints` do chão. */
+  speedPalette: z.record(z.string().length(1), z.number().int().positive()).optional(),
   /**
    * Onde um personagem nasce neste mapa (FUN-60, FUN-69). É CONTEÚDO, não código: o valor
    * antigo era um literal `(0,0)` no servidor, que é parede na borda de qualquer tilemap. O
    * `buildContent` valida contra `isBlocked` — ponto de entrada em parede quebra o boot, e
-   * não o jogador.
+   * não o jogador. Sem `z`, é o andar padrão.
    */
-  entryPoint: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
+  entryPoint: z.object({
+    x: z.number().int(), y: z.number().int(), z: z.number().int().optional(),
+  }).optional(),
+  /**
+   * Escadas, buracos e rampas (FUN-119): pisar em `from` leva a `to`, que pode estar em outro
+   * andar e não precisa ser adjacente — no Tibia, descer uma escada desloca um tile. Autorado
+   * à mão para o recorte; o importador só lista candidatos.
+   */
+  floorChanges: z.array(z.object({ from: point, to: point })).default([]),
+  /** De onde um mapa importado veio (ADR 0025). Ausente em mapa autorado à mão. */
+  source: z.object({
+    file: z.string().min(1),
+    sha256: z.string().min(1),
+    region: z.object({
+      x: z.tuple([z.number().int(), z.number().int()]),
+      y: z.tuple([z.number().int(), z.number().int()]),
+      z: z.tuple([z.number().int(), z.number().int()]),
+    }),
+  }).optional(),
+}).refine((map) => (map.grid === undefined) !== (map.floors === undefined), {
+  message: 'um mapa tem `grid` (um andar) ou `floors` (vários), nunca os dois nem nenhum',
 });
 
 export const routeSchema = z.object({
@@ -1021,5 +1063,7 @@ export const routeSchema = z.object({
 });
 
 export type TilemapData = z.infer<typeof tilemapSchema>;
+/** O que se ESCREVE num arquivo de mapa — `floorChanges` opcional, antes do default. */
+export type TilemapInput = z.input<typeof tilemapSchema>;
 export type RouteData = z.infer<typeof routeSchema>;
 export type Point = z.infer<typeof point>;

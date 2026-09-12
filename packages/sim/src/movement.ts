@@ -15,7 +15,7 @@
 // DEVOLVIDO no resultado, não emitido daqui: quem sabe para onde ele vai é o ruleset (§12).
 
 import type { Tilemap } from '@draconya/content';
-import { isBlocked } from '@draconya/content';
+import { floorChangeAt, groundSpeed, isBlocked } from '@draconya/content';
 import type { GridPoint } from './monster/step.js';
 
 /**
@@ -53,10 +53,16 @@ export type MoveResult =
  */
 export interface MovementWorld {
   readonly map: Tilemap;
+  /**
+   * Passo de duração FIXA, em milissegundos — o regime da Cidade (FUN-119, ADR 0025): ela é
+   * navegação, não simulação, e anda a `city.stepDurationMs` para todo mundo. Ausente é o
+   * regime da hunt: a fórmula do Tibia, por chão e velocidade.
+   */
+  readonly fixedStepMs?: number;
   /** `true` se ALGUÉM ocupa o tile. Quem chama já excluiu quem está se movendo. */
-  occupied(x: number, y: number): boolean;
-  vacate(x: number, y: number): void;
-  occupy(x: number, y: number): void;
+  occupied(x: number, y: number, z?: number): boolean;
+  vacate(x: number, y: number, z?: number): void;
+  occupy(x: number, y: number, z?: number): void;
 }
 
 /**
@@ -67,8 +73,11 @@ export interface MovementWorld {
  */
 export interface Movable<P extends GridPoint = GridPoint> {
   position: P;
-  /** Milissegundos por tile. Vem do conteúdo, nunca de constante em código. */
-  readonly stepDurationMs: number;
+  /**
+   * Velocidade na escala do Tibia (FUN-119). Vem do conteúdo — `progression` para o
+   * personagem, a definição para o monstro —, nunca de constante em código.
+   */
+  readonly speed: number;
 }
 
 /**
@@ -85,19 +94,38 @@ export interface CreatureMoved {
   readonly durationMs: number;
 }
 
+/** O `z` de um ponto que pode não ter `z` (monstro): o andar padrão do mapa. */
+export function zOf(point: GridPoint, map: Tilemap): number {
+  return 'z' in point && typeof point.z === 'number' ? point.z : map.z;
+}
+
 /**
  * Quanto tempo um passo leva. **Uma função, usada por humano, bot, monstro e auto-walk**
  * (§10.1 da referência).
  *
- * Hoje a diagonal custa o mesmo que a reta. No Tibia ela custa mais, e mudar isso é decisão
- * de balanceamento, não de arquitetura — o que esta função garante é que, quando mudar, muda
- * num lugar só, em vez de em quatro que já divergiram.
+ * É a fórmula do Tibia (FUN-119, ADR 0025): `chão × 1000 / speed`, com o chão do tile de
+ * DESTINO, arredondado para cima em múltiplos de 50 ms — o "beat" do servidor —, e a diagonal
+ * custa **3×** antes do arredondamento (é o que faz 1.163 × 3 dar 3.500, e não 3.600). Os
+ * números do Huntera na Parte II da observação são a fixture: speed 292 em chão 130/160/200
+ * dá 450/550/700 ms, e a diagonal do 200 dá 2.100.
+ *
+ * `from === to` é "quanto custa um passo daqui": é a cadência com que quem parou volta a
+ * olhar em volta, e é reta.
+ *
+ * Na Cidade (`fixedStepMs`) nada disto vale: o passo é o que o conteúdo diz, para todo mundo.
  */
 export function movementDuration(
-  mover: Movable<GridPoint>, _from: GridPoint, _to: GridPoint,
+  world: MovementWorld, mover: Movable<GridPoint>, from: GridPoint, to: WorldPoint,
 ): number {
-  return mover.stepDurationMs;
+  if (world.fixedStepMs !== undefined) return world.fixedStepMs;
+  const ground = groundSpeed(world.map, to.x, to.y, to.z);
+  const diagonal = from.x !== to.x && from.y !== to.y;
+  const raw = (ground * 1000) / Math.max(1, mover.speed) * (diagonal ? 3 : 1);
+  return Math.max(BEAT_MS, Math.ceil(raw / BEAT_MS) * BEAT_MS);
 }
+
+/** O compasso do servidor, em ms: toda duração de passo é múltiplo dele. */
+const BEAT_MS = 50;
 
 /**
  * Legalidade sem aplicar — para o `greedyStep` e para o `walk-to` do cliente.
@@ -114,7 +142,16 @@ export function canOccupy(
   // Um tile por passo, diagonal inclusive. Sem isto, `walk-to` do cliente vira teleporte —
   // e o cliente manda INTENÇÃO, então quem recusa é aqui (invariante 4).
   if (Math.abs(to.x - from.x) > 1 || Math.abs(to.y - from.y) > 1) return 'not-adjacent';
-  return tileAdmits(world, to);
+  // O andar é o de ONDE se está: trocar de andar é pisar numa escada, nunca pedir um `z`.
+  const z = zOf(from, world.map);
+  const change = floorChangeAt(world.map, to.x, to.y, z);
+  if (change !== null) {
+    // Quem não carrega `z` — o monstro — não usa escada, como no Tibia: para ele o degrau é
+    // parede. Para quem carrega, a legalidade é a do DESTINO da escada.
+    if (!('z' in from)) return 'tile-blocked';
+    return tileAdmits(world, change);
+  }
+  return tileAdmits(world, { x: to.x, y: to.y, z });
 }
 
 /**
@@ -125,11 +162,11 @@ export function canOccupy(
  * coordenada fora dos limites. As duas razões ficam separadas mesmo assim — "andei para fora
  * do mapa" e "bati numa parede" são bugs diferentes de quem chamou.
  */
-function tileAdmits(world: MovementWorld, to: GridPoint): MoveRejection | null {
+function tileAdmits(world: MovementWorld, to: WorldPoint): MoveRejection | null {
   const { map } = world;
   if (to.x < 0 || to.y < 0 || to.x >= map.width || to.y >= map.height) return 'out-of-bounds';
-  if (isBlocked(map, to.x, to.y)) return 'tile-blocked';
-  if (world.occupied(to.x, to.y)) return 'tile-occupied';
+  if (isBlocked(map, to.x, to.y, to.z)) return 'tile-blocked';
+  if (world.occupied(to.x, to.y, to.z)) return 'tile-occupied';
   return null;
 }
 
@@ -148,16 +185,21 @@ export function move<P extends GridPoint>(
   if (rejection !== null) return { ok: false, reason: rejection };
 
   const from = mover.position;
-  world.vacate(from.x, from.y);
-  mover.position = to;
-  world.occupy(to.x, to.y);
+  const fromZ = zOf(from, world.map);
+  // Pisar na escada leva ao destino dela (FUN-119): é o passo com `z` diferente que o
+  // cliente já sabe interpolar — e o tile de chegada pode não ser adjacente, como no Tibia.
+  const change = floorChangeAt(world.map, to.x, to.y, fromZ);
+  const dest: WorldPoint = change ?? { x: to.x, y: to.y, z: fromZ };
 
-  const z = world.map.z;
+  world.vacate(from.x, from.y, fromZ);
+  mover.position = ('z' in from ? { ...to, x: dest.x, y: dest.y, z: dest.z } : { ...to, x: dest.x, y: dest.y }) as P;
+  world.occupy(dest.x, dest.y, dest.z);
+
   return {
     ok: true,
-    from: { x: from.x, y: from.y, z },
-    to: { x: to.x, y: to.y, z },
-    durationMs: movementDuration(mover, from, to),
+    from: { x: from.x, y: from.y, z: fromZ },
+    to: dest,
+    durationMs: movementDuration(world, mover, from, dest),
   };
 }
 
@@ -183,10 +225,11 @@ export function move<P extends GridPoint>(
 export function place<P extends GridPoint>(
   world: MovementWorld, mover: Movable<P>, at: P,
 ): MoveRejection | null {
-  const rejection = tileAdmits(world, at);
+  const z = zOf(at, world.map);
+  const rejection = tileAdmits(world, { x: at.x, y: at.y, z });
   if (rejection !== null) return rejection;
   mover.position = at;
-  world.occupy(at.x, at.y);
+  world.occupy(at.x, at.y, z);
   return null;
 }
 
@@ -234,11 +277,12 @@ export function placeNear<P extends GridPoint>(
 }
 
 /**
- * Chave numérica de tile. String (`\`${x},${y}\``) alocaria por consulta, e a ocupação é
- * consultada até três vezes por passo de cada criatura. Só é chamada com coordenada dentro
- * do mapa — `tileAdmits` pergunta ao tilemap antes.
+ * Chave numérica de tile, com o andar. String (`\`${x},${y}\``) alocaria por consulta, e a
+ * ocupação é consultada até três vezes por passo de cada criatura. Só é chamada com
+ * coordenada dentro do mapa — `tileAdmits` pergunta ao tilemap antes.
  */
-const tileKey = (x: number, y: number): number => x * 100_000 + y;
+const tileKey = (x: number, y: number, z: number): number =>
+  ((z + 16) * 100_000 + x) * 100_000 + y;
 
 /**
  * A implementação padrão de `MovementWorld`: um tilemap imutável mais um `Set` de tiles
@@ -251,22 +295,24 @@ const tileKey = (x: number, y: number): number => x * 100_000 + y;
  */
 export class TileOccupancy implements MovementWorld {
   readonly map: Tilemap;
+  readonly fixedStepMs?: number;
   readonly #occupied = new Set<number>();
 
-  constructor(map: Tilemap) {
+  constructor(map: Tilemap, options: { readonly fixedStepMs?: number } = {}) {
     this.map = map;
+    if (options.fixedStepMs !== undefined) this.fixedStepMs = options.fixedStepMs;
   }
 
-  occupied(x: number, y: number): boolean {
-    return this.#occupied.has(tileKey(x, y));
+  occupied(x: number, y: number, z: number = this.map.z): boolean {
+    return this.#occupied.has(tileKey(x, y, z));
   }
 
-  occupy(x: number, y: number): void {
-    this.#occupied.add(tileKey(x, y));
+  occupy(x: number, y: number, z: number = this.map.z): void {
+    this.#occupied.add(tileKey(x, y, z));
   }
 
-  vacate(x: number, y: number): void {
-    this.#occupied.delete(tileKey(x, y));
+  vacate(x: number, y: number, z: number = this.map.z): void {
+    this.#occupied.delete(tileKey(x, y, z));
   }
 
   /**
@@ -280,7 +326,9 @@ export class TileOccupancy implements MovementWorld {
   reset(creatures: Iterable<{ readonly position: GridPoint; readonly alive: boolean }>): void {
     this.#occupied.clear();
     for (const creature of creatures) {
-      if (creature.alive) this.#occupied.add(tileKey(creature.position.x, creature.position.y));
+      if (!creature.alive) continue;
+      const { position } = creature;
+      this.#occupied.add(tileKey(position.x, position.y, zOf(position, this.map)));
     }
   }
 }

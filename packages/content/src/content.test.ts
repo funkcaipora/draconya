@@ -8,7 +8,7 @@ import { wallSetOf } from './schemas.js';
 const rat = {
   id: 'rat', name: 'Rat', recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
-  attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
+  attackIntervalMs: 2000, speed: 300, aggroRadius: 4,
   loot: { gold: { chance: 0.9, min: 1, max: 4 }, items: [] },
 };
 const cellars = {
@@ -23,7 +23,7 @@ const baseline = {
   id: 'baseline',
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-  vocationLevel: 8, stepDurationMs: 500,
+  vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
@@ -335,23 +335,24 @@ describe('ponto de entrada da Cidade (FUN-60)', () => {
     // Sem hunt: a de base aponta o mapa `rat-cellars`, e com um mapa presente a referência
     // cruzada passa a ser checada — o que aqui seria ruído.
     const content = buildContent(base({
-      hunts: [], maps: [{ ...sala, entryPoint: { x: 1, y: 1 } }], city: { mapId: 'city' },
+      hunts: [], maps: [{ ...sala, entryPoint: { x: 1, y: 1 } }], city: { mapId: 'city', stepDurationMs: 500 },
     }));
-    expect(content.city?.entryPoint).toEqual({ x: 1, y: 1 });
+    // Com o andar: um mapa de grade única põe o `entryPoint` no seu `z` (FUN-119).
+    expect(content.city?.entryPoint).toEqual({ x: 1, y: 1, z: 7 });
   });
 
   it('recusa entryPoint em parede — quebra no boot, e não no jogador', () => {
     // `(0,0)` é a borda de qualquer tilemap. Era exatamente onde todo personagem nascia, e
     // ninguém notava porque nada consultava posição na Cidade.
     expect(() => buildContent(base({
-      hunts: [], maps: [{ ...sala, entryPoint: { x: 0, y: 0 } }], city: { mapId: 'city' },
-    }))).toThrow(/entryPoint \(0,0\)/);
+      hunts: [], maps: [{ ...sala, entryPoint: { x: 0, y: 0 } }], city: { mapId: 'city', stepDurationMs: 500 },
+    }))).toThrow(/entryPoint \(0,0,7\)/);
   });
 
   it('recusa Cidade sem entryPoint e Cidade apontando mapa inexistente', () => {
-    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'city' } })))
+    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'city', stepDurationMs: 500 } })))
       .toThrow(/não tem entryPoint/);
-    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'nowhere' } })))
+    expect(() => buildContent(base({ hunts: [], maps: [sala], city: { mapId: 'nowhere', stepDurationMs: 500 } })))
       .toThrow(/mapa inexistente "nowhere"/);
   });
 });

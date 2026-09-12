@@ -2034,7 +2034,7 @@ describe('a praça não manda tudo para todos (FUN-33)', () => {
           Array.from({ length: size }, (_, x) =>
             (x === 0 || y === 0 || x === size - 1 || y === size - 1 ? '#' : '.')).join('')),
       }],
-      city: { mapId: 'city' },
+      city: { mapId: 'city', stepDurationMs: 500 },
     });
     const shard = new CityShard(content, () => 0);
     const host = new SessionHost({

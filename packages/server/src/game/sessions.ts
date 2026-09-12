@@ -40,7 +40,8 @@ const UNPLACED = { x: -1, y: -1, z: 0 } as const;
 function cityRulesetFor(content: Content, entryRadius?: number) {
   return createCityRuleset({
     ...(content.city === undefined ? {} : { map: content.city }),
-    stepDurationMs: content.progression.stepDurationMs,
+    // O passo da Cidade é FIXO (FUN-119, ADR 0025): vem de `city.json`, não da progressão.
+    ...(content.citySettings === undefined ? {} : { stepDurationMs: content.citySettings.stepDurationMs }),
     ...(entryRadius === undefined ? {} : { entryRadius }),
   });
 }

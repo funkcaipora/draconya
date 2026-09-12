@@ -10,7 +10,7 @@ const baseline: Progression = {
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
   vocationLevel: 8,
-  stepDurationMs: 500,
+  startingSpeed: 300, speedPerLevel: 2,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
@@ -26,14 +26,14 @@ describe('statsForLevel', () => {
   it('gives the starting values at level 1', () => {
     // Quem começa não "subiu" para o level 1: o primeiro level não concede incremento.
     expect(statsForLevel(1, null, baseline)).toEqual({
-      maxHealth: 150, maxMana: 0, capacity: 400,
+      maxHealth: 150, maxMana: 0, capacity: 400, speed: 300,
     });
   });
 
   it('uses the baseline while the character has no vocation', () => {
     // Nasce sem vocação e escolhe no level 8 (§7.4): até lá, todo mundo cresce igual.
     expect(statsForLevel(8, null, baseline)).toEqual({
-      maxHealth: 150 + 7 * 5, maxMana: 7 * 5, capacity: 400 + 7 * 10,
+      maxHealth: 150 + 7 * 5, maxMana: 7 * 5, capacity: 400 + 7 * 10, speed: 300 + 7 * 2,
     });
   });
 
