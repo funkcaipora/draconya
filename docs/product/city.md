@@ -160,3 +160,14 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
   com vaga.
 - [ABERTO] O que mais a Cidade é — praça social, hub de navegação, ou as duas. O PRD não decide,
   e é o que trava o canal global do [chat](./chat.md).
+
+## Divergências do PRD
+
+**A Cidade é Thais, importada do mapa real** (ADR 0025, M11). O PRD descreve a Cidade como
+praça social sem dizer de onde vem o mapa; a decisão é um recorte do `otservbr.otbm` com andares,
+e o desenho é a pilha de itens do Tibia. Até a FUN-120 entrar, o mapa em vigor continua a praça
+10×10.
+
+**O passo na Cidade é fixo — 150 ms por tile, para todos** (decisão do usuário, 2026-09-11,
+cópia do Huntera). A fórmula do Tibia (`chão × 1000 / speed`) vale só na hunt; o regime do PvP
+se decide quando o PvP existir.

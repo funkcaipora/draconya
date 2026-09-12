@@ -10,7 +10,8 @@
 // **Carrega uma vez e não guarda o buffer.** O `.dat` tem alguns MB; depois de virar catálogo
 // ele não serve para mais nada, e segurá-lo é memória parada pelo tempo que a aba viver.
 
-import { readAppearances } from './appearances.js';
+import { NO_FLAGS, readAppearances } from './appearances.js';
+import type { AppearanceFlags } from './appearances.js';
 import type { AppearanceCatalogue, FrameGroup } from './appearances.js';
 import { SheetCache, sheetKey } from './cache.js';
 import type { SheetStore } from './cache.js';
@@ -271,6 +272,15 @@ export class AssetPack {
     const group = this.#appearances.object.get(appearanceId)?.frameGroups[0];
     if (group === undefined) return { width: 1, height: 1 };
     return { width: Math.max(1, group.patternWidth), height: Math.max(1, group.patternHeight) };
+  }
+
+  /**
+   * As flags de um objeto (FUN-117): o que decide a ordem na pilha, a elevação e o
+   * deslocamento de cada item de um tile importado. `NO_FLAGS` quando o objeto não existe ou
+   * o pacote não trouxe o campo — desenhar como item comum sem elevação é a degradação certa.
+   */
+  objectFlags(appearanceId: number): AppearanceFlags {
+    return this.#appearances.object.get(appearanceId)?.flags ?? NO_FLAGS;
   }
 
   /**

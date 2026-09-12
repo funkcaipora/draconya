@@ -97,3 +97,12 @@ de milhares de sessões desanexadas.
 Nada disso muda a decisão nem o risco jurídico que ela assume — é a mitigação técnica passando a
 funcionar como estava escrito. Validar que cada id existe no pacote CARREGADO continua sendo a
 metade da FUN-21 que depende do pacote, e continua aberta.
+
+## Emenda — 2026-09-12 (ADR 0025): o mapa também
+
+O mapa real do Tibia entra pela mesma porta e com o mesmo tratamento: o `otservbr.otbm` do
+Canary é uma reprodução comunitária do mapa da CipSoft, está na mesma classe de risco do pacote
+de arte, e por isso **também nunca é versionado** — mora em `things/maps/`, e a pilha de
+aparências por tile que o importador produz para o cliente mora em `things/<versão>/maps/`,
+servida por `/things/` como as folhas. O que entra em `content/` é só geometria (bloqueio,
+velocidade de chão, escadas), regenerável de qualquer fonte. Ver ADR 0025.

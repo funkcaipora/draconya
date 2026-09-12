@@ -374,3 +374,14 @@ propósito.
 
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
+
+**Três tamanhos de pull, não quatro dificuldades** (ADR 0025, M11). O §14.5 prevê Iniciante/
+Profissional/Herói/Lendário; a decisão é copiar o Huntera — Cauteloso/Ousado/Agressivo, com um
+`monsterCount` total (2/5/8 na Rat Cellars) como o número que o jogador vê. Entra com a FUN-123.
+
+**Cadáver no chão, só visual** (decisão do usuário, 2026-09-11). O texto acima diz "sem
+cadáver"; passa a haver um, que some sozinho e não carrega loot — o loot continua na caixa da
+sessão. Entra com a FUN-123.
+
+**A Rat Cellars é o bueiro de ratos de Rookgaard**, como no Huntera, e a entrada continua pelo
+menu, abrindo uma instância — sem portal na cidade (ADR 0025).
