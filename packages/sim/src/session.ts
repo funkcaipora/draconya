@@ -176,6 +176,12 @@ export interface Ruleset {
   readonly mapId?: string;
 
   /**
+   * O ambiente da cena (FUN-121): `cavern` escurece o mundo no cliente. Ausente é superfície.
+   * Apresentação pura — nada da simulação depende disto.
+   */
+  readonly ambience?: 'surface' | 'cavern' | undefined;
+
+  /**
    * Com que frequência o HOSPEDEIRO avança esta sessão, em Hz. `0` significa orientada a
    * evento — sem laço.
    *

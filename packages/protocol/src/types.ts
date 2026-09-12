@@ -184,7 +184,16 @@ export const S2C_SCHEMAS = {
      */
     botConfig: z.unknown().optional(),
   }),
-  'instance-enter': z.object({ instanceId: z.string(), map: z.string() }),
+  /**
+   * A troca de cena (FUN-120): que mapa desenhar, e em que AMBIENTE (FUN-121) — `cavern`
+   * escurece o mundo, `surface` não. Opcional porque um nó `game` anterior manda sem, e o
+   * cliente trata ausência como superfície.
+   */
+  'instance-enter': z.object({
+    instanceId: z.string(),
+    map: z.string(),
+    ambience: z.enum(['surface', 'cavern']).optional(),
+  }),
   'creature-appear': CreatureState,
   // Um passo é enviado UMA vez, com origem, destino e duração. O cliente interpola o
   // intervalo inteiro — não existe snapshot por tick (ADR 0001, seção de banda).

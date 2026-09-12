@@ -319,6 +319,11 @@ export const huntSchema = z.object({
   recommendedLevel: z.number().int().positive(),
   mapId: z.string().min(1),
   /**
+   * O ambiente que o cliente desenha (FUN-121, cópia do Huntera): `cavern` escurece o mundo —
+   * o bueiro —, `surface` é a luz do dia. Só apresentação; a simulação não lê isto.
+   */
+  ambience: z.enum(['surface', 'cavern']).optional(),
+  /**
    * A rota que o bot percorre. **Apontada, não inferida.**
    *
    * Deduzir a rota pelo `mapId` funcionaria hoje, com uma rota por mapa, e falharia em

@@ -33,7 +33,15 @@ export function groundCell(x: number, y: number, pattern: Pattern): { x: number;
  * seiscentas texturas num mapa de 40×40 onde cabem dezesseis.
  */
 export function groundKey(appearanceId: number, x: number, y: number, pattern: Pattern): string {
-  const cell = groundCell(x, y, pattern);
+  return objectKey(appearanceId, groundCell(x, y, pattern));
+}
+
+/**
+ * A mesma chave, pela CÉLULA já resolvida (FUN-121): a pilha de um tile escolhe a célula por
+ * posição, por contagem ou pelo gancho da parede (`tile-stack.ts`), e o livro não precisa saber
+ * qual das três foi.
+ */
+export function objectKey(appearanceId: number, cell: { readonly x: number; readonly y: number }): string {
   return `object:${appearanceId}:${cell.x}:${cell.y}`;
 }
 

@@ -276,6 +276,27 @@ pnpm tsx scripts/make-sheet-fixture.ts
   por FASE e por CÉLULA do padrão 3×3 — a célula é a direção do voo, por OCTANTE
   (`missileCell`, a regra de `Position::getDirectionFromPosition` do OTClient): `(3, 1)` está
   a 18° e sai com o quadro de leste, não com a diagonal que o sinal de cada eixo daria.
+- **A pilha de um tile é desenhada como o Tibia desenha** (`world/tile-stack.ts`, puro;
+  `world/scene.ts`; FUN-121, ADR 0025). O mapa importado chega como a pilha de ids por tile
+  em `things/<versão>/maps/<id>.json`, buscada pelo `mapId` da sessão (`Viewport.tsx`,
+  `loadScene`) quando o laço de quadro nota `world.mapId` mudar — o `world` não avisa ninguém
+  (ADR 0007). As regras, lidas no OTClient (MIT — formato e regra, nunca código): **ordem**
+  chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top` (num container
+  ACIMA das criaturas: o arco cobre quem passa); **elevação** `height.elevation` acumula pelos
+  itens com teto de 24 px e sobe o que vem depois — e a criatura — para cima e para a
+  esquerda, `top` ignora; **shift** desloca o próprio item; **padrão** por `(x % w, y % h)`,
+  por CONTAGEM para o empilhável que veio com contagem (1–4 na primeira linha, 5/10/25/50 na
+  segunda), pelo GANCHO da parede do mesmo tile para o pendurável (sul → coluna 1, leste →
+  2); **âncora** no canto inferior direito do tile, como já era. **Andares**: na superfície
+  desenha-se do andar do jogador até o 7, o de baixo primeiro, cada nível abaixo deslocado um
+  tile para baixo e para a direita e sob um véu (`VEIL_PER_FLOOR`); no subsolo, só o andar do
+  jogador; quem está ACIMA do jogador não aparece — não há telhado. `ambience: 'cavern'` do
+  `instance-enter` é um tom sobre as camadas inteiras. **Mapa autorado à mão** (a adega de
+  teste) vira pilha SINTÉTICA — `[chão]` no livre, `[peça pela vizinhança]` no bloqueado
+  (`sceneFromTilemap`) — e passa pelo MESMO pintor: um caminho de desenho, duas origens. Cena
+  ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao
+  receber a cena, `AssetPack.warmObjects` aquece as folhas dos ids da janela inicial, como
+  `warmOutfit` faz com os monstros.
 - **A parede é montada pela VIZINHANÇA, como o Tibia monta muro** (`world/walls.ts`, FUN-105).
   O tilemap só diz "bloqueia"; qual das quatro peças vai em cada `#` — vertical, horizontal,
   canto ou poste — é `wallPiece` quem decide, olhando SÓ os vizinhos de NORTE e OESTE: parede
