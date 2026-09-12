@@ -54,7 +54,7 @@ const ATTRIBUTE_SIZE: Readonly<Record<number, number | 'string'>> = {
   0x09: 2, // ITEM — o chão, embutido no tile
   0x0a: 2, // depot id
   0x0b: 'string', // ext spawn file
-  0x0c: 2, // rune charges
+  0x0c: 1, // rune charges (u8; o de 2 bytes é 0x16, "charges" — são atributos diferentes)
   0x0d: 'string', // ext house file
   0x0e: 1, // house door id
   0x0f: 1, // COUNT

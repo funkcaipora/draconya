@@ -2,7 +2,7 @@
 // `otservbr.otbm` e escreve os DOIS produtos que a decisão pede, um por consumidor.
 //
 //   pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32369,32241,7
-//   pnpm map:import --id rat-cellars --x 32120..32270 --y 31990..32140 --z 8 --keep-from 32200,32070,8
+//   pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
 //   pnpm map:import --check      # regenera em memória cada mapa importado e compara (pnpm check)
 //
 //   packages/content/data/maps/<id>.json   geometria para o SERVIDOR: bloqueio e velocidade de
@@ -89,7 +89,6 @@ export interface ImportReport {
   readonly perFloor: ReadonlyArray<{ readonly z: number; readonly tiles: number; readonly blocked: number; readonly walkable: number }>;
   readonly distinctIds: number;
   readonly unknownIds: readonly number[];
-  readonly flaggedTiles: number;
   readonly stairCandidates: ReadonlyArray<{ readonly x: number; readonly y: number; readonly z: number; readonly id: number; readonly name?: string }>;
   readonly region: Region;
 }
@@ -178,21 +177,19 @@ const STAIR_NAME = /stair|ladder|ramp|hole|rope spot|trapdoor|sewer grate/i;
 
 export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions): ImportResult {
   const collected = collectTiles(source);
-  const unknown = new Set<number>();
   const blocked = new Map<string, boolean>();
   let dropped = 0;
   for (const [k, tile] of collected.tiles) {
     if (!exists(tile)) { collected.tiles.delete(k); dropped += 1; continue; }
-    blocked.set(k, blockedOf(tile, options.flagsOf, unknown));
-  }
-  if (unknown.size > 0 && !options.allowUnknown) {
-    throw new Error(
-      `${unknown.size} ids do mapa não existem no pacote (${[...unknown].slice(0, 10).join(', ')}…); `
-        + 'o recorte tem arte de outra versão — confira THINGS_VERSION, ou passe --allow-unknown',
-    );
+    blocked.set(k, blockedOf(tile, options.flagsOf, new Set()));
   }
 
   // Recorte à componente: fica a componente andável mais a borda de um tile (paredes, decoração).
+  //
+  // A componente é do ANDAR da semente — o importador não sabe onde as escadas levam, porque
+  // `floorChanges` é autorado depois. Os outros andares ficam com o que cai na caixa que a
+  // componente ocupa: é o teto e o subsolo do lugar recortado, e é o que o cliente desenha
+  // embaixo do andar do jogador.
   let kept: Set<string> | null = null;
   if (options.keepFrom !== undefined) {
     const component = walkableComponent(collected.tiles, blocked, options.keepFrom);
@@ -203,9 +200,30 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
         for (let dx = -1; dx <= 1; dx++) kept.add(key(x + dx, y + dy, z));
       }
     }
-    for (const k of [...collected.tiles.keys()]) {
-      if (!kept.has(k)) { collected.tiles.delete(k); dropped += 1; }
+    const box = { x: [Infinity, -Infinity], y: [Infinity, -Infinity] };
+    for (const k of kept) {
+      const [x, y] = k.split(',').map(Number) as [number, number, number];
+      box.x = [Math.min(box.x[0] as number, x), Math.max(box.x[1] as number, x)];
+      box.y = [Math.min(box.y[0] as number, y), Math.max(box.y[1] as number, y)];
     }
+    for (const [k, tile] of [...collected.tiles]) {
+      const stays = tile.z === options.keepFrom.z
+        ? kept.has(k)
+        : tile.x >= (box.x[0] as number) && tile.x <= (box.x[1] as number)
+          && tile.y >= (box.y[0] as number) && tile.y <= (box.y[1] as number);
+      if (!stays) { collected.tiles.delete(k); dropped += 1; }
+    }
+  }
+
+  // Os ids desconhecidos são os do que FICOU: um id de outra versão numa sala que o recorte
+  // descartou não é problema do mapa escrito, e não deveria obrigar ninguém a --allow-unknown.
+  const unknown = new Set<number>();
+  for (const tile of collected.tiles.values()) blockedOf(tile, options.flagsOf, unknown);
+  if (unknown.size > 0 && !options.allowUnknown) {
+    throw new Error(
+      `${unknown.size} ids do mapa não existem no pacote (${[...unknown].slice(0, 10).join(', ')}…); `
+        + 'o recorte tem arte de outra versão — confira THINGS_VERSION, ou passe --allow-unknown',
+    );
   }
 
   // A caixa final: a região pedida, ou a caixa dos tiles que ficaram depois do recorte.
@@ -323,13 +341,12 @@ export function importRegion(source: Iterable<OtbmTile>, options: ImportOptions)
   };
   tilemapSchema.parse(content);
 
-  const flaggedTiles = 0;
   return {
     content,
     stack: { id: options.id, version: options.version, source: sourceField, width, height, floors: floorsPresent, tiles: stackTiles },
     report: {
       tilesRead: collected.read, conflicts: collected.conflicts, dropped, perFloor,
-      distinctIds: ids.size, unknownIds: [...unknown].sort((a, b) => a - b), flaggedTiles,
+      distinctIds: ids.size, unknownIds: [...unknown].sort((a, b) => a - b),
       stairCandidates, region,
     },
   };

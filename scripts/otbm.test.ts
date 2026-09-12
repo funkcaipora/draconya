@@ -56,6 +56,18 @@ describe('readOtbmTiles', () => {
     ]);
   });
 
+  it('rune charges (0x0c) ocupa UM byte, e o atributo seguinte continua no lugar', () => {
+    // O 0x0c (rune charges, u8) e o 0x16 (charges, u16) têm nomes parecidos e tamanhos
+    // diferentes; ler o primeiro com dois bytes engole o tipo do atributo seguinte e desloca
+    // todo o resto do item em silêncio. O arquivo real não tem 0x0c — a fixture é a prova.
+    const bytes = file([area(32000, 32000, 7, [
+      tile(1, 1, [...ground(410)], [item(3155, [0x0c, ...u8(3), ...count(2)])]),
+    ])]);
+    expect(all(bytes)).toEqual([
+      { x: 32001, y: 32001, z: 7, ground: 410, items: [{ id: 3155, count: 2 }], flags: 0 },
+    ]);
+  });
+
   it('lê house tile com o houseId antes dos atributos', () => {
     const bytes = file([area(32000, 32000, 7, [houseTile(22, 0, 2958, [...flags(1), ...ground(4598)])])]);
     expect(all(bytes)).toEqual([

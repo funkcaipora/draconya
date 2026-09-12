@@ -122,6 +122,33 @@ describe('importRegion (FUN-118)', () => {
     expect(content.source?.region.x).toEqual([1000, 1004]);
   });
 
+  it('--keep-from mantém os outros andares dentro da caixa resultante', () => {
+    // A componente é do andar da semente; z6 nunca entra no flood-fill e ainda assim é o teto
+    // do lugar recortado — sumir com ele era o defeito: Thais importada só com o z7.
+    const two = [
+      ...room(),
+      ...room().map((t) => ({ ...t, z: 6 })),
+      tile(1010, 2000, 7, FLOOR, [WALL]), tile(1011, 2000, 7, FLOOR), tile(1012, 2000, 7, FLOOR, [WALL]),
+      tile(1011, 2000, 6, FLOOR),
+    ];
+    const wide: Region = { x: [1000, 1012], y: [2000, 2002], z: [6, 7] };
+    const { content, report } = importRegion(two, { id: 'sala', region: wide, flagsOf, source, version: '1332', keepFrom: { x: 1001, y: 2000, z: 7 } });
+    expect(report.region).toEqual({ x: [1000, 1004], y: [2000, 2002], z: [6, 7] });
+    expect(content.floors?.['6']?.grid).toEqual(['#...#', '#.#.#', '##.##']);
+    // A sala isolada some nos dois andares: 3 tiles em z7 e 1 em z6.
+    expect(report.dropped).toBe(4);
+  });
+
+  it('id desconhecido numa sala que o recorte descartou não é erro nem entra no relatório', () => {
+    const two = [
+      ...room(),
+      tile(1010, 2000, 7, FLOOR, [WALL]), tile(1011, 2000, 7, FLOOR, [999]), tile(1012, 2000, 7, FLOOR, [WALL]),
+    ];
+    const wide: Region = { x: [1000, 1012], y: [2000, 2002], z: [7, 7] };
+    const { report } = importRegion(two, { id: 'sala', region: wide, flagsOf, source, version: '1332', keepFrom: { x: 1001, y: 2000, z: 7 } });
+    expect(report.unknownIds).toEqual([]);
+  });
+
   it('os dois formatos escritos são JSON válido e reconstroem o mapa', () => {
     const result = importRegion(room(), { id: 'sala', region, flagsOf, source, version: '1332' });
     const content = JSON.parse(formatContentMap(result.content)) as unknown;

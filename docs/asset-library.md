@@ -142,7 +142,9 @@ derruba a importação (`--allow-unknown` segue e reporta).
 **Escadas não são derivadas.** O importador lista candidatos — tiles andáveis sem chão, que é
 como o degrau se apresenta — e `floorChanges` é autorado à mão no JSON do mapa; reimportar
 preserva o que já estava autorado. `--keep-from x,y,z` apara o recorte à componente andável
-que contém o tile (mais a borda de um tile), para uma hunt não carregar o bueiro inteiro.
+que contém o tile (mais a borda de um tile), para uma hunt não carregar o bueiro inteiro. A
+componente é do andar da semente — o importador não sabe aonde as escadas levam —, e os outros
+andares ficam com o que cai na caixa resultante. Id desconhecido só conta no que ficou.
 
 O leitor (`scripts/otbm.ts`) é iterativo e recorta por região sem alocar o resto: os 184 MB
 inteiros passam em ~0,6 s. O formato foi lido de documentação pública e conferido contra o
