@@ -56,7 +56,7 @@ class MemoryRepository implements GameRepository {
       id: `c${++this.next}`, accountId, name, vocation: null, level: 1, xp: 0, gold: 0,
       capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: now,
       state: 'city', sessionId: null, botConfig: initial.botConfig ?? null, skills: {},
-      outfitColors: null, bestiary: null,
+      outfitColors: null, bestiary: null, ammo: null,
       createdAt: now,
     };
     this.characters.set(character.id, character);

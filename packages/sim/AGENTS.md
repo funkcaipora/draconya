@@ -236,6 +236,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
   o rato bate de 0 a 8, e a mesma semente dá o mesmo golpe — o contrato do loot vale para o
   dano. Um número no JSON é a faixa de um valor só.
+- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026). `Inventory.weapon()`
+  é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e só sem arma vale
+  `combat.player.attackRange`. `#strike` despacha pelo `weapon.kind`: `melee` como sempre;
+  `distance` atira a MUNIÇÃO — `#ammoFor` devolve a escolhida da família se o gold paga o
+  tiro, senão a grátis, e avisa (`ammo-fallback`) uma vez por sessão — com o `attack` dela pela
+  skill `distance`, debitando `price` em `goldDelta` E `goldSpent` como o supply; `wand` gasta
+  `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma rolagem por golpe —
+  contrato como o loot) e rende `spell-cast` pela mana. **Wand sem mana não bate**: o golpe
+  fica agendado para o intervalo seguinte, sem gastar mana nem render skill. O tiro emite
+  `shot` ANTES do `creature-hit`; o projétil é da tabela, resolvido no hospedeiro (invariante
+  6). `CharacterState.ammo` (família → id) é opcional e viaja no snapshot; `selectAmmo` só
+  confere o level. `hands-full`: bow com escudo, ou escudo com bow, é recusado — nunca trocado.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
 - **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,

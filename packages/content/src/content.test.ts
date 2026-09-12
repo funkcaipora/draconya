@@ -749,8 +749,48 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     const raw = base({ ammunition: [flecha] });
     const semLinha = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
     expect(() => buildContent(semLinha)).toThrow(/munição "arrow" não tem aparência/);
-    const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: { arrow: 1, bolt: 2 } }] };
+    const orfa = {
+      ...raw,
+      appearances: [{
+        ...placeholderAppearances(raw),
+        ammunition: { arrow: { icon: 1, missile: 1 }, bolt: { icon: 2, missile: 2 } },
+      }],
+    };
     expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia munição "bolt"/);
+    // Ícone E projétil, os dois obrigatórios (#152): tiro sem projétil é vida sumindo do nada.
+    const semProjetil = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: { arrow: { icon: 1 } } }] };
+    expect(() => buildContent(semProjetil)).toThrow(ContentError);
+  });
+
+  it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
+    // Sem `weapon`, uma arma é corpo a corpo de alcance 1 — o que toda arma era.
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1 });
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
+    // Distância sem família, e família sem munição no catálogo, são as duas formas de um bow que
+    // não atira nada.
+    expect(() => buildContent(base({ items: [{ ...arco, weapon: { kind: 'distance', range: 6 } }], ammunition: [flecha] }))).toThrow(/precisa de "ammoFamily"/);
+    expect(() => buildContent(base({ items: [arco] }))).toThrow(/não tem munição no catálogo/);
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.manaPerHit).toBe(2);
+    expect(() => buildContent(base({ items: [{ ...varinha, weapon: { kind: 'wand', range: 3 } }] }))).toThrow(/precisa de "manaPerHit" e "damage"/);
+    expect(() => buildContent(base({ items: [{ ...varinha, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 18, max: 8 } } }] }))).toThrow(/damage.min maior/);
+    // Campo de um tipo em arma de outro, e `weapon` fora de arma: conteúdo quebrado.
+    expect(() => buildContent(base({ items: [{ ...espada, weapon: { kind: 'melee', range: 1, manaPerHit: 2 } }] }))).toThrow(/só wand/);
+    expect(() => buildContent(base({ items: [{ ...espada, weapon: { kind: 'melee', range: 1, ammoFamily: 'arrow' } }] }))).toThrow(/só arma de distância/);
+    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, weapon: { kind: 'melee', range: 1 } };
+    expect(() => buildContent(base({ items: [capacete] }))).toThrow(/só faz sentido em arma/);
+  });
+
+  it('o projétil da wand fica em appearances.weapons, de um lado só: arma muda é válida, linha órfã não (#152)', () => {
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    const raw = base({ items: [varinha] });
+    expect(buildContent(raw).appearances?.weapons).toEqual({});
+    const comProjetil = { ...raw, appearances: [{ ...placeholderAppearances(raw), weapons: { wand: { missile: 5 } } }] };
+    expect(buildContent(comProjetil).appearances?.weapons['wand']?.missile).toBe(5);
+    const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), weapons: { helmet: { missile: 5 } } }] };
+    expect(() => buildContent(orfa)).toThrow(/appearances.weapons mapeia "helmet"/);
   });
 
   it('toda família de munição precisa da grátis — é o que o bow dispara quando o gold acaba', () => {

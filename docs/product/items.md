@@ -117,6 +117,12 @@ que o jogador vê é o item no lugar. Recusa vira mensagem, e diz qual foi.
 acrescenta. Substituir faria vestir a primeira armadura deixar o personagem mais frágil se ela
 valesse menos que o número base.
 
+Desde a #152 o combate lê também **como** a arma bate — `weapon: { kind, range, ammoFamily,
+manaPerHit, damage }` —, e o alcance passou a ser da arma: bow 6 com a munição escolhida, wand
+e rod 3 gastando mana, corpo a corpo 1. A munição não é item: é uma seleção por família
+(`select-ammo`), com a grátis por padrão e as pagas debitando gold por tiro; ver `combat.md`
+("Como cada arma bate"). Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
+
 ### Como o item vai e volta do banco
 
 | | quando | forma |

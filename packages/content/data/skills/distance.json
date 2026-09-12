@@ -1,0 +1,15 @@
+{
+  "id": "distance",
+  "name": "Distância",
+  "startingLevel": 10,
+  "curve": {
+    "base": 50,
+    "factor": 1.1
+  },
+  "gain": {
+    "on": "distance-hit",
+    "points": 1
+  },
+  "damagePerLevel": 0.02,
+  "_open": "Curva e contribuição de dano provisórias, copiadas da corpo a corpo (#152, ADR 0026 decisão 4): o §9.4 decide que skill sobe por uso, e o balanceamento real depende de quanto uma hunt de Paladin rende, que ainda não foi medido."
+}

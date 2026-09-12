@@ -19,6 +19,7 @@ describe('describeEvent (FUN-110)', () => {
       ['level-down', '9 → 8', 'Perdeu level · 9 → 8'],
       ['xp-penalty', '1200', 'Perdeu 1200 XP'],
       ['skill-up', 'melee/11', 'Corpo a corpo subiu para 11'],
+      ['skill-up', 'distance/11', 'Distância subiu para 11'],
       ['bestiary-milestone', 'rat/1', 'Bestiário: Rato · marco 1 (+1 % XP)'],
       ['death', 'c1', 'Morreu'],
       ['stamina-exhausted', 'c1', 'Stamina esgotada'],

@@ -5,6 +5,13 @@
   "slot": "hand",
   "twoHanded": true,
   "weight": 31,
-  "requires": { "vocationId": "paladin" },
-  "_open": "A arma inicial do Paladin (ADR 0026, decisão 3): duas mãos, alcance 6, e o dano é o da munição escolhida — alcance e munição entram no motor pela issue #152; até lá o bow bate como arma sem attack."
+  "_open": "A arma inicial do Paladin (ADR 0026, decisão 3): duas mãos, alcance 6 (TibiaWiki), e o dano é o attack da munição escolhida pela skill de distância — o bow não tem attack próprio.",
+  "weapon": {
+    "kind": "distance",
+    "range": 6,
+    "ammoFamily": "arrow"
+  },
+  "requires": {
+    "vocationId": "paladin"
+  }
 }

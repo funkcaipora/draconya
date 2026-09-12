@@ -14,8 +14,8 @@ import {
   supplySchema, tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  Ammunition, Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster, Pack, Progression,
-  Skill, Spell, Stamina, Supply, Vocation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster,
+  Pack, Progression, Skill, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -186,11 +186,47 @@ export function buildContent(raw: RawContent): Content {
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   const itemDefinitions = parseAll('item', raw.items ?? [], itemSchema, problems);
+  // Arma sem `weapon` é corpo a corpo de alcance 1 (#152): é o que toda arma era antes de
+  // haver bow e wand, e é o que a machete e o steel axe são. O default mora AQUI, e não no
+  // schema, porque o schema de um campo opcional não sabe do `kind` — um capacete não ganha
+  // alcance por engano.
+  for (const [id, item] of itemDefinitions) {
+    if (item.kind === 'weapon' && item.weapon === undefined) {
+      itemDefinitions.set(id, { ...item, weapon: { kind: 'melee', range: 1 } });
+    }
+  }
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema, problems);
   // A forma do item que o schema sozinho não fecha (ADR 0026): a mochila é o único item que
   // se veste nas costas, e o que se veste nas costas é a mochila; e só arma ocupa as duas
   // mãos. Um `back` numa espada equiparia a espada nas costas sem nada acusar.
   for (const item of itemDefinitions.values()) {
+    // Como a arma bate é da arma, e só dela (#152): `weapon` sem `kind: 'weapon'` é um
+    // capacete com alcance; arma sem `weapon` seria uma arma que o motor não sabe usar.
+    if (item.kind !== 'weapon' && item.weapon !== undefined) {
+      problems.push(`item "${item.id}": "weapon" só faz sentido em arma`);
+    }
+    const weapon = item.weapon;
+    if (weapon !== undefined) {
+      if (weapon.kind === 'distance' && weapon.ammoFamily === undefined) {
+        problems.push(`item "${item.id}": arma de distância precisa de "ammoFamily"`);
+      }
+      if (weapon.kind === 'distance' && weapon.ammoFamily !== undefined
+        && ![...ammunitionDefinitions.values()].some((ammo) => ammo.family === weapon.ammoFamily)) {
+        problems.push(`item "${item.id}": a família "${weapon.ammoFamily}" não tem munição no catálogo`);
+      }
+      if (weapon.kind === 'wand' && (weapon.manaPerHit === undefined || weapon.damage === undefined)) {
+        problems.push(`item "${item.id}": wand precisa de "manaPerHit" e "damage"`);
+      }
+      if (weapon.kind !== 'distance' && weapon.ammoFamily !== undefined) {
+        problems.push(`item "${item.id}": só arma de distância tem "ammoFamily"`);
+      }
+      if (weapon.kind !== 'wand' && (weapon.manaPerHit !== undefined || weapon.damage !== undefined)) {
+        problems.push(`item "${item.id}": só wand tem "manaPerHit" e "damage"`);
+      }
+      if (weapon.damage !== undefined && weapon.damage.min > weapon.damage.max) {
+        problems.push(`item "${item.id}": damage.min maior que damage.max`);
+      }
+    }
     if (item.kind === 'container' && item.slot !== 'back') {
       problems.push(`item "${item.id}": container tem de ter slot "back" — é a mochila`);
     }
@@ -255,6 +291,13 @@ export function buildContent(raw: RawContent): Content {
       if (supplies.has(id)) continue;
       problems.push(`appearances.supplies mapeia supply "${id}", que não existe no conteúdo`);
     }
+    // O projétil da wand e do rod (#152): de um lado só, como `spells` — arma sem linha bate
+    // sem desenhar; linha para item que não é arma, ou que não existe, é órfã.
+    for (const id of Object.keys(appearances.weapons)) {
+      const item = itemDefinitions.get(id);
+      if (item?.kind === 'weapon') continue;
+      problems.push(`appearances.weapons mapeia "${id}", que não é arma do conteúdo`);
+    }
   }
 
   // O inventário do pacote (FUN-21). É a única conferência de que os NÚMEROS da tabela existem:
@@ -281,9 +324,8 @@ export function buildContent(raw: RawContent): Content {
   appearances?.corpses, problems);
   const items: ReadonlyMap<string, Item> = resolveAppearance(
     'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
-  const ammunition: ReadonlyMap<string, Ammunition> = resolveAppearance(
-    'munição', 'ammunition', ammunitionDefinitions, appearances?.ammunition, 'appearanceId',
-    problems);
+  const ammunition: ReadonlyMap<string, Ammunition> = resolveAmmunition(
+    ammunitionDefinitions, appearances?.ammunition, problems);
 
   const maps = new Map<string, Tilemap>();
   for (const data of mapData.values()) {
@@ -497,7 +539,9 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
     items: sequential(raw.items),
-    ammunition: sequential(raw.ammunition),
+    ammunition: Object.fromEntries(Object.entries(sequential(raw.ammunition))
+      .map(([id, n]) => [id, { icon: n, missile: n }])),
+    weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
@@ -557,6 +601,33 @@ function resolveAppearance<D extends { id: string }, K extends 'appearanceId' | 
   for (const id of Object.keys(table)) {
     if (definitions.has(id)) continue;
     problems.push(`appearances.${section} mapeia ${kind} "${id}", que não existe no conteúdo`);
+  }
+  return resolved;
+}
+
+/**
+ * A munição com ícone e projétil (#152), pela tabela, e dos DOIS lados como o item: a flecha
+ * sem linha não tem como ser escolhida na tela, e a linha órfã é o defeito que a tabela
+ * introduz. Não cabe em `resolveAppearance` porque a linha tem dois números.
+ */
+function resolveAmmunition(
+  definitions: ReadonlyMap<string, AmmunitionDefinition>,
+  table: Readonly<Record<string, { readonly icon: number; readonly missile: number }>> | undefined,
+  problems: string[],
+): Map<string, Ammunition> {
+  const resolved = new Map<string, Ammunition>();
+  if (table === undefined) return resolved;
+  for (const [id, definition] of definitions) {
+    const look = table[id];
+    if (look === undefined) {
+      problems.push(`munição "${id}" não tem aparência: falta a linha "${id}" em appearances.ammunition`);
+      continue;
+    }
+    resolved.set(id, { ...definition, appearanceId: look.icon, missileId: look.missile });
+  }
+  for (const id of Object.keys(table)) {
+    if (definitions.has(id)) continue;
+    problems.push(`appearances.ammunition mapeia munição "${id}", que não existe no conteúdo`);
   }
   return resolved;
 }

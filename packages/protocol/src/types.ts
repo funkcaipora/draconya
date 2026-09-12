@@ -136,6 +136,12 @@ export const C2S_SCHEMAS = {
    * divergir.
    */
   unequip: z.object({ slot: z.string().min(1) }),
+  /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). INTENÇÃO: o cliente diz QUAL munição, e
+   * quem decide se o level basta é o servidor (invariante 4). A escolha aparece de volta em
+   * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
+   */
+  'select-ammo': z.object({ ammoId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {
@@ -384,7 +390,33 @@ export const S2C_SCHEMAS = {
       weight: z.number().nonnegative(),
       /** Onde ele veste, ou `null` quando não veste em lugar nenhum. */
       slot: z.string().nullable(),
+      /** Ocupa as duas mãos (#152). `default`: nó anterior manda sem. */
+      twoHanded: z.boolean().default(false),
+      /**
+       * Como a arma bate (#152): o tipo e o alcance, para o tooltip e para o seletor de munição
+       * saber a família. Mana por golpe e faixa de dano ficam de fora — são balanceamento que o
+       * cliente não simula (invariante 4).
+       */
+      weapon: z.object({
+        kind: z.string().min(1),
+        range: z.number().int().positive(),
+        ammoFamily: z.string().min(1).optional(),
+      }).optional(),
     })),
+    /**
+     * A munição que existe (#152, ADR 0026 decisão 3): o seletor no slot do escudo lista a
+     * família do bow, com o preço por tiro — o único número de balanceamento aqui, pela mesma
+     * razão do preço do supply: é o que o jogador olha para escolher. `default([])`: nó anterior.
+     */
+    ammunition: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      family: z.string().min(1),
+      attack: z.number().int().nonnegative(),
+      price: z.number().int().nonnegative(),
+      appearanceId: z.number().int().positive(),
+      requires: z.object({ level: z.number().int().positive().optional() }),
+    })).default([]),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
@@ -419,6 +451,12 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
+    /**
+     * A munição escolhida por família (#152), a forma do Huntera (`ammo-selection`): `null` é
+     * "a grátis". `default`: um nó `game` anterior manda sem, e o cliente mostra a grátis.
+     */
+    ammo: z.object({ arrow: z.string().nullable(), bolt: z.string().nullable() })
+      .default({ arrow: null, bolt: null }),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),

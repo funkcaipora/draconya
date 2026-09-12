@@ -77,6 +77,29 @@ export function buildCatalogue(content: Content): Catalogue {
       // `null` e não ausente: "não veste em lugar nenhum" é uma informação, e campo opcional
       // a confundiria com "o servidor não disse".
       slot: item.slot ?? null,
+      twoHanded: item.twoHanded,
+      // Como a arma bate (#152): tipo, alcance e família — para o tooltip e o seletor. Mana
+      // por golpe e faixa de dano ficam de fora: balanceamento (invariante 4).
+      ...(item.weapon === undefined
+        ? {}
+        : {
+          weapon: {
+            kind: item.weapon.kind,
+            range: item.weapon.range,
+            ...(item.weapon.ammoFamily === undefined ? {} : { ammoFamily: item.weapon.ammoFamily }),
+          },
+        }),
+    })),
+    // A munição (#152, ADR 0026 decisão 3): o seletor lista a família do bow com o preço por
+    // tiro, o único número de balanceamento aqui — é o que o jogador olha para escolher.
+    ammunition: [...content.ammunition.values()].map((ammo) => ({
+      id: ammo.id,
+      name: ammo.name,
+      family: ammo.family,
+      attack: ammo.attack,
+      price: ammo.price,
+      appearanceId: ammo.appearanceId,
+      requires: ammo.requires.level === undefined ? {} : { level: ammo.requires.level },
     })),
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Só id e nome, em ordem de id para a mensagem ser a mesma a cada boot: a arte

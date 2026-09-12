@@ -137,8 +137,8 @@ magia — a fórmula de conversão para dano não é publicada; runas com cargas
   eventos da fila, grupos de cooldown com instante absoluto, formas de área a partir da direção
   do personagem — que passa a existir no `sim`. Tudo opcional no snapshot: sem bump de
   `SNAPSHOT_FORMAT_VERSION`.
-- `packages/protocol` ganha três intenções (`choose-vocation` 14, `select-ammo` 15, `move-item`
-  16), `vocationId` e `ammo` em `player-stats`, `vocations` e `ammunition` no catálogo, e o
+- `packages/protocol` ganha três intenções (`select-ammo` 14 — o primeiro livre quando o #152
+  entrou —, `choose-vocation` 15, `move-item` 16), `vocationId` e `ammo` em `player-stats`, `vocations` e `ammunition` no catálogo, e o
   `inventory` com dois vetores posicionais.
 - `packages/server`: o kit é a segunda inicialização de linha na criação do personagem (o bot
   padrão é a primeira); vocação, munição e posição dos itens viajam no extrato e voltam pelo

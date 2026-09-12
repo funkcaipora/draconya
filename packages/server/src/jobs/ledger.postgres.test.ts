@@ -93,18 +93,21 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+  ammo: unknown;
 }> => {
   const [row] = await database.database.db
     .select({
       xp: characters.xp, gold: characters.gold, level: characters.level,
       skills: characters.skills,
       bestiary: characters.bestiary,
+      ammo: characters.ammo,
       staminaMs: characters.staminaMs,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
+    ammo: unknown;
   };
 };
 
@@ -540,6 +543,25 @@ describe.runIf(ready)('as skills chegam ao Postgres pelo extrato (FUN-75)', () =
 
     expect((await characterRow(database, characterId)).skills)
       .toEqual({ melee: { level: 15, points: 1 } });
+  });
+});
+
+describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#152)', () => {
+  it('grava a escolha, a última escrita vence, e o extrato sem o campo não toca na coluna', async () => {
+    // Preferência, não progresso: o extrato mais novo diz o que o jogador escolheu por último,
+    // e um extrato de Cidade (sem o campo) não pode apagar a escolha que a hunt gravou.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).ammo).toBeNull();
+    const receipts = new ReceiptStore(redis);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), ammo: { arrow: 'sniper-arrow' } });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'sniper-arrow' });
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, ammo: { arrow: 'onyx-arrow' } });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'onyx-arrow' });
   });
 });
 

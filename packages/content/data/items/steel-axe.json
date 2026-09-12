@@ -5,6 +5,12 @@
   "slot": "hand",
   "weight": 41,
   "attack": 21,
-  "requires": { "vocationId": "knight" },
-  "_open": "A arma inicial do Knight (ADR 0026, decisão 3). Attack 21 e 41 oz do TibiaWiki; defense 10 não é lida."
+  "_open": "A arma inicial do Knight (ADR 0026, decisão 3). Attack 21 e 41 oz do TibiaWiki; defense 10 não é lida.",
+  "weapon": {
+    "kind": "melee",
+    "range": 1
+  },
+  "requires": {
+    "vocationId": "knight"
+  }
 }

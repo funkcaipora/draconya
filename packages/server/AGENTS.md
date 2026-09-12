@@ -444,6 +444,19 @@ não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálog
 `monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
 só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
 
+## A munição escolhida viaja como a vocação vai viajar: ticket → runtime → extrato → coluna (#152)
+
+`characters.ammo` é `jsonb` nulável (`{ arrow: 'sniper-arrow' }`), lida na emissão do ticket com
+a régua `isAmmoSelection` (torta vira ausente, nunca login recusado), adotada em
+`CharacterState.ammo`, escolhida pelo socket (`select-ammo`, processado na chegada; a recusa
+é `system-message`, o sucesso é `player-stats` com `ammo` — mandado na hora, porque a Cidade
+não tem ciclo que o compare), levada no extrato (`ammo`, lista de PERMISSÃO em
+`parseReceipt`) e escrita pelo ledger na transação do extrato. **Última escrita vence**: é
+preferência, não progresso — e o extrato SEM o campo (Cidade, nó antigo) não toca na coluna.
+`#creditUnrestorable` a leva também. O projétil do tiro (`shot`) é resolvido em
+`#presentCombat` pela tabela: `appearances.ammunition[ammoId].missile` para a flecha,
+`appearances.weapons[itemId].missile` para wand e rod; sem linha, o tiro é mudo.
+
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
 `lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis

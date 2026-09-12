@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import type { BestiaryState } from '@draconya/sim';
-import { isBestiaryState } from '../tickets.js';
+import { isAmmoSelection, isBestiaryState } from '../tickets.js';
 import type { IssueFailure, TicketService } from '../tickets.js';
 import type { GameRepository } from '../db/repository.js';
 
@@ -165,6 +165,8 @@ export function createTicketHandler(
         // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
         // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
         ...bestiaryOf(character.bestiary),
+        // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
+        ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
         // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
         // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
         inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),

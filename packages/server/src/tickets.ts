@@ -109,6 +109,8 @@ export interface InitialCharacter {
    * nunca abateu nada (ou ticket de um `api` antigo): a sessão parte de `{}`.
    */
   readonly bestiary?: BestiaryState;
+  /** A munição escolhida por família (#152), validada como o Bestiário. */
+  readonly ammo?: Readonly<Record<string, string>>;
 }
 
 export interface IssuedTicket {
@@ -487,7 +489,19 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // de inteiros, e um valor torto vira AUSENTE — a sessão parte de `{}` — em vez de virar
     // `NaN` dentro do motor ou de recusar o ticket por causa de uma contagem.
     ...(isBestiaryState(initial['bestiary']) ? { bestiary: initial['bestiary'] } : {}),
+    ...(isAmmoSelection(initial['ammo']) ? { ammo: initial['ammo'] } : {}),
   };
+}
+
+/**
+ * A forma da munição escolhida (#152): objeto `família → id`, strings não vazias. Um valor que
+ * não bate vira AUSENTE — a sessão atira a grátis —, nunca ticket recusado, pela razão do
+ * Bestiário. Exportada para o `api` conferir a linha com a MESMA régua do `consume`.
+ */
+export function isAmmoSelection(value: unknown): value is Readonly<Record<string, string>> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.entries(value).every(([family, ammoId]) =>
+    family.length > 0 && typeof ammoId === 'string' && ammoId.length > 0);
 }
 
 /**

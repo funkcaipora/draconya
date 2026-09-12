@@ -275,8 +275,9 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // `monsters` também tem default (FUN-113), e `lootDrops` (FUN-123): o que volta é a
     // mensagem com os dois preenchidos.
     const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
+    // E `ammunition` (#152): um nó anterior manda sem, e o seletor lista nada.
     expect(decodedWithIds).toEqual([{
-      ...withIds, monsters: [],
+      ...withIds, monsters: [], ammunition: [],
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({ ...hunt, lootDrops: 0 })),
     }]);
     const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number }> }> | null;
@@ -322,6 +323,7 @@ describe('the bestiary (FUN-113, §18)', () => {
     const full = {
       ...base,
       monsters: [{ id: 'rat', name: 'Rat' }],
+      ammunition: [],
       bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
     } as unknown as S2CMessage;
     expect(decodeS2C(encodeS2C(full))).toEqual([full]);

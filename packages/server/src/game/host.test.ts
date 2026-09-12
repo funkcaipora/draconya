@@ -3,8 +3,10 @@ import {
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema } from '@draconya/content';
-import type { Appearances, BotConfig, RawContent } from '@draconya/content';
+import {
+  BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema, placeholderAppearances,
+} from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -70,6 +72,7 @@ function buildHost(
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
+    ammunition?: NonNullable<SessionHostOptions['ammunition']>;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
   } = {},
@@ -3099,7 +3102,20 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     },
     supplies: { 'health-potion': { effect: 14 } },
     hits: { melee: 1 },
+    // O projétil do tiro (#152): o da flecha é da MUNIÇÃO, o da wand é da ARMA.
+    ammunition: { arrow: { icon: 3447, missile: 3 } },
+    weapons: { wand: { missile: 5 } },
   } as const;
+  /** As armas de tiro do #152, e a flecha grátis que o bow atira sem ninguém escolher. */
+  const BOW = {
+    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, twoHanded: true,
+    weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+  };
+  const WAND = {
+    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
+  };
+  const ARROW = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 };
   /** Um dia inteiro de stamina — o teto de `TEST_STAMINA`, e exatamente 24:00 no HUD. */
   const FULL_STAMINA_MS = 86_400_000;
   /** Stamina no MEIO de um minuto: três segundos de hunt não viram o mostrador. */
@@ -3154,14 +3170,31 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     monsterCount: number;
     /** `false` desliga a regeneração: vida e mana ficam paradas quando nada as toca. */
     regen: boolean;
+    /** O herói nasce com esta arma na mão, e o conteúdo com ela e com a flecha (#152). */
+    weapon: 'bow' | 'wand';
   }> = {}) {
     const raw = rawTestContent();
+    // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
+    // refeita com eles, e a de teste (`TABLE`) entra por cima só no host.
+    const armory = over.weapon === undefined
+      ? {}
+      : { items: [BOW, WAND], ammunition: [ARROW] };
+    const armed = over.weapon === undefined
+      ? {}
+      : {
+        inventory: {
+          backpack: [],
+          equipped: { hand: { instanceId: `i-${over.weapon}`, itemId: over.weapon, quantity: 1 } },
+        },
+      };
     const ratOverride = {
       ...(over.tanky === true ? { health: 100_000 } : {}),
       ...(over.rat ?? {}),
     };
     const content = buildContent({
       ...raw,
+      ...armory,
+      ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
@@ -3209,6 +3242,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           mana: over.mana ?? stats.maxMana, maxMana: stats.maxMana,
           level: 1, xp: 0, gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {},
           staminaMs: over.stamina ?? FULL_STAMINA_MS, staminaUpdatedAtMs: 0,
+          ...armed,
         }));
         return session;
       },
@@ -3666,5 +3700,102 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const stats = ofType(all, 'player-stats');
     expect(stats[0]?.gold).toBe(100);
     expect(stats.at(-1)?.gold).toBe(55);
+  });
+
+  it('o tiro do bow vira missile com o projétil da FLECHA, entre o herói e o rato (#152)', () => {
+    // O `sim` diz só "atirou arrow com o bow" (invariante 6); a arte do projétil é da tabela.
+    //
+    // Mutação que mata: ler `appearances.weapons[weaponItemId]` para a flecha também — o bow
+    // não tem linha em `weapons`, e o tiro ficaria mudo. Trocar `from`/`to` mata pela posição.
+    const { runFor, received, heroId } = hunt({ weapon: 'bow', tanky: true });
+    runFor(5_000);
+
+    const all = received();
+    const missiles = ofType(all, 'missile');
+    expect(missiles.length).toBeGreaterThan(0);
+    const first = all.findIndex((m) => m.type === 'missile');
+    const rat = ofType(all, 'creature-appear').find((m) => m.id !== heroId);
+    expect(missiles[0]).toMatchObject({
+      missileId: TABLE.ammunition.arrow.missile, to: rat?.position,
+    });
+    const heroTile = ofType(all.slice(0, first), 'creature-move')
+      .filter((m) => m.id === heroId).at(-1)?.to ?? { x: 1, y: 1, z: 7 };
+    expect(missiles[0]?.from).toEqual(heroTile);
+  });
+
+  it('o golpe da wand vira missile com o projétil da ARMA, e cobra a mana (#152)', () => {
+    const { runFor, received, hero, maxMana } = hunt({ weapon: 'wand', tanky: true, regen: false });
+    runFor(5_000);
+
+    const missiles = ofType(received(), 'missile');
+    expect(missiles.length).toBeGreaterThan(0);
+    expect(missiles[0]?.missileId).toBe(TABLE.weapons.wand.missile);
+    expect(hero().mana).toBe(maxMana - WAND.weapon.manaPerHit * missiles.length);
+  });
+
+  it('SEM linha na tabela o tiro é mudo, e a matemática não muda (invariante 3)', () => {
+    const { runFor, received } = hunt({ weapon: 'bow', tanky: true, table: false });
+    runFor(5_000);
+
+    const all = received();
+    expect(ofType(all, 'missile')).toHaveLength(0);
+    expect(ofType(all, 'creature-hit').length).toBeGreaterThan(0);
+  });
+});
+
+describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => {
+  const SNIPER: Ammunition = {
+    id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5,
+    requires: { level: 20 }, appearanceId: 7364, missileId: 22,
+  };
+  const ammunition = new Map([[SNIPER.id, SNIPER]]);
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+
+  const atLevel = (level: number) => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { ammunition, level });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const before = socket.received().length;
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, before };
+  };
+
+  it('escolhe, e a resposta é player-stats com a munição nova — não uma mensagem', () => {
+    // O seletor no slot do escudo precisa ver a escolha refletida; na Cidade não há ciclo que
+    // compare os vitais, então o sucesso manda `player-stats` na hora.
+    const { host, viewer, socket, hero, before } = atLevel(20);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'sniper-arrow' });
+    host.flush();
+
+    expect(hero.ammo.get('arrow')).toBe('sniper-arrow');
+    expect(warnings(socket)).toHaveLength(0);
+    const stats = socket.received().slice(before).filter((m) => m.type === 'player-stats');
+    const last = stats.at(-1);
+    expect(last?.type === 'player-stats' && last.ammo).toEqual({ arrow: 'sniper-arrow', bolt: null });
+  });
+
+  it('recusa por level com o MOTIVO, e a escolha anterior fica', () => {
+    const { host, viewer, socket, hero } = atLevel(19);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'sniper-arrow' });
+    host.flush();
+
+    expect(hero.ammo.get('arrow')).toBeUndefined();
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('level');
+  });
+
+  it('munição que o conteúdo não conhece é recusada, sem tocar em nada', () => {
+    const { host, viewer, socket, hero } = atLevel(20);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'flecha-de-brinquedo' });
+    host.flush();
+
+    expect(hero.ammo.size).toBe(0);
+    expect(warnings(socket)).toHaveLength(1);
   });
 });
