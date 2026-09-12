@@ -107,20 +107,22 @@ pode morar (ver `docs/harness-plan.md` §1).
 ## Padrão de commit e branch
 
 ```
-<type>(<scope>): <imperative description in English> (FUN-nn)
+<type>(<scope>): <imperative description in English> (#nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
 scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
-Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
+Exemplo: `feat(sim): advance simulation using elapsed time (#150)`
 
 O escopo `deps` é do Dependabot (`.github/dependabot.yml`) e de atualização de dependência
 feita à mão. Existe porque bump de `fastify` em `packages/server` não é `tools`: escopo que
 mente torna o campo inútil justamente no tipo de commit que mais aparece.
 
-`(FUN-nn)` é obrigatório em todo commit, exceto tipo `chore` e `docs`. Um hook recusa o commit que
-não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
+`(#nn)` — a issue do GitHub — é obrigatório em todo commit, exceto tipo `chore` e `docs`. `(FUN-nn)`
+é a issue do Linear, onde o trabalho foi rastreado até 2026-09-12 (FUN-1 a FUN-124, marcos M1 a
+M11): continua aceito só para branch aberta antes disso, e trabalho novo não o usa. Um hook recusa
+o commit que não bater: `.claude/hooks/validate-commit.sh` dentro do Claude Code, `.githooks/commit-msg` para
 commit feito fora dele (git de linha de comando ou GUI).
 
 **Commit de merge é isento.** Ele não descreve uma mudança, descreve uma junção, e o assunto que o
@@ -128,8 +130,14 @@ git gera (`Merge branch 'x' into y`) nunca bateria no formato. Os dois hooks det
 `MERGE_HEAD`, e não pelo prefixo do assunto — o assunto é texto livre e um commit normal pode
 começar com "Merge" sem ser um.
 
-**Branch:** a que o Linear já gera (`funkcaipora/fun-25-...`). Fecha o link automático entre
-commit, PR e issue sem trabalho manual.
+**Branch:** `<n>-<slug>`, a que `gh issue develop <n>` cria a partir da issue. **PR:** o corpo leva
+`Closes #n`, que fecha a issue no merge e liga as duas no GitHub.
+
+**Rastreamento:** issues, milestones e o quadro "Draconya" (projeto 3) do GitHub, desde
+2026-09-12 — o Linear é histórico. Toda issue leva uma label de épico (`E0 · Fundação` … `E16 ·
+Engine web`, os nomes do `docs/technical-architecture.md` §17) e uma de escopo (o escopo do
+commit que a fecha); quem pega a issue aplica `em andamento` e comenta, antes do merge, o que foi
+verificado. A skill `/spec` diz como uma issue vira spec e como ela entra no milestone e no quadro.
 
 **Entrega:** commit e PR para `main` fazem parte do trabalho autorizado, sem pedir confirmação
 a cada entrega. Nunca faça push direto na `main`; execute `pnpm check` antes de abrir o PR.

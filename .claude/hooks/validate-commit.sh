@@ -5,12 +5,13 @@
 # `git commit` com mensagem inline (-m ou --message), valida o formato contra o padrao do
 # projeto (docs/harness-plan.md secao 4.1, CLAUDE.md):
 #
-#   <tipo>(<escopo>): <descricao no imperativo> (FUN-nn)
+#   <tipo>(<escopo>): <descricao no imperativo> (#nn)
 #
 #   tipo:   feat | fix | refactor | perf | docs | test | chore
 #   escopo: sim | protocol | content | server | client | tools | docs | deps
 #
-# (FUN-nn) e obrigatorio, exceto para tipo chore ou docs.
+# (#nn) e obrigatorio, exceto para tipo chore ou docs -- nn e a issue do GitHub. (FUN-nn), a issue
+# do Linear, continua aceito so para branch aberta antes de 2026-09-12; trabalho novo nao usa.
 #
 # Contrato do hook: exit 0 deixa a chamada passar; exit 2 bloqueia a chamada e devolve o
 # stderr para o modelo. Na duvida -- JSON que nao parseia, comando que nao e git commit,
@@ -41,13 +42,14 @@ fail() {
 commit rejected by hook validate-commit: $1
 
 expected format:
-  <type>(<scope>): <imperative description in English> (FUN-nn)
+  <type>(<scope>): <imperative description in English> (#nn)
 
   type:   feat | fix | refactor | perf | docs | test | chore
   scope: sim | protocol | content | server | client | tools | docs | deps
 
-(FUN-nn) is required except for chore and docs commits.
-example: feat(sim): advance simulation using elapsed time (FUN-25)
+(#nn) -- the GitHub issue -- is required except for chore and docs commits.
+(FUN-nn) is only accepted for branches opened before the move to GitHub issues.
+example: feat(sim): advance simulation using elapsed time (#150)
 MSG
   exit 2
 }
@@ -206,7 +208,7 @@ if [[ "$subject" =~ ^([A-Za-z0-9_-]+)\(([A-Za-z0-9_-]+)\):[[:space:]]*(.*)$ ]]; 
   scope="${BASH_REMATCH[2]}"
   remainder="${BASH_REMATCH[3]}"
 else
-  fail "\"$subject\" does not match <type>(<scope>): <description> (FUN-nn)"
+  fail "\"$subject\" does not match <type>(<scope>): <description> (#nn)"
 fi
 
 if [[ ! "$type" =~ ^($TYPES)$ ]]; then
@@ -219,7 +221,7 @@ fi
 
 description="$remainder"
 has_issue=0
-if [[ "$remainder" =~ ^(.*[^[:space:]])[[:space:]]+\(FUN-[0-9]+\)[[:space:]]*$ ]]; then
+if [[ "$remainder" =~ ^(.*[^[:space:]])[[:space:]]+\((#[0-9]+|FUN-[0-9]+)\)[[:space:]]*$ ]]; then
   has_issue=1
   description="${BASH_REMATCH[1]}"
 fi
@@ -229,7 +231,7 @@ if [ -z "$description" ]; then
 fi
 
 if [[ "$type" != "chore" && "$type" != "docs" && "$has_issue" -eq 0 ]]; then
-  fail "missing (FUN-nn) in \"$subject\" -- required for type '$type' (only chore and docs are exempt)"
+  fail "missing (#nn) in \"$subject\" -- required for type '$type' (only chore and docs are exempt)"
 fi
 
 exit 0

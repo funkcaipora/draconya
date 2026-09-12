@@ -197,7 +197,7 @@ O item 4 vale sozinho: quando alguém for balancear a hunt daqui a três meses, 
 
 **Quando:** uma issue está rasa demais para alguém executar sem reconstruir o entendimento.
 
-Transforma a descrição da issue no Linear numa especificação executável: escopo por pacote,
+Transforma a descrição da issue no GitHub numa especificação executável: escopo por pacote,
 contratos, design com código real, casos de borda, testes e critérios de aceite verificáveis. A
 spec vive **na própria issue** — arquivo separado diverge dela no primeiro ajuste.
 
@@ -223,8 +223,8 @@ A cola do harness. Em ordem:
 3. Se alguma fronteira ou invariante mudou → `CLAUDE.md` do pacote
 4. Se houve decisão de arquitetura → `/adr`
 5. Se um sistema do PRD saiu do papel → `/product`
-6. Commit no padrão, na branch que o Linear gerou
-7. Atualiza a issue no Linear com o que foi feito e o que ficou de fora
+6. Commit no padrão, na branch da issue (`<n>-<slug>`)
+7. Comenta na issue do GitHub o que foi feito e o que ficou de fora; a PR fecha a issue
 
 Não faz nada que as outras não façam — garante que nenhuma seja esquecida, que é o problema real.
 
@@ -235,16 +235,19 @@ Não faz nada que as outras não façam — garante que nenhuma seja esquecida, 
 ### 4.1 Padrão de commit
 
 ```
-<type>(<scope>): <description no imperativo> (FUN-nn)
+<type>(<scope>): <description no imperativo> (#nn)
 
 type:   feat | fix | refactor | perf | docs | test | chore
 scope: sim | protocol | content | server | client | tools | docs | deps
 ```
 
-Exemplo: `feat(sim): advance simulation using elapsed time (FUN-25)`
+Exemplo: `feat(sim): advance simulation using elapsed time (#150)`
 
-**Branch:** usar a que o Linear já gera (`funkcaipora/fun-25-...`), que fecha o link automático
-entre commit, PR e issue sem trabalho manual.
+`#nn` é a issue do GitHub. Até 2026-09-12 o rastreador era o Linear e a referência era `(FUN-nn)`;
+os hooks continuam aceitando essa forma para branch aberta antes da troca, e só para isso.
+
+**Branch:** `<n>-<slug>`, a que `gh issue develop <n>` cria — o número liga commit, PR e issue sem
+trabalho manual, e a PR fecha a issue com `Closes #n`.
 
 **Hook `PreToolUse` em `git commit`:** valida o formato e recusa o que não bate. É a única forma
 de o padrão valer sempre — um agente que "sabe" o padrão o esquece na quinta hora de sessão.
@@ -293,7 +296,7 @@ Hook que incomoda vira hook desligado. Três:
 > **Corrigido na execução.** A versão original deste plano exigia responsável indicado em cada
 > `[ABERTO]`, e a regra derrubava o CI. Foi rebaixada a inventário na primeira vez que rodou:
 > num projeto onde o dono de toda decisão de produto é a mesma pessoa, o campo seria sempre o
-> mesmo nome, e atribuição de dono e prazo já vive no Linear — duplicar isso em markdown é
+> mesmo nome, e atribuição de dono e prazo já vive no rastreador de issues — duplicar isso em markdown é
 > exatamente a burocracia que a §7 manda não criar. O que sobrou é o que tem valor: saber
 > quantas decisões seguem abertas e onde. Um CI que nasce vermelho por uma regra sem sinal
 > ensina todo mundo a ignorar o CI.
