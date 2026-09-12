@@ -15,7 +15,7 @@ const cellars = {
   id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
   mapId: 'rat-cellars', routeId: 'rat-cellars',
   difficulties: {
-    beginner: { perSpawnPoint: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
+    cautious: { monsterCount: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000 },
   },
 };
 const knight = { id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25 };
@@ -114,7 +114,7 @@ describe('conteúdo inválido derruba, em vez de degradar', () => {
     const orfa = {
       ...cellars,
       difficulties: {
-        beginner: { perSpawnPoint: 2, composition: [{ monsterId: 'dragon', weight: 1 }], respawnDelayMs: 1000 },
+        cautious: { monsterCount: 2, composition: [{ monsterId: 'dragon', weight: 1 }], respawnDelayMs: 1000 },
       },
     };
     expect(() => buildContent(base({ hunts: [orfa] }))).toThrow(/monstro inexistente "dragon"/);

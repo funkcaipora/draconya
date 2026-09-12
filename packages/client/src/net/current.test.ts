@@ -8,9 +8,9 @@ describe('mandar intenção sem o socket passar por props (FUN-79)', () => {
     const send = vi.fn();
     setConnection({ send });
 
-    expect(sendIntent({ type: 'enter-hunt', huntId: 'rat', difficulty: 'beginner' })).toBe(true);
+    expect(sendIntent({ type: 'enter-hunt', huntId: 'rat', difficulty: 'cautious' })).toBe(true);
     expect(send).toHaveBeenCalledWith({
-      type: 'enter-hunt', huntId: 'rat', difficulty: 'beginner',
+      type: 'enter-hunt', huntId: 'rat', difficulty: 'cautious',
     });
   });
 

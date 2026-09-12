@@ -4,7 +4,7 @@
 
 Ferramentas de desenvolvimento e operação: o cliente sintético de carga, benchmarks e o
 `content:check`. Os importadores que falam com o pacote de arte e com o mapa real moram em
-`scripts/` na raiz (`pack-inventory.ts`, `import-map.ts`, `otbm.ts`, `fetch-map.ts`,
+`scripts/` na raiz (`pack-inventory.ts`, `import-map.ts`, `otbm.ts`, `fetch-map.ts`, `trace-route.ts`,
 `build-asset-library.ts`), porque importam `packages/client/src/assets` por caminho relativo
 sob o `tsconfig.tooling.json` — ver `docs/asset-library.md`.
 

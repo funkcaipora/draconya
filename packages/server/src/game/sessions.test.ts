@@ -33,7 +33,7 @@ describe('session restorer', () => {
 
   const hunt = (): Session => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0, maxMana: 0,
@@ -88,7 +88,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
    */
   const huntComRespawnPendente = (): Session => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 5_000, maxHealth: 5_000, mana: 0,
@@ -133,7 +133,7 @@ describe('retomada num nó de relógio diferente (FUN-70)', () => {
     // em um golpe e o instante final cai no prazo de respawn na maior parte das vezes.
     let noBAgoraMs = 5_000;
     let monstrosVistos = 0;
-    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.beginner.respawnDelayMs;
+    const ateMs = 5_000 + 10 * TEST_HUNT.difficulties.cautious.respawnDelayMs;
     for (; noBAgoraMs < ateMs; noBAgoraMs += 1_000) {
       noB.advanceBy(1_000);
       monstrosVistos = Math.max(monstrosVistos, ruleset.monsters.length);
@@ -159,7 +159,7 @@ describe('city successor (FUN-38)', () => {
 
   const dyingHunt = (): { session: Session; hero: CharacterRuntime } => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     const hero = new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 40, maxHealth: 200, mana: 0, maxMana: 0,
@@ -294,7 +294,7 @@ describe('stamina nas fronteiras da sessão (FUN-39)', () => {
     // leitura devolveria como recuperação exatamente o tempo que o personagem passou
     // gastando stamina.
     const hunt = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     const hero = new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 200, maxHealth: 200, mana: 0, maxMana: 0,
@@ -321,7 +321,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const city = cityWith();
     const hero = city.participants[0];
 
-    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1');
+    const hunt = build({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, city, 'p1');
 
     expect(hunt?.ruleset.type).toBe('hunt');
     expect(hunt?.participants[0]).toBe(hero);
@@ -330,7 +330,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
   });
 
   it('recusa hunt inexistente em vez de construir uma que mente sobre o que é', () => {
-    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'beginner' }, cityWith(), 'p1'))
+    expect(build({ to: 'hunt', huntId: 'nowhere', difficulty: 'cautious' }, cityWith(), 'p1'))
       .toBeNull();
   });
 
@@ -359,7 +359,7 @@ describe('construtor de sessão de destino (FUN-30)', () => {
     const hero = city.participants[0];
 
     createSessionBuilder(content, () => 3 * HOUR)(
-      { to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, city, 'p1',
+      { to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, city, 'p1',
     );
 
     expect(hero?.staminaMs).toBe(8 * HOUR);
@@ -372,7 +372,7 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
 
   const huntSnapshot = () => {
     const session = createHuntSession({
-      id: 'hunt-1', content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'hunt-1', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     session.enter(new CharacterRuntime({
       id: 'p1', position: { x: 0, y: 0, z: 7 }, health: 500, maxHealth: 500, mana: 0,
@@ -571,7 +571,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
 
     // p1 sai para caçar; p2 fica na praça. É a ordem real do hospedeiro: constrói o destino,
     // e só então tira quem saiu da sessão anterior.
-    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, praca, 'p1');
     if (hunt === null) throw new Error('a hunt não foi construída');
     praca.leave('p1');
     expect(praca.participants.map((p) => p.id)).toEqual(['p2']);
@@ -588,7 +588,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
     if (praca === undefined) throw new Error('a praça não foi criada');
     const builder = createSessionBuilder(content, () => 0, shard);
 
-    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'beginner' }, praca, 'p1');
+    const hunt = builder({ to: 'hunt', huntId: 'arena', difficulty: 'cautious' }, praca, 'p1');
     if (hunt === null) throw new Error('a hunt não foi construída');
     praca.leave('p1');
 

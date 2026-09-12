@@ -99,12 +99,34 @@ describe('world deltas', () => {
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
-      world: { mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
     }, 0);
     expect(world.mapId).toBe('rat-cellars');
     expect(world.ambience).toBe('cavern');
+  });
+
+  it('ground items: appear, disappear, and the session-state replaces them (FUN-123)', () => {
+    // O cadáver é um item do chão com id próprio; some pelo id, e o estado completo o
+    // substitui como substitui as criaturas — o que apodreceu sem ninguém olhar não fica.
+    const before = world.groundItemsVersion;
+    applyMessage({ type: 'ground-item-appear', id: 7, position: { x: 1, y: 2, z: 8 }, appearanceId: 5964 }, 0);
+    expect(world.groundItems.get(7)).toEqual({ id: 7, position: { x: 1, y: 2, z: 8 }, appearanceId: 5964 });
+    expect(world.groundItemsVersion).toBe(before + 1);
+    applyMessage({ type: 'ground-item-disappear', id: 7 }, 0);
+    expect(world.groundItems.has(7)).toBe(false);
+    applyMessage({ type: 'ground-item-disappear', id: 7 }, 0);
+    expect(world.groundItemsVersion).toBe(before + 2);
+    applyMessage({ type: 'ground-item-appear', id: 8, position: { x: 1, y: 2, z: 8 }, appearanceId: 5964 }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+      world: { mapId: 'rat-cellars', creatures: [], groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    expect([...world.groundItems.keys()]).toEqual([9]);
   });
 
   it('removes a creature that disappeared', () => {
@@ -151,7 +173,7 @@ describe('as cores de outfit (FUN-104)', () => {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
       },
-      world: {
+      world: { groundItems: [],
         mapId: 'rat-cellars',
         creatures: [
           { id: 1, position: at(0, 0), appearanceId: 128, name: 'me', health: 1, maxHealth: 1, colors },
@@ -288,7 +310,7 @@ describe('combat transients (FUN-106)', () => {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0,
       },
-      world: { mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     }, 0);
@@ -356,7 +378,7 @@ describe('session-state', () => {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200,
     },
-    world: {
+    world: { groundItems: [],
       mapId: 'rat-cellars',
       creatures: creatures.map((c) => ({
         id: c.id, position: at(c.x, c.y), appearanceId: 1,
@@ -462,7 +484,7 @@ describe('o analisador (FUN-83)', () => {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200,
     },
-    world: { mapId: 'rat-cellars', creatures: [] },
+    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120,
       kills: 12, deaths: 0, itemsLooted: 4, suppliesUsed: 7, bestBasicHit: 88,
@@ -548,7 +570,7 @@ describe('o analisador ao vivo (FUN-110)', () => {
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
       self: { creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200 },
-      world: { mapId: 'rat-cellars', creatures: [] },
+      world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
     }, 5_000);
@@ -601,7 +623,7 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: { creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
-    world: { mapId: null, creatures: [] },
+    world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
     ...over,
@@ -655,7 +677,7 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
 
   it('chega e vira o que as duas telas oferecem', () => {
     applyMessage(catalogue([
-      { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'] },
+      { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], lootDrops: 0 },
     ]), 0);
 
     expect(hud.get().catalogue?.hunts).toHaveLength(1);
@@ -673,7 +695,7 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
   it('SUBSTITUI em vez de acumular', () => {
     // Reconectar reenvia o mesmo catálogo. Concatenar daria hunts duplicadas na tela a cada
     // queda de rede — e a segunda cópia pareceria uma hunt diferente com o mesmo nome.
-    const uma = [{ id: 'a', name: 'A', recommendedLevel: 1, difficulties: ['beginner'] }];
+    const uma = [{ id: 'a', name: 'A', recommendedLevel: 1, difficulties: ['cautious'], lootDrops: 0 }];
     applyMessage(catalogue(uma), 0);
     applyMessage(catalogue(uma), 1_000);
 
@@ -687,7 +709,7 @@ describe('o catálogo (FUN-79, FUN-89)', () => {
     subscribeSlice(hud, (state) => state.chat, notified);
 
     applyMessage(catalogue([
-      { id: 'b', name: 'B', recommendedLevel: 8, difficulties: ['hero'] },
+      { id: 'b', name: 'B', recommendedLevel: 8, difficulties: ['reckless'], lootDrops: 0 },
     ]), 0);
 
     expect(notified).not.toHaveBeenCalled();

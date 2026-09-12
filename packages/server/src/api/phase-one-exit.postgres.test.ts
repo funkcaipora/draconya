@@ -281,7 +281,7 @@ describe.runIf(ready)('critério de saída da Fase 1', () => {
     let inbox = await connect(cookie, characterId);
 
     // --- 2. entrar na hunt, percorrer, matar, ganhar XP ---------------------------------
-    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     const entered = await inbox.waitFor('session-state');
     expect(entered.sessionType).toBe('hunt');
 

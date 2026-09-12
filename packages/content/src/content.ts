@@ -247,8 +247,9 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
-  const monsters: ReadonlyMap<string, Monster> = resolveAppearance(
-    'monstro', 'monsters', monsterDefinitions, appearances?.monsters, 'outfitId', problems);
+  const monsters: ReadonlyMap<string, Monster> = withCorpses(resolveAppearance(
+    'monstro', 'monsters', monsterDefinitions, appearances?.monsters, 'outfitId', problems),
+  appearances?.corpses, problems);
   const items: ReadonlyMap<string, Item> = resolveAppearance(
     'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
 
@@ -462,6 +463,8 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
     items: sequential(raw.items),
+    // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
+    corpses: {},
     maps: Object.fromEntries((raw.maps ?? []).map((entry, index) => [
       typeof entry === 'object' && entry !== null && 'id' in entry
         ? String((entry as { id: unknown }).id)
@@ -519,6 +522,29 @@ function resolveAppearance<D extends { id: string }, K extends 'appearanceId' | 
   for (const id of Object.keys(table)) {
     if (definitions.has(id)) continue;
     problems.push(`appearances.${section} mapeia ${kind} "${id}", que não existe no conteúdo`);
+  }
+  return resolved;
+}
+
+/**
+ * O cadáver de cada monstro (FUN-123), pela tabela: `corpses.<monstro> → appearanceId`. Linha
+ * sem monstro é erro, como em toda seção da tabela; monstro sem linha é válido — não deixa
+ * cadáver, e o `sim` nem fica sabendo (invariante 6: ele só diz que alguém morreu).
+ */
+function withCorpses(
+  monsters: ReadonlyMap<string, Monster>,
+  corpses: Readonly<Record<string, number>> | undefined,
+  problems: string[],
+): ReadonlyMap<string, Monster> {
+  if (corpses === undefined) return monsters;
+  const resolved = new Map<string, Monster>(monsters);
+  for (const [id, appearance] of Object.entries(corpses)) {
+    const monster = resolved.get(id);
+    if (monster === undefined) {
+      problems.push(`appearances.corpses mapeia monstro "${id}", que não existe no conteúdo`);
+      continue;
+    }
+    resolved.set(id, { ...monster, corpseAppearanceId: appearance });
   }
   return resolved;
 }

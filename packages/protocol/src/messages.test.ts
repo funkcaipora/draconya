@@ -186,7 +186,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
     const state: S2CMessage = {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
       self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0 },
-      world: { mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
+      world: { groundItems: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
     };
@@ -240,7 +240,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
   const state: S2CMessage = {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
     self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
-    world: { mapId: null, creatures: [] },
+    world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
   };
@@ -257,7 +257,7 @@ describe('the bot configuration in force rides the session state (FUN-111)', () 
 describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () => {
   const catalogue = (hunt: Record<string, unknown>): S2CMessage => ({
     type: 'catalogue',
-    hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'], ...hunt }],
+    hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], ...hunt }],
     bot: {
       vocabularyVersion: 1, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
@@ -272,10 +272,16 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // lança dentro do efeito de aquecimento. Mutação que mata: trocar `.default([])` por
     // `.optional()`.
     const withIds = catalogue({ outfitIds: [21, 35] });
-    // `monsters` também tem default (FUN-113): o que volta é a mensagem com ele preenchido.
-    expect(decodeS2C(encodeS2C(withIds))).toEqual([{ ...withIds, monsters: [] }]);
-    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[] }> }> | null;
+    // `monsters` também tem default (FUN-113), e `lootDrops` (FUN-123): o que volta é a
+    // mensagem com os dois preenchidos.
+    const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
+    expect(decodedWithIds).toEqual([{
+      ...withIds, monsters: [],
+      hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({ ...hunt, lootDrops: 0 })),
+    }]);
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.lootDrops).toBe(0);
   });
 
   it('rejects an outfit id of zero: there is no appearance zero', () => {

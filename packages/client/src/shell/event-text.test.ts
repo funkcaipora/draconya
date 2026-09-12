@@ -10,10 +10,10 @@ const names = {
 
 describe('describeEvent (FUN-110)', () => {
   it('traduz TODOS os tipos que o sim grava — nenhum sai como id cru', () => {
-    // A lista está ao vivo desde a FUN-110, e `entered-hunt · rat-cellars/beginner` era a
+    // A lista está ao vivo desde a FUN-110, e `entered-hunt · rat-cellars/cautious` era a
     // primeira linha que todo jogador via. Mutação que mata: apagar um `case`.
     const lines = [
-      ['entered-hunt', 'rat-cellars/beginner', 'Entrou em Rat Cellars · Iniciante'],
+      ['entered-hunt', 'rat-cellars/cautious', 'Entrou em Rat Cellars · Cauteloso'],
       ['entered-city', 'c1', 'Voltou para a cidade'],
       ['level-up', '4', 'Subiu de level · 4'],
       ['level-down', '9 → 8', 'Perdeu level · 9 → 8'],
@@ -27,7 +27,7 @@ describe('describeEvent (FUN-110)', () => {
       ['exit-rule', 'hp-below', 'Saiu por regra · hp-below'],
       ['ring-equipped', 'life-ring', 'Equipou o anel'],
       ['ring-removed', '', 'Tirou o anel'],
-      ['difficulty-changed', 'beginner → hero', 'Dificuldade mudou · beginner → hero'],
+      ['difficulty-changed', 'cautious → hero', 'Dificuldade mudou · cautious → hero'],
       ['advance-truncated', '90000', 'Tempo parado descartado'],
       ['ended', 'manual-exit', 'Sessão encerrada · saiu da hunt'],
     ] as const;
@@ -37,8 +37,8 @@ describe('describeEvent (FUN-110)', () => {
   });
 
   it('sem catálogo, o id fica no lugar do nome — estável, e não vazio', () => {
-    expect(describeEvent({ atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/beginner' }))
-      .toBe('Entrou em rat-cellars · Iniciante');
+    expect(describeEvent({ atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/cautious' }))
+      .toBe('Entrou em rat-cellars · Cauteloso');
     expect(describeEvent({ atMs: 0, type: 'supply-unaffordable', detail: 'mana-potion' }))
       .toBe('Gold acabou para mana-potion');
   });

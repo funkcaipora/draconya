@@ -297,7 +297,11 @@ pnpm tsx scripts/make-sheet-fixture.ts
   criatura em cima de uma caixa sobe a elevação do tile, INTERPOLADA ao longo do passo — lida
   só pelo tile arredondado ela pulava 24 px no meio do passo. A ordem de desenho das criaturas
   é pela posição de TELA (deslocada pelo andar). `ambience: 'cavern'` do `instance-enter` é um
-  tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Mapa autorado à mão** (a adega de
+  tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**
+  (`world.groundItems`, FUN-123 — os cadáveres) entram na pilha do tile como itens comuns, por
+  cima do que o mapa tem, e `groundItemsVersion` entra na chave da repintura: um cadáver que
+  cai repinta o tile dele sem varrer o mapa a cada quadro. Chegam por `ground-item-appear` /
+  `ground-item-disappear` e no `session-state.world.groundItems`, que substitui. **Mapa autorado à mão** (a adega de
   teste) vira pilha SINTÉTICA — `[chão]` no livre, `[peça pela vizinhança]` no bloqueado
   (`sceneFromTilemap`) — e passa pelo MESMO pintor: um caminho de desenho, duas origens. Cena
   ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao

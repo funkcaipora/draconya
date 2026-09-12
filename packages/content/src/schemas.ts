@@ -69,6 +69,12 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
+   * `id de monstro → aparência do cadáver` (FUN-123). O `sim` diz que um monstro morreu; é
+   * aqui que o rato morto vira o objeto 5964 no chão — arte, logo tabela (invariante 6).
+   * Monstro sem linha não deixa cadáver: válido, só não desenha.
+   */
+  corpses: z.record(z.string().min(1), appearanceId).default({}),
+  /**
    * Outfits de PERSONAGEM (FUN-103). `default` é o que todo jogador veste enquanto ninguém
    * escolhe o seu (§7.4 pendente): `CharacterRuntime` não tem outfit e o ticket não carrega
    * um. Mora aqui, e não numa constante no servidor, porque é arte (invariante 6).
@@ -280,8 +286,16 @@ export const monsterSchema = z.strictObject({
   recommendedLevel: z.number().int().positive(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),
-  /** Dano por ataque, antes de defesa. */
-  attack: z.number().int().nonnegative(),
+  /**
+   * Dano por ataque, antes de defesa: um número, ou uma FAIXA `{ min, max }` sorteada a cada
+   * golpe com o `Rng` da sessão (FUN-123) — o rato do Tibia bate de 0 a 8. Mesma semente,
+   * mesmo dano: o contrato do loot vale aqui.
+   */
+  attack: z.union([
+    z.number().int().nonnegative(),
+    z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() })
+      .refine((range) => range.min <= range.max, 'attack.min não pode passar de attack.max'),
+  ]),
   armor: z.number().int().nonnegative(),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
@@ -304,9 +318,19 @@ export const monsterSchema = z.strictObject({
   loot: lootTableSchema.default({ items: [] }),
 });
 
+/**
+ * Os três tamanhos de pull do Huntera (FUN-123): Cauteloso, Ousado, Agressivo. O PRD tinha
+ * quatro dificuldades; o produto copiou os três — ver `docs/product/hunt.md`, "Divergências".
+ */
+export const HUNT_DIFFICULTY_NAMES = ['cautious', 'bold', 'reckless'] as const;
+
 export const huntDifficultySchema = z.object({
-  /** Monstros por ponto de spawn. Sem variação aleatória de densidade no MVP (§14.5). */
-  perSpawnPoint: z.number().int().positive(),
+  /**
+   * Quantos monstros a instância mantém vivos, NO TOTAL — o `monsterCount` do Huntera (2, 5
+   * e 8 no bueiro), distribuído pelos pontos de spawn da rota em rodízio (`Spawner`). Sem
+   * variação aleatória de densidade no MVP (§14.5).
+   */
+  monsterCount: z.number().int().positive(),
   composition: z.array(
     z.object({ monsterId: z.string().min(1), weight: z.number().positive() }),
   ).min(1),
@@ -341,9 +365,15 @@ export const huntSchema = z.object({
    * exaustivo. No zod 3 as duas se escreviam igual, e o comportamento era este.
    */
   difficulties: z.partialRecord(
-    z.enum(['beginner', 'professional', 'hero', 'legendary']),
+    z.enum(HUNT_DIFFICULTY_NAMES),
     huntDifficultySchema,
   ).refine((d) => Object.keys(d).length > 0, 'a hunt precisa de ao menos uma dificuldade'),
+  /**
+   * Quanto tempo o cadáver de um monstro fica no chão, em milissegundos (FUN-123). Só visual:
+   * o loot vai direto à caixa da sessão, e o cadáver some sozinho. Ausente é hunt sem
+   * cadáver — o conteúdo de teste que não fala de arte.
+   */
+  corpseTtlMs: z.number().int().positive().optional(),
 });
 
 export const vocationSchema = z.object({
@@ -979,7 +1009,18 @@ export type Supply = z.infer<typeof supplySchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = MonsterDefinition & { readonly outfitId: number };
+export type Monster = MonsterDefinition & {
+  readonly outfitId: number;
+  /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
+  readonly corpseAppearanceId?: number;
+};
+export type MonsterAttack = MonsterDefinition['attack'];
+export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
+
+/** A faixa de ataque de um monstro: um número é a faixa de um valor só. */
+export function attackRange(attack: MonsterAttack): { readonly min: number; readonly max: number } {
+  return typeof attack === 'number' ? { min: attack, max: attack } : attack;
+}
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */
 export type LootRoll = NonNullable<LootTable['gold']>;

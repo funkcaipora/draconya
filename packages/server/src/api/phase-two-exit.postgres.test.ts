@@ -78,8 +78,8 @@ const raw: RawContent = {
     // (encerrar, creditar, devolver à Cidade), não quanto tempo ela demora.
     id: 'lethal', name: 'Arena Letal', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
     difficulties: {
-      beginner: {
-        perSpawnPoint: 1, composition: [{ monsterId: 'reaper', weight: 1 }],
+      cautious: {
+        monsterCount: 1, composition: [{ monsterId: 'reaper', weight: 1 }],
         respawnDelayMs: 1_000,
       },
     },
@@ -398,7 +398,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     expect(accepted).toMatchObject({ ok: true });
 
     // --- 3. entrar na hunt e FECHAR o navegador -----------------------------------------
-    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     expect((await inbox.waitFor('session-state')).sessionType).toBe('hunt');
     inbox.close();
 
@@ -482,7 +482,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
       .where(eq(characters.id, characterId));
 
     const inbox = await connect(cookie, characterId);
-    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await inbox.waitFor('session-state');
 
     // A asserção é "PARA de crescer", e não "é zero", e a diferença é honesta: entre gravar a
@@ -522,7 +522,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const characterId = String(created.id);
 
     const inbox = await connect(cookie, characterId);
-    inbox.send({ type: 'enter-hunt', huntId: 'lethal', difficulty: 'beginner' });
+    inbox.send({ type: 'enter-hunt', huntId: 'lethal', difficulty: 'cautious' });
     await inbox.waitFor('session-state');
 
     await advance(120_000);

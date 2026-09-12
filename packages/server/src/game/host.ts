@@ -1173,6 +1173,8 @@ export class SessionHost {
         case 'creature-appeared':
         case 'creature-vanished':
         case 'creature-health-changed':
+        case 'ground-item-appeared':
+        case 'ground-item-vanished':
           this.#presentPresence(hosted, event);
           continue;
         case 'creature-hit':
@@ -1239,6 +1241,20 @@ export class SessionHost {
    * não tem barra para atualizar; o `session-state` que vier traz a vida certa.
    */
   #presentPresence(hosted: HostedSession, event: PresenceEvent): void {
+    // O cadáver (FUN-123): o `sim` disse qual monstro e onde; a arte é da tabela. Monstro sem
+    // linha em `appearances.corpses` não deixa nada — e ninguém fica sabendo, de propósito.
+    if (event.kind === 'ground-item-appeared') {
+      const appearanceId = this.#options.monsterCatalog?.get(event.monsterId)?.corpseAppearanceId;
+      if (appearanceId === undefined) return;
+      const appeared: S2CMessage = { type: 'ground-item-appear', id: event.itemId, position: event.position, appearanceId };
+      for (const viewer of hosted.viewers) viewer.send(appeared);
+      return;
+    }
+    if (event.kind === 'ground-item-vanished') {
+      const vanished: S2CMessage = { type: 'ground-item-disappear', id: event.itemId };
+      for (const viewer of hosted.viewers) viewer.send(vanished);
+      return;
+    }
     const key = String(event.creatureId);
     let message: S2CMessage;
     if (event.kind === 'creature-appeared') {
@@ -2146,6 +2162,11 @@ export class SessionHost {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
         mapId: session.ruleset.mapId ?? null,
         creatures,
+        // Os cadáveres no chão (FUN-123), com a arte da tabela; sem linha, sem cadáver.
+        groundItems: (ruleset.groundItems ?? []).flatMap((corpse) => {
+          const appearanceId = this.#options.monsterCatalog?.get(corpse.monsterId)?.corpseAppearanceId;
+          return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
+        }),
       },
       aggregates: { ...session.aggregates },
       notableEvents: session.notableEvents.map((event) => ({ ...event })),

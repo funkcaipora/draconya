@@ -12,7 +12,7 @@ Hunts são instâncias isoladas: não existe disputa aberta por spawn nem necess
 
 Cada hunt tem uma rota única, fixa e predeterminada — o bot nunca escolhe caminhos alternativos. A rota forma um loop lógico, seja circular, seja por subidas e descidas que retornam ao ponto de origem. Os pontos de respawn de monstros são definidos por design, e a quantidade/composição de monstros em cada ponto é um dado da hunt e da dificuldade escolhida; não existe variação aleatória de densidade no MVP.
 
-Existem quatro dificuldades — Iniciante, Profissional, Herói e Lendário — cada uma aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
+Existem três tamanhos de pull — Cauteloso, Ousado e Agressivo (FUN-123, cópia do Huntera; o PRD previa quatro dificuldades) — cada um aumentando a quantidade de monstros e podendo introduzir variantes mais fortes e tematicamente coerentes (por exemplo, uma hunt de vampiros pode reservar variantes cerimoniais/escuras para dificuldades mais altas). O jogador pode trocar de dificuldade durante sua jornada, mas isso encerra a instância atual e cria uma nova — não existe alteração dinâmica de dificuldade dentro da mesma instância. Em party, a troca de dificuldade exige votação/aprovação dos membros.
 
 A hunt termina por ação manual do jogador, por uma regra automática de saída configurada no bot, por morte, ou por outras condições de sessão que venham a ser adicionadas depois. Stamina chegando a zero, isoladamente, não encerra a hunt (ver `stamina.md`).
 
@@ -42,7 +42,7 @@ fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
 - Rota fixa e única por hunt; sem pathfinding dinâmico do bot dentro da hunt.
 - Rota forma loop lógico (circular ou com retorno ao ponto de origem).
 - Pontos de spawn e composição por dificuldade são dados de conteúdo, não aleatórios no MVP.
-- Quatro dificuldades: Iniciante, Profissional, Herói, Lendário.
+- Três tamanhos de pull: Cauteloso, Ousado, Agressivo — `monsterCount` total de 2/5/8 na Rat Cellars.
 - Trocar de dificuldade encerra a instância atual e cria uma nova; sem mudança dinâmica na mesma instância.
 - Em party, troca de dificuldade exige aprovação dos membros.
 - Tela de seleção mostra level recomendado; não mostra XP/h nem gold/h estimados.
@@ -143,9 +143,11 @@ num andar só, e o carregador recusa rota que pise em escada.
 
 ## Spawn: densidade é dado, composição é sorteio
 
-Os pontos de respawn são definidos por design, na rota. Quantos monstros nascem em cada ponto
-vem da **dificuldade escolhida** e **não varia** — o §14.5 é explícito que não há variação
-aleatória de densidade no MVP.
+Os pontos de respawn são definidos por design, na rota. Quantos monstros a instância mantém
+vivos — o `monsterCount` TOTAL do pull escolhido, como o Huntera conta (FUN-123) — **não varia**:
+o §14.5 é explícito que não há variação aleatória de densidade no MVP. O total é distribuído
+pelos pontos de spawn da rota em rodízio (`Spawner`): o lugar `i` fica no ponto `i % pontos`,
+determinístico. Na Rat Cellars, 2/5/8 ratos sobre 14 pontos.
 
 O único sorteio do spawn é **qual** monstro, dentro dos pesos da composição. Peso zero é
 permitido e significa "não sai": é como se desliga uma variante sem apagar a linha, e apagar
@@ -158,10 +160,9 @@ planejar — e planejar é justamente o que se ganha ao tornar o monstro previs�
 O respawn tem **prazo configurável por hunt**. Instantâneo faria a rota deixar de importar: o
 personagem mataria tudo parado num ponto só. Longo demais faz ele dar voltas em mapa vazio.
 
-As quatro dificuldades — Iniciante, Profissional, Herói, Lendário — são **dados**, não código.
-Trocar `perSpawnPoint` e a composição no JSON muda densidade e variedade sem tocar em lógica;
-há teste afirmando exatamente isso, porque se uma dificuldade nova exigisse código o formato
-estaria errado.
+Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
+e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
+exatamente isso, porque se um pull novo exigisse código o formato estaria errado.
 
 ## O ruleset, e por que ele é o molde dos outros cinco
 
@@ -234,8 +235,9 @@ porque gold é campo no personagem e não item; `items` fica vazio até o sistem
 o carregador recusa qualquer coisa nele. O sorteio usa o `Rng` da sessão — a mesma semente rende o
 mesmo loot, antes e depois de uma retomada — e uma linha com `chance: 0` não consome sorteio, para
 desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta` no personagem e
-`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem cadáver, sem
-item no chão, sem caixa de loot: o produto rejeita isso de propósito (§26 da referência).
+`goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem item de
+loot no chão e sem caixa de loot: o produto rejeita isso de propósito (§26 da referência); o
+cadáver que fica é só visual (FUN-123, ver "Divergências").
 
 ### Abate comum não é evento notável
 
@@ -348,17 +350,18 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
-| Quantidade de dificuldades | 4 (Iniciante, Profissional, Herói, Lendário) | `data/hunts/*.json`, campo `difficulties` |
-| Densidade de referência por ponto de spawn (Iniciante / Profissional / Herói / Lendário) | ~2 / 4 / 8 / 12 monstros (referência inicial discutida; a composição real é definida por hunt) | `data/hunts/*.json`, campo `perSpawnPoint` |
+| Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, distribuído pelos pontos em rodízio (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
-| Velocidade do rato | 172 | `data/monsters/rat.json`, `speed` |
-| Loot por abate (gold: chance, mínimo, máximo) | Rat: 90%, 1–4 | `data/monsters/*.json`, bloco `loot.gold` |
+| O rato (números do mapa real, Canary) | 20 HP, 5 XP, ataque 0–8 sorteado por golpe, armadura 1, speed 172 | `data/monsters/rat.json` |
+| Loot por abate | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
 
 ## Em aberto
 
@@ -377,13 +380,19 @@ propósito.
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
 
-**Três tamanhos de pull, não quatro dificuldades** (ADR 0025, M11). O §14.5 prevê Iniciante/
-Profissional/Herói/Lendário; a decisão é copiar o Huntera — Cauteloso/Ousado/Agressivo, com um
-`monsterCount` total (2/5/8 na Rat Cellars) como o número que o jogador vê. Entra com a FUN-123.
+**Três tamanhos de pull, não quatro dificuldades** (ADR 0025, M11, em vigor desde a FUN-123).
+O §14.5 prevê Iniciante/Profissional/Herói/Lendário; a decisão é copiar o Huntera —
+Cauteloso/Ousado/Agressivo (`cautious`/`bold`/`reckless`), com um `monsterCount` total (2/5/8 na
+Rat Cellars) como o número que o jogador vê.
 
-**Cadáver no chão, só visual** (decisão do usuário, 2026-09-11). O texto acima diz "sem
-cadáver"; passa a haver um, que some sozinho e não carrega loot — o loot continua na caixa da
-sessão. Entra com a FUN-123.
+**Cadáver no chão, só visual** (decisão do usuário, 2026-09-11; FUN-123). O abate deixa o
+cadáver do monstro no tile — `ground-item-appear`, com a arte de `appearances.corpses` — por
+`corpseTtlMs`, e ele some sozinho (`ground-item-disappear`); não carrega loot — o loot continua
+indo direto à caixa da sessão. Quem reanexa vê os cadáveres que ainda estão lá
+(`session-state.world.groundItems`). Monstro sem linha na tabela não deixa nada.
 
-**A Rat Cellars é o bueiro de ratos de Rookgaard**, como no Huntera, e a entrada continua pelo
-menu, abrindo uma instância — sem portal na cidade (ADR 0025).
+**A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
+importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por
+`pnpm route:trace` sobre ele — um laço de 160 tiles com 14 pontos de spawn onde o mapa real põe
+rato —, e o rato do Tibia (20 HP, 5 XP, 0–8 de ataque, speed 172, gold e queijo). A entrada
+continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).

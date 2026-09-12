@@ -75,6 +75,13 @@ export const SERVER_TO_CLIENT = {
    * marco chegar.
    */
   bestiary: 21,
+  /**
+   * Um item no chão (FUN-123): hoje, o cadáver de um monstro — só visual, sem loot. Aparece
+   * com posição e aparência, e some pelo id quando apodrece. Só S2C: o cliente não põe nada
+   * no chão.
+   */
+  'ground-item-appear': 22,
+  'ground-item-disappear': 23,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

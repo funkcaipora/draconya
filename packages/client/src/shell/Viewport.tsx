@@ -1,32 +1,21 @@
 import { useEffect, useRef } from 'react';
-import appearances from '@draconya/content/data/appearances/baseline.json';
-import ratCellars from '@draconya/content/data/maps/rat-cellars.json';
 import type { AssetPack } from '../assets/pack.js';
 import { TextureBook } from '../world/textures.js';
-import { loadStackMap, sceneFromStack, sceneFromTilemap } from '../world/scene.js';
+import { loadStackMap, sceneFromStack } from '../world/scene.js';
 import type { Scene } from '../world/scene.js';
-import { mountViewport, tilemapFrom } from '../world/viewport.js';
+import { mountViewport } from '../world/viewport.js';
 import type { ViewportHandle } from '../world/viewport.js';
 import { useAssetPack } from './AssetPackContext.js';
 
 /**
- * Os mapas AUTORADOS À MÃO que o cliente conhece (FUN-121): a grade de `content` mais o par
- * chão/parede de `appearances.maps`, transformados em pilha sintética. É o mapa de teste da
- * adega; todo mapa importado (Thais, o bueiro real) chega pela rede, pelo `mapId` da sessão.
- */
-const HAND_MADE: Readonly<Record<string, () => Scene>> = {
-  'rat-cellars': () => sceneFromTilemap(tilemapFrom(ratCellars), appearances.maps['rat-cellars']),
-};
-
-/**
- * De onde vem a cena de um `mapId`: do registro à mão, ou de `things/<versão>/maps/<id>.json`
- * — o mesmo caminho das folhas (`VITE_THINGS_URL`). Sem caminho, ou sem o arquivo, é `null`,
- * e o viewport desenha a grade lisa de reserva: mapa que não carrega não é razão de a tela
- * não abrir, pela regra da arte que não carrega.
+ * De onde vem a cena de um `mapId`: de `things/<versão>/maps/<id>.json` — o mesmo caminho das
+ * folhas (`VITE_THINGS_URL`). Todo mapa do conteúdo é importado desde a FUN-123 (Thais e o
+ * bueiro real); um mapa autorado à mão voltaria por `sceneFromTilemap`, que fica para as
+ * fixtures. Sem caminho, ou sem o arquivo, é `null`, e o viewport desenha a grade lisa de
+ * reserva: mapa que não carrega não é razão de a tela não abrir, pela regra da arte que não
+ * carrega.
  */
 async function loadScene(mapId: string): Promise<Scene | null> {
-  const handMade = HAND_MADE[mapId];
-  if (handMade !== undefined) return handMade();
   const baseUrl = import.meta.env.VITE_THINGS_URL;
   if (baseUrl === undefined || baseUrl === '') return null;
   const stack = await loadStackMap(baseUrl, mapId);

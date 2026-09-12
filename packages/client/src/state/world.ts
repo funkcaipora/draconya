@@ -123,15 +123,31 @@ export interface World {
    */
   selfId: number | null;
   readonly creatures: Map<number, Creature>;
+  /** Os itens no chão (FUN-123): cadáveres, pelo id do servidor. Desenhados na pilha do tile. */
+  readonly groundItems: Map<number, GroundItem>;
+  /**
+   * Sobe a cada mudança em `groundItems`: o terreno só repinta quando a chave muda, e a chave
+   * precisa saber que um cadáver caiu sem varrer o mapa a cada quadro.
+   */
+  groundItemsVersion: number;
   readonly effects: Effect[];
   readonly missiles: Missile[];
   readonly texts: FloatingText[];
+}
+
+/** Um item no chão: onde, e com que arte. */
+export interface GroundItem {
+  readonly id: number;
+  readonly position: Point;
+  readonly appearanceId: number;
 }
 
 export const world: World = {
   instanceId: null,
   mapId: null,
   ambience: 'surface',
+  groundItems: new Map(),
+  groundItemsVersion: 0,
   selfId: null,
   creatures: new Map(),
   effects: [],
@@ -216,6 +232,8 @@ export function enterInstance(
   world.instanceId = instanceId;
   world.mapId = mapId;
   world.ambience = ambience;
+  world.groundItems.clear();
+  world.groundItemsVersion += 1;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

@@ -264,7 +264,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     const character = await createCharacter(owner.cookie);
     const content = testContent();
     const session = createHuntSession({
-      id: randomUUID(), content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: randomUUID(), content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
     const stats = statsForLevel(1, null, content.progression);
     const hero = new CharacterRuntime({

@@ -949,7 +949,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     await host.prepare('p1', undefined, 'a1');
     const antes = host.sessionFor('p1');
 
-    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'beginner' });
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
 
     expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt');
     expect(host.sessionFor('p1')).not.toBe(antes);
@@ -987,8 +987,8 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     const { host } = cityHost({ buildSession: build });
     await host.prepare('p1', undefined, 'a1');
 
-    const primeira = host.transition('p1', { to: 'hunt', huntId: 'a', difficulty: 'beginner' });
-    const segunda = host.transition('p1', { to: 'hunt', huntId: 'b', difficulty: 'beginner' });
+    const primeira = host.transition('p1', { to: 'hunt', huntId: 'a', difficulty: 'cautious' });
+    const segunda = host.transition('p1', { to: 'hunt', huntId: 'b', difficulty: 'cautious' });
 
     await expect(primeira).resolves.toBeUndefined();
     await expect(segunda).rejects.toThrow(/já está em andamento/);
@@ -1008,7 +1008,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     const viewer = host.attach(socket, 'p1');
     socket.frames.length = 0;
 
-    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
     host.flush();
 
@@ -1027,7 +1027,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     await host.prepare('p1', undefined, 'a1');
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
-    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
     host.flush();
     socket.frames.length = 0;
@@ -1085,7 +1085,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
       const socket = new FakeSocket();
       const viewer = host.attach(socket, 'p1');
 
-      host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+      host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
       await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
       host.flush();
 
@@ -2094,7 +2094,7 @@ describe('a praça compartilhada, vista pelo hospedeiro (FUN-71, ADR 0023)', () 
     const praçaSession = host.sessionFor('p1');
 
     host.handle(segundo.viewer, {
-      type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner',
+      type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious',
     });
 
     return vi.waitFor(() => {
@@ -2532,17 +2532,26 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     tanky: boolean;
     /** A arena larga, para haver passo de monstro. Implica `tanky`. */
     wide: boolean;
+    /** O rato deixa cadáver (FUN-123): aparência 7 na tabela, meio segundo no chão. */
+    corpses: boolean;
   }> = {}) {
     const raw = rawTestContent();
-    const content = over.wide === true
-      ? buildContent(wideArena())
-      : over.tanky === true
-        ? buildContent({
-          ...raw,
-          monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
-            m['id'] === 'rat' ? { ...m, health: 100_000 } : m),
-        })
-        : testContent();
+    const withCorpses = (base: RawContent): RawContent => ({
+      ...base,
+      hunts: (base.hunts as Array<Record<string, unknown>>).map((h) => ({ ...h, corpseTtlMs: 500 })),
+      appearances: (base.appearances as Array<Record<string, unknown>>).map((a) => ({ ...a, corpses: { rat: 7 } })),
+    });
+    const content = over.corpses === true
+      ? buildContent(withCorpses(raw))
+      : over.wide === true
+        ? buildContent(wideArena())
+        : over.tanky === true
+          ? buildContent({
+            ...raw,
+            monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+              m['id'] === 'rat' ? { ...m, health: 100_000 } : m),
+          })
+          : testContent();
     let now = 0;
     const host = new SessionHost({
       nodeId: 'n1', contentVersion: content.version, logger,
@@ -2551,7 +2560,7 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
       ...(over.playerOutfitId === undefined ? {} : { playerOutfitId: over.playerOutfitId }),
       createSession: (characterId) => {
         const session = createHuntSession({
-          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner',
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious',
           createdAtMs: 0,
         });
         session.enter(new CharacterRuntime({
@@ -2580,6 +2589,31 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     };
     return { host, socket, viewer, runFor, stateOf, received: () => socket.received() };
   }
+
+  it('o abate vira ground-item-appear com a arte do cadáver, e o prazo vira ground-item-disappear (FUN-123)', () => {
+    // O `sim` diz que o rato morreu e onde; a tabela diz que o rato morto é o objeto 7. Quem
+    // reanexa no meio vê o cadáver no `session-state`; meio segundo depois ele some pelo id.
+    const { host, socket, viewer, runFor, received } = hunt({ corpses: true });
+    runFor(3_000, 100);
+    const appeared = received().filter((m) => m.type === 'ground-item-appear');
+    expect(appeared.length).toBeGreaterThan(0);
+    expect(appeared[0]).toMatchObject({ appearanceId: 7, position: { z: 7 } });
+    const gone = received().filter((m) => m.type === 'ground-item-disappear');
+    expect(gone.length).toBeGreaterThan(0);
+    // Todo id que sumiu tinha aparecido antes.
+    const ids = new Set(appeared.map((m) => (m as { id: number }).id));
+    for (const m of gone) expect(ids.has((m as { id: number }).id)).toBe(true);
+
+    // O estado completo leva os que ainda estão no chão — e só eles.
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1) as
+      { world: { groundItems: Array<{ id: number; appearanceId: number }> } } | undefined;
+    const live = new Set(appeared.map((m) => (m as { id: number }).id));
+    for (const m of gone) live.delete((m as { id: number }).id);
+    expect(new Set(state?.world.groundItems.map((g) => g.id))).toEqual(live);
+    for (const g of state?.world.groundItems ?? []) expect(g.appearanceId).toBe(7);
+  });
 
   it('a hunt anuncia o mapa dela: instance-enter e session-state.world.mapId (FUN-120)', () => {
     const { host, socket, viewer } = hunt();
@@ -2997,7 +3031,7 @@ describe('as cores do outfit chegam ao cliente (FUN-104)', () => {
       monsterCatalog: content.monsters,
       createSession: (characterId) => {
         const session = createHuntSession({
-          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
         });
         session.enter(new CharacterRuntime({
           id: characterId,
@@ -3117,7 +3151,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     /** Coeficientes de combate trocados por cima de `TEST_COMBAT`: o piso de dano, sobretudo. */
     combat: Record<string, unknown>;
     /** Quantos ratos por ponto de spawn. Padrão: um. */
-    perSpawnPoint: number;
+    monsterCount: number;
     /** `false` desliga a regeneração: vida e mana ficam paradas quando nada as toca. */
     regen: boolean;
   }> = {}) {
@@ -3134,13 +3168,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
         ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
       }],
       ...(over.combat === undefined ? {} : { combat: [{ ...TEST_COMBAT, ...over.combat }] }),
-      ...(over.perSpawnPoint === undefined
+      ...(over.monsterCount === undefined
         ? {}
         : {
           hunts: [{
             ...TEST_HUNT,
             difficulties: {
-              beginner: { ...TEST_HUNT.difficulties.beginner, perSpawnPoint: over.perSpawnPoint },
+              cautious: { ...TEST_HUNT.difficulties.cautious, monsterCount: over.monsterCount },
             },
           }],
         }),
@@ -3164,7 +3198,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       ...(over.table === false ? {} : { appearances }),
       createSession: (characterId) => {
         const session = createHuntSession({
-          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'beginner',
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious',
           createdAtMs: 0,
           ...(over.bot === undefined ? {} : { botConfig: over.bot }),
         });
@@ -3413,7 +3447,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // Mutação que mata: trocar o laço por alvo do `spell-cast` por "só o primeiro" — a
     // contagem de `effect` cai para a de `missile`, metade dos golpes.
     const { runFor, received } = hunt({
-      tanky: true, perSpawnPoint: 2,
+      tanky: true, monsterCount: 2,
       bot: rules({ attack: [{
         when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'blast' },
       }] }),

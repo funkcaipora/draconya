@@ -1,18 +1,17 @@
 // O evento notável em palavras (§16.2, FUN-83, FUN-110).
 //
 // Puro e fora do componente para ser testável: a lista ficou AO VIVO na FUN-110, e metade dos
-// tipos que o `sim` grava saía cru — `entered-hunt · rat-cellars/beginner`, `skill-up ·
+// tipos que o `sim` grava saía cru — `entered-hunt · rat-cellars/cautious`, `skill-up ·
 // melee/11` — como primeira linha que todo jogador via. O `sim` grava o TIPO e um `detail`
 // curto; o que cada um quer dizer para quem lê é decisão de apresentação, e mora aqui.
 
 import type { NotableEvent } from '../state/hud.js';
 
-/** As dificuldades do §14.5, em palavras. As mesmas de `HuntMenu`. */
+/** Os três tamanhos de pull (FUN-123, cópia do Huntera), em palavras. Os mesmos de `HuntMenu`. */
 const DIFFICULTY_TEXT: Record<string, string> = {
-  beginner: 'Iniciante',
-  professional: 'Profissional',
-  hero: 'Herói',
-  legendary: 'Lendária',
+  cautious: 'Cauteloso',
+  bold: 'Ousado',
+  reckless: 'Agressivo',
 };
 
 const REASON_TEXT: Record<string, string> = {

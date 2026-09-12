@@ -12,7 +12,7 @@ async function render(element: ReactElement): Promise<string> {
 }
 
 const catalogue: Catalogue = {
-  hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['beginner'], outfitIds: [] }],
+  hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], outfitIds: [], lootDrops: 0 }],
   monsters: [{ id: 'rat', name: 'Rato' }],
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
@@ -24,7 +24,7 @@ const catalogue: Catalogue = {
 };
 
 const events = [
-  { atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/beginner' },
+  { atMs: 0, type: 'entered-hunt', detail: 'rat-cellars/cautious' },
   { atMs: 1_000, type: 'supply-unaffordable', detail: 'mana-potion' },
   { atMs: 2_000, type: 'bestiary-milestone', detail: 'rat/1' },
 ];
@@ -37,14 +37,14 @@ describe('os eventos notáveis com os nomes do CATÁLOGO (FUN-110, FUN-113)', ()
     // montagem de `names` em `Events` — o evento sairia com o id cru.
     hud.set((state) => ({ ...state, catalogue }));
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em Rat Cellars · Iniciante');
+    expect(html).toContain('Entrou em Rat Cellars · Cauteloso');
     expect(html).toContain('Gold acabou para Poção de Mana');
     expect(html).toContain('Bestiário: Rato · marco 1 (+1 % XP)');
   });
 
   it('sem catálogo os ids ficam no lugar dos nomes, e o marco sai sem bônus', async () => {
     const html = await render(createElement(Events, { events }));
-    expect(html).toContain('Entrou em rat-cellars · Iniciante');
+    expect(html).toContain('Entrou em rat-cellars · Cauteloso');
     expect(html).toContain('Bestiário: rat · marco 1');
     expect(html).not.toContain('% XP');
   });

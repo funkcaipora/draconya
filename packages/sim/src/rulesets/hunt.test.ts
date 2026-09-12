@@ -54,11 +54,11 @@ const ratWithDrop = {
 const hunt = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
   difficulties: {
-    beginner: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
+    cautious: {
+      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 30_000,
     },
-    professional: {
-      perSpawnPoint: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 10_000,
+    bold: {
+      monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 10_000,
     },
   },
 };
@@ -192,7 +192,7 @@ interface Started {
 }
 
 function start(
-  options: { difficulty?: 'beginner' | 'professional'; exitRules?: readonly HuntExitRule[];
+  options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
     inventory?: InventoryState; bestiary?: BestiaryState } = {},
 ): Started {
@@ -200,7 +200,7 @@ function start(
     id: 'session-1',
     content: options.loaded ?? content(),
     huntId: 'arena',
-    difficulty: options.difficulty ?? 'beginner',
+    difficulty: options.difficulty ?? 'cautious',
     createdAtMs: 0,
     ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
   });
@@ -236,9 +236,9 @@ describe('entrada', () => {
   });
 
   it('a densidade vem da dificuldade, e ela é dado', () => {
-    // Trocar `perSpawnPoint` no JSON tem que mudar a hunt. Se precisasse de código, o formato
+    // Trocar `monsterCount` no JSON tem que mudar a hunt. Se precisasse de código, o formato
     // estaria errado — e é isso que este teste protege.
-    const { session, ruleset } = start({ difficulty: 'professional' });
+    const { session, ruleset } = start({ difficulty: 'bold' });
     session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(3);
   });
@@ -250,8 +250,8 @@ describe('entrada', () => {
 
   it('recusa dificuldade que a hunt não define', () => {
     expect(() => createHuntSession({
-      id: 's', content: content(), huntId: 'arena', difficulty: 'legendary', createdAtMs: 0,
-    })).toThrow(/não define a dificuldade "legendary"/);
+      id: 's', content: content(), huntId: 'arena', difficulty: 'reckless', createdAtMs: 0,
+    })).toThrow(/não define a dificuldade "reckless"/);
   });
 });
 
@@ -282,6 +282,61 @@ describe('a sessão em si', () => {
     expect(session.aggregates.kills).toBe(1);
     expect(ruleset.routeIndex).toBeGreaterThan(indice);
     expect(hero.position).not.toEqual(paradoEm);
+  });
+
+  it('o abate deixa o cadáver no chão, que some sozinho depois de corpseTtlMs (FUN-123)', () => {
+    // Só visual: o `sim` diz QUAL monstro morreu e ONDE; a arte é do hospedeiro. O loot já foi
+    // para a caixa antes. Sem `corpseTtlMs` na hunt, nada disto acontece.
+    const loaded = content({ hunts: [{ ...hunt, corpseTtlMs: 1_000 }] });
+    const { session, ruleset } = start({ loaded });
+    run(session, 10_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const events = session.drainEvents();
+    const appeared = events.filter((e) => e.kind === 'ground-item-appeared');
+    const vanished = events.filter((e) => e.kind === 'ground-item-vanished');
+    expect(appeared).toHaveLength(session.aggregates.kills);
+    expect(appeared[0]).toMatchObject({ monsterId: 'rat', position: { z: 7 } });
+    // Um segundo depois de cada um, o `vanished` do MESMO id — e o último ainda pode estar lá.
+    const ids = new Set(vanished.map((e) => e.kind === 'ground-item-vanished' ? e.itemId : -1));
+    expect(vanished.length).toBeGreaterThanOrEqual(appeared.length - 1);
+    for (const e of vanished) if (e.kind === 'ground-item-vanished') expect(ids.has(e.itemId)).toBe(true);
+    expect(ruleset.groundItems.length).toBeLessThanOrEqual(1);
+
+    const semCadaver = start();
+    run(semCadaver.session, 10_000, 100);
+    expect(semCadaver.session.drainEvents().some((e) => e.kind === 'ground-item-appeared')).toBe(false);
+  });
+
+  it('o cadáver atravessa o snapshot, e apodrece do outro lado no prazo (FUN-123)', () => {
+    const loaded = content({ hunts: [{ ...hunt, corpseTtlMs: 5_000 }] });
+    const { session, ruleset } = start({ loaded });
+    run(session, 3_000, 100);
+    if (ruleset.groundItems.length === 0) run(session, 3_000, 100);
+    const before = [...ruleset.groundItems];
+    expect(before.length).toBeGreaterThan(0);
+    session.drainEvents();
+
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const restored = resumed.ruleset as HuntRuleset;
+    expect(restored.groundItems).toEqual(before);
+    run(resumed, 6_000, 100);
+    const gone = resumed.drainEvents().filter((e) => e.kind === 'ground-item-vanished');
+    expect(gone.map((e) => (e.kind === 'ground-item-vanished' ? e.itemId : -1))).toEqual(
+      expect.arrayContaining(before.map((c) => c.id)),
+    );
+  });
+
+  it('monsterCount é o TOTAL da instância: 3 no pull são 3 vivos com respawn instantâneo (FUN-123)', () => {
+    const loaded = content({
+      monsters: [{ ...rat, health: 100_000, aggroRadius: 0 }],
+      hunts: [{ ...hunt, difficulties: { cautious: { monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1 } } }],
+    });
+    const { session, ruleset } = start({ loaded });
+    run(session, 5_000, 100);
+    expect(ruleset.monsters.filter((m) => m.alive)).toHaveLength(3);
   });
 
   it('credita XP por abate', () => {
@@ -342,7 +397,7 @@ describe('a sessão em si', () => {
   it('a atribuição do personagem não cresce com os respawns', () => {
     // Cada respawn tem id novo. Sem poda, oito horas de hunt seriam milhares de chaves no
     // mapa do herói, serializadas a cada snapshot.
-    const { session, hero, ruleset } = start({ difficulty: 'professional' });
+    const { session, hero, ruleset } = start({ difficulty: 'bold' });
     run(session, 120_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(3);
     expect(hero.contribution.actorCount).toBeLessThanOrEqual(ruleset.monsters.length);
@@ -351,7 +406,7 @@ describe('a sessão em si', () => {
   it('não transforma cada abate em evento notável', () => {
     // `notableEvents` é a lista curta da tela de retorno (§16.2). Uma hunt de oito horas com
     // uma linha por rato não é lista, é log — e ninguém lê log ao voltar.
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(1);
     expect(session.notableEvents.filter((e) => e.type === 'kill')).toHaveLength(0);
@@ -415,7 +470,7 @@ describe('regeneração (FUN-36)', () => {
   it('morto não regenera', () => {
     // Sem isso, um personagem que caiu voltaria sozinho na hunt em que morreu, e a morte
     // deixaria de encerrar coisa nenhuma.
-    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    const { session, hero } = start({ difficulty: 'bold', health: 12 });
     run(session, 60_000, 100);
     expect(session.ended).toBe('death');
     expect(hero.health).toBe(0);
@@ -447,7 +502,7 @@ describe('stamina zero', () => {
   it('NÃO encerra a hunt, e bloqueia só a recompensa', () => {
     // A regra que mais parece bug para quem implementa (§10.2). O personagem continua
     // caçando; o que ele deixa de ganhar é XP.
-    const { session, hero } = start({ difficulty: 'professional', staminaMs: 0 });
+    const { session, hero } = start({ difficulty: 'bold', staminaMs: 0 });
 
     run(session, 60_000, 100);
 
@@ -470,7 +525,7 @@ describe('stamina zero', () => {
   it('avisa UMA vez ao zerar, e a hunt segue', () => {
     // O cenário comum é o jogador ausente: daqui para a frente a hunt queima supply sem
     // gerar nada. Repetir a linha a cada tick encheria a tela de retorno com ela só.
-    const { session } = start({ difficulty: 'professional', staminaMs: 5_000 });
+    const { session } = start({ difficulty: 'bold', staminaMs: 5_000 });
 
     run(session, 60_000, 100);
 
@@ -480,7 +535,7 @@ describe('stamina zero', () => {
   });
 
   it('a hunt rende normalmente enquanto sobra stamina', () => {
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
     expect(hero.xp).toBeGreaterThan(0);
   });
@@ -489,7 +544,7 @@ describe('stamina zero', () => {
 describe('level up e penalidade de morte dentro da hunt', () => {
   it('subir de level É evento notável, ao contrário do abate', () => {
     // É a única coisa que aconteceu numa hunt de oito horas que o jogador quer ver ao voltar.
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 120_000, 100);
     expect(session.notableEvents.filter((e) => e.type === 'level-up').length)
       .toBeGreaterThan(0);
@@ -498,7 +553,7 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   it('morrer cobra XP, e o extrato conta a perda em vez de escondê-la', () => {
     // O extrato é o que vira linha de ledger: creditar a XP ganha sem descontar a perdida
     // daria ao jogador uma XP que ele não tem.
-    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    const { session, hero } = start({ difficulty: 'bold', health: 12 });
     hero.level = 20;
     hero.xp = totalXpForLevel(20, progression as Progression);
 
@@ -514,7 +569,7 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   it('Premium paga menos por morrer', () => {
     const cobrança = (premium: boolean): number => {
       const session = createHuntSession({
-        id: 's', content: content(), huntId: 'arena', difficulty: 'professional',
+        id: 's', content: content(), huntId: 'arena', difficulty: 'bold',
         createdAtMs: 0, premium,
       });
       const hero = character({ health: 12 });
@@ -528,7 +583,7 @@ describe('level up e penalidade de morte dentro da hunt', () => {
   });
 
   it('sair ou ser encerrado por regra NÃO custa XP: quem paga é quem morre', () => {
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     hero.level = 20;
     hero.xp = totalXpForLevel(20, progression as Progression);
     const antes = hero.xp;
@@ -569,7 +624,7 @@ describe('encerramento', () => {
   it('por morte, com o extrato registrando a morte', () => {
     // Três ratos, não um: com a regeneração da FUN-36 no lugar, um rato sozinho já não mata
     // um personagem de level 1 — ele apanha, mata, e recupera durante o respawn.
-    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    const { session, hero } = start({ difficulty: 'bold', health: 12 });
     run(session, 60_000, 100);
 
     expect(hero.alive).toBe(false);
@@ -594,7 +649,7 @@ describe('encerramento', () => {
 
 describe('troca de dificuldade', () => {
   it('encerra a instância e cria outra, em vez de mudar no meio', () => {
-    // §14.7: não existe alteração dinâmica. Mudar `perSpawnPoint` no meio deixaria monstros
+    // §14.7: não existe alteração dinâmica. Mudar `monsterCount` no meio deixaria monstros
     // da densidade antiga vivos ao lado dos novos, e o jogador veria uma dificuldade que não
     // é nenhuma das duas.
     const loaded = content();
@@ -602,13 +657,13 @@ describe('troca de dificuldade', () => {
     run(session, 10_000, 100);
 
     const { session: nova, receipt } = changeDifficulty(session, {
-      content: loaded, to: 'professional', newSessionId: 'session-2', nowMs: session.nowMs,
+      content: loaded, to: 'bold', newSessionId: 'session-2', nowMs: session.nowMs,
     });
 
     expect(session.ended).toBe('manual-exit');
     expect(receipt.aggregates.kills).toBeGreaterThan(0);
     expect(receipt.notableEvents.find((e) => e.type === 'difficulty-changed')?.detail)
-      .toBe('beginner → professional');
+      .toBe('cautious → bold');
 
     // Instância NOVA: id novo, agregados zerados, e a densidade da dificuldade nova.
     expect(nova.id).toBe('session-2');
@@ -719,7 +774,7 @@ describe('snapshot', () => {
 describe('taxa de avanço', () => {
   /** Dez minutos de hunt na taxa dada. Tempo controlado: nada aqui espera de verdade. */
   const tenMinutesAt = (
-    hz: number, difficulty: 'beginner' | 'professional', loaded?: Content,
+    hz: number, difficulty: 'cautious' | 'bold', loaded?: Content,
   ): { session: Session; hero: CharacterRuntime } => {
     const { session, hero } = start({ difficulty, ...(loaded === undefined ? {} : { loaded }) });
     run(session, 600_000, 1000 / hz);
@@ -737,7 +792,7 @@ describe('taxa de avanço', () => {
     // escrita com cuidado: os eventos vencem nos mesmos instantes lógicos seja qual for o
     // tamanho da janela em que são despachados.
     const rendimento = RATES.map((hz) => {
-      const { session, hero } = tenMinutesAt(hz, 'beginner');
+      const { session, hero } = tenMinutesAt(hz, 'cautious');
       return { kills: session.aggregates.kills, xp: session.aggregates.xpGained, heroXp: hero.xp };
     });
     expect(rendimento[0]?.kills).toBeGreaterThan(0);
@@ -750,7 +805,7 @@ describe('taxa de avanço', () => {
     // granularidade do passo, porque num tick longo todos andavam vários tiles de uma vez
     // antes de alguém reavaliar distância. Com a fila, cada passo acontece no seu instante e
     // a vizinhança é a mesma em qualquer taxa — não sobra folga para o limite cobrir.
-    const kills = RATES.map((hz) => tenMinutesAt(hz, 'professional').session.aggregates.kills);
+    const kills = RATES.map((hz) => tenMinutesAt(hz, 'bold').session.aggregates.kills);
     expect(kills[0]).toBeGreaterThan(0);
     for (const k of kills) expect(k).toBe(kills[0]);
   });
@@ -779,7 +834,7 @@ describe('taxa de avanço', () => {
       progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
     });
     const dano = (hz: number): number => {
-      const { hero } = tenMinutesAt(hz, 'beginner', semRegen);
+      const { hero } = tenMinutesAt(hz, 'cautious', semRegen);
       return hero.maxHealth - hero.health;
     };
     // E não é vácuo: o cenário machuca de verdade nas duas pontas.
@@ -802,7 +857,7 @@ describe('seleção de hunt', () => {
     const [listing] = huntListings(content());
     expect(listing).toEqual({
       id: 'arena', name: 'Arena', recommendedLevel: 1,
-      difficulties: ['beginner', 'professional'],
+      difficulties: ['cautious', 'bold'],
     });
   });
 
@@ -955,7 +1010,7 @@ describe('movimento com escritor único (FUN-69)', () => {
     // A prova de que o guloso consulta a mesma `canOccupy`: dez minutos com três ratos
     // disputando um ponto, e nenhum instante com corpo em parede ou dois corpos num tile.
     const loaded = content();
-    const { session, ruleset } = start({ difficulty: 'professional', loaded });
+    const { session, ruleset } = start({ difficulty: 'bold', loaded });
     const map = loaded.maps.get('arena');
     if (map === undefined) throw new Error('esperava o mapa');
     for (let i = 0; i < 600; i++) {
@@ -1055,7 +1110,7 @@ const recorder = (executes = true) => {
 const withBot = (config: BotConfig, actuator?: { perform(a: BotAction): boolean }) => {
   const loaded = content();
   const session = createHuntSession({
-    id: 'bot-session', content: loaded, huntId: 'arena', difficulty: 'beginner',
+    id: 'bot-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
     createdAtMs: 0,
     botConfig: config,
     ...(actuator === undefined ? {} : { actuator }),
@@ -1195,7 +1250,7 @@ const withSpells = (
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
   } = {},
-  difficulty: 'beginner' | 'professional' = 'beginner',
+  difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
   // **Regeneração zerada, e é decisão.** Aqui o assunto é quanto a magia cura e quanto o
   // supply repõe; com 1 HP/s no meio, toda asserção absoluta viraria "mais ou menos isso", e
@@ -1461,7 +1516,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     //
     // Mutação que mata: emitir `result.damage` em vez de `applied` no `#strike` — a espada
     // faz o rato de pouca vida distinguir os dois (`amount` passa a 200 > 50).
-    const { session } = start({ difficulty: 'professional', inventory: comEspada });
+    const { session } = start({ difficulty: 'bold', inventory: comEspada });
     run(session, 20_000, 100);
     const events = session.drainEvents();
 
@@ -1492,7 +1547,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     //
     // Mutação que mata: trocar a ordem dos dois `emit` em `#onMonsterAction` — o evento logo
     // depois do golpe deixa de ser a barra. Apagar o `#emitCharacterHealth` mata também.
-    const { session, hero } = start({ difficulty: 'professional', health: 5_000 });
+    const { session, hero } = start({ difficulty: 'bold', health: 5_000 });
     run(session, 20_000, 100);
     const events = session.drainEvents();
 
@@ -1527,7 +1582,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     const semRegen = content({
       progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
     });
-    const { session, hero } = start({ loaded: semRegen, difficulty: 'professional', health: 3 });
+    const { session, hero } = start({ loaded: semRegen, difficulty: 'bold', health: 3 });
     run(session, 20_000, 100);
     const events = session.drainEvents();
 
@@ -1546,7 +1601,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
 
   it('subir de level anuncia a barra com o máximo NOVO — sem esperar golpe nem regeneração', () => {
     // `retarget` reescreve `health` e `maxHealth` pela tabela no level up, e nada mais toca
-    // a vida do herói depois disso: um rato só (beginner, respawn em 30 s), morto num golpe
+    // a vida do herói depois disso: um rato só (cautious, respawn em 30 s), morto num golpe
     // de espada, valendo exatamente a XP do level 2 — e regeneração desligada, porque de
     // vida cheia ela não anunciaria nada e, ferido, anunciaria com o máximo novo por conta
     // própria, escondendo a falta do anúncio do level up.
@@ -1577,7 +1632,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     //
     // Mutação que mata: tirar o `#emitCharacterHealth` do `#onCharacterDied` — a última
     // barra do herói passa a ser a do golpe fatal, com o máximo do level 20.
-    const { session, hero } = start({ difficulty: 'professional', health: 12 });
+    const { session, hero } = start({ difficulty: 'bold', health: 12 });
     hero.level = 20;
     hero.xp = totalXpForLevel(20, progression as Progression);
     hero.maxHealth = statsForLevel(20, null, progression as Progression).maxHealth;
@@ -1606,7 +1661,7 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
         when: { kind: 'targets', op: '>=', count: 1 },
         do: { kind: 'spell', spellId: 'blast' },
       }],
-    }), { mana: 200 }, 'professional');
+    }), { mana: 200 }, 'bold');
 
     session.advanceBy(50);
     const events = session.drainEvents();
@@ -1749,10 +1804,10 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
         do: { kind: 'spell', spellId: 'strike' },
       }],
     });
-    const sozinha = withSpells(completo, { health: 100 }, 'professional');
+    const sozinha = withSpells(completo, { health: 100 }, 'bold');
     run(sozinha.session, 10_000, 100);
 
-    const assistida = withSpells(completo, { health: 100 }, 'professional');
+    const assistida = withSpells(completo, { health: 100 }, 'bold');
     assistida.session.attach('viewer-1');
     run(assistida.session, 10_000, 100);
 
@@ -1860,24 +1915,24 @@ const posteEterno = { ...poste, id: 'post-tank', name: 'Poste Eterno', health: 1
 const huntSalao = {
   id: 'salao', name: 'Salão', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
   difficulties: {
-    beginner: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'post', weight: 1 }], respawnDelayMs: 600_000,
+    cautious: {
+      monsterCount: 1, composition: [{ monsterId: 'post', weight: 1 }], respawnDelayMs: 600_000,
     },
-    professional: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'post-tank', weight: 1 }],
+    bold: {
+      monsterCount: 1, composition: [{ monsterId: 'post-tank', weight: 1 }],
       respawnDelayMs: 600_000,
     },
     // Ratos de verdade — que andam, agroam e renascem. É o cenário movimentado que a
     // equivalência entre taxas precisa para não medir um empate de zeros.
-    hero: {
-      perSpawnPoint: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 5_000,
+    reckless: {
+      monsterCount: 2, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 5_000,
     },
   },
 };
 
 const withPosture = (
   over: Record<string, unknown>,
-  difficulty: 'beginner' | 'professional' | 'hero' = 'beginner',
+  difficulty: 'cautious' | 'bold' | 'reckless' = 'cautious',
 ) => {
   const loaded = buildContent(raw({
     monsters: [rat, poste, posteEterno], hunts: [hunt, huntSalao],
@@ -1920,7 +1975,7 @@ describe('postura: o primeiro caso em que o personagem sai da rota por decisão 
     // sempre ali. Se ele continuasse perseguindo depois de alcançar, tentaria ocupar o tile do
     // monstro a cada passo — `movement.ts` recusa, mas a tentativa em si é o bot batendo a
     // cabeça na parede para sempre, e o teste não veria diferença se o alvo tivesse morrido.
-    const { session, hero, ruleset } = withPosture({ posture: { kind: 'follow' } }, 'professional');
+    const { session, hero, ruleset } = withPosture({ posture: { kind: 'follow' } }, 'bold');
 
     run(session, 30_000, 100);
 
@@ -1944,7 +1999,7 @@ describe('postura: o primeiro caso em que o personagem sai da rota por decisão 
     // Voltar para a rota ao chegar na distância certa faria o personagem oscilar entre manter
     // distância e seguir o laço, e de fora isso parece o bot travado.
     const { session, hero } = withPosture(
-      { posture: { kind: 'keep-distance', tiles: 2 } }, 'professional',
+      { posture: { kind: 'keep-distance', tiles: 2 } }, 'bold',
     );
 
     run(session, 10_000, 100);
@@ -1991,7 +2046,7 @@ describe('a equivalência entre taxas vale para a postura também', () => {
     // precisa cair no mesmo instante lógico nas duas taxas.
     const at = (stepMs: number) => {
       const { session, hero, ruleset } = withPosture(
-        { posture: { kind: 'follow' }, policy: 'lowest-hp' }, 'hero',
+        { posture: { kind: 'follow' }, policy: 'lowest-hp' }, 'reckless',
       );
       run(session, 120_000, stepMs);
       return {
@@ -2024,7 +2079,7 @@ const withExit = (
     progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
   }));
   const session = createHuntSession({
-    id: 'saida', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+    id: 'saida', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     // Pelo schema, como a configuração do jogador chega: é ele que valida o percentual e
     // recusa um `kind` que o vocabulário não conhece.
     botConfig: botConfig({ exit: exit.map((r) => botExitRuleSchema.parse(r)) }),
@@ -2242,7 +2297,7 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
       }],
     }));
     const session = createHuntSession({
-      id: 'snap-bot', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'snap-bot', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       botConfig: curar,
     });
     const stats = statsForLevel(1, null, loaded.progression);
@@ -2348,7 +2403,7 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
       }],
     }));
     const session = createHuntSession({
-      id: 'troca', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'troca', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       botConfig: botConfig(),
     });
     const stats = statsForLevel(1, null, loaded.progression);
@@ -2378,7 +2433,7 @@ describe('trocar a configuração no meio da hunt (FUN-81)', () => {
     // apagar — e o extrato diria o nome de uma regra que já não existe.
     const loaded = buildContent(raw({ routes: [{ ...route, spawnPoints: [] }] }));
     const session = createHuntSession({
-      id: 'troca-saida', content: loaded, huntId: 'arena', difficulty: 'beginner',
+      id: 'troca-saida', content: loaded, huntId: 'arena', difficulty: 'cautious',
       createdAtMs: 0,
       botConfig: botConfig({ exit: [botExitRuleSchema.parse({ kind: 'hp-below', percent: 99 })] }),
     });
@@ -2409,9 +2464,9 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     // Curva de base 2: dois golpes fecham um nível. Contar acerto cheio em vez de golpe faria
     // a skill subir mais devagar contra alvo blindado, que é o oposto de "sobe pelo uso".
     //
-    // Dificuldade `professional` (três ratos) e um minuto: sem isso o personagem passa metade
+    // Dificuldade `bold` (três ratos) e um minuto: sem isso o personagem passa metade
     // do tempo esperando respawn, e o teste mediria a densidade da hunt em vez da curva.
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
 
     run(session, 60_000, 100);
 
@@ -2427,11 +2482,11 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     //
     // `damagePerLevel: 0.5` neste conteúdo de teste, alto de propósito: com skill 30 o poder
     // vai de 25 para 275, e um rato de 50 cai num golpe em vez de dois.
-    const cru = start({ difficulty: 'professional' });
+    const cru = start({ difficulty: 'bold' });
     run(cru.session, 60_000, 100);
 
     const treinado = start({
-      difficulty: 'professional', skills: { melee: { level: 30, points: 0 } },
+      difficulty: 'bold', skills: { melee: { level: 30, points: 0 } },
     });
     run(treinado.session, 60_000, 100);
 
@@ -2474,7 +2529,7 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
   it('subir de nível vira evento notável — é o que o jogador quer ver ao voltar', () => {
     // §16.2: a lista curta da tela de retorno. Numa hunt de oito horas, subir uma skill é uma
     // das poucas coisas que aconteceram que valem uma linha.
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
 
     const subiu = session.notableEvents.filter((e) => e.type === 'skill-up');
@@ -2483,7 +2538,7 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
   });
 
   it('as skills atravessam o snapshot', () => {
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
     const antes = hero.skills.getState();
 
@@ -2518,7 +2573,7 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     // O que o invariante 2 proíbe é grandeza dependente do TEMPO somada por tick. Aqui o que
     // se soma é uso, e uso é evento na fila: um golpe que vence, uma magia que sai.
     const at = (stepMs: number) => {
-      const { session, hero } = start({ difficulty: 'professional' });
+      const { session, hero } = start({ difficulty: 'bold' });
       run(session, 120_000, stepMs);
       return { skills: hero.skills.getState(), kills: session.aggregates.kills };
     };
@@ -2559,7 +2614,7 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
   };
 
   it('cada abate conta no Bestiário do matador, e o extrato leva o número ABSOLUTO', () => {
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.bestiary.killsOf('rat')).toBe(session.aggregates.kills);
@@ -2569,7 +2624,7 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
   it('sem config no conteúdo o abate conta, mas nenhum marco fecha e a XP sai sem bônus', () => {
     // O conteúdo de teste não tem `bestiary/`. A config é quem define marco, não quem autoriza
     // contar — e sem ela a XP é a de sempre, rato a rato.
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     run(session, 60_000, 100);
     expect(hero.bestiary.killsOf('rat')).toBeGreaterThanOrEqual(3);
     expect(session.notableEvents.filter((e) => e.type === 'bestiary-milestone')).toHaveLength(0);
@@ -2580,7 +2635,7 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
     // §18.6, DT-03: é o MESMO `if` que bloqueia a recompensa. Prender os três aqui é o que
     // impede alguém de mover o contador para fora dele "porque abate é abate".
     const { session, hero } = start({
-      difficulty: 'professional', staminaMs: 0, loaded: withBestiary(),
+      difficulty: 'bold', staminaMs: 0, loaded: withBestiary(),
     });
     run(session, 60_000, 100);
     expect(session.aggregates.kills).toBeGreaterThan(0);
@@ -2593,7 +2648,7 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
   it('o abate que ALCANÇA o marco sai com a XP de antes; o seguinte já sai com o bônus', () => {
     // DT-04. Invertida a ordem, o terceiro abate seria o único da vida do personagem a render
     // diferente dos vizinhos.
-    const started = start({ difficulty: 'professional', loaded: withBestiary() });
+    const started = start({ difficulty: 'bold', loaded: withBestiary() });
     const perKill = xpPerKill(started, 6);
 
     //                    1  2  3  4  5  6
@@ -2610,14 +2665,14 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
     // O personagem chega do ticket com três morcegos no Bestiário — um marco. O primeiro rato
     // rende 6, não 5: "XP PvE permanente", não "XP daquele monstro".
     const started = start({
-      difficulty: 'professional', loaded: withBestiary(), bestiary: { bat: 3 },
+      difficulty: 'bold', loaded: withBestiary(), bestiary: { bat: 3 },
     });
     expect(xpPerKill(started, 1)).toEqual([6]);
     expect(started.hero.bestiary.getState()).toEqual({ bat: 3, rat: 1 });
   });
 
   it('o Bestiário atravessa o snapshot', () => {
-    const { session, hero } = start({ difficulty: 'professional', loaded: withBestiary() });
+    const { session, hero } = start({ difficulty: 'bold', loaded: withBestiary() });
     run(session, 60_000, 100);
     const before = hero.bestiary.getState();
     expect(before['rat']).toBeGreaterThan(0);
@@ -2651,7 +2706,7 @@ describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () =
 
   it('1 Hz e 10 Hz contam o MESMO — abate é evento, não tick', () => {
     const at = (stepMs: number) => {
-      const { session, hero } = start({ difficulty: 'professional', loaded: withBestiary() });
+      const { session, hero } = start({ difficulty: 'bold', loaded: withBestiary() });
       run(session, 120_000, stepMs);
       return { bestiary: hero.bestiary.getState(), xp: hero.xp };
     };
@@ -2672,10 +2727,10 @@ describe('magia em área (FUN-92)', () => {
   });
 
   it('atinge TODOS os monstros no raio, não só o alvo', () => {
-    // Dificuldade `professional` põe três ratos perto do mesmo ponto de spawn. Um `blast` de
+    // Dificuldade `bold` põe três ratos perto do mesmo ponto de spawn. Um `blast` de
     // raio 2 pega mais de um, e o teste mede isso pelos abates: com alvo único seriam três
     // lançamentos para três ratos.
-    const { session } = withSpells(explodir, { mana: 200 }, 'professional');
+    const { session } = withSpells(explodir, { mana: 200 }, 'bold');
 
     run(session, 20_000, 100);
 
@@ -2689,7 +2744,7 @@ describe('magia em área (FUN-92)', () => {
     //
     // `blast` mata um rato de 50 num golpe (poder 80): com três ratos no raio, o primeiro
     // morre e os outros dois PRECISAM levar o dano da mesma rolagem.
-    const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'professional');
+    const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'bold');
 
     // Um único vencimento da categoria de ataque, no instante zero.
     session.advanceBy(50);
@@ -2707,7 +2762,7 @@ describe('magia em área (FUN-92)', () => {
     // A ordem em que os alvos entram na mira decide qual rolagem cai em quem. Ela é a ordem da
     // lista de monstros, que é a de nascimento — e por isso é reproduzível.
     const estado = () => {
-      const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'professional');
+      const { session, ruleset } = withSpells(explodir, { mana: 200 }, 'bold');
       session.advanceBy(50);
       return ruleset.monsters.map((m) => `${m.id}:${m.health}`);
     };
@@ -2716,7 +2771,7 @@ describe('magia em área (FUN-92)', () => {
 
   it('1 Hz e 10 Hz dão o mesmo resultado com magia de área', () => {
     const at = (stepMs: number) => {
-      const { session, hero, ruleset } = withSpells(explodir, { mana: 2_000 }, 'professional');
+      const { session, hero, ruleset } = withSpells(explodir, { mana: 2_000 }, 'bold');
       run(session, 60_000, stepMs);
       return {
         kills: session.aggregates.kills,
@@ -2745,7 +2800,7 @@ describe('o alcance da magia é o DELA, não o da arma (FUN-92)', () => {
       progression: [{ ...progression, startingMana: 500 }],
     }));
     const session = createHuntSession({
-      id: 'alcance', content: loaded, huntId: 'salao', difficulty: 'professional',
+      id: 'alcance', content: loaded, huntId: 'salao', difficulty: 'bold',
       createdAtMs: 0,
       botConfig: botConfig({
         attack: [{
@@ -2798,10 +2853,10 @@ describe('equipamento no combate (FUN-82)', () => {
     // `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
     // personagem SEM arma. A espada deste conteúdo bate 200 contra os 25 do punho: o rato de
     // 50 cai num golpe em vez de dois.
-    const desarmado = start({ difficulty: 'professional' });
+    const desarmado = start({ difficulty: 'bold' });
     run(desarmado.session, 60_000, 100);
 
-    const armado = start({ difficulty: 'professional', inventory: comEspada });
+    const armado = start({ difficulty: 'bold', inventory: comEspada });
     run(armado.session, 60_000, 100);
 
     expect(armado.session.aggregates.kills)
@@ -2811,11 +2866,11 @@ describe('equipamento no combate (FUN-82)', () => {
   it('a armadura vestida SOMA à do conteúdo, e o personagem apanha menos', () => {
     // Somar, e não substituir: `combat.player.armor` é a resistência do corpo. Substituir faria
     // vestir a primeira armadura deixar o personagem mais frágil se ela valesse menos.
-    const nu = start({ difficulty: 'professional', health: 5_000 });
+    const nu = start({ difficulty: 'bold', health: 5_000 });
     run(nu.session, 60_000, 100);
 
     const vestido = start({
-      difficulty: 'professional', health: 5_000, inventory: comArmadura,
+      difficulty: 'bold', health: 5_000, inventory: comArmadura,
     });
     run(vestido.session, 60_000, 100);
 
@@ -2823,7 +2878,7 @@ describe('equipamento no combate (FUN-82)', () => {
   });
 
   it('o inventário atravessa o snapshot', () => {
-    const { session } = start({ difficulty: 'professional', inventory: comEspada });
+    const { session } = start({ difficulty: 'bold', inventory: comEspada });
     run(session, 5_000, 100);
 
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
@@ -2838,7 +2893,7 @@ describe('equipamento no combate (FUN-82)', () => {
 
   it('personagem SEM inventário gravado continua batendo com o desarmado', () => {
     // É o personagem de antes desta issue. Campo opcional, sem bump de formato.
-    const { session, hero } = start({ difficulty: 'professional' });
+    const { session, hero } = start({ difficulty: 'bold' });
     run(session, 10_000, 100);
 
     expect(hero.inventory.backpack).toEqual([]);
@@ -2851,7 +2906,7 @@ describe('equipamento no combate (FUN-82)', () => {
     // quem chega com capacidade própria a mantém.
     const loaded = content();
     const session = createHuntSession({
-      id: 'capacidade', content: loaded, huntId: 'arena', difficulty: 'beginner',
+      id: 'capacidade', content: loaded, huntId: 'arena', difficulty: 'cautious',
       createdAtMs: 0,
     });
     const stats = statsForLevel(1, null, loaded.progression);
@@ -2912,7 +2967,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
       // Conteúdo com o catálogo VAZIO simula o que muda debaixo de uma sessão em voo: a
       // espada existia quando a hunt abriu e não existe mais.
       content: over.catalog === false ? { ...loaded, items: new Map() } : loaded,
-      id: 'drop', huntId: 'arena', difficulty: 'professional', createdAtMs: 0,
+      id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
     });
     const stats = statsForLevel(1, null, loaded.progression);
     const hero = new CharacterRuntime({
@@ -3054,7 +3109,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     // A prova é o recorde PASSAR da vida do monstro: o aplicado nunca passa, por construção —
     // `receiveDamage` devolve `min(dano, vida)`.
     const { session } = start({
-      difficulty: 'professional',
+      difficulty: 'bold',
       inventory: {
         backpack: [],
         equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } },
@@ -3066,11 +3121,11 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
   });
 
   it('o maior hit sobe quando o personagem fica mais forte', () => {
-    const cru = start({ difficulty: 'professional' });
+    const cru = start({ difficulty: 'bold' });
     run(cru.session, 30_000, 100);
 
     const armado = start({
-      difficulty: 'professional',
+      difficulty: 'bold',
       inventory: { backpack: [], equipped: { hand: { instanceId: 'i1', itemId: 'sword', quantity: 1 } } },
     });
     run(armado.session, 30_000, 100);
@@ -3088,7 +3143,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
         do: { kind: 'spell', spellId: 'blast' },
       }],
     });
-    const { session } = withSpells(explodir, { mana: 2_000 }, 'professional');
+    const { session } = withSpells(explodir, { mana: 2_000 }, 'bold');
     run(session, 30_000, 100);
 
     expect(session.aggregates.bestSpellHit).toBeGreaterThan(0);
@@ -3104,7 +3159,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
       progression: [{ ...progression, startingCapacity: 50, capacityPerLevel: 0 }],
     }));
     const session = createHuntSession({
-      id: 'drop', content: loaded, huntId: 'arena', difficulty: 'professional', createdAtMs: 0,
+      id: 'drop', content: loaded, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
     });
     const stats = statsForLevel(1, null, loaded.progression);
     const hero = new CharacterRuntime({
@@ -3147,7 +3202,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     // É o critério da issue: o que a tela de retorno mostra é o que o ledger recebe. Eles são
     // o mesmo objeto de propósito — duas cópias divergiriam, e a divergência apareceria como
     // "o analisador me deu mais gold do que caiu na conta".
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 30_000, 100);
     const receipt = session.end('manual-exit');
 
@@ -3155,7 +3210,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
   });
 
   it('os agregados novos atravessam o snapshot', () => {
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 30_000, 100);
     const antes = { ...session.aggregates };
 
@@ -3172,7 +3227,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
   it('snapshot ANTIGO, sem os campos novos, restaura com zero', () => {
     // Campos opcionais no formato: `Object.assign` sobre os agregados já inicializados deixa
     // o que faltou em zero, e por isso o `SNAPSHOT_FORMAT_VERSION` não precisou subir.
-    const { session } = start({ difficulty: 'professional' });
+    const { session } = start({ difficulty: 'bold' });
     run(session, 10_000, 100);
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
     const velhos = snapshot.aggregates as unknown as Record<string, unknown>;
@@ -3194,7 +3249,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
 
   it('1 Hz e 10 Hz dão os MESMOS agregados', () => {
     const at = (stepMs: number) => {
-      const { session } = start({ difficulty: 'professional' });
+      const { session } = start({ difficulty: 'bold' });
       run(session, 120_000, stepMs);
       return { ...session.aggregates };
     };
@@ -3238,14 +3293,14 @@ const perseguidor = {
 const huntLure = {
   id: 'lure-hunt', name: 'Lure', recommendedLevel: 1, mapId: 'salao', routeId: 'salao-anel',
   difficulties: {
-    beginner: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'chaser', weight: 1 }],
+    cautious: {
+      monsterCount: 1, composition: [{ monsterId: 'chaser', weight: 1 }],
       respawnDelayMs: 600_000,
     },
     // Três ratos que MORREM, e sem respawn dentro do teste: é o cenário em que a contagem cai
     // sozinha, e é o único jeito de exercitar o lado do `min` da máquina.
-    professional: {
-      perSpawnPoint: 3, composition: [{ monsterId: 'rat', weight: 1 }],
+    bold: {
+      monsterCount: 3, composition: [{ monsterId: 'rat', weight: 1 }],
       respawnDelayMs: 600_000,
     },
   },
@@ -3260,7 +3315,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
    */
   const comLure = (
     lure?: { min: number; max: number },
-    difficulty: 'beginner' | 'professional' = 'beginner',
+    difficulty: 'cautious' | 'bold' = 'cautious',
   ) => {
     const loaded = buildContent(raw({
       monsters: [rat, perseguidor], hunts: [hunt, huntLure],
@@ -3306,7 +3361,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
     //
     // `min` e `max` iguais em 3 apagam a faixa morta de propósito: aqui o assunto é a
     // transição de volta, e a histerese em si tem teste próprio no ring swap.
-    const { session, ruleset } = comLure({ min: 3, max: 3 }, 'professional');
+    const { session, ruleset } = comLure({ min: 3, max: 3 }, 'bold');
     const estados: boolean[] = [];
     for (let t = 0; t < 20_000 && session.ended === null; t += 100) {
       session.advanceBy(100);
@@ -3369,7 +3424,7 @@ describe('lure dinâmico (FUN-87, §13.7)', () => {
     // renderia diferente da anexada — que é o invariante 2 em uma linha.
     const at = (stepMs: number) => {
       const session = createHuntSession({
-        id: 'lure-hz', content: content(), huntId: 'arena', difficulty: 'professional',
+        id: 'lure-hz', content: content(), huntId: 'arena', difficulty: 'bold',
         createdAtMs: 0, botConfig: botConfig({ lure: { min: 2, max: 4 } }),
       });
       session.enter(character());
@@ -3406,8 +3461,8 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
     hunts: [{
       ...hunt,
       difficulties: {
-        beginner: {
-          perSpawnPoint: 1, composition: [{ monsterId: 'clock', weight: 1 }],
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'clock', weight: 1 }],
           respawnDelayMs: 30_000,
         },
       },
@@ -3423,7 +3478,7 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
   ) => {
     const loaded = anelContent();
     const session = createHuntSession({
-      id: 'anel', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'anel', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       botConfig: botConfig({
         ringSwap: botRingSwapSchema.parse({ itemId: 'life-ring', ...ringSwap }),
       }),
@@ -3530,7 +3585,7 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
   it('quem NÃO configurou anel não tem o dedo mexido', () => {
     const loaded = anelContent();
     const session = createHuntSession({
-      id: 'sem-anel', content: loaded, huntId: 'arena', difficulty: 'beginner', createdAtMs: 0,
+      id: 'sem-anel', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
       botConfig: botConfig(),
     });
     const stats = statsForLevel(1, null, anelProgression);

@@ -62,8 +62,11 @@ export class Spawner {
   #slots: SpawnSlot[];
 
   /**
-   * Um lugar por monstro previsto: `perSpawnPoint` da dificuldade, para cada ponto da rota.
-   * A conta acontece UMA vez, na entrada — densidade não muda durante a hunt.
+   * Um lugar por monstro previsto: `monsterCount` da dificuldade — o TOTAL da instância, como
+   * o Huntera conta (2, 5 e 8 no bueiro; FUN-123) —, distribuído pelos pontos da rota em
+   * rodízio: o lugar `i` fica no ponto `i % pontos`. Determinístico, e por isso igual em dois
+   * servidores com o mesmo conteúdo. A conta acontece UMA vez, na entrada — densidade não muda
+   * durante a hunt. Rota sem ponto de spawn é uma hunt sem monstro.
    */
   constructor(pointCount: number, difficulty: HuntDifficulty, state?: SpawnerState) {
     if (state !== undefined) {
@@ -71,10 +74,9 @@ export class Spawner {
       return;
     }
     this.#slots = [];
-    for (let pointIndex = 0; pointIndex < pointCount; pointIndex++) {
-      for (let i = 0; i < difficulty.perSpawnPoint; i++) {
-        this.#slots.push({ pointIndex, occupantId: null });
-      }
+    if (pointCount === 0) return;
+    for (let i = 0; i < difficulty.monsterCount; i++) {
+      this.#slots.push({ pointIndex: i % pointCount, occupantId: null });
     }
   }
 

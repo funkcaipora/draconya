@@ -42,7 +42,7 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
-import type { Scene } from './scene.js';
+import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type ObjectInfo } from './tile-stack.js';
 
@@ -312,9 +312,26 @@ export async function mountViewport(
     // para respondê-la era pagar a 60 Hz por um evento raro. E o ANDAR do jogador: subir a
     // escada troca a cena inteira sem a janela andar.
     const floor = Math.round(center.z);
-    const key = `${scene?.id ?? '-'}:${floor}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}`;
+    // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
+    const key = `${scene?.id ?? '-'}:${floor}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
     if (key === painted) return;
     painted = key;
+
+    // Os itens do chão por tile, para entrarem na pilha como itens comuns — o mais recente por
+    // cima. São poucos (cadáveres com prazo), e a varredura é só na repintura.
+    const groundItemsAt = new Map<string, StackedItem[]>();
+    for (const item of world.groundItems.values()) {
+      const at = `${item.position.x},${item.position.y},${item.position.z}`;
+      const list = groundItemsAt.get(at) ?? [];
+      list.push({ id: item.appearanceId });
+      groundItemsAt.set(at, list);
+    }
+    const stackAt = (x: number, y: number, z: number): TileStack | null => {
+      const base = scene?.tileAt(x, y, z) ?? null;
+      const extra = groundItemsAt.get(`${x},${y},${z}`);
+      if (extra === undefined) return base;
+      return base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] };
+    };
 
     groundFallback.clear();
     elevations.clear();
@@ -354,7 +371,7 @@ export async function mountViewport(
       const tint = veilTint(below);
       for (let sy = window.minY; sy <= window.maxY; sy++) {
         for (let sx = window.minX; sx <= window.maxX; sx++) {
-          const stack = scene?.tileAt(sx - below, sy - below, z) ?? null;
+          const stack = stackAt(sx - below, sy - below, z);
           if (stack === null) continue;
           const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
           const drawn = drawTile(stack, sx - below, sy - below, objectInfo);
