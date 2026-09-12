@@ -90,7 +90,7 @@ dobro, e a capacidade deixa de significar o que diz.
 | | |
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
-| empilha | só o que o conteúdo marca `stackable` — munição sim, espada não |
+| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não (munição não é item desde o ADR 0026; ver "Decidido" abaixo) |
 | item que não cabe | **recusado**, e vai para a Caixa de Loot da Sessão (issue própria) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a

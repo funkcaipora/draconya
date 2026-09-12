@@ -53,6 +53,18 @@ describe('packHas', () => {
 });
 
 describe('packProblems', () => {
+  it('confere a munição no registro de objetos, aceitando o id que existe e recusando o que não (#151)', () => {
+    // Mutação que mata: apagar o laço de `ammunition` em `packProblems` — o resto da suíte
+    // continua verde, porque o conteúdo real só tem ids válidos, e a flecha com id fora do
+    // pacote subiria como o quadrado invisível que este módulo existe para impedir.
+    expect(packProblems(table({ ammunition: { arrow: 1200 } }), pack)).toEqual([]);
+    expect(packProblems(table({ ammunition: { arrow: 168 } }), pack))
+      .toEqual(['appearances.ammunition.arrow: object 168 não existe no pacote tibia-test']);
+    // No registro de OBJETOS: 21 é um outfit que existe, e um objeto que não.
+    expect(packProblems(table({ ammunition: { arrow: 21 } }), pack))
+      .toEqual(['appearances.ammunition.arrow: object 21 não existe no pacote tibia-test']);
+  });
+
   it('aceita a tabela cujos ids existem todos no pacote', () => {
     expect(packProblems(table({
       monsters: { rat: 21 }, characters: { default: 128 },
