@@ -104,7 +104,7 @@ O que faz:
 3. Atualiza `docs/adr/README.md` (índice)
 4. **Se a decisão muda um invariante, atualiza o `CLAUDE.md` afetado** — é este passo que fecha
    o ciclo entre "a gente decidiu" e "o agente sabe"
-5. Se houver issue relacionada, referencia `FUN-nn`
+5. Se houver issue relacionada, referencia `#nn` (`FUN-nn` só para issue antiga do Linear)
 
 Template curto de propósito. ADR que ninguém escreve porque dá trabalho não serve.
 

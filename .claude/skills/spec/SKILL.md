@@ -137,8 +137,9 @@ issue é grande demais e o que falta é quebrá-la, não resumi-la.
 
 ## Passo 6 — organização: labels, milestone, dependências, sub-issues e quadro
 
-**Labels** — toda issue leva uma de épico (`E0 · Fundação` … `E16 · Engine web`, os nomes do
-`docs/technical-architecture.md` §17) e uma de escopo (`sim`, `protocol`, `content`, `server`,
+**Labels** — toda issue leva uma de épico (`E0 · Fundação` … `E15 · Operação`, os nomes do
+`docs/technical-architecture.md` §17; uma iniciativa fora dele cria a sua, como `E16 · Engine web`)
+e uma de escopo (`sim`, `protocol`, `content`, `server`,
 `client`, `tools`, `docs` — a do commit que a fecha). `em andamento` é de quem pega a issue. Label
 nova: `gh label create "<nome>" --color <hex> --description "<uma linha>"`.
 

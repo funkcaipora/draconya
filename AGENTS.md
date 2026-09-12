@@ -134,8 +134,9 @@ começar com "Merge" sem ser um.
 `Closes #n`, que fecha a issue no merge e liga as duas no GitHub.
 
 **Rastreamento:** issues, milestones e o quadro "Draconya" (projeto 3) do GitHub, desde
-2026-09-12 — o Linear é histórico. Toda issue leva uma label de épico (`E0 · Fundação` … `E16 ·
-Engine web`, os nomes do `docs/technical-architecture.md` §17) e uma de escopo (o escopo do
+2026-09-12 — o Linear é histórico. Toda issue leva uma label de épico (`E0 · Fundação` … `E15 ·
+Operação`, os nomes do `docs/technical-architecture.md` §17, mais as que uma iniciativa fora dele
+criar — `E16 · Engine web` é da branch do OTClient web) e uma de escopo (o escopo do
 commit que a fecha); quem pega a issue aplica `em andamento` e comenta, antes do merge, o que foi
 verificado. A skill `/spec` diz como uma issue vira spec e como ela entra no milestone e no quadro.
 
