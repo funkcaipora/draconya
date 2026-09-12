@@ -22,7 +22,9 @@ const REASON_TEXT: Record<string, string> = {
   completed: 'concluída',
 };
 
-const SKILL_TEXT: Record<string, string> = { melee: 'Corpo a corpo', magic: 'Magia' };
+const SKILL_TEXT: Record<string, string> = {
+  melee: 'Corpo a corpo', magic: 'Magia', distance: 'Distância',
+};
 
 /** `1` e `0,5` — o bônus de um marco em pontos percentuais, como o jogador lê. */
 const percent = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });

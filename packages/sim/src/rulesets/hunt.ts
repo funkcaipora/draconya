@@ -316,6 +316,8 @@ export interface HuntRulesetState {
   readonly luring?: boolean;
   /** Ver `HuntRuleset.#ringReplaced`. Ausente é `null`: o dedo estava vazio. */
   readonly ringReplaced?: string | null;
+  /** Ver `HuntRuleset.#ammoFallbackTold`. Ausente é vazio: snapshot anterior ao #152. */
+  readonly ammoFallbackTold?: readonly string[];
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -453,8 +455,14 @@ export class HuntRuleset implements Ruleset {
   readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
   /** A munição grátis por família (#152). Ver o construtor. */
   readonly #freeAmmo = new Map<AmmoFamily, Ammunition>();
-  /** Quem já foi avisado nesta sessão que o gold acabou para a munição escolhida (#152). */
-  readonly #ammoFallbackTold = new Set<string>();
+  /**
+   * Quem já foi avisado nesta sessão que o gold acabou para a munição escolhida (#152).
+   *
+   * Vai no snapshot, como `#warnedNoGold`: a hunt é desanexada e retomada o tempo todo, e
+   * um aviso que zerasse a cada retomada apareceria na tela de retorno uma vez por retomada —
+   * o contrário de "uma vez por sessão".
+   */
+  #ammoFallbackTold = new Set<string>();
 
   /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
@@ -786,6 +794,7 @@ export class HuntRuleset implements Ruleset {
       botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
       luring: this.#running,
       ringReplaced: this.#ringReplaced,
+      ammoFallbackTold: [...this.#ammoFallbackTold],
       ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
     };
   }
@@ -838,6 +847,7 @@ export class HuntRuleset implements Ruleset {
     // e continuaria juntando por cima do que já estava junto.
     this.#running = restored.luring ?? true;
     this.#ringReplaced = restored.ringReplaced ?? null;
+    this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
     // A configuração volta CRUA e é recompilada aqui (FUN-81). Sem isto, uma hunt retomada
     // roda sem bot: continua andando e matando com o ataque básico, então nada PARECE
     // quebrado — o que some é a cura, e o jogador descobre pelo personagem morto.
@@ -1110,7 +1120,7 @@ export class HuntRuleset implements Ruleset {
     }
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
-    const weapon = character.inventory.weapon(this.#options.items);
+    const weapon = character.inventory.weapon(this.#options.items, character);
     const how = weapon?.weapon;
     // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
     // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
@@ -2068,7 +2078,7 @@ export class HuntRuleset implements Ruleset {
    * todo personagem novo não machucar nada, e sem arma é como todo personagem começa.
    */
   #attackPowerOf(character: CharacterRuntime): number {
-    return character.inventory.weaponAttack(this.#options.items)
+    return character.inventory.weaponAttack(this.#options.items, character)
       ?? this.#options.player.attackPower;
   }
 
@@ -2106,7 +2116,7 @@ export class HuntRuleset implements Ruleset {
    * `weapon`, que o conteúdo já normalizou — vale `combat.player.attackRange`, o corpo a corpo.
    */
   #attackRangeOf(character: CharacterRuntime): number {
-    return character.inventory.weapon(this.#options.items)?.weapon?.range
+    return character.inventory.weapon(this.#options.items, character)?.weapon?.range
       ?? this.#options.player.attackRange;
   }
 

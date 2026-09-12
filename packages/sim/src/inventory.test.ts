@@ -179,9 +179,28 @@ describe('equipar (§21.4)', () => {
 
   it('`weapon()` é a definição da arma na mão, ou null desarmado (#152)', () => {
     const inventory = comEspada();
-    expect(inventory.weapon(catalog)).toBeNull();
+    expect(inventory.weapon(catalog, wearer())).toBeNull();
     inventory.equip('sword', wearer(), catalog);
-    expect(inventory.weapon(catalog)?.id).toBe('sword');
+    expect(inventory.weapon(catalog, wearer())?.id).toBe('sword');
+  });
+
+  it('a arma que exige vocação ou level que o portador não tem é lida como mão vazia (#152)', () => {
+    // `equip` recusa, mas a mão não é preenchida só por `equip`: um snapshot anterior à regra
+    // chega por `fromState` sem passar por ela. O combate lê pela definição, e é aqui que a
+    // arma de druida na mão de quem não tem vocação vira desarmado — alcance, ataque e modo
+    // de bater juntos, e não só um deles.
+    const staffInHand = Inventory.fromState({
+      backpack: [], equipped: { hand: carried('druid-staff') },
+    });
+    expect(staffInHand.weapon(catalog, wearer())).toBeNull();
+    expect(staffInHand.weaponAttack(catalog, wearer())).toBeNull();
+    expect(staffInHand.weapon(catalog, wearer({ vocationId: 'druid' }))?.id).toBe('druid-staff');
+
+    const greatSwordInHand = Inventory.fromState({
+      backpack: [], equipped: { hand: carried('great-sword') },
+    });
+    expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 19 }))).toBeNull();
+    expect(greatSwordInHand.weaponAttack(catalog, wearer({ level: 20 }))).toBe(40);
   });
 
   it('recusa equipar o que ele não tem', () => {
@@ -204,14 +223,14 @@ describe('o que o combate lê', () => {
   it('sem arma, o ataque é NULO — e não zero', () => {
     // Zero faria o personagem desarmado não machucar nada, e desarmado é como todo personagem
     // começa. Quem sabe quanto o punho bate é o conteúdo (`combat.player.attackPower`).
-    expect(new Inventory().weaponAttack(catalog)).toBeNull();
+    expect(new Inventory().weaponAttack(catalog, wearer())).toBeNull();
   });
 
   it('com arma, o ataque é o DELA', () => {
     const inventory = new Inventory();
     inventory.add(carried('sword'), catalog, wearer());
     inventory.equip('sword', wearer(), catalog);
-    expect(inventory.weaponAttack(catalog)).toBe(24);
+    expect(inventory.weaponAttack(catalog, wearer())).toBe(24);
   });
 
   it('a armadura SOMA o que está vestido', () => {

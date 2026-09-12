@@ -56,6 +56,9 @@ export interface Wearer {
   readonly capacity: number;
 }
 
+/** O que `requires` de um item confere: level e vocação. É o que `weapon()` lê do portador. */
+export type Requirements = Pick<Wearer, 'level' | 'vocationId'>;
+
 export class Inventory {
   #backpack: CarriedItem[] = [];
   readonly #equipped = new Map<ItemSlot, CarriedItem>();
@@ -205,20 +208,35 @@ export class Inventory {
    * (`combat.player.attackPower`). Devolver zero aqui faria o personagem sem arma não machucar
    * nada, e "sem arma" é o estado em que todo personagem começa.
    */
-  weaponAttack(catalog: ReadonlyMap<string, Item>): number | null {
-    const weapon = this.#equipped.get('hand');
-    if (weapon === undefined) return null;
-    return catalog.get(weapon.itemId)?.attack ?? null;
+  weaponAttack(catalog: ReadonlyMap<string, Item>, wearer: Requirements): number | null {
+    return this.weapon(catalog, wearer)?.attack ?? null;
   }
 
   /**
    * A DEFINIÇÃO da arma na mão, ou `null` desarmado (#152). É por ela que o ruleset decide
    * como bater — corpo a corpo, tiro com munição, ou wand — e a que alcance.
+   *
+   * Lida COM o portador: a arma que exige vocação ou level que ele não tem conta como mão
+   * vazia. `equip` já recusa isso, mas o que está na mão não veio só de `equip` — um snapshot
+   * anterior à regra, ou uma instância gravada por outro caminho, chegam por `fromState` sem
+   * passar por ela. Conferir aqui, e não em cada leitor, é o que faz alcance, ataque e modo de
+   * bater caírem juntos para o desarmado.
    */
-  weapon(catalog: ReadonlyMap<string, Item>): Item | null {
+  weapon(catalog: ReadonlyMap<string, Item>, wearer: Requirements): Item | null {
     const carried = this.#equipped.get('hand');
     if (carried === undefined) return null;
-    return catalog.get(carried.itemId) ?? null;
+    const definition = catalog.get(carried.itemId);
+    if (definition === undefined) return null;
+    if (definition.requires.level !== undefined && wearer.level < definition.requires.level) {
+      return null;
+    }
+    if (
+      definition.requires.vocationId !== undefined
+      && wearer.vocationId !== definition.requires.vocationId
+    ) {
+      return null;
+    }
+    return definition;
   }
 
   /** A armadura somada do que está vestido. Zero é ninguém vestido, e é um número honesto. */

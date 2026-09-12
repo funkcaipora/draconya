@@ -574,7 +574,10 @@ export const combatSchema = z.object({
   player: z.object({
     attackPower: z.number().int().nonnegative(),
     attackIntervalMs: z.number().int().positive(),
-    /** Alcance em tiles. `1` é corpo a corpo — o único que existe hoje. */
+    /**
+     * Alcance em tiles do personagem DESARMADO — `1`, corpo a corpo. Arma na mão vale o
+     * `weapon.range` dela (#152); este só entra quando não há arma.
+     */
     attackRange: z.number().int().positive().default(1),
     armor: z.number().int().nonnegative(),
     dodgeChance: z.number().min(0).max(1),

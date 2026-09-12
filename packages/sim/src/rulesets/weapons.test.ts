@@ -68,6 +68,7 @@ const items = [
   { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 1, attack: 30 },
   { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
   { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 10, max: 10 } } },
+  { id: 'staff', name: 'Staff', kind: 'weapon', slot: 'hand', weight: 1, requires: { vocationId: 'sorcerer' }, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 100, max: 100 } } },
   { id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 1 },
 ];
 const ammunition = [
@@ -266,6 +267,27 @@ describe('a wand gasta mana e causa dano por faixa (#152)', () => {
   });
 });
 
+describe('a arma que o personagem não pode usar não bate por ele (#152)', () => {
+  it('wand de vocação na mão de quem não tem vocação cai no desarmado: sem tiro, sem mana, punho', () => {
+    // `equip` recusa `wrong-vocation`, mas um snapshot anterior à regra traz a arma na mão
+    // por `fromState`. Ela conta como mão vazia: alcance 1, ataque do desarmado (25), nenhum
+    // `shot`, nenhuma mana gasta — e não uma wand de 100 de dano por golpe.
+    const { session, hero, ruleset } = start({ inventory: armed('staff') });
+    session.advanceBy(50);
+    const far = ratAt(ruleset, 2);
+    const h0 = far.health;
+    run(session, 2_000, 100);
+    expect(far.health).toBe(h0);
+
+    far.position = { x: 1, y: 2 };
+    const events = run(session, 3_000, 100);
+    expect(events.filter((e) => e.kind === 'shot')).toHaveLength(0);
+    expect(hero.mana).toBe(hero.maxMana);
+    expect(h0 - far.health).toBeGreaterThan(0);
+    expect(h0 - far.health).toBeLessThan(100);
+  });
+});
+
 describe('equivalência entre taxas e snapshot com arma na mão (#152)', () => {
   it('1 Hz == 10 Hz com o bow pago e com a wand', () => {
     for (const weapon of ['bow', 'wand'] as const) {
@@ -279,6 +301,26 @@ describe('equivalência entre taxas e snapshot com arma na mão (#152)', () => {
       expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
       expect(fast.hero.mana).toBe(slow.hero.mana);
     }
+  });
+
+  it('o aviso de munição sem gold sai uma vez por sessão, mesmo com retomada no meio', () => {
+    // A hunt é desanexada e retomada o tempo todo; um aviso que zerasse a cada retomada
+    // encheria a tela de retorno com a mesma linha. O conjunto de avisados vai no snapshot.
+    const { session, ruleset, loaded } = start({ inventory: armed('bow'), gold: 3, ammo: { arrow: 'onyx-arrow' } });
+    session.advanceBy(50);
+    ratAt(ruleset, 2);
+    run(session, 2_000, 100);
+    expect(session.notableEvents.filter((e) => e.type === 'ammo-fallback')).toHaveLength(1);
+
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const rat = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (rat === undefined) throw new Error('sem rato');
+    rat.position = { x: 1, y: 3 };
+    run(resumed, 2_000, 100);
+    expect(resumed.notableEvents.filter((e) => e.type === 'ammo-fallback')).toHaveLength(1);
   });
 
   it('a escolha de munição sobrevive ao snapshot', () => {
