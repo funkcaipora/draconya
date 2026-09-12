@@ -16,11 +16,24 @@
 //   message SpriteAnimation { ... repeated SpritePhase sprite_phase=6; }
 //   message SpritePhase { uint32 duration_min=1; uint32 duration_max=2; }
 //
-// **Lemos um subconjunto, de propósito.** `flags` (campo 3) é a maior parte do arquivo e nada
-// nele desenha um sprite; `name` e `description` são texto do cliente oficial. Materializá-los
-// custaria memória para dezenas de milhares de aparências que o jogo nunca desenha ao mesmo
-// tempo. O que não é lido é PULADO por wire type, e é isso que mantém o leitor válido quando o
-// pacote sobe de versão e ganha campo novo.
+//   message AppearanceFlags { AppearanceFlagBank bank=1; bool clip=2, bottom=3, top=4;
+//                         bool unpass=13, unmove=14, unsight=15, avoid=16,
+//                         no_movement_animation=17, take=18, hang=20;
+//                         AppearanceFlagHook hook=21; AppearanceFlagShift shift=26;
+//                         AppearanceFlagHeight height=27; bool lying_object=28,
+//                         animate_always=29, fullbank=32; ... }
+//   message AppearanceFlagBank { uint32 waypoints=1; }      -- a velocidade do chão
+//   message AppearanceFlagHook { HOOK_TYPE south=1; HOOK_TYPE east=2; }
+//   message AppearanceFlagShift { uint32 x=1; uint32 y=2; }
+//   message AppearanceFlagHeight { uint32 elevation=1; }
+//
+// **Lemos um subconjunto, de propósito.** De `flags` (campo 3) entram só as que decidem
+// BLOQUEIO e DESENHO DE PILHA (FUN-117): chão, borda, bottom/top, passagem, tiro, elevação,
+// deslocamento, gancho — booleanos e três números por aparência. O resto das flags (mercado,
+// NPC, cyclopedia, vocação, luz, minimapa), `name` e `description` continuam pulados:
+// materializá-los custaria memória para dezenas de milhares de aparências que o jogo nunca
+// desenha ao mesmo tempo. O que não é lido é PULADO por wire type, e é isso que mantém o
+// leitor válido quando o pacote sobe de versão e ganha campo novo.
 
 import { Reader, WIRE_LENGTH, WIRE_VARINT } from './protobuf.js';
 
@@ -73,10 +86,52 @@ export interface FrameGroup {
   readonly phases: readonly SpritePhase[];
 }
 
+/**
+ * As flags de UMA aparência que bloqueio e desenho de pilha precisam (FUN-117, ADR 0025).
+ *
+ * Os nomes são os do `appearances.proto` moderno. `bankWaypoints` é a VELOCIDADE DO CHÃO —
+ * o nome estranho é do pacote —, e `undefined` quer dizer "não é chão": o que importa é a
+ * presença do submessage `bank`, não o número. `hookSouth`/`hookEast` vêm de
+ * `AppearanceFlagHook`: o otclient declara `south=1, east=2`; o Canary redefine a mesma
+ * mensagem com um `direction=1` só — o campo 1 é comum às duas formas, e é o que se lê.
+ */
+export interface AppearanceFlags {
+  readonly bankWaypoints?: number;
+  readonly clip: boolean;
+  readonly bottom: boolean;
+  readonly top: boolean;
+  readonly unpass: boolean;
+  readonly unmove: boolean;
+  readonly unsight: boolean;
+  readonly avoid: boolean;
+  readonly noMovementAnimation: boolean;
+  readonly take: boolean;
+  readonly hang: boolean;
+  readonly hookSouth?: number;
+  readonly hookEast?: number;
+  /** `AppearanceFlagShift`, em pixels. Ausente é `{0, 0}`. */
+  readonly shiftX?: number;
+  readonly shiftY?: number;
+  /** `AppearanceFlagHeight.elevation`, em pixels. Ausente é zero. */
+  readonly elevation?: number;
+  readonly lyingObject: boolean;
+  readonly animateAlways: boolean;
+  readonly fullbank: boolean;
+}
+
+/** Aparência sem nenhuma flag lida — o que uma sem o campo 3 devolve, e o que um teste usa. */
+export const NO_FLAGS: AppearanceFlags = Object.freeze({
+  clip: false, bottom: false, top: false, unpass: false, unmove: false, unsight: false,
+  avoid: false, noMovementAnimation: false, take: false, hang: false, lyingObject: false,
+  animateAlways: false, fullbank: false,
+});
+
 export interface Appearance {
   readonly id: number;
   readonly kind: AppearanceKind;
   readonly frameGroups: readonly FrameGroup[];
+  /** Ausente quando o pacote não trouxe o campo 3 — o mesmo que `NO_FLAGS`. */
+  readonly flags?: AppearanceFlags;
 }
 
 /** Um catálogo por tipo, pela razão explicada em `APPEARANCE_KINDS`. */
@@ -118,16 +173,99 @@ export function readAppearances(buffer: ArrayBuffer | Uint8Array): AppearanceCat
 function readAppearance(reader: Reader, kind: AppearanceKind): Appearance {
   let id = 0;
   const frameGroups: FrameGroup[] = [];
+  let flags: AppearanceFlags | undefined;
 
   while (!reader.done) {
     const { field, wire } = reader.tag();
     if (field === 1 && wire === WIRE_VARINT) { id = reader.varint(); continue; }
     if (field === 2 && wire === WIRE_LENGTH) { frameGroups.push(readFrameGroup(reader.slice())); continue; }
-    // `flags` (3), `name` (4), `description` (5) e o que vier: pulados. Ver o topo do arquivo.
+    if (field === 3 && wire === WIRE_LENGTH) { flags = readAppearanceFlags(reader.slice()); continue; }
+    // `name` (4), `description` (5) e o que vier: pulados. Ver o topo do arquivo.
     reader.skip(wire);
   }
 
-  return { id, kind, frameGroups };
+  return flags === undefined ? { id, kind, frameGroups } : { id, kind, frameGroups, flags };
+}
+
+/** Lê um submessage de UM campo varint (`bank`, `height`) e devolve o valor dele. */
+function readSingleVarint(reader: Reader, wanted: number): number | undefined {
+  let value: number | undefined;
+  while (!reader.done) {
+    const { field, wire } = reader.tag();
+    if (field === wanted && wire === WIRE_VARINT) { value = reader.varint(); continue; }
+    reader.skip(wire);
+  }
+  return value;
+}
+
+/** Lê um submessage de DOIS campos varint (`hook`, `shift`). */
+function readVarintPair(reader: Reader): { first?: number; second?: number } {
+  const pair: { first?: number; second?: number } = {};
+  while (!reader.done) {
+    const { field, wire } = reader.tag();
+    if (field === 1 && wire === WIRE_VARINT) { pair.first = reader.varint(); continue; }
+    if (field === 2 && wire === WIRE_VARINT) { pair.second = reader.varint(); continue; }
+    reader.skip(wire);
+  }
+  return pair;
+}
+
+/**
+ * Só os campos da tabela do topo do arquivo; o resto é pulado por wire type. Um booleano do
+ * proto2 é varint, e `!== 0` é a leitura certa de `true`.
+ *
+ * `bank` é presença: o pacote real grava `bank {}` sem `waypoints` em chão nenhum, mas o
+ * contrato é "há chão se há submessage", então `bankWaypoints` vira `0` — e não `undefined`
+ * — quando o submessage vem vazio.
+ */
+function readAppearanceFlags(reader: Reader): AppearanceFlags {
+  const flags: {
+    -readonly [K in keyof AppearanceFlags]: AppearanceFlags[K];
+  } = { ...NO_FLAGS };
+
+  while (!reader.done) {
+    const { field, wire } = reader.tag();
+    if (wire === WIRE_VARINT) {
+      const on = reader.varint() !== 0;
+      if (field === 2) flags.clip = on;
+      else if (field === 3) flags.bottom = on;
+      else if (field === 4) flags.top = on;
+      else if (field === 13) flags.unpass = on;
+      else if (field === 14) flags.unmove = on;
+      else if (field === 15) flags.unsight = on;
+      else if (field === 16) flags.avoid = on;
+      else if (field === 17) flags.noMovementAnimation = on;
+      else if (field === 18) flags.take = on;
+      else if (field === 20) flags.hang = on;
+      else if (field === 28) flags.lyingObject = on;
+      else if (field === 29) flags.animateAlways = on;
+      else if (field === 32) flags.fullbank = on;
+      continue;
+    }
+    if (wire !== WIRE_LENGTH) { reader.skip(wire); continue; }
+    if (field === 1) { flags.bankWaypoints = readSingleVarint(reader.slice(), 1) ?? 0; continue; }
+    if (field === 21) {
+      const hook = readVarintPair(reader.slice());
+      if (hook.first !== undefined) flags.hookSouth = hook.first;
+      if (hook.second !== undefined) flags.hookEast = hook.second;
+      continue;
+    }
+    if (field === 26) {
+      const shift = readVarintPair(reader.slice());
+      if (shift.first !== undefined) flags.shiftX = shift.first;
+      if (shift.second !== undefined) flags.shiftY = shift.second;
+      continue;
+    }
+    if (field === 27) {
+      const elevation = readSingleVarint(reader.slice(), 1);
+      if (elevation !== undefined) flags.elevation = elevation;
+      continue;
+    }
+    // Mercado, NPC, cyclopedia, vocação, luz, minimapa e o que vier: pulados.
+    reader.skip(wire);
+  }
+
+  return flags;
 }
 
 function readFrameGroup(reader: Reader): FrameGroup {

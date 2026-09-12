@@ -98,10 +98,17 @@ cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um v
 (`pbjs --target static-module` ainda emitiria `.js`, que o `source-policy` recusa.)
 
 **O que é lido, e o que é pulado.** Lidos: `id`, `frame_group`, e de `sprite_info` os
-`pattern_*`, `layers`, `sprite_id`, `bounding_square` e as durações das fases. Pulados:
-`flags`, `name`, `description`, `bounding_box_per_direction`, `is_opaque` — e todo campo que
-uma versão futura trouxer, **pelo wire type**. É isso, e não a lista de campos conhecidos, que
-mantém o leitor válido quando o pacote sobe de versão.
+`pattern_*`, `layers`, `sprite_id`, `bounding_square` e as durações das fases; e, de `flags`
+(FUN-117, ADR 0025), só o que bloqueio e pilha precisam — `bank` (com `waypoints`, a
+velocidade do chão), `clip`, `bottom`, `top`, `unpass`, `unmove`, `unsight`, `avoid`,
+`no_movement_animation`, `take`, `hang`, `hook`, `shift`, `height`, `lying_object`,
+`animate_always`, `fullbank` — booleanos e três números por aparência, com os números de campo
+conferidos contra o pacote 1332 real (`appearances.pack.test.ts`). Pulados: o resto das flags
+(mercado, NPC, cyclopedia, vocação, luz, minimapa), `name`, `description`,
+`bounding_box_per_direction`, `is_opaque` — e todo campo que uma versão futura trouxer, **pelo
+wire type**. É isso, e não a lista de campos conhecidos, que mantém o leitor válido quando o
+pacote sobe de versão. **`bank` é presença, não número**: o pacote grava `bank {}` em chão sem
+velocidade, e `bankWaypoints` vira `0` — "não é chão" é `undefined`.
 
 Medido contra o `appearances.dat` do Canary (4,8 MB): **42.107 objects, 1.443 outfits, 242
 effects, 62 missiles, em 136 ms.** O `outfit 21` sai com dois grupos — parado com 4 direções e

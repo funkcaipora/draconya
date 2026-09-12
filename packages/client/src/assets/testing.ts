@@ -88,9 +88,69 @@ export function frameGroup(fixture: FrameGroupFixture = {}): Uint8Array {
   return concat(...group);
 }
 
+/**
+ * As flags de uma aparência (campo 3), pelo número de campo do `appearances.proto` (FUN-117).
+ * `bankWaypoints` emite `bank { waypoints }`; `bank: true` emite `bank {}` vazio, que é como
+ * o pacote real marca chão sem velocidade; `hook`/`shift`/`height` são os submessages.
+ */
+export interface FlagsFixture {
+  readonly bank?: boolean;
+  readonly bankWaypoints?: number;
+  readonly clip?: boolean;
+  readonly bottom?: boolean;
+  readonly top?: boolean;
+  readonly unpass?: boolean;
+  readonly unmove?: boolean;
+  readonly unsight?: boolean;
+  readonly avoid?: boolean;
+  readonly noMovementAnimation?: boolean;
+  readonly take?: boolean;
+  readonly hang?: boolean;
+  readonly hookSouth?: number;
+  readonly hookEast?: number;
+  readonly shift?: { readonly x: number; readonly y: number };
+  readonly elevation?: number;
+  readonly lyingObject?: boolean;
+  readonly animateAlways?: boolean;
+  readonly fullbank?: boolean;
+  /** Campos que o leitor NÃO conhece, para provar o pulo. */
+  readonly extra?: readonly Field[];
+}
+
+export function flags(fixture: FlagsFixture): Field {
+  const parts: Field[] = [];
+  if (fixture.bankWaypoints !== undefined) {
+    parts.push(messageField(1, uint32Field(1, fixture.bankWaypoints)));
+  } else if (fixture.bank) {
+    parts.push(messageField(1, new Uint8Array(0)));
+  }
+  const bools: ReadonlyArray<readonly [number, boolean | undefined]> = [
+    [2, fixture.clip], [3, fixture.bottom], [4, fixture.top], [13, fixture.unpass],
+    [14, fixture.unmove], [15, fixture.unsight], [16, fixture.avoid],
+    [17, fixture.noMovementAnimation], [18, fixture.take],
+    [20, fixture.hang], [28, fixture.lyingObject], [29, fixture.animateAlways],
+    [32, fixture.fullbank],
+  ];
+  for (const [field, on] of bools) if (on !== undefined) parts.push(uint32Field(field, on ? 1 : 0));
+  if (fixture.hookSouth !== undefined || fixture.hookEast !== undefined) {
+    const hook: Field[] = [];
+    if (fixture.hookSouth !== undefined) hook.push(uint32Field(1, fixture.hookSouth));
+    if (fixture.hookEast !== undefined) hook.push(uint32Field(2, fixture.hookEast));
+    parts.push(messageField(21, concat(...hook)));
+  }
+  if (fixture.shift !== undefined) {
+    parts.push(messageField(26, concat(uint32Field(1, fixture.shift.x), uint32Field(2, fixture.shift.y))));
+  }
+  if (fixture.elevation !== undefined) parts.push(messageField(27, uint32Field(1, fixture.elevation)));
+  parts.push(...(fixture.extra ?? []));
+  return messageField(3, concat(...parts));
+}
+
 export interface AppearanceFixture {
   readonly id: number;
   readonly frameGroups?: readonly Uint8Array[];
+  /** Já codificado por `flags()`. */
+  readonly flags?: Field;
   readonly extra?: readonly Field[];
 }
 
@@ -98,6 +158,7 @@ export function appearance(fixture: AppearanceFixture): Uint8Array {
   return concat(
     uint32Field(1, fixture.id),
     ...(fixture.frameGroups ?? []).map((group) => messageField(2, group)),
+    ...(fixture.flags === undefined ? [] : [fixture.flags]),
     ...(fixture.extra ?? []),
   );
 }

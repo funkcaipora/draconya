@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readAppearances } from './appearances.js';
+import { NO_FLAGS, readAppearances } from './appearances.js';
 import { Reader } from './protobuf.js';
 import {
-  appearance, appearances, concat, fixed32Field, frameGroup, messageField, uint32Field, varint,
+  appearance, appearances, concat, fixed32Field, flags, frameGroup, messageField, uint32Field,
+  varint,
 } from './testing.js';
 
 describe('Reader (FUN-16)', () => {
@@ -193,5 +194,70 @@ describe('readAppearances (FUN-16)', () => {
       })],
     }));
     expect(catalogue.object.get(3)?.frameGroups[0]?.boundingSquare).toBe(64);
+  });
+});
+
+describe('as flags de aparência (FUN-117)', () => {
+  it('lê chão, bloqueio, pilha, elevação, deslocamento e gancho pelo número de campo', () => {
+    const catalogue = readAppearances(appearances({
+      object: [
+        appearance({
+          id: 429, frameGroups: [frameGroup({ spriteIds: [1] })],
+          flags: flags({ bankWaypoints: 100, unmove: true, fullbank: true }),
+        }),
+        appearance({
+          id: 1294, frameGroups: [frameGroup({ spriteIds: [2] })],
+          flags: flags({ bottom: true, unpass: true, unmove: true, unsight: true, hookSouth: 2 }),
+        }),
+        appearance({
+          id: 7, frameGroups: [frameGroup({ spriteIds: [3] })],
+          flags: flags({
+            clip: true, top: true, avoid: true, noMovementAnimation: true, take: true, hang: true,
+            hookEast: 1, shift: { x: 8, y: 4 }, elevation: 8, lyingObject: true, animateAlways: true,
+          }),
+        }),
+      ],
+    }));
+    const floor = catalogue.object.get(429)?.flags;
+    expect(floor).toMatchObject({ bankWaypoints: 100, unmove: true, fullbank: true, unpass: false });
+    const wall = catalogue.object.get(1294)?.flags;
+    expect(wall).toMatchObject({ bottom: true, unpass: true, unsight: true, hookSouth: 2 });
+    expect(wall?.bankWaypoints).toBeUndefined();
+    const odd = catalogue.object.get(7)?.flags;
+    expect(odd).toMatchObject({
+      clip: true, top: true, avoid: true, noMovementAnimation: true, take: true, hang: true,
+      hookEast: 1, shiftX: 8, shiftY: 4, elevation: 8, lyingObject: true, animateAlways: true,
+    });
+    // O que NÃO foi ligado fica falso — um número de campo trocado ligaria a flag errada.
+    expect(odd).toMatchObject({ bottom: false, unpass: false, unmove: false, unsight: false, fullbank: false });
+    expect(odd?.hookSouth).toBeUndefined();
+  });
+
+  it('chão sem waypoints continua sendo chão: bank vazio dá zero, não undefined', () => {
+    // O pacote real grava `bank {}` em chão sem velocidade declarada. A pergunta que o
+    // importador faz é "é chão?", e a resposta tem que ser sim.
+    const catalogue = readAppearances(appearances({
+      object: [appearance({ id: 5, frameGroups: [frameGroup({ spriteIds: [1] })], flags: flags({ bank: true }) })],
+    }));
+    expect(catalogue.object.get(5)?.flags?.bankWaypoints).toBe(0);
+  });
+
+  it('sem o campo 3 a aparência não tem flags, e um campo de flag desconhecido é pulado', () => {
+    const catalogue = readAppearances(appearances({
+      object: [
+        appearance({ id: 1, frameGroups: [frameGroup({ spriteIds: [1] })] }),
+        appearance({
+          id: 2, frameGroups: [frameGroup({ spriteIds: [1] })],
+          // `light` (23) é submessage, `market` (36) também, e um bool que não lemos (9).
+          flags: flags({
+            unpass: true,
+            extra: [messageField(23, concat(uint32Field(1, 7), uint32Field(2, 215))), uint32Field(9, 1),
+              messageField(36, uint32Field(1, 3))],
+          }),
+        }),
+      ],
+    }));
+    expect(catalogue.object.get(1)?.flags).toBeUndefined();
+    expect(catalogue.object.get(2)?.flags).toEqual({ ...NO_FLAGS, unpass: true });
   });
 });
