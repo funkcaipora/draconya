@@ -220,6 +220,22 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   DESTINO da escada (`floorChangeAt`), não o degrau; o monstro — posição sem `z` — vê o degrau
   como parede, como no Tibia. A ocupação é por andar (`tileKey(x, y, z)`), e `occupied(x, y)`
   sem `z` é o andar padrão do mapa.
+- **`monsterCount` é o TOTAL da instância, e o `Spawner` o ESPALHA pelo laço** (FUN-123, cópia
+  do Huntera: 2/5/8 no bueiro). O lugar `i` fica no ponto `⌊i × pontos / total⌋` — com menos
+  monstros que pontos eles cobrem o laço em intervalos iguais (o rodízio `i % pontos` deixava
+  seis dos catorze pontos do bueiro sem monstro em qualquer pull), com mais cada ponto recebe
+  o mesmo tanto; determinístico, igual em dois servidores com o mesmo conteúdo. O tile livre é
+  procurado até o `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem
+  monstro.
+- **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
+  `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
+  resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com
+  `corpseTtlMs` da hunt — hunt sem o campo não deixa cadáver. Os cadáveres entram no snapshot
+  (`corpses`, `nextGroundItemId`), e o evento de apodrecer volta com a fila. O loot NUNCA passa
+  pelo cadáver: já foi para a caixa antes de ele cair.
+- **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
+  o rato bate de 0 a 8, e a mesma semente dá o mesmo golpe — o contrato do loot vale para o
+  dano. Um número no JSON é a faixa de um valor só.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
 - **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,

@@ -10,22 +10,32 @@
   "items": {
     "arrow": 3447,
     "leather-armor": 3361,
-    "spike-sword": 3271
+    "spike-sword": 3271,
+    "cheese": 3607
   },
-  "maps": {
-    "rat-cellars": {
-      "floor": 355,
-      "wall": { "vertical": 1294, "horizontal": 1295, "corner": 1298, "pole": 1296 }
+  "corpses": {
+    "rat": 5964
+  },
+  "maps": {},
+  "spells": {
+    "heal": {
+      "effect": 13
+    },
+    "strike": {
+      "effect": 12,
+      "missile": 5
+    },
+    "blast": {
+      "effect": 38
     }
   },
-  "spells": {
-    "heal": { "effect": 13 },
-    "strike": { "effect": 12, "missile": 5 },
-    "blast": { "effect": 38 }
-  },
   "supplies": {
-    "health-potion": { "effect": 14 },
-    "mana-potion": { "effect": 13 }
+    "health-potion": {
+      "effect": 14
+    },
+    "mana-potion": {
+      "effect": 13
+    }
   },
   "hits": {
     "melee": 1

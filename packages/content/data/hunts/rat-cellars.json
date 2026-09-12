@@ -5,11 +5,38 @@
   "mapId": "rat-cellars",
   "routeId": "rat-cellars",
   "ambience": "cavern",
+  "corpseTtlMs": 10000,
   "difficulties": {
-    "beginner": {
-      "perSpawnPoint": 2,
-      "composition": [{ "monsterId": "rat", "weight": 1 }],
-      "respawnDelayMs": 30000
+    "cautious": {
+      "monsterCount": 2,
+      "composition": [
+        {
+          "monsterId": "rat",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
+    },
+    "bold": {
+      "monsterCount": 5,
+      "composition": [
+        {
+          "monsterId": "rat",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
+    },
+    "reckless": {
+      "monsterCount": 8,
+      "composition": [
+        {
+          "monsterId": "rat",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
     }
-  }
+  },
+  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs [ABERTO — valor provisório: 2000 ms; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]. corpseTtlMs [ABERTO — valor provisório: 10 s; a captura não fechou nenhum par appear→disappear]."
 }

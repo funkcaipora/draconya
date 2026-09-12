@@ -72,9 +72,29 @@ describe('loadContent', () => {
     const content = loadContent(DATA);
     const map = content.maps.get('rat-cellars');
     const route = content.routes.get('rat-cellars');
-    expect(map?.width).toBe(10);
-    expect(route?.tiles.length).toBe(28);
-    expect(route?.spawnPoints.length).toBe(4);
+    // O bueiro real (FUN-123, ADR 0025): importado, um andar (o 8), e a rota traçada por
+    // `pnpm route:trace` sobre ele — um laço de 160 tiles com um spawn por corredor de rato.
+    expect(map?.source?.file).toBe('otservbr.otbm');
+    expect(map?.width).toBe(118);
+    expect(map?.height).toBe(80);
+    expect(map?.z).toBe(8);
+    expect(route?.tiles.length).toBe(160);
+    expect(route?.spawnPoints.length).toBe(14);
+  });
+
+  it('a Rat Cellars é o bueiro real, com os três pulls do Huntera, o rato do Tibia e o queijo (FUN-123)', () => {
+    const content = loadContent(DATA);
+    const hunt = content.hunts.get('rat-cellars');
+    expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
+    expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
+    expect(hunt?.ambience).toBe('cavern');
+    expect(hunt?.corpseTtlMs).toBeGreaterThan(0);
+    const rat = content.monsters.get('rat');
+    expect(rat?.attack).toEqual({ min: 0, max: 8 });
+    expect(rat?.speed).toBe(172);
+    expect(rat?.corpseAppearanceId).toBe(5964);
+    expect(rat?.loot.items.map((i) => i.itemId)).toEqual(['cheese']);
+    expect(content.items.get('cheese')?.appearanceId).toBe(3607);
   });
 
   it('a Cidade é Thais: entrada no templo, andável, e cada escada tem a volta (FUN-120)', () => {

@@ -16,7 +16,7 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BOT_CATEGORIES, isBlocked } from '@draconya/content';
+import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
   BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
   Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap,
@@ -72,6 +72,8 @@ const MONSTER_ATTACK = 'monster-attack';
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
+/** O cadáver apodreceu (FUN-123): sai do chão. */
+const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 /**
  * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
@@ -265,6 +267,13 @@ export interface HuntRulesetOptions {
   readonly premium?: boolean;
 }
 
+/** Um cadáver no chão (FUN-123): de que monstro, onde. O prazo dele é o evento `CORPSE` na fila. */
+export interface CorpseState {
+  readonly id: number;
+  readonly monsterId: string;
+  readonly position: WorldPoint;
+}
+
 export interface HuntRulesetState {
   readonly huntId: string;
   readonly difficulty: HuntDifficultyName;
@@ -272,6 +281,10 @@ export interface HuntRulesetState {
   readonly spawner: SpawnerState;
   readonly monsters: readonly MonsterState[];
   readonly nextCreatureId: number;
+  /** Os cadáveres no chão (FUN-123). Ausente é nenhum: snapshot anterior. */
+  readonly corpses?: readonly CorpseState[];
+  /** O próximo id de item de chão. Ausente é `1`: snapshot anterior à FUN-123. */
+  readonly nextGroundItemId?: number;
   readonly warnedExhausted: boolean;
   /** Ver `HuntRuleset.#warnedFullBackpack`. Ausente é `false`: snapshot anterior à FUN-88. */
   readonly warnedFullBackpack?: boolean;
@@ -352,6 +365,9 @@ export class HuntRuleset implements Ruleset {
    */
   readonly #monsterBySubject = new Map<string, MonsterRuntime>();
   #nextCreatureId = 1;
+  /** Os cadáveres no chão, e o próximo id de item de chão (FUN-123). */
+  #corpses: CorpseState[] = [];
+  #nextGroundItemId = 1;
 
   /**
    * Já avisou que a stamina zerou? A notícia sai UMA vez.
@@ -500,6 +516,20 @@ export class HuntRuleset implements Ruleset {
     return this.#world.map.id;
   }
 
+  /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
+  get groundItems(): readonly CorpseState[] {
+    return this.#corpses;
+  }
+
+  /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
+  #onCorpseDecay(session: Session, subject: string): void {
+    const id = Number(subject);
+    const index = this.#corpses.findIndex((corpse) => corpse.id === id);
+    if (index === -1) return;
+    this.#corpses.splice(index, 1);
+    session.emit({ kind: 'ground-item-vanished', itemId: id });
+  }
+
   /** O ambiente da hunt (FUN-121), do conteúdo — `cavern` no bueiro. Ausente é superfície. */
   get ambience(): 'surface' | 'cavern' | undefined {
     return this.#options.hunt.ambience;
@@ -605,6 +635,7 @@ export class HuntRuleset implements Ruleset {
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
+      case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
       case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
@@ -733,6 +764,8 @@ export class HuntRuleset implements Ruleset {
       spawner: this.#spawner.getState(),
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
+      corpses: [...this.#corpses],
+      nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: this.#warnedExhausted,
       warnedFullBackpack: this.#warnedFullBackpack,
       warnedNoGold: this.#warnedNoGold,
@@ -777,6 +810,10 @@ export class HuntRuleset implements Ruleset {
       this.#monsterBySubject.set(monsterSubject(monster.id), monster);
     }
     this.#nextCreatureId = restored.nextCreatureId;
+    // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
+    // da sessão já trouxe de volta (FUN-123).
+    this.#corpses = [...(restored.corpses ?? [])];
+    this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#warnedExhausted = restored.warnedExhausted;
     this.#warnedFullBackpack = restored.warnedFullBackpack ?? false;
     this.#warnedNoGold = restored.warnedNoGold ?? false;
@@ -820,7 +857,10 @@ export class HuntRuleset implements Ruleset {
     const request = this.#spawner.fill(
       slot,
       this.#difficulty,
-      (pointIndex) => (this.#options.route.spawnPoints[pointIndex] as SpawnPoint).at,
+      (pointIndex) => {
+        const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
+        return { at: point.at, radius: point.radius };
+      },
       this.#spawnBlocked,
       session.rng,
     );
@@ -1552,8 +1592,11 @@ export class HuntRuleset implements Ruleset {
     const character = findById(session.participants, action.targetId);
     if (character === null || !character.alive) return;
 
+    // A faixa de ataque sorteada com o `Rng` da sessão (FUN-123): o rato bate de 0 a 8, e a
+    // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
+    const { min, max } = attackRange(definition.attack);
     const result = resolveDamage(
-      { power: definition.attack, kind: 'melee' },
+      { power: session.rng.integer(min, max), kind: 'melee' },
       this.#playerDefender(character),
       'pve',
       this.#options.combat,
@@ -1835,6 +1878,25 @@ export class HuntRuleset implements Ruleset {
       });
     }
     this.#world.vacate(monster.position.x, monster.position.y);
+    // O cadáver, só visual (FUN-123): fica no tile por `corpseTtlMs` e some sozinho, sem
+    // loot — o loot já foi para a caixa da sessão acima. O `sim` diz que monstro morreu e onde;
+    // a arte é da tabela, no hospedeiro (invariante 6). Hunt sem `corpseTtlMs` não deixa nada.
+    const corpseTtlMs = this.#options.hunt.corpseTtlMs;
+    if (corpseTtlMs !== undefined) {
+      const corpse: CorpseState = {
+        id: this.#nextGroundItemId++,
+        monsterId: monster.monsterId,
+        position: { x: monster.position.x, y: monster.position.y, z: this.floor },
+      };
+      this.#corpses.push(corpse);
+      session.emit({
+        kind: 'ground-item-appeared', itemId: corpse.id, monsterId: corpse.monsterId,
+        position: corpse.position,
+      });
+      session.scheduleIn(CORPSE, corpseTtlMs, {
+        priority: EventPriority.Housekeeping, subject: String(corpse.id),
+      });
+    }
     // Os eventos dele já saíram da fila: congelar é o primeiro estágio do pipeline. Aqui só
     // se tira o monstro dos índices desta instância — e da atribuição de quem ele bateu, senão
     // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
@@ -2157,7 +2219,7 @@ export function huntRulesetFromSnapshot(
 
 /**
  * Trocar de dificuldade ENCERRA a instância e cria outra (§14.7). Não existe alteração
- * dinâmica, e não tente ser esperto aqui: mudar `perSpawnPoint` no meio deixaria monstros da
+ * dinâmica, e não tente ser esperto aqui: mudar `monsterCount` no meio deixaria monstros da
  * densidade antiga vivos ao lado dos novos, e o jogador veria uma dificuldade que não é
  * nenhuma das duas.
  *

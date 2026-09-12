@@ -27,8 +27,8 @@ export const TEST_ROUTE = {
 export const TEST_HUNT = {
   id: 'arena', name: 'Arena', recommendedLevel: 1, mapId: 'arena', routeId: 'arena-loop',
   difficulties: {
-    beginner: {
-      perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
+    cautious: {
+      monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000,
     },
   },
 };

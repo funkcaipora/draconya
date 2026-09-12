@@ -126,7 +126,8 @@ Cada linha do catálogo mostra três coisas: o nome, **a lista de monstros** e
 Orc Camp → … → Infernal Gate (Demon) → Falcon's Eye.
 
 **"Tamanho do pull" é um nome melhor que "dificuldade".** Nós chamamos de dificuldade o que a
-`huntDifficultySchema` guarda como `perSpawnPoint` — quantos monstros vêm de uma vez. Eles
+`huntDifficultySchema` guarda como `monsterCount` (desde a FUN-123; era `perSpawnPoint`) —
+quantos monstros vêm de uma vez. Eles
 chamam pelo que é, e os três são `Cautelosa`, `Ousada`, `Agressiva`. Vale considerar renomear:
 "dificuldade" sugere monstro mais forte, e não é isso que muda.
 

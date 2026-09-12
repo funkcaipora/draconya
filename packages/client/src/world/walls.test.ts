@@ -113,12 +113,26 @@ describe('wallsOf — fora do mapa não é parede (FUN-105)', () => {
   });
 });
 
-describe('a regra sobre o mapa REAL — rat-cellars (FUN-105)', () => {
-  // Carregado do arquivo, e não copiado para cá: o que se prende é que a regra produz um muro
-  // sobre o mapa que o jogo desenha hoje, e uma cópia divergiria dele na primeira edição.
-  const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
-  const raw: unknown = JSON.parse(readFileSync(join(DATA, 'maps', 'rat-cellars.json'), 'utf8'));
-  const map: Tilemap = buildTilemap(tilemapSchema.parse(raw));
+describe('a regra sobre a adega de teste — a antiga rat-cellars (FUN-105)', () => {
+  // A adega 10×10 que foi a Rat Cellars até a FUN-123 — três retângulos concêntricos —, agora
+  // fixture: o mapa real é importado e desenha pela pilha (`scene.ts`), não por esta regra. A
+  // regra continua valendo para mapa autorado à mão, e é sobre esta grade que o histograma
+  // abaixo foi conferido.
+  const map: Tilemap = buildTilemap(tilemapSchema.parse({
+    id: 'cellar', z: 7,
+    grid: [
+      "##########",
+      "#........#",
+      "#.######.#",
+      "#.#....#.#",
+      "#.#.##.#.#",
+      "#.#.##.#.#",
+      "#.#....#.#",
+      "#.######.#",
+      "#........#",
+      "##########",
+    ],
+  }));
   const walls = wallsOf(map);
 
   it('a borda superior é um poste em (0, 0) e horizontal dali até a ponta direita', () => {

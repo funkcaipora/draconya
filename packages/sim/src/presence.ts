@@ -45,4 +45,24 @@ export interface CreatureHealthChanged {
   readonly maxHealth: number;
 }
 
-export type PresenceEvent = CreatureAppeared | CreatureVanished | CreatureHealthChanged;
+/**
+ * Um item apareceu no chão (FUN-123): o cadáver de um monstro. O `sim` diz QUAL monstro morreu
+ * e ONDE; a aparência é da tabela, resolvida pelo hospedeiro (invariante 6). Só visual — o
+ * loot não passa por aqui.
+ */
+export interface GroundItemAppeared {
+  readonly kind: 'ground-item-appeared';
+  readonly itemId: number;
+  readonly monsterId: string;
+  readonly position: WorldPoint;
+}
+
+/** O item do chão sumiu — o cadáver apodreceu. */
+export interface GroundItemVanished {
+  readonly kind: 'ground-item-vanished';
+  readonly itemId: number;
+}
+
+export type PresenceEvent =
+  | CreatureAppeared | CreatureVanished | CreatureHealthChanged
+  | GroundItemAppeared | GroundItemVanished;

@@ -51,6 +51,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       enterInstance(message.instanceId, message.map, message.ambience ?? 'surface');
       return;
 
+    case 'ground-item-appear':
+      world.groundItems.set(message.id, {
+        id: message.id, position: message.position, appearanceId: message.appearanceId,
+      });
+      world.groundItemsVersion += 1;
+      return;
+
+    case 'ground-item-disappear':
+      if (world.groundItems.delete(message.id)) world.groundItemsVersion += 1;
+      return;
+
     case 'creature-appear':
       world.creatures.set(message.id, {
         id: message.id,
@@ -261,6 +272,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       world.mapId = message.world.mapId;
       world.selfId = message.self.creatureId;
       world.creatures.clear();
+      // O chão também é substituído (FUN-123): o cadáver que apodreceu enquanto ninguém olhava
+      // sumiria da mesma forma que o monstro que morreu.
+      world.groundItems.clear();
+      for (const item of message.world.groundItems) world.groundItems.set(item.id, item);
+      world.groundItemsVersion += 1;
       // Os transitórios também: o que estava no ar pertence à cena que este estado substitui,
       // e um efeito do mapa anterior tocando sobre o novo é o mesmo defeito do monstro que
       // nunca some — por menos de um segundo, mas no primeiro quadro que o jogador vê.

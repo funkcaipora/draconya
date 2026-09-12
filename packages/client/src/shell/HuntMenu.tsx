@@ -13,12 +13,14 @@ import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { HuntListing } from '../state/hud.js';
 
-/** As quatro do §14.5, em palavras. Uma hunt define as que fazem sentido para ela. */
+/**
+ * Os três tamanhos de pull do Huntera (FUN-123): Cauteloso, Ousado, Agressivo. Uma hunt define
+ * os que fazem sentido para ela; o texto é o que o jogador vê no botão.
+ */
 const DIFFICULTY_TEXT: Record<string, string> = {
-  beginner: 'Iniciante',
-  professional: 'Profissional',
-  hero: 'Herói',
-  legendary: 'Lendária',
+  cautious: 'Cauteloso',
+  bold: 'Ousado',
+  reckless: 'Agressivo',
 };
 
 function Hunt({ hunt, level }: { hunt: HuntListing; level: number }) {
@@ -34,6 +36,11 @@ function Hunt({ hunt, level }: { hunt: HuntListing; level: number }) {
         <span className={below ? 'hunt-warn' : 'entry-meta'}>
           {`level ${String(hunt.recommendedLevel)}+`}
         </span>
+      </div>
+      {/* A linha do Huntera: quantos pulls a hunt tem e quantos drops distintos os monstros
+          dela soltam (FUN-123). A lista do loot é da tela de detalhe, que ainda não existe. */}
+      <div className="entry-meta">
+        {`${String(hunt.difficulties.length)} tamanhos de pull · ${String(hunt.lootDrops)} drops de loot`}
       </div>
       <div className="hunt-difficulties">
         {hunt.difficulties.map((difficulty) => (

@@ -55,6 +55,9 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.items)) {
     check(`items.${id}`, 'object', object);
   }
+  for (const [id, object] of Object.entries(appearances.corpses)) {
+    check(`corpses.${id}`, 'object', object);
+  }
   for (const [id, map] of Object.entries(appearances.maps)) {
     check(`maps.${id}.floor`, 'object', map.floor);
     // Um número vira as quatro peças iguais (`wallSetOf`), e as quatro são conferidas como

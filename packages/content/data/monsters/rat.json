@@ -4,10 +4,25 @@
   "recommendedLevel": 1,
   "health": 20,
   "experience": 5,
-  "attack": 6,
-  "armor": 0,
+  "attack": {
+    "min": 0,
+    "max": 8
+  },
+  "armor": 1,
   "attackIntervalMs": 2000,
   "speed": 172,
   "aggroRadius": 4,
-  "loot": { "gold": { "chance": 0.9, "min": 1, "max": 4 }, "items": [] }
+  "loot": {
+    "gold": {
+      "chance": 1,
+      "min": 1,
+      "max": 4
+    },
+    "items": [
+      {
+        "itemId": "cheese",
+        "chance": 0.394
+      }
+    ]
+  }
 }

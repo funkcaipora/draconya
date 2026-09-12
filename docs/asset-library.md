@@ -146,6 +146,12 @@ que contém o tile (mais a borda de um tile), para uma hunt não carregar o buei
 componente é do andar da semente — o importador não sabe aonde as escadas levam —, e os outros
 andares ficam com o que cai na caixa resultante. Id desconhecido só conta no que ficou.
 
+**A rota de uma hunt num mapa importado** sai de `pnpm route:trace --id <id> --map <mapId>
+--z <z> --via x,y x,y … --spawn x,y,raio …` (`scripts/trace-route.ts`, FUN-123): busca em
+largura pelos quatro vizinhos entre pontos de passagem, laço fechado, e cada spawn ancorado no
+índice da rota mais próximo. A Rat Cellars foi traçada com os lugares onde o mapa real põe rato
+como pontos de spawn; o `raio` de cada um é até onde o monstro procura tile livre para nascer.
+
 O leitor (`scripts/otbm.ts`) é iterativo e recorta por região sem alocar o resto: os 184 MB
 inteiros passam em ~0,6 s. O formato foi lido de documentação pública e conferido contra o
 arquivo real; nenhum código GPL foi copiado (ADR 0019).

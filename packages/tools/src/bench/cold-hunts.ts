@@ -83,8 +83,8 @@ function scenario(): Content {
     hunts: [{
       id: 'cold', name: 'Cold', recommendedLevel: 1, mapId: 'cold', routeId: 'cold-loop',
       difficulties: {
-        hero: {
-          perSpawnPoint: 4,
+        reckless: {
+          monsterCount: 40,
           composition: [{ monsterId: 'rat', weight: 1 }],
           respawnDelayMs: 30_000,
         },
@@ -144,7 +144,7 @@ const before = heapMb();
 const sessions: Session[] = [];
 for (let i = 0; i < HUNTS; i++) {
   const session = createHuntSession({
-    id: `cold-${i}`, content, huntId: 'cold', difficulty: 'hero', createdAtMs: 0,
+    id: `cold-${i}`, content, huntId: 'cold', difficulty: 'reckless', createdAtMs: 0,
   });
   session.enter(new CharacterRuntime({
     id: `p${i}`, position: { x: 0, y: 0, z: 7 },

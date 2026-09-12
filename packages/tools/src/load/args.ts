@@ -36,7 +36,7 @@ const DEFAULTS = {
   mode: 'detached' as const,
   durationMs: 60_000,
   huntId: 'rat-cellars',
-  difficulty: 'beginner',
+  difficulty: 'cautious',
   pingIntervalMs: 1_000,
   rampMs: 2,
 };
@@ -103,7 +103,7 @@ export const USAGE = `
   --api URL        base do api (padrão http://127.0.0.1:8080)
   --metrics URL    base do /metrics do nó de jogo, para memória e custo de tick
   --hunt ID        hunt a entrar (padrão rat-cellars)
-  --difficulty D   dificuldade (padrão beginner)
+  --difficulty D   dificuldade (padrão cautious)
   --ping MS        intervalo de ping no modo anexado (padrão 1000)
   --ramp MS        espaçamento entre aberturas (padrão 2)
   --json FILE      grava o relatório em JSON

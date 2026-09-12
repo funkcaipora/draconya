@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { outfitsToWarm } from './useWarmHuntOutfits.js';
 
 const catalogue = (hunts: Array<{ id: string; outfitIds: number[] }>) => ({
-  hunts: hunts.map((hunt) => ({ ...hunt, name: hunt.id, recommendedLevel: 1, difficulties: ['beginner'] })),
+  hunts: hunts.map((hunt) => ({ ...hunt, name: hunt.id, recommendedLevel: 1, difficulties: ['cautious'], lootDrops: 0 })),
   monsters: [],
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50,

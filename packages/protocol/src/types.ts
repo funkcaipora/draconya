@@ -172,6 +172,12 @@ export const S2C_SCHEMAS = {
     world: z.object({
       mapId: z.string().nullable(),
       creatures: z.array(CreatureState),
+      /** Os itens no chão agora (FUN-123) — quem reanexa vê os cadáveres. `default([])`: nó anterior. */
+      groundItems: z.array(z.object({
+        id: z.number().int(),
+        position: Point,
+        appearanceId: z.number().int().positive(),
+      })).default([]),
     }),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
@@ -202,6 +208,18 @@ export const S2C_SCHEMAS = {
     from: Point, to: Point, durationMs: z.number().positive(), pushed: z.boolean().optional(),
   }),
   'creature-disappear': z.object({ id: z.number().int() }),
+  /**
+   * Um item apareceu no chão (FUN-123): o cadáver de um monstro, na posição em que ele caiu,
+   * com a aparência da tabela. Só visual — o loot nunca passa por aqui. Ids próprios, numa
+   * sequência separada da das criaturas.
+   */
+  'ground-item-appear': z.object({
+    id: z.number().int(),
+    position: Point,
+    appearanceId: z.number().int().positive(),
+  }),
+  /** O item do chão sumiu — o cadáver apodreceu. */
+  'ground-item-disappear': z.object({ id: z.number().int() }),
   /**
    * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
    * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
@@ -292,6 +310,12 @@ export const S2C_SCHEMAS = {
        * conteúdo. `default([])`: um nó `game` anterior manda sem, e nada se aquece.
        */
       outfitIds: z.array(z.number().int().positive()).default([]),
+      /**
+       * Quantos drops distintos os monstros desta hunt têm — gold conta um, cada item conta um
+       * (FUN-123): a linha "3 tamanhos de pull · 2 drops de loot" do Huntera. `default(0)`: nó
+       * anterior manda sem.
+       */
+      lootDrops: z.number().int().nonnegative().default(0),
     })),
     /**
      * Os monstros que existem, para a tela do Bestiário (FUN-113) ter nome onde o contador

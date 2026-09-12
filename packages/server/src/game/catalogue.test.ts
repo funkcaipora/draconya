@@ -21,8 +21,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const { hunts } = buildCatalogue(content);
 
     for (const hunt of hunts) {
+      // `lootDrops` é uma CONTAGEM de drops distintos (FUN-123), não uma taxa: continua sem
+      // XP/h nem gold/h.
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'name', 'outfitIds', 'recommendedLevel']);
+        .toEqual(['difficulties', 'id', 'lootDrops', 'name', 'outfitIds', 'recommendedLevel']);
     }
   });
 
@@ -51,9 +53,9 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       hunts: [{
         ...TEST_HUNT,
         difficulties: {
-          beginner: { perSpawnPoint: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
-          hero: {
-            perSpawnPoint: 2, respawnDelayMs: 1000,
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
             composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
           },
         },
@@ -62,6 +64,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
     const ratId = content.monsters.get('rat')?.outfitId ?? -1;
     const batId = content.monsters.get('bat')?.outfitId ?? -1;
+    // Os drops distintos da hunt (FUN-123): o rato de teste solta gold, e mais nada — um.
+    expect(buildCatalogue(content).hunts[0]?.lootDrops).toBe(1);
     expect(batId).toBeLessThan(ratId);
 
     const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');

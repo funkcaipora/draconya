@@ -34,6 +34,7 @@ export function buildCatalogue(content: Content): Catalogue {
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
       outfitIds: monsterOutfitsOf(content, hunt.id),
+      lootDrops: lootDropsOf(content, hunt.id),
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
@@ -106,6 +107,27 @@ export function buildCatalogue(content: Content): Catalogue {
  * Cidade, e um id repetido seria uma folha pedida duas vezes. Vem do conteúdo fixado na
  * sessão (invariante 7) — o `outfitId` já resolvido pela tabela de aparências (FUN-94).
  */
+/**
+ * Quantos drops distintos a hunt tem (FUN-123): gold conta um se algum monstro dela solta, e
+ * cada item distinto conta um — é o "2 drops de loot" que o Huntera mostra na Rat Cellars
+ * (gold e queijo). Só o NÚMERO: a lista de loot possível é da tela de detalhe, que não existe.
+ */
+function lootDropsOf(content: Content, huntId: string): number {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return 0;
+  const items = new Set<string>();
+  let gold = false;
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const loot = content.monsters.get(entry.monsterId)?.loot;
+      if (loot === undefined) continue;
+      if (loot.gold !== undefined && loot.gold.chance > 0) gold = true;
+      for (const item of loot.items) if (item.chance > 0) items.add(item.itemId);
+    }
+  }
+  return items.size + (gold ? 1 : 0);
+}
+
 function monsterOutfitsOf(content: Content, huntId: string): number[] {
   const hunt = content.hunts.get(huntId);
   if (hunt === undefined) return [];

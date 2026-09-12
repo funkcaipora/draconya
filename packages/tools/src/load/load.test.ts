@@ -71,7 +71,7 @@ describe('percentis', () => {
 describe('relatório', () => {
   const scenario = {
     sessions: 2, mode: 'attached', durationMs: 10_000, workers: 1,
-    apiUrl: 'http://x', huntId: 'arena', difficulty: 'beginner',
+    apiUrl: 'http://x', huntId: 'arena', difficulty: 'cautious',
   };
 
   it('conta sessão que falhou, e diz por quê', () => {
