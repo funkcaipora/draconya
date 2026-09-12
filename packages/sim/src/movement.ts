@@ -112,13 +112,18 @@ export function zOf(point: GridPoint, map: Tilemap): number {
  * `from === to` é "quanto custa um passo daqui": é a cadência com que quem parou volta a
  * olhar em volta, e é reta.
  *
+ * `landing` é onde o passo TERMINA quando `to` é uma escada — o chão que conta é o dele, mas
+ * a diagonal é a do passo pedido (`from` → `to`): uma escada que leva dois tiles adiante não
+ * transforma um passo reto em diagonal. Ausente, o passo termina em `to`.
+ *
  * Na Cidade (`fixedStepMs`) nada disto vale: o passo é o que o conteúdo diz, para todo mundo.
  */
 export function movementDuration(
   world: MovementWorld, mover: Movable<GridPoint>, from: GridPoint, to: WorldPoint,
+  landing: WorldPoint = to,
 ): number {
   if (world.fixedStepMs !== undefined) return world.fixedStepMs;
-  const ground = groundSpeed(world.map, to.x, to.y, to.z);
+  const ground = groundSpeed(world.map, landing.x, landing.y, landing.z);
   const diagonal = from.x !== to.x && from.y !== to.y;
   const raw = (ground * 1000) / Math.max(1, mover.speed) * (diagonal ? 3 : 1);
   return Math.max(BEAT_MS, Math.ceil(raw / BEAT_MS) * BEAT_MS);
@@ -199,7 +204,7 @@ export function move<P extends GridPoint>(
     ok: true,
     from: { x: from.x, y: from.y, z: fromZ },
     to: dest,
-    durationMs: movementDuration(world, mover, from, dest),
+    durationMs: movementDuration(world, mover, from, { x: to.x, y: to.y, z: fromZ }, dest),
   };
 }
 

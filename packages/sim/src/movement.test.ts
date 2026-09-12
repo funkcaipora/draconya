@@ -240,7 +240,9 @@ describe('andares e escadas (FUN-119)', () => {
     const hero = at(1, 1);
     w.reset([hero]);
     const up = move(w, hero, to(2, 1));
-    expect(up).toMatchObject({ ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 } });
+    // A duração é a de um passo RETO (o pedido, (1,1)→(2,1)) no chão de chegada — a escada
+    // levar a (3,1) não faz dele uma diagonal.
+    expect(up).toEqual({ ok: true, from: { x: 1, y: 1, z: 7 }, to: { x: 3, y: 1, z: 6 }, durationMs: 500 });
     expect(hero.position).toEqual({ x: 3, y: 1, z: 6 });
     expect(w.occupied(3, 1, 6)).toBe(true);
     expect(w.occupied(1, 1, 7)).toBe(false);
@@ -249,6 +251,29 @@ describe('andares e escadas (FUN-119)', () => {
     const down = move(w, hero, { x: 3, y: 2, z: 6 });
     expect(down).toMatchObject({ ok: true, to: { x: 2, y: 2, z: 7 } });
     expect(hero.position.z).toBe(7);
+  });
+
+  it('a diagonal é a do passo pedido, e o chão é o da chegada — mesmo quando a escada desloca', () => {
+    // Escada em (2,2,7) que leva a (4,1,6): o passo pedido é reto ((1,2)→(2,2)), e a chegada
+    // divide o eixo y com a origem por acaso — nada disso pode mudar a conta.
+    const stairs = buildTilemap({
+      id: 'escada-torta', z: 7,
+      floors: {
+        '7': { grid: ['######', '#....#', '#....#', '######'] },
+        '6': { grid: ['######', '#....#', '#....#', '######'], speed: ['      ', ' ffff ', ' ffff ', '      '] },
+      },
+      speedPalette: { f: 200 },
+      floorChanges: [{ from: { x: 2, y: 2, z: 7 }, to: { x: 4, y: 1, z: 6 } }],
+    });
+    const w = new TileOccupancy(stairs);
+    const straight = { alive: true, position: { x: 1, y: 2, z: 7 }, speed: 292 };
+    w.reset([straight]);
+    // Reto, chão 200 na chegada: 700 — não 2.100.
+    expect(move(w, straight, { x: 2, y: 2, z: 7 })).toMatchObject({ ok: true, durationMs: 700 });
+    const diagonal = { alive: true, position: { x: 1, y: 1, z: 7 }, speed: 292 };
+    w.reset([diagonal]);
+    // Diagonal ((1,1)→(2,2)), chão 200 na chegada: 2.100 — mesmo com a chegada em y = 1.
+    expect(move(w, diagonal, { x: 2, y: 2, z: 7 })).toMatchObject({ ok: true, durationMs: 2100 });
   });
 
   it('a escada respeita a ocupação do DESTINO, não a do degrau', () => {
