@@ -202,8 +202,12 @@ export function buildContent(raw: RawContent): Content {
   // existe — a mesma checagem dos dois lados que monstro e item já têm. Sem a primeira, o
   // mundo desenha buraco preto; sem a segunda, a linha órfã sobrevive a três trocas de pacote.
   if (appearances !== undefined) {
-    for (const id of mapData.keys()) {
+    for (const [id, data] of mapData) {
       if (appearances.maps[id] !== undefined) continue;
+      // Mapa IMPORTADO (ADR 0025) traz a pilha de aparências por tile em `things/`, não um
+      // par chão/parede aqui — o `source` diz que ele é assim. Só o autorado à mão precisa
+      // da linha na tabela.
+      if (data.source !== undefined) continue;
       problems.push(`mapa "${id}" não tem chão nem parede: falta a linha "${id}" em appearances.maps`);
     }
     for (const id of Object.keys(appearances.maps)) {

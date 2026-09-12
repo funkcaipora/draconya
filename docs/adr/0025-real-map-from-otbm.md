@@ -88,11 +88,10 @@ itens de cada tile.** Em nove pontos:
    reanexação, com `{ instanceId, map }`, e `session-state.world.mapId` para de ser `null`. É
    por ele que o cliente sabe qual arquivo de `things/maps/` buscar.
 8. **A Rat Cellars é o bueiro de ratos de Rookgaard**, como no Huntera — z8 do mapa real —,
-   **decidido pelo usuário em 2026-09-11** ("Rookgaard, copiar"). A janela de recorte
-   `x ∈ [32120, 32270]`, `y ∈ [31990, 32140]` (150×150) vem dos spawns de rato do mapa real
-   (`otservbr-monster.xml`: 50 blocos em `x 32135–32252`, `y 32007–32126`, z8) e é só a
-   janela: o importador apara o recorte à componente conexa dos corredores, que é o que o
-   Huntera serve (9.396 tiles numa caixa de 118×80). A entrada continua **pelo menu, abrindo
+   **decidido pelo usuário em 2026-09-11** ("Rookgaard, copiar"). O recorte é
+   `x ∈ [32022, 32139]`, `y ∈ [32168, 32247]`, z8 — o bueiro sob a vila —, encontrado
+   casando as assinaturas dos tiles do terreno do Huntera contra o mapa real: os 9.396 tiles
+   deles existem ali, com 9.386 chãos e 9.392 pilhas idênticas (FUN-118). A entrada continua **pelo menu, abrindo
    uma instância**: sem portal na cidade. **Três tamanhos de pull** com os nomes do Huntera
    (Cauteloso/Ousado/Agressivo) e `monsterCount` total (2/5/8) no lugar das quatro
    dificuldades do PRD §14.5. **Cadáver no chão, só visual, sem loot** — o loot continua na

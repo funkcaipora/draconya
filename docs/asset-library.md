@@ -110,3 +110,42 @@ rg 'icon-battlelist' things/1332/library/ui-index.jsonl
 
 A origem e a autorização de uso do pacote são resolvidas antes desta etapa. O gerador não baixa
 arte nem publica binários: ele apenas organiza os arquivos locais fornecidos ao projeto.
+
+## O mapa real (FUN-118, ADR 0025)
+
+O mapa comunitário do Tibia — `otservbr.otbm`, release v3.6.1 do Canary, 184 MB — entra pela
+mesma porta que a arte e fica fora do Git, em `things/maps/`:
+
+```bash
+pnpm map:fetch                                   # baixa e confere o SHA-256 fixado em scripts/fetch-map.ts
+pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32369,32241,7
+pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
+pnpm map:import --check                          # dentro do pnpm check; sem o OTBM, avisa e pula
+```
+
+Cada importação escreve dois arquivos, um por consumidor:
+
+- `packages/content/data/maps/<id>.json` — o que o **servidor** precisa: por andar, a grade de
+  bloqueio (`#`/`.`) e a de velocidade de chão (um caractere por tile, resolvido por
+  `speedPalette`), `entryPoint`, `floorChanges` e `source` (arquivo, SHA-256, região). É
+  versionado, e é a única coisa do mapa que entra em `computeVersion`.
+- `things/<versão>/maps/<id>.json` — a **pilha de aparências por tile**, para o cliente, em
+  coordenadas locais ao recorte (`[x, y, z, chão, [itens…]]`). Servido por `/things/`, nunca
+  versionado.
+
+O bloqueio deriva das flags do pacote (`unpass` no chão ou em qualquer item; tile sem chão mas
+com item é decidido pelos itens; tile sem nada fica fora), e foi conferido contra o terreno
+que o Huntera serve: nos 21.318 tiles de Thais idênticos ao mapa real, **100 %** de acordo. Os
+ids do OTBM são ids de cliente, os mesmos do `appearances.dat`; um id que o pacote não tem
+derruba a importação (`--allow-unknown` segue e reporta).
+
+**Escadas não são derivadas.** O importador lista candidatos — tiles andáveis sem chão, que é
+como o degrau se apresenta — e `floorChanges` é autorado à mão no JSON do mapa; reimportar
+preserva o que já estava autorado. `--keep-from x,y,z` apara o recorte à componente andável
+que contém o tile (mais a borda de um tile), para uma hunt não carregar o bueiro inteiro. A
+componente é do andar da semente — o importador não sabe aonde as escadas levam —, e os outros
+andares ficam com o que cai na caixa resultante. Id desconhecido só conta no que ficou.
+
+O leitor (`scripts/otbm.ts`) é iterativo e recorta por região sem alocar o resto: os 184 MB
+inteiros passam em ~0,6 s. O formato foi lido de documentação pública e conferido contra o
+arquivo real; nenhum código GPL foi copiado (ADR 0019).
