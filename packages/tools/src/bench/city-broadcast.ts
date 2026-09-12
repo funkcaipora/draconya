@@ -5,8 +5,9 @@
 // justificar o trabalho — 2.000 jogadores × 2 passos/s × 2.000 destinatários = 8 milhões de
 // mensagens por segundo — é a projeção do que acontece SEM interest management.
 //
-//   pnpm bench:city                  # 100, 200 e 500 jogadores
+//   pnpm bench:city                  # 100, 200 e 500 jogadores, na praça sintética
 //   PLAYERS=1000 STEPS=40 pnpm bench:city
+//   MAP=thais pnpm bench:city        # a Thais real (FUN-120): todos no templo, e espalhados
 //
 // O número que interessa não é o total: é **destinatários por passo**. Se ele ficar praticamente
 // igual entre 100 e 500 jogadores, o custo é linear na população — cada passo continua indo para
@@ -16,8 +17,11 @@
 // A comparação sai nas duas colunas: com AOI e com a transmissão para a sessão inteira, que é o
 // que existia antes desta issue.
 
-import { buildContent } from '@draconya/content';
-import type { Content, RawContent } from '@draconya/content';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { buildContent, floorChangeAt, isBlocked } from '@draconya/content';
+import type { Content, RawContent, Tilemap } from '@draconya/content';
+import { loadContent } from '@draconya/content/load';
 import { CityShard, SessionHost, createCitySessionFactory, createLogger } from '@draconya/server';
 import type { Viewer, ViewerSocket } from '@draconya/server';
 
@@ -26,6 +30,41 @@ const PLAYERS = process.env['PLAYERS'] === undefined
   : [Number(process.env['PLAYERS'])];
 /** Passos por jogador. Cada um é um `walk` pelo caminho real do socket. */
 const STEPS = Number(process.env['STEPS'] ?? 20);
+/** `MAP=thais` mede na Thais real do conteúdo, em vez da praça sintética. */
+const THAIS = process.env['MAP'] === 'thais';
+
+/** O conteúdo de verdade, com a Thais importada (FUN-120). O `pnpm` roda isto de `packages/tools`. */
+function realContent(): Content {
+  const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+  return loadContent(resolve(repo, process.env['CONTENT_DIR'] ?? 'packages/content/data'));
+}
+
+/**
+ * Campo de distância A PÉ até um alvo, no andar dado: quatro vizinhos, parede e escada não
+ * entram. É o único pathfinding do repositório, e mora numa ferramenta: quem anda no jogo é o
+ * cliente, um tile por vez; aqui ele só serve para espalhar quinhentas pessoas pelas ruas.
+ */
+function distanceField(map: Tilemap, target: { x: number; y: number }, z: number): Uint16Array {
+  const field = new Uint16Array(map.width * map.height).fill(0xffff);
+  const queue = [target.y * map.width + target.x];
+  field[queue[0] as number] = 0;
+  for (let head = 0; head < queue.length; head++) {
+    const index = queue[head] as number;
+    const x = index % map.width;
+    const y = Math.floor(index / map.width);
+    const d = (field[index] as number) + 1;
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= map.width || ny >= map.height) continue;
+      const next = ny * map.width + nx;
+      if (field[next] !== 0xffff || isBlocked(map, nx, ny, z) || floorChangeAt(map, nx, ny, z) !== null) continue;
+      field[next] = d;
+      queue.push(next);
+    }
+  }
+  return field;
+}
 
 /** Passos por jogador. Cada um é um `walk` pelo caminho real do socket. */
 const cityContent = (size: number): Content => buildContent({
@@ -79,20 +118,26 @@ const DIRECTIONS = ['north', 'east', 'south', 'west'] as const;
 
 interface Scenario {
   readonly players: number;
+  /** O lado da praça sintética; na Thais real é só o rótulo da tabela. */
   readonly size: number;
-  readonly entryRadius?: number;
+  readonly entryTiles?: number;
   /** Espalhar antes de medir? Sem isto, todo mundo fica empilhado no ponto de entrada. */
   readonly spread?: boolean;
+  /** A Thais real do conteúdo (FUN-120), em vez da praça sintética de `size`. */
+  readonly thais?: boolean;
 }
 
 function measure(scenario: Scenario, aoi: boolean): Measurement {
-  const { players, size, entryRadius } = scenario;
-  const content = cityContent(size);
+  const { players, size, entryTiles } = scenario;
+  const content = scenario.thais === true ? realContent() : cityContent(size);
+  const cityMap = content.city;
+  if (cityMap === undefined) throw new Error('o conteúdo não tem Cidade');
+  const floor = cityMap.entryPoint?.z ?? cityMap.z;
   const logger = createLogger('silent', 'bench');
   // Uma cópia só: aqui o assunto é a AOI, e o teto de população é a outra defesa da issue.
   const shard = new CityShard(content, () => 0, {
     capacity: players + 1,
-    ...(entryRadius === undefined ? {} : { entryRadius }),
+    ...(entryTiles === undefined ? {} : { entryTiles }),
   });
   let messages = 0;
   const host = new SessionHost({
@@ -113,24 +158,49 @@ function measure(scenario: Scenario, aoi: boolean): Measurement {
 
   // DISPERSÃO, antes de medir.
   //
-  // `placeNear` entrega o tile livre mais próximo do ponto de entrada, então todo mundo chega
+  // `placeReachable` entrega o tile livre mais próximo do ponto de entrada, então todo mundo chega
   // empilhado no mesmo punhado de tiles — que é a Cidade de hoje, com um ponto de entrada e
   // mais nada. Para medir a praça COM lugares, cada um caminha até um destino próprio antes de
   // a contagem começar.
   const side = Math.ceil(Math.sqrt(players));
   const spread = Math.max(1, Math.floor((size - 4) / side));
-  for (const [index, entry] of entries.entries()) {
-    entry.target = {
-      x: 2 + (index % side) * spread,
-      y: 2 + Math.floor(index / side) * spread,
-    };
+  /** Na Thais real, o campo de distância até o alvo de cada um; na praça, o alvo basta. */
+  const fields = new Map<string, Uint16Array>();
+  if (scenario.thais === true && scenario.spread === true) {
+    // Os alvos são tiles alcançáveis a pé da entrada, tomados a intervalos iguais na ordem de
+    // largura: é o que espalha as pessoas pelas ruas em vez de amontoá-las no templo.
+    const entryPoint = cityMap.entryPoint ?? { x: 0, y: 0 };
+    const fromEntry = distanceField(cityMap, entryPoint, floor);
+    const reachable: number[] = [];
+    for (let index = 0; index < fromEntry.length; index++) if (fromEntry[index] !== 0xffff) reachable.push(index);
+    reachable.sort((a, b) => (fromEntry[a] as number) - (fromEntry[b] as number) || a - b);
+    const stride = Math.max(1, Math.floor(reachable.length / players));
+    for (const [index, entry] of entries.entries()) {
+      const tile = reachable[Math.min(reachable.length - 1, index * stride)] as number;
+      entry.target = { x: tile % cityMap.width, y: Math.floor(tile / cityMap.width) };
+      fields.set(entry.id, distanceField(cityMap, entry.target, floor));
+    }
+  } else {
+    for (const [index, entry] of entries.entries()) {
+      entry.target = {
+        x: 2 + (index % side) * spread,
+        y: 2 + Math.floor(index / side) * spread,
+      };
+    }
   }
   // O teto é generoso porque quinhentas pessoas saindo de um punhado de tiles formam
   // engarrafamento: quase todo passo é recusado por tile ocupado no começo. A saída é quando
   // uma rodada inteira não move NINGUÉM — aí ou todos chegaram, ou o que sobrou está preso.
   const centre = size / 2;
+  /** Quão longe do destino alguém está: pela distância a pé na Thais, pela do centro na praça. */
+  const remaining = (id: string, position: { x: number; y: number }): number => {
+    const field = fields.get(id);
+    if (field !== undefined) return field[position.y * cityMap.width + position.x] ?? 0xffff;
+    return Math.abs(position.x - centre) + Math.abs(position.y - centre);
+  };
   let rounds = 0;
-  for (let step = 0; scenario.spread === true && step < size * 8; step++) {
+  const maxRounds = scenario.thais === true ? Math.max(cityMap.width, cityMap.height) * 8 : size * 8;
+  for (let step = 0; scenario.spread === true && step < maxRounds; step++) {
     let moved = false;
     // De FORA para dentro. Todo mundo empurrando ao mesmo tempo de dentro de um punhado de
     // tiles trava: quem está no miolo não tem para onde ir enquanto quem está na borda não
@@ -139,8 +209,8 @@ function measure(scenario: Scenario, aoi: boolean): Measurement {
     const outwardFirst = [...entries].sort((a, b) => {
       const pa = host.sessionFor(a.id)?.participants.find((p) => p.id === a.id)?.position;
       const pb = host.sessionFor(b.id)?.participants.find((p) => p.id === b.id)?.position;
-      const da = pa === undefined ? 0 : Math.abs(pa.x - centre) + Math.abs(pa.y - centre);
-      const db = pb === undefined ? 0 : Math.abs(pb.x - centre) + Math.abs(pb.y - centre);
+      const da = pa === undefined ? 0 : remaining(a.id, pa);
+      const db = pb === undefined ? 0 : remaining(b.id, pb);
       return db - da;
     });
     for (const entry of outwardFirst) {
@@ -148,18 +218,31 @@ function measure(scenario: Scenario, aoi: boolean): Measurement {
       const target = entry.target;
       if (character === undefined || target === undefined) continue;
       const from = character.position;
-      const dx = Math.sign(target.x - from.x);
-      const dy = Math.sign(target.y - from.y);
-      if (dx === 0 && dy === 0) continue;
-      // Diagonal primeiro, e os dois eixos como saída. Sem as alternativas, um passo recusado
-      // por tile ocupado é um jogador PARADO, e cem jogadores parados um na frente do outro
-      // travam a dispersão inteira — foi o que aconteceu na primeira versão desta medição.
-      // ...e um desvio lateral quando nem os eixos servem: é o que permite contornar quem já
-      // chegou e parou no caminho.
-      for (const [sx, sy] of [[dx, dy], [dx, 0], [0, dy], [dy, dx], [-dy, -dx]] as const) {
+      const field = fields.get(entry.id);
+      let candidates: ReadonlyArray<readonly [number, number]>;
+      if (field !== undefined) {
+        // Na Thais, o vizinho que mais aproxima A PÉ — as ruas têm esquina, e "na direção do
+        // alvo" bate na parede. Os cardeais em ordem de distância; o que já chegou fica.
+        if (field[from.y * cityMap.width + from.x] === 0) continue;
+        candidates = ([[0, -1], [1, 0], [0, 1], [-1, 0]] as const)
+          .filter(([sx, sy]) => (field[(from.y + sy) * cityMap.width + from.x + sx] ?? 0xffff) !== 0xffff)
+          .sort((a, b) => (field[(from.y + a[1]) * cityMap.width + from.x + a[0]] as number)
+            - (field[(from.y + b[1]) * cityMap.width + from.x + b[0]] as number));
+      } else {
+        const dx = Math.sign(target.x - from.x);
+        const dy = Math.sign(target.y - from.y);
+        if (dx === 0 && dy === 0) continue;
+        // Diagonal primeiro, e os dois eixos como saída. Sem as alternativas, um passo recusado
+        // por tile ocupado é um jogador PARADO, e cem jogadores parados um na frente do outro
+        // travam a dispersão inteira — foi o que aconteceu na primeira versão desta medição.
+        // ...e um desvio lateral quando nem os eixos servem: é o que permite contornar quem já
+        // chegou e parou no caminho.
+        candidates = [[dx, dy], [dx, 0], [0, dy], [dy, dx], [-dy, -dx]];
+      }
+      for (const [sx, sy] of candidates) {
         if (sx === 0 && sy === 0) continue;
         host.handle(entry.viewer, {
-          type: 'walk-to', destination: { x: from.x + sx, y: from.y + sy, z: 7 },
+          type: 'walk-to', destination: { x: from.x + sx, y: from.y + sy, z: floor },
         });
         const to = character.position;
         if (from.x === to.x && from.y === to.y) continue;
@@ -182,7 +265,7 @@ function measure(scenario: Scenario, aoi: boolean): Measurement {
       const c = host.sessionFor(entry.id)?.participants.find((p) => p.id === entry.id);
       if (c === undefined || entry.target === undefined) continue;
       if (c.position.x === entry.target.x && c.position.y === entry.target.y) atTarget += 1;
-      spreadSum += Math.abs(c.position.x - size / 2) + Math.abs(c.position.y - size / 2);
+      spreadSum += remaining(entry.id, c.position);
     }
     console.log(`  [debug] spread=${scenario.spread} rodadas=${rounds} `
       + `noAlvo=${atTarget}/${players} distMedia=${(spreadSum / players).toFixed(1)}`);
@@ -231,7 +314,7 @@ function table(
     const com = measure(scenario, true);
     const sem = measure(scenario, false);
     console.log(
-      `${String(players).padStart(9)}   ${`${size}×${size}`.padEnd(9)}`
+      `${String(players).padStart(9)}   ${(scenario.thais === true ? 'thais' : `${size}×${size}`).padEnd(9)}`
       + `${com.neighbours.toFixed(1).padStart(7)}   ${sem.neighbours.toFixed(1).padStart(12)}    `
       + `${com.messages.toLocaleString('pt-BR').padStart(9)}  `
       + `${sem.messages.toLocaleString('pt-BR').padStart(14)}`,
@@ -242,19 +325,28 @@ function table(
 
 console.log(`passos por jogador  ${STEPS}`);
 console.log('');
-table('a Cidade de HOJE: um ponto de entrada, e todo mundo em cima dele',
-  PLAYERS.map((players) => ({ players, size: 128 })));
-table('a Cidade COM LUGARES: as pessoas espalhadas por ela',
-  // Mapa proporcional à população, e cada um caminha até um destino próprio antes de a
-  // contagem começar: é a praça com loja, depósito e ruas, em que ninguém fica em cima de
-  // ninguém. É aqui que se vê a propriedade que a issue pede — o custo por passo PARA de
-  // acompanhar quantos estão online.
-  PLAYERS.map((players) => ({
-    players,
-    size: Math.round(Math.sqrt(players) * 14),
-    entryRadius: Math.round(Math.sqrt(players) * 7),
-    spread: true,
-  })));
+if (THAIS) {
+  // A Thais real (FUN-120): todo mundo chegando no templo — a hora do login —, e depois
+  // espalhados pelas ruas, cada um num alvo alcançável a pé a intervalos iguais da entrada.
+  table('THAIS: todo mundo no templo, como na hora do login',
+    PLAYERS.map((players) => ({ players, size: 0, thais: true, entryTiles: players * 4 })));
+  table('THAIS: as pessoas espalhadas pelas ruas',
+    PLAYERS.map((players) => ({ players, size: 0, thais: true, entryTiles: players * 4, spread: true })));
+} else {
+  table('a Cidade de HOJE: um ponto de entrada, e todo mundo em cima dele',
+    PLAYERS.map((players) => ({ players, size: 128 })));
+  table('a Cidade COM LUGARES: as pessoas espalhadas por ela',
+    // Mapa proporcional à população, e cada um caminha até um destino próprio antes de a
+    // contagem começar: é a praça com loja, depósito e ruas, em que ninguém fica em cima de
+    // ninguém. É aqui que se vê a propriedade que a issue pede — o custo por passo PARA de
+    // acompanhar quantos estão online.
+    PLAYERS.map((players) => ({
+      players,
+      size: Math.round(Math.sqrt(players) * 14),
+      entryTiles: players * 2,
+      spread: true,
+    })));
+}
 
 console.log('O número que decide é "vizinhos por jogador COM AOI".');
 console.log('');

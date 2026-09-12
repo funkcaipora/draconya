@@ -37,12 +37,12 @@ const INITIAL_FLAGS = { goldDelta: 0, alive: true, cooldowns: {} } as const;
 const UNPLACED = { x: -1, y: -1, z: 0 } as const;
 
 /** O ruleset da Cidade, com o mapa e a duração de passo que o conteúdo diz. */
-function cityRulesetFor(content: Content, entryRadius?: number) {
+function cityRulesetFor(content: Content, entryTiles?: number) {
   return createCityRuleset({
     ...(content.city === undefined ? {} : { map: content.city }),
     // O passo da Cidade é FIXO (FUN-119, ADR 0025): vem de `city.json`, não da progressão.
     ...(content.citySettings === undefined ? {} : { stepDurationMs: content.citySettings.stepDurationMs }),
-    ...(entryRadius === undefined ? {} : { entryRadius }),
+    ...(entryTiles === undefined ? {} : { entryTiles }),
   });
 }
 
@@ -80,20 +80,19 @@ export interface CityShardOptions {
   /** Teto de população por cópia. Padrão: `CITY_SHARD_CAPACITY`. */
   readonly capacity?: number;
   /**
-   * Até onde procurar tile livre ao chegar, em tiles.
+   * Quantos tiles a busca por tile livre visita ao chegar (`placeReachable`, FUN-120).
    *
-   * A Cidade de hoje tem um ponto de entrada e mais nada, então todo mundo fica no mesmo
-   * punhado de tiles. Quando ela tiver loja, depósito e ruas, as pessoas se espalham — e é esse
-   * cenário que `pnpm bench:city` reproduz alargando isto.
+   * Quem chega entra no ponto de entrada ou no livre mais próximo a pé; o teto é a praça
+   * cheia. `pnpm bench:city` o alarga para caber quinhentas pessoas de uma vez.
    */
-  readonly entryRadius?: number;
+  readonly entryTiles?: number;
 }
 
 export class CityShard {
   readonly #content: Content;
   readonly #now: () => number;
   readonly #capacity: number;
-  readonly #entryRadius: number | undefined;
+  readonly #entryTiles: number | undefined;
   #copies: Session[] = [];
 
   constructor(
@@ -108,7 +107,7 @@ export class CityShard {
     this.#content = content;
     this.#now = now;
     this.#capacity = capacity;
-    this.#entryRadius = options.entryRadius;
+    this.#entryTiles = options.entryTiles;
   }
 
   /**
@@ -147,7 +146,7 @@ export class CityShard {
       // Fixada na criação e imutável até o fim (invariante 7): a sessão termina na versão
       // de conteúdo em que começou, mesmo que um deploy aconteça no meio.
       contentVersion: this.#content.version,
-      ruleset: cityRulesetFor(this.#content, this.#entryRadius),
+      ruleset: cityRulesetFor(this.#content, this.#entryTiles),
       // Semente derivada do id da sessão: o mesmo id reproduz a mesma sequência, que é o
       // que torna "por que esse loot não caiu" uma pergunta investigável.
       rng: Rng.fromSeed(id),

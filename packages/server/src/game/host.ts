@@ -1422,6 +1422,14 @@ export class SessionHost {
    */
   #sendState(hosted: HostedSession, viewer: Viewer): void {
     const { characterId } = viewer;
+    // Qual cena, ANTES do estado (FUN-120). `instance-enter` é a troca de cena — o cliente
+    // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
+    // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
+    // transição, porque os dois passam por aqui; a instância é a própria sessão.
+    const mapId = hosted.session.ruleset.mapId;
+    if (mapId !== undefined) {
+      viewer.send({ type: 'instance-enter', instanceId: hosted.session.id, map: mapId });
+    }
     viewer.send(this.#sessionState(hosted, characterId));
     const participant = this.#participantOf(hosted, characterId);
     const stats = playerStatsOf(participant);
@@ -2113,7 +2121,8 @@ export class SessionHost {
         xp: self.xp,
       },
       world: {
-        mapId: null,
+        // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
+        mapId: session.ruleset.mapId ?? null,
         creatures,
       },
       aggregates: { ...session.aggregates },

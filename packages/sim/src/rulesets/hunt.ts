@@ -495,6 +495,11 @@ export class HuntRuleset implements Ruleset {
     return this.#world.map.z;
   }
 
+  /** O mapa da instância (FUN-120): é o que o cliente busca para desenhar a hunt. */
+  get mapId(): string {
+    return this.#world.map.id;
+  }
+
   get routeIndex(): number {
     return this.#walker.index;
   }

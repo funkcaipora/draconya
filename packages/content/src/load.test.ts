@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
+import { floorChangeAt, isBlocked } from './map.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -61,6 +62,37 @@ describe('loadContent', () => {
     expect(map?.width).toBe(10);
     expect(route?.tiles.length).toBe(28);
     expect(route?.spawnPoints.length).toBe(4);
+  });
+
+  it('a Cidade é Thais: entrada no templo, andável, e cada escada tem a volta (FUN-120)', () => {
+    // O mapa importado é gerado; o que é AUTORADO — entrada e escadas — é o que este teste
+    // prende. Uma escada sem a volta é um andar de onde ninguém desce.
+    const content = loadContent(DATA);
+    const city = content.city;
+    if (city === undefined) throw new Error('o conteúdo real não tem Cidade');
+    expect(city.id).toBe('thais');
+    expect(city.entryPoint).toEqual({ x: 94, y: 88, z: 7 });
+    expect(isBlocked(city, 94, 88, 7)).toBe(false);
+    expect(content.citySettings?.stepDurationMs).toBe(150);
+
+    const raw = JSON.parse(readFileSync(join(DATA, 'maps', 'thais.json'), 'utf8')) as {
+      floorChanges: Array<{ from: { x: number; y: number; z: number }; to: { x: number; y: number; z: number } }>;
+    };
+    expect(raw.floorChanges.length).toBeGreaterThanOrEqual(2);
+    for (const change of raw.floorChanges) {
+      expect(floorChangeAt(city, change.from.x, change.from.y, change.from.z)).toEqual(change.to);
+      expect(isBlocked(city, change.to.x, change.to.y, change.to.z)).toBe(false);
+      // A volta: uma escada no andar de chegada, encostada no tile de chegada, que leva de
+      // volta ao andar de origem.
+      const back = raw.floorChanges.find((other) => other.from.z === change.to.z
+        && other.to.z === change.from.z
+        && Math.max(Math.abs(other.from.x - change.to.x), Math.abs(other.from.y - change.to.y)) <= 1);
+      expect(back, `escada ${JSON.stringify(change)} sem volta`).toBeDefined();
+    }
+    // A escada do depot, como o Huntera a mostrou (§14): subir em (75,73,7) chega em (75,72,6)
+    // e descer de (75,73,6) chega em (75,74,7).
+    expect(floorChangeAt(city, 75, 73, 7)).toEqual({ x: 75, y: 72, z: 6 });
+    expect(floorChangeAt(city, 75, 73, 6)).toEqual({ x: 75, y: 74, z: 7 });
   });
 
   it('reporta o Druida como valor em aberto', () => {

@@ -902,6 +902,7 @@ describe('a sessão que acaba sozinha devolve o personagem à próxima (FUN-38)'
 describe('máquina de estados do personagem (FUN-30)', () => {
   const quiet = (type: 'city' | 'hunt'): Ruleset => ({
     type,
+    mapId: type === 'city' ? 'city' : 'arena',
     hz: () => (type === 'city' ? 0 : 10),
     onEnter: () => {},
     onEvent: () => {},
@@ -993,6 +994,26 @@ describe('máquina de estados do personagem (FUN-30)', () => {
     expect(built).toEqual(['hunt']);
     expect(host.sessionCount).toBe(1);
     expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt');
+  });
+
+  it('a transição anuncia a cena nova ANTES do estado: instance-enter com o mapa da hunt (FUN-120)', async () => {
+    // O cliente limpa a cena no `instance-enter` e a povoa no `session-state`. Na ordem
+    // inversa, o estado chegaria e seria apagado pela troca — a hunt abriria vazia.
+    const { build } = builder();
+    const { host } = cityHost({ buildSession: build });
+    await host.prepare('p1', undefined, 'a1');
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    socket.frames.length = 0;
+
+    host.handle(viewer, { type: 'enter-hunt', huntId: 'arena', difficulty: 'beginner' });
+    await vi.waitFor(() => expect(host.sessionFor('p1')?.ruleset.type).toBe('hunt'));
+    host.flush();
+
+    const received = socket.received();
+    const enter = received.findIndex((m) => m.type === 'instance-enter');
+    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-1', map: 'arena' });
+    expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
   it('destino que este servidor não constrói deixa o personagem onde estava', async () => {
@@ -1445,6 +1466,20 @@ describe('walk pelo socket passa pelo sistema de movimento (FUN-69)', () => {
     now: () => 0,
   });
 
+  it('o attach anuncia a Cidade: instance-enter com o mapa, e o session-state diz o mesmo mapa (FUN-120)', () => {
+    // Era opcode definido, tratado no cliente e nunca enviado — e `world.mapId` saía `null`.
+    const host = cityHost();
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    const received = socket.received();
+    const enter = received.findIndex((m) => m.type === 'instance-enter');
+    expect(received[enter]).toMatchObject({ type: 'instance-enter', map: 'city' });
+    expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'city' } });
+  });
+
   it('move o personagem e quem está olhando recebe UM creature-move, com duração', () => {
     // `creature-move` não tinha emissor nenhum antes desta issue. Um passo é enviado uma vez,
     // com origem, destino e duração — o cliente interpola o intervalo inteiro (ADR 0001).
@@ -1852,20 +1887,20 @@ describe('a praça compartilhada, vista pelo hospedeiro (FUN-71, ADR 0023)', () 
   });
 
   it('o passo de um chega ao outro como creature-move', () => {
-    // p1 fica no ponto de entrada (2,2) e p2 entra no livre mais próximo, (1,1). p2 anda para
-    // o sul, que é (1,2) — dentro do mapa e livre.
+    // p1 fica no ponto de entrada (2,2) e p2 entra no livre mais próximo A PÉ, que é o vizinho
+    // ao norte, (2,1) (FUN-120). p2 anda para o oeste, que é (1,1) — dentro do mapa e livre.
     const { host, enter } = praca();
     const primeiro = enter('p1');
     const segundo = enter('p2');
-    expect(host.sessionFor('p2')?.participants[1]?.position).toEqual({ x: 1, y: 1, z: 7 });
+    expect(host.sessionFor('p2')?.participants[1]?.position).toEqual({ x: 2, y: 1, z: 7 });
     primeiro.socket.frames.length = 0;
 
-    host.handle(segundo.viewer, { type: 'walk', direction: 'south' });
+    host.handle(segundo.viewer, { type: 'walk', direction: 'west' });
     host.flush();
 
     const moves = primeiro.socket.received().filter((m) => m.type === 'creature-move');
     expect(moves).toHaveLength(1);
-    expect(moves[0]).toMatchObject({ from: { x: 1, y: 1, z: 7 }, to: { x: 1, y: 2, z: 7 } });
+    expect(moves[0]).toMatchObject({ from: { x: 2, y: 1, z: 7 }, to: { x: 1, y: 1, z: 7 } });
   });
 
   it('o say de um chega ao outro — o alcance "sessão inteira" da FUN-58 passa a alcançar', () => {
@@ -2460,6 +2495,17 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     };
     return { host, socket, viewer, runFor, stateOf, received: () => socket.received() };
   }
+
+  it('a hunt anuncia o mapa dela: instance-enter e session-state.world.mapId (FUN-120)', () => {
+    const { host, socket, viewer } = hunt();
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    const received = socket.received();
+    const enter = received.findIndex((m) => m.type === 'instance-enter');
+    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena' });
+    expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
+  });
 
   it('o monstro que nasce vira creature-appear, com nome e outfit do catálogo', () => {
     // Antes disto o passo do monstro atravessava o fio com um id que ninguém tinha anunciado,

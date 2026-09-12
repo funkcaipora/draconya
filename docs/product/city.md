@@ -1,9 +1,10 @@
 # Cidade
 
 **Status:** parcial — protect zone com mapa, ponto de entrada e movimento (FUN-60, FUN-69),
-**shard compartilhado** com entrada, saída e visibilidade entre jogadores (FUN-71) e
-**interest management por célula com teto de 200 por cópia** (FUN-33); faltam loja, depósito e
-Market (E5, E13)
+**shard compartilhado** com entrada, saída e visibilidade entre jogadores (FUN-71),
+**interest management por célula com teto de 200 por cópia** (FUN-33) e **a Thais real, com
+andares e escadas, como mapa da Cidade** (FUN-120, ADR 0025); faltam loja, depósito e Market
+(E5, E13)
 **PRD:** §6, §37
 **Épico:** E1 (sessão e visualizador)
 **Referência técnica:** [ADR 0004](../adr/0004-city-as-protect-zone.md) (Cidade como protect
@@ -47,13 +48,16 @@ achar um amigo — ainda não existe.
 ### Chegar e sair
 
 O ponto de entrada é **um tile**, e tile é exclusivo. Quem chega entra nele ou no **livre mais
-próximo**, na mesma ordem fixa que o respawn da hunt usa. Sem isso, o segundo a chegar ficaria
-fora do mapa — invisível, sem andar, com o log dizendo que entrou.
+próximo a pé** — busca em largura pelos tiles andáveis, no andar da entrada (`placeReachable`,
+FUN-120). Sem isso, o segundo a chegar ficaria fora do mapa — invisível, sem andar, com o log
+dizendo que entrou.
 
-A busca vai até **16 tiles**, e o número vem do teto de população: com os 8 de antes seriam 289
-tiles ao redor da entrada, e duzentas pessoas ali ficariam ombro a ombro, sem conseguir andar. Não
-é um raio de espalhamento — a busca começa no centro, então quem chega numa praça vazia entra no
-tile de entrada.
+Era um anel geométrico de 16 tiles até a Thais chegar, e num templo com paredes o anel atravessa
+a parede: o vigésimo a chegar apareceria do lado de fora do prédio, ou numa sala sem porta. A pé,
+o lotado transborda pela porta. A busca visita até **1 089 tiles** (o quadrado do anel de 16), e o
+número vem do teto de população: com os 289 de antes, duzentas pessoas ficariam ombro a ombro, sem
+conseguir andar. Não é um raio de espalhamento — a busca começa na entrada, então quem chega num
+templo vazio entra no tile de entrada. A hunt continua com o anel: ponto de spawn é lugar aberto.
 
 Sair é `Session.leave`, não `end`. Antes da FUN-71 sair só sabia ser encerrar, e um jogador
 fechando o jogo na praça levaria a praça junto. Quando o **último** sai, a cópia é descartada; a
@@ -78,6 +82,29 @@ quer — um jogador com o navegador aberto seguraria todo mundo na memória do n
 Durante esses cinco minutos o personagem desconectado **fica de pé na praça**, visível para os
 outros. É o mesmo comportamento de antes da praça compartilhada; a diferença é que agora há
 testemunhas.
+
+## O mapa é a Thais real (FUN-120)
+
+A Cidade é o recorte de Thais do `otservbr.otbm` (ADR 0025): `packages/content/data/maps/thais.json`,
+184×139 tiles, andares 4 a 7, gerado por `pnpm map:import` (FUN-118) e conferido por `pnpm check`.
+`city/city.json` aponta `mapId: "thais"`. O que é **autorado** no arquivo — e não gerado — são a
+entrada e as escadas:
+
+- **Nasce-se no templo**, em `(94, 88, 7)` — o `(32369, 32241, 7)` do mapa real, o mesmo tile
+  em que o Huntera põe quem chega (§13 do estudo).
+- **Cada escada é um par de `floorChanges`**, ida e volta: o degrau (aparência 1947) leva ao tile
+  ao norte, um andar acima; o tile em cima do degrau leva ao tile ao sul do degrau, no andar do
+  degrau. É o que o Huntera mostrou no depot — subir de `(75,73,7)` chega em `(75,72,6)`, descer
+  de `(75,73,6)` chega em `(75,74,7)` — e vale para as 45 escadas do recorte, 90 entradas, todas
+  com o destino andável. `load.test.ts` prende que toda escada tem a volta.
+- **O templo não tem escada para cima**, e a do porão dele leva ao andar 8, que fica fora do
+  recorte: pisar nela hoje é pisar num tile comum.
+
+O servidor **diz qual mapa desenhar**: `instance-enter { instanceId, map }` sai no
+`session-attach` e em toda transição, ANTES do `session-state`, e `session-state.world.mapId` é o
+mesmo id. Era um opcode definido, tratado pelo cliente e nunca enviado. Desenhar a Thais — a pilha
+de itens por tile, os andares de baixo sob um véu — é o cliente que faz (FUN-121); até lá ele
+continua abrindo, com o mapa de teste na tela.
 
 ## Cada passo vai para quem está por perto (FUN-33)
 
@@ -115,6 +142,30 @@ duzentos é o canal global com outro nome.
 Quintuplicar a população não mexeu em quantos recebem cada passo — é a propriedade que a issue
 pede. Sem interest management, o total de mensagens cresce 25 vezes para 5 vezes mais gente.
 
+**Na Thais real** (`MAP=thais pnpm bench:city`, FUN-120), com todo mundo chegando no templo — a
+hora do login — e depois espalhados pelas ruas, cada um num alvo a pé a intervalos iguais da
+entrada:
+
+| jogadores | onde | vizinhos por jogador | sem AOI | mensagens | sem AOI |
+|---|---|---|---|---|---|
+| 100 | todos no templo | 98,5 | 99 | 35 mil | 36 mil |
+| 200 | todos no templo | 181,5 | 199 | 42 mil | 48 mil |
+| 500 | todos no templo | 291,3 | 499 | 171 mil | 349 mil |
+| 100 | espalhados | 9,1 | 99 | 19 mil | 191 mil |
+| 200 | espalhados | 14,8 | 199 | 59 mil | 744 mil |
+| 500 | espalhados | **44,2** | 499 | **376 mil** | **4,33 milhões** |
+
+Na hora do login a AOI corta pouco — quinhentas pessoas no templo é uma multidão, e quem está ao
+alcance da vista É a multidão. Espalhadas pelas ruas, quinhentas pessoas custam 44 vizinhos por
+passo: mais que os 11 da praça sintética de 316×316, porque a Thais de 184×139 tem 21 mil tiles
+andáveis e ruas estreitas que concentram, e ainda assim onze vezes menos que a sessão inteira.
+
+**O Huntera usa um raio fixo de 16 tiles** (§13 do estudo); a nossa célula de 10 com dois limiares
+dá um alcance efetivo entre 10 e 30 tiles, conforme a posição dentro da célula. Não mudamos agora:
+o número que decide é o de vizinhos por jogador, e na Thais espalhada ele fica na mesma ordem do
+raio do Huntera; trocar a célula por um raio custaria uma consulta por par a cada passo, e a
+faixa morta dos dois limiares é o que evita o `appear`/`disappear` a cada passo na fronteira.
+
 **Na Cidade de hoje o ganho é pequeno, e isso é sobre a Cidade.** Com um ponto de entrada e mais
 nada, todo mundo fica no mesmo punhado de tiles, e quem está ao alcance da vista É a praça inteira:
 500 jogadores dão 374 vizinhos em vez de 499. A AOI não tem o que cortar enquanto ninguém se
@@ -144,9 +195,10 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
-| Mapa e ponto de entrada | `city.mapId` e `entryPoint` do tilemap | `packages/content/data/maps` |
+| Mapa e ponto de entrada | `thais`, entrada no templo `(94, 88, 7)` | `packages/content/data/city/city.json` (`mapId`), `packages/content/data/maps/thais.json` (`entryPoint`) |
+| Escadas | 90 `floorChanges` (45 escadas, ida e volta) | `packages/content/data/maps/thais.json` — autorado; o resto do arquivo é gerado |
 | Velocidade de passo | 150 ms por tile, fixo para todos (cópia do Huntera) | `packages/content/data/city/city.json`, `stepDurationMs` |
-| Raio de busca de tile livre na chegada | 16 tiles | `packages/sim/src/rulesets/city.ts` — geometria, não balanceamento |
+| Tiles visitados na busca de lugar na chegada | 1 089, a pé | `packages/sim/src/rulesets/city.ts` — geometria, não balanceamento |
 | Carência de repouso | 5 min | `packages/server/src/game/host.ts` |
 | Teto de população por cópia | 200 | `CITY_SHARD_CAPACITY`, em `packages/server/src/game/sessions.ts` — configuração de nó, não conteúdo |
 | Célula do campo de visão | 10 tiles | `packages/server/src/game/aoi.ts` — derivada da câmera, não escolhida |
@@ -163,10 +215,10 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 
 ## Divergências do PRD
 
-**A Cidade é Thais, importada do mapa real** (ADR 0025, M11). O PRD descreve a Cidade como
-praça social sem dizer de onde vem o mapa; a decisão é um recorte do `otservbr.otbm` com andares,
-e o desenho é a pilha de itens do Tibia. Até a FUN-120 entrar, o mapa em vigor continua a praça
-10×10.
+**A Cidade é Thais, importada do mapa real** (ADR 0025, M11, em vigor desde a FUN-120). O PRD
+descreve a Cidade como praça social sem dizer de onde vem o mapa; a decisão é um recorte do
+`otservbr.otbm` com andares, e o desenho é a pilha de itens do Tibia. A praça 10×10 sobrevive só
+como fixture de teste (`packages/server/src/testing/content.ts`).
 
 **O passo na Cidade é fixo — 150 ms por tile, para todos** (decisão do usuário, 2026-09-11,
 cópia do Huntera). A fórmula do Tibia (`chão × 1000 / speed`) vale só na hunt; o regime do PvP
