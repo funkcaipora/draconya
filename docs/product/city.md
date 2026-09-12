@@ -88,16 +88,19 @@ testemunhas.
 
 Setas e WASD andam, **só nas quatro cardeais** — com duas teclas presas vale a pressionada por
 último, nunca a diagonal —, e a tecla presa repete o passo no ritmo do passo: 150 ms por tile na
-Cidade, o que o Huntera faz (§14 do estudo). Soltar para no tile. Digitar num campo de texto
-não anda, e perder o foco da janela solta tudo.
+Cidade, o que o Huntera faz (§14 do estudo). Soltar para no tile. Digitar num campo de texto —
+o painel do bot, a entrada; o chat ainda não tem caixa — não anda, e perder o foco da janela
+solta tudo. ↑ e W são duas teclas para o mesmo norte: soltar uma com a outra presa continua.
 
 **A repetição é do cliente, e o ritmo é do servidor.** A Cidade é orientada a evento (`hz` 0) e
 não tem relógio para repetir um `walk` até um `walk-stop`, então é o cliente que reenvia — um
 `walk` por passo, quando o passo próprio acaba (`creature-move`) ou 150 ms depois se nenhum
 chegou (parede à frente). Cada `walk` continua sendo a intenção de UM tile (invariante 4), e o
 hospedeiro recusa em silêncio o que chega antes de o passo anterior acabar: um cliente que
-mandasse mil por segundo continuaria andando a 150 ms por tile. Escada é um `walk` como outro:
-o passo chega com `z` diferente.
+mandasse mil por segundo continuaria andando a 150 ms por tile — e o mesmo vale na hunt, onde a
+rajada antes furava a fórmula do Tibia. Escada é um `walk` como outro: o passo chega com `z`
+diferente. Os 150 ms de reserva do cliente são uma cópia de `city.stepDurationMs`, presa por
+teste; só decidem com que frequência se insiste contra uma parede.
 
 ## O mapa é a Thais real (FUN-120)
 

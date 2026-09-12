@@ -22,7 +22,12 @@ const KEY_DIRECTIONS: Readonly<Record<string, Direction>> = {
   ArrowLeft: 'west', KeyA: 'west',
 };
 
-/** O passo da Cidade quando nenhum passo próprio chegou para dizer o ritmo (150 ms, FUN-119). */
+/**
+ * O passo da Cidade quando nenhum passo próprio chegou para dizer o ritmo: é o `city.json`
+ * (`stepDurationMs`, FUN-119) copiado à mão — o número não atravessa o protocolo, e
+ * `walk-keys.test.ts` prende que os dois continuam iguais. Só decide com que frequência se
+ * insiste contra uma parede; o ritmo de andar de verdade vem do `creature-move`.
+ */
 export const DEFAULT_STEP_MS = 150;
 
 export function directionOf(code: string): Direction | null {
@@ -30,35 +35,39 @@ export function directionOf(code: string): Direction | null {
 }
 
 /**
- * As teclas de andar presas agora, na ordem em que foram pressionadas. A ATIVA é a última:
- * segurar ↑ e depois → anda para leste; soltar → volta a andar para norte, porque ↑ continua
- * presa. Nunca duas ao mesmo tempo, nunca diagonal.
+ * As teclas de andar presas agora, na ordem em que foram pressionadas — as TECLAS, pelo
+ * `code`, e não as direções: ↑ e W são duas teclas para o mesmo norte, e soltar uma delas com
+ * a outra ainda presa não pode parar ninguém. A direção ATIVA é a da última tecla: segurar ↑ e
+ * depois → anda para leste; soltar → volta a andar para norte, porque ↑ continua presa. Nunca
+ * duas ao mesmo tempo, nunca diagonal.
  */
 export class WalkKeys {
-  readonly #held: Direction[] = [];
+  readonly #held: string[] = [];
 
   /** Uma tecla desceu. Devolve a direção ativa depois dela, ou `null` se não é tecla de andar. */
   press(code: string): Direction | null {
-    const direction = directionOf(code);
-    if (direction === null) return null;
+    if (directionOf(code) === null) return null;
     // O auto-repeat do sistema manda `keydown` de novo com a tecla já presa: não muda nada.
-    const index = this.#held.indexOf(direction);
+    const index = this.#held.indexOf(code);
     if (index !== -1) this.#held.splice(index, 1);
-    this.#held.push(direction);
-    return direction;
+    this.#held.push(code);
+    return this.active;
   }
 
-  /** Uma tecla subiu. Devolve a direção que continua ativa, ou `null` se nenhuma. */
+  /**
+   * Uma tecla subiu. Devolve a direção que continua ativa, ou `null` se nenhuma. Soltar uma
+   * tecla que nunca desceu aqui — o `keydown` dela foi ignorado porque alguém digitava — não
+   * mexe em nada: é por isso que o `keyup` não precisa do filtro de digitação.
+   */
   release(code: string): Direction | null {
-    const direction = directionOf(code);
-    if (direction === null) return this.active;
-    const index = this.#held.indexOf(direction);
+    const index = this.#held.indexOf(code);
     if (index !== -1) this.#held.splice(index, 1);
     return this.active;
   }
 
   get active(): Direction | null {
-    return this.#held[this.#held.length - 1] ?? null;
+    const last = this.#held[this.#held.length - 1];
+    return last === undefined ? null : directionOf(last);
   }
 
   /** Tudo solto — a janela perdeu o foco, e o `keyup` nunca vai chegar. */

@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { sendIntent } from '../net/current.js';
 import { world } from '../state/world.js';
-import { WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
+import { DEFAULT_STEP_MS, WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
 
 /** O foco está num campo de texto? Andar ali seria apagar o que o jogador digita. */
 function typing(target: EventTarget | null): boolean {
@@ -30,6 +30,12 @@ export function useWalkKeys(): void {
     const keys = new WalkKeys();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let sentAtMs = 0;
+    /**
+     * Quanto durou o último passo próprio: é quando o PRIMEIRO olhar do timer acontece depois
+     * de cada envio. Olhar só aos 150 ms travaria num piso de 150 quem anda mais rápido que
+     * isso — a hunt com speed alto —, porque o passo já teria acabado sem ninguém ver.
+     */
+    let lastStepMs = DEFAULT_STEP_MS;
 
     const ownStep = () => (world.selfId === null ? null : world.creatures.get(world.selfId)?.step ?? null);
     const stop = (): void => {
@@ -44,14 +50,17 @@ export function useWalkKeys(): void {
       }
       sentAtMs = performance.now();
       sendIntent({ type: 'walk', direction });
-      timer = setTimeout(tick, nextWalkDelay(sentAtMs, sentAtMs, null));
+      timer = setTimeout(tick, Math.max(1, Math.min(DEFAULT_STEP_MS, lastStepMs)));
     };
     const tick = (): void => {
       timer = null;
       if (keys.active === null) return;
       // O passo próprio ainda está em curso: espera o que falta dele. Acabou, ou nunca veio:
       // é a vez do próximo.
-      const delay = nextWalkDelay(performance.now(), sentAtMs, ownStep());
+      const now = performance.now();
+      const step = ownStep();
+      if (step !== null && step.startedAtMs >= sentAtMs) lastStepMs = step.durationMs;
+      const delay = nextWalkDelay(now, sentAtMs, step);
       if (delay > 1) {
         timer = setTimeout(tick, delay);
         return;
@@ -74,6 +83,9 @@ export function useWalkKeys(): void {
       }
     };
     const onKeyUp = (event: KeyboardEvent): void => {
+      // Sem o filtro de digitação, de propósito: uma tecla que desceu enquanto alguém digitava
+      // nunca entrou na pilha, e soltá-la não mexe em nada; a que desceu andando precisa sair
+      // da pilha mesmo que o foco tenha ido para um campo no meio do caminho.
       if (directionOf(event.code) === null) return;
       const before = keys.active;
       const active = keys.release(event.code);

@@ -2592,6 +2592,20 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
+  it('na hunt também é um passo por vez: a rajada de walk anda um tile por duração de passo (FUN-122)', () => {
+    // O `walk` do jogador entra pelo mesmo `#requestWalk` em qualquer sessão, e antes da
+    // trava a hunt aceitava a rajada — o personagem andava mais rápido que a fórmula do Tibia.
+    const { host, socket, viewer } = hunt({ wide: true });
+    host.flush();
+    socket.frames.length = 0;
+    const before = { ...host.sessionFor('hero')?.participants[0]?.position };
+    for (let i = 0; i < 10; i++) host.handle(viewer, { type: 'walk', direction: 'east' });
+    host.flush();
+    const after = host.sessionFor('hero')?.participants[0]?.position;
+    expect(after?.x).toBe((before.x ?? 0) + 1);
+    expect(socket.received().filter((m) => m.type === 'creature-move' && m.id === 1)).toHaveLength(1);
+  });
+
   it('o monstro que nasce vira creature-appear, com nome e outfit do catálogo', () => {
     // Antes disto o passo do monstro atravessava o fio com um id que ninguém tinha anunciado,
     // e o cliente descartava em silêncio — a hunt rodava inteira e a tela ficava vazia.

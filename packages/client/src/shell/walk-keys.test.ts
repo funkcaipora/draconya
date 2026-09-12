@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STEP_MS, WalkKeys, directionOf, nextWalkDelay } from './walk-keys.js';
+
+/** `city/city.json` do conteúdo real, lido do disco como `walls.test.ts` lê o mapa. */
+const city = JSON.parse(readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data', 'city', 'city.json'),
+  'utf8',
+)) as { stepDurationMs: number };
 
 describe('directionOf (FUN-122)', () => {
   it('setas e WASD, pelas quatro cardeais, e mais nada', () => {
@@ -44,6 +53,24 @@ describe('WalkKeys (FUN-122)', () => {
     expect(keys.active).toBe('west');
   });
 
+  it('duas teclas para a MESMA direção são duas teclas: soltar uma não para quem segura a outra', () => {
+    // ↑ e W são ambas "norte". Soltar ↑ com W presa continua andando; soltar as duas para.
+    const keys = new WalkKeys();
+    keys.press('ArrowUp');
+    keys.press('KeyW');
+    expect(keys.active).toBe('north');
+    expect(keys.release('ArrowUp')).toBe('north');
+    expect(keys.release('KeyW')).toBeNull();
+  });
+
+  it('soltar uma tecla que nunca desceu aqui não mexe em nada — o keydown dela foi de quem digitava', () => {
+    // Segurando ↑ e digitando "w" num campo de texto: o keydown do W é ignorado, o keyup chega.
+    const keys = new WalkKeys();
+    keys.press('ArrowUp');
+    expect(keys.release('KeyW')).toBe('north');
+    expect(keys.active).toBe('north');
+  });
+
   it('tecla que não anda não mexe em nada; clear solta tudo', () => {
     const keys = new WalkKeys();
     keys.press('ArrowDown');
@@ -51,6 +78,12 @@ describe('WalkKeys (FUN-122)', () => {
     expect(keys.release('KeyQ')).toBe('south');
     keys.clear();
     expect(keys.active).toBeNull();
+  });
+});
+
+describe('o passo de reserva (FUN-122)', () => {
+  it('é o mesmo número do conteúdo da Cidade — copiado à mão, e por isso preso aqui', () => {
+    expect(DEFAULT_STEP_MS).toBe(city.stepDurationMs);
   });
 });
 

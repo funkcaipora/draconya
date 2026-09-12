@@ -353,6 +353,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 30 s em Rat Cellars | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |

@@ -446,6 +446,11 @@ export class Session {
     return this.#schedule.cancelSubject(subject);
   }
 
+  /** Cancela só os eventos de um `kind` de um subject — reagendar um passo sem tocar no ataque. */
+  cancelEvent(kind: string, subject: string): number {
+    return this.#schedule.cancel(kind, subject);
+  }
+
   /** Quantos eventos esperam. Existe para métrica e teste; não é regra de jogo. */
   get pendingEvents(): number {
     return this.#schedule.size;
