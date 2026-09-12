@@ -48,7 +48,7 @@ import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { TileOccupancy, canOccupy, move, place } from '../movement.js';
+import { TileOccupancy, canOccupy, move, movementDuration, place } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
@@ -125,8 +125,6 @@ export interface PlayerProfile {
   readonly attackRange: number;
   readonly armor: number;
   readonly dodgeChance: number;
-  /** Milissegundos por tile ao percorrer a rota. */
-  readonly stepDurationMs: number;
 }
 
 /** O que uma regra de saída consegue enxergar. Estreito de propósito: regra não muda estado. */
@@ -529,16 +527,13 @@ export class HuntRuleset implements Ruleset {
     // este; contá-la aqui marcaria como ocupado um tile da hunt por uma coordenada de
     // cidade. Antes da FUN-72 isso era limpo por acidente, porque `place` liberava a origem.
     this.#world.reset(session.participants.filter((p) => p !== character));
-    // A duração do passo vem do CONTEÚDO e é copiada para a criatura, como `maxHealth` é: o
-    // sistema de movimento pergunta a quem anda, e quem anda não conhece o conteúdo.
-    character.stepDurationMs = this.#options.player.stepDurationMs;
-    // Capacidade vem da tabela, como `maxHealth` — e é reposta na entrada porque snapshot
-    // anterior ao inventário traz zero, e zero é "não carrega nada".
-    if (character.capacity <= 0) {
-      character.capacity = statsForLevel(
-        character.level, this.#vocationOf(character), this.#options.progression,
-      ).capacity;
-    }
+    // Velocidade e capacidade vêm da tabela, como `maxHealth` — e são repostas na entrada
+    // porque snapshot anterior traz zero: zero é "não carrega nada" e "não anda" (FUN-119).
+    const stats = statsForLevel(
+      character.level, this.#vocationOf(character), this.#options.progression,
+    );
+    character.speed = stats.speed;
+    if (character.capacity <= 0) character.capacity = stats.capacity;
     const refused = place(this.#world, character, this.#walker.current);
     if (refused !== null) {
       throw new Error(
@@ -761,11 +756,11 @@ export class HuntRuleset implements Ruleset {
       restored.spawner,
     );
     this.#monsters = restored.monsters.map((m) => new MonsterRuntime(m));
-    // Snapshot anterior à FUN-69 não traz a duração do passo; ela é do conteúdo, e repor
-    // daqui é o que impede um monstro restaurado de andar com duração zero.
+    // Snapshot anterior à FUN-119 não traz a velocidade; ela é do conteúdo, e repor daqui é
+    // o que impede um monstro restaurado de andar com velocidade zero.
     for (const monster of this.#monsters) {
-      if (monster.stepDurationMs > 0) continue;
-      monster.stepDurationMs = this.#options.monsters.get(monster.monsterId)?.stepDurationMs ?? 0;
+      if (monster.speed > 0) continue;
+      monster.speed = this.#options.monsters.get(monster.monsterId)?.speed ?? 0;
     }
     this.#monsterBySubject.clear();
     for (const monster of this.#monsters) {
@@ -841,7 +836,7 @@ export class HuntRuleset implements Ruleset {
       home: request.position,
       health: definition.health,
       targetId: null,
-      stepDurationMs: definition.stepDurationMs,
+      speed: definition.speed,
       cooldowns: {},
     });
     this.#monsters.push(monster);
@@ -880,9 +875,28 @@ export class HuntRuleset implements Ruleset {
   #onPlayerStep(session: Session, characterId: string): void {
     const character = findById(session.participants, characterId);
     if (character === null || !character.alive) return;
-    session.scheduleIn(PLAYER_STEP, this.#options.player.stepDurationMs, {
+    // Snapshot anterior à FUN-119 traz velocidade zero; a tabela repõe.
+    if (character.speed <= 0) {
+      character.speed = statsForLevel(
+        character.level, this.#vocationOf(character), this.#options.progression,
+      ).speed;
+    }
+    // O vencimento seguinte é a duração do passo que este evento der — e, quando ele não der
+    // passo nenhum, a de um passo daqui (FUN-119): quem parou volta a olhar em volta no ritmo
+    // em que andaria. Agendar ANTES de decidir, com a duração de um passo daqui, dá o mesmo
+    // resultado para quem fica e adianta o de quem anda para chão mais lento; por isso o
+    // reagendamento fica no fim, com o que de fato aconteceu.
+    const stepped = this.#playerStep(session, character);
+    const cadence = stepped !== null && stepped.ok
+      ? stepped.durationMs
+      : movementDuration(this.#world, character, character.position, character.position);
+    session.scheduleIn(PLAYER_STEP, cadence, {
       priority: EventPriority.Movement, subject: characterId,
     });
+  }
+
+  /** O corpo do passo do personagem; devolve o passo dado, ou `null` quando ficou parado. */
+  #playerStep(session: Session, character: CharacterRuntime): MoveResult | null {
 
     // Para para lutar, e retoma DEPOIS no mesmo índice (FUN-42). Como ele para assim que há
     // monstro ao alcance, nunca pisa no tile de um: o combate começa antes do passo.
@@ -892,21 +906,22 @@ export class HuntRuleset implements Ruleset {
     if (this.#attackTarget(character) !== null && !this.#luring(character)) {
       this.#walker.stop();
       this.#armPlayerAttack(session);
-      return;
+      return null;
     }
 
     // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
     // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
-    if (this.#holdPosture(session, character)) {
+    const posture = this.#holdPosture(session, character);
+    if (posture !== false) {
       this.#armPlayerAttack(session);
-      return;
+      return posture;
     }
 
     // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
     // rota e deixa o monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
     this.#walker.resume();
     const to = this.#walker.step();
-    if (to === null) return;
+    if (to === null) return null;
     const result = this.#step(session, character, to, character.id);
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
@@ -921,6 +936,7 @@ export class HuntRuleset implements Ruleset {
       }
     }
     this.#armPlayerAttack(session);
+    return result;
   }
 
   /**
@@ -937,7 +953,7 @@ export class HuntRuleset implements Ruleset {
    * `not-adjacent` e `rejoinNearest` reentra pelo tile mais próximo. O caminho de volta já
    * existia, e é o mesmo de quem foi empurrado.
    */
-  #holdPosture(session: Session, character: CharacterRuntime): boolean {
+  #holdPosture(session: Session, character: CharacterRuntime): MoveResult | null | false {
     const posture = this.#targeting.posture;
     if (posture.kind === 'stand') return false;
 
@@ -951,18 +967,18 @@ export class HuntRuleset implements Ruleset {
     // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
     // divergindo na terceira mudança.
     const want = posture.kind === 'follow' ? this.#options.player.attackRange : posture.tiles;
-    if (d === want) return true;
+    // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
+    if (d === want) return null;
 
     const to = d > want
       ? greedyStep(from, target.position, blocked)
       : fleeStep(from, target.position, blocked);
     // Empacado — cercado, ou contra a parede recuando. Esperar é o comportamento certo, e é o
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
-    if (to === null) return true;
+    if (to === null) return null;
 
     this.#walker.stop();
-    this.#step(session, character, { ...to, z: from.z }, character.id);
-    return true;
+    return this.#step(session, character, { ...to, z: from.z }, character.id);
   }
 
   /**
@@ -1485,11 +1501,17 @@ export class HuntRuleset implements Ruleset {
 
     if (which === 'step') {
       // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
-      // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer.
-      session.scheduleIn(MONSTER_STEP, definition.stepDurationMs, {
+      // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
+      // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
+      const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
+      const cadence = result !== null && result.ok
+        ? result.durationMs
+        : movementDuration(this.#world, monster, monster.position, {
+          ...monster.position, z: this.#world.map.z,
+        });
+      session.scheduleIn(MONSTER_STEP, cadence, {
         priority: EventPriority.Movement, subject,
       });
-      if (action.kind === 'step') this.#step(session, monster, action.to, subject);
       // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo
       // de um relógio. É a mesma regra do personagem, do outro lado.
       if (action.kind === 'attack' && monster.attackReady) {
@@ -2056,7 +2078,7 @@ export function createHuntRuleset(
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
-    player: { ...content.combat.player, stepDurationMs: content.progression.stepDurationMs },
+    player: { ...content.combat.player },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),

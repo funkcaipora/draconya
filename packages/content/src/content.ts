@@ -74,6 +74,8 @@ export interface Content {
    * fala de hunt não precisa dele — mas o conteúdo REAL precisa, e `load.ts` exige.
    */
   readonly city?: Tilemap;
+  /** Presente sempre que `city` está: o passo fixo da Cidade (FUN-119). */
+  readonly citySettings?: CitySettings;
   /** Valores marcados como não decididos no PRD, para o boot conseguir avisar. */
   readonly openValues: readonly string[];
 }
@@ -100,8 +102,20 @@ export interface RawContent {
   readonly city?: unknown;
 }
 
-/** `data/city.json`. Explícito, e não um id mágico: o boot diz qual mapa é a Cidade. */
-const citySchema = z.object({ mapId: z.string().min(1) });
+/**
+ * `data/city.json`. Explícito, e não um id mágico: o boot diz qual mapa é a Cidade — e a que
+ * ritmo se anda nela. `stepDurationMs` é FIXO (FUN-119, ADR 0025): a Cidade é navegação, não
+ * simulação, e o passo não depende do chão nem da velocidade do personagem.
+ */
+const citySchema = z.object({
+  mapId: z.string().min(1),
+  stepDurationMs: z.number().int().positive(),
+});
+
+/** O que `city.json` decide além do mapa. */
+export interface CitySettings {
+  readonly stepDurationMs: number;
+}
 
 export class ContentError extends Error {
   constructor(readonly problems: readonly string[]) {
@@ -236,25 +250,52 @@ export function buildContent(raw: RawContent): Content {
 
   const maps = new Map<string, Tilemap>();
   for (const data of mapData.values()) {
-    const map = buildTilemap(data);
+    let map: Tilemap;
+    try {
+      map = buildTilemap(data);
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : String(error));
+      continue;
+    }
     // Ponto de entrada em parede é conteúdo quebrado, e quebra AQUI, no boot — não no
     // primeiro personagem que tentar andar (FUN-60).
-    if (map.entryPoint !== undefined && isBlocked(map, map.entryPoint.x, map.entryPoint.y)) {
+    const entry = map.entryPoint;
+    if (entry !== undefined && isBlocked(map, entry.x, entry.y, entry.z)) {
       problems.push(
-        `mapa "${map.id}": entryPoint (${map.entryPoint.x},${map.entryPoint.y}) está fora do ` +
-          'mapa ou em parede',
+        `mapa "${map.id}": entryPoint (${entry.x},${entry.y},${entry.z}) está fora do mapa, ` +
+          'em parede, ou num andar que o mapa não tem',
       );
+    }
+    // Escada para parede é o personagem preso no andar de cima; escada de tile bloqueado é
+    // uma que ninguém alcança (FUN-119).
+    for (const [, to] of map.floorChanges) {
+      if (isBlocked(map, to.x, to.y, to.z)) {
+        problems.push(
+          `mapa "${map.id}": floorChange leva a (${to.x},${to.y},${to.z}), que está fora do ` +
+            'mapa, em parede, ou num andar que o mapa não tem',
+        );
+      }
+    }
+    for (const change of data.floorChanges) {
+      if (isBlocked(map, change.from.x, change.from.y, change.from.z)) {
+        problems.push(
+          `mapa "${map.id}": floorChange sai de (${change.from.x},${change.from.y},` +
+            `${change.from.z}), que ninguém pisa`,
+        );
+      }
     }
     maps.set(data.id, map);
   }
 
   let city: Tilemap | undefined;
+  let citySettings: CitySettings | undefined;
   if (raw.city !== undefined) {
     const parsed = citySchema.safeParse(raw.city);
     if (!parsed.success) {
       problems.push(`city: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
     } else {
       city = maps.get(parsed.data.mapId);
+      citySettings = { stepDurationMs: parsed.data.stepDurationMs };
       if (city === undefined) {
         problems.push(`city referencia mapa inexistente "${parsed.data.mapId}"`);
       } else if (city.entryPoint === undefined) {
@@ -369,6 +410,7 @@ export function buildContent(raw: RawContent): Content {
     routes,
     openValues,
     ...(city === undefined ? {} : { city }),
+    ...(citySettings === undefined ? {} : { citySettings }),
     ...(appearances === undefined ? {} : { appearances }),
     ...(pack === undefined ? {} : { pack }),
   };

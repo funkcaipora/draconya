@@ -5,7 +5,7 @@ import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from './
 const rat: Monster = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
   health: 20, experience: 5, attack: 6, armor: 0,
-  attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
+  attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
   attackRange: 1, leashRadius: 0, loot: { items: [] },
 };
 

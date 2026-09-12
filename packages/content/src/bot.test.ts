@@ -17,13 +17,13 @@ const content = buildContent({
     {
       id: 'rat', name: 'Rat', recommendedLevel: 1,
       health: 20, experience: 5, attack: 6, armor: 0,
-      attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
+      attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
       loot: { items: [] },
     },
     {
       id: 'wolf', name: 'Wolf', recommendedLevel: 3,
       health: 40, experience: 12, attack: 12, armor: 2,
-      attackIntervalMs: 2_000, stepDurationMs: 400, aggroRadius: 5,
+      attackIntervalMs: 2_000, speed: 300, aggroRadius: 5,
       loot: { items: [] },
     },
   ],
@@ -36,7 +36,7 @@ const content = buildContent({
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-    vocationLevel: 8, stepDurationMs: 500,
+    vocationLevel: 8, startingSpeed: 300, speedPerLevel: 0,
     regen: { healthPerSecond: 1, manaPerSecond: 1 },
     xp: { base: 20, exponent: 2 },
     deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },

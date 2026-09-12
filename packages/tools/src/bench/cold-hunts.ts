@@ -78,7 +78,7 @@ function scenario(): Content {
     monsters: [{
       id: 'rat', name: 'Rat', recommendedLevel: 1,
       health: 200, experience: 5, attack: 4, armor: 0,
-      attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 8, attackRange: 1,
+      attackIntervalMs: 2_000, speed: 300, aggroRadius: 8, attackRange: 1,
     }],
     hunts: [{
       id: 'cold', name: 'Cold', recommendedLevel: 1, mapId: 'cold', routeId: 'cold-loop',
@@ -94,7 +94,7 @@ function scenario(): Content {
     progression: [{
       id: 'baseline', startingHealth: 1_000_000, startingMana: 0, startingCapacity: 400,
       healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-      stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
       xp: { base: 20, exponent: 2 },
       deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
     }],

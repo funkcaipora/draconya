@@ -49,12 +49,12 @@ export interface CharacterState {
   /** Instante de RELÓGIO (epoch) em que `staminaMs` valia. Não é o relógio da simulação. */
   readonly staminaUpdatedAtMs?: number;
   /**
-   * Milissegundos por tile ao andar (FUN-69). Vem de `progression.stepDurationMs`, copiado
-   * para cá como `maxHealth` é: o sistema de movimento pergunta à criatura, e a criatura não
-   * conhece o conteúdo. Opcional porque snapshot gravado antes da FUN-69 não tem a chave;
-   * quem restaura repõe a partir do conteúdo.
+   * Velocidade na escala do Tibia (FUN-119). Vem de `statsForLevel`, copiada para cá como
+   * `maxHealth` é: o sistema de movimento pergunta à criatura, e a criatura não conhece o
+   * conteúdo. Opcional porque snapshot gravado antes da FUN-119 não tem a chave; quem restaura
+   * repõe a partir do conteúdo.
    */
-  readonly stepDurationMs?: number;
+  readonly speed?: number;
   /**
    * Gold que o personagem TINHA ao entrar na sessão (FUN-77). Vem do ticket, nunca do cliente
    * (invariante 4), e não é escrito aqui: o que a sessão movimenta é `goldDelta`.
@@ -88,7 +88,7 @@ export interface CharacterState {
    *
    * Opcional: personagem e snapshot anteriores ao inventário não têm a chave, e zero seria
    * "não carrega nada" — o que travaria a mochila de quem já jogava. Quem restaura repõe a
-   * partir do conteúdo, como faz com `stepDurationMs`.
+   * partir do conteúdo, como faz com `speed`.
    */
   readonly capacity?: number;
   /**
@@ -133,7 +133,7 @@ export class CharacterRuntime {
   readonly gold: number;
   goldDelta: number;
   alive: boolean;
-  stepDurationMs: number;
+  speed: number;
   /** Mutadas no lugar a cada uso — ver `Skills.gain`. */
   readonly skills: Skills;
   /** Mutado no lugar a cada abate recompensado — ver `Bestiary.record`. */
@@ -163,9 +163,9 @@ export class CharacterRuntime {
     this.gold = state.gold ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
-    // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar) repõe. Um passo com
-    // duração zero nunca chega ao fio — o protocolo exige duração positiva.
-    this.stepDurationMs = state.stepDurationMs ?? 0;
+    // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar ou no primeiro
+    // evento) repõe pela tabela de progressão.
+    this.speed = state.speed ?? 0;
     this.skills = Skills.fromState(state.skills);
     this.bestiary = Bestiary.fromState(state.bestiary);
     this.capacity = state.capacity ?? 0;
@@ -189,7 +189,7 @@ export class CharacterRuntime {
       vocationId: this.vocationId,
       staminaMs: this.staminaMs,
       staminaUpdatedAtMs: this.staminaUpdatedAtMs,
-      stepDurationMs: this.stepDurationMs,
+      speed: this.speed,
       gold: this.gold,
       goldDelta: this.goldDelta,
       alive: this.alive,

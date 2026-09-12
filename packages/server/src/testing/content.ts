@@ -48,7 +48,7 @@ export const TEST_PROGRESSION = {
   // O número é do teste; o balanceamento de verdade é `packages/content/data`.
   id: 'baseline', startingHealth: 1_200, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-  stepDurationMs: 500, regen: { healthPerSecond: 1, manaPerSecond: 1 },
+  startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };
@@ -63,7 +63,7 @@ export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 
 
 const TEST_RAT = {
   id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
-  attack: 6, armor: 0, attackIntervalMs: 2000, stepDurationMs: 500, aggroRadius: 4,
+  attack: 6, armor: 0, attackIntervalMs: 2000, speed: 300, aggroRadius: 4,
   loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
 
@@ -105,7 +105,7 @@ export function rawTestContent(): RawContent {
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
     advancedOnly: { targetPolicies: [TEST_ADVANCED_POLICY] } }],
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
-    city: { mapId: 'city' },
+    city: { mapId: 'city', stepDurationMs: 500 },
   };
   return { ...raw, appearances: [placeholderAppearances(raw)] };
 }

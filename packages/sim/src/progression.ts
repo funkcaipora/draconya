@@ -12,6 +12,8 @@ export interface Stats {
   readonly maxHealth: number;
   readonly maxMana: number;
   readonly capacity: number;
+  /** Velocidade na escala do Tibia (FUN-119): base mais o ganho por level, sem vocação. */
+  readonly speed: number;
 }
 
 /**
@@ -52,6 +54,9 @@ export function statsForLevel(
     capacity: progression.startingCapacity
       + beforeVocation * progression.capacityPerLevel
       + afterVocation * perLevel.capacityPerLevel,
+    // Velocidade não tem incremento por vocação (o Tibia dá +2 por level a todo mundo): é a
+    // base mais o ganho por level, contado do 1.
+    speed: progression.startingSpeed + (level - 1) * progression.speedPerLevel,
   };
 }
 
@@ -177,6 +182,7 @@ function retarget(
   // mais vida e mais mana e deixaria a mochila do mesmo tamanho — e o jogador descobriria pelo
   // item que não coube, sem nada ligando uma coisa à outra.
   character.capacity = after.capacity;
+  character.speed = after.speed;
   character.health = clamp(character.health + (after.maxHealth - before.maxHealth), 0, after.maxHealth);
   character.mana = clamp(character.mana + (after.maxMana - before.maxMana), 0, after.maxMana);
   return { from, to };

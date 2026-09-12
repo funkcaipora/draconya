@@ -1,1 +1,1 @@
-{ "mapId": "city" }
+{ "mapId": "city", "stepDurationMs": 150 }

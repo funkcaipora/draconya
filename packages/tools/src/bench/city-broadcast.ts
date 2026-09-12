@@ -33,7 +33,7 @@ const cityContent = (size: number): Content => buildContent({
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
     healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-    stepDurationMs: 500,
+    startingSpeed: 300, speedPerLevel: 0,
     regen: { healthPerSecond: 1, manaPerSecond: 1 },
     xp: { base: 20, exponent: 2 },
     deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
@@ -56,7 +56,7 @@ const cityContent = (size: number): Content => buildContent({
         (x === 0 || y === 0 || x === size - 1 || y === size - 1 ? '#' : '.')).join('')),
   }],
   routes: [],
-  city: { mapId: 'city' },
+  city: { mapId: 'city', stepDurationMs: 500 },
 } satisfies RawContent);
 
 /** Um socket que não faz nada: aqui o assunto é quantidade de mensagem, não byte no fio. */

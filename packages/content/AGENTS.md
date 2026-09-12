@@ -36,6 +36,18 @@ mudou". A conversão para `Uint8Array` acontece uma vez, no carregamento.
 O bitmap em memória é **array plano indexado por `y * width + x`**, não array de objetos: é
 consultado a cada passo de cada monstro de cada instância, e é a estrutura mais quente do motor.
 
+**O mapa tem andares** (FUN-119, ADR 0025). `grid` é o açúcar de um andar só; `floors:
+{ "7": { grid, speed? }, "6": … }` é a forma completa, com `z` dizendo qual é o andar padrão. A
+camada `speed` é a velocidade de chão por tile, um caractere resolvido por `speedPalette` —
+ausente, todo tile anda a `DEFAULT_GROUND_SPEED` (150, o que o TFS usa). `floorChanges` liga um
+tile a outro andar (escadas), e `source` diz de que OTBM um mapa importado veio. O `sim` só lê
+bloqueio, velocidade e escadas; a pilha de aparências de um mapa importado mora em `things/`,
+nunca aqui.
+
+**`city.json` diz o mapa E o passo**: `stepDurationMs` é o passo fixo da Cidade (150 ms, cópia do
+Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
+`monster.speed`.
+
 **A rota fecha um laço** (§14.4), e isso é validado no carregamento. Rota aberta faz o
 personagem chegar ao fim e parar — o sintoma chega dias depois como "a hunt travou", sem ligação
 nenhuma com o arquivo de rota.

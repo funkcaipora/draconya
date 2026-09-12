@@ -87,11 +87,11 @@ const raw: RawContent = {
   monsters: [{
     id: 'reaper', name: 'Ceifador', recommendedLevel: 1,
     health: 100_000, experience: 0, attack: 400, armor: 0,
-    attackIntervalMs: 1_000, stepDurationMs: 500, aggroRadius: 8,
+    attackIntervalMs: 1_000, speed: 300, aggroRadius: 8,
     loot: { items: [] },
   }, {
     id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
-    attack: 6, armor: 0, attackIntervalMs: 2_000, stepDurationMs: 500, aggroRadius: 4,
+    attack: 6, armor: 0, attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
     // Chance 1 tira o sorteio da conta: o que este teste mede é o caminho do loot até o
     // banco, não a distribuição.
     loot: {

@@ -203,6 +203,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   exclusivo; um `place` seco deixaria o segundo a chegar fora do mapa — invisível, sem andar,
   com o log dizendo que ele entrou. O raio de 16 vem do TETO DE POPULAÇÃO por cópia (200, na
   FUN-33): com 289 tiles ao redor da entrada, duzentas pessoas ficariam ombro a ombro.
+- **A duração do passo é do tile de DESTINO, e a diagonal custa 3× ANTES do arredondamento**
+  (FUN-119, ADR 0025). `movementDuration(world, mover, from, to)` é `ceil50(chão × 1000 /
+  speed)`; arredondar e depois triplicar dá 3.600 onde o Tibia dá 3.500. Quem parou volta a
+  olhar em volta no ritmo de um passo dali (`from === to`). A Cidade passa `fixedStepMs` no
+  `TileOccupancy` e nada disso vale lá.
+- **Escada é um passo com `z` diferente, e só para quem carrega `z`.** `canOccupy` julga o
+  DESTINO da escada (`floorChangeAt`), não o degrau; o monstro — posição sem `z` — vê o degrau
+  como parede, como no Tibia. A ocupação é por andar (`tileKey(x, y, z)`), e `occupied(x, y)`
+  sem `z` é o andar padrão do mapa.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
 - **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,

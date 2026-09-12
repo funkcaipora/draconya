@@ -128,6 +128,8 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 - Voltar à Cidade cura HP e mana por completo (§26.1). Quem cura é a entrada, não a transição.
 - Movimento passa pelo mesmo sistema da hunt e do bot (FUN-69): `movement.ts` é o único escritor
   de posição, e a Cidade não é exceção.
+- O passo é FIXO — `city.stepDurationMs`, 150 ms — para todo mundo (FUN-119, ADR 0025); a
+  fórmula do Tibia vale só na hunt. Escada é um passo com `z` diferente.
 - Uma cópia por processo `game`; muitos personagens por cópia.
 - Sair de um shard é `leave` — a sessão continua para quem ficou.
 - A cópia vazia é descartada.
@@ -143,7 +145,7 @@ espalha — o corte aparece quando a Cidade tiver loja, depósito e ruas.
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
 | Mapa e ponto de entrada | `city.mapId` e `entryPoint` do tilemap | `packages/content/data/maps` |
-| Velocidade de passo | 500 ms por tile `[ABERTO — valor provisório: 500]` | `packages/content/data/progression/baseline.json` |
+| Velocidade de passo | 150 ms por tile, fixo para todos (cópia do Huntera) | `packages/content/data/city/city.json`, `stepDurationMs` |
 | Raio de busca de tile livre na chegada | 16 tiles | `packages/sim/src/rulesets/city.ts` — geometria, não balanceamento |
 | Carência de repouso | 5 min | `packages/server/src/game/host.ts` |
 | Teto de população por cópia | 200 | `CITY_SHARD_CAPACITY`, em `packages/server/src/game/sessions.ts` — configuração de nó, não conteúdo |
