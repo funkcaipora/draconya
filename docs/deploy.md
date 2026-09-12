@@ -242,7 +242,7 @@ rsync -av things/1332/library/ui/images/ root@<servidor>:/root/things/1332/libra
 nunca é versionada nem vai na imagem. A origem não a serve, e sem ela o jogo abre com a grade
 lisa de reserva: templo sem chão, bueiro sem parede, e nenhum erro além do 404 na aba de rede.
 Ela sobe pelo MESMO caminho das imagens de UI — é a subpasta `maps/` inteira, dois arquivos
-por versão hoje (1,1 MB na 13.32):
+por versão hoje (1,0 MB na 13.32):
 
 ```bash
 rsync -av things/1332/maps/ root@<servidor>:/root/things/1332/maps/
@@ -267,7 +267,7 @@ nada mais. O que precisa estar no volume:
 
 - `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
   `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
-- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`; 1,1 MB na 13.32) —
+- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`; 1,0 MB na 13.32) —
   a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e não só o
   `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar o mesmo
   hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra região ou
