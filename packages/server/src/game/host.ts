@@ -1426,9 +1426,12 @@ export class SessionHost {
     // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
     // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
     // transição, porque os dois passam por aqui; a instância é a própria sessão.
-    const mapId = hosted.session.ruleset.mapId;
+    const { mapId, ambience } = hosted.session.ruleset;
     if (mapId !== undefined) {
-      viewer.send({ type: 'instance-enter', instanceId: hosted.session.id, map: mapId });
+      viewer.send({
+        type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
+        ...(ambience === undefined ? {} : { ambience }),
+      });
     }
     viewer.send(this.#sessionState(hosted, characterId));
     const participant = this.#participantOf(hosted, characterId);

@@ -354,6 +354,29 @@ export class AssetPack {
   }
 
   /**
+   * Aquece as folhas de um conjunto de OBJETOS (FUN-121): todas as células do padrão de cada
+   * id, em segundo plano. É o `warmOutfit` do mapa — ao receber a cena, o viewport pede os ids
+   * da janela inicial, para Thais não abrir em retângulos pelos segundos que a primeira folha
+   * de cada chão leva no Worker. Id desconhecido não pede nada; folha que não abre não derruba
+   * o aquecimento.
+   */
+  async warmObjects(appearanceIds: Iterable<number>): Promise<void> {
+    const requests: Promise<unknown>[] = [];
+    for (const id of appearanceIds) {
+      const group = this.#appearances.object.get(id)?.frameGroups[0];
+      if (group === undefined) continue;
+      for (let y = 0; y < Math.max(1, group.patternHeight); y++) {
+        for (let x = 0; x < Math.max(1, group.patternWidth); x++) {
+          requests.push(
+            this.#frame(group, { x, y, z: 0, phase: 0, layer: LAYER_BASE }).catch(() => null),
+          );
+        }
+      }
+    }
+    await Promise.all(requests);
+  }
+
+  /**
    * Em quantas fases o ciclo de caminhada se divide, para o viewport mapear o progresso do
    * passo em quadro. `1` quando a criatura não anima — e aí qualquer fase cai no mesmo quadro.
    */

@@ -104,9 +104,10 @@ entrada e as escadas:
 
 O servidor **diz qual mapa desenhar**: `instance-enter { instanceId, map }` sai no
 `session-attach` e em toda transição, ANTES do `session-state`, e `session-state.world.mapId` é o
-mesmo id. Era um opcode definido, tratado pelo cliente e nunca enviado. Desenhar a Thais — a pilha
-de itens por tile, os andares de baixo sob um véu — é o cliente que faz (FUN-121); até lá ele
-continua abrindo, com o mapa de teste na tela.
+mesmo id. Era um opcode definido, tratado pelo cliente e nunca enviado. Desenhar a Thais é o
+cliente (FUN-121): a pilha de itens por tile na ordem do Tibia, e **os andares de baixo sob um
+véu** — na superfície vê-se do andar do jogador até o 7, cada nível abaixo deslocado um tile para
+baixo e para a direita; nada acima dele, sem telhado. No subsolo, só o andar do jogador.
 
 ## Cada passo vai para quem está por perto (FUN-33)
 

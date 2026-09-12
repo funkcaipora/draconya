@@ -48,7 +48,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
   switch (message.type) {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
     case 'instance-enter':
-      enterInstance(message.instanceId, message.map);
+      enterInstance(message.instanceId, message.map, message.ambience ?? 'surface');
       return;
 
     case 'creature-appear':

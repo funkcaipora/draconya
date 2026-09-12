@@ -112,6 +112,8 @@ export interface World {
   /** Instância em que o personagem está, ou `null` antes de entrar em alguma. */
   instanceId: string | null;
   mapId: string | null;
+  /** O ambiente da cena (FUN-121): `cavern` escurece o mundo. Superfície até alguém dizer. */
+  ambience: 'surface' | 'cavern';
   /**
    * Qual criatura é o próprio jogador. A câmera segue esta; sem ela, não há em quem centrar.
    *
@@ -129,6 +131,7 @@ export interface World {
 export const world: World = {
   instanceId: null,
   mapId: null,
+  ambience: 'surface',
   selfId: null,
   creatures: new Map(),
   effects: [],
@@ -207,9 +210,12 @@ export function clearTransients(): void {
  * Troca de instância limpa TUDO. Carregar por cima deixaria criatura do mapa anterior
  * desenhada no novo, e o sintoma é um monstro parado que nunca some.
  */
-export function enterInstance(instanceId: string, mapId: string): void {
+export function enterInstance(
+  instanceId: string, mapId: string, ambience: 'surface' | 'cavern' = 'surface',
+): void {
   world.instanceId = instanceId;
   world.mapId = mapId;
+  world.ambience = ambience;
   world.selfId = null;
   world.creatures.clear();
   clearTransients();

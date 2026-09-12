@@ -500,6 +500,11 @@ export class HuntRuleset implements Ruleset {
     return this.#world.map.id;
   }
 
+  /** O ambiente da hunt (FUN-121), do conteúdo — `cavern` no bueiro. Ausente é superfície. */
+  get ambience(): 'surface' | 'cavern' | undefined {
+    return this.#options.hunt.ambience;
+  }
+
   get routeIndex(): number {
     return this.#walker.index;
   }

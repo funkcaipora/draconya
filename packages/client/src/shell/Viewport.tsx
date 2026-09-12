@@ -1,15 +1,42 @@
 import { useEffect, useRef } from 'react';
 import appearances from '@draconya/content/data/appearances/baseline.json';
-import mapData from '@draconya/content/data/maps/rat-cellars.json';
+import ratCellars from '@draconya/content/data/maps/rat-cellars.json';
 import type { AssetPack } from '../assets/pack.js';
 import { TextureBook } from '../world/textures.js';
+import { loadStackMap, sceneFromStack, sceneFromTilemap } from '../world/scene.js';
+import type { Scene } from '../world/scene.js';
 import { mountViewport, tilemapFrom } from '../world/viewport.js';
-import type { MapTiles, ViewportHandle } from '../world/viewport.js';
+import type { ViewportHandle } from '../world/viewport.js';
 import { useAssetPack } from './AssetPackContext.js';
 
 /**
+ * Os mapas AUTORADOS À MÃO que o cliente conhece (FUN-121): a grade de `content` mais o par
+ * chão/parede de `appearances.maps`, transformados em pilha sintética. É o mapa de teste da
+ * adega; todo mapa importado (Thais, o bueiro real) chega pela rede, pelo `mapId` da sessão.
+ */
+const HAND_MADE: Readonly<Record<string, () => Scene>> = {
+  'rat-cellars': () => sceneFromTilemap(tilemapFrom(ratCellars), appearances.maps['rat-cellars']),
+};
+
+/**
+ * De onde vem a cena de um `mapId`: do registro à mão, ou de `things/<versão>/maps/<id>.json`
+ * — o mesmo caminho das folhas (`VITE_THINGS_URL`). Sem caminho, ou sem o arquivo, é `null`,
+ * e o viewport desenha a grade lisa de reserva: mapa que não carrega não é razão de a tela
+ * não abrir, pela regra da arte que não carrega.
+ */
+async function loadScene(mapId: string): Promise<Scene | null> {
+  const handMade = HAND_MADE[mapId];
+  if (handMade !== undefined) return handMade();
+  const baseUrl = import.meta.env.VITE_THINGS_URL;
+  if (baseUrl === undefined || baseUrl === '') return null;
+  const stack = await loadStackMap(baseUrl, mapId);
+  return stack === null ? null : sceneFromStack(stack);
+}
+
+/**
  * O canvas. Este componente monta e desmonta o Pixi e nada mais — o mundo NÃO passa por
- * prop nem por estado do React (ADR 0007). O laço de quadro lê `world` direto.
+ * prop nem por estado do React (ADR 0007). O laço de quadro lê `world` direto — inclusive o
+ * `mapId` (FUN-121): a cena é buscada quando ele muda, pelo `loadScene` acima.
  *
  * **O Pixi sobe IMEDIATAMENTE, sem pacote, e a arte entra quando chega** (`setPack`). O
  * pacote vem do contexto, montado pelo `Shell` (FUN-108), e leva o que a rede levar para
@@ -50,11 +77,9 @@ export function Viewport() {
 
     const book = new TextureBook();
     bookRef.current = book;
-    // A tabela vem do JSON direto, como o mapa: é o mesmo caminho e a mesma versão.
-    const tiles: MapTiles | null = appearances.maps[mapData.id as keyof typeof appearances.maps] ?? null;
 
     void (async () => {
-      const mounted = await mountViewport(parent, { pack: null, book });
+      const mounted = await mountViewport(parent, { pack: null, book, loadScene });
       // Desmontado antes de o Pixi terminar de subir — o StrictMode faz isso em
       // desenvolvimento. Destruir na hora, senão sobra um canvas órfão desenhando.
       if (cancelled) {
@@ -62,8 +87,6 @@ export function Viewport() {
         return;
       }
       handleRef.current = mounted;
-      // O mapa vem empacotado por enquanto: o `instance-enter` manda o ID, não o conteúdo.
-      mounted.setMap(tilemapFrom(mapData), tiles);
       // O pacote pode ter chegado enquanto o Pixi subia: o efeito de pacote já rodou, não
       // tinha a quem entregar, e deixou aqui.
       mounted.setPack(packRef.current);

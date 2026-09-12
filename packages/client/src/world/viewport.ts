@@ -20,9 +20,8 @@
 // pacote, pela mesma regra do resto: retângulo é a degradação, tela vazia não.
 
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import {
-  buildTilemap, isBlocked, wallSetOf, type Tilemap, type WallSet,
-} from '@draconya/content';
+import { buildTilemap, type Tilemap } from '@draconya/content';
+import { NO_FLAGS } from '../assets/appearances.js';
 import type { AssetPack } from '../assets/pack.js';
 import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
@@ -34,20 +33,26 @@ import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
+import { floorsBelow, shade, veilTint } from './floors.js';
 import {
   HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_FILL_HEIGHT, HEALTH_FILL_WIDTH,
   healthColor, healthPercent, healthWidth,
 } from './health.js';
 import {
-  creatureKey, effectKey, effectKeysOf, groundCell, groundKey, missileKey,
+  creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
+import type { Scene } from './scene.js';
 import { TextureBook } from './textures.js';
-import { wallPiece, wallsOf } from './walls.js';
+import { drawTile, type ObjectInfo } from './tile-stack.js';
+
+export type { MapTiles } from './scene.js';
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
+/** O tom do bueiro (`ambience: 'cavern'`): o mundo inteiro, sob uma luz fria. */
+const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
 const COLOR_HEALTH_FRAME = 0x000000;
@@ -95,26 +100,22 @@ interface EffectEntry {
   readonly phases: readonly number[];
 }
 
-/** De que o mapa é feito, pela tabela de aparências (FUN-94, `appearances.maps`). */
-export interface MapTiles {
-  readonly floor: number;
-  /**
-   * UMA peça — a mesma em todo tile bloqueado — ou as quatro, escolhidas pela vizinhança
-   * (FUN-105). É o campo como está na tabela; `setMap` o normaliza com `wallSetOf`.
-   */
-  readonly wall: number | WallSet;
-}
-
 export interface ViewportOptions {
   /** O pacote de arte. `null` desenha só retângulos — é o modo sem assets, e continua válido. */
   readonly pack?: AssetPack | null;
   /** O livro de texturas, criado por quem criou o pacote: é ele que recebe o `onEvict`. */
   readonly book?: TextureBook;
+  /**
+   * De onde vem a cena de um `mapId` (FUN-121): o `instance-enter` manda o ID, e é o laço de
+   * quadro que nota a troca (`world.mapId`) e pede a cena — o `world` não tem `subscribe`
+   * (ADR 0007). `null` é mapa que não há: a tela mostra a grade lisa de reserva.
+   */
+  readonly loadScene?: (mapId: string) => Promise<Scene | null>;
 }
 
 export interface ViewportHandle {
-  /** Troca o mapa desenhado, e diz de que ele é feito. */
-  setMap(map: Tilemap | null, tiles?: MapTiles | null): void;
+  /** Troca a cena desenhada. O caminho normal é o `loadScene`; isto é para quem já a tem. */
+  setScene(scene: Scene | null): void;
   /**
    * Troca o pacote de arte; `null` volta ao modo sem assets.
    *
@@ -164,36 +165,45 @@ export async function mountViewport(
     painted = '';
   });
 
-  // Camadas na ordem de desenho: terreno embaixo, criaturas em cima, efeitos sobre elas —
-  // a explosão cobre o monstro, não o contrário — e a sobreposição por último.
+  // Camadas na ordem de desenho: terreno embaixo, criaturas em cima, o `top` da pilha sobre
+  // elas (FUN-121: o arco cobre quem passa por baixo), efeitos sobre tudo — a explosão cobre o
+  // monstro, não o contrário — e a sobreposição por último.
   const terrain = new Container();
   const creatures = new Container();
+  const above = new Container();
   const effects = new Container();
   const overlay = new Container();
-  app.stage.addChild(terrain, creatures, effects, overlay);
+  app.stage.addChild(terrain, creatures, above, effects, overlay);
 
-  let map: Tilemap | null = null;
-  let tiles: MapTiles | null = null;
-  /**
-   * As quatro peças da parede, resolvidas UMA vez no `setMap` (FUN-105): um id vira as quatro
-   * iguais, e o laço de pintura só indexa. Junto, o predicado de parede do mapa — `isBlocked`
-   * com fora-do-mapa valendo "não é parede", senão a borda inteira sai como canto.
-   */
-  let wallPieces: WallSet | null = null;
-  let walls: (x: number, y: number) => boolean = () => false;
+  /** A cena de agora, e o `mapId` que foi pedido por último — para a resposta atrasada de outro mapa não entrar. */
+  let scene: Scene | null = null;
+  let requested: string | null = null;
   // Última janela desenhada. O terreno só é redesenhado quando ela muda — redesenhar a cada
   // quadro é o desperdício óbvio, e num mapa grande é o que come o orçamento de quadro.
   let painted = '';
   /** Assinatura das posições INTEIRAS. A ordem de desenho só muda quando ela muda. */
   let ordered = '';
+  /**
+   * A elevação de cada tile da janela pintada, por chave `x,y,z`: a criatura em cima da caixa
+   * sobe o que a caixa mede. Refeita a cada repintura; consultada por criatura por quadro.
+   */
+  const elevations = new Map<string, number>();
 
   /**
-   * Pool de sprites de terreno, um por tile da janela. Reaproveitado a cada troca de janela:
-   * recriar Sprites a cada tile cruzado é a fragmentação que o pool de criaturas já evita.
+   * Pools de sprites de terreno — um por OBJETO desenhado na janela, nas duas camadas (a de
+   * baixo das criaturas e a `top`). Reaproveitados a cada troca de janela: recriar Sprites a
+   * cada tile cruzado é a fragmentação que o pool de criaturas já evita.
    */
   const ground: Sprite[] = [];
+  const top: Sprite[] = [];
   const groundFallback = new Graphics();
   terrain.addChild(groundFallback);
+
+  /** As flags e o padrão que a pilha precisa, pelo pacote de agora — `NO_FLAGS` sem pacote. */
+  const objectInfo: ObjectInfo = {
+    flagsOf: (id) => pack?.objectFlags(id) ?? NO_FLAGS,
+    patternOf: (id) => pack?.objectPattern(id) ?? { width: 1, height: 1 },
+  };
 
   /**
    * Pool de sprites por id de criatura.
@@ -218,92 +228,175 @@ export async function mountViewport(
     if (self !== undefined) return interpolate(self, performance.now());
     // Sem `selfId` ainda (FUN-32), a câmera fica no centro do mapa: é melhor mostrar o mapa
     // do que mostrar o canto (0,0), que num mapa cercado por parede é só parede.
-    if (map !== null) return { x: (map.width - 1) / 2, y: (map.height - 1) / 2, z: map.z };
+    if (scene !== null) return { x: (scene.width - 1) / 2, y: (scene.height - 1) / 2, z: scene.defaultZ };
     return { x: 0, y: 0, z: 0 };
   }
 
   /**
-   * A textura de um objeto do mapa NO TILE `(x, y)`, ou `undefined` enquanto não chega.
+   * A textura de um objeto do mapa numa CÉLULA do padrão, ou `undefined` enquanto não chega.
    *
-   * A chave e o pedido são pela CÉLULA do padrão: um chão de 4×4 são dezesseis texturas no
-   * livro, não uma por tile — e vizinhos ganham quadros diferentes, que é o que faz o chão do
-   * Tibia não parecer azulejo.
+   * A chave e o pedido são pela célula: um chão de 4×4 são dezesseis texturas no livro, não
+   * uma por tile — e vizinhos ganham quadros diferentes, que é o que faz o chão do Tibia não
+   * parecer azulejo. Qual célula é de `tile-stack.ts`: posição, contagem ou gancho.
    */
-  function tileTexture(appearanceId: number, x: number, y: number): Texture | null | undefined {
+  function objectTexture(
+    appearanceId: number, cell: { readonly x: number; readonly y: number },
+  ): Texture | null | undefined {
     // Cópia local porque `pack` é `let` (`setPack`) e o narrowing não entra na closure.
     const art = pack;
     if (art === null) return null;
-    const pattern = art.objectPattern(appearanceId);
-    const cell = groundCell(x, y, pattern);
-    return book.get(
-      groundKey(appearanceId, x, y, pattern), () => art.object(appearanceId, cell.x, cell.y),
-    );
+    return book.get(objectKey(appearanceId, cell), () => art.object(appearanceId, cell.x, cell.y));
   }
 
-  function paintTerrain(center: { x: number; y: number }): void {
-    if (map === null) {
-      groundFallback.clear();
-      for (const sprite of ground) sprite.visible = false;
-      painted = '';
-      return;
-    }
-    const window = visibleTiles({ ...center, z: map.z }, view);
+  /**
+   * A elevação do tile em que uma criatura está — e, no meio de um passo, a INTERPOLAÇÃO entre
+   * a do tile de onde ela vem e a do tile aonde vai. Ler só pelo tile arredondado fazia o
+   * personagem pular até 24 px no meio do passo ao subir numa caixa; agora ele sobe com o
+   * passo. Só no andar do jogador: `elevations` é da janela pintada, que é dele.
+   */
+  function liftOf(creature: Creature, at: { x: number; y: number; z: number }, nowMs: number): number {
+    const lift = (x: number, y: number): number => elevations.get(`${Math.round(x)},${Math.round(y)},${at.z}`) ?? 0;
+    const step = creature.step;
+    if (step === null || step.durationMs <= 0) return lift(at.x, at.y);
+    const t = Math.min(1, Math.max(0, (nowMs - step.startedAtMs) / step.durationMs));
+    const from = lift(step.from.x, step.from.y);
+    const to = lift(step.to.x, step.to.y);
+    return from + (to - from) * t;
+  }
 
+  /**
+   * Aquece as folhas da janela inicial (FUN-121), como `warmOutfit` faz com os monstros: sem
+   * isto Thais abria em retângulos pelos segundos que a primeira folha de cada chão leva no
+   * Worker. Só os ids que a câmera vê agora; o resto chega à medida que ela anda.
+   */
+  function warm(next: Scene): void {
+    const art = pack;
+    if (art === null) return;
+    const center = target();
+    const window = visibleTiles(center, view);
+    const ids = new Set<number>();
+    for (const z of floorsBelow(next.floors, Math.round(center.z))) {
+      for (let y = window.minY; y <= window.maxY; y++) {
+        for (let x = window.minX; x <= window.maxX; x++) {
+          const stack = next.tileAt(x, y, z);
+          if (stack === null) continue;
+          if (stack.ground > 0) ids.add(stack.ground);
+          for (const item of stack.items) ids.add(item.id);
+        }
+      }
+    }
+    void art.warmObjects(ids);
+  }
+
+  function paintTerrain(center: { x: number; y: number; z: number }): void {
+    const window = visibleTiles(center, view);
     // **O terreno é pintado em coordenada RELATIVA à janela e o CONTAINER é que anda.** Pintar
     // com o centro fracionário só quando a janela vira faria o chão pular um tile inteiro
     // enquanto as criaturas — posicionadas a cada quadro — deslizam: cisalhamento de até 32 px
     // assim que a câmera seguir o personagem.
-    const origin = toScreen({ x: window.minX, y: window.minY }, { ...center, z: map.z }, view);
+    const origin = toScreen({ x: window.minX, y: window.minY }, center, view);
     terrain.x = Math.round(origin.x);
     terrain.y = Math.round(origin.y);
+    above.x = terrain.x;
+    above.y = terrain.y;
+    // O ambiente é um tom sobre as camadas inteiras (FUN-121): o bueiro é escuro, a rua não.
+    const ambient = world.ambience === 'cavern' ? CAVERN_TINT : 0xffffff;
+    terrain.tint = ambient;
+    creatures.tint = ambient;
+    above.tint = ambient;
 
     // A chave inclui a VERSÃO do livro de texturas: o primeiro quadro pinta retângulo, e o
     // quadro em que uma folha resolve — ou em que um despejo esquece uma célula — precisa
     // repintar mesmo com a janela parada. Um número, e não uma sondagem célula a célula: a
     // pergunta "mudou algo?" só muda quando o livro muda, e custar 17 consultas por quadro
-    // para respondê-la era pagar a 60 Hz por um evento raro.
-    const key = `${map.id}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}`;
+    // para respondê-la era pagar a 60 Hz por um evento raro. E o ANDAR do jogador: subir a
+    // escada troca a cena inteira sem a janela andar.
+    const floor = Math.round(center.z);
+    const key = `${scene?.id ?? '-'}:${floor}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}`;
     if (key === painted) return;
     painted = key;
 
     groundFallback.clear();
-    let used = 0;
-    for (let y = window.minY; y <= window.maxY; y++) {
-      for (let x = window.minX; x <= window.maxX; x++) {
-        const outside = x < 0 || y < 0 || x >= map.width || y >= map.height;
-        if (outside) continue;
-        const local = { x: (x - window.minX) * TILE, y: (y - window.minY) * TILE };
-        const blocked = isBlocked(map, x, y);
-        // A parede é uma das quatro peças, pela vizinhança (FUN-105); o chão é o chão. As
-        // peças têm padrão de 2×1 e 1×2, e `tileTexture` já pede por célula do padrão — a
-        // chave continua sendo id + célula, e não há nada novo a repintar.
-        const texture = tiles === null || wallPieces === null
-          ? null
-          : tileTexture(blocked ? wallPieces[wallPiece(walls, x, y)] : tiles.floor, x, y);
-        if (texture instanceof Texture) {
-          let sprite = ground[used];
-          if (sprite === undefined) {
-            sprite = new Sprite();
-            sprite.roundPixels = true;
-            ground.push(sprite);
-            terrain.addChild(sprite);
-          }
-          sprite.texture = texture;
-          // Parede maior que o tile transborda para CIMA e para a ESQUERDA, como no Tibia:
-          // a âncora é o canto inferior direito do tile.
-          sprite.x = local.x + TILE - texture.width;
-          sprite.y = local.y + TILE - texture.height;
-          sprite.visible = true;
-          used += 1;
-          continue;
+    elevations.clear();
+    let usedGround = 0;
+    let usedTop = 0;
+    /** Um sprite do pool pedido, criado se o pool acabou. */
+    const take = (pool: Sprite[], index: number, layer: Container): Sprite => {
+      let sprite = pool[index];
+      if (sprite === undefined) {
+        sprite = new Sprite();
+        sprite.roundPixels = true;
+        pool.push(sprite);
+        layer.addChild(sprite);
+      }
+      sprite.visible = true;
+      return sprite;
+    };
+
+    if (scene === null) {
+      // Sem cena — o mapa ainda não chegou, ou não há — a grade lisa de reserva em volta da
+      // câmera: o personagem continua visível num chão, em vez de flutuar no preto.
+      for (let y = window.minY; y <= window.maxY; y++) {
+        for (let x = window.minX; x <= window.maxX; x++) {
+          groundFallback
+            .rect((x - window.minX) * TILE, (y - window.minY) * TILE, TILE, TILE)
+            .fill(COLOR_FLOOR)
+            .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
         }
-        groundFallback
-          .rect(local.x, local.y, TILE, TILE)
-          .fill(blocked ? COLOR_WALL : COLOR_FLOOR)
-          .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
       }
     }
-    for (let i = used; i < ground.length; i++) (ground[i] as Sprite).visible = false;
+
+    // Do andar mais fundo ao do jogador (FUN-121): o de cima cobre o de baixo. Um andar `below`
+    // níveis abaixo aparece deslocado `below` tiles para baixo e para a direita — a perspectiva
+    // do Tibia —, e sob um véu que escurece a cada nível.
+    for (const z of scene === null ? [] : floorsBelow(scene.floors, floor)) {
+      const below = z - floor;
+      const tint = veilTint(below);
+      for (let sy = window.minY; sy <= window.maxY; sy++) {
+        for (let sx = window.minX; sx <= window.maxX; sx++) {
+          const stack = scene?.tileAt(sx - below, sy - below, z) ?? null;
+          if (stack === null) continue;
+          const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
+          const drawn = drawTile(stack, sx - below, sy - below, objectInfo);
+          if (below === 0 && drawn.creatureElevation > 0) {
+            elevations.set(`${sx},${sy},${z}`, drawn.creatureElevation);
+          }
+          // O retângulo de reserva do tile, sob o mesmo véu do andar: chão é chão, e tile
+          // bloqueado — parede, pilar — é escuro. Sem pacote é tudo o que há; com pacote, é
+          // o que segura o lugar do PRIMEIRO objeto da pilha enquanto o quadro dele não chega
+          // — o chão, ou a parede de um tile sem chão. A tela nunca fica preta por causa de
+          // arte, e um item de cima sem quadro não é nada.
+          const placeholder = (): void => {
+            groundFallback
+              .rect(local.x, local.y, TILE, TILE)
+              .fill(shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below))
+              .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
+          };
+          if (pack === null) {
+            placeholder();
+            continue;
+          }
+          for (const [index, object] of drawn.objects.entries()) {
+            const texture = objectTexture(object.appearanceId, object.cell);
+            if (!(texture instanceof Texture)) {
+              if (index === 0) placeholder();
+              continue;
+            }
+            const sprite = object.layer === 'top'
+              ? take(top, usedTop++, above)
+              : take(ground, usedGround++, terrain);
+            sprite.texture = texture;
+            sprite.tint = tint;
+            // Ancorado no canto INFERIOR DIREITO do tile, transbordando para cima e para a
+            // esquerda, como no Tibia; a elevação e o shift deslocam mais para lá.
+            sprite.x = local.x + TILE - texture.width + object.dx;
+            sprite.y = local.y + TILE - texture.height + object.dy;
+          }
+        }
+      }
+    }
+    for (let i = usedGround; i < ground.length; i++) (ground[i] as Sprite).visible = false;
+    for (let i = usedTop; i < top.length; i++) (top[i] as Sprite).visible = false;
   }
 
   /** O quadro de uma criatura agora: direção, fase e parado/andando saem do passo dela. */
@@ -402,11 +495,17 @@ export async function mountViewport(
 
   function paintCreatures(center: { x: number; y: number; z: number }, nowMs: number): void {
     const seen = new Set<number>();
-    const drawable: Array<{ creature: Creature; x: number; y: number }> = [];
+    const floor = Math.round(center.z);
+    /** Cada criatura com a posição interpolada E a de TELA — deslocada pelo andar (FUN-121). */
+    const drawable: Array<{ creature: Creature; x: number; y: number; z: number; below: number; sx: number; sy: number }> = [];
 
     for (const creature of world.creatures.values()) {
       const position = interpolate(creature, nowMs);
-      drawable.push({ creature, x: position.x, y: position.y });
+      const below = position.z - floor;
+      drawable.push({
+        creature, x: position.x, y: position.y, z: position.z, below,
+        sx: position.x + below, sy: position.y + below,
+      });
       seen.add(creature.id);
     }
 
@@ -430,35 +529,54 @@ export async function mountViewport(
         sprites.set(entry.creature.id, sprite);
         creatures.addChild(sprite);
       }
-      let top = overlays.get(entry.creature.id);
-      if (top === undefined) {
-        top = createOverlay();
-        overlays.set(entry.creature.id, top);
+      let head = overlays.get(entry.creature.id);
+      if (head === undefined) {
+        head = createOverlay();
+        overlays.set(entry.creature.id, head);
       }
-      const screen = toScreen(entry, center, view);
-      paintOverlay(top, entry.creature, screen);
+      // Andar (FUN-121): quem está ACIMA do jogador não aparece — não há telhado, não há
+      // ninguém em cima dele —, e quem está abaixo aparece deslocado e sob o véu do andar.
+      const { below } = entry;
+      if (below < 0) {
+        sprite.visible = false;
+        head.bar.visible = false;
+        head.label.visible = false;
+        continue;
+      }
+      sprite.visible = true;
+      head.bar.visible = true;
+      head.label.visible = true;
+      const screen = toScreen({ x: entry.sx, y: entry.sy }, center, view);
+      // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
+      // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
+      const lift = below === 0 ? liftOf(entry.creature, entry, nowMs) : 0;
+      const lifted = { x: screen.x - lift, y: screen.y - lift };
+      paintOverlay(head, entry.creature, lifted);
       const texture = creatureTexture(entry.creature, nowMs);
       if (texture instanceof Texture) {
         sprite.texture = texture;
-        sprite.tint = 0xffffff;
+        sprite.tint = veilTint(below);
         // Em Pixi `width`/`height` são ESCALA. Um quadro de 64×64 tem que ficar 64×64 — e
         // transbordar para cima e para a esquerda, ancorado no canto inferior direito do tile.
         sprite.width = texture.width;
         sprite.height = texture.height;
-        sprite.x = screen.x + TILE - texture.width;
-        sprite.y = screen.y + TILE - texture.height;
+        sprite.x = lifted.x + TILE - texture.width;
+        sprite.y = lifted.y + TILE - texture.height;
         continue;
       }
-      // Sem quadro (ainda, ou nunca): o retângulo de antes. É a degradação, não o erro.
+      // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
+      // véu que o quadro teria. É a degradação, não o erro.
       sprite.texture = Texture.WHITE;
       sprite.width = TILE - 6;
       sprite.height = TILE - 6;
-      sprite.x = screen.x + 3;
-      sprite.y = screen.y + 3;
-      sprite.tint = entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE;
+      sprite.x = lifted.x + 3;
+      sprite.y = lifted.y + 3;
+      sprite.tint = shade(entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
     }
 
-    reorder(drawable);
+    // A ordem é pela posição de TELA: uma criatura dois andares abaixo desenhada na mesma
+    // célula que uma do andar do jogador é comparada onde de fato está, não onde o mapa a põe.
+    reorder(drawable.filter((entry) => entry.below >= 0).map((entry) => ({ creature: entry.creature, x: entry.sx, y: entry.sy })));
   }
 
   /**
@@ -671,6 +789,23 @@ export async function mountViewport(
 
   app.ticker.add(() => {
     const nowMs = performance.now();
+    // A troca de cena é notada AQUI (FUN-121): o `instance-enter` põe o `mapId` no `world`, o
+    // `world` não avisa ninguém (ADR 0007), e o laço de quadro é quem olha. A resposta que
+    // chegar depois de outro pedido é de outro mapa, e é descartada.
+    if (world.mapId !== requested) {
+      const mapId = world.mapId;
+      requested = mapId;
+      scene = null;
+      painted = '';
+      if (mapId !== null && options.loadScene !== undefined) {
+        void options.loadScene(mapId).then((next) => {
+          if (requested !== mapId) return;
+          scene = next;
+          painted = '';
+          if (next !== null) warm(next);
+        });
+      }
+    }
     const center = target();
     paintTerrain(center);
     paintCreatures(center, nowMs);
@@ -680,12 +815,11 @@ export async function mountViewport(
   });
 
   return {
-    setMap(next, nextTiles = null) {
-      map = next;
-      tiles = nextTiles;
-      wallPieces = nextTiles === null ? null : wallSetOf(nextTiles.wall);
-      walls = next === null ? () => false : wallsOf(next);
+    setScene(next) {
+      scene = next;
+      requested = world.mapId;
       painted = '';
+      if (next !== null) warm(next);
     },
     setPack(next) {
       pack = next;
@@ -697,6 +831,8 @@ export async function mountViewport(
       // enquanto não havia arte — não existe entrada "não existe" envenenada para o pacote
       // que chega agora. (Limpar também não daria: `clear()` fecha o livro para sempre.)
       painted = '';
+      // A arte que acabou de chegar aquece a janela que já está na tela.
+      if (next !== null && scene !== null) warm(scene);
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
       for (const entry of effectSprites.values()) entry.sprite.destroy();
@@ -718,6 +854,9 @@ export async function mountViewport(
       textLabels.clear();
       for (const sprite of ground) sprite.destroy();
       ground.length = 0;
+      for (const sprite of top) sprite.destroy();
+      top.length = 0;
+      above.destroy();
       overlay.destroy();
       book.clear();
       app.destroy(true, { children: true });

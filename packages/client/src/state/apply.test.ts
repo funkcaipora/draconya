@@ -88,6 +88,25 @@ describe('world deltas', () => {
     expect(world.mapId).toBe('rat-cellars');
   });
 
+  it('instance-enter followed by session-state sets the map once, and the ambience (FUN-121)', () => {
+    // O `instance-enter` é a troca de cena e o `session-state` povoa a cena nova; os dois
+    // dizem o mesmo mapa, e o ambiente só viaja no primeiro — ausente é superfície.
+    applyMessage({ type: 'instance-enter', instanceId: 'i2', map: 'thais' }, 0);
+    expect(world.ambience).toBe('surface');
+    applyMessage({ type: 'instance-enter', instanceId: 'i3', map: 'rat-cellars', ambience: 'cavern' }, 0);
+    expect(world.mapId).toBe('rat-cellars');
+    expect(world.ambience).toBe('cavern');
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+      world: { mapId: 'rat-cellars', creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
+      notableEvents: [],
+    }, 0);
+    expect(world.mapId).toBe('rat-cellars');
+    expect(world.ambience).toBe('cavern');
+  });
+
   it('removes a creature that disappeared', () => {
     applyMessage(spawn(1), 0);
     applyMessage({ type: 'creature-disappear', id: 1 }, 0);
