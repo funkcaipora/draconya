@@ -903,6 +903,8 @@ describe('máquina de estados do personagem (FUN-30)', () => {
   const quiet = (type: 'city' | 'hunt'): Ruleset => ({
     type,
     mapId: type === 'city' ? 'city' : 'arena',
+    // A hunt de teste é um bueiro (FUN-121); a Cidade não diz ambiente, e o campo não viaja.
+    ...(type === 'hunt' ? { ambience: 'cavern' as const } : {}),
     hz: () => (type === 'city' ? 0 : 10),
     onEnter: () => {},
     onEvent: () => {},
@@ -1012,7 +1014,8 @@ describe('máquina de estados do personagem (FUN-30)', () => {
 
     const received = socket.received();
     const enter = received.findIndex((m) => m.type === 'instance-enter');
-    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-1', map: 'arena' });
+    // Com o ambiente da hunt (FUN-121): é o que escurece o bueiro no cliente.
+    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-1', map: 'arena', ambience: 'cavern' });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
@@ -1035,6 +1038,7 @@ describe('máquina de estados do personagem (FUN-30)', () => {
 
     const received = socket.received();
     const enter = received.findIndex((m) => m.type === 'instance-enter');
+    // Sem `ambience`: a Cidade não diz, e o campo não viaja — `toEqual` prende a ausência.
     expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'city-2', map: 'city' });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', sessionType: 'city', world: { mapId: 'city' } });
     expect(socket.ended).toBeNull();

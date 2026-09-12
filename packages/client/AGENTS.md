@@ -285,13 +285,19 @@ pnpm tsx scripts/make-sheet-fixture.ts
   ACIMA das criaturas: o arco cobre quem passa); **elevação** `height.elevation` acumula pelos
   itens com teto de 24 px e sobe o que vem depois — e a criatura — para cima e para a
   esquerda, `top` ignora; **shift** desloca o próprio item; **padrão** por `(x % w, y % h)`,
-  por CONTAGEM para o empilhável que veio com contagem (1–4 na primeira linha, 5/10/25/50 na
-  segunda), pelo GANCHO da parede do mesmo tile para o pendurável (sul → coluna 1, leste →
-  2); **âncora** no canto inferior direito do tile, como já era. **Andares**: na superfície
-  desenha-se do andar do jogador até o 7, o de baixo primeiro, cada nível abaixo deslocado um
-  tile para baixo e para a direita e sob um véu (`VEIL_PER_FLOOR`); no subsolo, só o andar do
-  jogador; quem está ACIMA do jogador não aparece — não há telhado. `ambience: 'cavern'` do
-  `instance-enter` é um tom sobre as camadas inteiras. **Mapa autorado à mão** (a adega de
+  por CONTAGEM para o empilhável que veio com contagem E tem o padrão de 4×2 da tabela (1–4
+  na primeira linha, 5/10/25/50 na segunda — a moeda de 4×3 do 13.x volta à posição, como o
+  cliente do Tibia faz), pelo GANCHO da parede do mesmo tile para o pendurável (sul → coluna
+  1, leste → 2); **âncora** no canto inferior direito do tile, como já era. **Andares**
+  (`world/floors.ts`, puro): na superfície desenha-se do andar do jogador até o 7, o de baixo
+  primeiro, cada nível abaixo deslocado um tile para baixo e para a direita — o
+  `transformPositionTo2D` do OTClient — e sob um véu (`VEIL_PER_FLOOR`, também sobre os
+  retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da arte); no
+  subsolo, só o andar do jogador; quem está ACIMA do jogador não aparece — não há telhado. A
+  criatura em cima de uma caixa sobe a elevação do tile, INTERPOLADA ao longo do passo — lida
+  só pelo tile arredondado ela pulava 24 px no meio do passo. A ordem de desenho das criaturas
+  é pela posição de TELA (deslocada pelo andar). `ambience: 'cavern'` do `instance-enter` é um
+  tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Mapa autorado à mão** (a adega de
   teste) vira pilha SINTÉTICA — `[chão]` no livre, `[peça pela vizinhança]` no bloqueado
   (`sceneFromTilemap`) — e passa pelo MESMO pintor: um caminho de desenho, duas origens. Cena
   ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao

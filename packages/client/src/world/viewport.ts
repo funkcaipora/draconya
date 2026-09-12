@@ -33,6 +33,7 @@ import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
+import { floorsBelow, shade, veilTint } from './floors.js';
 import {
   HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_FILL_HEIGHT, HEALTH_FILL_WIDTH,
   healthColor, healthPercent, healthWidth,
@@ -50,14 +51,6 @@ export type { MapTiles } from './scene.js';
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
-/**
- * A superfície (FUN-121): na superfície e acima dela vê-se do andar do jogador até o 7, cada
- * andar de baixo sob um véu; no subsolo (8+) só o andar do jogador. É o que o Huntera faz, e
- * o que o Tibia faz sem telhado.
- */
-const SURFACE_FLOOR = 7;
-/** Quanto cada andar abaixo do jogador escurece: o cinza multiplica a cada nível. */
-const VEIL_PER_FLOOR = 0.55;
 /** O tom do bueiro (`ambience: 'cavern'`): o mundo inteiro, sob uma luz fria. */
 const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
@@ -255,21 +248,20 @@ export async function mountViewport(
     return book.get(objectKey(appearanceId, cell), () => art.object(appearanceId, cell.x, cell.y));
   }
 
-  /** O cinza de um andar `below` níveis abaixo do jogador: 0 é o andar dele, sem véu. */
-  function veilTint(below: number): number {
-    if (below <= 0) return 0xffffff;
-    const grey = Math.round(255 * VEIL_PER_FLOOR ** below);
-    return (grey << 16) | (grey << 8) | grey;
-  }
-
   /**
-   * Os andares a desenhar para quem está em `z`, do mais fundo ao do jogador — a ordem de
-   * pintura, o de baixo primeiro. Na superfície, do 7 até o dele; no subsolo, só o dele.
+   * A elevação do tile em que uma criatura está — e, no meio de um passo, a INTERPOLAÇÃO entre
+   * a do tile de onde ela vem e a do tile aonde vai. Ler só pelo tile arredondado fazia o
+   * personagem pular até 24 px no meio do passo ao subir numa caixa; agora ele sobe com o
+   * passo. Só no andar do jogador: `elevations` é da janela pintada, que é dele.
    */
-  function floorsBelow(z: number): number[] {
-    if (scene === null) return [];
-    const deepest = z <= SURFACE_FLOOR ? SURFACE_FLOOR : z;
-    return scene.floors.filter((floor) => floor >= z && floor <= deepest).sort((a, b) => b - a);
+  function liftOf(creature: Creature, at: { x: number; y: number; z: number }, nowMs: number): number {
+    const lift = (x: number, y: number): number => elevations.get(`${Math.round(x)},${Math.round(y)},${at.z}`) ?? 0;
+    const step = creature.step;
+    if (step === null || step.durationMs <= 0) return lift(at.x, at.y);
+    const t = Math.min(1, Math.max(0, (nowMs - step.startedAtMs) / step.durationMs));
+    const from = lift(step.from.x, step.from.y);
+    const to = lift(step.to.x, step.to.y);
+    return from + (to - from) * t;
   }
 
   /**
@@ -283,7 +275,7 @@ export async function mountViewport(
     const center = target();
     const window = visibleTiles(center, view);
     const ids = new Set<number>();
-    for (const z of floorsBelow(center.z)) {
+    for (const z of floorsBelow(next.floors, Math.round(center.z))) {
       for (let y = window.minY; y <= window.maxY; y++) {
         for (let x = window.minX; x <= window.maxX; x++) {
           const stack = next.tileAt(x, y, z);
@@ -357,7 +349,7 @@ export async function mountViewport(
     // Do andar mais fundo ao do jogador (FUN-121): o de cima cobre o de baixo. Um andar `below`
     // níveis abaixo aparece deslocado `below` tiles para baixo e para a direita — a perspectiva
     // do Tibia —, e sob um véu que escurece a cada nível.
-    for (const z of scene === null ? [] : floorsBelow(floor)) {
+    for (const z of scene === null ? [] : floorsBelow(scene.floors, floor)) {
       const below = z - floor;
       const tint = veilTint(below);
       for (let sy = window.minY; sy <= window.maxY; sy++) {
@@ -369,25 +361,25 @@ export async function mountViewport(
           if (below === 0 && drawn.creatureElevation > 0) {
             elevations.set(`${sx},${sy},${z}`, drawn.creatureElevation);
           }
-          if (pack === null) {
-            // Sem pacote: chão é chão, e tile sem chão — parede, degrau — é escuro.
+          // O retângulo de reserva do tile, sob o mesmo véu do andar: chão é chão, e tile
+          // bloqueado — parede, pilar — é escuro. Sem pacote é tudo o que há; com pacote, é
+          // o que segura o lugar do PRIMEIRO objeto da pilha enquanto o quadro dele não chega
+          // — o chão, ou a parede de um tile sem chão. A tela nunca fica preta por causa de
+          // arte, e um item de cima sem quadro não é nada.
+          const placeholder = (): void => {
             groundFallback
               .rect(local.x, local.y, TILE, TILE)
-              .fill(stack.ground > 0 && !drawn.blocked ? COLOR_FLOOR : COLOR_WALL)
+              .fill(shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below))
               .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
+          };
+          if (pack === null) {
+            placeholder();
             continue;
           }
           for (const [index, object] of drawn.objects.entries()) {
             const texture = objectTexture(object.appearanceId, object.cell);
             if (!(texture instanceof Texture)) {
-              // O chão sem quadro é um retângulo, para o tile existir na tela; um item sem
-              // quadro — a caminho, ou id que o pacote não tem — não é nada.
-              if (index === 0 && stack.ground > 0) {
-                groundFallback
-                  .rect(local.x, local.y, TILE, TILE)
-                  .fill(drawn.blocked ? COLOR_WALL : COLOR_FLOOR)
-                  .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
-              }
+              if (index === 0) placeholder();
               continue;
             }
             const sprite = object.layer === 'top'
@@ -503,11 +495,17 @@ export async function mountViewport(
 
   function paintCreatures(center: { x: number; y: number; z: number }, nowMs: number): void {
     const seen = new Set<number>();
-    const drawable: Array<{ creature: Creature; x: number; y: number; z: number }> = [];
+    const floor = Math.round(center.z);
+    /** Cada criatura com a posição interpolada E a de TELA — deslocada pelo andar (FUN-121). */
+    const drawable: Array<{ creature: Creature; x: number; y: number; z: number; below: number; sx: number; sy: number }> = [];
 
     for (const creature of world.creatures.values()) {
       const position = interpolate(creature, nowMs);
-      drawable.push({ creature, x: position.x, y: position.y, z: position.z });
+      const below = position.z - floor;
+      drawable.push({
+        creature, x: position.x, y: position.y, z: position.z, below,
+        sx: position.x + below, sy: position.y + below,
+      });
       seen.add(creature.id);
     }
 
@@ -523,7 +521,6 @@ export async function mountViewport(
       }
     }
 
-    const floor = Math.round(center.z);
     for (const entry of drawable) {
       let sprite = sprites.get(entry.creature.id);
       if (sprite === undefined) {
@@ -539,7 +536,7 @@ export async function mountViewport(
       }
       // Andar (FUN-121): quem está ACIMA do jogador não aparece — não há telhado, não há
       // ninguém em cima dele —, e quem está abaixo aparece deslocado e sob o véu do andar.
-      const below = entry.z - floor;
+      const { below } = entry;
       if (below < 0) {
         sprite.visible = false;
         head.bar.visible = false;
@@ -549,12 +546,10 @@ export async function mountViewport(
       sprite.visible = true;
       head.bar.visible = true;
       head.label.visible = true;
-      const screen = toScreen({ x: entry.x + below, y: entry.y + below }, center, view);
+      const screen = toScreen({ x: entry.sx, y: entry.sy }, center, view);
       // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
-      // (`tile-stack.ts`), lida da última repintura.
-      const lift = below === 0
-        ? elevations.get(`${Math.round(entry.x)},${Math.round(entry.y)},${entry.z}`) ?? 0
-        : 0;
+      // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
+      const lift = below === 0 ? liftOf(entry.creature, entry, nowMs) : 0;
       const lifted = { x: screen.x - lift, y: screen.y - lift };
       paintOverlay(head, entry.creature, lifted);
       const texture = creatureTexture(entry.creature, nowMs);
@@ -569,16 +564,19 @@ export async function mountViewport(
         sprite.y = lifted.y + TILE - texture.height;
         continue;
       }
-      // Sem quadro (ainda, ou nunca): o retângulo de antes. É a degradação, não o erro.
+      // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
+      // véu que o quadro teria. É a degradação, não o erro.
       sprite.texture = Texture.WHITE;
       sprite.width = TILE - 6;
       sprite.height = TILE - 6;
-      sprite.x = screen.x + 3;
-      sprite.y = screen.y + 3;
-      sprite.tint = entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE;
+      sprite.x = lifted.x + 3;
+      sprite.y = lifted.y + 3;
+      sprite.tint = shade(entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
     }
 
-    reorder(drawable);
+    // A ordem é pela posição de TELA: uma criatura dois andares abaixo desenhada na mesma
+    // célula que uma do andar do jogador é comparada onde de fato está, não onde o mapa a põe.
+    reorder(drawable.filter((entry) => entry.below >= 0).map((entry) => ({ creature: entry.creature, x: entry.sx, y: entry.sy })));
   }
 
   /**

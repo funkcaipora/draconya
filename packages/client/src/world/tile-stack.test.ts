@@ -15,6 +15,8 @@ const ARCH = 106; // top
 const COINS = 107; // comum, empilhável 4×2
 const PAINTING = 108; // hang, padrão 3×1
 const SHIFTED = 109; // comum com shift (2, 3)
+const COINS_13 = 110; // empilhável do 13.x: padrão 4×3, fora da tabela de contagem
+const STEP = 111; // chão com elevação 8 (um degrau)
 
 const catalogue: Record<number, { flags: Partial<AppearanceFlags>; pattern?: { width: number; height: number } }> = {
   [GRASS]: { flags: { bankWaypoints: 150 }, pattern: { width: 4, height: 4 } },
@@ -27,6 +29,8 @@ const catalogue: Record<number, { flags: Partial<AppearanceFlags>; pattern?: { w
   [COINS]: { flags: { take: true }, pattern: { width: 4, height: 2 } },
   [PAINTING]: { flags: { hang: true }, pattern: { width: 3, height: 1 } },
   [SHIFTED]: { flags: { shiftX: 2, shiftY: 3 } },
+  [COINS_13]: { flags: { take: true }, pattern: { width: 4, height: 3 } },
+  [STEP]: { flags: { bankWaypoints: 150, elevation: 8 } },
 };
 const info: ObjectInfo = {
   flagsOf: (id) => ({ ...NO_FLAGS, ...(catalogue[id]?.flags ?? {}) }),
@@ -94,6 +98,19 @@ describe('drawTile — padrões (FUN-121)', () => {
     expect(at(10)).toEqual({ x: 1, y: 1 });
     expect(at(25)).toEqual({ x: 2, y: 1 });
     expect(at(100)).toEqual({ x: 3, y: 1 });
+  });
+
+  it('a tabela de contagem só vale para o padrão de 4×2; com outro padrão a célula é a da posição', () => {
+    // As moedas do 13.x têm padrão 4×3, e o cliente do Tibia as desenha pela posição — pela
+    // tabela, a terceira linha delas nunca seria alcançada.
+    const drawn = drawTile({ ground: GRASS, items: [{ id: COINS_13, count: 4 }] }, 129, 50, info);
+    expect(drawn.objects[1]?.cell).toEqual({ x: 1, y: 2 });
+  });
+
+  it('chão com elevação sobe os itens em cima dele e a criatura, como um degrau', () => {
+    const drawn = drawTile({ ground: STEP, items: [{ id: CRATE }] }, 0, 0, info);
+    expect(drawn.objects.map((o) => o.dy)).toEqual([0, -8]);
+    expect(drawn.creatureElevation).toBe(16);
   });
 
   it('countCell cabe num padrão menor sem estourar', () => {

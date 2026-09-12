@@ -55,8 +55,9 @@ export interface ObjectInfo {
 
 /**
  * A célula de um empilhável pela CONTAGEM, no padrão de `4×2` do Tibia: 1, 2, 3 e 4 moedas
- * são as quatro células da primeira linha; a partir de 5, 10, 25 e 50 as da segunda. Padrão
- * menor que isso cai na célula que existir — o `%` de sempre — e sem contagem é a célula 0.
+ * são as quatro células da primeira linha; a partir de 5, 10, 25 e 50 as da segunda. Sem
+ * contagem é a célula 0. Quem chama garante o padrão de 4×2; com outro, o `%` só evita
+ * estourar.
  */
 export function countCell(count: number | undefined, pattern: Pattern): { x: number; y: number } {
   if (count === undefined || count <= 1) return { x: 0, y: 0 };
@@ -93,11 +94,13 @@ export function drawTile(tile: TileStack, x: number, y: number, info: ObjectInfo
 
   const place = (item: StackedItem, flags: AppearanceFlags, layer: DrawLayer): void => {
     const pattern = info.patternOf(item.id);
-    // Empilhável é o que veio COM contagem do arquivo: a célula é da contagem, nunca da
-    // posição — uma moeda só é a célula 0, e não a que o `x % 4` daria.
+    // Empilhável é o que veio COM contagem do arquivo, e a tabela de contagem só vale para o
+    // padrão de 4×2 que ela descreve — é o que o cliente do Tibia faz; com outro padrão
+    // (a moeda de 4×3 do 13.x) a célula volta a ser a da posição, como qualquer item. Uma
+    // moeda só é a célula 0, e não a que o `x % 4` daria.
     const cell = flags.hang
       ? hangCell(hooks, pattern)
-      : item.count !== undefined
+      : item.count !== undefined && pattern.width === 4 && pattern.height === 2
         ? countCell(item.count, pattern)
         : groundCell(x, y, pattern);
     const lift = layer === 'top' ? 0 : elevation;

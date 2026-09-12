@@ -4,6 +4,7 @@
   "recommendedLevel": 1,
   "mapId": "rat-cellars",
   "routeId": "rat-cellars",
+  "ambience": "cavern",
   "difficulties": {
     "beginner": {
       "perSpawnPoint": 2,
