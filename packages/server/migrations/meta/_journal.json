@@ -43,6 +43,13 @@
       "when": 1789400000000,
       "tag": "0005_fun-113-bestiary",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0006_152-ammo-selection",
+      "breakpoints": true
     }
   ]
 }

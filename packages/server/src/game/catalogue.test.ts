@@ -72,6 +72,34 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
+  it('leva a munição e como cada arma bate — tipo, alcance, família, duas mãos — e nunca mana nem faixa de dano (#152)', () => {
+    // O seletor no slot do escudo precisa da família e do preço por tiro; o tooltip, do
+    // alcance. Mana por golpe e faixa de dano são balanceamento (invariante 4) e ficam fora.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withWeapons = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+        { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
+      ],
+      ammunition: [
+        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 },
+        { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, requires: { level: 20 } },
+      ],
+    };
+    const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
+    const { items, ammunition } = buildCatalogue(content);
+
+    expect(items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
+    const wand = items.find((item) => item.id === 'wand');
+    expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
+    expect(ammunition).toEqual([
+      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 1, requires: {} },
+      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 2, requires: { level: 20 } },
+    ]);
+  });
+
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
     // O contador chega por id; sem esta lista a tela mostraria "rat: 12" em vez de "Rat". Só
     // id e nome: vida, ataque e XP são balanceamento que o cliente não simula (invariante 4).

@@ -143,6 +143,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
+        ammo: message.ammo,
       }));
       return;
 
@@ -200,6 +201,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           monsters: message.monsters,
           bot: message.bot,
           items: message.items,
+          // A munição (#152): o seletor no slot do escudo lista a família do bow por aqui.
+          ammunition: message.ammunition,
           ...(message.bestiary === undefined ? {} : { bestiary: message.bestiary }),
         },
       }));

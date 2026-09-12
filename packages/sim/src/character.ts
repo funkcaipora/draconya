@@ -1,6 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
+import type { AmmoFamily, Ammunition } from '@draconya/content';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
 import { Cooldowns } from './cooldown.js';
@@ -114,8 +115,19 @@ export interface CharacterState {
   readonly lootSeq?: number;
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
+  /**
+   * A munição escolhida por família (#152, ADR 0026 decisão 3): `{ arrow: 'sniper-arrow' }`.
+   * Ausente, ou família sem chave, é a munição GRÁTIS da família — o padrão de quem nunca
+   * escolheu. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não precisou subir. Viaja no
+   * ticket e no extrato como a vocação.
+   */
+  readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
   readonly cooldowns: Partial<CooldownState>;
 }
+
+/** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
+export type AmmoRefusal = 'level-too-low';
+export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly reason: AmmoRefusal };
 
 export class CharacterRuntime {
   readonly id: string;
@@ -146,6 +158,8 @@ export class CharacterRuntime {
   lootSeq: number;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
+  /** A munição escolhida por família. Só a sessão dona escreve (`selectAmmo`). */
+  readonly ammo: Map<AmmoFamily, string>;
   readonly cooldowns: Cooldowns;
 
   constructor(state: CharacterState) {
@@ -173,7 +187,22 @@ export class CharacterRuntime {
     this.lootBox = [...(state.lootBox ?? [])];
     this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
+    this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
+  }
+
+  /**
+   * Escolhe a munição da família dela (#152). Só o level é conferido: a família é da
+   * munição, e a arma na mão não precisa existir ainda — o Huntera mostra a seleção só com o
+   * bow, mas guarda a escolha sempre. Sem gold para ela, o tiro sai com a grátis (o ruleset
+   * decide isso a cada tiro, não aqui).
+   */
+  selectAmmo(ammo: Ammunition): AmmoResult {
+    if (ammo.requires.level !== undefined && this.level < ammo.requires.level) {
+      return { ok: false, reason: 'level-too-low' };
+    }
+    this.ammo.set(ammo.family, ammo.id);
+    return { ok: true };
   }
 
   getState(): CharacterState {
@@ -200,6 +229,7 @@ export class CharacterRuntime {
       lootBox: this.lootBox,
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
+      ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       cooldowns: this.cooldowns.getState(),
     };
   }

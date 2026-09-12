@@ -23,14 +23,15 @@ async function render(): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
+  ammunition: [],
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [], supplies: [],
   },
   items: [
-    { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand' },
-    { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null },
+    { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
+    { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null, twoHanded: false },
   ],
 };
 

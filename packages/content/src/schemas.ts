@@ -69,11 +69,21 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
-   * `id de munição → appearanceId` (ADR 0026, decisão 3). O objeto da flecha no pacote: é o
-   * ícone que o seletor mostra no slot do escudo e a origem do projétil. Conferido dos dois
-   * lados, como item — munição sem arte não tem como ser escolhida na tela.
+   * `id de munição → { icon, missile }` (ADR 0026, decisão 3; #152). `icon` é o objeto da
+   * flecha no pacote — o que o seletor mostra no slot do escudo —, `missile` é o projétil do
+   * tiro. Os dois obrigatórios e conferidos dos dois lados, como item: munição sem ícone não
+   * tem como ser escolhida, e tiro sem projétil é um monstro perdendo vida do nada.
    */
-  ammunition: z.record(z.string().min(1), appearanceId).default({}),
+  ammunition: z.record(z.string().min(1), z.object({
+    icon: appearanceId,
+    missile: appearanceId,
+  })).default({}),
+  /**
+   * `id de item → { missile }` para a arma que dispara sem munição — wand e rod (#152). De
+   * um lado só, como `spells`: arma sem linha é arma MUDA (bate, não desenha), e a linha
+   * órfã é recusada.
+   */
+  weapons: z.record(z.string().min(1), z.object({ missile: appearanceId })).default({}),
   /**
    * `id de monstro → aparência do cadáver` (FUN-123). O `sim` diz que um monstro morreu; é
    * aqui que o rato morto vira o objeto 5964 no chão — arte, logo tabela (invariante 6).
@@ -221,6 +231,32 @@ export const ITEM_SLOTS = [
 ] as const;
 export type ItemSlot = (typeof ITEM_SLOTS)[number];
 
+/** As famílias de munição do Tibia: flecha para bow, virote para crossbow. */
+export const AMMO_FAMILIES = ['arrow', 'bolt'] as const;
+export type AmmoFamily = (typeof AMMO_FAMILIES)[number];
+
+/**
+ * Como uma arma bate (#152, ADR 0026 decisões 3 e 4). `melee` usa o `attack` do item pela skill
+ * corpo a corpo; `distance` usa o `attack` da MUNIÇÃO selecionada pela skill de distância, e
+ * exige `ammoFamily`; `wand` (wand e rod) gasta `manaPerHit` por golpe, causa dano mágico por
+ * faixa fixa (`damage`) e treina magia pela mana gasta — o `attack` do item fica 0.
+ */
+export const WEAPON_KINDS = ['melee', 'distance', 'wand'] as const;
+export type WeaponKind = (typeof WEAPON_KINDS)[number];
+
+export const weaponSchema = z.strictObject({
+  kind: z.enum(WEAPON_KINDS),
+  /** Alcance em tiles. `1` é corpo a corpo; o bow do Tibia alcança 6, wand e rod 3. */
+  range: z.number().int().positive(),
+  ammoFamily: z.enum(AMMO_FAMILIES).optional(),
+  manaPerHit: z.number().int().positive().optional(),
+  damage: z.object({
+    min: z.number().int().nonnegative(),
+    max: z.number().int().nonnegative(),
+  }).optional(),
+});
+export type Weapon = z.infer<typeof weaponSchema>;
+
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 export const ITEM_ORIGINS = ['loot', 'boss', 'quest', 'market', 'admin'] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
@@ -256,6 +292,11 @@ export const itemSchema = z.strictObject({
    * (issue #152); aqui só a forma. Fora de arma é conteúdo quebrado, e o boot recusa.
    */
   twoHanded: z.boolean().default(false),
+  /**
+   * Como a arma bate (#152). Obrigatório em `kind: 'weapon'` e proibido fora dela —
+   * `buildContent` confere, porque o schema de um campo opcional não sabe do `kind`.
+   */
+  weapon: weaponSchema.optional(),
   /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
   weight: z.number().nonnegative(),
   /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
@@ -287,9 +328,6 @@ export const itemSchema = z.strictObject({
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
-/** As famílias de munição do Tibia: flecha para bow, virote para crossbow. */
-export const AMMO_FAMILIES = ['arrow', 'bolt'] as const;
-export type AmmoFamily = (typeof AMMO_FAMILIES)[number];
 
 /**
  * Munição (ADR 0026, decisão 3 — o modelo do Huntera). NÃO é item: não tem peso, pilha nem
@@ -314,8 +352,11 @@ export const ammunitionSchema = z.strictObject({
 });
 
 export type AmmunitionDefinition = z.infer<typeof ammunitionSchema>;
-/** A munição pronta para uso, com a aparência (o projétil e o ícone) resolvida no boot. */
-export type Ammunition = AmmunitionDefinition & { readonly appearanceId: number };
+/** A munição pronta para uso: `appearanceId` é o ícone, `missileId` o projétil, ambos do boot. */
+export type Ammunition = AmmunitionDefinition & {
+  readonly appearanceId: number;
+  readonly missileId: number;
+};
 
 /**
  * O item pronto para uso, com a aparência já resolvida por `buildContent`.
@@ -660,6 +701,8 @@ export const skillSchema = z.object({
    */
   gain: z.discriminatedUnion('on', [
     z.object({ on: z.literal('melee-hit'), points: z.number().positive() }),
+    /** Um tiro de arma de distância (#152). Como o golpe: rende por uso, acerte ou não. */
+    z.object({ on: z.literal('distance-hit'), points: z.number().positive() }),
     z.object({ on: z.literal('spell-cast'), pointsPerMana: z.number().positive() }),
   ]),
   /** Fração acrescentada ao poder por nível ACIMA do inicial. `0` é skill que não bate. */

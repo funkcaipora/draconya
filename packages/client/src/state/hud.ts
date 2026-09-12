@@ -121,6 +121,8 @@ export interface HudState {
   readonly capacity: number;
   readonly gold: number;
   readonly staminaMs: number;
+  /** A munição escolhida por família (#152): `null` é a grátis. Chega em `player-stats`. */
+  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
 
   /** Ida e volta medida pelo `ping`/`pong`, ou `null` enquanto não houve nenhum. */
   readonly latencyMs: number | null;
@@ -170,6 +172,7 @@ export const INITIAL_HUD: HudState = {
   mana: 0, maxMana: 0,
   level: 0, xp: 0,
   capacity: 0, gold: 0, staminaMs: 0,
+  ammo: { arrow: null, bolt: null },
   latencyMs: null,
   connection: 'idle',
   chat: [],

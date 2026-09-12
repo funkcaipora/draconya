@@ -151,6 +151,36 @@ evento por segundo para redescobrir a mesma coisa.
 O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
 inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
+## Como cada arma bate (#152, ADR 0026 decisões 3 e 4)
+
+O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bow 6, wand e rod
+3, corpo a corpo 1), e só desarmado vale `combat.player.attackRange`. O golpe despacha pelo
+`weapon.kind`:
+
+- **`melee`** — o `attack` do item pela skill corpo a corpo, como sempre.
+- **`distance`** — o bow atira a **munição** da família dele (`ammoFamily`): a escolhida pelo
+  jogador (`select-ammo`, guardada por família e persistida como preferência), ou a grátis. O
+  dano é o `attack` da munição pela skill `distance` (nova, sobe por tiro). Cada tiro da
+  munição paga debita `price` do gold do personagem e do agregado da sessão, como o supply
+  (§20.1); sem gold para ela, o tiro sai com a grátis e o jogador é avisado uma vez por sessão
+  (`ammo-fallback`) — o bot nunca para de atirar (invariante 11).
+- **`wand`** — wand e rod gastam `manaPerHit` por golpe, causam dano **mágico** por faixa fixa
+  (`damage.min..max`, uma rolagem do `Rng` da sessão por golpe, como o loot) e rendem magia
+  pela mana gasta, como uma magia. Sem mana, o golpe não sai: fica para o intervalo seguinte.
+
+O tiro emite um projétil (`shot` → `missile`), resolvido pela tabela de aparências no
+hospedeiro: o da munição para a flecha, o da arma (`appearances.weapons`) para wand e rod. O
+bow ocupa as duas mãos: com escudo vestido é recusado (`hands-full`), e vice-versa. Elemento
+(energia, terra) é ignorado até haver resistência por elemento no monstro.
+
+| Parâmetro | Valor | Onde mora |
+|---|---|---|
+| Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
+| Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
+| Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
+| Munição — attack e preço por tiro | arrow 25 / 0; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/*.json` |
+| Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
+
 ## O que o jogador vê (FUN-106, FUN-109)
 
 O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe

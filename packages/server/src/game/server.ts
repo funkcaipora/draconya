@@ -45,6 +45,7 @@ export interface GameDependencies {
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
+  readonly ammunition?: SessionHostOptions['ammunition'];
   /** O catálogo de monstros, para nome e outfit de quem nasce na hunt (FUN-103). */
   readonly monsterCatalog?: SessionHostOptions['monsterCatalog'];
   /** O outfit de todo jogador, até alguém escolher o seu (FUN-103). */
@@ -126,6 +127,9 @@ export function createGame(
       ...(dependencies.itemCatalog === undefined
         ? {}
         : { itemCatalog: dependencies.itemCatalog }),
+      ...(dependencies.ammunition === undefined
+        ? {}
+        : { ammunition: dependencies.ammunition }),
       ...(dependencies.monsterCatalog === undefined
         ? {}
         : { monsterCatalog: dependencies.monsterCatalog }),

@@ -166,13 +166,31 @@ describe('loadContent', () => {
     expect(content.items.get('leather-armor')?.weight).toBe(60);
   });
 
+  it('cada arma diz como bate, e a skill de distância existe (#152, ADR 0026 decisões 3 e 4)', () => {
+    const content = loadContent(DATA);
+    const weapon = (id: string) => content.items.get(id)?.weapon;
+    expect(weapon('machete')).toEqual({ kind: 'melee', range: 1 });
+    expect(weapon('steel-axe')).toEqual({ kind: 'melee', range: 1 });
+    expect(weapon('bow')).toEqual({ kind: 'distance', range: 6, ammoFamily: 'arrow' });
+    expect(weapon('wand-of-vortex')).toEqual({ kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } });
+    expect(weapon('snakebite-rod')).toEqual({ kind: 'wand', range: 3, manaPerHit: 1, damage: { min: 8, max: 18 } });
+    // Os projéteis da wand e do rod: energia (5) e terra pequena (39), conferidos de olho.
+    expect(content.appearances?.weapons).toEqual({ 'wand-of-vortex': { missile: 5 }, 'snakebite-rod': { missile: 39 } });
+    const distance = content.skills.get('distance');
+    expect(distance?.gain).toEqual({ on: 'distance-hit', points: 1 });
+    expect(distance?.startingLevel).toBe(10);
+  });
+
   it('carrega a munição como seleção: a arrow é grátis, as outras debitam gold por tiro (ADR 0026, decisão 3)', () => {
     const content = loadContent(DATA);
-    const ammo = [...content.ammunition.values()].map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId]);
+    // Ícone (objeto) e projétil (missile), conferidos de olho: arrow 3, sniper arrow 22, onyx
+    // arrow 23 são os projéteis do pacote 13.32 (#152).
+    const ammo = [...content.ammunition.values()]
+      .map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId, a.missileId]);
     expect(ammo).toEqual([
-      ['arrow', 'arrow', 25, 0, 3447],
-      ['onyx-arrow', 'arrow', 38, 7, 7365],
-      ['sniper-arrow', 'arrow', 28, 5, 7364],
+      ['arrow', 'arrow', 25, 0, 3447, 3],
+      ['onyx-arrow', 'arrow', 38, 7, 7365, 23],
+      ['sniper-arrow', 'arrow', 28, 5, 7364, 22],
     ]);
     expect(content.ammunition.get('sniper-arrow')?.requires.level).toBe(20);
     expect(content.ammunition.get('onyx-arrow')?.requires.level).toBe(40);

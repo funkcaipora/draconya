@@ -80,4 +80,20 @@ export interface SupplyUsed {
   readonly position: WorldPoint;
 }
 
-export type CombatEvent = CreatureHit | CreatureHealed | SpellCast | SupplyUsed;
+/**
+ * Um TIRO saiu (#152): flecha do bow, ou o disparo da wand e do rod — uma vez por golpe,
+ * ANTES do `creature-hit` dele. O `sim` diz qual arma e qual munição; o projétil a desenhar é
+ * da tabela de aparências, resolvido pelo hospedeiro (invariante 6). `ammoId` só no tiro com
+ * munição; a wand dispara sem.
+ */
+export interface Shot {
+  readonly kind: 'shot';
+  readonly attackerId: string | number;
+  readonly targetId: string | number;
+  readonly weaponItemId: string;
+  readonly ammoId?: string;
+  readonly from: WorldPoint;
+  readonly to: WorldPoint;
+}
+
+export type CombatEvent = CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot;

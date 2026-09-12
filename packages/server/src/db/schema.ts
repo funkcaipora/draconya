@@ -141,6 +141,13 @@ export const characters = pgTable(
      */
     bestiary: jsonb('bestiary'),
 
+    /**
+     * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. Nulável — quem
+     * nunca escolheu atira a grátis. Escrita pelo ledger na transação do extrato, última
+     * escrita vence; lida na emissão do ticket.
+     */
+    ammo: jsonb('ammo'),
+
     state: text('state').notNull().default('city'),
     sessionId: text('session_id'),
 

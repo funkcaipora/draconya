@@ -26,6 +26,7 @@ const monsters = [rat, { id: 'bat', name: 'Bat' }];
 const catalogue = (over: Partial<Catalogue> = {}): Catalogue => ({
   hunts: [],
   monsters,
+  ammunition: [],
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },

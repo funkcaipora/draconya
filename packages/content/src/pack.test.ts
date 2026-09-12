@@ -15,8 +15,8 @@ const pack: Pack = packSchema.parse({
 
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
-  monsters: {}, items: {}, ammunition: {}, corpses: {}, maps: {}, spells: {}, supplies: {},
-  hits: {},
+  monsters: {}, items: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
+  supplies: {}, hits: {},
   ...over,
 });
 
@@ -53,16 +53,25 @@ describe('packHas', () => {
 });
 
 describe('packProblems', () => {
-  it('confere a munição no registro de objetos, aceitando o id que existe e recusando o que não (#151)', () => {
+  it('confere a munição — ícone em objetos, projétil em missiles — aceitando o que existe e recusando o que não (#151, #152)', () => {
     // Mutação que mata: apagar o laço de `ammunition` em `packProblems` — o resto da suíte
     // continua verde, porque o conteúdo real só tem ids válidos, e a flecha com id fora do
     // pacote subiria como o quadrado invisível que este módulo existe para impedir.
-    expect(packProblems(table({ ammunition: { arrow: 1200 } }), pack)).toEqual([]);
-    expect(packProblems(table({ ammunition: { arrow: 168 } }), pack))
-      .toEqual(['appearances.ammunition.arrow: object 168 não existe no pacote tibia-test']);
-    // No registro de OBJETOS: 21 é um outfit que existe, e um objeto que não.
-    expect(packProblems(table({ ammunition: { arrow: 21 } }), pack))
-      .toEqual(['appearances.ammunition.arrow: object 21 não existe no pacote tibia-test']);
+    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 5 } } }), pack)).toEqual([]);
+    expect(packProblems(table({ ammunition: { arrow: { icon: 168, missile: 5 } } }), pack))
+      .toEqual(['appearances.ammunition.arrow.icon: object 168 não existe no pacote tibia-test']);
+    // O projétil é conferido no registro de MISSILES: 43 é o buraco entre as faixas.
+    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 43 } } }), pack))
+      .toEqual(['appearances.ammunition.arrow.missile: missile 43 não existe no pacote tibia-test']);
+    // E o ícone no de OBJETOS: 21 é um outfit que existe, e um objeto que não.
+    expect(packProblems(table({ ammunition: { arrow: { icon: 21, missile: 5 } } }), pack))
+      .toEqual(['appearances.ammunition.arrow.icon: object 21 não existe no pacote tibia-test']);
+  });
+
+  it('confere o projétil da wand e do rod no registro de missiles (#152)', () => {
+    expect(packProblems(table({ weapons: { 'wand-of-vortex': { missile: 5 } } }), pack)).toEqual([]);
+    expect(packProblems(table({ weapons: { 'wand-of-vortex': { missile: 43 } } }), pack))
+      .toEqual(['appearances.weapons.wand-of-vortex.missile: missile 43 não existe no pacote tibia-test']);
   });
 
   it('aceita a tabela cujos ids existem todos no pacote', () => {

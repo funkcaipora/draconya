@@ -64,6 +64,12 @@ export interface SessionReceipt {
    */
   readonly bestiary?: BestiaryState;
   /**
+   * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
+   * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
+   * ordem escreveria a escolha antiga, e o jogador a refaria num clique.
+   */
+  readonly ammo?: Readonly<Record<string, string>>;
+  /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
    * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
@@ -255,6 +261,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // linha existir é a mesma que a do comentário delas.
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
+      : {}),
+    // A munição (#152): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
+      ? { ammo: value['ammo'] as Record<string, string> }
       : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.

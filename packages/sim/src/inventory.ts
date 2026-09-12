@@ -38,7 +38,9 @@ export type InventoryRefusal =
   | 'not-equippable'
   | 'level-too-low'
   | 'wrong-vocation'
-  | 'stack-too-large';
+  | 'stack-too-large'
+  /** Arma de duas mãos com escudo vestido, ou escudo com arma de duas mãos na mão (#152). */
+  | 'hands-full';
 
 export type InventoryResult = { readonly ok: true } | {
   readonly ok: false; readonly reason: InventoryRefusal;
@@ -165,6 +167,19 @@ export class Inventory {
       return { ok: false, reason: 'wrong-vocation' };
     }
 
+    // As duas mãos (#152, ADR 0026): o bow ocupa também o escudo. Vestir um com o outro no
+    // lugar é recusado, e não trocado — tirar o escudo por conta própria seria decidir pelo
+    // jogador o que ele queria fora do corpo.
+    if (definition.twoHanded && this.#equipped.has('shield')) {
+      return { ok: false, reason: 'hands-full' };
+    }
+    if (definition.slot === 'shield') {
+      const inHand = this.#equipped.get('hand');
+      if (inHand !== undefined && catalog.get(inHand.itemId)?.twoHanded) {
+        return { ok: false, reason: 'hands-full' };
+      }
+    }
+
     this.remove(instanceId);
     const previous = this.#equipped.get(definition.slot);
     this.#equipped.set(definition.slot, carried);
@@ -194,6 +209,16 @@ export class Inventory {
     const weapon = this.#equipped.get('hand');
     if (weapon === undefined) return null;
     return catalog.get(weapon.itemId)?.attack ?? null;
+  }
+
+  /**
+   * A DEFINIÇÃO da arma na mão, ou `null` desarmado (#152). É por ela que o ruleset decide
+   * como bater — corpo a corpo, tiro com munição, ou wand — e a que alcance.
+   */
+  weapon(catalog: ReadonlyMap<string, Item>): Item | null {
+    const carried = this.#equipped.get('hand');
+    if (carried === undefined) return null;
+    return catalog.get(carried.itemId) ?? null;
   }
 
   /** A armadura somada do que está vestido. Zero é ninguém vestido, e é um número honesto. */

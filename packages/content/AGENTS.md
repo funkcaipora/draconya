@@ -252,7 +252,12 @@ antes de gravar a linha. Os números do Tibia (TibiaWiki) e os ids do pacote 13.
 | wand of vortex (Sorcerer) / snakebite rod (Druid) | 3074 / 3066 | 19 oz — alcance, mana e dano entram no motor pela #152 |
 
 `kind: 'container'` e `slot: 'back'` andam juntos, e `twoHanded` só em arma — `buildContent`
-recusa o resto. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a
+recusa o resto. **Como a arma bate é da arma** (#152): `weapon: { kind, range, ammoFamily?,
+manaPerHit?, damage? }` — `melee` (o `attack` do item), `distance` (o `attack` da munição da
+`ammoFamily`, que precisa ter munição no catálogo) ou `wand` (`manaPerHit` e `damage` por
+faixa, `attack` 0). Arma sem `weapon` é `{ kind: 'melee', range: 1 }`, normalizado no boot;
+campo de um tipo em arma de outro, ou `weapon` fora de arma, é recusado. O projétil da wand e
+do rod mora em `appearances.weapons[itemId].missile`, de um lado só como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a
 segura até o level 8: o personagem nasce sem vocação.
 
 ## Munição (#151, ADR 0026)
@@ -263,8 +268,9 @@ Huntera (`ammo-selection { arrow, bolt }`, `docs/reference/huntera-observed.md` 
 `price: 0` é a grátis e o padrão da família, e cada tiro das outras debita `price` do gold do
 personagem, pelo caminho do supply (§20.1). `buildContent` exige uma grátis por família — é
 ela que o bow dispara quando o gold acaba, e sem ela o bot pararia de atirar (invariante 11).
-A aparência vive em `appearances.ammunition`, conferida dos dois lados como a do item: é o
-ícone que o seletor mostra. Hoje: arrow (3447, attack 25, grátis), sniper arrow (7364, 28,
+A aparência vive em `appearances.ammunition[id] = { icon, missile }`, conferida dos dois
+lados como a do item: `icon` é o objeto que o seletor mostra, `missile` o projétil do tiro —
+os dois obrigatórios (arrow 3, sniper arrow 22, onyx arrow 23 no 13.32, conferidos de olho). Hoje: arrow (3447, attack 25, grátis), sniper arrow (7364, 28,
 level 20) e onyx arrow (7365, 38, level 40); os preços por tiro são `_open` até serem
 conferidos no TibiaWiki. Quem atira é o `sim` (#152).
 

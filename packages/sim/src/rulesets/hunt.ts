@@ -18,9 +18,9 @@
 
 import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
-  BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, Hunt, HuntDifficulty,
-  Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina, Supply, Tilemap,
-  Vocation,
+  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content,
+  Hunt, HuntDifficulty, Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina,
+  Supply, Tilemap, Vocation, Weapon,
 } from '@draconya/content';
 import type { CharacterRuntime } from '../character.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
@@ -225,6 +225,8 @@ export interface HuntRulesetOptions {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
   readonly items: ReadonlyMap<string, Item>;
+  /** A munição que o bow dispara (#152): a escolhida por família, ou a grátis. */
+  readonly ammunition: ReadonlyMap<string, Ammunition>;
   /**
    * Os marcos do Bestiário e o bônus por marco (§18, FUN-113). Ausente é uma hunt em que o
    * abate conta, mas nenhum marco fecha e a XP sai sem bônus — o conteúdo de teste que não
@@ -449,6 +451,10 @@ export class HuntRuleset implements Ruleset {
    * índice de monstro por subject valer a pena.
    */
   readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
+  /** A munição grátis por família (#152). Ver o construtor. */
+  readonly #freeAmmo = new Map<AmmoFamily, Ammunition>();
+  /** Quem já foi avisado nesta sessão que o gold acabou para a munição escolhida (#152). */
+  readonly #ammoFallbackTold = new Set<string>();
 
   /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
@@ -492,8 +498,14 @@ export class HuntRuleset implements Ruleset {
     this.#exitRules = this.#composeExitRules(options.botConfig);
     this.#skillsByGain = {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
+      'distance-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'distance-hit'),
       'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
     };
+    // A munição grátis de cada família, UMA vez: é o tiro de quem não escolheu e de quem
+    // ficou sem gold. Por ordem de id, para dois nós com o mesmo conteúdo escolherem a mesma.
+    for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (ammo.price === 0 && !this.#freeAmmo.has(ammo.family)) this.#freeAmmo.set(ammo.family, ammo);
+    }
     this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
@@ -1016,7 +1028,7 @@ export class HuntRuleset implements Ruleset {
     // `follow` persegue até poder bater; `keep-distance` mira a distância configurada. Os dois
     // são o mesmo cálculo com alvos diferentes, e escrever dois laços seria a mesma geometria
     // divergindo na terceira mudança.
-    const want = posture.kind === 'follow' ? this.#options.player.attackRange : posture.tiles;
+    const want = posture.kind === 'follow' ? this.#attackRangeOf(character) : posture.tiles;
     // `null` é "a postura decidiu ficar parado": a cadência seguinte é a de um passo daqui.
     if (d === want) return null;
 
@@ -1098,7 +1110,12 @@ export class HuntRuleset implements Ruleset {
     }
 
     this.#schedulePlayerAttack(session, characterId, this.#options.player.attackIntervalMs);
-    this.#strike(session, character, target);
+    const weapon = character.inventory.weapon(this.#options.items);
+    const how = weapon?.weapon;
+    // Wand sem mana NÃO bate (#152): o golpe fica agendado para o intervalo seguinte, e sai
+    // quando a mana tiver voltado. Não consome mana, não rende skill — como a magia recusada.
+    if (how?.kind === 'wand' && character.mana < (how.manaPerHit ?? 0)) return;
+    this.#strike(session, character, target, weapon, how);
     // Quem aplica dano não decide morte: o pipeline resolve quem matou e devolve a
     // consequência a `onCreatureDied`, o mesmo caminho da morte do personagem.
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -1729,39 +1746,120 @@ export class HuntRuleset implements Ruleset {
 
   // --- combate ------------------------------------------------------------------------------
 
-  #strike(session: Session, character: CharacterRuntime, monster: MonsterRuntime): void {
+  /**
+   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4):
+   * corpo a corpo com o `attack` da arma (ou desarmado); tiro com o `attack` da munição
+   * escolhida, debitando o preço dela; ou wand, gastando mana e causando dano mágico por
+   * faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar, contar o recorde,
+   * render skill — e é `#land` quem o faz.
+   */
+  #strike(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+    weapon: Item | null, how: Weapon | undefined,
+  ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
+    const defender: Defender = { armor: definition.armor, dodgeChance: 0 };
+
+    if (weapon !== null && how?.kind === 'distance') {
+      const ammo = this.#ammoFor(session, character, how.ammoFamily ?? 'arrow');
+      // Família sem munição nenhuma no catálogo: o conteúdo real não passa no boot assim, e
+      // aqui a resposta é não atirar — nunca um tiro de dano inventado.
+      if (ammo === null) return;
+      if (ammo.price > 0) {
+        // Gold gasto pela munição paga: no personagem E no agregado da sessão, como o supply
+        // (§20.1). O extrato leva os dois ao ledger.
+        character.goldDelta -= ammo.price;
+        session.aggregates.goldSpent += ammo.price;
+      }
+      session.emit({
+        kind: 'shot', attackerId: character.id, targetId: monster.subject,
+        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
+      });
+      // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio.
+      const result = resolveDamage(
+        { power: this.#scaledPower(character, 'distance-hit', ammo.attack), kind: 'melee' },
+        defender, 'pve', this.#options.combat, session.rng,
+      );
+      this.#land(session, character, monster, result.damage, 'melee');
+      this.#gainSkills(session, character, 'distance-hit', 1);
+      return;
+    }
+
+    if (weapon !== null && how?.kind === 'wand') {
+      const manaPerHit = how.manaPerHit ?? 0;
+      const range = how.damage ?? { min: 0, max: 0 };
+      // A mana sai ANTES da rolagem, e a conferência foi em `#onPlayerAttack`: chegar aqui é
+      // ter mana. Uma rolagem por golpe, com o `Rng` da sessão — a mesma semente, o mesmo
+      // dano, como o loot (contrato).
+      character.mana -= manaPerHit;
+      session.emit({
+        kind: 'shot', attackerId: character.id, targetId: monster.subject,
+        weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
+      });
+      // Dano por faixa fixa e MÁGICO: no Tibia a wand não escala com skill nenhuma, e a
+      // armadura que vale é a mágica (`armorEffectiveness.magic`).
+      const result = resolveDamage(
+        { power: session.rng.integer(range.min, range.max), kind: 'magic' },
+        defender, 'pve', this.#options.combat, session.rng,
+      );
+      this.#land(session, character, monster, result.damage, 'spell');
+      // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
+      this.#gainSkills(session, character, 'spell-cast', manaPerHit);
+      return;
+    }
+
     const result = resolveDamage(
       // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
       // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
       { power: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
         kind: 'melee' },
-      { armor: definition.armor, dodgeChance: 0 },
-      'pve',
-      this.#options.combat,
-      session.rng,
+      defender, 'pve', this.#options.combat, session.rng,
     );
-    const applied = monster.receiveDamage(result.damage);
+    this.#land(session, character, monster, result.damage, 'melee');
+    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
+    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
+    // que "sobe pelo uso" quer dizer.
+    this.#gainSkills(session, character, 'melee-hit', 1);
+  }
+
+  /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
+  #land(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime,
+    resolved: number, source: 'melee' | 'spell',
+  ): void {
+    const applied = monster.receiveDamage(resolved);
     recordDamage(monster.contribution, character.id, applied);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-      amount: applied, source: 'melee', position: this.#at(monster),
+      amount: applied, source, position: this.#at(monster),
     });
     this.#emitHealth(session, monster);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
-    session.aggregates.bestBasicHit = Math.max(
-      session.aggregates.bestBasicHit, result.damage,
-    );
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
-    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
-    // que "sobe pelo uso" quer dizer.
-    this.#gainSkills(session, character, 'melee-hit', 1);
+    session.aggregates.bestBasicHit = Math.max(session.aggregates.bestBasicHit, resolved);
+  }
+
+  /**
+   * A munição que o tiro usa (#152): a escolhida da família, se o gold paga o tiro; senão a
+   * grátis — e o jogador é avisado UMA vez por sessão, como evento notável. Sem gold o bot
+   * continua atirando: parar seria o oposto do invariante 11.
+   */
+  #ammoFor(session: Session, character: CharacterRuntime, family: AmmoFamily): Ammunition | null {
+    const free = this.#freeAmmo.get(family) ?? null;
+    const chosenId = character.ammo.get(family);
+    const chosen = chosenId === undefined ? undefined : this.#options.ammunition.get(chosenId);
+    if (chosen === undefined || chosen.family !== family) return free;
+    if (chosen.price === 0 || balanceOf(character) >= chosen.price) return chosen;
+    if (!this.#ammoFallbackTold.has(character.id)) {
+      this.#ammoFallbackTold.add(character.id);
+      session.record('ammo-fallback', chosen.id);
+    }
+    return free;
   }
 
   /**
@@ -1804,7 +1902,7 @@ export class HuntRuleset implements Ruleset {
     for (let i = 0; i < definitions.length; i += 1) {
       const definition = definitions[i] as Skill;
       const gain = definition.gain;
-      const points = gain.on === 'melee-hit' ? gain.points * amount : gain.pointsPerMana * amount;
+      const points = gain.on === 'spell-cast' ? gain.pointsPerMana * amount : gain.points * amount;
       if (character.skills.gain(definition, points) > 0) {
         session.record('skill-up', `${definition.id}/${character.skills.levelOf(definition)}`);
       }
@@ -1999,8 +2097,17 @@ export class HuntRuleset implements Ruleset {
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
     return selectTarget(
-      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
+      this.#targeting, this.#monsters, character.position, this.#attackRangeOf(character),
     );
+  }
+
+  /**
+   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado — ou a arma sem
+   * `weapon`, que o conteúdo já normalizou — vale `combat.player.attackRange`, o corpo a corpo.
+   */
+  #attackRangeOf(character: CharacterRuntime): number {
+    return character.inventory.weapon(this.#options.items)?.weapon?.range
+      ?? this.#options.player.attackRange;
   }
 
   /**
@@ -2154,6 +2261,7 @@ export function createHuntRuleset(
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
+    ammunition: content.ammunition,
     // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
     // `exactOptionalPropertyTypes`.
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),

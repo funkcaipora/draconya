@@ -19,7 +19,7 @@ import type {
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
 import type {
   CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult,
 } from '@draconya/sim';
@@ -114,6 +114,11 @@ export interface SessionHostOptions {
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
   /**
+   * O catálogo de munição (#152), para a escolha pelo socket. Ausente: nada se escolhe, e a
+   * recusa é honesta — como o de itens.
+   */
+  readonly ammunition?: ReadonlyMap<string, Ammunition>;
+  /**
    * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
    *
    * O `sim` não conhece nome nem arte: o evento de nascimento traz só o `monsterId`, e é aqui
@@ -177,6 +182,7 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'over-capacity': 'Você não aguenta carregar mais isso.',
   'not-carried': 'Você não está com esse item.',
   'not-equippable': 'Esse item não se veste.',
+  'hands-full': 'Isso precisa das duas mãos: tire o escudo, ou a arma.',
   'level-too-low': 'Seu level ainda não permite usar esse item.',
   'wrong-vocation': 'Esse item é de outra vocação.',
   'stack-too-large': 'Essa pilha é grande demais.',
@@ -232,6 +238,11 @@ function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
+    // A munição escolhida por família (#152): `null` é a grátis.
+    ammo: {
+      arrow: character?.ammo.get('arrow') ?? null,
+      bolt: character?.ammo.get('bolt') ?? null,
+    },
   };
 }
 
@@ -257,6 +268,8 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.xp === b.xp
     && a.capacity === b.capacity
     && a.gold === b.gold
+    && a.ammo.arrow === b.ammo.arrow
+    && a.ammo.bolt === b.ammo.bolt
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
 }
 
@@ -789,6 +802,9 @@ export class SessionHost {
         // level basta e em que slot vai é o servidor.
         this.#requestEquip(viewer, message.instanceId);
         return;
+      case 'select-ammo':
+        this.#requestAmmo(viewer, message.ammoId);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -917,6 +933,30 @@ export class SessionHost {
       return;
     }
     this.#answerInventory(viewer, character.inventory.unequip(slot as ItemSlot));
+  }
+
+  /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). Processado NA CHEGADA, como equipar. Quem
+   * confere o level é o `sim`; o host traduz a recusa e, no sucesso, manda os vitais com a
+   * escolha nova — na Cidade não há ciclo que os compare, e o seletor precisa ver a resposta.
+   */
+  #requestAmmo(viewer: Viewer, ammoId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const ammo = this.#options.ammunition?.get(ammoId);
+    if (ammo === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
+      return;
+    }
+    const result = character.selectAmmo(ammo);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Seu level não basta para essa munição.' });
+      return;
+    }
+    const stats = playerStatsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   #ownerOf(characterId: string): CharacterRuntime | undefined {
@@ -1181,6 +1221,7 @@ export class SessionHost {
         case 'creature-healed':
         case 'spell-cast':
         case 'supply-used':
+        case 'shot':
           this.#presentCombat(hosted, event);
           continue;
         case 'creature-moved':
@@ -1360,6 +1401,16 @@ export class SessionHost {
         const effectId = appearances?.supplies[event.supplyId]?.effect;
         if (effectId === undefined) return;
         messages.push({ type: 'effect', position: event.position, effectId });
+        break;
+      }
+      case 'shot': {
+        // O projétil é da MUNIÇÃO (flecha) ou da ARMA (wand e rod) — o `sim` só diz qual
+        // (invariante 6). Sem linha na tabela o tiro é mudo, como a magia sem arte.
+        const missileId = event.ammoId === undefined
+          ? appearances?.weapons[event.weaponItemId]?.missile
+          : appearances?.ammunition[event.ammoId]?.missile;
+        if (missileId === undefined) return;
+        messages.push({ type: 'missile', from: event.from, to: event.to, missileId });
         break;
       }
     }
@@ -2026,6 +2077,9 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
+      // login se ficasse só na sessão.
+      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -2297,6 +2351,7 @@ export class SessionHost {
         // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
+        ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
       });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida

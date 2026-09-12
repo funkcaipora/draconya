@@ -22,9 +22,26 @@
     "cheese": 3607
   },
   "ammunition": {
-    "arrow": 3447,
-    "sniper-arrow": 7364,
-    "onyx-arrow": 7365
+    "arrow": {
+      "icon": 3447,
+      "missile": 3
+    },
+    "sniper-arrow": {
+      "icon": 7364,
+      "missile": 22
+    },
+    "onyx-arrow": {
+      "icon": 7365,
+      "missile": 23
+    }
+  },
+  "weapons": {
+    "wand-of-vortex": {
+      "missile": 5
+    },
+    "snakebite-rod": {
+      "missile": 39
+    }
   },
   "corpses": {
     "rat": 5964

@@ -19,6 +19,8 @@ const catalog = new Map<string, Item>([
   // Empilhável: o queijo — munição deixou de ser item (ADR 0026), e o schema já não a aceita.
   ['arrow', define({ id: 'arrow', kind: 'other', weight: 1, stackable: true })],
   ['rock', define({ id: 'rock', kind: 'other', weight: 5 })],
+  ['bow', define({ id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } })],
+  ['shield', define({ id: 'shield', kind: 'shield', slot: 'shield', weight: 40 })],
   ['great-sword', define({
     id: 'great-sword', kind: 'weapon', slot: 'hand', weight: 60, attack: 40,
     requires: { level: 20 },
@@ -157,6 +159,29 @@ describe('equipar (§21.4)', () => {
       .toBe(false);
     expect(inventory.equip('druid-staff', wearer({ vocationId: 'druid' }), catalog).ok)
       .toBe(true);
+  });
+
+  it('as duas mãos (#152): bow com escudo vestido é recusado, e escudo com bow na mão também', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('bow'), catalog, wearer({ capacity: 1_000 }));
+    inventory.add(carried('shield'), catalog, wearer({ capacity: 1_000 }));
+    expect(inventory.equip('shield', wearer(), catalog).ok).toBe(true);
+    expect(inventory.equip('bow', wearer(), catalog)).toEqual({ ok: false, reason: 'hands-full' });
+    // Tira o escudo, veste o bow, e agora é o escudo que não entra.
+    expect(inventory.unequip('shield').ok).toBe(true);
+    expect(inventory.equip('bow', wearer(), catalog).ok).toBe(true);
+    expect(inventory.equip('shield', wearer(), catalog)).toEqual({ ok: false, reason: 'hands-full' });
+    // Uma arma de UMA mão convive com o escudo.
+    inventory.add(carried('sword'), catalog, wearer({ capacity: 1_000 }));
+    expect(inventory.equip('sword', wearer(), catalog).ok).toBe(true);
+    expect(inventory.equip('shield', wearer(), catalog).ok).toBe(true);
+  });
+
+  it('`weapon()` é a definição da arma na mão, ou null desarmado (#152)', () => {
+    const inventory = comEspada();
+    expect(inventory.weapon(catalog)).toBeNull();
+    inventory.equip('sword', wearer(), catalog);
+    expect(inventory.weapon(catalog)?.id).toBe('sword');
   });
 
   it('recusa equipar o que ele não tem', () => {
