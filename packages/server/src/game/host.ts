@@ -1422,6 +1422,14 @@ export class SessionHost {
    */
   #sendState(hosted: HostedSession, viewer: Viewer): void {
     const { characterId } = viewer;
+    // Qual cena, ANTES do estado (FUN-120). `instance-enter` é a troca de cena — o cliente
+    // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
+    // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
+    // transição, porque os dois passam por aqui; a instância é a própria sessão.
+    const mapId = hosted.session.ruleset.mapId;
+    if (mapId !== undefined) {
+      viewer.send({ type: 'instance-enter', instanceId: hosted.session.id, map: mapId });
+    }
     viewer.send(this.#sessionState(hosted, characterId));
     const participant = this.#participantOf(hosted, characterId);
     const stats = playerStatsOf(participant);
@@ -1746,6 +1754,11 @@ export class SessionHost {
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
+    // ANTES de os visualizadores dele entrarem em `successor.viewers`, de propósito: o que o
+    // anúncio manda é o `creature-appear` de quem chega para quem JÁ estava na praça. O que
+    // ele mandaria ao recém-chegado — os vizinhos que ele passa a ver — ninguém recebe, e
+    // não faz falta: o `#sendState` logo abaixo leva a cena inteira (`instance-enter` e
+    // `session-state`, que substitui tudo), e um `appear` antes dela seria apagado pela troca.
     this.#announceArrival(successor, characterId);
 
     for (const viewer of following) {
@@ -2113,7 +2126,8 @@ export class SessionHost {
         xp: self.xp,
       },
       world: {
-        mapId: null,
+        // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
+        mapId: session.ruleset.mapId ?? null,
         creatures,
       },
       aggregates: { ...session.aggregates },

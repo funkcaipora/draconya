@@ -8,7 +8,7 @@ import type { Tilemap } from '@draconya/content';
 import type { EndReason, Ruleset, Session } from '../session.js';
 import type { CharacterRuntime } from '../character.js';
 import type { GridPoint } from '../monster/step.js';
-import { TileOccupancy, move, placeNear } from '../movement.js';
+import { TileOccupancy, move, placeReachable } from '../movement.js';
 import type { MoveResult } from '../movement.js';
 
 export interface CityRulesetOptions {
@@ -23,22 +23,23 @@ export interface CityRulesetOptions {
    * Vem de `city.stepDurationMs`; a Cidade é navegação, não simulação.
    */
   readonly stepDurationMs?: number;
-  /** Até onde procurar tile livre ao chegar. Ver `ENTRY_RADIUS`. */
-  readonly entryRadius?: number;
+  /** Quantos tiles a busca por tile livre visita ao chegar. Ver `ENTRY_TILES`. */
+  readonly entryTiles?: number;
 }
 
 /**
- * Até onde procurar tile livre ao chegar na praça, em tiles.
+ * Quantos tiles a busca por tile livre visita ao chegar, antes de desistir.
  *
- * Dezesseis dá 1.089 tiles ao redor do ponto de entrada, e o número vem do TETO DE POPULAÇÃO
- * por cópia (200, na FUN-33): com 289 tiles — o raio 8 de antes — duzentas pessoas ficariam
- * ombro a ombro e ninguém conseguiria andar, porque tile é exclusivo.
+ * 1.089 é o quadrado de 33 — o anel de raio 16 que valia antes da FUN-120 —, e o número vem do
+ * TETO DE POPULAÇÃO por cópia (200, na FUN-33): com 289 tiles — o raio 8 de antes — duzentas
+ * pessoas ficariam ombro a ombro e ninguém conseguiria andar, porque tile é exclusivo.
  *
- * Não é um raio de espalhamento: a busca é do mais próximo para o mais distante, então quem
- * chega numa praça vazia entra no tile de entrada. O raio só é usado de verdade quando os tiles
- * perto estão ocupados — que é exatamente quando ele precisa existir.
+ * A busca é em largura pelos tiles ANDÁVEIS (`placeReachable`), do ponto de entrada para
+ * fora, então quem chega num templo vazio entra no tile de entrada, e quem chega no lotado
+ * fica no primeiro livre a pé — nunca do outro lado de uma parede, que é o que o anel
+ * geométrico fazia num prédio.
  */
-const ENTRY_RADIUS = 16;
+const ENTRY_TILES = 1_089;
 
 export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
   const world = options.map === undefined
@@ -48,13 +49,23 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       : { fixedStepMs: options.stepDurationMs });
   let occupancyStale = true;
 
-  const rebuild = (session: Session): void => {
+  /**
+   * Remonta a ocupação a partir de quem está na sessão — MENOS quem está entrando agora. O
+   * `Session.enter` já pôs o personagem em `participants` quando o `onEnter` roda, e a
+   * posição que ele traz é da sessão anterior, num mapa que não é este: a hunt de onde
+   * voltou, ou fora do mapa para um personagem novo. Contá-la aqui marcava um tile da praça
+   * como ocupado por ninguém — e, quando ela caía por acaso no ponto de entrada, o primeiro
+   * a chegar numa praça vazia era desviado para o vizinho. O mesmo filtro que a hunt faz.
+   */
+  const rebuild = (session: Session, arriving?: CharacterRuntime): void => {
     occupancyStale = false;
-    world?.reset(session.participants);
+    world?.reset(session.participants.filter((p) => p !== arriving));
   };
 
   return {
     type: 'city',
+    // O mapa que o cliente desenha (FUN-120). Cidade sem mapa é só fixture.
+    ...(options.map === undefined ? {} : { mapId: options.map.id }),
 
     // A Cidade é o SHARD (FUN-71, ADR 0023): uma cópia, muitos personagens. É a única sessão
     // do jogo assim — hunt, quest, boss e guild war são instanciadas por quem entra.
@@ -74,13 +85,14 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       // validado no carregamento do conteúdo contra `isBlocked`, então uma recusa aqui é
       // outra criatura em cima dele — e nesse caso o personagem fica onde estava.
       if (world !== null && options.map?.entryPoint !== undefined) {
-        if (occupancyStale) rebuild(session);
-        // No tile de entrada, ou no livre mais próximo dele.
+        if (occupancyStale) rebuild(session, character);
+        // No tile de entrada, ou no livre mais próximo dele A PÉ (FUN-120).
         //
         // A praça é COMPARTILHADA (FUN-71): o segundo a chegar encontra o primeiro parado
         // exatamente no ponto de entrada, e um `place` seco recusaria — o personagem ficaria
-        // fora do mapa, invisível e sem andar, com o log dizendo que ele entrou.
-        placeNear(world, character, options.map.entryPoint, options.entryRadius ?? ENTRY_RADIUS);
+        // fora do mapa, invisível e sem andar, com o log dizendo que ele entrou. E o templo
+        // tem paredes: o anel geométrico de `placeNear` colocaria o vigésimo do lado de fora.
+        placeReachable(world, character, options.map.entryPoint, options.entryTiles ?? ENTRY_TILES);
       }
       session.record('entered-city', character.id);
     },

@@ -199,10 +199,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
   da praça usando coordenada de outro mapa, em cima de quem estivesse parado ali. É o defeito da
   FUN-72 entrando pela mesma porta.
-- **Chegar na praça é `placeNear`, não `place`.** O ponto de entrada é um tile só e tile é
-  exclusivo; um `place` seco deixaria o segundo a chegar fora do mapa — invisível, sem andar,
-  com o log dizendo que ele entrou. O raio de 16 vem do TETO DE POPULAÇÃO por cópia (200, na
-  FUN-33): com 289 tiles ao redor da entrada, duzentas pessoas ficariam ombro a ombro.
+- **Chegar na Cidade é `placeReachable`, não `place` nem `placeNear`** (FUN-120). O ponto de
+  entrada é um tile só e tile é exclusivo; um `place` seco deixaria o segundo a chegar fora do
+  mapa — invisível, sem andar, com o log dizendo que ele entrou. E o anel geométrico de
+  `placeNear` atravessa parede: no templo de Thais lotado, ele punha quem chega do lado de fora
+  do prédio. A busca é em largura pelos tiles andáveis, quatro vizinhos, no andar da entrada,
+  sem entrar em escada; o teto de 1.089 tiles visitados (o quadrado do anel de 16 de antes) vem
+  do TETO DE POPULAÇÃO por cópia (200, na FUN-33): com 289, duzentas pessoas ficariam ombro a
+  ombro. A hunt não passa por nenhum dos dois: o spawn é um `place` seco num ponto aberto, e
+  `placeNear` fica como a busca em anel para quem tiver um lugar sem paredes.
+- **`Ruleset.mapId` é o mapa que o cliente desenha** (FUN-120): a hunt devolve o do
+  `TileOccupancy`, a Cidade o de `options.map`. Ausente é sessão sem mapa — só fixture. O
+  hospedeiro o manda em `instance-enter` antes do `session-state`, e em `world.mapId`.
 - **A duração do passo é do tile de DESTINO, e a diagonal custa 3× ANTES do arredondamento**
   (FUN-119, ADR 0025). `movementDuration(world, mover, from, to)` é `ceil50(chão × 1000 /
   speed)`; arredondar e depois triplicar dá 3.600 onde o Tibia dá 3.500. Quem parou volta a

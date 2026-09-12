@@ -44,7 +44,7 @@ export function loadContent(dir: string): Content {
     // `city/city.json`, uma pasta como as outras — é a convenção que o loader e a varredura
     // do invariante 6 esperam. Obrigatório no conteúdo real: sem Cidade ninguém tem onde
     // nascer (FUN-60); o `buildContent` é quem reclama se faltar.
-    city: readJsonDir(join(dir, 'city'))[0],
+    city: requireCity(readJsonDir(join(dir, 'city'))[0]),
   });
 }
 
@@ -65,4 +65,16 @@ function readJsonDir(dir: string): unknown[] {
       throw new Error(`${caminho}: JSON inválido — ${(erro as Error).message}`);
     }
   });
+}
+
+/**
+ * `city/city.json` é obrigatório no conteúdo REAL (FUN-120): sem ele a Cidade sobe sem mapa e
+ * sem `mapId`, o cliente nunca recebe `instance-enter` para a praça, e nada acusa no boot. O
+ * `buildContent` continua aceitando conteúdo sem Cidade — é a fixture que só fala de hunt.
+ */
+function requireCity(city: unknown): unknown {
+  if (city === undefined) {
+    throw new Error('city/city.json ausente: a Cidade não teria mapa nem ponto de entrada');
+  }
+  return city;
 }

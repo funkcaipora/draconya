@@ -48,6 +48,18 @@ nunca aqui.
 Huntera); a hunt anda pela fórmula do Tibia com `progression.startingSpeed`/`speedPerLevel` e
 `monster.speed`.
 
+**Mapa importado: o que é gerado e o que é autorado** (FUN-118, FUN-120, ADR 0025). Um mapa com
+`source` veio do OTBM real por `pnpm map:import`: `floors` (grade e velocidade), `speedPalette`
+e `source` são GERADOS, e `pnpm map:import --check` — que o `pnpm check` roda — reprova a grade
+editada à mão, porque ela é a geometria do arquivo de origem e não uma opinião. O que se autora
+no JSON é `entryPoint` e `floorChanges`; reimportar preserva os dois. Mapa importado NÃO tem
+linha em `appearances.maps`: a arte dele é a pilha por tile em `things/<versão>/maps/<id>.json`,
+que o cliente busca pelo `mapId` da sessão. A regra das escadas de Thais: o degrau (aparência
+1947, ou a variante 1958, em `(x, y, z)`) leva a `(x, y−1, z−1)`, e o tile em cima dele,
+`(x, y, z−1)`, leva a `(x, y+1, z)` — observado no Huntera e válido para as 46 escadas do
+recorte; `load.test.ts` prende que cada escada tem a volta. `city/city.json` aponta `thais`; a praça 10×10 de antes vive
+só como fixture em `packages/server/src/testing/content.ts`.
+
 **A rota fecha um laço** (§14.4), e isso é validado no carregamento. Rota aberta faz o
 personagem chegar ao fim e parar — o sintoma chega dias depois como "a hunt travou", sem ligação
 nenhuma com o arquivo de rota.

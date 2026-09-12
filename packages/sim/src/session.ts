@@ -168,6 +168,14 @@ export interface Ruleset {
   readonly shared?: boolean;
 
   /**
+   * O mapa desta sessão, pelo id do conteúdo (FUN-120). É o que `instance-enter` e
+   * `session-state.world.mapId` levam ao cliente, para ele buscar a geometria e a pilha de
+   * aparências certas. Ausente é sessão sem mapa — só fixture de teste; toda sessão de jogo
+   * tem um.
+   */
+  readonly mapId?: string;
+
+  /**
    * Com que frequência o HOSPEDEIRO avança esta sessão, em Hz. `0` significa orientada a
    * evento — sem laço.
    *

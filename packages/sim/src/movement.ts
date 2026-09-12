@@ -281,6 +281,51 @@ export function placeNear<P extends GridPoint>(
   return last;
 }
 
+/** Os quatro vizinhos cardeais, em ordem fixa: norte, leste, sul, oeste. */
+const CARDINALS: ReadonlyArray<readonly [number, number]> = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+/**
+ * Coloca no tile pedido, ou no LIVRE mais próximo A PÉ dele (FUN-120).
+ *
+ * `placeNear` procura em anéis geométricos, e num lugar com paredes o anel atravessa a parede:
+ * com o templo de Thais lotado, ele colocaria quem chega do lado de fora do prédio — ou numa
+ * sala dos fundos sem porta. Aqui a busca é em largura pelos tiles andáveis, quatro vizinhos,
+ * no andar do ponto pedido, e para no primeiro livre; `limit` é quantos tiles ela visita antes
+ * de desistir, que é a praça cheia — e o tile pedido é sempre tentado, mesmo com `limit`
+ * zero, como `placeNear` sempre tenta o centro. Escada não entra na fila: ela leva a outro
+ * andar.
+ *
+ * A hunt não precisa disto: o spawn é um `place` seco num ponto aberto (`hunt.ts`), e
+ * `placeNear` fica como a busca em anel para quem tiver um lugar sem paredes.
+ */
+export function placeReachable<P extends GridPoint>(
+  world: MovementWorld, mover: Movable<P>, at: P, limit: number,
+): MoveRejection | null {
+  const z = zOf(at, world.map);
+  const queue: P[] = [at];
+  const seen = new Set<number>([tileKey(at.x, at.y, z)]);
+  let last: MoveRejection = 'out-of-bounds';
+  const visits = Math.max(1, limit);
+  for (let head = 0; head < queue.length && head < visits; head++) {
+    const tile = queue[head] as P;
+    const rejection = place(world, mover, tile);
+    if (rejection === null) return null;
+    last = rejection;
+    // Só o OCUPADO tem vizinho a explorar: parede e fora do mapa são o fim do caminho.
+    if (rejection !== 'tile-occupied') continue;
+    for (const [dx, dy] of CARDINALS) {
+      const x = tile.x + dx;
+      const y = tile.y + dy;
+      const k = tileKey(x, y, z);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (isBlocked(world.map, x, y, z) || floorChangeAt(world.map, x, y, z) !== null) continue;
+      queue.push({ ...tile, x, y });
+    }
+  }
+  return last;
+}
+
 /**
  * Chave numérica de tile, com o andar. String (`\`${x},${y}\``) alocaria por consulta, e a
  * ocupação é consultada até três vezes por passo de cada criatura. Só é chamada com

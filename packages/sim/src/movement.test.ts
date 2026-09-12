@@ -1,7 +1,7 @@
 import { buildTilemap } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import {
-  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, tilesAround,
+  TileOccupancy, canOccupy, move, movementDuration, place, placeNear, placeReachable, tilesAround,
 } from './movement.js';
 import type { Movable, MoveRejection } from './movement.js';
 
@@ -426,5 +426,80 @@ describe('placeNear (FUN-71)', () => {
 
     const chegando = at(3, 3);
     expect(placeNear(world, chegando, to(1, 1), 1)).not.toBeNull();
+  });
+});
+
+describe('placeReachable (FUN-120)', () => {
+  // Duas salas separadas por uma parede, ligadas por um corredor que dá a volta por baixo. A
+  // entrada E é na sala da esquerda; a da direita está a dois tiles em linha reta — e a doze
+  // a pé.
+  //
+  //     0 1 2 3 4 5 6
+  //   0 # # # # # # #
+  //   1 # . . # . . #
+  //   2 # . E # . . #
+  //   3 # . . # . . #
+  //   4 # . # # # . #
+  //   5 # . . . . . #
+  //   6 # # # # # # #
+  const temple = buildTilemap({
+    id: 'templo', z: 7,
+    grid: ['#######', '#..#..#', '#..#..#', '#..#..#', '#.###.#', '#.....#', '#######'],
+  });
+  const entry = to(2, 2);
+  const leftRoom = [to(1, 1), to(2, 1), to(1, 2), to(2, 2), to(1, 3), to(2, 3)];
+
+  it('usa o tile pedido quando ele está livre', () => {
+    const world = new TileOccupancy(temple);
+    const mover = at(5, 5);
+    expect(placeReachable(world, mover, entry, 100)).toBeNull();
+    expect(mover.position).toEqual(entry);
+  });
+
+  it('com a sala lotada, fica no primeiro tile livre A PÉ — nunca do outro lado da parede', () => {
+    const world = new TileOccupancy(temple);
+    for (const tile of leftRoom) expect(place(world, at(5, 5), tile)).toBeNull();
+
+    // O anel geométrico atravessa a parede: a dois tiles de E está (4,1), na sala da direita.
+    const pelaParede = at(5, 5);
+    expect(placeNear(world, pelaParede, entry, 2)).toBeNull();
+    expect(pelaParede.position).toEqual(to(4, 1));
+    world.vacate(4, 1);
+
+    // A pé, o primeiro livre é a boca do corredor.
+    const chegando = at(5, 5);
+    expect(placeReachable(world, chegando, entry, 100)).toBeNull();
+    expect(chegando.position).toEqual(to(1, 4));
+    expect(world.occupied(1, 4)).toBe(true);
+  });
+
+  it('tenta o tile pedido mesmo com `limit` zero, como `placeNear` sempre tenta o centro', () => {
+    const world = new TileOccupancy(temple);
+    const mover = at(5, 5);
+    expect(placeReachable(world, mover, entry, 0)).toBeNull();
+    expect(mover.position).toEqual(entry);
+  });
+
+  it('desiste depois de visitar `limit` tiles, e devolve a última recusa', () => {
+    const world = new TileOccupancy(temple);
+    for (const tile of leftRoom) place(world, at(5, 5), tile);
+    const chegando = at(5, 5);
+    // Seis tiles visitados, os seis ocupados: o sétimo, livre, fica fora do teto.
+    expect(placeReachable(world, chegando, entry, 6)).toBe('tile-occupied');
+    expect(chegando.position).toEqual(to(5, 5));
+  });
+
+  it('não sobe escada para procurar lugar: ela leva a outro andar', () => {
+    // Um degrau ao lado da entrada, e mais nada. Com a entrada ocupada, o único vizinho é a
+    // escada — e colocar alguém nela seria colocá-lo no andar de cima.
+    const stairs = buildTilemap({
+      id: 'degrau', z: 7,
+      floors: { '7': { grid: ['####', '#..#', '####'] }, '6': { grid: ['####', '#..#', '####'] } },
+      floorChanges: [{ from: { x: 2, y: 1, z: 7 }, to: { x: 2, y: 1, z: 6 } }],
+    });
+    const world = new TileOccupancy(stairs);
+    place(world, at(1, 1), to(1, 1));
+    const chegando = at(1, 1);
+    expect(placeReachable(world, chegando, to(1, 1), 100)).toBe('tile-occupied');
   });
 });
