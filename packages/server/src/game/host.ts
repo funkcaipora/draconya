@@ -1580,7 +1580,18 @@ export class SessionHost {
       case 'supply-used': {
         const effectId = appearances?.supplies[event.supplyId]?.effect;
         if (effectId === undefined) return;
-        messages.push({ type: 'effect', position: event.position, effectId });
+        // Poção: o efeito no usuário. Runa (#165): um por alvo e um por tile da forma — o
+        // mesmo desenho da magia em área.
+        if (event.targets.length === 0 && event.tiles.length === 0) {
+          messages.push({ type: 'effect', position: event.position, effectId });
+          break;
+        }
+        const hit = new Set(event.targets.map((t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`));
+        for (const target of event.targets) messages.push({ type: 'effect', position: target.position, effectId });
+        for (const tile of event.tiles) {
+          if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+          messages.push({ type: 'effect', position: tile, effectId });
+        }
         break;
       }
       case 'shot': {

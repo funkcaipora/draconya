@@ -189,6 +189,37 @@ evento por segundo para redescobrir a mesma coisa.
 O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
 inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
+### Runa é supply de ataque (#165, ADR 0026 decisão 8)
+
+A runa **não é magia**: é supply — debita gold por uso, como a poção, sem item físico no
+inventário (§20.1) — e é o que a categoria `rune` do bot lança. A Avalanche Rune
+(`packages/content/data/supplies/avalanche-rune.json`) é a primeira: supply com efeito
+`damage`, Base Power próprio, alcance 4 e círculo de raio 3 no alvo, e um bloco `requires`
+(`level`, `magicLevel`) que a poção não tem.
+
+O que difere da magia de ataque, e por quê:
+
+- **Escala sempre pelo magic level**, em toda vocação. Magia escala pela skill que a vocação
+  declara (`spellSkill`, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
+  magic level 2 usando Avalanche é a cena real — bate fraco, mas bate.
+- **Sem cooldown próprio.** A cadência é a da categoria `rune` do bot (1 s). Não há grupo de
+  magia envolvido: runa não tranca `attack` nem é trancada por ele.
+- **A ordem das recusas**: `level-too-low` → `magic-level-too-low` → `no-target` →
+  `out-of-range` → `not-enough-gold`. O gold é conferido **depois** da mira, pela mesma razão
+  que a mana da magia sai por último: recusar antes de saber se há alvo é debitar sem lançar.
+- **O dano é o mesmo pipeline** (`resolveDamage` com `kind: 'magic'`, `#applyHits` da hunt —
+  o mesmo que a magia usa), com atribuição e morte por alvo.
+
+Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
+da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um
+efeito só, no tile de quem bebeu. O id do efeito da Avalanche mora em
+`appearances/baseline.json` (`supplies['avalanche-rune']`) e **não foi conferido
+visualmente** — o pacote de assets não está no repositório.
+
+Os números (preço 14 por uso, Base Power 45, raio 3, level 30, magic level 4) são
+provisórios e estão marcados em `_open` no arquivo; o preço é o da runa no NPC dividido pelas
+4 cargas, arredondado.
+
 ## Como cada arma bate (#152, ADR 0026 decisões 3 e 4)
 
 O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bow 6, wand e rod
@@ -227,7 +258,8 @@ não o resolvido: o golpe fatal mostra o que a criatura tinha, não o que o atac
 quando houve dano, um efeito de sangue no atingido. Cura vira `creature-hit` com `kind: heal`.
 Magia vira `spell-cast` no `sim` e, pela tabela de aparências fixada na sessão, projétil do
 conjurador ao primeiro alvo e um efeito **por alvo** (ou no conjurador, quando é cura); poção
-vira efeito no tile de quem bebeu. Magia sem linha na tabela é muda, nunca erro. Quais ids são
+vira efeito no tile de quem bebeu, e runa (#165) um efeito por tile da forma, como a magia em
+área. Magia sem linha na tabela é muda, nunca erro. Quais ids são
 esses mora em `packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`),
 e só ids (invariante 6).
 
@@ -340,6 +372,9 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 ## Em aberto
 
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
+- `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
+  provisórios até a leitura da infobox do TibiaWiki; o elemento gelo é ignorado até haver
+  resistência por elemento.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

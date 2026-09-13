@@ -316,6 +316,9 @@
     },
     "mana-potion": {
       "effect": 13
+    },
+    "avalanche-rune": {
+      "effect": 41
     }
   },
   "hits": {

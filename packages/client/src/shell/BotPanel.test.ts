@@ -22,7 +22,7 @@ const catalogue: Catalogue = {
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' }],
-    supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal' }],
+    supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {} }],
   },
 };
 

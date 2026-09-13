@@ -18,7 +18,7 @@ const catalogue: Catalogue = {
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana' }],
+    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],
   },
   items: [],
   bestiary: { milestones: [10_000], xpBonusPercentPerMilestone: 1 },

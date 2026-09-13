@@ -3874,3 +3874,46 @@ describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
     expect(at(1)).toEqual(at(10));
   });
 });
+
+describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () => {
+  const rune = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  };
+  const withRune = (level: number, gold: number, hz = 10) => {
+    const { session, hero } = withSpells(botConfig({
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    }), { gold, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    hero.level = level;
+    hero.xp = totalXpForLevel(level, progression as Progression);
+    run(session, 60_000, 1000 / hz);
+    return { session, hero };
+  };
+
+  it('hits the rats around the target, charges 14 per use, and the receipt counts the uses', () => {
+    const { session, hero } = withRune(30, 1_000);
+    const uses = session.aggregates.suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(session.aggregates.goldSpent).toBe(uses * 14);
+    // `goldDelta` é gasto MENOS o loot dos ratos: o que se prende é a diferença.
+    expect(session.aggregates.goldGained - session.aggregates.goldSpent).toBe(hero.goldDelta);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // Uma runa por vencimento da categoria: nunca mais de 60 usos em 60 s a 1 s de cooldown.
+    expect(uses).toBeLessThanOrEqual(61);
+    const used = session.drainEvents().filter((e) => e.kind === 'supply-used');
+    expect(used.length).toBe(uses);
+    expect(used.every((e) => e.kind === 'supply-used' && e.targets.length > 0 && e.tiles.length === 49)).toBe(true);
+  });
+
+  it('below the level the rune never fires and never charges; the same at 10 Hz and at 1 Hz', () => {
+    const young = withRune(29, 1_000);
+    expect(young.session.aggregates.suppliesUsed).toBe(0);
+    expect(young.session.aggregates.goldSpent).toBe(0);
+    const at = (hz: number) => {
+      const { session, hero } = withRune(30, 1_000, hz);
+      return { uses: session.aggregates.suppliesUsed, gold: hero.goldDelta, kills: session.aggregates.kills };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});

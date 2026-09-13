@@ -66,10 +66,10 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 | `kind` | Campo | Catálogo |
 |---|---|---|
 | `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
+| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77; a runa de ataque, #165, é supply e vai na categoria `rune`) |
+| `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
 
 Toda regra pode carregar `enabled: false` (#162): fica no slot, sai da avaliação. Ausente é ligada.
-| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) |
-| `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
 
 A referência cruzada acontece na **validação**, nunca na execução: `validateBotConfig` confere
 cada `spellId` e `supplyId` contra o catálogo e devolve o problema com a categoria e o número do
@@ -172,6 +172,7 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 | Slots — Potions | 4 (2 vida + 2 mana) | caminho previsto: `packages/content/bot` |
 | Slots — Magias de ataque | 10 | caminho previsto: `packages/content/bot` |
 | Slots — Runas e itens | 10 | caminho previsto: `packages/content/bot` |
+| Avalanche Rune — preço por uso / requisitos | 14 gold; level 30, magic level 4 (provisórios) | `packages/content/data/supplies/avalanche-rune.json` |
 | Slots — Magias de suporte | 10 | caminho previsto: `packages/content/bot` |
 | Cooldown por categoria | 1s | caminho previsto: `packages/content/bot` |
 | Teto de ações por segundo por personagem | 5 (derivado: 5 categorias × 1 cooldown cada — não é número do PRD, é consequência calculada em `docs/technical-architecture.md` §5) | caminho previsto: `packages/content/bot` |
@@ -195,7 +196,9 @@ Vazio por enquanto. É aqui que vai o que foi construído diferente do especific
   removível. A regra ganha `enabled` (default `true`) e o compilador pula a desligada. É o PRD
   §5.3 (bot à esquerda). Issue #162.
 - **A categoria `rune` ganha o que lançar**: a Avalanche entra como supply de ataque em área
-  (decisão 8), com requisito de level e magic level e preço por uso. Issue #165.
+  (decisão 8), com requisito de level e magic level e preço por uso. Issue #165 — entregue;
+  a tela tranca a opção abaixo do level, e quem recusa é o servidor. Detalhe em
+  `docs/product/combat.md` §"Runa é supply de ataque".
 
 ## Quem executa: magia e supply (FUN-74, FUN-77)
 
@@ -209,7 +212,8 @@ O que ele faz, por tipo de ação:
 |---|---|---|
 | `spell` com efeito `heal` | repõe HP do lançador, debita mana, inicia o cooldown da magia | level insuficiente, cooldown, mana |
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no monstro mais próximo e **atribui** (`recordDamage`) | level, cooldown, sem alvo, fora de alcance, mana |
-| `supply` | repõe HP ou mana e **debita gold** | gold insuficiente |
+| `supply` com efeito `heal`/`mana` | repõe HP ou mana e **debita gold** | gold insuficiente |
+| `supply` com efeito `damage` (runa, #165) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita gold** | level, magic level, sem alvo, fora de alcance, gold — nesta ordem; sem cooldown próprio |
 | `item` | nada | sempre — não há catálogo |
 
 Três coisas que não podem mudar sem pensar duas vezes:

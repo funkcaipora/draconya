@@ -24,14 +24,27 @@ export function blankCondition(kind: string): BotCondition {
   return { kind: 'hp', op: '<=', percent: 50 };
 }
 
+/**
+ * O que cada categoria lança (§13.3), e vem do catálogo: poção é supply que repõe, runa (#165)
+ * é supply de dano — a divisão é pelo `effect` do catálogo, não por lista de ids —, e o resto
+ * é magia. `null` é magia.
+ */
+export function suppliesFor(category: BotCategory, vocabulary: BotVocabulary): BotVocabulary['supplies'] | null {
+  if (category === 'potion') return vocabulary.supplies.filter((supply) => supply.effect !== 'damage');
+  if (category === 'rune') return vocabulary.supplies.filter((supply) => supply.effect === 'damage');
+  return null;
+}
+
 /** Uma regra nova para a categoria: a primeira ação do catálogo, ligada. */
 export function blankRule(category: BotCategory, vocabulary: BotVocabulary): BotRule | null {
-  const first = category === 'potion' ? vocabulary.supplies[0]?.id : vocabulary.spells[0]?.id;
+  const supplies = suppliesFor(category, vocabulary);
+  const first = supplies === null ? vocabulary.spells[0]?.id : supplies[0]?.id;
   if (first === undefined) return null;
   return {
     enabled: true,
-    when: blankCondition('hp'),
-    do: category === 'potion' ? { kind: 'supply', supplyId: first } : { kind: 'spell', spellId: first },
+    // A runa é de ataque: a condição de nascença é "há alvo", como a magia de ataque seria.
+    when: blankCondition(category === 'rune' ? 'targets' : 'hp'),
+    do: supplies === null ? { kind: 'spell', spellId: first } : { kind: 'supply', supplyId: first },
   };
 }
 
@@ -57,10 +70,13 @@ export function RuleEditor({ category, index, initial, vocabulary, level, onClos
     ? rule.do.supplyId
     : rule.do.kind === 'spell' ? rule.do.spellId : rule.do.itemId;
 
-  // Poção é supply; o resto é magia. É a divisão do §13.3, e ela vem do catálogo.
-  const actions = category === 'potion'
-    ? vocabulary.supplies.map((supply) => ({
-      id: supply.id, label: `${supply.name} (${String(supply.price)} gold)`, locked: false,
+  // Poção e runa são supply; o resto é magia. É a divisão do §13.3, e ela vem do catálogo.
+  const supplies = suppliesFor(category, vocabulary);
+  const actions = supplies !== null
+    ? supplies.map((supply) => ({
+      id: supply.id, label: `${supply.name} (${String(supply.price)} gold)`,
+      // A runa (#165) tem level: a tela só mostra que ainda não dá; quem recusa é o servidor.
+      locked: level > 0 && level < (supply.requires.level ?? 0),
     }))
     : vocabulary.spells.map((spell) => ({
       id: spell.id,
@@ -106,7 +122,7 @@ export function RuleEditor({ category, index, initial, vocabulary, level, onClos
               const id = event.target.value;
               setRule({
                 ...rule,
-                do: category === 'potion' ? { kind: 'supply', supplyId: id } : { kind: 'spell', spellId: id },
+                do: supplies !== null ? { kind: 'supply', supplyId: id } : { kind: 'spell', spellId: id },
               });
             }}
           >

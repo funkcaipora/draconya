@@ -405,6 +405,11 @@ export const S2C_SCHEMAS = {
         name: z.string().min(1),
         price: z.number().int().nonnegative(),
         effect: z.string().min(1),
+        /** Level e magic level exigidos (#165) — para a tela não oferecer o que o servidor vai recusar. `default({})`: nó anterior. */
+        requires: z.object({
+          level: z.number().int().positive().optional(),
+          magicLevel: z.number().int().nonnegative().optional(),
+        }).default({}),
       })),
     }),
     /**

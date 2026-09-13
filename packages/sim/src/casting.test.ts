@@ -24,11 +24,11 @@ const strike: Spell = {
 };
 
 const potion: Supply = {
-  id: 'health-potion', name: 'Poção de Vida', price: 45,
+  id: 'health-potion', name: 'Poção de Vida', price: 45, requires: {},
   effect: { kind: 'heal', amount: 80 },
 };
 const manaPotion: Supply = {
-  id: 'mana-potion', name: 'Poção de Mana', price: 50,
+  id: 'mana-potion', name: 'Poção de Mana', price: 50, requires: {},
   effect: { kind: 'mana', amount: 100 },
 };
 
@@ -375,5 +375,54 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
     const halved = castSpell(caster, wave, aim, 5_000, combat, rng());
     if (!halved.ok || !plain.ok) throw new Error('lançamento recusado');
     expect(halved.damage).toBeLessThan(plain.damage);
+  });
+});
+
+describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisão 8)', () => {
+  const rune: Supply = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+    requires: { level: 30, magicLevel: 4 },
+    effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  };
+  const three = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }] };
+  const scaling = (skillLevel: number) => ({ skillLevel, powerScale: 1 });
+
+  it('hits every target in the aim with one roll each, and charges the gold ONCE', () => {
+    const caster = hero({ level: 30, gold: 100 });
+    const result = useSupply(caster, rune, three, combat, rng(), scaling(4));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.hits).toHaveLength(3);
+    expect(result.hits.every((hit) => hit > 0)).toBe(true);
+    expect(result.goldSpent).toBe(14);
+    expect(caster.goldDelta).toBe(-14);
+    // A mesma semente dá o mesmo dano.
+    const again = useSupply(hero({ level: 30, gold: 100 }), rune, three, combat, rng(), scaling(4));
+    expect(again.ok && again.hits).toEqual(result.hits);
+  });
+
+  it('refuses by level, magic level, target, range and gold — and NEVER charges on a refusal', () => {
+    // Mutação que mata: subir o débito para antes da mira (runa em ninguém custaria).
+    const at = (level: number, gold: number, skill: number, aim: typeof three | null) => {
+      const caster = hero({ level, gold });
+      const result = useSupply(caster, rune, aim, combat, rng(), scaling(skill));
+      return { result, gold: caster.goldDelta };
+    };
+    expect(at(29, 100, 4, three)).toEqual({ result: { ok: false, reason: 'level-too-low', retryInMs: 0 }, gold: 0 });
+    expect(at(30, 100, 3, three)).toEqual({ result: { ok: false, reason: 'magic-level-too-low', retryInMs: 0 }, gold: 0 });
+    expect(at(30, 100, 4, null)).toEqual({ result: { ok: false, reason: 'no-target', retryInMs: 0 }, gold: 0 });
+    expect(at(30, 100, 4, { ...three, distance: 5 })).toEqual({ result: { ok: false, reason: 'out-of-range', retryInMs: 0 }, gold: 0 });
+    expect(at(30, 10, 4, three)).toEqual({ result: { ok: false, reason: 'not-enough-gold', retryInMs: 0 }, gold: 0 });
+  });
+
+  it('without combat context the rune does not exist — never damage without an rng', () => {
+    // Sem `scaling` o magic level é zero e recusa antes; sem `combat`/`rng` com scaling, cai
+    // em `not-in-catalog` — e em nenhum dos dois o gold sai.
+    const caster = hero({ level: 30, gold: 100 });
+    expect(useSupply(caster, rune, three)).toEqual({ ok: false, reason: 'magic-level-too-low', retryInMs: 0 });
+    expect(useSupply(caster, rune, three, undefined, undefined, scaling(4))).toEqual({ ok: false, reason: 'not-in-catalog', retryInMs: 0 });
+    expect(caster.goldDelta).toBe(0);
+    // A poção continua no caminho de sempre, sem contexto nenhum.
+    expect(useSupply(hero({ health: 10, gold: 100 }), potion).ok).toBe(true);
   });
 });

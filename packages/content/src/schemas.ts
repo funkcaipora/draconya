@@ -1211,7 +1211,27 @@ export const supplySchema = z.object({
   effect: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
     z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+    /**
+     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
+     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
+     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
+     */
+    z.object({
+      kind: z.literal('damage'),
+      basePower: z.number().int().positive(),
+      range: z.number().int().positive(),
+      area: z.object({
+        shape: z.literal('circle'),
+        radius: z.number().int().positive(),
+        centered: z.literal('target').default('target'),
+      }),
+    }),
   ]),
+  /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+    magicLevel: z.number().int().nonnegative().optional(),
+  }).default(() => ({})),
   _open: z.string().optional(),
 });
 
