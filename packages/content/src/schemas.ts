@@ -930,6 +930,13 @@ export const botRingSwapSchema = z.object({
 
 /** Uma linha de slot: a condição e o que fazer quando ela vale. */
 export const botRuleSchema = z.object({
+  /**
+   * O interruptor da linha (#162, ADR 0026 d.7 — o `BotSwitch` do vBot). Desligada, a regra
+   * fica na configuração e no slot, e sai só da avaliação. Opcional, e AUSENTE É LIGADA: toda
+   * configuração gravada antes disto continua valendo igual, e nenhuma fixture precisa dizer
+   * o óbvio — quem lê é `compileBot`, e só ele.
+   */
+  enabled: z.boolean().optional(),
   when: botConditionSchema,
   do: botActionSchema,
 });
