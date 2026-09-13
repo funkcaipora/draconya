@@ -57,6 +57,257 @@
     },
     "blast": {
       "effect": 38
+    },
+    "bruise-bane": {
+      "effect": 13
+    },
+    "lesser-front-sweep": {
+      "effect": 10
+    },
+    "wound-cleansing": {
+      "effect": 13
+    },
+    "haste-knight": {
+      "effect": 14
+    },
+    "brutal-strike": {
+      "effect": 10
+    },
+    "blood-rage": {
+      "effect": 14
+    },
+    "protector": {
+      "effect": 13
+    },
+    "charge": {
+      "effect": 14
+    },
+    "whirlwind-throw": {
+      "effect": 10,
+      "missile": 25
+    },
+    "groundshaker": {
+      "effect": 34
+    },
+    "berserk": {
+      "effect": 10
+    },
+    "recovery-knight": {
+      "effect": 9
+    },
+    "front-sweep": {
+      "effect": 10
+    },
+    "intense-wound-cleansing": {
+      "effect": 13
+    },
+    "lesser-ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "light-healing-paladin": {
+      "effect": 13
+    },
+    "haste-paladin": {
+      "effect": 14
+    },
+    "intense-healing-paladin": {
+      "effect": 13
+    },
+    "divine-defiance": {
+      "effect": 39
+    },
+    "sharpshooter": {
+      "effect": 14
+    },
+    "ethereal-spear": {
+      "effect": 2,
+      "missile": 28
+    },
+    "divine-healing": {
+      "effect": 13
+    },
+    "divine-missile": {
+      "effect": 39,
+      "missile": 31
+    },
+    "divine-caldera": {
+      "effect": 49
+    },
+    "recovery-paladin": {
+      "effect": 9
+    },
+    "swift-foot": {
+      "effect": 14
+    },
+    "salvation": {
+      "effect": 13
+    },
+    "ethereal-barrage": {
+      "effect": 2,
+      "missile": 28
+    },
+    "divine-barrage": {
+      "effect": 39,
+      "missile": 31
+    },
+    "buzz": {
+      "effect": 12,
+      "missile": 5
+    },
+    "scorch": {
+      "effect": 7
+    },
+    "magic-patch-sorcerer": {
+      "effect": 13
+    },
+    "apprentices-strike-sorcerer": {
+      "effect": 15,
+      "missile": 4
+    },
+    "flame-strike-sorcerer": {
+      "effect": 15,
+      "missile": 4
+    },
+    "ice-strike-sorcerer": {
+      "effect": 43,
+      "missile": 29
+    },
+    "energy-strike-sorcerer": {
+      "effect": 12,
+      "missile": 5
+    },
+    "terra-strike-sorcerer": {
+      "effect": 16,
+      "missile": 30
+    },
+    "haste-sorcerer": {
+      "effect": 14
+    },
+    "magic-shield-sorcerer": {
+      "effect": 13
+    },
+    "death-strike": {
+      "effect": 17,
+      "missile": 11
+    },
+    "fire-wave": {
+      "effect": 7
+    },
+    "energy-beam": {
+      "effect": 37
+    },
+    "great-energy-beam": {
+      "effect": 37
+    },
+    "ultimate-healing-sorcerer": {
+      "effect": 13
+    },
+    "energy-wave": {
+      "effect": 37
+    },
+    "great-fire-wave": {
+      "effect": 7
+    },
+    "lightning": {
+      "effect": 12,
+      "missile": 5
+    },
+    "rage-of-the-skies": {
+      "effect": 37
+    },
+    "hells-core": {
+      "effect": 7
+    },
+    "great-death-beam": {
+      "effect": 17
+    },
+    "strong-flame-strike": {
+      "effect": 15,
+      "missile": 4
+    },
+    "strong-energy-strike": {
+      "effect": 12,
+      "missile": 5
+    },
+    "mud-attack": {
+      "effect": 16,
+      "missile": 30
+    },
+    "chill-out": {
+      "effect": 41
+    },
+    "magic-patch-druid": {
+      "effect": 13
+    },
+    "apprentices-strike-druid": {
+      "effect": 15,
+      "missile": 4
+    },
+    "flame-strike-druid": {
+      "effect": 15,
+      "missile": 4
+    },
+    "ice-strike-druid": {
+      "effect": 43,
+      "missile": 29
+    },
+    "light-healing-druid": {
+      "effect": 13
+    },
+    "energy-strike-druid": {
+      "effect": 12,
+      "missile": 5
+    },
+    "terra-strike-druid": {
+      "effect": 16,
+      "missile": 30
+    },
+    "haste-druid": {
+      "effect": 14
+    },
+    "magic-shield-druid": {
+      "effect": 13
+    },
+    "physical-strike": {
+      "effect": 10,
+      "missile": 10
+    },
+    "ice-wave": {
+      "effect": 41
+    },
+    "intense-healing-druid": {
+      "effect": 13
+    },
+    "ultimate-healing-druid": {
+      "effect": 13
+    },
+    "mass-healing": {
+      "effect": 13
+    },
+    "terra-wave": {
+      "effect": 45
+    },
+    "strong-ice-wave": {
+      "effect": 41
+    },
+    "wrath-of-nature": {
+      "effect": 54
+    },
+    "eternal-winter": {
+      "effect": 42
+    },
+    "strong-terra-strike": {
+      "effect": 16,
+      "missile": 30
+    },
+    "forked-thorns": {
+      "effect": 45,
+      "missile": 39
+    },
+    "strong-ice-strike": {
+      "effect": 43,
+      "missile": 29
     }
   },
   "supplies": {

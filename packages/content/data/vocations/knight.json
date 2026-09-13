@@ -4,5 +4,6 @@
   "healthPerLevel": 15,
   "manaPerLevel": 5,
   "capacityPerLevel": 25,
-  "startingWeaponItemId": "steel-axe"
+  "startingWeaponItemId": "steel-axe",
+  "spellSkill": "melee"
 }

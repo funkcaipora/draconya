@@ -913,3 +913,16 @@ describe('a arma inicial da vocação (#154, ADR 0026 decisão 3)', () => {
       .toThrow(/precisa exigir a própria vocação/);
   });
 });
+
+describe('magia de vocação (#156–#159)', () => {
+  it('recusa uma magia cuja vocação não existe', () => {
+    // Uma magia órfã subiria muda e nunca seria lançada por ninguém. Mutação que mata: tirar a
+    // conferência de `spell.vocationId` em `buildContent`.
+    const orphan = {
+      id: 'x', name: 'X', manaCost: 1, cooldownMs: 1000, vocationId: 'monk',
+      effect: { kind: 'heal', amount: 1 },
+    };
+    expect(() => buildContent(base({ spells: [orphan] }))).toThrow(/vocationId "monk" não existe/);
+    expect(() => buildContent(base({ spells: [{ ...orphan, vocationId: 'knight' }] }))).not.toThrow();
+  });
+});

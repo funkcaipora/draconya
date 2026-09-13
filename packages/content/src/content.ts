@@ -192,6 +192,11 @@ export function buildContent(raw: RawContent): Content {
   // ela, subiria mudo e apareceria no meio de uma hunt como magia que não bate.
   for (const spell of spells.values()) {
     const where = `spell/${spell.id}`;
+    // A vocação que a magia exige precisa existir (#156–#159): uma magia órfã subiria muda e
+    // nunca seria lançada por ninguém.
+    if (spell.vocationId !== undefined && !vocations.has(spell.vocationId)) {
+      problems.push(`${where}: vocationId "${spell.vocationId}" não existe`);
+    }
     if (spell.groupCooldownMs !== undefined && spell.group === undefined) {
       problems.push(`${where}: groupCooldownMs sem group`);
     }
