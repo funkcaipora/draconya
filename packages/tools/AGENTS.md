@@ -57,6 +57,11 @@ pnpm vitest run packages/tools
   que aconteceu na FUN-68: o `pnpm check` ficou verde e o benchmark parou de rodar. Os scripts da
   raiz (`bench:hunts`, `bench:monster`, `load`, `content:check`) agora começam com `tsc -b`, que
   é incremental e custa nada quando já está em dia.
+- **`pnpm bench:hunts` não roda no CI, e por isso quebra em silêncio** (#179): ele parou quando
+  FUN-94 tornou a tabela de aparências obrigatória e ninguém viu por meses. O cenário vive em
+  `src/bench/cold-scenario.ts` e `cold-scenario.test.ts` monta e avança uma hunt — é o teste
+  que reprova no PR quando o contrato de `buildContent` mudar de novo. O relatório imprime a
+  CPU ao lado da parede: num laptop paginando a parede mediu 380 µs/tick onde a CPU gastou 16.
 - **`pnpm bench:hunts` só vale com a máquina junto.** O tick é single-thread, então quem decide é
   desempenho por core (ADR 0013); o relatório imprime plataforma, CPU e versão do Node por isso.
   Medir no laptop e extrapolar para o servidor erra.

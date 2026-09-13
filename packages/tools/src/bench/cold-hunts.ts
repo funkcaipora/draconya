@@ -23,96 +23,16 @@
 
 import { performance, PerformanceObserver } from 'node:perf_hooks';
 import { arch, cpus, platform, totalmem } from 'node:os';
-import { buildContent } from '@draconya/content';
-import type { Content } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
 import type { HuntRuleset } from '@draconya/sim';
 import type { Session } from '@draconya/sim';
+import { scenario } from './cold-scenario.js';
 
 const HUNTS = Number(process.env['HUNTS'] ?? 5_000);
 /** Minutos SIMULADOS, não de espera: o relógio é parâmetro (invariante 1). */
 const MINUTES = Number(process.env['MINUTES'] ?? 10);
 /** Desanexada roda a 1 Hz (ADR 0003). É o cenário da issue. */
 const HZ = Number(process.env['HZ'] ?? 1);
-
-// --- o conteúdo do cenário -------------------------------------------------------------------
-//
-// Montado aqui, e não lido de `packages/content/data`, porque a medição precisa de uma
-// instância CHEIA: a Rat Cellars de hoje tem 2 monstros por ponto em 4 pontos, e medir 8
-// monstros diria pouco sobre as 10–40 que a issue pede.
-
-const SIZE = 24;
-const grid = Array.from({ length: SIZE }, (_, y) =>
-  Array.from({ length: SIZE }, (_, x) => {
-    if (x === 0 || y === 0 || x === SIZE - 1 || y === SIZE - 1) return '#';
-    // Paredes espalhadas pelo MIOLO: caminho livre demais não exercita o desvio, que é o ramo
-    // mais caro do passo guloso. O anel de fora fica limpo porque é por onde a rota passa — a
-    // validação da FUN-9 recusa rota em cima de parede, e com razão.
-    const inside = x >= 3 && x <= SIZE - 4 && y >= 3 && y <= SIZE - 4;
-    return inside && x % 7 === 3 && y % 5 !== 0 ? '#' : '.';
-  }).join(''));
-
-/** Um laço retangular pelo miolo do mapa, sem encostar nas paredes espalhadas. */
-function loop(): Array<{ x: number; y: number; z: number }> {
-  const tiles: Array<{ x: number; y: number; z: number }> = [];
-  const lo = 1;
-  const hi = SIZE - 2;
-  for (let x = lo; x < hi; x++) tiles.push({ x, y: lo, z: 7 });
-  for (let y = lo; y < hi; y++) tiles.push({ x: hi, y, z: 7 });
-  for (let x = hi; x > lo; x--) tiles.push({ x, y: hi, z: 7 });
-  for (let y = hi; y > lo; y--) tiles.push({ x: lo, y, z: 7 });
-  return tiles;
-}
-
-const tiles = loop();
-// Um ponto de spawn a cada oito tiles, com 4 monstros cada: 40 monstros na instância, o topo
-// da faixa que a issue pede.
-const spawnPoints = tiles
-  .map((_, index) => index)
-  .filter((index) => index % 8 === 0)
-  .slice(0, 10)
-  .map((routeIndex) => ({ routeIndex, radius: 3 }));
-
-function scenario(): Content {
-  return buildContent({
-    monsters: [{
-      id: 'rat', name: 'Rat', recommendedLevel: 1,
-      health: 200, experience: 5, attack: 4, armor: 0,
-      attackIntervalMs: 2_000, speed: 300, aggroRadius: 8, attackRange: 1,
-    }],
-    hunts: [{
-      id: 'cold', name: 'Cold', recommendedLevel: 1, mapId: 'cold', routeId: 'cold-loop',
-      difficulties: {
-        reckless: {
-          monsterCount: 40,
-          composition: [{ monsterId: 'rat', weight: 1 }],
-          respawnDelayMs: 30_000,
-        },
-      },
-    }],
-    vocations: [],
-    progression: [{
-      id: 'baseline', startingHealth: 1_000_000, startingMana: 0, startingCapacity: 400,
-      healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
-      startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
-      xp: { base: 20, exponent: 2 },
-      deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
-    }],
-    combat: [{
-      id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
-      minimumDamageFraction: 0.1,
-      player: {
-        attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0.05,
-      },
-    }],
-    stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
-    // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
-    maps: [{ id: 'cold', z: 7, grid }],
-    routes: [{ id: 'cold-loop', mapId: 'cold', tiles, spawnPoints }],
-  });
-}
 
 // --- medição ---------------------------------------------------------------------------------
 
@@ -203,6 +123,7 @@ const measuredFrom = tick;
 // ótimo resultado, medindo coisa nenhuma.
 observer.observe({ type: 'gc' });
 const startedAt = performance.now();
+const cpuAtStart = process.cpuUsage();
 // Drena a cada avanço, como `SessionHost.cycle` faz haja ou não visualizador (FUN-69). Sem
 // isto o bench mede um buffer de eventos que enche e descarta — cenário que produção não
 // tem, porque o hospedeiro drena sempre.
@@ -213,6 +134,12 @@ for (; tick <= ticks; tick++) {
   }
 }
 const elapsedMs = performance.now() - startedAt;
+// CPU de verdade, ao lado da parede (#179): num laptop paginando, a parede mediu 380 µs por
+// tick onde a CPU gastou 16 — e o relatório dizia "20× pior" sem avisar que a máquina, e não
+// o código, era o problema. O número comparável continua sendo o de parede (é o que a
+// projeção e as rodadas anteriores usam); o de CPU é o que diz se ele vale alguma coisa.
+const cpu = process.cpuUsage(cpuAtStart);
+const cpuMs = (cpu.user + cpu.system) / 1_000;
 const measuredTicks = ticks - measuredFrom + 1;
 
 // O observador entrega as entradas numa tarefa própria, e este script é síncrono do início ao
@@ -259,6 +186,10 @@ console.log(`abates              ${kills.toLocaleString('pt-BR')}`);
 
 console.log('--- resultado -------------------------------------------------------');
 console.log(`tempo de parede     ${(elapsedMs / 1_000).toFixed(1)} s`);
+console.log(`cpu                 ${(cpuMs / 1_000).toFixed(1)} s (${((cpuMs / elapsedMs) * 100).toFixed(0)}% da parede)`);
+if (cpuMs / elapsedMs < 0.8) {
+  console.log('aviso               a CPU ficou ociosa: a máquina paginou ou disputou o core; o custo por tick não vale');
+}
 console.log(`por tick/instância  ${perTickUs.toFixed(1)} µs`);
 console.log(`instâncias por core ${Math.floor(1 / coreFraction).toLocaleString('pt-BR')} a ${HZ} Hz`);
 console.log(`memória por sessão  ${perSessionKb.toFixed(1)} KiB`);
