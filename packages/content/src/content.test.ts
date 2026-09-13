@@ -841,6 +841,19 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
       .toThrow(/"steel-axe" do kit exige level ou vocação/);
   });
 
+  it('recusa arma de duas mãos com escudo: o kit não passa por `equip`, então a regra das mãos vale aqui', () => {
+    const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40 };
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const withArmory = (startingKit: unknown) =>
+      base({ items: [bow, shield], ammunition: [arrow], progression: [{ ...baseline, startingKit }] });
+    expect(() => buildContent(withArmory([
+      { itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' },
+    ]))).toThrow(/duas mãos e escudo/);
+    expect(buildContent(withArmory([{ itemId: 'bow', slot: 'hand' }])).progression.startingKit)
+      .toHaveLength(1);
+  });
+
   it('recusa duas peças no mesmo slot: o banco recusaria na criação, e o boot é o lugar', () => {
     const sword = { ...machete, id: 'sword', name: 'Sword' };
     expect(() => buildContent(withKit([

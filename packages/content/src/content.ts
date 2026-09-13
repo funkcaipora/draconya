@@ -248,6 +248,7 @@ export function buildContent(raw: RawContent): Content {
   // nasce level 1 e sem vocação —, e um por slot, que é o que o índice único de
   // `item_instance` vai impor de qualquer jeito; melhor reprovar no boot do que na criação.
   const kitSlots = new Set<string>();
+  let kitTwoHanded = false;
   for (const piece of progression?.startingKit ?? []) {
     const item = itemDefinitions.get(piece.itemId);
     if (item === undefined) {
@@ -264,6 +265,13 @@ export function buildContent(raw: RawContent): Content {
       problems.push(`progression: o kit de nascimento tem duas peças em "${piece.slot}"`);
     }
     kitSlots.add(piece.slot);
+    if (item.twoHanded) kitTwoHanded = true;
+  }
+  // As duas mãos (#152): o kit é gravado direto no banco, sem passar por `Inventory.equip`, então
+  // a regra `hands-full` precisa valer AQUI — senão todo personagem nasceria num estado que
+  // nenhum caminho de equipar alcança.
+  if (kitTwoHanded && kitSlots.has('shield')) {
+    problems.push('progression: o kit de nascimento não pode ter arma de duas mãos e escudo ao mesmo tempo');
   }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
