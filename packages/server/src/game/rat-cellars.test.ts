@@ -3,7 +3,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from '../../../content/src/load.js';
 import type { Content } from '@draconya/content';
-import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
+import {
+  CharacterRuntime, Rng, castSpell, createHuntSession, groupCooldownKey, secondaryCooldownKey,
+  spellCooldownKey, statsForLevel,
+} from '@draconya/sim';
 import type { HuntRuleset, Session } from '@draconya/sim';
 
 // A Rat Cellars REAL (FUN-123): o bueiro de Rookgaard importado, a rota traçada sobre ele e o
@@ -69,4 +72,55 @@ describe('a Rat Cellars real (FUN-123)', () => {
     );
     expect(slow.ruleset.groundItems).toEqual(fast.ruleset.groundItems);
   });
+});
+
+describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
+  // Um personagem de level 80 de cada vocação lança UMA magia de cada tipo da vocação dele:
+  // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
+  // `wrong-vocation`; um level abaixo, `level-too-low`. São os NÚMEROS reais passando pelo
+  // motor — `casting.test.ts` testa o motor com magias sintéticas.
+  const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
+    const vocation = content.vocations.get(vocationId) ?? null;
+    const stats = statsForLevel(level, vocation, content.progression);
+    return new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 8 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 100_000, maxMana: 100_000,
+      level, xp: 0, vocationId, goldDelta: 0, alive: true, cooldowns: {},
+    });
+  };
+  const aim = { distance: 1, targets: [{ armor: 0, dodgeChance: 0 }] };
+
+  for (const vocationId of ['knight', 'paladin', 'sorcerer', 'druid']) {
+    it(`a ${vocationId} casts one spell of each kind of the vocation`, () => {
+      const content = real();
+      const mine = [...content.spells.values()].filter((s) => s.vocationId === vocationId);
+      expect(mine.length).toBeGreaterThan(0);
+      const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
+      let now = 0;
+      for (const spell of oneOfEach.values()) {
+        const hero = caster(content, vocationId, 80);
+        // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
+        // alcance, e a forma que sai do lançador ignora a distância.
+        const result = castSpell(hero, spell, spell.effect.kind === 'damage' ? aim : null, now, content.combat, Rng.fromSeed(spell.id));
+        expect(result.ok, spell.id).toBe(true);
+        expect(hero.mana, spell.id).toBe(100_000 - spell.manaCost);
+        expect(hero.cooldowns.isReady(spellCooldownKey(spell.id), now), spell.id).toBe(false);
+        if (spell.group !== undefined) {
+          expect(hero.cooldowns.isReady(groupCooldownKey(spell.group), now), spell.id).toBe(false);
+        }
+        if (spell.secondaryGroup !== undefined) {
+          expect(hero.cooldowns.isReady(secondaryCooldownKey(spell.secondaryGroup.name), now), spell.id).toBe(false);
+        }
+        now += 1;
+      }
+      // Outra vocação, e um level abaixo do mínimo.
+      const first = mine[0] as NonNullable<(typeof mine)[number]>;
+      const other = vocationId === 'knight' ? 'druid' : 'knight';
+      expect(castSpell(caster(content, other, 80), first, aim, 0, content.combat, Rng.fromSeed('x')))
+        .toMatchObject({ ok: false, reason: 'wrong-vocation' });
+      const highest = mine.reduce((a, b) => (a.minLevel > b.minLevel ? a : b));
+      expect(castSpell(caster(content, vocationId, highest.minLevel - 1), highest, aim, 0, content.combat, Rng.fromSeed('x')))
+        .toMatchObject({ ok: false, reason: 'level-too-low' });
+    });
+  }
 });

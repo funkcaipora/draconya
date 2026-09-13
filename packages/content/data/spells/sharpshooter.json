@@ -1,0 +1,22 @@
+{
+  "id": "sharpshooter",
+  "name": "Sharpshooter",
+  "vocationId": "paladin",
+  "minLevel": 20,
+  "manaCost": 250,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 10000,
+  "secondaryGroup": {
+    "name": "stance",
+    "cooldownMs": 10000
+  },
+  "effect": {
+    "kind": "buff",
+    "durationMs": 10000,
+    "damageDealtPercent": {
+      "distance": 32
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. o Tibia dá +32 % de SKILL de distância; aproximação em dano, como Blood Rage."
+}

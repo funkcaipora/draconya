@@ -19,12 +19,14 @@
 import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content,
-  Hunt, HuntDifficulty, Item, Monster, Progression, Route, Skill, Spell, SpawnPoint, Stamina,
-  Supply, Tilemap, Vocation, Weapon,
+  Hunt, HuntDifficulty, Item, Monster, Progression, Route, Skill, Spell, SpellArea, SpawnPoint,
+  Stamina, Supply, Tilemap, Vocation, Weapon,
 } from '@draconya/content';
-import type { CharacterRuntime } from '../character.js';
+import { CharacterRuntime } from '../character.js';
+import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, useSupply } from '../casting.js';
-import type { CastResult, SpellAim, SpellTarget } from '../casting.js';
+import type { CastResult, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
+import type { ConditionKind, ConditionState } from '../conditions.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
@@ -77,6 +79,14 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 /**
+ * As condições (#155): o vencimento e o tique periódico da cura ao longo do tempo. Eventos
+ * da fila (invariante 2), nunca acumulador. `subject` é `${characterId}/${key}`: um
+ * cancelamento por condição, sem varrer a fila.
+ */
+const CONDITION_EXPIRE = 'condition-expire';
+const CONDITION_TICK = 'condition-tick';
+const conditionSubject = (characterId: string, key: ConditionKind): string => `${characterId}/${key}`;
+/**
  * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
  * cura que executa não atrasa o ataque, porque são vencimentos independentes na mesma fila.
  */
@@ -111,6 +121,7 @@ const SPAWN_RETRY_MS = 1000;
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
+const NO_TILES: readonly WorldPoint[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
@@ -477,6 +488,8 @@ export class HuntRuleset implements Ruleset {
   readonly #spellTargets: MutableSpellTarget[] = [];
   /** Os monstros na mesma ordem de `#spellTargets`: é quem leva o dano de cada rolagem. */
   readonly #spellHits: MonsterRuntime[] = [];
+  /** Os tiles da forma do último lançamento (#155), para o efeito por tile. Reaproveitado. */
+  #aimTiles: WorldPoint[] = [];
   readonly #aim: { distance: number; targets: readonly SpellTarget[] } = {
     distance: 0, targets: [],
   };
@@ -661,6 +674,8 @@ export class HuntRuleset implements Ruleset {
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
+      case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
+      case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
       case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
       case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
@@ -1253,13 +1268,12 @@ export class HuntRuleset implements Ruleset {
     if (spell === undefined) return NOT_IN_CATALOG;
 
     const aim = spell.effect.kind === 'damage'
-      ? this.#aimAt(character, spell.effect.range, spell.effect.area?.radius ?? 0)
+      ? this.#aimFor(character, spell.effect.range, spell.effect.area)
       : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      // A skill de magia escala o poder, como a de arma escala o golpe (FUN-75).
-      this.#scaledPower(character, 'spell-cast', 1),
+      this.#spellScaling(character),
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
@@ -1279,8 +1293,16 @@ export class HuntRuleset implements Ruleset {
       targets: aim === null
         ? NO_SPELL_TARGETS
         : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+      // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
+      tiles: aim === null ? NO_TILES : [...this.#aimTiles],
     });
     if (aim === null) {
+      // Condição (#155): haste, postura, magic shield, cura ao longo do tempo — o `castSpell`
+      // devolve, e quem agenda o vencimento é quem tem a fila.
+      if (result.condition !== undefined) {
+        this.#applyCondition(session, character, result.condition);
+        return result;
+      }
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
       this.#emitHealed(session, character, result.healed, 'spell');
@@ -1316,34 +1338,51 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Colhe quem a magia atinge: o alvo principal primeiro, depois quem cai no raio (FUN-92).
+   * Colhe quem a magia atinge (FUN-92, #155): o alvo principal primeiro, depois quem cai na
+   * forma. Sem área é alvo único — um caso do mesmo caminho, e não um ramo à parte.
    *
-   * `radius` zero é alvo único — um caso do mesmo caminho, e não um ramo à parte. Área é
-   * distância de Chebyshev a partir do ALVO, a mesma métrica da grade.
+   * Duas famílias de forma (referência §19): a centrada no ALVO (alvo único, círculo no alvo)
+   * passa por `selectTarget` com o alcance da MAGIA — não o da arma, que era o defeito da
+   * FUN-74 —, e a que sai do LANÇADOR (onda, cleave, feixe, círculo em volta) não tem alvo
+   * nem alcance: os tiles saem da posição e da DIREÇÃO do personagem, e `distance` vem zero.
    *
    * A ordem é CONTRATO: cada alvo consome uma rolagem do `Rng` da sessão, e ela é a ordem da
    * lista de monstros, que é a de nascimento. Trocar a ordem troca qual sorteio cai em quem, e
    * a mesma semente passa a render uma hunt diferente.
    *
-   * Os dois vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`: uma magia por
-   * segundo por personagem, vezes 5.000 instâncias, é alocação que dá para não fazer.
+   * Os vetores são REAPROVEITADOS, como `#botView` e `#spellTarget`. A única alocação por
+   * lançamento é o `Set` de chaves da forma, do tamanho dela.
    */
-  #aimAt(character: CharacterRuntime, range: number, radius: number): SpellAim | null {
-    // Alcance da MAGIA, não o da arma — e isto era um defeito desde a FUN-74, que só apareceu
-    // quando o teste de área foi escrito. `#attackTarget` para no alcance do golpe, então uma
-    // magia de alcance 3 nunca alcançava além de 1: a conferência de alcance dentro de
-    // `castSpell` jamais era a restrição que mordia, porque a seleção já tinha mordido antes.
-    const primary = selectTarget(this.#targeting, this.#monsters, character.position, range);
-    if (primary === null) return null;
-
+  #aimFor(
+    character: CharacterRuntime, range: number | undefined, area: SpellArea | undefined,
+  ): SpellAim | null {
     this.#spellHits.length = 0;
     this.#spellTargets.length = 0;
+    this.#aimTiles = [];
+
+    if (area !== undefined && isSelfOrigin(area)) {
+      this.#aimTiles = areaTiles(area, character.position, character.direction);
+      const keys = new Set(this.#aimTiles.map(tileKey));
+      for (const monster of this.#monsters) {
+        if (!monster.alive || !keys.has(tileKey(this.#at(monster)))) continue;
+        this.#collect(monster);
+      }
+      if (this.#spellHits.length === 0) return null;
+      this.#aim.distance = 0;
+      this.#aim.targets = this.#spellTargets;
+      return this.#aim;
+    }
+
+    const primary = selectTarget(this.#targeting, this.#monsters, character.position, range ?? 1);
+    if (primary === null) return null;
     this.#collect(primary);
 
-    if (radius > 0) {
+    if (area !== undefined) {
+      this.#aimTiles = areaTiles(area, character.position, character.direction, this.#at(primary));
+      const keys = new Set(this.#aimTiles.map(tileKey));
       for (const monster of this.#monsters) {
         if (monster === primary || !monster.alive) continue;
-        if (distance(primary.position, monster.position) > radius) continue;
+        if (!keys.has(tileKey(this.#at(monster)))) continue;
         this.#collect(monster);
       }
     }
@@ -1351,6 +1390,57 @@ export class HuntRuleset implements Ruleset {
     this.#aim.distance = distance(character.position, primary.position);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
+  }
+
+  /** O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por uso. */
+  #spellScaling(character: CharacterRuntime): SpellScaling {
+    const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
+    const skill = this.#options.skills.get(skillId);
+    return {
+      skillLevel: skill === undefined ? 0 : character.skills.levelOf(skill),
+      // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
+      powerScale: this.#scaledPower(character, 'spell-cast', 1),
+    };
+  }
+
+  /**
+   * Aplica uma condição (#155) e agenda o vencimento — e o tique, se ela tem um. Relançar
+   * REINICIA (a política `refresh` de `Conditions`): o evento antigo é cancelado antes.
+   */
+  #applyCondition(session: Session, character: CharacterRuntime, condition: ConditionState): void {
+    const subject = conditionSubject(character.id, condition.key);
+    if (character.conditions.apply(condition) !== null) {
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+    }
+    session.scheduleIn(CONDITION_EXPIRE, condition.expiresAtMs - session.nowMs, {
+      priority: EventPriority.Housekeeping, subject,
+    });
+    if (condition.tick !== undefined) {
+      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
+        priority: EventPriority.Housekeeping, subject,
+      });
+    }
+  }
+
+  #onConditionTick(session: Session, subject: string): void {
+    const [characterId, key] = subject.split('/') as [string, ConditionKind];
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return;
+    const condition = character.conditions.get(key);
+    if (condition?.tick === undefined) return;
+    this.#emitHealed(session, character, character.heal(condition.tick.amount), 'spell');
+    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece.
+    if (session.nowMs + condition.tick.intervalMs <= condition.expiresAtMs) {
+      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
+        priority: EventPriority.Housekeeping, subject,
+      });
+    }
+  }
+
+  #onConditionExpire(session: Session, subject: string): void {
+    const [characterId, key] = subject.split('/') as [string, ConditionKind];
+    findById(session.participants, characterId)?.conditions.remove(key);
   }
 
   /** Põe o monstro na mira, com a armadura que o conteúdo dá a ele. */
@@ -1642,7 +1732,8 @@ export class HuntRuleset implements Ruleset {
       this.#options.combat,
       session.rng,
     );
-    const applied = character.receiveDamage(result.damage);
+    // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
+    const applied = character.receiveDamage(Math.round(result.damage * character.conditions.damageTakenScale()));
     recordDamage(character.contribution, subject, applied);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
@@ -1676,6 +1767,11 @@ export class HuntRuleset implements Ruleset {
   ): MoveResult {
     const result = move(this.#world, mover, to);
     if (result.ok) {
+      // A direção do personagem (#155): é de onde saem onda, cleave e feixe. Só o passo a
+      // escreve, e só a do personagem — o monstro não lança magia.
+      if (mover instanceof CharacterRuntime) {
+        mover.direction = directionOf(result.from, result.to) ?? mover.direction;
+      }
       session.emit({
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
@@ -1894,9 +1990,13 @@ export class HuntRuleset implements Ruleset {
    */
   #scaledPower(character: CharacterRuntime, on: Skill['gain']['on'], base: number): number {
     const definitions = this.#skillsByGain[on];
-    // Nenhuma skill alimentada por esta fonte: devolve o base sem tocar em nada. É o caminho
-    // de um conteúdo sem skills, e ele custa uma comparação.
-    if (definitions.length === 0) return base;
+    // Nenhuma skill alimentada por esta fonte: só a postura, se houver. É o caminho de um
+    // conteúdo sem skills, e ele custa uma comparação — e uma multiplicação com postura.
+    if (definitions.length === 0) {
+      if (on === 'melee-hit') return Math.round(base * character.conditions.damageDealtScale('melee'));
+      if (on === 'distance-hit') return Math.round(base * character.conditions.damageDealtScale('distance'));
+      return base;
+    }
 
     let power = base;
     for (let i = 0; i < definitions.length; i += 1) {
@@ -1904,6 +2004,10 @@ export class HuntRuleset implements Ruleset {
       if (definition.damagePerLevel === 0) continue;
       power *= powerMultiplier(definition, character.skills.levelOf(definition));
     }
+    // A postura (#155) escala o golpe e o tiro aqui; a magia é escalada dentro de `castSpell`,
+    // por alvo — aplicar nos dois lugares contaria a mesma postura duas vezes.
+    if (on === 'melee-hit') power *= character.conditions.damageDealtScale('melee');
+    else if (on === 'distance-hit') power *= character.conditions.damageDealtScale('distance');
     return Math.round(power);
   }
 

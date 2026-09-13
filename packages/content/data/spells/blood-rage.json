@@ -1,0 +1,23 @@
+{
+  "id": "blood-rage",
+  "name": "Blood Rage",
+  "vocationId": "knight",
+  "minLevel": 20,
+  "manaCost": 20,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "secondaryGroup": {
+    "name": "stance",
+    "cooldownMs": 2000
+  },
+  "effect": {
+    "kind": "buff",
+    "durationMs": 10000,
+    "damageDealtPercent": {
+      "melee": 25
+    },
+    "damageTakenPercent": 15
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. o Tibia dá +25 % de SKILL, não de dano; sem skill de arma separada (ADR 0026 d.4) a aproximação é em dano."
+}

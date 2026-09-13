@@ -1,0 +1,16 @@
+{
+  "id": "divine-missile",
+  "name": "Divine Missile",
+  "vocationId": "paladin",
+  "minLevel": 40,
+  "manaCost": 20,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 60,
+    "range": 5
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. alcance 5 (TibiaWiki)."
+}

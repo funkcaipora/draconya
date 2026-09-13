@@ -4,5 +4,6 @@
   "healthPerLevel": 10,
   "manaPerLevel": 15,
   "capacityPerLevel": 20,
-  "startingWeaponItemId": "bow"
+  "startingWeaponItemId": "bow",
+  "spellSkill": "distance"
 }

@@ -480,6 +480,8 @@ export const vocationSchema = z.object({
   healthPerLevel: z.number().int().nonnegative(),
   manaPerLevel: z.number().int().nonnegative(),
   capacityPerLevel: z.number().int().nonnegative(),
+  /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
+  spellSkill: z.string().min(1).default('magic'),
   /**
    * A arma que a vocação recebe ao ser escolhida (#154, ADR 0026 decisão 3). `buildContent`
    * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
@@ -617,6 +619,17 @@ export const combatSchema = z.object({
     armor: z.number().int().nonnegative(),
     dodgeChance: z.number().min(0).max(1),
   }),
+  /**
+   * A conversão do Base Power (#155, ADR 0026 decisão 5) — UMA para todas as magias, e nossa:
+   * o TibiaWiki não publica a fórmula, e a do TFS é GPL (ADR 0019). `mid = basePower × (1 +
+   * level × levelFactor + skillLevel × skillFactor)`; `min = ⌊mid × (1 − spread)⌋`,
+   * `max = ⌈mid × (1 + spread)⌉`. O default cobre o conteúdo de teste; o real declara.
+   */
+  spellPower: z.object({
+    levelFactor: z.number().nonnegative(),
+    skillFactor: z.number().nonnegative(),
+    spread: z.number().min(0).max(1),
+  }).default({ levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 }),
   _open: z.string().optional(),
 });
 
@@ -1055,24 +1068,71 @@ export type BotRule = z.infer<typeof botRuleSchema>;
 export type BotLimits = z.infer<typeof botSchema>;
 export type BotConfig = z.infer<typeof botConfigSchema>;
 
+export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
+export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
+
 /**
- * Uma magia (FUN-74, §4.1, §9.2).
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
+ * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * exige alvo nem alcance.
+ */
+export const spellAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
+    radius: z.number().int().positive(),
+    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
+    centered: z.enum(['target', 'caster']).default('target'),
+  }),
+  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Os três tiles imediatamente à frente (Front Sweep). */
+  z.object({ shape: z.literal('cleave') }),
+  /** Linha reta de `length` tiles à frente, largura 1. */
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+export type SpellArea = z.infer<typeof spellAreaSchema>;
+
+/** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
+export const damagePercentBySource = z.object({
+  melee: z.number().int().optional(),
+  distance: z.number().int().optional(),
+  spell: z.number().int().optional(),
+});
+
+/**
+ * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
  *
- * Tudo em CONTEÚDO: custo, cooldown, alcance e efeito. O motor não sabe quanto cura nem quanto
- * custa — ele sabe *que* cura e *que* custa. É a mesma regra que vale para monstro e progressão,
- * e é o que permite balancear sem deploy.
+ * Tudo em CONTEÚDO: custo, cooldown, grupo, alcance, forma e efeito. O motor não sabe quanto
+ * cura nem quanto custa — ele sabe *que* cura e *que* custa. É a mesma regra que vale para
+ * monstro e progressão, e é o que permite balancear sem deploy.
  *
  * O `kind` do efeito é fechado como o do bot, e pela mesma razão: o `sim` só executa o que
  * conhece, e uma magia com efeito desconhecido é recusada no boot em vez de virar uma linha
- * morta que ninguém explica.
+ * morta que ninguém explica. Dano e cura vêm por `basePower` (o BP do TibiaWiki, convertido
+ * por `combat.spellPower`) OU por número fixo (`power`/`amount`) — um dos dois, nunca ambos
+ * (`buildContent` confere).
  */
 export const spellSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
   manaCost: z.number().int().nonnegative(),
-  /** Tempo até poder lançar de novo. Evento na fila, nunca acumulador (ADR 0020). */
+  /** O cooldown DA MAGIA. Evento na fila, nunca acumulador (ADR 0020). */
   cooldownMs: z.number().int().positive(),
+  /**
+   * O grupo do Tibia (#155) e por quanto tempo esta magia o tranca. Ausente é magia fora dos
+   * grupos — só o cooldown próprio —, que é o que as três genéricas eram antes de #155; o
+   * catálogo real declara os dois. `groupCooldownMs` sem `group` é recusado no boot.
+   */
+  group: z.enum(SPELL_GROUPS).optional(),
+  groupCooldownMs: z.number().int().positive().optional(),
+  /** Grupo secundário exclusivo (Stance, Focus, Great Beams, Special). Tranca só as magias que o têm. */
+  secondaryGroup: z.object({
+    name: z.enum(SECONDARY_GROUPS),
+    cooldownMs: z.number().int().positive(),
+  }).optional(),
   /** Level mínimo. */
   minLevel: z.number().int().positive().default(1),
   /**
@@ -1084,28 +1144,47 @@ export const spellSchema = z.object({
   vocationId: z.string().min(1).optional(),
   effect: z.discriminatedUnion('kind', [
     /** Cura o próprio lançador. Alcance não se aplica. */
-    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    z.object({
+      kind: z.literal('heal'),
+      basePower: z.number().int().positive().optional(),
+      amount: z.number().int().positive().optional(),
+    }),
     /**
      * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
-     * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor.
+     * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor. `range` é o
+     * alcance até o alvo principal; obrigatório em forma centrada no alvo, proibido em forma
+     * self-origin (`buildContent` confere).
      */
     z.object({
       kind: z.literal('damage'),
-      power: z.number().int().positive(),
-      range: z.number().int().positive(),
-      /**
-       * A ÁREA atingida, centrada no alvo (FUN-92). Ausente é alvo único.
-       *
-       * Centrada no ALVO, e não no lançador: uma magia centrada em quem lança não precisa de
-       * alvo nenhum, e isso muda o portão inteiro — some a recusa por `no-target`, some a
-       * conferência de alcance. É outra forma de magia, não um parâmetro desta, e entra quando
-       * o §4.1 disser que ela existe.
-       *
-       * `radius` é distância de Chebyshev, a mesma da grade: raio 1 pega os oito vizinhos do
-       * alvo mais ele.
-       */
-      area: z.object({ radius: z.number().int().positive() }).optional(),
+      basePower: z.number().int().positive().optional(),
+      power: z.number().int().positive().optional(),
+      range: z.number().int().positive().optional(),
+      area: spellAreaSchema.optional(),
     }),
+    /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
+    z.object({
+      kind: z.literal('heal-over-time'),
+      amount: z.number().int().positive(),
+      intervalMs: z.number().int().positive(),
+      durationMs: z.number().int().positive(),
+    }),
+    /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
+    z.object({
+      kind: z.literal('haste'),
+      speedPercent: z.number().int().positive(),
+      durationMs: z.number().int().positive(),
+      damageDealtPercent: damagePercentBySource.optional(),
+    }),
+    /** Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs`. */
+    z.object({
+      kind: z.literal('buff'),
+      durationMs: z.number().int().positive(),
+      damageDealtPercent: damagePercentBySource.optional(),
+      damageTakenPercent: z.number().int().optional(),
+    }),
+    /** Dano vira mana enquanto vale. */
+    z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
   ]),
   _open: z.string().optional(),
 });

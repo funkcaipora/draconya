@@ -255,6 +255,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `shot` ANTES do `creature-hit`; o projétil é da tabela, resolvido no hospedeiro (invariante
   6). `CharacterState.ammo` (família → id) é opcional e viaja no snapshot; `selectAmmo` só
   confere o level. `hands-full`: bow com escudo, ou escudo com bow, é recusado — nunca trocado.
+- **Condição é evento, não acumulador; a direção é do `#step`; cooldown tem três livros** (#155).
+  Haste, postura, magic shield e cura ao longo do tempo são `ConditionState` no personagem
+  (`conditions.ts`, uma por tipo, relançar substitui) com `expiresAtMs` LÓGICO, e o vencimento
+  é `CONDITION_EXPIRE` na fila — um `remainingMs -= dtMs` em qualquer lugar quebra a
+  equivalência de taxas. `castSpell` DEVOLVE a condição; quem agenda é o ruleset, que tem a
+  fila. O haste é `Movable.speedScale`, lido por `movementDuration` à parte de `speed`, porque
+  `retarget` e a entrada reescrevem `speed` pela tabela. A direção do personagem é gravada só
+  em `#step` (diagonal: a horizontal decide) e é de onde saem onda, cleave e feixe
+  (`area.ts`, puro: forma → tiles; a mira colhe quem está nos tiles por `Set` de chaves, uma
+  alocação do tamanho da forma). `Cooldowns` guarda `spell:`, `group:` e `secondary:` no mesmo
+  mapa; `group-cooldown` carrega o prazo do livro que trancou. Uma magia de `basePower` não
+  passa pelo `powerMultiplier` das skills por uso — a skill já entrou na conversão.
 - **`tilesAround` mora em `movement.ts`, não no spawner.** Tem dois donos desde a FUN-71 — o
   respawn da hunt e a chegada na praça —, e geometria de tile não é assunto de hunt.
 - **Evento de combate carrega o APLICADO, e a ordem é contrato** (`combat-events.ts`,

@@ -1,0 +1,16 @@
+{
+  "id": "haste-knight",
+  "name": "Haste",
+  "vocationId": "knight",
+  "minLevel": 14,
+  "manaCost": 60,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "haste",
+    "speedPercent": 30,
+    "durationMs": 30000
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. a mesma Haste das quatro vocações; um arquivo por vocação porque `vocationId` é um só (DT-02)."
+}

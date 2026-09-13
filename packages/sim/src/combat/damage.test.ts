@@ -11,6 +11,7 @@ const combat: Combat = {
   // O personagem desarmado não participa de nenhum caso deste arquivo: aqui o atacante e o
   // defensor são montados à mão, tijolo por tijolo. Está preenchido porque o tipo pede.
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
+  spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };
 
 /** Gerador de mentira, para separar "esquivou" de "não esquivou" sem depender de semente. */

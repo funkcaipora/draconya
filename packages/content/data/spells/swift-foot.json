@@ -1,0 +1,25 @@
+{
+  "id": "swift-foot",
+  "name": "Swift Foot",
+  "vocationId": "paladin",
+  "minLevel": 55,
+  "manaCost": 400,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 4000,
+  "secondaryGroup": {
+    "name": "focus",
+    "cooldownMs": 2000
+  },
+  "effect": {
+    "kind": "haste",
+    "speedPercent": 80,
+    "durationMs": 10000,
+    "damageDealtPercent": {
+      "melee": -30,
+      "distance": -30,
+      "spell": -30
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}

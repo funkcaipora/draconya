@@ -1,0 +1,16 @@
+{
+  "id": "charge",
+  "name": "Charge",
+  "vocationId": "knight",
+  "minLevel": 25,
+  "manaCost": 100,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "haste",
+    "speedPercent": 90,
+    "durationMs": 5000
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}

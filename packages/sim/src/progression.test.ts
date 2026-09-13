@@ -16,10 +16,10 @@ const baseline: Progression = {
   deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
 };
 const knight: Vocation = {
-  id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25,
+  id: 'knight', name: 'Knight', healthPerLevel: 20, manaPerLevel: 5, capacityPerLevel: 25, spellSkill: 'magic',
 };
 const sorcerer: Vocation = {
-  id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10,
+  id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 25, capacityPerLevel: 10, spellSkill: 'magic',
 };
 
 describe('statsForLevel', () => {

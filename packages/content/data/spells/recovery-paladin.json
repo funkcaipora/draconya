@@ -1,0 +1,17 @@
+{
+  "id": "recovery-paladin",
+  "name": "Recovery",
+  "vocationId": "paladin",
+  "minLevel": 50,
+  "manaCost": 75,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 60000,
+  "effect": {
+    "kind": "heal-over-time",
+    "amount": 20,
+    "intervalMs": 3000,
+    "durationMs": 60000
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. a mesma Recovery do Knight (DT-02)."
+}

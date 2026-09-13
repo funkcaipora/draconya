@@ -1,0 +1,15 @@
+{
+  "id": "ultimate-healing-sorcerer",
+  "name": "Ultimate Healing",
+  "vocationId": "sorcerer",
+  "minLevel": 30,
+  "manaCost": 160,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 250
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. a mesma Ultimate Healing do Druid (DT-02)."
+}
