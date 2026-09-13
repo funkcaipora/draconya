@@ -94,6 +94,11 @@ verdade e o balanceamento virou tarefa de quem mexe em código.
 A base é **obrigatória**: sem ela não há stats de level 1, e um default em código seria
 exatamente o que a regra acima proíbe. O carregador recusa conteúdo sem ela.
 
+`progression.startingKit` (#153, ADR 0026 decisão 2) é com o que todo personagem nasce
+**vestido**: item e slot. `buildContent` confere que o item existe, que o slot é o dele, que ele
+não tem `requires` (o personagem nasce level 1 sem vocação) e que há um por slot — reprova no
+boot, não na criação do personagem. Vazio é válido: é o conteúdo de teste.
+
 Valor ainda não decidido no PRD entra com `_open` **no próprio arquivo**, nunca como número
 que parece decidido — palpite disfarçado de decisão é o que faz ninguém lembrar de voltar. O
 boot repete todos eles em `openValues`, e o `docs-check` conta os `[ABERTO]` correspondentes

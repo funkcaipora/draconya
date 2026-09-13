@@ -1,6 +1,6 @@
 # Onboarding e tutorial
 
-**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação está decidida (ADR 0026) e entra pela issue #154; o kit de nascimento pela #153; tutorial pendente
+**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação está decidida (ADR 0026) e entra pela issue #154; o kit de nascimento é dado na criação do personagem (#153); tutorial pendente
 **PRD:** §7.4, §8
 **Épico:** E14 (tutorial guiado do level 1 ao 8 com escolha de vocação). E0 cobre o que precede o tutorial — CRUD e criação inicial de personagem.
 
@@ -42,7 +42,11 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
   escolha é uma só, sem troca. O texto curto de cada vocação é o deste documento.
 - **Com o que se nasce:** machete na mão, leather helmet/armor/legs/boots no corpo e a mochila
   nas costas — dados na criação do personagem, não dropados (a exceção ao §21.1 registrada em
-  `items.md`). No level 8 a arma da vocação troca de lugar com a machete.
+  `items.md`). No level 8 a arma da vocação troca de lugar com a machete. Implementado (#153):
+  as peças e os slots estão em `progression.startingKit`
+  (`packages/content/data/progression/baseline.json`), e o boot recusa kit com item que não
+  existe, no slot errado, que exija level ou vocação, ou com duas peças no mesmo slot. A
+  mochila é um item nas costas até os containers do #160.
 
 ## Divergências do PRD
 

@@ -8,6 +8,7 @@ import {
   type CharacterRecord,
   type GameRepository,
   type ItemInstanceRecord,
+  type StartingKitPiece,
 } from '../db/repository.js';
 import { registerCharacterRoutes } from './characters.js';
 
@@ -20,6 +21,8 @@ class MemorySessions implements AuthSessionStore {
 
 class MemoryRepository implements GameRepository {
   readonly characters = new Map<string, CharacterRecord>();
+  /** Com o que cada personagem nasceu vestido (#153): o que a rota mandou gravar. */
+  readonly kits = new Map<string, readonly StartingKitPiece[]>();
   next = 0;
   async applyEquipment(): Promise<void> {
     // Equipamento não passa por este arquivo.
@@ -46,7 +49,8 @@ class MemoryRepository implements GameRepository {
     return { id: 'a1', email: identity.email, externalAuthId: identity.externalAuthId, coins: 0 };
   }
   async createCharacter(
-    accountId: string, name: string, initial: { readonly botConfig?: unknown } = {},
+    accountId: string, name: string,
+    initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},
   ): Promise<CharacterRecord> {
     if ([...this.characters.values()].some((character) => character.name.toLowerCase() === name.toLowerCase())) {
       throw new CharacterNameTakenError();
@@ -60,6 +64,7 @@ class MemoryRepository implements GameRepository {
       createdAt: now,
     };
     this.characters.set(character.id, character);
+    this.kits.set(character.id, initial.kit ?? []);
     return character;
   }
   async listCharacters(accountId: string) {
@@ -155,6 +160,32 @@ describe('character routes', () => {
       method: 'POST', url: '/api/characters', headers: { cookie: bareCookie }, payload: { name: 'Sem Bot' },
     });
     expect(bareRepository.characters.get(bareCreated.json().id as string)?.botConfig).toBeNull();
+  });
+
+  it('nasce vestido com o kit do conteúdo, gravado junto com o personagem; sem kit, de mãos vazias (#153)', async () => {
+    // O kit é conteúdo (`progression.startingKit`) e chega à rota como o bot padrão chega:
+    // injetado no boot. A rota não sabe o que é uma machete — só repassa ao repositório, que
+    // grava tudo numa transação. Mutação que mata: esquecer o `kit` na chamada.
+    const repository = new MemoryRepository();
+    const sessions = new MemorySessions();
+    const auth = new AuthService({ repository, sessions, devMode: true });
+    await auth.devLogin('hero@example.com');
+    const app = Fastify();
+    const startingKit = [{ itemId: 'machete', slot: 'hand' }, { itemId: 'backpack', slot: 'back' }];
+    registerCharacterRoutes(app, auth, repository, { startingKit });
+    const cookie = `${SESSION_COOKIE}=token`;
+
+    const created = await app.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie }, payload: { name: 'Vestido' },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(repository.kits.get(created.json().id as string)).toEqual(startingKit);
+
+    const { app: bare, cookie: bareCookie, repository: bareRepository } = await build();
+    const bareCreated = await bare.inject({
+      method: 'POST', url: '/api/characters', headers: { cookie: bareCookie }, payload: { name: 'Pelado' },
+    });
+    expect(bareRepository.kits.get(bareCreated.json().id as string)).toEqual([]);
   });
 
   it('normalizes names and rejects a case-insensitive duplicate', async () => {

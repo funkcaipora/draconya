@@ -9,6 +9,32 @@
   "vocationLevel": 8,
   "startingSpeed": 278,
   "speedPerLevel": 2,
+  "startingKit": [
+    {
+      "itemId": "machete",
+      "slot": "hand"
+    },
+    {
+      "itemId": "leather-helmet",
+      "slot": "head"
+    },
+    {
+      "itemId": "leather-armor",
+      "slot": "chest"
+    },
+    {
+      "itemId": "leather-legs",
+      "slot": "legs"
+    },
+    {
+      "itemId": "leather-boots",
+      "slot": "feet"
+    },
+    {
+      "itemId": "backpack",
+      "slot": "back"
+    }
+  ],
   "xp": {
     "base": 20,
     "exponent": 2

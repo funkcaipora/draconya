@@ -806,6 +806,62 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   });
 });
 
+describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 decisão 2)', () => {
+  const machete = { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 };
+  const helmet = { id: 'leather-helmet', name: 'Leather Helmet', kind: 'armor', slot: 'head', weight: 22, armor: 1 };
+  const axe = { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 50, attack: 21, requires: { vocationId: 'knight' } };
+  const withKit = (startingKit: unknown, items: unknown[] = [machete, helmet]) =>
+    base({ items, progression: [{ ...baseline, startingKit }] });
+
+  it('sem kit no JSON, ninguém nasce com nada — é o conteúdo de teste', () => {
+    expect(buildContent(base()).progression.startingKit).toEqual([]);
+  });
+
+  it('aceita o kit com item que existe, no slot dele, sem exigência', () => {
+    const content = buildContent(withKit([
+      { itemId: 'machete', slot: 'hand' }, { itemId: 'leather-helmet', slot: 'head' },
+    ]));
+    expect(content.progression.startingKit).toEqual([
+      { itemId: 'machete', slot: 'hand' }, { itemId: 'leather-helmet', slot: 'head' },
+    ]);
+  });
+
+  it('recusa item fantasma, e diz qual', () => {
+    expect(() => buildContent(withKit([{ itemId: 'espada-de-luz', slot: 'hand' }])))
+      .toThrow(/kit de nascimento aponta item "espada-de-luz"/);
+  });
+
+  it('recusa slot que não é o do item: a machete não se veste na cabeça', () => {
+    expect(() => buildContent(withKit([{ itemId: 'machete', slot: 'head' }])))
+      .toThrow(/"machete" do kit se veste em "hand", não em "head"/);
+  });
+
+  it('recusa item que exige vocação ou level: o personagem nasce level 1 sem ela', () => {
+    expect(() => buildContent(withKit([{ itemId: 'steel-axe', slot: 'hand' }], [axe])))
+      .toThrow(/"steel-axe" do kit exige level ou vocação/);
+  });
+
+  it('recusa arma de duas mãos com escudo: o kit não passa por `equip`, então a regra das mãos vale aqui', () => {
+    const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40 };
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const withArmory = (startingKit: unknown) =>
+      base({ items: [bow, shield], ammunition: [arrow], progression: [{ ...baseline, startingKit }] });
+    expect(() => buildContent(withArmory([
+      { itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' },
+    ]))).toThrow(/duas mãos e escudo/);
+    expect(buildContent(withArmory([{ itemId: 'bow', slot: 'hand' }])).progression.startingKit)
+      .toHaveLength(1);
+  });
+
+  it('recusa duas peças no mesmo slot: o banco recusaria na criação, e o boot é o lugar', () => {
+    const sword = { ...machete, id: 'sword', name: 'Sword' };
+    expect(() => buildContent(withKit([
+      { itemId: 'machete', slot: 'hand' }, { itemId: 'sword', slot: 'hand' },
+    ], [machete, sword]))).toThrow(/duas peças em "hand"/);
+  });
+});
+
 describe('loot de item, agora que existe catálogo (FUN-76)', () => {
   const espada = {
     id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',

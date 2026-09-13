@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildContent, placeholderAppearances } from '@draconya/content';
+import type { Content } from '@draconya/content';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/sim';
@@ -20,11 +22,32 @@ import { ReceiptStore } from '../receipts.js';
 import type { Role } from '../role.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
-import { testContent } from '../testing/content.js';
+import { TEST_PROGRESSION, rawTestContent } from '../testing/content.js';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
 
 const logger = createLogger('silent', 'integration');
+
+/**
+ * O conteúdo de teste, mais o kit de nascimento (#153): machete na mão e mochila nas costas.
+ * O conteúdo de teste puro não tem item nenhum, e é assim que os outros testes o querem; aqui
+ * o kit precisa existir de ponta a ponta — criação, ticket, sessão, `inventory` no socket.
+ */
+function integrationContent(): Content {
+  const raw = rawTestContent();
+  const armory = {
+    items: [
+      { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 },
+      { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18 },
+    ],
+    progression: [{
+      ...TEST_PROGRESSION,
+      startingKit: [{ itemId: 'machete', slot: 'hand' }, { itemId: 'backpack', slot: 'back' }],
+    }],
+  };
+  return buildContent({ ...raw, ...armory, appearances: [placeholderAppearances({ ...raw, ...armory })] });
+}
+
 let database: TestDatabase;
 let redis: Redis;
 let repository: DrizzleGameRepository;
@@ -121,8 +144,12 @@ beforeAll(async () => {
     repository, sessions: new RedisAuthSessionStore(redis, 3600), devMode: true,
   });
   receipts = new ReceiptStore(redis);
+  const content = integrationContent();
   app = buildApi(configuration, logger, {
     auth, repository, tickets,
+    // O kit e a mochila de verdade (#153): o `main.ts` liga os dois do mesmo jeito.
+    startingKit: content.progression.startingKit,
+    listItemInstances: (characterId) => repository.listItemInstances(characterId),
     isCharacterActive: async (accountId, characterId) =>
       (await directory.lookup(characterId)) !== null
       || (await directory.activeSlots(accountId)).includes(characterId),
@@ -132,13 +159,13 @@ beforeAll(async () => {
       database: database.database.db,
       receipts,
       logger,
-      progression: testContent().progression,
+      progression: content.progression,
     }),
   });
   baseUrl = await app.listen({ port: 0, host: '127.0.0.1' });
   game = createGame(configuration, logger, {
-    directory, tickets, contentVersion: 'integration-v1',
-    createSession: createCitySessionFactory(testContent()),
+    directory, tickets, contentVersion: 'integration-v1', itemCatalog: content.items,
+    createSession: createCitySessionFactory(content),
   });
   await game.start();
   await directory.heartbeat('integration-node', { sessions: 0, url: configuration.GAME_PUBLIC_URL });
@@ -262,7 +289,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     // cair e que some no deploy.
     const owner = await login();
     const character = await createCharacter(owner.cookie);
-    const content = testContent();
+    const content = integrationContent();
     const session = createHuntSession({
       id: randomUUID(), content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
     });
@@ -367,6 +394,29 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(await directory.lookup(character.id)).toEqual(location);
   });
 
+  it('a new character is born wearing the kit, and the inventory on attach shows it (#153)', async () => {
+    // Ponta a ponta: `POST /api/characters` grava o kit, o ticket o carrega em `inventory`, a
+    // sessão de Cidade nasce com ele no `CharacterRuntime`, e o `inventory` do attach o mostra
+    // equipado — com o peso contando na capacidade. O que reprova aqui é qualquer elo solto.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    const ticket = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(ticket.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    // O inventário chega pela fila do attach, num quadro que pode ser o do `welcome` ou um
+    // dos seguintes (FUN-102).
+    const first = decodeS2C(await receive(socket)) ?? [];
+    const inventory = first.find((m) => m.type === 'inventory') ?? await awaitMessage(socket, 'inventory');
+    if (inventory.type !== 'inventory') throw new Error('não veio inventory');
+
+    expect(inventory.equipped['hand']).toMatchObject({ itemId: 'machete', instanceId: `${character.id}:kit:1`, quantity: 1 });
+    expect(inventory.equipped['back']).toMatchObject({ itemId: 'backpack', instanceId: `${character.id}:kit:2` });
+    expect(inventory.backpack).toEqual([]);
+    expect(inventory.capacity.used).toBeGreaterThan(0);
+    expect(inventory.capacity.used).toBeLessThan(inventory.capacity.total);
+  });
+
   it('walk through the real socket moves the character, and session-state shows it (FUN-69)', async () => {
     // A ligação socket → host → sistema de movimento, ponta a ponta. O que reprova aqui é o
     // `walk` chegando e caindo no `default` de novo.
@@ -468,7 +518,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     });
     const failedGame = createGame(configuration, logger, {
       tickets: new TicketService(disconnected, directory),
-      contentVersion: 'integration-v1', createSession: createCitySessionFactory(testContent()),
+      contentVersion: 'integration-v1', createSession: createCitySessionFactory(integrationContent()),
     });
     await failedGame.start();
     try {

@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -210,7 +210,11 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 - **§21.1 — equipamento só por drop.** O kit de nascimento (machete, leather helmet/armor/
   legs/boots, mochila) e a arma de vocação no level 8 são **dados** ao personagem — `origin:
   'starting-kit'` e `'vocation-choice'` em `item_instance` —, não dropados (ADR 0026, decisões
-  2 e 3). São as duas únicas exceções; tudo o mais continua vindo de monstro.
+  2 e 3). São as duas únicas exceções; tudo o mais continua vindo de monstro. O kit já é dado
+  (#153): `progression.startingKit` em `packages/content/data/progression/baseline.json` lista
+  as seis peças e o slot em que cada uma nasce vestida, e `createCharacter` grava as linhas de
+  `item_instance` na **mesma transação** que o personagem (id `<characterId>:kit:<n>`), sem
+  passar pelo ledger — o kit não tem preço. Personagem criado antes do #153 continua sem kit.
 
 ## Decidido (ADR 0026): munição, containers e runa
 

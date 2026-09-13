@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
-import { accounts, characters } from './schema.js';
+import { accounts, characters, itemInstances } from './schema.js';
 import {
   AccountIdentityConflictError,
   CharacterNameTakenError,
@@ -320,6 +320,46 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
       expect(meus.map((i) => i.itemId)).toEqual(['spike-sword', 'leather-armor']);
       expect(await repository.listItemInstances(meu.id)).toEqual(meus);
       expect(await repository.listItemInstances(outro.id)).toHaveLength(1);
+    });
+
+    it('o kit de nascimento entra equipado, com proveniência e id determinístico, na mesma linha do tempo do personagem (#153)', async () => {
+      const character = await seed();
+      const account = character.accountId;
+      const dressed = await repository.createCharacter(account, 'Kit Hero', {
+        kit: [{ itemId: 'machete', slot: 'hand' }, { itemId: 'backpack', slot: 'back' }],
+      });
+
+      const items = await repository.listItemInstances(dressed.id);
+      expect(items.map(({ id, itemId, origin, equippedSlot, quantity }) =>
+        ({ id, itemId, origin, equippedSlot, quantity }))).toEqual([
+        { id: `${dressed.id}:kit:1`, itemId: 'machete', origin: 'starting-kit', equippedSlot: 'hand', quantity: 1 },
+        { id: `${dressed.id}:kit:2`, itemId: 'backpack', origin: 'starting-kit', equippedSlot: 'back', quantity: 1 },
+      ]);
+      // Sem kit, de mãos vazias — é o personagem do conteúdo de teste.
+      expect(await repository.listItemInstances(character.id)).toEqual([]);
+    });
+
+    it('kit que o banco recusa derruba o personagem junto: é UMA transação (#153)', async () => {
+      // Duas peças no mesmo slot esbarram em `item_instance_one_per_slot`. O que não pode
+      // sobrar é o personagem sem kit — o estado que uma escrita em dois passos deixaria.
+      const { accountId } = await seed();
+      await expect(repository.createCharacter(accountId, 'Twin Hands', {
+        kit: [{ itemId: 'machete', slot: 'hand' }, { itemId: 'spike-sword', slot: 'hand' }],
+      })).rejects.toThrow();
+      const db = testDatabase.database.db;
+      expect(await db.select().from(characters).where(eq(characters.name, 'Twin Hands'))).toEqual([]);
+      expect(await db.select().from(itemInstances).where(eq(itemInstances.origin, 'starting-kit'))).toEqual([]);
+    });
+
+    it('nome repetido não deixa kit órfão (#153)', async () => {
+      const { accountId } = await seed();
+      const kit = [{ itemId: 'machete', slot: 'hand' }];
+      await repository.createCharacter(accountId, 'Same Hero', { kit });
+      await expect(repository.createCharacter(accountId, 'same hero', { kit }))
+        .rejects.toBeInstanceOf(CharacterNameTakenError);
+      const rows = await testDatabase.database.db.select().from(itemInstances)
+        .where(eq(itemInstances.origin, 'starting-kit'));
+      expect(rows).toHaveLength(1);
     });
 
     it('recusa instância de personagem que não existe', async () => {
