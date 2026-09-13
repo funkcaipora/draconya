@@ -127,7 +127,8 @@ describe('the inventory message (FUN-90, FUN-108)', () => {
   const sword = { instanceId: 'i1', itemId: 'sword', quantity: 1 };
   const inventory: S2CMessage = {
     type: 'inventory',
-    backpack: [{ instanceId: 'i2', itemId: 'health-potion', quantity: 5 }],
+    backpack: [{ instanceId: 'i2', itemId: 'health-potion', quantity: 5 }, null],
+    satchel: [],
     equipped: { hand: sword },
     capacity: { used: 130, total: 400 },
   };
@@ -361,5 +362,17 @@ describe('vocation choice (#154)', () => {
     });
     expect(catalogue.vocations).toEqual([]);
     expect(catalogue.vocationLevel).toBe(0);
+  });
+});
+
+describe('move-item (#160)', () => {
+  it('is intention only — two places — and the opcode is 16', () => {
+    expect(CLIENT_TO_SERVER['move-item']).toBe(16);
+    const schema = C2S_SCHEMAS['move-item'];
+    expect(schema.safeParse({ from: { container: 'backpack', index: 3 }, to: { container: 'satchel', index: 0 } }).success).toBe(true);
+    expect(schema.safeParse({ from: { container: 'backpack', index: 3 }, to: { slot: 'hand' } }).success).toBe(true);
+    // Nem quantidade nem item: o servidor sabe o que está em cada lugar (invariante 4).
+    expect(schema.safeParse({ from: { container: 'chest', index: 0 }, to: { slot: 'hand' } }).success).toBe(false);
+    expect(schema.safeParse({ from: { container: 'backpack', index: -1 }, to: { slot: 'hand' } }).success).toBe(false);
   });
 });

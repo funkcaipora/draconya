@@ -7,6 +7,15 @@ import type { C2SName, S2CName } from './messages.js';
 const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number().int() });
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
+/**
+ * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
+ * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
+ */
+const Place = z.union([
+  z.object({ container: z.enum(['backpack', 'satchel']), index: z.number().int().nonnegative() }),
+  z.object({ slot: z.string().min(1) }),
+]);
+
 /** Um índice na paleta de 133 cores do outfit (FUN-20). O cliente é quem sabe que cor é. */
 const PaletteIndex = z.number().int().min(0).max(132);
 
@@ -148,6 +157,12 @@ export const C2S_SCHEMAS = {
    * `player-stats.vocationId` mais `inventory`; recusa é `system-message`, como equipar.
    */
   'choose-vocation': z.object({ vocationId: z.string().min(1) }),
+  /**
+   * Mover um item (#160). INTENÇÃO: origem e destino; quem decide se cabe, se empilha, se
+   * veste e se o slot existe é o servidor (invariante 4). Sucesso é `inventory` reenviado;
+   * recusa é `system-message`, como equipar.
+   */
+  'move-item': z.object({ from: Place, to: Place }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {
@@ -278,7 +293,13 @@ export const S2C_SCHEMAS = {
    * atributo base, fixo por id (§21.2), e vêm no catálogo.
    */
   inventory: z.object({
-    backpack: z.array(CarriedItem),
+    /**
+     * Um lugar por posição (#160); `null` é lugar vazio, e o comprimento é o tamanho ATUAL do
+     * container — 20 ao nascer, mais cinco a cada linha que abriu.
+     */
+    backpack: z.array(CarriedItem.nullable()),
+    /** A bolsa (#160): fixa do personagem, mesma forma. `default([])`: nó anterior manda sem. */
+    satchel: z.array(CarriedItem.nullable()).default([]),
     /**
      * `slot` → o que está vestido ali, com a MESMA forma de uma entrada da mochila.
      *

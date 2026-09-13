@@ -1,0 +1,15 @@
+{
+  "id": "divine-healing",
+  "name": "Divine Healing",
+  "vocationId": "paladin",
+  "minLevel": 35,
+  "manaCost": 160,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 250
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}

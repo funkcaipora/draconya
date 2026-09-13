@@ -71,6 +71,9 @@ export interface ItemInstanceRecord {
   readonly origin: string;
   /** Em que slot está vestida, ou `null` para "na mochila" (FUN-82). */
   readonly equippedSlot: string | null;
+  /** Onde está dentro dos containers (#160); nulos é linha sem posição gravada. */
+  readonly container: string | null;
+  readonly slotIndex: number | null;
   readonly createdAt: Date;
 }
 

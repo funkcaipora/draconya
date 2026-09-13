@@ -236,6 +236,107 @@ a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte)
 a cada ciclo em que algo mudou — a stamina comparada no minuto, porque ela queima a cada evento
 e comparada exata faria a mensagem sair dez vezes por segundo.
 
+### As magias por vocação (#156–#159)
+
+Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spells/*.json`; o teste da tabela é `load.test.ts`. Magia compartilhada entre vocações é um arquivo por vocação (`vocationId` é um só). Aproximações e valores provisórios estão no `_open` de cada arquivo.
+
+**Knight (escala por `melee`)**
+
+| level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
+|---|---|---|---|---|---|---|
+| 1 | Bruise Bane | 10 | healing (2 s) | 1 s | cura | 15 |
+| 1 | Lesser Front Sweep | 6 | attack (2 s) | 6 s | dano · cleave | 14 |
+| 8 | Wound Cleansing | 40 | healing (2 s) | 1 s | cura | 70 |
+| 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
+| 16 | Brutal Strike | 30 | attack (2 s) | 6 s | dano · alvo, alcance 1 | 39 |
+| 20 | Blood Rage | 20 | support (2 s) + stance (2 s) | 2 s | postura 10 s | — |
+| 20 | Protector | 20 | support (2 s) + stance (2 s) | 2 s | postura 10 s | — |
+| 25 | Charge | 100 | support (2 s) | 2 s | haste +90 % / 5 s | — |
+| 28 | Whirlwind Throw | 40 | attack (2 s) | 6 s | dano · alvo, alcance 5 | 32 |
+| 33 | Groundshaker | 200 | attack (2 s) | 8 s | dano · círculo raio 3 no lançador | 32 |
+| 35 | Berserk | 125 | attack (2 s) | 4 s | dano · círculo raio 1 no lançador | 44 |
+| 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
+| 70 | Front Sweep | 200 | attack (2 s) | 6 s | dano · cleave | 80 |
+| 80 | Intense Wound Cleansing | 200 | healing (2 s) | 120 s | cura | 500 |
+
+**Paladin (escala por `distance`)**
+
+| level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
+|---|---|---|---|---|---|---|
+| 1 | Lesser Ethereal Spear | 6 | attack (2 s) | 8 s | dano · alvo, alcance 5 | 9 |
+| 8 | Light Healing | 20 | healing (1 s) | 1 s | cura | 40 |
+| 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
+| 20 | Divine Defiance | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
+| 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
+| 20 | Sharpshooter | 250 | support (2 s) + stance (10 s) | 10 s | postura 10 s | — |
+| 23 | Ethereal Spear | 25 | attack (2 s) | 2 s | dano · alvo, alcance 5 | 25 |
+| 35 | Divine Healing | 160 | healing (1 s) | 1 s | cura | 250 |
+| 40 | Divine Missile | 20 | attack (2 s) | 2 s | dano · alvo, alcance 5 | 60 |
+| 50 | Divine Caldera | 160 | attack (2 s) | 4 s | dano · círculo raio 3 no lançador | 150 |
+| 50 | Recovery | 75 | healing (1 s) | 60 s | cura 20 a cada 3 s por 60 s | — |
+| 55 | Swift Foot | 400 | support (2 s) + focus (2 s) | 4 s | haste +80 % / 10 s | — |
+| 60 | Ethereal Barrage | 135 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 100 |
+| 60 | Salvation | 210 | healing (1 s) | 1 s | cura | 500 |
+| 70 | Divine Barrage | 175 | attack (2 s) | 4 s | dano · círculo raio 1 no alvo, alcance 5 | 130 |
+
+**Sorcerer (escala por `magic`)**
+
+| level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
+|---|---|---|---|---|---|---|
+| 1 | Buzz | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
+| 1 | Scorch | 8 | attack (2 s) | 4 s | dano · onda 2 | 10 |
+| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 8 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 8 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
+| 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
+| 16 | Death Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 18 | Fire Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 40 |
+| 23 | Energy Beam | 40 | attack (2 s) | 4 s | dano · feixe 5 | 60 |
+| 29 | Great Energy Beam | 110 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 8 | 155 |
+| 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
+| 38 | Energy Wave | 170 | attack (2 s) | 8 s | dano · onda 5 | 150 |
+| 38 | Great Fire Wave | 120 | attack (2 s) | 4 s | dano · onda 4 | 100 |
+| 55 | Lightning | 60 | attack (2 s) + special (8 s) | 8 s | dano · círculo raio 1 no alvo, alcance 5 | 110 |
+| 55 | Rage of the Skies | 600 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 200 |
+| 60 | Hell's Core | 1100 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 4 no lançador | 250 |
+| 66 | Great Death Beam | 140 | attack (2 s) + great-beams (6 s) | 6 s | dano · feixe 5 | 155 |
+| 70 | Strong Flame Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 125 |
+| 80 | Strong Energy Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 125 |
+
+**Druid (escala por `magic`)**
+
+| level | magia | mana | grupo (tranca) | cd próprio | efeito | BP |
+|---|---|---|---|---|---|---|
+| 1 | Chill Out | 8 | attack (2 s) | 4 s | dano · onda 2 | 10 |
+| 1 | Magic Patch | 6 | healing (1 s) | 1 s | cura | 10 |
+| 1 | Mud Attack | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 6 | Apprentice's Strike | 6 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 15 |
+| 8 | Flame Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 8 | Ice Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 8 | Light Healing | 20 | healing (1 s) | 1 s | cura | 40 |
+| 12 | Energy Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 13 | Terra Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 45 |
+| 14 | Haste | 60 | support (2 s) | 2 s | haste +30 % / 30 s | — |
+| 14 | Magic Shield | 50 | support (2 s) | 14 s | magic shield 180 s | — |
+| 16 | Physical Strike | 20 | attack (2 s) | 2 s | dano · alvo, alcance 3 | 50 |
+| 18 | Ice Wave | 25 | attack (2 s) | 4 s | dano · onda 3 | 35 |
+| 20 | Intense Healing | 70 | healing (1 s) | 1 s | cura | 120 |
+| 30 | Ultimate Healing | 160 | healing (1 s) | 1 s | cura | 250 |
+| 36 | Mass Healing | 150 | healing (1 s) | 2 s | cura | 200 |
+| 38 | Terra Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 120 |
+| 40 | Strong Ice Wave | 170 | attack (2 s) | 4 s | dano · onda 5 | 150 |
+| 55 | Wrath of Nature | 700 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 5 no lançador | 175 |
+| 60 | Eternal Winter | 1050 | attack (4 s) + focus (40 s) | 40 s | dano · círculo raio 4 no lançador | 200 |
+| 70 | Strong Terra Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 115 |
+| 80 | Forked Thorns | 180 | attack (2 s) | 6 s | dano · círculo raio 1 no alvo, alcance 5 | 97 |
+| 80 | Strong Ice Strike | 60 | attack (2 s) + special (8 s) | 8 s | dano · alvo, alcance 7 | 115 |
+
+**Ficam de fora, por nome** (ADR 0026 decisão 5): Light, Great Light, Ultimate Light, Find Person, Find Fiend, Magic Rope, Levitate, Invisible, Cancel Invisibility, Cancel Magic Shield, Creature Illusion (utilidade); Cure Poison, Cure Bleeding, Cure Curse, Cure Electrification, Cure Burning (condição); Inflict Wound, Holy Flash, Ignite, Electrify, Curse, Envenom (dano ao longo do tempo); Shield Bash, Shield Slam (defesa de escudo); Challenge (promoção); Train Party, Protect Party, Enchant Party, Heal Friend, Heal Party, Shared Conservation (party); Elemental Synthesis, Master of Decay/Flames/Thunder (elemento); Arrow Call, Conjure Arrow, Conjure Explosive Arrow, Enchant Spear, Conjure Wand of Darkness, Food (conjuração); Summon Creature (convocação). O Sorcerer não tem Light Healing nem Intense Healing no TibiaWiki de 2026 — a cura dele é Magic Patch e Ultimate Healing; as três magias genéricas (`heal`, `strike`, `blast`) continuam de todo mundo.
+
 ## Em aberto
 
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.

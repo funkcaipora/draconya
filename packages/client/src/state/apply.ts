@@ -220,6 +220,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         ...state,
         inventory: {
           backpack: message.backpack,
+          // A bolsa (#160): `default([])` no protocolo — um nó anterior manda sem.
+          satchel: message.satchel,
           equipped: message.equipped,
           capacity: message.capacity,
         },

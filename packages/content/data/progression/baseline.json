@@ -35,6 +35,8 @@
       "slot": "back"
     }
   ],
+  "satchelInitialSlots": 10,
+  "containerRow": 5,
   "xp": {
     "base": 20,
     "exponent": 2

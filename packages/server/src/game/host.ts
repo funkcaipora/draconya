@@ -20,10 +20,12 @@ import type {
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Vocation } from '@draconya/content';
+import { containerRulesFor } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult, InventoryState,
-  VocationRefusal,
+  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
+  InventoryState, Place, VocationRefusal,
 } from '@draconya/sim';
+import type { Progression } from '@draconya/content';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
@@ -126,6 +128,12 @@ export interface SessionHostOptions {
   readonly vocations?: ReadonlyMap<string, Vocation>;
   readonly vocationLevel?: number;
   /**
+   * A tabela de progressão (#160), para os tamanhos de container — a bolsa e a linha. Ausente:
+   * `move-item` e a arma de vocação usam containers de zero lugares que crescem por um; é o
+   * host de teste sem conteúdo.
+   */
+  readonly progression?: Progression;
+  /**
    * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
    *
    * O `sim` não conhece nome nem arte: o evento de nascimento traz só o `monsterId`, e é aqui
@@ -193,6 +201,9 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'level-too-low': 'Seu level ainda não permite usar esse item.',
   'wrong-vocation': 'Esse item é de outra vocação.',
   'stack-too-large': 'Essa pilha é grande demais.',
+  'backpack-not-empty': 'Esvazie a mochila antes de tirá-la.',
+  'no-such-place': 'Esse lugar não existe.',
+  'empty-place': 'Não há nada nesse lugar.',
 };
 
 const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
@@ -224,11 +235,24 @@ function acquiredBy(character: CharacterRuntime, sessionId: string): BoxedItem[]
  */
 function acquiredByState(inventory: InventoryState, sessionId: string): BoxedItem[] {
   const prefix = `${sessionId}:`;
-  const born = (item: CarriedItem): boolean => item.instanceId.startsWith(prefix);
-  const equipped = Object.values(inventory.equipped).filter(
-    (item): item is CarriedItem => item !== undefined && born(item),
-  );
-  return [...inventory.backpack.filter(born), ...equipped];
+  const born = (item: CarriedItem | null | undefined): item is CarriedItem =>
+    item !== null && item !== undefined && item.instanceId.startsWith(prefix);
+  return [
+    ...inventory.backpack.filter(born),
+    ...(inventory.satchel ?? []).filter(born),
+    ...Object.values(inventory.equipped).filter(born),
+  ];
+}
+
+/**
+ * Onde cada instância está DENTRO dos containers (#160): `instanceId → lugar`. ABSOLUTO como
+ * `equipment`; o equipado não aparece — o slot dele já vai em `equipment`.
+ */
+function layoutOfState(inventory: InventoryState): Record<string, { container: 'backpack' | 'satchel'; index: number }> {
+  const layout: Record<string, { container: 'backpack' | 'satchel'; index: number }> = {};
+  inventory.backpack.forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'backpack', index }; });
+  (inventory.satchel ?? []).forEach((item, index) => { if (item !== null) layout[item.instanceId] = { container: 'satchel', index }; });
+  return layout;
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
@@ -855,6 +879,10 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
         this.#requestVocation(viewer, message.vocationId);
         return;
+      case 'move-item':
+        // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
+        this.#requestMove(viewer, message.from, message.to);
+        return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
         return;
@@ -986,9 +1014,40 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
       return;
     }
-    const result = character.inventory.unequip(slot as ItemSlot);
+    const result = character.inventory.unequip(slot as ItemSlot, this.#containerRules(character));
     if (result.ok) this.#markDirty(viewer.characterId);
     this.#answerInventory(viewer, result);
+  }
+
+  /**
+   * Mover um item (#160, ADR 0026 decisão 6). Processado NA CHEGADA, como equipar. O `sim`
+   * decide — troca, pilha, veste, desveste, recusa — numa transação; o host confere só o que
+   * o protocolo deixou aberto (o slot é string) e traduz a recusa.
+   */
+  #requestMove(viewer: Viewer, from: Place | { readonly slot: string }, to: Place | { readonly slot: string }): void {
+    const character = this.#ownerOf(viewer.characterId);
+    if (character === undefined) return;
+    // O slot chega como string e é conferido pelo CONTEÚDO, como em `#requestUnequip`.
+    for (const end of [from, to]) {
+      if ('slot' in end && !(ITEM_SLOTS as readonly string[]).includes(end.slot)) {
+        viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
+        return;
+      }
+    }
+    const result = character.inventory.move(
+      from as Place, to as Place, this.#options.itemCatalog ?? EMPTY_ITEMS, character, this.#containerRules(character),
+    );
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
+  #containerRules(character: CharacterRuntime): ContainerRules {
+    const progression = this.#options.progression;
+    if (progression === undefined) {
+      return { backpackSlots: 0, satchelSlots: 0, row: 1 };
+    }
+    return containerRulesFor(character.inventory, this.#options.itemCatalog ?? EMPTY_ITEMS, progression);
   }
 
   /**
@@ -1051,6 +1110,7 @@ export class SessionHost {
       // compartilham `session.id`, e `${session.id}:${lootSeq}` colidiria na chave primária
       // de `item_instance`. O prefixo da sessão é o que `acquiredBy` filtra.
       instanceId: `${hosted.session.id}:${character.id}:vocation`,
+      rules: this.#containerRules(character),
     });
     if (!result.ok) {
       viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
@@ -1110,9 +1170,10 @@ export class SessionHost {
 
     const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
     const state = character.inventory.getState();
-    const carried = (item: CarriedItem): S2CProps<'inventory'>['backpack'][number] => ({
+    const carried = (item: CarriedItem): NonNullable<S2CProps<'inventory'>['backpack'][number]> => ({
       instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity,
     });
+    const place = (item: CarriedItem | null) => (item === null ? null : carried(item));
     const equipped: S2CProps<'inventory'>['equipped'] = {};
     for (const [slot, item] of Object.entries(state.equipped)) {
       if (item !== undefined) equipped[slot] = carried(item);
@@ -1120,7 +1181,9 @@ export class SessionHost {
 
     this.#sendToViewersOf(hosted, characterId, {
       type: 'inventory',
-      backpack: state.backpack.map(carried),
+      // Posicional (#160): `null` é lugar vazio, e o comprimento é o tamanho do container.
+      backpack: state.backpack.map(place),
+      satchel: (state.satchel ?? []).map(place),
       equipped,
       capacity: { used: character.inventory.weight(catalog), total: character.capacity },
     });
@@ -2205,6 +2268,8 @@ export class SessionHost {
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
+      // E onde cada item está dentro dos containers (#160).
+      ...(owner === undefined ? {} : { layout: layoutOfState(owner.inventory.getState()) }),
       // O que caiu nesta sessão (FUN-88): o que coube vira linha de `item_instance`, o que não
       // coube vira Caixa de Loot da Sessão.
       ...(owner === undefined ? {} : { acquired: acquiredBy(owner, receipt.sessionId) }),
@@ -2255,6 +2320,7 @@ export class SessionHost {
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       equipment: equipmentOf(owner),
+      layout: layoutOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
       ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
     });
@@ -2515,6 +2581,7 @@ export class SessionHost {
         ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
         ...(owner?.inventory === undefined ? {} : {
           equipment: equipmentOfState(owner.inventory),
+          layout: layoutOfState(owner.inventory),
           acquired: acquiredByState(owner.inventory, snapshot.id),
         }),
         ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),

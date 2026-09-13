@@ -303,6 +303,11 @@ export const itemSchema = z.strictObject({
    * `buildContent` confere, porque o schema de um campo opcional não sabe do `kind`.
    */
   weapon: weaponSchema.optional(),
+  /**
+   * Lugares iniciais de um container (#160, ADR 0026 decisão 6). Obrigatório em
+   * `kind: 'container'` e proibido fora dela — `buildContent` confere, como faz com `weapon`.
+   */
+  initialSlots: z.number().int().positive().optional(),
   /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
   weight: z.number().nonnegative(),
   /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
@@ -541,6 +546,13 @@ export const progressionSchema = z.object({
     itemId: z.string().min(1),
     slot: z.enum(ITEM_SLOTS),
   })).default([]),
+  /**
+   * A bolsa fixa do personagem (#160, ADR 0026 decisão 6): não é item, nasce com ele. E
+   * quantos lugares uma linha acrescenta quando mochila ou bolsa enchem — o único teto é o
+   * peso. Defaults para o conteúdo de teste; o real declara.
+   */
+  satchelInitialSlots: z.number().int().positive().default(10),
+  containerRow: z.number().int().positive().default(5),
   /**
    * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
    * completar aquele level.

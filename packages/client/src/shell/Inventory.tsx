@@ -20,7 +20,7 @@ import type { ItemSlot } from '@draconya/content';
 import { slotVariable } from '../assets/ui.js';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
-import type { ItemDefinition } from '../state/hud.js';
+import type { Inventory as InventoryState, ItemDefinition } from '../state/hud.js';
 import { ItemSprite } from './ItemSprite.js';
 
 /** Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa. */
@@ -55,6 +55,47 @@ function SlotContent({ definition, name, quantity }: {
       <ItemSprite appearanceId={definition?.appearanceId} name={name} />
       {quantity > 1 && <span className="slot-count">{quantity}</span>}
     </>
+  );
+}
+
+function Places({ places, byId, label, empty }: {
+  places: readonly (NonNullable<InventoryState['backpack'][number]> | null)[];
+  byId: ReadonlyMap<string, ItemDefinition>;
+  label: string;
+  empty: string;
+}) {
+  return (
+    <ul className="backpack" aria-label={label}>
+      {places.every((item) => item === null) && <li className="quiet">{empty}</li>}
+      {places.map((item, index) => {
+        if (item === null) return <li key={index} className="slot slot-empty-place" aria-label="lugar vazio" />;
+        const definition = byId.get(item.itemId);
+        const name = definition?.name ?? item.itemId;
+        // Item que veste em algum lugar pode ser equipado; o resto é carga. Quem confere de
+        // verdade é o servidor — isto só evita oferecer o que ele vai recusar.
+        const wearable = definition?.slot !== null && definition?.slot !== undefined;
+        return (
+          <li key={item.instanceId} className="slot">
+            {wearable
+              ? (
+                <button
+                  type="button"
+                  className="slot-button"
+                  title={`Vestir ${name}`}
+                  onClick={() => { sendIntent({ type: 'equip', instanceId: item.instanceId }); }}
+                >
+                  <SlotContent definition={definition} name={name} quantity={item.quantity} />
+                </button>
+              )
+              : (
+                <span className="slot-item" title={name}>
+                  <SlotContent definition={definition} name={name} quantity={item.quantity} />
+                </span>
+              )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -111,36 +152,10 @@ export function Inventory() {
         {`${inventory.capacity.used.toFixed(0)} / ${inventory.capacity.total.toFixed(0)} oz`}
       </div>
 
-      <ul className="backpack">
-        {inventory.backpack.length === 0 && <li className="quiet">Mochila vazia</li>}
-        {inventory.backpack.map((item) => {
-          const definition = byId.get(item.itemId);
-          const name = definition?.name ?? item.itemId;
-          // Item que veste em algum lugar pode ser equipado; o resto é carga. Quem confere de
-          // verdade é o servidor — isto só evita oferecer o que ele vai recusar.
-          const wearable = definition?.slot !== null && definition?.slot !== undefined;
-          return (
-            <li key={item.instanceId} className="slot">
-              {wearable
-                ? (
-                  <button
-                    type="button"
-                    className="slot-button"
-                    title={`Vestir ${name}`}
-                    onClick={() => { sendIntent({ type: 'equip', instanceId: item.instanceId }); }}
-                  >
-                    <SlotContent definition={definition} name={name} quantity={item.quantity} />
-                  </button>
-                )
-                : (
-                  <span className="slot-item" title={name}>
-                    <SlotContent definition={definition} name={name} quantity={item.quantity} />
-                  </span>
-                )}
-            </li>
-          );
-        })}
-      </ul>
+      {/* Posicional (#160): cada lugar é um `li`, vazio ou com item; a bolsa é a segunda
+          lista. A tela de verdade — arrastar, as duas janelas — é a #161. */}
+      <Places places={inventory.backpack} byId={byId} label="mochila" empty="Mochila vazia" />
+      <Places places={inventory.satchel} byId={byId} label="bolsa" empty="Bolsa vazia" />
     </section>
   );
 }

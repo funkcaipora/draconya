@@ -1,0 +1,16 @@
+{
+  "id": "physical-strike",
+  "name": "Physical Strike",
+  "vocationId": "druid",
+  "minLevel": 16,
+  "manaCost": 20,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 2000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 50,
+    "range": 3
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. dano físico com armadura contando no Tibia; `resolveDamage` só conhece `kind: magic` para magia até haver `attackKind` no efeito."
+}

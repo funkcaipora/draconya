@@ -38,7 +38,7 @@ function integrationContent(): Content {
   const armory = {
     items: [
       { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 },
-      { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18 },
+      { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20 },
       // A arma do Knight (#154): exige a vocação, como as quatro de verdade.
       { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
         requires: { vocationId: 'knight' } },
@@ -422,7 +422,10 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
 
     expect(inventory.equipped['hand']).toMatchObject({ itemId: 'machete', instanceId: `${character.id}:kit:1`, quantity: 1 });
     expect(inventory.equipped['back']).toMatchObject({ itemId: 'backpack', instanceId: `${character.id}:kit:2` });
-    expect(inventory.backpack).toEqual([]);
+    // Posicional (#160): os 20 lugares da mochila do kit, todos vazios; a bolsa com 10.
+    expect(inventory.backpack).toHaveLength(20);
+    expect(inventory.backpack.every((place) => place === null)).toBe(true);
+    expect(inventory.satchel).toHaveLength(10);
     expect(inventory.capacity.used).toBeGreaterThan(0);
     expect(inventory.capacity.used).toBeLessThan(inventory.capacity.total);
   });
@@ -463,7 +466,7 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     const inventory = frames.find((m) => m.type === 'inventory') ?? await awaitMessage(again, 'inventory');
     if (inventory.type !== 'inventory') throw new Error('não veio inventory');
     expect(inventory.equipped['hand']).toMatchObject({ itemId: 'steel-axe' });
-    expect(inventory.backpack.map((item) => item.itemId)).toEqual(['machete']);
+    expect(inventory.backpack.filter((item) => item !== null).map((item) => item.itemId)).toEqual(['machete']);
     again.send(encodeC2S({ type: 'session-attach' }));
     const state = await awaitMessage(again, 'session-state');
     if (state.type !== 'session-state') throw new Error('não veio session-state');
