@@ -493,7 +493,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   versão do cliente sendo a errada.
 - **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, hunts e bot à
   esquerda, chat embaixo, nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
-  atividade faz o jogador procurar a poção no meio da luta.
+  atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
+  FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
+  botão "Inventário" da barra minimiza as três (`collapsed` esconde tudo menos o cabeçalho),
+  nunca remove. Com bow na mão o escudo é o seletor de munição (`AmmoPicker`). Arrastar é DnD
+  nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
+  MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
+  lugar de origem.
 - **O mundo ocupa a tela INTEIRA e o resto flutua por cima** (`shell/Shell.tsx`, `shell/TopBar.tsx`,
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Inventory } from './Inventory.js';
+import { EquipmentPanel } from './EquipmentPanel.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, Inventory as InventoryState } from '../state/hud.js';
 
@@ -16,14 +16,18 @@ import type { Catalogue, Inventory as InventoryState } from '../state/hud.js';
  * `server` que proíbe `packages/server` no cliente casa com o subpath do React também.
  */
 async function render(): Promise<string> {
-  const { prelude } = await prerender(createElement(Inventory));
+  const { prelude } = await prerender(createElement(EquipmentPanel));
   return new Response(prelude).text();
 }
 
 const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
-  ammunition: [], vocations: [], vocationLevel: 8,
+  vocations: [], vocationLevel: 8,
+  ammunition: [
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447, requires: {} },
+    { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
+  ],
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
@@ -32,6 +36,7 @@ const catalogue: Catalogue = {
   items: [
     { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
     { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null, twoHanded: false },
+    { id: 'bow', name: 'Bow', appearanceId: 3350, weight: 31, slot: 'hand', twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
   ],
 };
 
@@ -104,5 +109,43 @@ describe('o slot equipado (FUN-108)', () => {
     }));
 
     expect(await render()).toContain('title="Tirar mystery-hat"');
+  });
+});
+
+describe('a coluna da direita (#161)', () => {
+  it('mostra a capacidade e o gold do hud, sob os dez slots', async () => {
+    hud.set((state) => ({ ...state, catalogue, gold: 1234, inventory: inventory() }));
+    const html = await render();
+    expect((html.match(/class="slot slot-/g) ?? []).length).toBe(10);
+    expect(html).toContain('10 / 400 oz');
+    expect(html).toContain('1.234');
+    expect(html).toContain('aria-label="set"');
+  });
+
+  it('com um bow na mão, o escudo vira o seletor de munição — a grátis quando não há escolha, a escolhida quando há', async () => {
+    // Mutação que mata: ignorar `weapon.kind` (o escudo continua slot), ou mostrar a escolhida
+    // com `ammo.arrow` nulo em vez de cair na grátis.
+    hud.set((state) => ({
+      ...state, catalogue,
+      inventory: inventory({ equipped: { hand: { instanceId: 'b1', itemId: 'bow', quantity: 1 } } }),
+    }));
+    const free = await render();
+    expect(free).toContain('slot-ammo');
+    expect(free).toContain('munição: Arrow · grátis');
+    expect(free).not.toContain('Escudo (vazio)');
+    hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
+    const chosen = await render();
+    expect(chosen).toContain('munição: Sniper Arrow · 5 gold/tiro');
+    // Sem bow, o escudo é um slot.
+    hud.set((state) => ({ ...state, inventory: inventory() }));
+    expect(await render()).toContain('Escudo (vazio)');
+  });
+
+  it('minimizado mantém o cabeçalho e não desmonta', async () => {
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const { prelude } = await prerender(createElement(EquipmentPanel, { collapsed: true }));
+    const html = await new Response(prelude).text();
+    expect(html).toContain('collapsed');
+    expect(html).toContain('<strong>Set</strong>');
   });
 });

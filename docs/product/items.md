@@ -161,6 +161,32 @@ limpar por omissão desequiparia o personagem sem ninguém ter pedido.
 Item **não muda de dono** dentro da sessão: não há troca nem venda na hunt. O que muda é onde ele
 está, e é só isso que atravessa.
 
+### A tela (#161, ADR 0026 decisão 7)
+
+A coluna da DIREITA do OTClient: o **painel do set** (`EquipmentPanel`) com os dez slots no
+desenho de corpo do Tibia — mochila no canto superior direito —, a capacidade `usado / total oz`
+e o gold (o gold sob o set é escolha nossa, copiada do Huntera; o cliente do Tibia o mostra na
+bolsa de moedas); abaixo, a **janela da mochila** e a **da bolsa** (`ContainerWindow`), cada uma
+uma grade de 5 por linha — uma linha da tela é uma linha do container —, com o lugar vazio
+desenhado com o quadrado de pedra do pacote e a pilha com a quantidade; e abaixo delas o
+analisador e o Bestiário. As três são **fixas**: sempre montadas, um botão da barra do topo
+minimiza as três juntas (só o cabeçalho fica), nunca removidas.
+
+**Com uma arma de distância na mão, o slot do escudo é o seletor de munição** (ADR 0026 d.3):
+a célula mostra a munição em uso — a escolhida, ou a grátis, que é o que o servidor atira sem
+escolha — com o preço por tiro; o clique abre o `AmmoPicker`, a lista da família com sprite,
+nome, attack, preço ou "grátis" e level exigido (desabilitado acima do level, só para não
+oferecer o que o servidor vai recusar); um clique manda `select-ammo`, e a escolha aparece
+quando `player-stats.ammo` volta.
+
+**Arrastar e clicar.** Arrastar (HTML5, nativo) de lugar para lugar manda `move-item`, de lugar
+para slot manda `equip`, de slot para lugar manda `move-item` com `from: { slot }`; o
+`dataTransfer` carrega só o LUGAR de origem, nunca o item. O clique continua vestindo e
+desvestindo — é o caminho do celular, que não arrasta. A decisão de qual intenção sai é
+`shell/drag-intent.ts`, pura e testada; nada na tela valida level, vocação ou peso (invariante
+4). No celular a coluna vira blocos na ordem set → mochila → bolsa → bot → hunts → analisador →
+bestiário.
+
 ## Loot de item e a Caixa de Loot da Sessão (FUN-88)
 
 O item cai pelo mesmo sorteio de sempre — gold antes, itens na ordem da tabela, com o `Rng` da
