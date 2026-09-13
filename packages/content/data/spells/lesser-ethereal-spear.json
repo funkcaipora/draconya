@@ -1,0 +1,16 @@
+{
+  "id": "lesser-ethereal-spear",
+  "name": "Lesser Ethereal Spear",
+  "vocationId": "paladin",
+  "minLevel": 1,
+  "manaCost": 6,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 8000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 9,
+    "range": 5
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. alcance 5 (TibiaWiki), não está na tabela da issue."
+}
