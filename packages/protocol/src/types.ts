@@ -142,6 +142,12 @@ export const C2S_SCHEMAS = {
    * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
    */
   'select-ammo': z.object({ ammoId: z.string().min(1) }),
+  /**
+   * Escolher a vocação (#154, ADR 0026 decisão 1). INTENÇÃO: o cliente diz QUAL, e quem decide
+   * se o level basta e se ainda não há uma é o servidor (invariante 4). Sucesso é
+   * `player-stats.vocationId` mais `inventory`; recusa é `system-message`, como equipar.
+   */
+  'choose-vocation': z.object({ vocationId: z.string().min(1) }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 export const S2C_SCHEMAS = {
@@ -174,6 +180,8 @@ export const S2C_SCHEMAS = {
       health: z.number(), maxHealth: z.number(),
       mana: z.number(), maxMana: z.number(),
       level: z.number().int(), xp: z.number(),
+      /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
+      vocationId: z.string().nullable().default(null),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -417,6 +425,21 @@ export const S2C_SCHEMAS = {
       appearanceId: z.number().int().positive(),
       requires: z.object({ level: z.number().int().positive().optional() }),
     })).default([]),
+    /**
+     * As vocações (#154), para o diálogo do level da escolha. Os três ganhos por level
+     * aparecem porque são o que o jogador olha para escolher — como o preço do supply. A arma
+     * inicial vem como id de item, resolvido em `items`. `default([])`: nó anterior.
+     */
+    vocations: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      healthPerLevel: z.number().int().nonnegative(),
+      manaPerLevel: z.number().int().nonnegative(),
+      capacityPerLevel: z.number().int().nonnegative(),
+      startingWeaponItemId: z.string().min(1),
+    })).default([]),
+    /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
+    vocationLevel: z.number().int().nonnegative().default(0),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
@@ -457,6 +480,8 @@ export const S2C_SCHEMAS = {
      */
     ammo: z.object({ arrow: z.string().nullable(), bolt: z.string().nullable() })
       .default({ arrow: null, bolt: null }),
+    /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
+    vocationId: z.string().nullable().default(null),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),

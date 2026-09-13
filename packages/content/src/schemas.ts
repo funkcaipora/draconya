@@ -476,6 +476,13 @@ export const vocationSchema = z.object({
   manaPerLevel: z.number().int().nonnegative(),
   capacityPerLevel: z.number().int().nonnegative(),
   /**
+   * A arma que a vocação recebe ao ser escolhida (#154, ADR 0026 decisão 3). `buildContent`
+   * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
+   * um veste não é "a arma da vocação". Opcional no SCHEMA, e não no conteúdo real: as quatro
+   * vocações têm a sua, e o conteúdo de teste que não fala de item precisa de vocação sem arma.
+   */
+  startingWeaponItemId: z.string().min(1).optional(),
+  /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
    */

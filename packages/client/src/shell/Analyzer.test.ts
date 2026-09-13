@@ -14,7 +14,7 @@ async function render(element: ReactElement): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], outfitIds: [], lootDrops: 0 }],
   monsters: [{ id: 'rat', name: 'Rato' }],
-  ammunition: [],
+  ammunition: [], vocations: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },

@@ -100,6 +100,30 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     ]);
   });
 
+  it('leva as vocações — ganhos por level e arma inicial — e o level da escolha (#154)', () => {
+    // O diálogo do level 8 lê daqui: a tela não pode ter o 8 em código. A vocação sem arma
+    // (conteúdo de teste) fica de fora — sem arma não há o que escolher.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withVocations = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21, requires: { vocationId: 'knight' } },
+      ],
+      vocations: [
+        { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+        { id: 'monk', name: 'Monk', healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10 },
+      ],
+    };
+    const content = buildContent({ ...withVocations, appearances: [placeholderAppearances(withVocations)] });
+    const { vocations, vocationLevel } = buildCatalogue(content);
+
+    expect(vocations).toEqual([
+      { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+    ]);
+    expect(vocationLevel).toBe(8);
+  });
+
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
     // O contador chega por id; sem esta lista a tela mostraria "rat: 12" em vez de "Rat". Só
     // id e nome: vida, ataque e XP são balanceamento que o cliente não simula (invariante 4).

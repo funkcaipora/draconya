@@ -1,6 +1,6 @@
 # Onboarding e tutorial
 
-**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação está decidida (ADR 0026) e entra pela issue #154; o kit de nascimento é dado na criação do personagem (#153); tutorial pendente
+**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação implementada (#154, ADR 0026); o kit de nascimento é dado na criação do personagem (#153); tutorial pendente
 **PRD:** §7.4, §8
 **Épico:** E14 (tutorial guiado do level 1 ao 8 com escolha de vocação). E0 cobre o que precede o tutorial — CRUD e criação inicial de personagem.
 
@@ -36,10 +36,23 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
 
 ## Decidido (ADR 0026)
 
-- **Como se escolhe:** o jogo oferece as quatro vocações quando `level >= 8` e a vocação ainda
-  é nula — um diálogo com nome, papel, os três ganhos por level e a arma inicial de cada uma —,
-  em qualquer sessão (Cidade ou hunt), sem NPC nem lugar; um clique manda `choose-vocation`, e a
-  escolha é uma só, sem troca. O texto curto de cada vocação é o deste documento.
+- **Como se escolhe (implementado, #154):** o jogo oferece as quatro vocações quando
+  `level >= progression.vocationLevel` (8, e o número vem do catálogo — a tela não o tem em
+  código) e a vocação ainda é nula — um diálogo com nome, papel, os três ganhos por level e a
+  arma inicial de cada uma —, em qualquer sessão (Cidade ou hunt), sem NPC nem lugar; um clique
+  manda `choose-vocation` (opcode 15), e a escolha é uma só, sem troca (`already-chosen`). O
+  `sim` grava `vocationId`, cria a arma como `CarriedItem` com `origin: 'vocation-choice'` e a
+  veste; a machete volta para a mochila. Sem capacidade para a arma ela vai para a Caixa de Loot,
+  com escudo vestido e bow ela fica na mochila — a escolha vale mesmo assim. Os stats NÃO mudam
+  na hora: a tabela da vocação vale do próximo level em diante (`progression.md`).
+- **Como persiste:** `characters.vocation` é escrita UMA vez pelo `jobs`
+  (`coalesce(vocation, $1)`), a partir do extrato — o da hunt, ou o **extrato de estado
+  durável** que o shard da Cidade passa a gravar no logout e na drenagem para quem mudou
+  vocação, equipamento ou munição (agregados zerados; sem crédito). Volta pelo ticket
+  (`InitialCharacter.vocation`) e chega ao cliente em `player-stats.vocationId` e
+  `session-state.self.vocationId`. **Limite conhecido:** a Cidade não tem snapshot (ADR 0023) —
+  uma escolha feita na praça e um nó que cai sem drenar se perdem juntos; é o mesmo risco que
+  `equip` e `select-ammo` na praça já tinham.
 - **Com o que se nasce:** machete na mão, leather helmet/armor/legs/boots no corpo e a mochila
   nas costas — dados na criação do personagem, não dropados (a exceção ao §21.1 registrada em
   `items.md`). No level 8 a arma da vocação troca de lugar com a machete. Implementado (#153):

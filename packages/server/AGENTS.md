@@ -450,7 +450,7 @@ não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálog
 `monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
 só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
 
-## A munição escolhida viaja como a vocação vai viajar: ticket → runtime → extrato → coluna (#152)
+## A munição escolhida viaja como a vocação: ticket → runtime → extrato → coluna (#152)
 
 `characters.ammo` é `jsonb` nulável (`{ arrow: 'sniper-arrow' }`), lida na emissão do ticket com
 a régua `isAmmoSelection` (torta vira ausente, nunca login recusado), adotada em
@@ -462,6 +462,33 @@ preferência, não progresso — e o extrato SEM o campo (Cidade, nó antigo) n�
 `#creditUnrestorable` a leva também. O projétil do tiro (`shot`) é resolvido em
 `#presentCombat` pela tabela: `appearances.ammunition[ammoId].missile` para a flecha,
 `appearances.weapons[itemId].missile` para wand e rod; sem linha, o tiro é mudo.
+
+## A vocação é escrita UMA vez, pelo `jobs`; e o shard grava um extrato de ESTADO (#154)
+
+`characters.vocation` é `text` nulável, nunca escrita pelo `game` (ADR 0026 decisão 1, ADR
+0021): chega ao banco pelo extrato (`SessionReceipt.vocation`, lista de PERMISSÃO em
+`parseReceipt`) e o ledger a grava com `coalesce(vocation, $1)` — um extrato fora de ordem com
+outra vocação não sobrescreve. Volta pelo ticket (`InitialCharacter.vocation`, string não vazia
+ou ausente), entra em `CharacterRuntime.vocationId` e nos stats de entrada (`statsForLevel` com
+a vocação), e vai ao cliente em `player-stats.vocationId` e `session-state.self.vocationId`. A
+escolha é `choose-vocation` (opcode 15), processada na chegada como `equip`; o host resolve a
+vocação e a arma no conteúdo fixado (`vocations`, `vocationLevel`, `itemCatalog`) e o `sim`
+decide (`chooseVocation`). A arma nasce com `instanceId` `${sessionId}:${characterId}:vocation`
+— **com o id do personagem no meio**, porque numa cópia da Cidade dois personagens compartilham
+`session.id` e `${sessionId}:${lootSeq}` colidiria na chave primária de `item_instance` — e
+`origin: 'vocation-choice'`, que o ledger grava (`item.origin ?? 'loot'`).
+
+**O shard não credita progresso, mas grava estado.** Antes de #154 a Cidade nunca gravava
+extrato: `equip`, `select-ammo` e agora a vocação feitos na praça sumiam no logout. Agora cada
+`HostedSession` de shard tem `dirty: Set<characterId>` — marcado por `equip`, `unequip`,
+`select-ammo` e `choose-vocation` — e `release` (antes do `leave`) e `drainAll` gravam, para
+quem está em `dirty`, um **extrato de estado durável**: agregados zerados, `vocation`, `ammo`,
+`equipment`, `acquired`, `lootBox`, `seq` do `ledgerSeq` compartilhado da cópia. A linha de
+ledger que o `jobs` insere tem `delta: 0` e é só a chave de idempotência. Quem não mexeu em
+nada sai sem extrato. **Limite:** a Cidade não tem snapshot (ADR 0023) — nó que cai sem drenar
+perde o que a praça mudou, como já perdia. `#creditUnrestorable` passou a levar `vocation`,
+`equipment`, `acquired` e `lootBox` (o buraco de antes: item equipado numa sessão
+irrestaurável se perdia).
 
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 

@@ -2,7 +2,7 @@ import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content } from '@draconya/content';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
@@ -39,7 +39,14 @@ function integrationContent(): Content {
     items: [
       { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 },
       { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18 },
+      // A arma do Knight (#154): exige a vocação, como as quatro de verdade.
+      { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+        requires: { vocationId: 'knight' } },
     ],
+    vocations: [{
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+      startingWeaponItemId: 'steel-axe',
+    }],
     progression: [{
       ...TEST_PROGRESSION,
       startingKit: [{ itemId: 'machete', slot: 'hand' }, { itemId: 'backpack', slot: 'back' }],
@@ -165,6 +172,9 @@ beforeAll(async () => {
   baseUrl = await app.listen({ port: 0, host: '127.0.0.1' });
   game = createGame(configuration, logger, {
     directory, tickets, contentVersion: 'integration-v1', itemCatalog: content.items,
+    // O extrato de estado durável do shard (#154) precisa de onde gravar; e a escolha de
+    // vocação, do catálogo dela — ligados como o `main.ts` liga.
+    receipts, vocations: content.vocations, vocationLevel: content.progression.vocationLevel,
     createSession: createCitySessionFactory(content),
   });
   await game.start();
@@ -415,6 +425,49 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(inventory.backpack).toEqual([]);
     expect(inventory.capacity.used).toBeGreaterThan(0);
     expect(inventory.capacity.used).toBeLessThan(inventory.capacity.total);
+  });
+
+  it('choosing the vocation in the City survives a logout: ticket, session-state and inventory bring it back (#154)', async () => {
+    // A premissa que a spec corrigiu: o shard não gravava extrato, e a escolha feita na praça
+    // sumia no logout. Ponta a ponta: level 8 na linha → ticket → `choose-vocation` no socket
+    // → `logout` → extrato de estado durável no Redis → `POST /api/tickets` liquida → a linha
+    // tem `vocation`, e a sessão nova nasce com ela e com a arma na mão.
+    const owner = await login();
+    const character = await createCharacter(owner.cookie);
+    await database.database.db
+      .update(characters).set({ level: 8, xp: 20 * 64 }).where(eq(characters.id, character.id));
+
+    const first = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const socket = new WebSocket(first.wsUrl);
+    sockets.add(socket);
+    socket.binaryType = 'arraybuffer';
+    await receive(socket);
+    socket.send(encodeC2S({ type: 'choose-vocation', vocationId: 'knight' }));
+    const stats = await awaitMessage(socket, 'player-stats');
+    if (stats.type !== 'player-stats') throw new Error('não veio player-stats');
+    expect(stats.vocationId).toBe('knight');
+    socket.send(encodeC2S({ type: 'logout' }));
+    await new Promise<void>((resolve) => { socket.addEventListener('close', () => { resolve(); }, { once: true }); });
+
+    // O extrato está no Redis, e o ticket seguinte o liquida antes de ler a linha (FUN-56).
+    await vi.waitFor(async () => { expect(await receipts.pendingFor(character.id)).toHaveLength(1); });
+    const second = await (await request('/api/tickets', 'POST', owner.cookie, { characterId: character.id })).json();
+    const [row] = await database.database.db
+      .select({ vocation: characters.vocation }).from(characters).where(eq(characters.id, character.id));
+    expect(row?.vocation).toBe('knight');
+
+    const again = new WebSocket(second.wsUrl);
+    sockets.add(again);
+    again.binaryType = 'arraybuffer';
+    const frames = decodeS2C(await receive(again)) ?? [];
+    const inventory = frames.find((m) => m.type === 'inventory') ?? await awaitMessage(again, 'inventory');
+    if (inventory.type !== 'inventory') throw new Error('não veio inventory');
+    expect(inventory.equipped['hand']).toMatchObject({ itemId: 'steel-axe' });
+    expect(inventory.backpack.map((item) => item.itemId)).toEqual(['machete']);
+    again.send(encodeC2S({ type: 'session-attach' }));
+    const state = await awaitMessage(again, 'session-state');
+    if (state.type !== 'session-state') throw new Error('não veio session-state');
+    expect(state.self.vocationId).toBe('knight');
   });
 
   it('walk through the real socket moves the character, and session-state shows it (FUN-69)', async () => {

@@ -146,6 +146,11 @@ magia — a fórmula de conversão para dano não é publicada; runas com cargas
   continua com uma escrita só (ADR 0021).
 - `packages/client`: duas colunas fixas e minimizáveis, o inventário em quatro peças (set,
   seletor de munição, mochila, bolsa), o bot com interruptor por regra e editor por cima.
+- (#154) O shard da Cidade passa a gravar um **extrato de estado durável** — sem crédito, com
+  agregados zerados — para quem mudou vocação, equipamento ou munição na praça: sem ele a
+  decisão 1 ("aceita em qualquer sessão hospedada") não tinha caminho até o banco a partir da
+  Cidade, porque o shard nunca gravava extrato (ADR 0023). A decisão 1 fica intacta: o `game`
+  continua sem escrever `characters.vocation`.
 - O que piora: mais estado por personagem (vocação, munição, posição de item) atravessa o
   extrato, e cada campo novo é um lugar a mais para o `#creditUnrestorable` esquecer — a #154
   fecha esse buraco para os que existem. A conversão do Base Power é um número nosso, e é

@@ -25,6 +25,8 @@ export interface BoxedItem {
   readonly instanceId: string;
   readonly itemId: string;
   readonly quantity: number;
+  /** De onde veio (#154). Ausente é `'loot'`. */
+  readonly origin?: string;
 }
 
 const key = (sessionId: string): string => `lootbox:${sessionId}`;

@@ -23,6 +23,11 @@ export interface CarriedItem {
   readonly instanceId: string;
   readonly itemId: string;
   readonly quantity: number;
+  /**
+   * De onde veio (§25.3, #154). Ausente é `'loot'` — o snapshot anterior a #154 não tem a
+   * chave, e tudo o que existia antes caiu de monstro. É o `origin` da linha de `item_instance`.
+   */
+  readonly origin?: 'loot' | 'vocation-choice';
 }
 
 export interface InventoryState {

@@ -20,6 +20,8 @@ export const CLIENT_TO_SERVER = {
   equip: 12,
   unequip: 13,
   'select-ammo': 14,
+  /** Escolher a vocação (#154, ADR 0026 decisão 1). 15: o 14 foi do `select-ammo` (#152). */
+  'choose-vocation': 15,
 } as const;
 
 export const SERVER_TO_CLIENT = {
