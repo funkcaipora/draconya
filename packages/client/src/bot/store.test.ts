@@ -1,10 +1,13 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import type { BotConfig } from '@draconya/content';
 import {
-  INITIAL_BOT, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, toConfig,
+  INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
+  removeRule, setConfigSender, toConfig, toggleRule,
 } from './store.js';
 
-const rule = (percent: number) => ({
+const rule = (percent: number, enabled = true) => ({
+  enabled,
   when: { kind: 'hp' as const, op: '<=' as const, percent },
   do: { kind: 'spell' as const, spellId: 'heal' },
 });
@@ -78,6 +81,7 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     ...toConfig(emptyDraft()),
     heal: [rule(70)],
     attack: [{
+      enabled: true,
       when: { kind: 'targets' as const, op: '>=' as const, count: 1 },
       do: { kind: 'spell' as const, spellId: 'strike' },
     }],
@@ -176,5 +180,67 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     loadConfig(config());
     expect(bot.get().draft.rules.heal).toHaveLength(0);
     expect(bot.get().save).toBe('idle');
+  });
+});
+
+describe('o interruptor salva sozinho, com debounce (#162)', () => {
+  const sent: BotConfig[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+    edit((draft) => ({ ...draft, rules: { ...draft.rules, heal: [rule(30), rule(70)] } }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('dois toques em 100 ms mandam UMA mensagem, com o estado final e o resto igual', () => {
+    // Mutação que mata: mandar no toque (duas mensagens), ou mandar só a regra tocada.
+    toggleRule('heal', 1);
+    vi.advanceTimersByTime(100);
+    toggleRule('heal', 1);
+    vi.advanceTimersByTime(100);
+    toggleRule('heal', 1);
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.heal.map((r) => r.enabled !== false)).toEqual([true, false]);
+    expect(sent[0]?.heal).toHaveLength(2);
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('a regra desligada continua no rascunho e na configuração mandada: desligar não libera slot', () => {
+    toggleRule('heal', 0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent[0]?.heal).toHaveLength(2);
+    expect(bot.get().draft.rules.heal[0]?.enabled).toBe(false);
+  });
+
+  it('sem conexão o rascunho fica tocado e a tela diz por quê; a recusa do servidor também não desfaz', () => {
+    setConfigSender(() => false);
+    toggleRule('heal', 0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(bot.get().save).toBe('refused');
+    expect(bot.get().touched).toBe(true);
+    expect(bot.get().draft.rules.heal[0]?.enabled).toBe(false);
+    botResult(false, 'regra inválida');
+    expect(bot.get().draft.rules.heal[0]?.enabled).toBe(false);
+    expect(bot.get().reason).toBe('regra inválida');
+  });
+
+  it('mover, remover e escrever uma regra salvam; escrever manda AGORA (é o Salvar do editor)', () => {
+    moveRule('heal', 1, -1);
+    expect(bot.get().draft.rules.heal.map((r) => (r.when as { percent: number }).percent)).toEqual([70, 30]);
+    removeRule('heal', 1);
+    expect(bot.get().draft.rules.heal).toHaveLength(1);
+    putRule('heal', null, rule(50));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.heal.map((r) => (r.when as { percent: number }).percent)).toEqual([70, 50]);
+    putRule('heal', 0, rule(10));
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.heal.map((r) => (r.when as { percent: number }).percent)).toEqual([10, 50]);
   });
 });

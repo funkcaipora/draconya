@@ -176,7 +176,12 @@ export function compileBot(config: BotConfig): CompiledBot {
   for (const category of BOT_CATEGORIES) {
     categories.set(
       category,
-      config[category].map((rule) => ({ when: compileCondition(rule.when), act: rule.do })),
+      // Regra desligada não vira predicado (#162): custo zero no tick, e a ordem das que ficam
+      // é a ordem de sempre — desligar a segunda faz a terceira ser avaliada logo depois da
+      // primeira.
+      config[category]
+        .filter((rule) => rule.enabled !== false)
+        .map((rule) => ({ when: compileCondition(rule.when), act: rule.do })),
     );
   }
 

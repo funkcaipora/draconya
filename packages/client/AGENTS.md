@@ -493,7 +493,12 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   versão do cliente sendo a errada.
 - **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, hunts e bot à
   esquerda, chat embaixo, nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
-  atividade faz o jogador procurar a poção no meio da luta.
+  atividade faz o jogador procurar a poção no meio da luta. **O bot é uma seção FIXA da
+  esquerda desde #162** (o vBot): sempre montada, minimizável pela barra (`collapsed` esconde
+  tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
+  (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
+  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
+  o remetente por `setConfigSender` ao montar.
 - **O mundo ocupa a tela INTEIRA e o resto flutua por cima** (`shell/Shell.tsx`, `shell/TopBar.tsx`,
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir

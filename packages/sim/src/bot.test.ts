@@ -142,3 +142,24 @@ describe('compilar é o que torna a avaliação barata', () => {
     expect(bot.select('heal', v)).toBeNull();
   });
 });
+
+describe('o interruptor por regra (#162)', () => {
+  it('a regra desligada nunca dispara, a seguinte é avaliada, e ausente é ligada', () => {
+    // Mutação que mata: `compileBot` ignorar `enabled` (a primeira cura dispararia), ou tratar
+    // ausente como desligada (a segunda nunca dispararia).
+    const config = botConfigSchema.parse({
+      version: BOT_VOCABULARY_VERSION,
+      heal: [
+        { enabled: false, when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'off' } },
+        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'on' } },
+      ],
+      potion: [], attack: [], rune: [], support: [],
+    });
+    const compiled = compileBot(config);
+    const hurt = view({ self: hero(50) });
+    expect(compiled.select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'on' });
+    // Ligar de volta é uma configuração nova: a primeira volta a ser avaliada primeiro.
+    const on = botConfigSchema.parse({ ...config, heal: config.heal.map((r) => ({ ...r, enabled: true })) });
+    expect(compileBot(on).select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'off' });
+  });
+});
