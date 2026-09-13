@@ -1498,11 +1498,18 @@ export class SessionHost {
         }
         if (look.effect !== undefined) {
           const effectId = look.effect;
-          if (event.targets.length === 0) {
+          if (event.targets.length === 0 && event.tiles.length === 0) {
             messages.push({ type: 'effect', position: event.casterPosition, effectId });
           }
           for (const target of event.targets) {
             messages.push({ type: 'effect', position: target.position, effectId });
+          }
+          // A forma inteira (#155): a onda aparece onde não há monstro, como no Tibia. O tile
+          // com alvo já teve o seu efeito acima.
+          const hit = new Set(event.targets.map((t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`));
+          for (const tile of event.tiles) {
+            if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+            messages.push({ type: 'effect', position: tile, effectId });
           }
         }
         break;

@@ -3,7 +3,18 @@
   "name": "Explosão Arcana",
   "manaCost": 60,
   "cooldownMs": 4000,
+  "group": "attack",
+  "groupCooldownMs": 1000,
   "minLevel": 1,
-  "effect": { "kind": "damage", "power": 30, "range": 4, "area": { "radius": 1 } },
+  "effect": {
+    "kind": "damage",
+    "power": 30,
+    "range": 4,
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "target"
+    }
+  },
   "_open": "Valores de referência. Área de raio 1 (o alvo mais os oito vizinhos) e poder por alvo menor que o do golpe único, com o Tibia como referência funcional — a proporção certa entre alvo único e área depende de quantos monstros uma hunt real junta, que ainda não foi medido."
 }

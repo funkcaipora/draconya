@@ -376,6 +376,8 @@ export const S2C_SCHEMAS = {
         vocationId: z.string().nullable(),
         /** `heal`, `mana` ou `damage`: é o que separa a categoria em que ela cabe. */
         effect: z.string().min(1),
+        /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
+        group: z.string().min(1).default('attack'),
       })),
       supplies: z.array(z.object({
         id: z.string().min(1),

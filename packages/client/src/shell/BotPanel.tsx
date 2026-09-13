@@ -93,7 +93,8 @@ function Rule({ rule, index, total, category, vocabulary, level }: {
     }))
     : vocabulary.spells.map((spell) => ({
       id: spell.id,
-      label: `${spell.name} (${String(spell.manaCost)} mana)`,
+      // O grupo do Tibia (#155) ao lado do nome: é o que tranca junto.
+      label: `${spell.name} · ${spell.group} (${String(spell.manaCost)} mana)`,
       // Level e vocação são do SERVIDOR; a tela só mostra que ainda não dá, para o jogador
       // não configurar o que vai ser recusado.
       locked: level > 0 && level < spell.minLevel,

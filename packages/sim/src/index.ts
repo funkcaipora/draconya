@@ -19,6 +19,8 @@ export * from './skills.js';
 export * from './bestiary.js';
 export * from './inventory.js';
 export * from './casting.js';
+export * from './area.js';
+export * from './conditions.js';
 export * from './targeting.js';
 export * from './combat/damage.js';
 export * from './monster/step.js';

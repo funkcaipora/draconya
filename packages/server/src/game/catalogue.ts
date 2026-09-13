@@ -56,6 +56,8 @@ export function buildCatalogue(content: Content): Catalogue {
         // Só o `kind`: é o que separa em qual categoria a magia cabe. O quanto ela cura ou
         // machuca é balanceamento.
         effect: spell.effect.kind,
+        // O grupo (#155): a tela mostra ao lado do nome; BP e conversão não descem.
+        group: spell.group ?? 'attack',
       })),
       supplies: [...content.supplies.values()].map((supply) => ({
         id: supply.id,

@@ -2,8 +2,11 @@
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
 import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
+import type { Direction } from './area.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
+import { Conditions } from './conditions.js';
+import type { ConditionState } from './conditions.js';
 import { Cooldowns } from './cooldown.js';
 import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
@@ -123,6 +126,18 @@ export interface CharacterState {
    */
   readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
   readonly cooldowns: Partial<CooldownState>;
+  /**
+   * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
+   * (`#step` do ruleset); ausente é `south`, a de quem nunca andou — e a de todo snapshot
+   * anterior a #155.
+   */
+  readonly direction?: Direction;
+  /**
+   * Haste, postura, magic shield e cura ao longo do tempo (#155), com vencimento LÓGICO. O
+   * evento que as faz vencer está na fila da sessão, que também vai no snapshot. Ausente é
+   * nenhuma — sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly conditions?: readonly ConditionState[];
 }
 
 /** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
@@ -175,6 +190,10 @@ export class CharacterRuntime {
   /** A munição escolhida por família. Só a sessão dona escreve (`selectAmmo`). */
   readonly ammo: Map<AmmoFamily, string>;
   readonly cooldowns: Cooldowns;
+  /** Para onde olha. Só o passo escreve. */
+  direction: Direction;
+  /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions`. */
+  readonly conditions: Conditions;
 
   constructor(state: CharacterState) {
     this.id = state.id;
@@ -203,6 +222,13 @@ export class CharacterRuntime {
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
+    this.direction = state.direction ?? 'south';
+    this.conditions = Conditions.fromState(state.conditions);
+  }
+
+  /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
+  get speedScale(): number {
+    return this.conditions.speedScale();
   }
 
   /**
@@ -281,12 +307,26 @@ export class CharacterRuntime {
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       cooldowns: this.cooldowns.getState(),
+      direction: this.direction,
+      ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
     };
   }
 
-  /** Aplica dano e devolve quanto foi de fato aplicado. Morrer é decisão do ruleset. */
+  /**
+   * Aplica dano e devolve quanto saiu da VIDA. Morrer é decisão do ruleset.
+   *
+   * Com magic shield (#155) o dano sai da mana primeiro, e só o resto vai na vida — o escudo
+   * continua "ativo" até vencer mesmo com a mana em zero, como no Tibia. O devolvido é o que
+   * a barra de vida e a atribuição de morte usam.
+   */
   receiveDamage(amount: number): number {
-    const applied = Math.min(amount, this.health);
+    let remaining = amount;
+    if (this.conditions.hasManaShield()) {
+      const absorbed = Math.min(remaining, this.mana);
+      this.mana -= absorbed;
+      remaining -= absorbed;
+    }
+    const applied = Math.min(remaining, this.health);
     this.health -= applied;
     if (this.health <= 0) {
       this.health = 0;
