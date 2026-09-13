@@ -1,0 +1,20 @@
+{
+  "id": "strong-energy-strike",
+  "name": "Strong Energy Strike",
+  "vocationId": "sorcerer",
+  "minLevel": 80,
+  "manaCost": 60,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 8000,
+  "secondaryGroup": {
+    "name": "special",
+    "cooldownMs": 8000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 125,
+    "range": 7
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}

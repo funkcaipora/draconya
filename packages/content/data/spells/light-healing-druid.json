@@ -1,0 +1,15 @@
+{
+  "id": "light-healing-druid",
+  "name": "Light Healing",
+  "vocationId": "druid",
+  "minLevel": 8,
+  "manaCost": 20,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 40
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. a mesma do Paladin (DT-02)."
+}

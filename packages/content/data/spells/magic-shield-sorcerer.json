@@ -1,0 +1,15 @@
+{
+  "id": "magic-shield-sorcerer",
+  "name": "Magic Shield",
+  "vocationId": "sorcerer",
+  "minLevel": 14,
+  "manaCost": 50,
+  "group": "support",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 14000,
+  "effect": {
+    "kind": "mana-shield",
+    "durationMs": 180000
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. a mesma Magic Shield do Druid (DT-02)."
+}

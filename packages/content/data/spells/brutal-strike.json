@@ -1,0 +1,16 @@
+{
+  "id": "brutal-strike",
+  "name": "Brutal Strike",
+  "vocationId": "knight",
+  "minLevel": 16,
+  "manaCost": 30,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 6000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 39,
+    "range": 1
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}

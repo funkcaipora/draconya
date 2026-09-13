@@ -1,0 +1,21 @@
+{
+  "id": "divine-barrage",
+  "name": "Divine Barrage",
+  "vocationId": "paladin",
+  "minLevel": 70,
+  "manaCost": 175,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 4000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 130,
+    "range": 5,
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "target"
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. escala com magic level no Tibia, aqui com `distance` como o resto."
+}

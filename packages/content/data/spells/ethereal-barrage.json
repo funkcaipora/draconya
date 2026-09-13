@@ -1,0 +1,21 @@
+{
+  "id": "ethereal-barrage",
+  "name": "Ethereal Barrage",
+  "vocationId": "paladin",
+  "minLevel": 60,
+  "manaCost": 135,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 4000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 100,
+    "range": 5,
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "target"
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. BP não publicado; 100 é provisório."
+}

@@ -1,0 +1,24 @@
+{
+  "id": "rage-of-the-skies",
+  "name": "Rage of the Skies",
+  "vocationId": "sorcerer",
+  "minLevel": 55,
+  "manaCost": 600,
+  "group": "attack",
+  "groupCooldownMs": 4000,
+  "cooldownMs": 40000,
+  "secondaryGroup": {
+    "name": "focus",
+    "cooldownMs": 40000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 200,
+    "area": {
+      "shape": "circle",
+      "radius": 5,
+      "centered": "caster"
+    }
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}
