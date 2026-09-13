@@ -1,0 +1,15 @@
+{
+  "id": "intense-wound-cleansing",
+  "name": "Intense Wound Cleansing",
+  "vocationId": "knight",
+  "minLevel": 80,
+  "manaCost": 200,
+  "group": "healing",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 120000,
+  "effect": {
+    "kind": "heal",
+    "basePower": 500
+  },
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
+}
