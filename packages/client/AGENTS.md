@@ -499,7 +499,11 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   nunca remove. Com bow na mão o escudo é o seletor de munição (`AmmoPicker`). Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem.
+  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada, minimizável pela barra (`collapsed` esconde
+  tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
+  (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
+  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
+  o remetente por `setConfigSender` ao montar.
 - **O mundo ocupa a tela INTEIRA e o resto flutua por cima** (`shell/Shell.tsx`, `shell/TopBar.tsx`,
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir

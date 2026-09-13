@@ -266,36 +266,57 @@ body {
 .hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .hunt-difficulties button { padding: 2px 6px; }
 
-/* A configuração do bot (FUN-89). Densa de propósito: são cinco categorias na mesma coluna. */
-/* Sobreposição: a linha de regra não cabe nos 200px da coluna, e configurar o bot é o caso de
-   uso do celular (§5.1). Uma tela só serve aos dois. */
-.bot-overlay {
-  position: fixed; inset: 0; z-index: 30;
-  background: rgba(6, 6, 10, 0.86);
-  display: grid; place-items: start center; padding: 16px; overflow-y: auto;
-}
-.bot-body {
-  width: 100%; max-width: 520px; box-sizing: border-box;
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-.bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+/* O painel do bot (FUN-89; fixo à esquerda desde #162). Densa de propósito: são cinco categorias
+   na mesma coluna, e cada regra é UMA linha — interruptor, texto, engrenagem, setas. O vBot. */
+.bot-panel .bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .bot-title strong { flex: 1 1 auto; }
-.bot-category-head { display: flex; justify-content: space-between; align-items: baseline; }
+/* Minimizado: só o cabeçalho fica. A seção nunca desmonta. */
+.windows > section.collapsed > *:not(header) { display: none; }
+.bot-category { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.bot-category-head { display: flex; align-items: baseline; gap: 6px; }
+.bot-category-head strong { flex: 1 1 auto; }
 .bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
-.bot-rule { display: flex; align-items: center; gap: 2px; }
-.bot-rule-order { display: flex; flex-direction: column; }
+.bot-rule { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bot-rule-off .bot-rule-text { color: var(--text-faint); text-decoration: line-through; }
+.bot-rule-text {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px;
+}
+/* O interruptor: verde ligado, vermelho desligado — a cor do BotSwitch do vBot. */
+.bot-switch {
+  flex: 0 0 auto; width: 26px; height: 14px; border-radius: 7px; border: 1px solid var(--line);
+  padding: 0; cursor: pointer; background: #7a2b2b; position: relative;
+}
+.bot-switch::after {
+  content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
+  border-radius: 50%; background: #fff; transition: left 120ms;
+}
+.bot-switch[aria-checked="true"] { background: #2e8b57; }
+.bot-switch[aria-checked="true"]::after { left: 13px; }
+.bot-rule-order { display: flex; flex-direction: column; flex: 0 0 auto; }
 .bot-rule-order button {
   background: none; border: none; padding: 0; line-height: 1;
   color: var(--text-muted); font-size: 9px; cursor: pointer;
 }
 .bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
-/* No celular a linha quebra em vez de espremer: seis caixinhas de 30px não são configuráveis
-   com o dedo. */
+/* O editor de uma regra: sobreposição pequena, a linha larga de antes — condição, operador,
+   valor, ação — porque ela não cabe em 300 px. É o "Setup" do vBot. */
+.rule-editor {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(6, 6, 10, 0.7);
+  display: grid; place-items: center; padding: 16px;
+}
+.rule-editor-body {
+  width: 100%; max-width: 520px; box-sizing: border-box;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* No celular a linha larga quebra em vez de espremer: seis caixinhas de 30px não são
+   configuráveis com o dedo. */
 @media (max-width: 520px) {
-  .bot-rule { flex-wrap: wrap; }
-  .bot-rule select[aria-label="ação"] { flex-basis: 100%; }
+  .bot-rule-wide { flex-wrap: wrap; }
+  .bot-rule-wide select[aria-label="ação"] { flex-basis: 100%; }
 }
 .bot-rule select, .bot-rule input {
   background: #131319; border: 1px solid var(--line); border-radius: 3px;
