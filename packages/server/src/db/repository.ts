@@ -57,6 +57,12 @@ export interface CharacterRecord {
  * `itemId` é do CATÁLOGO, que é conteúdo — o repositório não sabe o que uma espada faz, só que
  * esta linha existe e é de alguém.
  */
+/** Uma peça do kit de nascimento: o item e o slot em que ele nasce vestido (#153). */
+export interface StartingKitPiece {
+  readonly itemId: string;
+  readonly slot: string;
+}
+
 export interface ItemInstanceRecord {
   readonly id: string;
   readonly itemId: string;
@@ -80,9 +86,16 @@ export interface GameRepository {
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
    * hunt curando e atacando sem ter aberto tela nenhuma. Opaca, como em `saveBotConfig`.
+   *
+   * `initial.kit` é com o que ele nasce VESTIDO (#153, ADR 0026 decisão 2): uma linha de
+   * `item_instance` por peça, origem `starting-kit`, na MESMA transação do personagem —
+   * personagem sem kit, ou kit sem personagem, são os dois estados que uma falha no meio
+   * deixaria para trás. Não passa pelo ledger: o kit não tem preço, é inicialização de linha
+   * como o bot padrão.
    */
   createCharacter(
-    accountId: string, name: string, initial?: { readonly botConfig?: unknown },
+    accountId: string, name: string,
+    initial?: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] },
   ): Promise<CharacterRecord>;
   listCharacters(accountId: string): Promise<readonly CharacterRecord[]>;
   getCharacter(accountId: string, characterId: string): Promise<CharacterRecord | null>;
@@ -166,18 +179,37 @@ export class DrizzleGameRepository implements GameRepository {
   }
 
   async createCharacter(
-    accountId: string, name: string, initial: { readonly botConfig?: unknown } = {},
+    accountId: string, name: string,
+    initial: { readonly botConfig?: unknown; readonly kit?: readonly StartingKitPiece[] } = {},
   ): Promise<CharacterRecord> {
+    const id = randomUUID();
+    const kit = initial.kit ?? [];
     try {
-      const [created] = await this.#db
-        .insert(characters)
-        .values({
-          id: randomUUID(), accountId, name,
-          ...(initial.botConfig === undefined ? {} : { botConfig: initial.botConfig }),
-        })
-        .returning();
-      if (created === undefined) throw new Error('failed to create character');
-      return toCharacter(created);
+      return await this.#db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(characters)
+          .values({
+            id, accountId, name,
+            ...(initial.botConfig === undefined ? {} : { botConfig: initial.botConfig }),
+          })
+          .returning();
+        if (created === undefined) throw new Error('failed to create character');
+        // Id determinístico por posição no kit: a proveniência diz "a primeira peça do kit
+        // deste personagem", e nunca há como o mesmo personagem ganhar o kit duas vezes. Sem
+        // `ON CONFLICT`: duas peças no mesmo slot devem DERRUBAR a criação (índice único
+        // `item_instance_one_per_slot`), não nascer pela metade em silêncio. Um retry do
+        // `POST` esbarra antes no nome único, e é a resposta certa para ele.
+        if (kit.length > 0) {
+          await tx.insert(itemInstances).values(kit.map((piece, index) => ({
+            id: `${id}:kit:${index + 1}`,
+            itemId: piece.itemId,
+            ownerCharacterId: id,
+            origin: 'starting-kit',
+            equippedSlot: piece.slot,
+          })));
+        }
+        return toCharacter(created);
+      });
     } catch (error) {
       if (isUniqueViolation(error, 'character_name_unique')) throw new CharacterNameTakenError();
       throw error;

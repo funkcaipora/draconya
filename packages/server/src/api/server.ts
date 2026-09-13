@@ -10,6 +10,7 @@ import type { Logger } from '../log.js';
 import type { Role } from '../role.js';
 import { registerAuthRoutes } from './auth.js';
 import { registerCharacterRoutes } from './characters.js';
+import type { CharacterRouteOptions } from './characters.js';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
@@ -17,6 +18,8 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly repository?: GameRepository;
   /** O bot com que o personagem nasce (FUN-114). Ver `CharacterRouteOptions`. */
   readonly defaultBotConfig?: unknown;
+  /** O kit com que o personagem nasce vestido (#153). Ver `CharacterRouteOptions`. */
+  readonly startingKit?: CharacterRouteOptions['startingKit'];
   readonly isCharacterActive?: (accountId: string, characterId: string) => Promise<boolean>;
   /** Onde o personagem está agora, segundo o diretório de sessões (FUN-30). */
   readonly locateSession?: (
@@ -120,6 +123,7 @@ export function buildApi(
       ...(dependencies.defaultBotConfig === undefined
         ? {}
         : { defaultBotConfig: dependencies.defaultBotConfig }),
+      ...(dependencies.startingKit === undefined ? {} : { startingKit: dependencies.startingKit }),
     });
   }
 

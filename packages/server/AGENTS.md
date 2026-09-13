@@ -79,7 +79,13 @@ sem um caminho de limpeza para cada caso.
 
 ## Personagens (FUN-11)
 
-Personagem nasce sem vocação, com Coins fora dele (na conta) e Premium por personagem. Nomes são
+Personagem nasce sem vocação, com Coins fora dele (na conta) e Premium por personagem. Nasce
+**vestido** com `progression.startingKit` (#153): `createCharacter` grava o personagem e uma
+linha de `item_instance` por peça (`origin: 'starting-kit'`, `equipped_slot` preenchido, id
+`<characterId>:kit:<n>`) na **mesma transação** — sem ledger, porque o kit não tem preço; é
+inicialização de linha, como o bot padrão (FUN-114). Duas peças no mesmo slot derrubam a
+criação inteira pelo índice único, e é o que se quer: kit pela metade em silêncio seria pior.
+Personagem anterior ao #153 continua sem kit. Nomes são
 únicos sem diferenciar maiúsculas/minúsculas. Exclusão é **soft delete** (`deleted_at`) para não
 quebrar proveniência futura de item/ledger; personagem com `session_id`, lease ou reserva ativa não pode ser apagado. Exclusão e emissão
 de ticket usam a mesma trava de linha do Postgres; o teste de concorrência é obrigatório.

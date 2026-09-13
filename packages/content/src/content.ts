@@ -244,6 +244,27 @@ export function buildContent(raw: RawContent): Content {
       .some((ammo) => ammo.family === family && ammo.price === 0);
     if (!free) problems.push(`munição: a família "${family}" não tem munição grátis (price 0)`);
   }
+  // O kit de nascimento (#153): item que existe, no slot dele, sem exigir nada — o personagem
+  // nasce level 1 e sem vocação —, e um por slot, que é o que o índice único de
+  // `item_instance` vai impor de qualquer jeito; melhor reprovar no boot do que na criação.
+  const kitSlots = new Set<string>();
+  for (const piece of progression?.startingKit ?? []) {
+    const item = itemDefinitions.get(piece.itemId);
+    if (item === undefined) {
+      problems.push(`progression: o kit de nascimento aponta item "${piece.itemId}", que não existe`);
+      continue;
+    }
+    if (item.slot !== piece.slot) {
+      problems.push(`progression: "${piece.itemId}" do kit se veste em "${item.slot ?? 'nenhum'}", não em "${piece.slot}"`);
+    }
+    if (item.requires.level !== undefined || item.requires.vocationId !== undefined) {
+      problems.push(`progression: "${piece.itemId}" do kit exige level ou vocação, e o personagem nasce sem`);
+    }
+    if (kitSlots.has(piece.slot)) {
+      problems.push(`progression: o kit de nascimento tem duas peças em "${piece.slot}"`);
+    }
+    kitSlots.add(piece.slot);
+  }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 

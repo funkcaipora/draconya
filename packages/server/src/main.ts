@@ -151,6 +151,8 @@ async function main(): Promise<void> {
         ...(content.bot.defaultConfig === undefined
           ? {}
           : { defaultBotConfig: content.bot.defaultConfig }),
+        // E o kit com que ele nasce vestido (#153), conferido no boot contra o catálogo.
+        startingKit: content.progression.startingKit,
         ...(auth === null || repository === null || database === null
           ? {}
           : {

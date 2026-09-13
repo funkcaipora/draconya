@@ -258,7 +258,13 @@ export const weaponSchema = z.strictObject({
 export type Weapon = z.infer<typeof weaponSchema>;
 
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
-export const ITEM_ORIGINS = ['loot', 'boss', 'quest', 'market', 'admin'] as const;
+/**
+ * De onde uma instância veio (§25.3). `starting-kit` e `vocation-choice` são as duas únicas
+ * origens em que o item é DADO, não dropado (ADR 0026, decisões 2 e 3; #153 e #154).
+ */
+export const ITEM_ORIGINS = [
+  'loot', 'boss', 'quest', 'market', 'admin', 'starting-kit', 'vocation-choice',
+] as const;
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 /**
@@ -516,6 +522,16 @@ export const progressionSchema = z.object({
     healthPerSecond: z.number().nonnegative(),
     manaPerSecond: z.number().nonnegative(),
   }),
+  /**
+   * Com o que todo personagem nasce, já VESTIDO (ADR 0026, decisão 2; #153): o item e o slot
+   * em que ele entra. É número de conteúdo, como o bot padrão — trocar a machete por outra
+   * arma é editar JSON. `buildContent` confere que cada item existe, que o slot é o dele, que
+   * ele não exige level nem vocação (o personagem nasce level 1 sem ela) e que há um por slot.
+   */
+  startingKit: z.array(z.object({
+    itemId: z.string().min(1),
+    slot: z.enum(ITEM_SLOTS),
+  })).default([]),
   /**
    * A curva de XP, como FÓRMULA e não como tabela: `base * level^exponent` é a XP para
    * completar aquele level.

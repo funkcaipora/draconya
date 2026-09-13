@@ -166,6 +166,29 @@ describe('loadContent', () => {
     expect(content.items.get('leather-armor')?.weight).toBe(60);
   });
 
+  it('todo personagem nasce vestido com o kit do ADR 0026: seis peças, uma por slot, sem exigir nada (#153)', () => {
+    // O kit é conteúdo (`progression.startingKit`), e o que se prende aqui é o que o jogador
+    // encontra na primeira entrada. Mutação que mata: tirar uma peça do JSON, ou trocar o slot.
+    const content = loadContent(DATA);
+    expect(content.progression.startingKit).toEqual([
+      { itemId: 'machete', slot: 'hand' },
+      { itemId: 'leather-helmet', slot: 'head' },
+      { itemId: 'leather-armor', slot: 'chest' },
+      { itemId: 'leather-legs', slot: 'legs' },
+      { itemId: 'leather-boots', slot: 'feet' },
+      { itemId: 'backpack', slot: 'back' },
+    ]);
+    for (const piece of content.progression.startingKit) {
+      const item = content.items.get(piece.itemId);
+      expect(item?.slot, piece.itemId).toBe(piece.slot);
+      expect(item?.requires, piece.itemId).toEqual({});
+    }
+    // O kit pesa menos que a capacidade de nascença: senão o personagem nasce sobrecarregado.
+    const weight = content.progression.startingKit
+      .reduce((sum, piece) => sum + (content.items.get(piece.itemId)?.weight ?? 0), 0);
+    expect(weight).toBeLessThan(content.progression.startingCapacity);
+  });
+
   it('cada arma diz como bate, e a skill de distância existe (#152, ADR 0026 decisões 3 e 4)', () => {
     const content = loadContent(DATA);
     const weapon = (id: string) => content.items.get(id)?.weapon;
