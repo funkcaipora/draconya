@@ -17,6 +17,7 @@
 import type { Combat, Spell, Supply } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
+import type { ConditionState } from './conditions.js';
 import type { Rng } from './rng.js';
 
 /** Por que a ação não aconteceu. Tipada porque o jogador merece saber qual das sete foi. */
@@ -36,7 +37,9 @@ export type CastRefusal =
   | 'not-enough-mana'
   | 'not-enough-gold'
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
-  | 'wrong-vocation';
+  | 'wrong-vocation'
+  /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
+  | 'group-cooldown';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -60,6 +63,12 @@ export interface CastSuccess {
   readonly hits: readonly number[];
   /** Gold debitado. Vira `aggregates.goldSpent` em quem chama. */
   readonly goldSpent: number;
+  /**
+   * A condição que a magia aplica (#155: haste, postura, magic shield, cura ao longo do tempo),
+   * já com `expiresAtMs`. Devolvida, não aplicada: quem tem a fila de eventos é o ruleset, e é
+   * ele quem agenda o vencimento — a mesma divisão do dano resolvido.
+   */
+  readonly condition?: ConditionState;
 }
 
 export interface CastRefused {
@@ -109,6 +118,61 @@ export function spellCooldownKey(spellId: string): string {
   return `spell:${spellId}`;
 }
 
+/** Os dois outros livros de cooldown (#155, referência §21): o grupo e o secundário. */
+export function groupCooldownKey(group: string): string {
+  return `group:${group}`;
+}
+
+export function secondaryCooldownKey(name: string): string {
+  return `secondary:${name}`;
+}
+
+/**
+ * O que escala uma magia (#155). `skillLevel` é o level da skill que a vocação usa para magia
+ * (`spellSkill`, `magic` por padrão); `powerScale` é o multiplicador das skills por uso
+ * (`#scaledPower`) e só vale para `power`/`amount` FIXOS — o `basePower` já entra pela
+ * conversão, e multiplicar de novo contaria a mesma skill duas vezes.
+ */
+export interface SpellScaling {
+  readonly skillLevel: number;
+  readonly powerScale: number;
+}
+
+const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
+
+/**
+ * A conversão do Base Power (ADR 0026 decisão 5): inteira nas duas pontas, `min <= max`
+ * sempre, nunca abaixo de 1. Os coeficientes são conteúdo (`combat.spellPower`).
+ */
+export function spellPowerRange(
+  basePower: number, level: number, skillLevel: number, spellPower: Combat['spellPower'],
+): { readonly min: number; readonly max: number } {
+  const mid = basePower * (1 + level * spellPower.levelFactor + skillLevel * spellPower.skillFactor);
+  return {
+    min: Math.max(1, Math.floor(mid * (1 - spellPower.spread))),
+    max: Math.max(1, Math.ceil(mid * (1 + spellPower.spread))),
+  };
+}
+
+/**
+ * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
+ * contrato), ou o fixo escalado pelas skills por uso.
+ */
+function powerOf(
+  effect: {
+    readonly basePower?: number | undefined;
+    readonly power?: number | undefined;
+    readonly amount?: number | undefined;
+  },
+  caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
+): number {
+  if (effect.basePower !== undefined) {
+    const { min, max } = spellPowerRange(effect.basePower, caster.level, scaling.skillLevel, combat.spellPower);
+    return rng.integer(min, max);
+  }
+  return Math.round((effect.power ?? effect.amount ?? 0) * scaling.powerScale);
+}
+
 const NOT_WAITING = 0;
 
 /** A recusa de quem pediu o que não existe. Congelada: é devolvida em caminho quente. */
@@ -134,12 +198,10 @@ export function castSpell(
   combat: Combat,
   rng: Rng,
   /**
-   * Multiplicador de poder vindo das skills (FUN-75). `1` é "sem skill nenhuma".
-   *
-   * Entra pronto, e não como a skill em si, porque quem sabe quais skills alimentam magia é o
-   * conteúdo — e este arquivo não conhece catálogo. Quem chama já percorreu.
+   * O que escala a magia (FUN-75, #155). Entra pronto, e não como a skill em si, porque quem
+   * sabe quais skills alimentam magia é o conteúdo — e este arquivo não conhece catálogo.
    */
-  powerScale = 1,
+  scaling: SpellScaling = NO_SCALING,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -155,60 +217,104 @@ export function castSpell(
   if (!caster.cooldowns.isReady(key, nowMs)) {
     return { ok: false, reason: 'on-cooldown', retryInMs: caster.cooldowns.remainingMs(key, nowMs) };
   }
+  // Os grupos do Tibia (#155, referência §21): livros separados do cooldown da magia, no
+  // mesmo `Cooldowns` por prefixo de chave. O prazo devolvido é o do livro que trancou.
+  const groupKey = spell.group === undefined ? null : groupCooldownKey(spell.group);
+  if (groupKey !== null && !caster.cooldowns.isReady(groupKey, nowMs)) {
+    return { ok: false, reason: 'group-cooldown', retryInMs: caster.cooldowns.remainingMs(groupKey, nowMs) };
+  }
+  const secondaryKey = spell.secondaryGroup === undefined ? null : secondaryCooldownKey(spell.secondaryGroup.name);
+  if (secondaryKey !== null && !caster.cooldowns.isReady(secondaryKey, nowMs)) {
+    return { ok: false, reason: 'group-cooldown', retryInMs: caster.cooldowns.remainingMs(secondaryKey, nowMs) };
+  }
 
-  if (spell.effect.kind === 'damage') {
+  const effect = spell.effect;
+  // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
+  // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
+  // e `range` não existe nela (o boot recusa).
+  if (effect.kind === 'damage') {
     if (aim === null || aim.targets.length === 0) {
       return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     }
     // Só o alvo PRINCIPAL é conferido contra o alcance: quem foi pego pela área está lá porque
-    // cai dentro do raio, não porque o lançador o alcança.
-    if (aim.distance > spell.effect.range) {
+    // cai dentro da forma, não porque o lançador o alcança.
+    if (effect.range !== undefined && aim.distance > effect.range) {
       return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
     }
-    if (caster.mana < spell.manaCost) {
-      return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
-    }
-
-    caster.mana -= spell.manaCost;
-    caster.cooldowns.start(key, nowMs, spell.cooldownMs);
-
-    // Uma rolagem POR ALVO, na ordem em que eles chegaram. A ordem é contrato: trocar qual
-    // sorteio cai em quem faz a mesma semente render uma hunt diferente, e o `AGENTS.md` deste
-    // pacote registra que semente e ordem de consumo do RNG são contrato de loot também.
-    //
-    // `kind: 'magic'` porque a eficácia da armadura contra magia é outra, e ela é conteúdo
-    // (`combat/baseline.json`) — não motor.
-    const power = Math.round(spell.effect.power * powerScale);
-    const hits: number[] = [];
-    let total = 0;
-    for (let i = 0; i < aim.targets.length; i += 1) {
-      const target = aim.targets[i] as SpellTarget;
-      const result = resolveDamage(
-        { power, kind: 'magic' },
-        { armor: target.armor, dodgeChance: target.dodgeChance },
-        'pve',
-        combat,
-        rng,
-      );
-      hits.push(result.damage);
-      total += result.damage;
-    }
-    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
   }
-
   if (caster.mana < spell.manaCost) {
     return { ok: false, reason: 'not-enough-mana', retryInMs: NOT_WAITING };
   }
+
   caster.mana -= spell.manaCost;
+  // Os três livros de uma vez: a magia, o grupo e, se houver, o secundário.
   caster.cooldowns.start(key, nowMs, spell.cooldownMs);
-  return {
-    ok: true,
-    healed: restore(caster, 'health', spell.effect.amount),
-    manaRestored: 0,
-    damage: 0,
-    hits: NO_HITS,
-    goldSpent: 0,
-  };
+  if (groupKey !== null && spell.groupCooldownMs !== undefined) {
+    caster.cooldowns.start(groupKey, nowMs, spell.groupCooldownMs);
+  }
+  if (secondaryKey !== null && spell.secondaryGroup !== undefined) {
+    caster.cooldowns.start(secondaryKey, nowMs, spell.secondaryGroup.cooldownMs);
+  }
+
+  switch (effect.kind) {
+    case 'damage': {
+      const targets = (aim as SpellAim).targets;
+      // Uma rolagem POR ALVO, na ordem em que eles chegaram. A ordem é contrato: trocar qual
+      // sorteio cai em quem faz a mesma semente render uma hunt diferente, e o `AGENTS.md`
+      // deste pacote registra que semente e ordem de consumo do RNG são contrato de loot também.
+      //
+      // `kind: 'magic'` porque a eficácia da armadura contra magia é outra, e ela é conteúdo
+      // (`combat/baseline.json`) — não motor. A postura (Swift Foot, Protector) multiplica o
+      // poder ANTES da armadura, como faz com o golpe.
+      const dealt = caster.conditions.damageDealtScale('spell');
+      const hits: number[] = [];
+      let total = 0;
+      for (let i = 0; i < targets.length; i += 1) {
+        const target = targets[i] as SpellTarget;
+        const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
+        const result = resolveDamage(
+          { power, kind: 'magic' },
+          { armor: target.armor, dodgeChance: target.dodgeChance },
+          'pve',
+          combat,
+          rng,
+        );
+        hits.push(result.damage);
+        total += result.damage;
+      }
+      return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
+    }
+    case 'heal':
+      return {
+        ok: true,
+        healed: restore(caster, 'health', powerOf(effect, caster, scaling, combat, rng)),
+        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+      };
+    case 'heal-over-time':
+      return cast({
+        key: 'heal-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+        tick: { amount: effect.amount, intervalMs: effect.intervalMs },
+      });
+    case 'haste':
+      return cast({
+        key: 'haste', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+        speedPercent: effect.speedPercent,
+        ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
+      });
+    case 'buff':
+      return cast({
+        key: 'buff', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+        ...(effect.damageDealtPercent === undefined ? {} : { damageDealtPercent: effect.damageDealtPercent }),
+        ...(effect.damageTakenPercent === undefined ? {} : { damageTakenPercent: effect.damageTakenPercent }),
+      });
+    case 'mana-shield':
+      return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+  }
+}
+
+/** O sucesso de uma magia que aplica uma condição: nada muda no lançador além da mana. */
+function cast(condition: ConditionState): CastSuccess {
+  return { ok: true, healed: 0, manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0, condition };
 }
 
 /**

@@ -3093,7 +3093,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
    */
   const BLAST = {
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 2_000,
-    effect: { kind: 'damage', power: 40, range: 3, area: { radius: 1 } },
+    effect: { kind: 'damage', power: 40, range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
   };
   /** A tabela de aparências do teste. Números do contrato, para o teste ler igual ao real. */
   const TABLE = {
@@ -3493,11 +3493,15 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const explosoes = ofType(all, 'effect').filter((e) => e.effectId === 15);
     const golpes = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
     expect(missiles.length).toBeGreaterThan(0);
-    expect(explosoes).toHaveLength(golpes.length);
-    expect(explosoes).toHaveLength(2 * missiles.length);
-    // Em tiles DIFERENTES: cada rato levou a sua.
+    expect(golpes).toHaveLength(2 * missiles.length);
+    // A forma INTEIRA (#155): o círculo de raio 1 no alvo são nove tiles, e a explosão aparece
+    // em cada um — onde há rato e onde não há, como no Tibia. Um efeito por tile, nunca dois.
+    expect(explosoes).toHaveLength(9 * missiles.length);
     const tiles = new Set(explosoes.map((e) => `${e.position.x},${e.position.y}`));
-    expect(tiles.size).toBe(2);
+    expect(tiles.size).toBeGreaterThanOrEqual(9);
+    // E cada rato atingido está entre eles.
+    const hitTiles = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
+    expect(hitTiles.length).toBeGreaterThan(0);
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {

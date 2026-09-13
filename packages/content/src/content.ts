@@ -186,6 +186,42 @@ export function buildContent(raw: RawContent): Content {
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   const itemDefinitions = parseAll('item', raw.items ?? [], itemSchema, problems);
+
+  // O catálogo de magias do Tibia (#155, ADR 0026 decisão 5): o schema fecha a forma de cada
+  // campo; o que UM campo não sabe do OUTRO é conferido aqui. Cada regra é um defeito que, sem
+  // ela, subiria mudo e apareceria no meio de uma hunt como magia que não bate.
+  for (const spell of spells.values()) {
+    const where = `spell/${spell.id}`;
+    if (spell.groupCooldownMs !== undefined && spell.group === undefined) {
+      problems.push(`${where}: groupCooldownMs sem group`);
+    }
+    if (spell.group !== undefined && spell.groupCooldownMs === undefined) {
+      problems.push(`${where}: group sem groupCooldownMs`);
+    }
+    if (spell.secondaryGroup !== undefined && spell.groupCooldownMs !== undefined
+      && spell.secondaryGroup.cooldownMs < spell.groupCooldownMs) {
+      problems.push(`${where}: o grupo secundário tranca por menos tempo que o primário`);
+    }
+    const effect = spell.effect;
+    if (effect.kind === 'heal') {
+      if ((effect.basePower === undefined) === (effect.amount === undefined)) {
+        problems.push(`${where}: cura precisa de basePower OU amount, um dos dois`);
+      }
+    }
+    if (effect.kind === 'damage') {
+      if ((effect.basePower === undefined) === (effect.power === undefined)) {
+        problems.push(`${where}: dano precisa de basePower OU power, um dos dois`);
+      }
+      const selfOrigin = effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
+      if (selfOrigin && effect.range !== undefined) {
+        problems.push(`${where}: forma que sai do lançador não tem alcance`);
+      }
+      if (!selfOrigin && effect.range === undefined) {
+        problems.push(`${where}: dano no alvo precisa de range`);
+      }
+    }
+  }
   // Arma sem `weapon` é corpo a corpo de alcance 1 (#152): é o que toda arma era antes de
   // haver bow e wand, e é o que a machete e o steel axe são. O default mora AQUI, e não no
   // schema, porque o schema de um campo opcional não sabe do `kind` — um capacete não ganha
@@ -272,6 +308,16 @@ export function buildContent(raw: RawContent): Content {
   // nenhum caminho de equipar alcança.
   if (kitTwoHanded && kitSlots.has('shield')) {
     problems.push('progression: o kit de nascimento não pode ter arma de duas mãos e escudo ao mesmo tempo');
+  }
+  // A skill que escala a magia de cada vocação (#155) precisa existir — quando há skills. O
+  // conteúdo de teste sem skills não tem como conferir, e não precisa: `levelOf` de skill
+  // desconhecida é zero.
+  if (skills.size > 0) {
+    for (const vocation of vocations.values()) {
+      if (!skills.has(vocation.spellSkill)) {
+        problems.push(`vocation/${vocation.id}: spellSkill "${vocation.spellSkill}" não existe`);
+      }
+    }
   }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);

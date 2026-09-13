@@ -78,6 +78,11 @@ export interface Movable<P extends GridPoint = GridPoint> {
    * personagem, a definição para o monstro —, nunca de constante em código.
    */
   readonly speed: number;
+  /**
+   * Haste (#155): multiplica a velocidade por um tempo. À parte de `speed` porque `retarget` e
+   * a entrada na hunt REESCREVEM `speed` pela tabela, e apagariam o haste com ele. Ausente é 1.
+   */
+  readonly speedScale?: number;
 }
 
 /**
@@ -125,7 +130,7 @@ export function movementDuration(
   if (world.fixedStepMs !== undefined) return world.fixedStepMs;
   const ground = groundSpeed(world.map, landing.x, landing.y, landing.z);
   const diagonal = from.x !== to.x && from.y !== to.y;
-  const raw = (ground * 1000) / Math.max(1, mover.speed) * (diagonal ? 3 : 1);
+  const raw = (ground * 1000) / Math.max(1, mover.speed * (mover.speedScale ?? 1)) * (diagonal ? 3 : 1);
   return Math.max(BEAT_MS, Math.ceil(raw / BEAT_MS) * BEAT_MS);
 }
 

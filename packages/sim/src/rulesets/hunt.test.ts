@@ -104,7 +104,7 @@ const spells = [
   // meio da área" ser sobre morte, e não sobre quanto falta de vida.
   {
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 1_000,
-    effect: { kind: 'damage', power: 80, range: 3, area: { radius: 2 } },
+    effect: { kind: 'damage', power: 80, range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   },
 ];
 const supplies = [
@@ -3629,5 +3629,130 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
     back.health = 710;
     resumed.advanceBy(100);
     expect(back.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
+  });
+});
+
+describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
+  const wave = {
+    id: 'fire-wave', name: 'Fire Wave', manaCost: 25, cooldownMs: 1_000, group: 'attack', groupCooldownMs: 1_000,
+    effect: { kind: 'damage', basePower: 400, area: { shape: 'wave', length: 3 } },
+  };
+  const haste = {
+    id: 'haste', name: 'Haste', manaCost: 60, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+    effect: { kind: 'haste', speedPercent: 30, durationMs: 30_000 },
+  };
+  const recovery = {
+    id: 'recovery', name: 'Recovery', manaCost: 75, cooldownMs: 60_000, group: 'healing', groupCooldownMs: 1_000,
+    effect: { kind: 'heal-over-time', amount: 20, intervalMs: 3_000, durationMs: 60_000 },
+  };
+  const protector = {
+    id: 'protector', name: 'Protector', manaCost: 20, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+    secondaryGroup: { name: 'stance', cooldownMs: 2_000 },
+    effect: { kind: 'buff', durationMs: 10_000, damageTakenPercent: -50 },
+  };
+  const always = { kind: 'hp' as const, op: '<=' as const, percent: 100 };
+  const cast = (spellId: string) => ({ when: always, do: { kind: 'spell' as const, spellId } });
+
+  it('a onda sai na DIREÇÃO do personagem, acerta quem está nos tiles e desenha a forma inteira', () => {
+    // Nasce olhando para o sul (nunca andou); o passo grava a direção — a rota da arena sai
+    // para o leste. A onda só sai quando há alguém nos tiles dela (self-origin: sem alvo é
+    // `no-target`, sem mana gasta), e o evento leva os 7 tiles da forma para o efeito
+    // aparecer onde não há monstro. Mutação que mata: ignorar `direction` em `#aimFor`, ou não
+    // gravá-la no `#step`.
+    const walking = withSpells(botConfig(), { monsters: false });
+    expect(walking.hero.direction).toBe('south');
+    // A direção é a do ÚLTIMO passo: depois de cada passo do herói ela bate com o vetor dele.
+    run(walking.session, 3_000, 100);
+    const moves = walking.session.drainEvents().filter((e) => e.kind === 'creature-moved' && e.creatureId === 'hero');
+    const last = moves.at(-1);
+    expect(moves.length).toBeGreaterThan(0);
+    if (last?.kind !== 'creature-moved') throw new Error('sem passo');
+    const dx = last.to.x - last.from.x;
+    const dy = last.to.y - last.from.y;
+    expect(walking.hero.direction).toBe(dx !== 0 ? (dx > 0 ? 'east' : 'west') : dy > 0 ? 'south' : 'north');
+
+    const { session, hero } = withSpells(botConfig({
+      attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'fire-wave' } }],
+    }), { mana: 200, spells: [...spells, wave] }, 'bold');
+    run(session, 20_000, 100);
+
+    const casts = session.drainEvents().filter((e) => e.kind === 'spell-cast');
+    expect(casts.length).toBeGreaterThan(0);
+    const first = casts[0] as { tiles: readonly unknown[]; targets: readonly unknown[] };
+    expect(first.tiles).toHaveLength(1 + 3 + 3);
+    expect(first.targets.length).toBeGreaterThan(0);
+    // Sem monstro nos tiles a onda NÃO sai: cada lançamento tem pelo menos um alvo.
+    expect(casts.every((c) => c.kind === 'spell-cast' && c.targets.length > 0)).toBe(true);
+    // (A mana não é conferida em absoluto: subir de level devolve mana — `retarget`.)
+    expect(hero.mana).toBeLessThan(200);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+  });
+
+  it('o haste encurta o passo enquanto vale e o passo volta ao normal quando vence', () => {
+    const { session } = withSpells(botConfig({ support: [cast('haste')] }), { mana: 60, spells: [...spells, haste], monsters: false });
+    run(session, 40_000, 100);
+    const moves = session.drainEvents()
+      .filter((e) => e.kind === 'creature-moved' && e.creatureId === 'hero')
+      .map((e) => (e.kind === 'creature-moved' ? e.durationMs : 0));
+    // O primeiro passo sai antes de a categoria de suporte vencer; do segundo em diante o
+    // haste vale. Mana para UM lançamento só: senão a regra "sempre" relança ao vencer.
+    const hasted = new Set(moves.slice(1, 6));
+    const later = new Set(moves.slice(-5));
+    // Durante o haste (+30 %): o passo custa ceil50(chão × 1000 / (300 × 1,3)); depois, o
+    // de sempre. Mutação que mata: `movementDuration` ignorar `speedScale`, ou o vencimento
+    // não remover a condição.
+    expect(hasted.size).toBe(1);
+    expect(later.size).toBe(1);
+    expect([...hasted][0] as number).toBeLessThan([...later][0] as number);
+  });
+
+  it('Recovery cura 20 a cada 3 s por 60 s — 400 no total —, o mesmo a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number): number => {
+      const { session, hero } = withSpells(botConfig({ heal: [cast('recovery')] }), {
+        health: 1_000, mana: 200, spells: [...spells, recovery], monsters: false,
+      });
+      run(session, 61_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(10)).toBe(1_400);
+    expect(at(1)).toBe(1_400);
+  });
+
+  it('a postura reduz o dano tomado, e um snapshot no meio dela retoma com o mesmo vencimento', () => {
+    // Mana para UM lançamento: a regra "sempre" relançaria a cada 2 s e o prazo andaria.
+    const build = () => withSpells(botConfig({ support: [cast('protector')] }), {
+      health: 100_000, mana: 20, spells: [...spells, protector],
+    }, 'bold');
+    const { session, hero } = build();
+    session.advanceBy(50);
+    expect(hero.conditions.get('buff')?.expiresAtMs).toBe(10_000);
+    run(session, 5_000, 100);
+
+    // Retomar no meio: a condição e o evento de vencimento vêm juntos no snapshot.
+    const loaded = buildContent(raw({ spells: [...spells, protector] }));
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    expect(resumedHero.conditions.get('buff')?.expiresAtMs).toBe(10_000);
+    run(resumed, 4_000, 100);
+    expect(resumedHero.conditions.get('buff')).not.toBeNull();
+    run(resumed, 1_100, 100);
+    // Venceu no instante 10 000 do relógio lógico, do outro lado do snapshot.
+    expect(resumedHero.conditions.get('buff')).toBeNull();
+  });
+
+  it('uma hunt com onda, cura, haste, Recovery e postura rende o mesmo a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number) => {
+      const { session, hero } = withSpells(botConfig({
+        attack: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'spell', spellId: 'fire-wave' } }],
+        heal: [cast('recovery'), healRule(90)],
+        support: [cast('haste'), cast('protector')],
+      }), { health: 5_000, mana: 100_000, spells: [...spells, wave, haste, recovery, protector] }, 'bold');
+      run(session, 120_000, 1000 / hz);
+      return { health: hero.health, mana: hero.mana, kills: session.aggregates.kills, xp: session.aggregates.xpGained };
+    };
+    expect(at(1)).toEqual(at(10));
   });
 });

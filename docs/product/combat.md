@@ -138,9 +138,47 @@ Três coisas que a área traz e o alvo único não tinha:
 O custo de mana é da **magia**, não do número de alvos: cobrar por alvo faria o jogador pagar
 mais por lançar no lugar certo, que é o inverso do que uma magia de área quer ensinar.
 
-**Área centrada no LANÇADOR não existe**, e é decisão: uma magia centrada em quem lança não
-precisa de alvo nenhum, e isso muda o portão inteiro — some a recusa por "sem alvo", some a
-conferência de alcance. É outra forma de magia, não um parâmetro desta.
+**Área centrada no LANÇADOR passou a existir com o #155** — ver a seção seguinte: é outra
+família de forma, com o portão que essa decisão previa (sem alvo, sem alcance).
+
+### Magias do catálogo do Tibia (#155, ADR 0026 decisão 5)
+
+O motor expressa o catálogo instantâneo do Tibia até o level 80; os números de cada magia são
+das issues por vocação (#156–#159). O que o motor ganhou:
+
+- **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (Chebyshev, centrado
+  no alvo ou no lançador), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
+  5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os três tiles à
+  frente) e `beam` (linha reta). Onda, cleave, feixe e o círculo no lançador são **self-origin**:
+  não exigem alvo nem alcance (o boot recusa `range` nelas), e recusam `no-target` só quando
+  nenhum monstro cai nos tiles — sem gastar mana. Saem na **direção do personagem**, que o
+  passo grava (diagonal: a componente horizontal decide — regra nossa); quem nunca andou olha
+  para o sul. O evento `spell-cast` leva os tiles da forma, e o efeito aparece em todos —
+  inclusive onde não há monstro, como no Tibia.
+- **Base Power** (`effect.basePower`, o BP do TibiaWiki) convertido por `combat.spellPower` —
+  `mid = BP × (1 + level × levelFactor + skill × skillFactor)`, `[⌊mid × (1 − spread)⌋,
+  ⌈mid × (1 + spread)⌉]`, uma rolagem por alvo. A skill é a da vocação (`vocation.spellSkill`:
+  `magic`, e `distance` no Paladin). **A fórmula é nossa e provisória** `[ABERTO]`: o TibiaWiki
+  não publica a do Tibia, e a do TFS é GPL (ADR 0019); os coeficientes (0,06 / 0,15 / 0,15)
+  foram calibrados para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal`
+  genérico cura. Uma magia de BP NÃO passa pelo multiplicador das skills por uso
+  (`damagePerLevel`) — contaria a skill duas vezes; `power`/`amount` fixos continuam passando.
+- **Grupos de cooldown** (`group` + `groupCooldownMs`, `secondaryGroup`): três livros no mesmo
+  `Cooldowns` (`spell:`, `group:`, `secondary:`), instante lógico absoluto. A recusa é
+  `group-cooldown` com o prazo do livro que trancou, e a categoria do bot volta no vencimento.
+  Magia sem `group` (as três genéricas de antes) só tem o cooldown próprio.
+- **Condições** (`packages/sim/src/conditions.ts`): haste (`speedScale` lido por
+  `movementDuration`, à parte de `speed` — `retarget` reescreve `speed`), postura (`buff`:
+  dano causado por fonte e dano tomado, em percentuais que somam), magic shield (o dano sai da
+  mana primeiro, o escudo continua até vencer mesmo com mana zero) e cura ao longo do tempo
+  (Recovery: `amount` a cada `intervalMs`). Uma por tipo; relançar REINICIA. O vencimento e o
+  tique são eventos da fila (`condition-expire`, `condition-tick` — invariante 2), e a condição
+  vai no `CharacterState` com o prazo lógico: um snapshot no meio de um haste retoma vencendo
+  no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset.
+
+O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
+de condição e dano ao longo do tempo (não há condições de monstro), magias de escudo, elemento e
+resistência.
 
 ### Requisito de vocação (§9.2)
 
@@ -199,6 +237,8 @@ a cada ciclo em que algo mudou — a stamina comparada no minuto, porque ela que
 e comparada exata faria a mensagem sair dez vezes por segundo.
 
 ## Em aberto
+
+- `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

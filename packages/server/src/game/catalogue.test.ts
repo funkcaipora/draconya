@@ -150,7 +150,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
 
     expect(spell).toBeDefined();
     expect(Object.keys(spell ?? {}).sort())
-      .toEqual(['effect', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+      .toEqual(['effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
   });
 
   it('vocação ausente vira `null`, e não some', () => {

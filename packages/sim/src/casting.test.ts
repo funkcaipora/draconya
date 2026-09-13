@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
-import { balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
+import { balanceOf, castSpell, spellCooldownKey, spellPowerRange, useSupply } from './casting.js';
 import { Rng } from './rng.js';
 
 // Esquiva zero e armadura que conta inteira: aqui o assunto é o PORTÃO — level, cooldown,
@@ -11,6 +11,7 @@ const combat: Combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
   armorEffectiveness: { melee: 1, magic: 1 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
+  spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };
 
 const heal: Spell = {
@@ -175,7 +176,7 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
 describe('magia em ÁREA (FUN-92)', () => {
   const blast = {
     id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
-    effect: { kind: 'damage' as const, power: 30, range: 4, area: { radius: 1 } },
+    effect: { kind: 'damage' as const, power: 30, range: 4, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
   };
   const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
     ({ distance, targets });
@@ -283,5 +284,96 @@ describe('requisito de VOCAÇÃO (FUN-92)', () => {
     const recusa = castSpell(cavaleiro, druidica, null, 0, combat, rng());
     expect(recusa.ok).toBe(false);
     if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
+  });
+});
+
+describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
+  it('converts the Base Power by level and skill, integer at both ends', () => {
+    // Light Healing (BP 40) no level 8 com magic 0: mid = 40 × 1,48 = 59,2 → [50, 69]. Mutação
+    // que mata: trocar `floor`/`ceil` por `round` (dá [50, 68]), ou esquecer o `skillFactor`.
+    expect(spellPowerRange(40, 8, 0, combat.spellPower)).toEqual({ min: 50, max: 69 });
+    expect(spellPowerRange(40, 8, 10, combat.spellPower)).toEqual({ min: 101, max: 138 });
+    // Nunca abaixo de 1, e `min <= max` sempre.
+    expect(spellPowerRange(1, 1, 0, { levelFactor: 0, skillFactor: 0, spread: 0.9 })).toEqual({ min: 1, max: 2 });
+  });
+
+  it('a basePower spell rolls in the range and does NOT stack the per-use skill multiplier (DT-03)', () => {
+    const bp: Spell = { ...heal, id: 'light-healing', effect: { kind: 'heal', basePower: 40 } };
+    const caster = hero({ level: 8, health: 1 });
+    const result = castSpell(caster, bp, null, 0, combat, rng(), { skillLevel: 0, powerScale: 10 });
+    expect(result.ok && result.healed).toBeGreaterThanOrEqual(50);
+    expect(result.ok && result.healed).toBeLessThanOrEqual(69);
+    // O fixo continua escalando pelas skills por uso.
+    const fixed = castSpell(hero({ level: 8, health: 1 }), heal, null, 0, combat, rng(), { skillLevel: 0, powerScale: 1.5 });
+    expect(fixed.ok && fixed.healed).toBe(90);
+  });
+
+  it('the group locks every spell of the group, the secondary only its own, and no mana leaves on refusal', () => {
+    const flame: Spell = {
+      ...strike, id: 'flame-strike', group: 'attack', groupCooldownMs: 2_000, cooldownMs: 2_000,
+      effect: { kind: 'damage', basePower: 45, range: 3 },
+    };
+    const beam: Spell = {
+      ...flame, id: 'great-energy-beam', groupCooldownMs: 2_000, cooldownMs: 6_000,
+      secondaryGroup: { name: 'great-beams', cooldownMs: 6_000 },
+      effect: { kind: 'damage', basePower: 155, area: { shape: 'beam', length: 8 } },
+    };
+    const deathBeam: Spell = { ...beam, id: 'great-death-beam' };
+    const stance: Spell = {
+      ...heal, id: 'blood-rage', manaCost: 20, group: 'support', groupCooldownMs: 2_000,
+      secondaryGroup: { name: 'stance', cooldownMs: 2_000 },
+      effect: { kind: 'buff', durationMs: 10_000, damageDealtPercent: { melee: 25 }, damageTakenPercent: 15 },
+    };
+    const caster = hero({ level: 80, mana: 1_000 });
+
+    expect(castSpell(caster, beam, near(), 0, combat, rng()).ok).toBe(true);
+    // O grupo `attack` trancou por 2 s: a outra magia do grupo espera, com o prazo.
+    expect(castSpell(caster, flame, near(), 500, combat, rng()))
+      .toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 1_500 });
+    // O secundário `great-beams` tranca por 6 s — e só as que o têm.
+    expect(castSpell(caster, deathBeam, near(), 2_000, combat, rng()))
+      .toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 4_000 });
+    expect(castSpell(caster, flame, near(), 2_000, combat, rng()).ok).toBe(true);
+    // A postura é de outro grupo: passa, e devolve a condição SEM aplicar nada.
+    const manaBefore = caster.mana;
+    const buffed = castSpell(caster, stance, null, 2_000, combat, rng());
+    expect(buffed.ok && buffed.condition).toEqual({
+      key: 'buff', spellId: 'blood-rage', expiresAtMs: 12_000,
+      damageDealtPercent: { melee: 25 }, damageTakenPercent: 15,
+    });
+    expect(caster.mana).toBe(manaBefore - 20);
+    expect(caster.conditions.size).toBe(0);
+    // Recusa por grupo não gasta mana.
+    const before = caster.mana;
+    expect(castSpell(caster, deathBeam, near(), 3_000, combat, rng()).ok).toBe(false);
+    expect(caster.mana).toBe(before);
+  });
+
+  it('haste, mana shield and heal-over-time come back as conditions with the logical deadline', () => {
+    const caster = hero({ level: 50, mana: 1_000 });
+    const haste: Spell = { ...heal, id: 'haste', effect: { kind: 'haste', speedPercent: 30, durationMs: 30_000 } };
+    const shield: Spell = { ...heal, id: 'magic-shield', effect: { kind: 'mana-shield', durationMs: 180_000 } };
+    const recovery: Spell = { ...heal, id: 'recovery', effect: { kind: 'heal-over-time', amount: 20, intervalMs: 3_000, durationMs: 60_000 } };
+    const at = (spell: Spell, now: number) => castSpell(caster, spell, null, now, combat, rng());
+    expect(at(haste, 1_000)).toMatchObject({ ok: true, condition: { key: 'haste', expiresAtMs: 31_000, speedPercent: 30 } });
+    expect(at(shield, 1_000)).toMatchObject({ ok: true, condition: { key: 'mana-shield', expiresAtMs: 181_000 } });
+    expect(at(recovery, 1_000)).toMatchObject({
+      ok: true, condition: { key: 'heal-over-time', expiresAtMs: 61_000, tick: { amount: 20, intervalMs: 3_000 } },
+    });
+  });
+
+  it('a self-origin shape needs no range and no primary distance; the posture scales the spell hit', () => {
+    const wave: Spell = {
+      ...strike, id: 'fire-wave', effect: { kind: 'damage', power: 40, area: { shape: 'wave', length: 3 } },
+    };
+    const caster = hero({ level: 20 });
+    // A mira vem com `distance: 0` e os alvos colhidos pela forma; o alcance não é conferido.
+    const aim = { distance: 0, targets: [{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }] };
+    const plain = castSpell(caster, wave, aim, 0, combat, rng());
+    expect(plain.ok && plain.hits).toHaveLength(2);
+    caster.conditions.apply({ key: 'buff', spellId: 'x', expiresAtMs: 9_999, damageDealtPercent: { spell: -50 } });
+    const halved = castSpell(caster, wave, aim, 5_000, combat, rng());
+    if (!halved.ok || !plain.ok) throw new Error('lançamento recusado');
+    expect(halved.damage).toBeLessThan(plain.damage);
   });
 });

@@ -67,6 +67,11 @@ export interface SpellCast {
   readonly spellId: string;
   readonly casterPosition: WorldPoint;
   readonly targets: ReadonlyArray<SpellCastTarget>;
+  /**
+   * Os tiles da forma (#155), para o efeito aparecer onde não há monstro — a onda é visível
+   * inteira, como no Tibia. Vazio em alvo único e em cura.
+   */
+  readonly tiles: readonly WorldPoint[];
 }
 
 /**
