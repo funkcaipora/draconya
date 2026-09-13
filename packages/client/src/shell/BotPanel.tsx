@@ -89,7 +89,9 @@ function Rule({ rule, index, total, category, vocabulary, level }: {
   // lista de ids em código aqui.
   const actions = category === 'potion'
     ? vocabulary.supplies.map((supply) => ({
-      id: supply.id, label: `${supply.name} (${String(supply.price)} gold)`, locked: false,
+      id: supply.id, label: `${supply.name} (${String(supply.price)} gold)`,
+      // A runa (#165) tem level: a tela só mostra que ainda não dá; quem recusa é o servidor.
+      locked: level > 0 && level < (supply.requires.level ?? 0),
     }))
     : vocabulary.spells.map((spell) => ({
       id: spell.id,

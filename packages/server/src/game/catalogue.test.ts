@@ -194,7 +194,25 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const supply = bot.supplies[0];
 
     expect(supply).toBeDefined();
-    expect(Object.keys(supply ?? {}).sort()).toEqual(['effect', 'id', 'name', 'price']);
+    expect(Object.keys(supply ?? {}).sort()).toEqual(['effect', 'id', 'name', 'price', 'requires']);
     expect(supply?.price).toBeGreaterThan(0);
+  });
+
+  it('a runa leva os requisitos — level e magic level — e nunca o Base Power (#165)', () => {
+    // A tela desabilita a runa abaixo do level, como faz com magia; o BP e a conversão são
+    // balanceamento (invariante 4) e ficam fora.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withRune = {
+      ...raw,
+      supplies: [
+        ...(raw.supplies ?? []),
+        { id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, requires: { level: 30, magicLevel: 4 },
+          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } } },
+      ],
+    };
+    const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
+    const rune = bot.supplies.find((s) => s.id === 'avalanche-rune');
+    expect(rune).toEqual({ id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 30, magicLevel: 4 } });
+    expect(JSON.stringify(rune)).not.toContain('basePower');
   });
 });

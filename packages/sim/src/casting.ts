@@ -39,7 +39,9 @@ export type CastRefusal =
   /** A magia pede uma vocação que este personagem não tem (§9.2, FUN-92). */
   | 'wrong-vocation'
   /** O grupo (ou o secundário) da magia ainda está trancado (#155). Carrega prazo, como `on-cooldown`. */
-  | 'group-cooldown';
+  | 'group-cooldown'
+  /** A runa pede magic level que este personagem não tem (#165). */
+  | 'magic-level-too-low';
 
 export interface CastSuccess {
   readonly ok: true;
@@ -328,7 +330,44 @@ function cast(condition: ConditionState): CastSuccess {
  * um segundo cooldown ao supply seria dois lugares decidindo a mesma coisa, e o dia em que
  * eles divergissem ninguém saberia qual dos dois estava valendo.
  */
-export function useSupply(user: CharacterRuntime, supply: Supply): CastResult {
+export function useSupply(
+  user: CharacterRuntime,
+  supply: Supply,
+  /** Só a runa (#165) usa os quatro: poção passa `null` e ignora o resto. */
+  aim: SpellAim | null = null,
+  combat?: Combat,
+  rng?: Rng,
+  scaling?: SpellScaling,
+): CastResult {
+  // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
+  // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
+  if (supply.effect.kind === 'damage') {
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    if (balanceOf(user) < supply.price) return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    // Chamador sem contexto de combate: a runa não existe para ele — nunca dano sem `rng`.
+    if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
+    user.goldDelta -= supply.price;
+    const hits: number[] = [];
+    let total = 0;
+    for (let i = 0; i < aim.targets.length; i += 1) {
+      const target = aim.targets[i] as SpellTarget;
+      // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia.
+      const { min, max } = spellPowerRange(supply.effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
+      const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
+      const result = resolveDamage({ power, kind: 'magic' }, { armor: target.armor, dodgeChance: target.dodgeChance }, 'pve', combat, rng);
+      hits.push(result.damage);
+      total += result.damage;
+    }
+    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
+  }
+
   if (balanceOf(user) < supply.price) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }

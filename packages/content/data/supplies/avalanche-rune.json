@@ -1,0 +1,20 @@
+{
+  "id": "avalanche-rune",
+  "name": "Avalanche Rune",
+  "price": 14,
+  "requires": {
+    "level": 30,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 45,
+    "range": 4,
+    "area": {
+      "shape": "circle",
+      "radius": 3,
+      "centered": "target"
+    }
+  },
+  "_open": "TibiaWiki (conferir ao gravar): level 30, magic level 4, 4 cargas; o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo ignorado até haver resistência por elemento."
+}

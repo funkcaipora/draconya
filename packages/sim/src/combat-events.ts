@@ -83,6 +83,9 @@ export interface SupplyUsed {
   readonly characterId: string | number;
   readonly supplyId: string;
   readonly position: WorldPoint;
+  /** Runa (#165): onde caiu. Vazio para poção — o efeito é no usuário. */
+  readonly targets: ReadonlyArray<SpellCastTarget>;
+  readonly tiles: readonly WorldPoint[];
 }
 
 /**

@@ -1309,17 +1309,25 @@ export class HuntRuleset implements Ruleset {
       return result;
     }
 
-    // Aplicar depois de colher TODOS os alvos, e não durante (FUN-92).
-    //
-    // `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
-    // meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
-    // alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
-    // Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço do raio —,
-    // então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
-    // `alive` aqui seria código que nenhum teste alcança.
+    this.#applyHits(session, character, result.hits);
+    return result;
+  }
+
+  /**
+   * Aplica os golpes de uma mira — magia (FUN-92) ou runa (#165) — depois de colher TODOS os
+   * alvos, e não durante.
+   *
+   * `#onMonsterDied` faz `this.#monsters = this.#monsters.filter(...)`: resolver morte no
+   * meio de uma varredura sobre `#monsters` é varrer um array que está sendo trocado, e os
+   * alvos depois do que morreu ficariam de fora. Colher primeiro fecha essa porta.
+   * Nenhum monstro entra duas vezes na mesma mira — o principal é excluído do laço da forma —,
+   * então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
+   * `alive` aqui seria código que nenhum teste alcança.
+   */
+  #applyHits(session: Session, character: CharacterRuntime, hits: readonly number[]): void {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
-      const damage = result.hits[i] ?? 0;
+      const damage = hits[i] ?? 0;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
       session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
@@ -1334,7 +1342,6 @@ export class HuntRuleset implements Ruleset {
       this.#emitHealth(session, monster);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
     }
-    return result;
   }
 
   /**
@@ -1390,6 +1397,12 @@ export class HuntRuleset implements Ruleset {
     this.#aim.distance = distance(character.position, primary.position);
     this.#aim.targets = this.#spellTargets;
     return this.#aim;
+  }
+
+  /** O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o BP já a conta). */
+  #runeScaling(character: CharacterRuntime): SpellScaling {
+    const magic = this.#options.skills.get('magic');
+    return { skillLevel: magic === undefined ? 0 : character.skills.levelOf(magic), powerScale: 1 };
   }
 
   /** O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por uso. */
@@ -1459,7 +1472,14 @@ export class HuntRuleset implements Ruleset {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
-    const result = useSupply(character, supply);
+    // A runa (#165) mira como a magia em área — o mesmo `#aimFor`, o mesmo contrato de ordem —
+    // e escala SEMPRE pela skill `magic`: runa é do magic level, em toda vocação.
+    const aim = supply.effect.kind === 'damage'
+      ? this.#aimFor(character, supply.effect.range, supply.effect.area)
+      : null;
+    const result = useSupply(
+      character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character),
+    );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
       // ao ledger, e o personagem só carrega o delta.
@@ -1472,8 +1492,13 @@ export class HuntRuleset implements Ruleset {
       session.emit({
         kind: 'supply-used', characterId: character.id, supplyId: supply.id,
         position: this.#at(character),
+        targets: aim === null
+          ? NO_SPELL_TARGETS
+          : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+        tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
-      this.#emitHealed(session, character, result.healed, 'supply');
+      if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
+      else this.#applyHits(session, character, result.hits);
       return result;
     }
 

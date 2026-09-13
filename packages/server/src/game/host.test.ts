@@ -3137,12 +3137,21 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     id: 'blast', name: 'Explosão', manaCost: 20, cooldownMs: 2_000,
     effect: { kind: 'damage', power: 40, range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
   };
+  /**
+   * A runa de ataque (#165): supply de dano em área, raio 1 no alvo — a forma do `blast`,
+   * para o teste da apresentação ler os mesmos nove tiles. Sem `requires`: o herói de level 1
+   * usa, e o que este arquivo prova é o desenho, não o gate.
+   */
+  const RUNE = {
+    id: 'rune', name: 'Runa', price: 3,
+    effect: { kind: 'damage', basePower: 40, range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
+  };
   /** A tabela de aparências do teste. Números do contrato, para o teste ler igual ao real. */
   const TABLE = {
     spells: {
       heal: { effect: 13 }, strike: { effect: 12, missile: 5 }, blast: { effect: 15, missile: 6 },
     },
-    supplies: { 'health-potion': { effect: 14 } },
+    supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41 } },
     hits: { melee: 1 },
     // O projétil do tiro (#152): o da flecha é da MUNIÇÃO, o da wand é da ARMA.
     ammunition: { arrow: { icon: 3447, missile: 3 } },
@@ -3238,6 +3247,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       ...armory,
       ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
+      supplies: [...(raw.supplies ?? []), RUNE],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
@@ -3544,6 +3554,31 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // E cada rato atingido está entre eles.
     const hitTiles = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
     expect(hitTiles.length).toBeGreaterThan(0);
+  });
+
+  it('a runa de ataque estoura um effect em CADA tile da forma, e a poção só no usuário (#165)', () => {
+    // O supply de dano é apresentado como a magia em área: um `effect` por tile do círculo
+    // de raio 1 — nove —, com ou sem rato. O gold sai como o da poção, e a forma vem de
+    // `tiles` do `supply-used`, que o host desenha uma vez cada.
+    //
+    // Mutação que mata: tratar todo `supply-used` como poção (efeito só em `position`) — a
+    // contagem cai para uma por uso, no tile do herói.
+    const { runFor, received, hero } = hunt({
+      tanky: true, monsterCount: 2, gold: 300,
+      bot: rules({ rune: [{
+        when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'rune' },
+      }] }),
+    });
+    runFor(3_000);
+
+    const all = received();
+    const usos = ofType(all, 'effect').filter((e) => e.effectId === 41);
+    const golpes = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
+    expect(golpes.length).toBeGreaterThan(0);
+    expect(golpes.length % 2).toBe(0);
+    expect(usos).toHaveLength(9 * (golpes.length / 2));
+    expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
+    expect(hero().goldDelta).toBe(-3 * (golpes.length / 2));
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {

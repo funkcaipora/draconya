@@ -254,6 +254,21 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
+  it('carrega a Avalanche Rune como supply de ATAQUE, com gate e área (#165)', () => {
+    // A runa é supply (debita gold, sem item físico) e não magia: mora em `supplies/`, tem
+    // `requires` — o servidor recusa abaixo de level 30 / magic level 4 — e a forma é o
+    // círculo de raio 3 no alvo. O gate dela é o primeiro `requires` em supply do repositório.
+    // Mutação que mata: apagar `requires` do arquivo — o default `{}` liberaria a runa no level 1.
+    const content = loadContent(DATA);
+    const rune = content.supplies.get('avalanche-rune');
+    expect(rune).toMatchObject({
+      price: 14,
+      requires: { level: 30, magicLevel: 4 },
+      effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+    });
+    expect(content.supplies.get('health-potion')?.requires).toEqual({});
+  });
+
   it('o pacote que a tabela cita tem inventário em packs/, e a tabela passa por ele (FUN-21)', () => {
     // É o que faz o CI conferir os ids sem ter o pacote: `packs/<pack>.json` é a sombra dele
     // no repositório. Apagar a pasta desligaria a conferência em silêncio — `buildContent`

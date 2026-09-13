@@ -66,6 +66,11 @@ export function buildCatalogue(content: Content): Catalogue {
         // "beber poção abaixo de 40% de HP" olhando quanto ela custa por hora de hunt.
         price: supply.price,
         effect: supply.effect.kind,
+        // Os requisitos (#165): a tela desabilita a runa abaixo do level, como faz com magia.
+        requires: {
+          ...(supply.requires.level === undefined ? {} : { level: supply.requires.level }),
+          ...(supply.requires.magicLevel === undefined ? {} : { magicLevel: supply.requires.magicLevel }),
+        },
       })),
     },
     // As DEFINIÇÕES, uma vez cada. Atributo base é fixo (§21.2): duas espadas do mesmo id são
