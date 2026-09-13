@@ -43,6 +43,8 @@ function cityRulesetFor(content: Content, entryTiles?: number) {
     // O passo da Cidade é FIXO (FUN-119, ADR 0025): vem de `city.json`, não da progressão.
     ...(content.citySettings === undefined ? {} : { stepDurationMs: content.citySettings.stepDurationMs }),
     ...(entryTiles === undefined ? {} : { entryTiles }),
+    // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
+    containers: { items: content.items, progression: content.progression },
   });
 }
 
@@ -418,10 +420,13 @@ function isSkillsState(value: unknown): value is SkillsState {
  */
 function isInventoryState(value: unknown): value is InventoryState {
   if (typeof value !== 'object' || value === null) return false;
-  const state = value as { backpack?: unknown; equipped?: unknown };
+  const state = value as { backpack?: unknown; satchel?: unknown; equipped?: unknown };
   if (!Array.isArray(state.backpack)) return false;
   if (typeof state.equipped !== 'object' || state.equipped === null) return false;
-  return state.backpack.every(isCarried)
+  // Posicional (#160): `null` é lugar vazio, e a bolsa é opcional (ticket anterior).
+  const place = (item: unknown): boolean => item === null || isCarried(item);
+  if (state.satchel !== undefined && !(Array.isArray(state.satchel) && state.satchel.every(place))) return false;
+  return state.backpack.every(place)
     && Object.values(state.equipped).every((item) => item === undefined || isCarried(item));
 }
 

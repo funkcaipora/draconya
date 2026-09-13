@@ -75,6 +75,7 @@ function buildHost(
     ammunition?: NonNullable<SessionHostOptions['ammunition']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
     vocationLevel?: number;
+    progression?: NonNullable<SessionHostOptions['progression']>;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
   } = {},
@@ -1909,7 +1910,7 @@ describe('equipar pelo socket (FUN-82)', () => {
     const viewer = host.attach(socket, 'p1');
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
     hero.capacity = 1_000;
-    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero, { backpackSlots: 0, satchelSlots: 0, row: 1 });
     return { host, viewer, socket, hero };
   };
 
@@ -1934,7 +1935,7 @@ describe('equipar pelo socket (FUN-82)', () => {
     host.flush();
 
     expect(hero.inventory.equippedAt('hand')).toBeNull();
-    expect(hero.inventory.backpack).toHaveLength(1);
+    expect([...hero.inventory.items()]).toHaveLength(1);
     const aviso = mensagens(socket)[0];
     expect(aviso?.type === 'system-message' && aviso.text).toContain('level');
   });
@@ -1957,7 +1958,7 @@ describe('equipar pelo socket (FUN-82)', () => {
     host.flush();
 
     expect(hero.inventory.equippedAt('hand')).toBeNull();
-    expect(hero.inventory.backpack.map((i) => i.instanceId)).toEqual(['i1']);
+    expect([...hero.inventory.items()].map((i) => i.instanceId)).toEqual(['i1']);
   });
 
   it('host montado SEM catálogo recusa em vez de vestir no escuro', () => {
@@ -1969,7 +1970,7 @@ describe('equipar pelo socket (FUN-82)', () => {
     const viewer = host.attach(socket, 'p1');
     const hero = sessions[0]?.participants[0] as CharacterRuntime;
     hero.capacity = 1_000;
-    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero);
+    hero.inventory.add({ instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, hero, { backpackSlots: 0, satchelSlots: 0, row: 1 });
 
     host.handle(viewer, { type: 'equip', instanceId: 'i1' });
     host.flush();
@@ -2438,6 +2439,7 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
         if (character !== undefined) {
           character.inventory.add(
             { instanceId: 'i1', itemId: 'sword', quantity: 1 }, catalogo, character,
+            { backpackSlots: 0, satchelSlots: 0, row: 1 },
           );
         }
         return session;
@@ -2458,9 +2460,11 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
 
     const sent = socket.received().filter((m) => m.type === 'inventory');
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
-    });
+    // Sem mochila nas costas (a fixture nasce só com a espada), o item está na BOLSA (#160).
+    const message = sent[0];
+    if (message?.type !== 'inventory') throw new Error('não veio inventory');
+    expect(message.backpack).toEqual([]);
+    expect(message.satchel[0]).toEqual({ instanceId: 'i1', itemId: 'sword', quantity: 1 });
   });
 
   it('o PESO vem calculado, e é o do servidor', () => {
@@ -3983,5 +3987,68 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
       expect(saved).toHaveLength(1);
       expect(saved[0]).toMatchObject({ reason: 'drain', vocation: 'knight' });
     });
+  });
+});
+
+describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
+  const rock = { ...itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5 }), appearanceId: 1 };
+  const sword = { ...itemSchema.parse({ id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24 }), appearanceId: 2 };
+  const itemCatalog = new Map([[rock.id, rock], [sword.id, sword]]);
+  const progression = { ...TEST_PROGRESSION, satchelInitialSlots: 10, containerRow: 5 } as never;
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message').map((m) => (m.type === 'system-message' ? m.text : ''));
+
+  const setup = () => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { itemCatalog, progression });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    // Sem mochila nas costas: a bolsa (10) recebe.
+    hero.inventory.ensureContainers({ backpackSlots: 0, satchelSlots: 10, row: 5 });
+    hero.inventory.add({ instanceId: 'r1', itemId: 'rock', quantity: 1 }, itemCatalog, hero, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    hero.inventory.add({ instanceId: 's1', itemId: 'sword', quantity: 1 }, itemCatalog, hero, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    const before = socket.received().length;
+    return { host, viewer, socket, hero, before };
+  };
+
+  it('troca dois lugares e reenvia o inventário posicional; veste por move; recusa vira mensagem', () => {
+    const { host, viewer, socket, hero, before } = setup();
+    host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 0 }, to: { container: 'satchel', index: 7 } });
+    host.flush();
+    expect(hero.inventory.satchel[7]?.instanceId).toBe('r1');
+    expect(hero.inventory.satchel[0]).toBeNull();
+    const inventory = socket.received().slice(before).filter((m) => m.type === 'inventory').at(-1);
+    if (inventory?.type !== 'inventory') throw new Error('não veio inventory');
+    expect(inventory.satchel).toHaveLength(10);
+    expect(inventory.satchel[7]).toMatchObject({ instanceId: 'r1' });
+    expect(inventory.satchel[0]).toBeNull();
+
+    host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 1 }, to: { slot: 'hand' } });
+    host.flush();
+    expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('s1');
+
+    host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 3 }, to: { container: 'satchel', index: 4 } });
+    host.handle(viewer, { type: 'move-item', from: { container: 'backpack', index: 0 }, to: { container: 'satchel', index: 4 } });
+    host.handle(viewer, { type: 'move-item', from: { slot: 'hand' }, to: { slot: 'chapeu' } });
+    host.flush();
+    expect(warnings(socket)).toEqual(['Não há nada nesse lugar.', 'Esse lugar não existe.', 'Esse lugar não existe.']);
+  });
+
+  it('o extrato leva o layout — onde cada item está — junto com o equipamento', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(countingRuleset().ruleset, { itemCatalog, progression, receipts });
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    hero.capacity = 1_000;
+    hero.inventory.ensureContainers({ backpackSlots: 0, satchelSlots: 10, row: 5 });
+    hero.inventory.add({ instanceId: 'r1', itemId: 'rock', quantity: 1 }, itemCatalog, hero, { backpackSlots: 0, satchelSlots: 10, row: 5 });
+    host.handle(viewer, { type: 'move-item', from: { container: 'satchel', index: 0 }, to: { container: 'satchel', index: 9 } });
+    await host.release('p1', 1000, 'logout');
+    expect(saved[0]).toMatchObject({ layout: { r1: { container: 'satchel', index: 9 } }, equipment: {} });
   });
 });

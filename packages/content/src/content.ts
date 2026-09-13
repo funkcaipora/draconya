@@ -249,6 +249,16 @@ export function buildContent(raw: RawContent): Content {
   // `item_instance` vai impor de qualquer jeito; melhor reprovar no boot do que na criação.
   const kitSlots = new Set<string>();
   let kitTwoHanded = false;
+  // Container tem lugares, e só ele (#160): `initialSlots` fora de `kind: 'container'` é um
+  // número que ninguém lê; container sem ele é uma mochila em que nada cabe.
+  for (const item of itemDefinitions.values()) {
+    if (item.kind === 'container' && item.initialSlots === undefined) {
+      problems.push(`item "${item.id}": container precisa de initialSlots`);
+    }
+    if (item.kind !== 'container' && item.initialSlots !== undefined) {
+      problems.push(`item "${item.id}": initialSlots só vale em kind "container"`);
+    }
+  }
   for (const piece of progression?.startingKit ?? []) {
     const item = itemDefinitions.get(piece.itemId);
     if (item === undefined) {

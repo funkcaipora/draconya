@@ -423,7 +423,9 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     expect(aggregates.bestBasicHit).toBeGreaterThan(0);
 
     // E a mochila chegou junto: o item que caiu está lá, não só no contador (FUN-90).
-    expect(inbox.last('inventory')?.backpack.length).toBeGreaterThan(0);
+    // Sem mochila nas costas nesta fixture, o loot vai para a bolsa (#160): conta os dois.
+    const carried = inbox.last('inventory');
+    expect([...(carried?.backpack ?? []), ...(carried?.satchel ?? [])].filter((place) => place !== null).length).toBeGreaterThan(0);
 
     // --- 6. drenar: o extrato vira linha, e os números BATEM ------------------------------
     const [node] = [...games];

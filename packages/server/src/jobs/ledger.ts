@@ -14,7 +14,7 @@ import type { Progression } from '@draconya/content';
 import type { Database } from '../db/client.js';
 import { characters, itemInstances, ledger } from '../db/schema.js';
 import type { Logger } from '../log.js';
-import type { ReceiptStore, SessionReceipt } from '../receipts.js';
+import type { ItemPlace, ReceiptStore, SessionReceipt } from '../receipts.js';
 
 export interface LedgerSweepOptions {
   readonly database: Database;
@@ -236,6 +236,11 @@ async function applyProgression(
   if (receipt.equipment !== undefined) {
     await applyEquipment(tx, receipt.characterId, receipt.equipment);
   }
+  // E onde cada item está dentro dos containers (#160): último-escrito-vence, como o
+  // equipamento — é posição, não valor.
+  if (receipt.layout !== undefined) {
+    await applyLayout(tx, receipt.characterId, receipt.layout);
+  }
 
   await tx
     .update(characters)
@@ -256,6 +261,30 @@ async function applyProgression(
       ...stamina,
     })
     .where(eq(characters.id, receipt.characterId));
+}
+
+/**
+ * A posição de cada instância nos containers (#160). Escopada por dono, como o equipamento:
+ * um extrato com o id de um item alheio não move nada. O que não está no layout — equipado,
+ * ou desconhecido — fica sem posição, e o ticket o põe no primeiro lugar livre.
+ */
+async function applyLayout(
+  tx: Parameters<Parameters<Database['transaction']>[0]>[0],
+  characterId: string,
+  layout: Readonly<Record<string, ItemPlace>>,
+): Promise<void> {
+  const owned = await tx
+    .select({ id: itemInstances.id, container: itemInstances.container, slotIndex: itemInstances.slotIndex })
+    .from(itemInstances)
+    .where(eq(itemInstances.ownerCharacterId, characterId));
+  for (const row of owned) {
+    const place = layout[row.id];
+    const next = place === undefined
+      ? { container: null, slotIndex: null }
+      : { container: place.container, slotIndex: place.index };
+    if (row.container === next.container && row.slotIndex === next.slotIndex) continue;
+    await tx.update(itemInstances).set(next).where(eq(itemInstances.id, row.id));
+  }
 }
 
 /** Só para teste: conta linhas de uma sessão, para provar que o retry não duplica. */

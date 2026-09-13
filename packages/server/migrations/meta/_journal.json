@@ -50,6 +50,13 @@
       "when": 1789500000000,
       "tag": "0006_152-ammo-selection",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0007_160-item-position",
+      "breakpoints": true
     }
   ]
 }

@@ -35,7 +35,7 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import type { LootItem } from '../loot.js';
-import type { CarriedItem } from '../inventory.js';
+import type { CarriedItem, ContainerRules } from '../inventory.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
@@ -48,6 +48,7 @@ import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
+import { containerRulesFor } from '../inventory.js';
 import { TileOccupancy, canOccupy, move, movementDuration, place } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
 import { EventPriority } from '../schedule.js';
@@ -594,6 +595,9 @@ export class HuntRuleset implements Ruleset {
     );
     character.speed = stats.speed;
     if (character.capacity <= 0) character.capacity = stats.capacity;
+    // Os containers ganham os tamanhos iniciais aqui (#160) — é onde o conteúdo existe, e é o
+    // que migra um snapshot anterior sem bump: nunca encolhe.
+    character.inventory.ensureContainers(this.#containerRules(character));
     const refused = place(this.#world, character, this.#walker.current);
     if (refused !== null) {
       throw new Error(
@@ -797,6 +801,13 @@ export class HuntRuleset implements Ruleset {
       ammoFallbackTold: [...this.#ammoFallbackTold],
       ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
     };
+  }
+
+  /** Um snapshot anterior a #160 traz a lista plana: os containers ganham os tamanhos aqui. */
+  onResume(session: Session): void {
+    for (const character of session.participants) {
+      character.inventory.ensureContainers(this.#containerRules(character));
+    }
   }
 
   restore(state: unknown): void {
@@ -1532,8 +1543,10 @@ export class HuntRuleset implements Ruleset {
     // Guarda o que estava no dedo ANTES de trocar: `equip` devolve a peça anterior para a
     // mochila, e sem o id guardado não há como saber qual delas era a do jogador.
     const previous = character.inventory.equippedAt('finger');
-    const carried = character.inventory.backpack
-      .find((item) => item.itemId === ring.itemId);
+    let carried: CarriedItem | undefined;
+    for (const item of character.inventory.items()) {
+      if (item.itemId === ring.itemId) { carried = item; break; }
+    }
     // Não tem o anel na mochila: nada a fazer, e nada a avisar. Perder o anel é caso normal
     // (§21.3 gasta anel por tempo), e a máquina não pode virar erro por causa disso.
     if (carried === undefined) return;
@@ -1545,7 +1558,7 @@ export class HuntRuleset implements Ruleset {
 
   /** Tira o anel e devolve o anterior, se o jogador pediu para restaurar (§13.8). */
   #takeOffRing(session: Session, character: CharacterRuntime, restore: boolean): void {
-    if (!character.inventory.unequip('finger').ok) return;
+    if (!character.inventory.unequip('finger', this.#containerRules(character)).ok) return;
     const previous = this.#ringReplaced;
     this.#ringReplaced = null;
     session.record('ring-removed', '');
@@ -2048,7 +2061,7 @@ export class HuntRuleset implements Ruleset {
       // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
       session.aggregates.itemsLooted += carried.quantity;
 
-      if (character.inventory.add(carried, this.#options.items, character).ok) continue;
+      if (character.inventory.add(carried, this.#options.items, character, this.#containerRules(character)).ok) continue;
 
       // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
       // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
@@ -2061,6 +2074,11 @@ export class HuntRuleset implements Ruleset {
       // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+  }
+
+  /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
+  #containerRules(character: CharacterRuntime): ContainerRules {
+    return containerRulesFor(character.inventory, this.#options.items, this.#options.progression);
   }
 
   #vocationOf(character: CharacterRuntime): Vocation | null {

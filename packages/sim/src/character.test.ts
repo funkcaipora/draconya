@@ -32,7 +32,8 @@ const knight: Vocation = {
 const paladin: Vocation = { ...knight, id: 'paladin', name: 'Paladin', startingWeaponItemId: 'bow' };
 
 const options = (over: Partial<VocationChoiceOptions> = {}): VocationChoiceOptions => ({
-  catalog, vocationLevel: 8, instanceId: 'city-1:hero:vocation', ...over,
+  catalog, vocationLevel: 8, instanceId: 'city-1:hero:vocation',
+  rules: { backpackSlots: 0, satchelSlots: 0, row: 1 }, ...over,
 });
 
 const state = (over: Partial<CharacterState> = {}): CharacterState => ({
@@ -68,7 +69,7 @@ describe('chooseVocation', () => {
     expect(hero.inventory.equippedAt('hand')).toEqual({
       instanceId: 'city-1:hero:vocation', itemId: 'steel-axe', quantity: 1, origin: 'vocation-choice',
     });
-    expect(hero.inventory.backpack.map((item) => item.itemId)).toEqual(['machete']);
+    expect([...hero.inventory.items()].map((item) => item.itemId)).toEqual(['machete']);
   });
 
   it('keeps the choice when the weapon does not fit the capacity: it goes to the loot box', () => {
@@ -95,7 +96,7 @@ describe('chooseVocation', () => {
     const result = shielded.chooseVocation(paladin, catalog.get('bow') ?? null, options());
     expect(result).toEqual({ ok: true, weapon: 'in-backpack' });
     expect(shielded.vocationId).toBe('paladin');
-    expect(shielded.inventory.backpack.map((item) => item.itemId)).toEqual(['bow']);
+    expect([...shielded.inventory.items()].map((item) => item.itemId)).toEqual(['bow']);
   });
 
   it('accepts a vocation without a starting weapon (test content)', () => {
@@ -112,6 +113,6 @@ describe('chooseVocation', () => {
     expect(restored.vocationId).toBe('knight');
     expect(restored.inventory.equippedAt('hand')?.origin).toBe('vocation-choice');
     // E o snapshot anterior a #154 — sem `origin` — continua legível: ausente é loot.
-    expect(restored.inventory.backpack[0]?.origin).toBeUndefined();
+    expect([...restored.inventory.items()][0]?.origin).toBeUndefined();
   });
 });

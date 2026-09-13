@@ -9,7 +9,7 @@ import type { CooldownState } from './cooldown.js';
 import { Contribution } from './death.js';
 import type { ContributionState } from './death.js';
 import { Inventory } from './inventory.js';
-import type { CarriedItem, InventoryState } from './inventory.js';
+import type { CarriedItem, ContainerRules, InventoryState } from './inventory.js';
 import { Skills } from './skills.js';
 import type { SkillsState } from './skills.js';
 
@@ -141,6 +141,8 @@ export interface VocationChoiceOptions {
   readonly vocationLevel: number;
   /** A identidade da arma nova — decidida por quem conhece a sessão (ver a spec da #154, DT-03). */
   readonly instanceId: string;
+  /** Os tamanhos de container (#160), para a arma achar lugar. */
+  readonly rules: ContainerRules;
 }
 
 export class CharacterRuntime {
@@ -246,7 +248,7 @@ export class CharacterRuntime {
       quantity: 1,
       origin: 'vocation-choice',
     };
-    if (!this.inventory.add(carried, options.catalog, this).ok) {
+    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
       this.lootBox.push(carried);
       return { ok: true, weapon: 'in-loot-box' };
     }

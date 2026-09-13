@@ -230,13 +230,31 @@ function bestiaryOf(stored: unknown): { bestiary?: BestiaryState } {
  */
 function inventoryOf(instances: readonly {
   id: string; itemId: string; quantity: number; equippedSlot: string | null;
-}[]): { backpack: unknown[]; equipped: Record<string, unknown> } {
-  const backpack: unknown[] = [];
+  container?: string | null; slotIndex?: number | null;
+}[]): { backpack: unknown[]; satchel: unknown[]; equipped: Record<string, unknown> } {
+  // Posicional (#160): cada linha volta ao lugar gravado; a linha sem posição (anterior a
+  // #160, ou duas na mesma posição por banco tocado à mão) entra no primeiro lugar livre da
+  // mochila no fim — o `ensureContainers` da entrada acerta o tamanho inicial.
+  const backpack: (unknown | null)[] = [];
+  const satchel: (unknown | null)[] = [];
   const equipped: Record<string, unknown> = {};
+  const unplaced: unknown[] = [];
   for (const row of instances) {
     const carried = { instanceId: row.id, itemId: row.itemId, quantity: row.quantity };
-    if (row.equippedSlot === null) backpack.push(carried);
-    else equipped[row.equippedSlot] = carried;
+    if (row.equippedSlot !== null) { equipped[row.equippedSlot] = carried; continue; }
+    const target = row.container === 'backpack' ? backpack : row.container === 'satchel' ? satchel : null;
+    const index = row.slotIndex ?? null;
+    if (target === null || index === null || index < 0 || target[index] !== undefined && target[index] !== null) {
+      unplaced.push(carried);
+      continue;
+    }
+    while (target.length <= index) target.push(null);
+    target[index] = carried;
   }
-  return { backpack, equipped };
+  for (const carried of unplaced) {
+    const free = backpack.indexOf(null);
+    if (free >= 0) backpack[free] = carried;
+    else backpack.push(carried);
+  }
+  return { backpack, satchel, equipped };
 }

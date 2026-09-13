@@ -67,6 +67,7 @@ async function seedCharacter(database: NonNullable<typeof db>): Promise<string> 
 const progression: Progression = {
   id: 'baseline', startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10, vocationLevel: 8,
+  satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 0, regen: { healthPerSecond: 1, manaPerSecond: 1 },
   startingKit: [],
   xp: { base: 20, exponent: 2 },
@@ -819,6 +820,53 @@ describe.runIf(ready)('o equipamento é liquidado pelo extrato (FUN-82)', () => 
     });
 
     expect((await slotsOf(database, alheio)).get(id)).toBeNull();
+  });
+});
+
+describe.runIf(ready)('a posição dos itens nos containers é liquidada pelo extrato (#160)', () => {
+  const placesOf = async (database: NonNullable<typeof db>, characterId: string) => {
+    const rows = await database.database.db
+      .select({ id: itemInstances.id, container: itemInstances.container, slotIndex: itemInstances.slotIndex })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId));
+    return new Map(rows.map((row) => [row.id, [row.container, row.slotIndex]]));
+  };
+  const seed = async (database: NonNullable<typeof db>, characterId: string, n: number) => {
+    const repository = new DrizzleGameRepository(database.database.db);
+    const ids: string[] = [];
+    for (let i = 0; i < n; i += 1) {
+      ids.push((await repository.createItemInstance({ itemId: 'rock', ownerCharacterId: characterId, origin: 'loot' })).id);
+    }
+    return ids;
+  };
+
+  it('grava container e índice; o extrato SEM layout não toca; um id alheio não move nada', async () => {
+    // Mutação que mata: tirar `applyLayout` do `applyProgression`, ou escopar sem o dono.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const other = await seedCharacter(database);
+    const [a, b] = await seed(database, characterId, 2) as [string, string];
+    const [alien] = await seed(database, other, 1) as [string];
+    expect((await placesOf(database, characterId)).get(a)).toEqual([null, null]);
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({
+      ...receiptOf(randomUUID(), characterId),
+      layout: { [a]: { container: 'backpack', index: 3 }, [b]: { container: 'satchel', index: 0 }, [alien]: { container: 'backpack', index: 9 } },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await placesOf(database, characterId)).get(a)).toEqual(['backpack', 3]);
+    expect((await placesOf(database, characterId)).get(b)).toEqual(['satchel', 0]);
+    expect((await placesOf(database, other)).get(alien)).toEqual([null, null]);
+
+    // Sem `layout`: nada muda. Com um layout que omite `b` (foi equipado): a posição sai.
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await placesOf(database, characterId)).get(a)).toEqual(['backpack', 3]);
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3, layout: { [a]: { container: 'backpack', index: 0 } } });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await placesOf(database, characterId)).get(a)).toEqual(['backpack', 0]);
+    expect((await placesOf(database, characterId)).get(b)).toEqual([null, null]);
   });
 });
 
