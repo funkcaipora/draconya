@@ -356,3 +356,17 @@ describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 
       .toEqual(['troca de anel']);
   });
 });
+
+describe('o interruptor por regra (#162)', () => {
+  it('a configuração gravada antes do campo continua válida, e a regra desligada continua contando slot', () => {
+    // Mutação que mata: `enabled` obrigatório (a config antiga reprova), ou `validateBotConfig`
+    // contar só as ligadas (desligar viraria truque para ganhar slot).
+    expect(botConfigSchema.safeParse(config({ heal: [rule(30)] })).success).toBe(true);
+    const parsed = botConfigSchema.parse(config({ heal: [{ ...rule(30), enabled: false }] }));
+    expect(parsed.heal[0]?.enabled).toBe(false);
+    const problems = validateBotConfig(
+      config({ heal: [rule(30), rule(55), { ...rule(80), enabled: false }, rule(90)] }), content,
+    );
+    expect(problems.length).toBeGreaterThan(0);
+  });
+});

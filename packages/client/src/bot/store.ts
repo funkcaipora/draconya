@@ -107,6 +107,92 @@ export function edit(produce: (draft: BotDraft) => BotDraft): void {
   }));
 }
 
+/** Quanto tempo o painel espera antes de mandar (#162): dois toques seguidos viram UMA mensagem. */
+export const SAVE_DEBOUNCE_MS = 300;
+
+/** Quem manda a configuração. Injetável: o painel liga ao socket, o teste anota. */
+export type ConfigSender = (config: BotConfig) => boolean;
+
+let sender: ConfigSender | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** O painel liga o socket aqui uma vez; a store não importa `net/` (ADR 0007 — o socket fica fora do render). */
+export function setConfigSender(next: ConfigSender | null): void {
+  sender = next;
+}
+
+/**
+ * Agenda um `bot-config` com o rascunho atual (#162, DT-01): o interruptor salva sozinho, sem
+ * botão. Debounce porque o servidor grava a configuração INTEIRA (ADR 0021) — três toques em
+ * 300 ms são uma gravação, não três. Sem conexão a mensagem não sai: o rascunho fica `touched`
+ * e o próximo toque agenda de novo.
+ */
+export function scheduleSave(): void {
+  if (saveTimer !== null) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    flushSave();
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/** Manda agora o que está agendado (o "Salvar" do editor, e o teste). */
+export function flushSave(): void {
+  if (saveTimer !== null) { clearTimeout(saveTimer); saveTimer = null; }
+  bot.set((state) => ({ ...state, save: 'pending', reason: null }));
+  const sent = sender?.(toConfig(bot.get().draft)) ?? false;
+  if (!sent) {
+    bot.set((state) => ({ ...state, save: 'refused', reason: 'Sem conexão. Tente de novo.' }));
+  }
+}
+
+/** Liga ou desliga uma regra (#162) e salva. A regra fica no slot; só sai da avaliação. */
+export function toggleRule(category: BotCategory, index: number): void {
+  edit((draft) => ({
+    ...draft,
+    rules: {
+      ...draft.rules,
+      [category]: draft.rules[category].map((rule, i) => (i === index ? { ...rule, enabled: rule.enabled === false } : rule)),
+    },
+  }));
+  scheduleSave();
+}
+
+/** Move uma regra uma posição (#162): reordenar é configurar, e salva. */
+export function moveRule(category: BotCategory, index: number, by: number): void {
+  edit((draft) => {
+    const list = [...draft.rules[category]];
+    const to = index + by;
+    if (to < 0 || to >= list.length) return draft;
+    const [moved] = list.splice(index, 1);
+    if (moved !== undefined) list.splice(to, 0, moved);
+    return { ...draft, rules: { ...draft.rules, [category]: list } };
+  });
+  scheduleSave();
+}
+
+/** Tira uma regra (#162) e salva. */
+export function removeRule(category: BotCategory, index: number): void {
+  edit((draft) => ({
+    ...draft,
+    rules: { ...draft.rules, [category]: draft.rules[category].filter((_, i) => i !== index) },
+  }));
+  scheduleSave();
+}
+
+/** Escreve (ou acrescenta, com `index === null`) uma regra inteira (#162) e salva agora: é o "Salvar" do editor. */
+export function putRule(category: BotCategory, index: number | null, rule: BotRule): void {
+  edit((draft) => ({
+    ...draft,
+    rules: {
+      ...draft.rules,
+      [category]: index === null
+        ? [...draft.rules[category], rule]
+        : draft.rules[category].map((r, i) => (i === index ? rule : r)),
+    },
+  }));
+  flushSave();
+}
+
 /**
  * O inverso de `toConfig`: a configuração como o servidor a guarda, de volta a rascunho — e a
  * volta inteira, `lure` e `ringSwap` inclusive, para `toConfig(draftFrom(c))` ser `c`.

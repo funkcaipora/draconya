@@ -69,6 +69,8 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 | `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77; a runa de ataque, #165, é supply e vai na categoria `rune`) |
 | `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
 
+Toda regra pode carregar `enabled: false` (#162): fica no slot, sai da avaliação. Ausente é ligada.
+
 A referência cruzada acontece na **validação**, nunca na execução: `validateBotConfig` confere
 cada `spellId` e `supplyId` contra o catálogo e devolve o problema com a categoria e o número do
 slot. Uma regra que aponta magia inexistente e só falha ao ser disparada é o bot que para de
@@ -484,12 +486,23 @@ dizendo por quê.
 Nenhum dos dois é uma varredura periódica. Um evento por segundo para redescobrir que nada
 mudou é exatamente o custo que o ADR 0020 existe para não pagar.
 
-## A tela (FUN-89)
+## A tela (FUN-89; painel fixo desde #162)
 
-Sobreposição, não coluna. Uma linha de regra tem condição, operador, valor e ação — não cabe nos
-200px do painel lateral, e espremer daria seis caixinhas ilegíveis. E abrir por cima **é** a
-resposta para o celular (§5.1): configurar o bot é o caso de uso móvel do jogo — o jogador ajusta
-e fecha, sem precisar de jogabilidade completa. No celular a linha quebra em vez de espremer.
+**Painel fixo na coluna da esquerda**, o vBot do OTClientV8 (ADR 0026 decisão 7; PRD §5.3):
+sempre montado, minimizável pela barra do topo, nunca removido. Um grupo por categoria,
+colapsável, com `n/slots`; cada regra é **uma linha compacta** — `[interruptor] HP ≤ 70 % →
+Cura [⚙] [▴▾] [×]` — e o interruptor, verde ligado e vermelho desligado, é o `enabled` da regra
+(`botRuleSchema`; ausente é ligada). **Desligar não apaga nem libera slot**: a regra fica na
+configuração e conta para o teto; `compileBot` a pula, com custo zero no tick. A edição fina
+(condição, operador, valor, ação) abre **por cima**, no `RuleEditor` — porque a linha larga não
+cabe em 300 px, o motivo original da sobreposição da FUN-89 —, com Salvar e Cancelar; "+ regra"
+abre o mesmo editor com uma regra nova. No celular o painel é um bloco da página (o bot antes das
+hunts: configurar o bot é o caso de uso móvel, §5.1) e o editor continua sobreposição.
+
+**O interruptor salva sozinho.** Não há botão "Salvar" no painel: ligar, desligar, mover e
+remover agendam um `bot-config` com **debounce de 300 ms** (três toques são uma gravação, porque
+o servidor grava a configuração inteira — ADR 0021); o Salvar do editor manda na hora. Sem
+conexão a tela diz por quê e o rascunho fica tocado.
 
 **Nada na tela tem lista de opções em código.** Categorias, slots, magias e supplies vêm do
 catálogo. Se as duas divergirem sobre o que existe, o jogador configura o que o bot recusa — e

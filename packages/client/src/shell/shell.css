@@ -266,36 +266,57 @@ body {
 .hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .hunt-difficulties button { padding: 2px 6px; }
 
-/* A configuração do bot (FUN-89). Densa de propósito: são cinco categorias na mesma coluna. */
-/* Sobreposição: a linha de regra não cabe nos 200px da coluna, e configurar o bot é o caso de
-   uso do celular (§5.1). Uma tela só serve aos dois. */
-.bot-overlay {
-  position: fixed; inset: 0; z-index: 30;
-  background: rgba(6, 6, 10, 0.86);
-  display: grid; place-items: start center; padding: 16px; overflow-y: auto;
-}
-.bot-body {
-  width: 100%; max-width: 520px; box-sizing: border-box;
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-.bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+/* O painel do bot (FUN-89; fixo à esquerda desde #162). Densa de propósito: são cinco categorias
+   na mesma coluna, e cada regra é UMA linha — interruptor, texto, engrenagem, setas. O vBot. */
+.bot-panel .bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .bot-title strong { flex: 1 1 auto; }
-.bot-category-head { display: flex; justify-content: space-between; align-items: baseline; }
+/* Minimizado: só o cabeçalho fica. A seção nunca desmonta. */
+.windows > section.collapsed > *:not(header) { display: none; }
+.bot-category { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.bot-category-head { display: flex; align-items: baseline; gap: 6px; }
+.bot-category-head strong { flex: 1 1 auto; }
 .bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
-.bot-rule { display: flex; align-items: center; gap: 2px; }
-.bot-rule-order { display: flex; flex-direction: column; }
+.bot-rule { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bot-rule-off .bot-rule-text { color: var(--text-faint); text-decoration: line-through; }
+.bot-rule-text {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px;
+}
+/* O interruptor: verde ligado, vermelho desligado — a cor do BotSwitch do vBot. */
+.bot-switch {
+  flex: 0 0 auto; width: 26px; height: 14px; border-radius: 7px; border: 1px solid var(--line);
+  padding: 0; cursor: pointer; background: #7a2b2b; position: relative;
+}
+.bot-switch::after {
+  content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
+  border-radius: 50%; background: #fff; transition: left 120ms;
+}
+.bot-switch[aria-checked="true"] { background: #2e8b57; }
+.bot-switch[aria-checked="true"]::after { left: 13px; }
+.bot-rule-order { display: flex; flex-direction: column; flex: 0 0 auto; }
 .bot-rule-order button {
   background: none; border: none; padding: 0; line-height: 1;
   color: var(--text-muted); font-size: 9px; cursor: pointer;
 }
 .bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
-/* No celular a linha quebra em vez de espremer: seis caixinhas de 30px não são configuráveis
-   com o dedo. */
+/* O editor de uma regra: sobreposição pequena, a linha larga de antes — condição, operador,
+   valor, ação — porque ela não cabe em 300 px. É o "Setup" do vBot. */
+.rule-editor {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(6, 6, 10, 0.7);
+  display: grid; place-items: center; padding: 16px;
+}
+.rule-editor-body {
+  width: 100%; max-width: 520px; box-sizing: border-box;
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* No celular a linha larga quebra em vez de espremer: seis caixinhas de 30px não são
+   configuráveis com o dedo. */
 @media (max-width: 520px) {
-  .bot-rule { flex-wrap: wrap; }
-  .bot-rule select[aria-label="ação"] { flex-basis: 100%; }
+  .bot-rule-wide { flex-wrap: wrap; }
+  .bot-rule-wide select[aria-label="ação"] { flex-basis: 100%; }
 }
 .bot-rule select, .bot-rule input {
   background: #131319; border: 1px solid var(--line); border-radius: 3px;
@@ -332,6 +353,37 @@ body {
 .vocation-gains { font-size: 11px; color: var(--text-muted); }
 .vocation-weapon { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 @media (max-width: 520px) { .vocation-cards { grid-template-columns: 1fr; } }
+
+/* A coluna da direita (#161): set, mochila e bolsa fixos; minimizado é só o cabeçalho. */
+.windows > section.collapsed > *:not(header) { display: none; }
+.container-head { display: flex; align-items: center; gap: 6px; }
+.container-head strong { flex: 1 1 auto; }
+.container-icon { display: inline-flex; width: 20px; height: 20px; overflow: hidden; }
+.container-icon canvas { width: 20px; height: 20px; }
+/* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). */
+.container-grid {
+  list-style: none; margin: 6px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(5, 34px); gap: 3px; justify-content: center;
+}
+.slot-empty-place { opacity: 0.85; }
+.slot[draggable], .slot-button[draggable] { cursor: grab; }
+.capacity { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
+/* O seletor de munição: sobreposição pequena, ancorada ao painel do set. */
+.ammo-picker {
+  position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 280px;
+  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); padding: 0 0 8px;
+}
+.ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
+.ammo-option {
+  width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; text-align: left;
+  background: #131319; border: 1px solid var(--line); border-radius: 4px; color: inherit; font: inherit; cursor: pointer;
+}
+.ammo-option.active { border-color: var(--accent); }
+.ammo-option:disabled { opacity: 0.45; cursor: default; }
+.ammo-name { flex: 1 1 auto; }
+.slot-ammo { outline: 1px dashed var(--accent); outline-offset: -1px; }
 
 /* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: o quadrado de pedra do
    pacote (34×34, o topo de `containerslot.png`), o ícone cinza do lugar quando vazio, o sprite
@@ -395,13 +447,7 @@ body {
   pointer-events: none;
 }
 
-.capacity { color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; padding: 0 2px; }
-/* A mochila: grade de slots iguais, quantos couberem na largura. */
-.backpack {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, 34px); gap: 3px;
-}
-.backpack .quiet { grid-column: 1 / -1; }
+.capacity { color: var(--text-muted); font-variant-numeric: tabular-nums; padding: 0 2px; }
 
 /* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
    embaixo, roláveis. Duas colunas flutuantes de 300px não cabem em 375px, e o caso de uso
@@ -425,5 +471,15 @@ body {
     position: static; width: auto; margin: 10px 10px 0; pointer-events: auto;
   }
   .windows > section { max-height: none; overflow: visible; }
+  /* A ordem dos blocos no celular (#161): set → mochila → bolsa → bot → hunts → analisador →
+     bestiário. As duas colunas viram uma, e `order` põe cada seção no lugar. */
+  .windows-left, .windows-right { display: flex; flex-direction: column; }
+  .windows-right > .inventory { order: 1; }
+  .windows-right > .container-window { order: 2; }
+  .windows-left > .bot-panel { order: 3; }
+  .windows-left > section { order: 4; }
+  .windows-right > .analyzer { order: 5; }
+  .windows-right > .bestiary { order: 6; }
+  .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   .chat { position: static; width: auto; margin: 10px; }
 }
