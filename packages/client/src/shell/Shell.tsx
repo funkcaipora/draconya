@@ -26,12 +26,16 @@ import { Analyzer } from './Analyzer.js';
 import { Bestiary } from './Bestiary.js';
 import { HuntMenu } from './HuntMenu.js';
 import { BotPanel } from './BotPanel.js';
-import { Inventory } from './Inventory.js';
+import { EquipmentPanel } from './EquipmentPanel.js';
+import { ContainerWindow } from './ContainerWindow.js';
 import { VocationChoice } from './VocationChoice.js';
 import { TopBar } from './TopBar.js';
 import type { WindowId } from './TopBar.js';
 
-/** Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. */
+/**
+ * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
+ * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
+ */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false,
 };
@@ -69,7 +73,11 @@ export function Shell() {
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
-          {open.inventory && <Inventory />}
+          {/* A coluna do OTClient (#161): set, mochila e bolsa FIXOS — um botão da barra
+              minimiza os três juntos —, e abaixo deles o analisador e o Bestiário. */}
+          <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
+          <ContainerWindow container="backpack" collapsed={!open.inventory} />
+          <ContainerWindow container="satchel" collapsed={!open.inventory} />
           {open.analyzer && <Analyzer />}
           {open.bestiary && <Bestiary />}
         </div>
