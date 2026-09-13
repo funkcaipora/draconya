@@ -600,7 +600,7 @@ describe('level up e penalidade de morte dentro da hunt', () => {
       hero.health = before.maxHealth;
       const chosen = hero.chooseVocation(
         withKnight.vocations.get('knight') as NonNullable<ReturnType<typeof withKnight.vocations.get>>,
-        null, { catalog: withKnight.items, vocationLevel: progression.vocationLevel, instanceId: 's:hero:vocation' },
+        null, { catalog: withKnight.items, vocationLevel: progression.vocationLevel, instanceId: 's:hero:vocation', rules: { backpackSlots: 0, satchelSlots: 0, row: 1 } },
       );
       expect(chosen.ok).toBe(true);
       // Nada muda no instante da escolha.
@@ -3023,7 +3023,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     run(session, 60_000, 100);
 
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(hero.inventory.backpack.length).toBe(session.aggregates.kills);
+    expect([...hero.inventory.items()].length).toBe(session.aggregates.kills);
     expect(hero.lootBox).toEqual([]);
   });
 
@@ -3033,7 +3033,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     const { session, hero } = comDrop();
     run(session, 60_000, 100);
 
-    for (const [n, item] of hero.inventory.backpack.entries()) {
+    for (const [n, item] of [...hero.inventory.items()].entries()) {
       expect(item.instanceId).toBe(`drop:${n}`);
     }
   });
@@ -3045,10 +3045,10 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
     const { session, hero } = comDrop({ capacity: 50 });
     run(session, 60_000, 100);
 
-    expect(hero.inventory.backpack).toHaveLength(1);
+    expect([...hero.inventory.items()]).toHaveLength(1);
     expect(hero.lootBox.length).toBeGreaterThan(0);
     // E os ids continuam únicos entre a mochila e a caixa: o contador é um só.
-    const todos = [...hero.inventory.backpack, ...hero.lootBox].map((i) => i.instanceId);
+    const todos = [...hero.inventory.items(), ...hero.lootBox].map((i) => i.instanceId);
     expect(new Set(todos).size).toBe(todos.length);
   });
 
@@ -3123,7 +3123,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
       run(session, 120_000, stepMs);
       return {
         kills: session.aggregates.kills,
-        mochila: hero.inventory.backpack.map((i) => `${i.instanceId}/${i.itemId}`),
+        mochila: [...hero.inventory.items()].map((i) => `${i.instanceId}/${i.itemId}`),
         caixa: hero.lootBox.length,
       };
     };
@@ -3134,6 +3134,89 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
 });
 
 // --- os agregados do analisador (FUN-78) -----------------------------------------------------
+
+describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
+  const backpackItem = {
+    id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20,
+  };
+  /** Um herói com a mochila nas costas, numa arena em que cada rato solta uma espada. */
+  const withBackpack = (capacity: number) => {
+    const loaded = buildContent(raw({
+      monsters: [ratWithDrop],
+      items: [...items, backpackItem],
+      progression: [{ ...progression, startingCapacity: capacity, capacityPerLevel: 0, satchelInitialSlots: 10, containerRow: 5 }],
+    }));
+    const session = createHuntSession({ content: loaded, id: 'drop', huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
+    const stats = statsForLevel(1, null, loaded.progression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: stats.maxMana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null, staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+      inventory: { backpack: [], equipped: { back: { instanceId: 'kit:back', itemId: 'backpack', quantity: 1 } } },
+    });
+    session.enter(hero);
+    return { session, hero };
+  };
+
+  it('nasce com 20 lugares, e o 21º drop abre uma linha — a Caixa fica vazia enquanto o PESO cabe', () => {
+    // Mutação que mata: `#deliverLoot` recusar por lugar, ou `ensureContainers` não rodar na entrada.
+    const { session, hero } = withBackpack(100_000);
+    expect(hero.inventory.backpack).toHaveLength(20);
+    expect(hero.inventory.satchel).toHaveLength(10);
+    run(session, 240_000, 100);
+    const looted = [...hero.inventory.items()].length;
+    expect(looted).toBeGreaterThan(20);
+    expect(hero.inventory.backpack.length).toBe(20 + 5 * Math.ceil((looted - 20) / 5));
+    expect(hero.lootBox).toEqual([]);
+    // Tudo na mochila, nada na bolsa: o loot cai na mochila enquanto ela está nas costas.
+    expect(hero.inventory.satchel.every((p) => p === null)).toBe(true);
+  });
+
+  it('com capacidade curta, o excedente vai para a Caixa — por peso, com lugar sobrando', () => {
+    const { session, hero } = withBackpack(18 + 50 * 3);
+    run(session, 120_000, 100);
+    expect([...hero.inventory.items()]).toHaveLength(3);
+    expect(hero.inventory.backpack).toHaveLength(20);
+    expect(hero.lootBox.length).toBeGreaterThan(0);
+  });
+
+  it('rende o mesmo a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number) => {
+      const { session, hero } = withBackpack(100_000);
+      run(session, 120_000, 1000 / hz);
+      return { places: hero.inventory.backpack.length, items: [...hero.inventory.items()].map((i) => i.instanceId) };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('um snapshot v1 (lista plana) retoma como v2 com os 20 lugares', () => {
+    const { session, hero } = withBackpack(100_000);
+    run(session, 30_000, 100);
+    const snapshot = session.snapshot();
+    // Reescreve o inventário do snapshot na forma ANTIGA: lista compacta, sem bolsa.
+    const participant = snapshot.participants[0] as (typeof snapshot.participants)[number];
+    const legacy = {
+      ...snapshot,
+      participants: [{
+        ...participant,
+        inventory: {
+          backpack: (participant.inventory?.backpack ?? []).filter((p) => p !== null),
+          equipped: participant.inventory?.equipped ?? {},
+        },
+      }],
+    };
+    const loaded = buildContent(raw({
+      monsters: [ratWithDrop], items: [...items, backpackItem],
+      progression: [{ ...progression, startingCapacity: 100_000, capacityPerLevel: 0, satchelInitialSlots: 10, containerRow: 5 }],
+    }));
+    const resumed = Session.fromSnapshot(legacy, huntRulesetFromSnapshot(legacy, loaded) as HuntRuleset, Rng.fromSeed('resume'));
+    const back = resumed.participants[0] as CharacterRuntime;
+    expect(back.inventory.backpack.length).toBeGreaterThanOrEqual(20);
+    expect(back.inventory.satchel).toHaveLength(10);
+    expect([...back.inventory.items()].map((i) => i.instanceId)).toEqual([...hero.inventory.items()].map((i) => i.instanceId));
+  });
+});
 
 describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
   it('o maior hit de arma é o RESOLVIDO, não o aplicado', () => {
@@ -3212,7 +3295,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     // Um item por abate, e todos contam — os que couberam e os que ficaram na caixa.
     expect(session.aggregates.itemsLooted).toBe(session.aggregates.kills);
     expect(session.aggregates.itemsLooted)
-      .toBe(hero.inventory.backpack.length + hero.lootBox.length);
+      .toBe([...hero.inventory.items()].length + hero.lootBox.length);
   });
 
   it('supply conta em QUANTIDADE além de contar em gold', () => {

@@ -145,6 +145,13 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
+- **Inventário é POSICIONAL, e `Inventory` não conhece conteúdo** (`inventory.ts`, #160). Mochila
+  (o item em `back`, `initialSlots`) e bolsa (`progression.satchelInitialSlots`) são vetores com
+  `null`; os tamanhos e a linha chegam por `ContainerRules` — `containerRulesFor` é a única
+  ponte com o conteúdo, chamada em `onEnter`, em `onResume` (snapshot anterior ao formato, lido
+  como lista plana sem bump) e pelo host no `move`. O lugar NUNCA recusa loot: só o peso recusa,
+  e a Caixa segura. `move` é transação — valida tudo, depois escreve; a recusa não muta. A
+  mochila só sai vazia.
 - **Capacidade é PESO, e o equipado conta** (`inventory.ts`, FUN-82). Sem contar o equipado, a
   estratégia ótima é vestir tudo para carregar o dobro. E `weaponAttack` devolve `null` sem
   arma, nunca zero: zero faria o personagem desarmado não machucar nada, e desarmado é como

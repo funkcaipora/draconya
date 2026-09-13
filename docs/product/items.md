@@ -97,6 +97,25 @@ Item não empilhável vira sempre linha nova: duas espadas são duas **identidad
 identidade que carrega a proveniência (FUN-76). Juntá-las num contador apagaria de onde cada uma
 veio.
 
+### Mochila e bolsa posicionais (#160, ADR 0026 decisão 6)
+
+Desde #160 o item tem **lugar**, no modelo do Huntera: a **mochila** é o item vestido em `back`
+(`initialSlots: 20` em `items/backpack.json`) e a **bolsa** (`satchel`) é fixa do personagem, não
+é item (`progression.satchelInitialSlots: 10`). As duas são vetores posicionais — `null` é lugar
+vazio — e **crescem por linhas de `progression.containerRow` (5), sem limite, enquanto houver
+capacidade**: o lugar nunca recusa loot (o bot não pode parar de caçar por mochila cheia —
+invariante 11); só o peso recusa, e aí a Caixa de Loot segura. Remover apara as linhas vazias do
+fim até o tamanho inicial. O loot cai na mochila (empilha antes de ocupar lugar; sem mochila nas
+costas, cai na bolsa); a bolsa é onde o jogador organiza.
+
+`move-item` (opcode 16) é a intenção de mover entre dois lugares — `{ container, index }` ou
+`{ slot }`: troca, empilha até o teto (o resto fica na origem), veste (`to` é slot; o desequipado
+volta ao lugar de onde o novo saiu) ou desveste para um lugar. É uma **transação** (referência
+§25): tudo é validado antes de qualquer escrita, e a recusa (`no-such-place`, `empty-place`,
+`backpack-not-empty` — a mochila só sai vazia) não muta nada. `Inventory` não conhece conteúdo:
+os tamanhos chegam por `ContainerRules` na entrada da sessão (`onEnter`, e `onResume` para um
+snapshot anterior ao formato, que é lido como lista plana sem bump de versão).
+
 ### Equipar
 
 Intenção pelo socket (`equip`/`unequip`), validada no servidor por **slot, level e vocação**
@@ -128,7 +147,7 @@ e rod 3 gastando mana, corpo a corpo 1. A munição não é item: é uma seleç�
 | | quando | forma |
 |---|---|---|
 | entra na sessão | emissão do ticket | as instâncias do personagem viram mochila e equipamento |
-| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto** |
+| sai da sessão | extrato → ledger | o layout `slot → instanceId`, **absoluto**; e a posição `instanceId → { container, index }` (#160), gravada em `item_instance.container`/`slot_index` — último-escrito-vence, escopada por dono; a linha sem posição volta ao primeiro lugar livre |
 
 **A sessão nunca escreve `item_instance`.** Ela registra onde as coisas ficaram; o `jobs` aplica
 na mesma transação da linha de ledger (invariante 10), e retry não duplica porque a chave
@@ -279,3 +298,7 @@ manual é o motor da F4 (E10).
 Uma barra sem o que disparar seria decoração, e inventar o opcode com o servidor mudo do outro
 lado é contrato antes do uso — o erro que a DT-07 nomeia. Ela entra quando houver o que ela
 dispare.
+- **§21.5 fala em slots fixos; aqui o lugar é elástico** (#160, ADR 0026 decisão 6). Mochila de
+  20 e bolsa de 10 são o tamanho INICIAL, e crescem por linha enquanto houver capacidade — decisão
+  do usuário: "o lugar não é limite, o peso é". A Caixa de Loot fica só para o que não cabe no
+  peso.

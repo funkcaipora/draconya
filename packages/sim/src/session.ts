@@ -243,6 +243,12 @@ export interface Ruleset {
    */
   getState?(): unknown;
   restore?(state: unknown): void;
+  /**
+   * Depois de `restore`, com os participantes já reconstruídos (#160). `onEnter` não roda na
+   * retomada — o personagem já está dentro —, e o que a entrada repõe pela tabela (os tamanhos
+   * de container) precisa de um lugar para ser reposto num snapshot anterior ao formato.
+   */
+  onResume?(session: Session): void;
 }
 
 export interface SessionOptions {
@@ -315,6 +321,7 @@ export class Session {
       session.participants.push(new CharacterRuntime(state));
     }
     if (snapshot.ruleset !== undefined) ruleset.restore?.(snapshot.ruleset);
+    ruleset.onResume?.(session);
     return session;
   }
 

@@ -119,3 +119,20 @@ describe('message shape', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('positional inventory (#160)', () => {
+  it('keeps null inside arrays through the frame: null is a place, not an absence', () => {
+    // O codec é JSON e `null` sobrevive por natureza; o teste existe para prender isso — um
+    // codec que apagasse `null` faria a mochila encolher no fio.
+    const message = {
+      type: 'inventory' as const,
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }, null, null],
+      satchel: [null, { instanceId: 'i2', itemId: 'cheese', quantity: 7 }],
+      equipped: {},
+      capacity: { used: 10, total: 400 },
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    const move = { type: 'move-item' as const, from: { container: 'backpack' as const, index: 0 }, to: { slot: 'hand' } };
+    expect(decodeC2S(encodeC2S(move))).toEqual([move]);
+  });
+});

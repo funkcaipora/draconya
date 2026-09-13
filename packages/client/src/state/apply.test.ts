@@ -796,6 +796,7 @@ describe('o inventário (FUN-90)', () => {
   const inventory = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'inventory',
     backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+    satchel: [],
     // O equipado vem INTEIRO (FUN-108): ele não está na mochila, então só o id não bastava
     // para a tela achar a definição.
     equipped: { chest: { instanceId: 'i2', itemId: 'plate', quantity: 1 } },

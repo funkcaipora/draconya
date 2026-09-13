@@ -727,8 +727,11 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, attack: 10 };
 
   it('a mochila é container e se veste em `back`; as duas coisas andam juntas', () => {
-    const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18 };
+    const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20 };
     expect(buildContent(base({ items: [mochila] })).items.get('backpack')?.slot).toBe('back');
+    // Container tem lugares, e só ele (#160).
+    expect(() => buildContent(base({ items: [{ ...mochila, initialSlots: undefined }] }))).toThrow(/precisa de initialSlots/);
+    expect(() => buildContent(base({ items: [{ ...espada, initialSlots: 5 }] }))).toThrow(/só vale em kind "container"/);
     // Container fora das costas, e costas sem container: os dois são conteúdo quebrado.
     expect(() => buildContent(base({ items: [{ ...mochila, slot: 'hand' }] }))).toThrow(/slot "back"/);
     expect(() => buildContent(base({ items: [{ ...espada, slot: 'back' }] }))).toThrow(/só container/);

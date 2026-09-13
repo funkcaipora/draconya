@@ -49,6 +49,8 @@ export interface GameDependencies {
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
+  /** A tabela de progressão, para os tamanhos de container (#160). */
+  readonly progression?: SessionHostOptions['progression'];
   /** O catálogo de monstros, para nome e outfit de quem nasce na hunt (FUN-103). */
   readonly monsterCatalog?: SessionHostOptions['monsterCatalog'];
   /** O outfit de todo jogador, até alguém escolher o seu (FUN-103). */
@@ -135,6 +137,7 @@ export function createGame(
         : { ammunition: dependencies.ammunition }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
+      ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),
       ...(dependencies.monsterCatalog === undefined
         ? {}
         : { monsterCatalog: dependencies.monsterCatalog }),

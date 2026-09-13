@@ -4,7 +4,8 @@
 // não couber nela sem gambiarra, a interface nasceu modelada em cima de hunt, e Guild War
 // não vai caber depois.
 
-import type { Tilemap } from '@draconya/content';
+import type { Item, Progression, Tilemap } from '@draconya/content';
+import { containerRulesFor } from '../inventory.js';
 import type { EndReason, Ruleset, Session } from '../session.js';
 import type { CharacterRuntime } from '../character.js';
 import type { GridPoint } from '../monster/step.js';
@@ -25,6 +26,12 @@ export interface CityRulesetOptions {
   readonly stepDurationMs?: number;
   /** Quantos tiles a busca por tile livre visita ao chegar. Ver `ENTRY_TILES`. */
   readonly entryTiles?: number;
+  /**
+   * Os tamanhos de container (#160): a mochila (item) e a bolsa (progressão). A Cidade não
+   * simula, mas é onde o personagem entra primeiro — e um snapshot v1 precisa ganhar os 20
+   * lugares aqui, antes de qualquer `move`. Ausente é o conteúdo de teste sem itens.
+   */
+  readonly containers?: { readonly items: ReadonlyMap<string, Item>; readonly progression: Progression };
 }
 
 /**
@@ -80,6 +87,11 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
       character.health = character.maxHealth;
       character.mana = character.maxMana;
       character.alive = true;
+      if (options.containers !== undefined) {
+        character.inventory.ensureContainers(
+          containerRulesFor(character.inventory, options.containers.items, options.containers.progression),
+        );
+      }
 
       // A colocação passa pela MESMA legalidade que um passo (FUN-69). O ponto de entrada é
       // validado no carregamento do conteúdo contra `isBlocked`, então uma recusa aqui é

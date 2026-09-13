@@ -3,6 +3,7 @@
   "name": "Backpack",
   "kind": "container",
   "slot": "back",
+  "initialSlots": 20,
   "weight": 18,
-  "_open": "A mochila do kit de nascimento (ADR 0026, decisão 6). Os 20 lugares iniciais e o crescimento por linha entram com o container no sim (issue #160); até lá ela é um item nas costas."
+  "_open": "A mochila do kit de nascimento (ADR 0026, decisão 6): 20 lugares iniciais (o Huntera), crescendo por linhas enquanto houver capacidade (#160)."
 }

@@ -86,6 +86,12 @@ export interface SessionReceipt {
    */
   readonly equipment?: Readonly<Record<string, string>>;
   /**
+   * Onde cada instância está DENTRO dos containers (#160): `instanceId → { container, index }`.
+   * ABSOLUTO como `equipment`; instância equipada não aparece; o que não estiver aqui perde a
+   * posição gravada e volta ao primeiro lugar livre na próxima entrada.
+   */
+  readonly layout?: Readonly<Record<string, ItemPlace>>;
+  /**
    * Os itens que ESTA sessão criou e que couberam na mochila (§22.2, FUN-88).
    *
    * Viram linha de `item_instance` na liquidação. O id vem do `sim` e é determinístico
@@ -98,6 +104,12 @@ export interface SessionReceipt {
    * expirar precisa significar que o item nunca existiu.
    */
   readonly lootBox?: readonly BoxedItem[];
+}
+
+/** Um lugar de container, como o extrato e o banco o guardam (#160). */
+export interface ItemPlace {
+  readonly container: 'backpack' | 'satchel';
+  readonly index: number;
 }
 
 export interface ReceiptStoreOptions {
@@ -280,6 +292,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // de volta sem erro nenhum. Já aconteceu com as skills.
     ...(typeof value['equipment'] === 'object' && value['equipment'] !== null
       ? { equipment: value['equipment'] as Record<string, string> }
+      : {}),
+    // A posição dos itens (#160): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['layout'] === 'object' && value['layout'] !== null
+      ? { layout: value['layout'] as Record<string, ItemPlace> }
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
     ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),

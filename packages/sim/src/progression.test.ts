@@ -9,7 +9,7 @@ const baseline: Progression = {
   id: 'baseline',
   startingHealth: 150, startingMana: 0, startingCapacity: 400,
   healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
-  vocationLevel: 8, startingKit: [],
+  vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
   startingSpeed: 300, speedPerLevel: 2,
   regen: { healthPerSecond: 1, manaPerSecond: 1 },
   xp: { base: 20, exponent: 2 },

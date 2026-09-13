@@ -69,6 +69,14 @@ export const itemInstances = pgTable(
      * permitiria a mesma instância aparecer equipada e na mochila ao mesmo tempo.
      */
     equippedSlot: text('equipped_slot'),
+    /**
+     * Onde está DENTRO do inventário (#160): `backpack`/`satchel` e o índice. Nulos com
+     * `equipped_slot` nulo é "na mochila, sem posição gravada" — a linha anterior a #160 —, e o
+     * ticket a põe no primeiro lugar livre. Sem índice único por posição: a sessão é a única
+     * escritora e grava o vetor inteiro; um índice esbarraria na troca A↔B no meio do UPDATE.
+     */
+    container: text('container'),
+    slotIndex: integer('slot_index'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

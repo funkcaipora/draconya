@@ -37,6 +37,7 @@ const catalogue: Catalogue = {
 
 const inventory = (over: Partial<InventoryState> = {}): InventoryState => ({
   backpack: [],
+  satchel: [],
   equipped: {},
   capacity: { used: 10, total: 400 },
   ...over,
