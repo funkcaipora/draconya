@@ -3,5 +3,6 @@
   "name": "Sorcerer",
   "healthPerLevel": 5,
   "manaPerLevel": 30,
-  "capacityPerLevel": 10
+  "capacityPerLevel": 10,
+  "startingWeaponItemId": "wand-of-vortex"
 }

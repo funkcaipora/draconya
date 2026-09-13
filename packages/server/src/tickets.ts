@@ -111,6 +111,12 @@ export interface InitialCharacter {
   readonly bestiary?: BestiaryState;
   /** A munição escolhida por família (#152), validada como o Bestiário. */
   readonly ammo?: Readonly<Record<string, string>>;
+  /**
+   * A vocação (#154), lida de `characters.vocation`. Ausente é quem ainda não escolheu — ou
+   * ticket de um `api` anterior: a sessão entra sem vocação e o diálogo aparece de novo, o que
+   * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
+   */
+  readonly vocation?: string;
 }
 
 export interface IssuedTicket {
@@ -490,6 +496,11 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     // `NaN` dentro do motor ou de recusar o ticket por causa de uma contagem.
     ...(isBestiaryState(initial['bestiary']) ? { bestiary: initial['bestiary'] } : {}),
     ...(isAmmoSelection(initial['ammo']) ? { ammo: initial['ammo'] } : {}),
+    // A vocação (#154): string não vazia; qualquer outra coisa vira AUSENTE, nunca ticket
+    // recusado — como o Bestiário.
+    ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
+      ? { vocation: initial['vocation'] }
+      : {}),
   };
 }
 

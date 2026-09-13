@@ -126,7 +126,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | HP / mana / capacidade por level — Paladin | +10 / +15 / +20 (o Tibia; ADR 0026) | `packages/content/data/vocations/paladin.json` |
 | HP / mana / capacidade por level — Sorcerer | +5 / +30 / +10 (o Tibia; ADR 0026) | `packages/content/data/vocations/sorcerer.json` |
 | HP / mana / capacidade por level — Druid | +5 / +30 / +10 (o Tibia; ADR 0026) | `packages/content/data/vocations/druid.json` |
-| Arma inicial de cada vocação | steel axe / bow / wand of vortex / snakebite rod (ADR 0026, decisão 3) | `packages/content/data/vocations/*.json`, `startingWeaponItemId` (a criar) |
+| Arma inicial de cada vocação | steel axe / bow / wand of vortex / snakebite rod (ADR 0026, decisão 3; #154) | `packages/content/data/vocations/*.json`, `startingWeaponItemId` |
 | Skill de distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (ADR 0026, decisão 4; sobe por tiro de bow, #152) | `packages/content/data/skills/distance.json` |
 | HP inicial (level 1) | 150 `[ABERTO — valor provisório: 150]` | `packages/content/data/progression/baseline.json` |
 | Mana inicial (level 1) | 20 `[ABERTO — valor provisório: 20, uma cura ou um Golpe Arcano no level 1 (FUN-114)]` | `packages/content/data/progression/baseline.json` |

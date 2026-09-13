@@ -73,6 +73,8 @@ function buildHost(
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
     ammunition?: NonNullable<SessionHostOptions['ammunition']>;
+    vocations?: NonNullable<SessionHostOptions['vocations']>;
+    vocationLevel?: number;
     saveBotConfig?: NonNullable<SessionHostOptions['saveBotConfig']>;
     level?: number;
   } = {},
@@ -1450,6 +1452,42 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
       reason: 'drain',
       skills: { melee: { level: 12, points: 3 } },
       bestiary: { rat: 9_999 },
+    });
+  });
+
+  it('a vocação, o equipamento e a arma de vocação do snapshot vão no extrato (#154)', async () => {
+    // Era o buraco de `#creditUnrestorable`: item equipado numa sessão irrestaurável se perdia,
+    // e a arma de vocação — que nasce equipada com o prefixo da sessão — com ele. Mutação que
+    // mata: tirar `equipment`, `acquired` ou `vocation` do espalhamento.
+    const snapshot = stored();
+    const participant = snapshot.participants[0] as SessionSnapshot['participants'][number];
+    const withChoice: SessionSnapshot = {
+      ...snapshot,
+      participants: [{
+        ...participant,
+        vocationId: 'knight',
+        inventory: {
+          backpack: [{ instanceId: 'hero:kit:1', itemId: 'machete', quantity: 1 }],
+          equipped: { hand: { instanceId: 's-antiga:p1:vocation', itemId: 'steel-axe', quantity: 1, origin: 'vocation-choice' } },
+        },
+      }],
+    };
+    const receipts: Array<Record<string, unknown>> = [];
+    const { snapshots } = withSnapshots(withChoice);
+    const { ruleset } = countingRuleset();
+    const { host } = buildHost(ruleset, {
+      directory: { register: async () => true } as unknown as SessionDirectory,
+      snapshots,
+      receipts: { save: async (receipt: Record<string, unknown>) => { receipts.push(receipt); } } as unknown as ReceiptStore,
+      restoreSession: () => null,
+    });
+
+    await host.prepare('p1', undefined, 'a1');
+
+    expect(receipts[0]).toMatchObject({
+      vocation: 'knight',
+      equipment: { hand: 's-antiga:p1:vocation' },
+      acquired: [{ instanceId: 's-antiga:p1:vocation', itemId: 'steel-axe', origin: 'vocation-choice' }],
     });
   });
 
@@ -3797,5 +3835,153 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
 
     expect(hero.ammo.size).toBe(0);
     expect(warnings(socket)).toHaveLength(1);
+  });
+});
+
+describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () => {
+  const axe = {
+    ...itemSchema.parse({
+      id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+      weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
+    }),
+    appearanceId: 1,
+  };
+  const knight = {
+    id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+    startingWeaponItemId: 'steel-axe',
+  };
+  const vocations = new Map([[knight.id, knight]]);
+  const itemCatalog = new Map([[axe.id, axe]]);
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message' && m.level === 'warning');
+
+  const atLevel = (level: number, ruleset: Ruleset = countingRuleset().ruleset, extra: Record<string, unknown> = {}) => {
+    const { host, sessions } = buildHost(ruleset, { itemCatalog, vocations, vocationLevel: 8, level, ...extra });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const before = socket.received().length;
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    // O personagem de `buildHost` nasce sem capacidade; sem ela a arma iria para a Caixa.
+    hero.capacity = 400;
+    return { host, viewer, socket, hero, before };
+  };
+
+  it('escolhe na hunt: player-stats traz a vocação e inventory traz a arma na mão', () => {
+    const { host, viewer, socket, hero, before } = atLevel(8);
+
+    host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+    host.flush();
+
+    expect(hero.vocationId).toBe('knight');
+    expect(warnings(socket)).toHaveLength(0);
+    const after = socket.received().slice(before);
+    const stats = after.filter((m) => m.type === 'player-stats').at(-1);
+    expect(stats?.type === 'player-stats' && stats.vocationId).toBe('knight');
+    const inventory = after.filter((m) => m.type === 'inventory').at(-1);
+    expect(inventory?.type === 'inventory' && inventory.equipped['hand']?.itemId).toBe('steel-axe');
+  });
+
+  it('recusa com o motivo: vocação inexistente, level baixo, e a segunda escolha', () => {
+    const young = atLevel(7);
+    young.host.handle(young.viewer, { type: 'choose-vocation', vocationId: 'knight' });
+    young.host.flush();
+    expect(young.hero.vocationId).toBeNull();
+    expect(warnings(young.socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+      'Você ainda não chegou ao level da escolha de vocação.',
+    ]);
+
+    const { host, viewer, socket, hero } = atLevel(8);
+    host.handle(viewer, { type: 'choose-vocation', vocationId: 'monk' });
+    host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+    host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+    host.flush();
+    expect(hero.vocationId).toBe('knight');
+    expect(warnings(socket).map((m) => m.type === 'system-message' && m.text)).toEqual([
+      'Essa vocação não existe.',
+      'Você já escolheu a sua vocação.',
+    ]);
+  });
+
+  it('o extrato da hunt leva a vocação e a arma com a proveniência', async () => {
+    const saved: Array<Record<string, unknown>> = [];
+    const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+    const { host, sessions } = buildHost(countingRuleset().ruleset, { itemCatalog, vocations, vocationLevel: 8, receipts });
+    // `prepare` ANTES do attach: é ele que liga a conta à sessão, e sem conta não há extrato.
+    await host.prepare('p1', undefined, 'a1');
+    const viewer = host.attach(new FakeSocket(), 'p1');
+    (sessions[0]?.participants[0] as CharacterRuntime).capacity = 400;
+    host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+    await host.release('p1', 1000, 'logout');
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      vocation: 'knight',
+      equipment: { hand: 's-p1:p1:vocation' },
+      acquired: [{ instanceId: 's-p1:p1:vocation', itemId: 'steel-axe', origin: 'vocation-choice' }],
+    });
+  });
+
+  describe('na Cidade — o shard grava um extrato de ESTADO, sem crédito', () => {
+    const shard = (): Ruleset => ({
+      type: 'city', shared: true, hz: () => 0,
+      onEnter: () => {}, onEvent: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+    });
+    const withReceipts = () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      return { saved, receipts };
+    };
+
+    it('escolher na praça e sair grava vocação, arma e layout, com agregados zerados', async () => {
+      // Era a premissa quebrada da issue: o shard nunca gravava extrato, e a escolha feita na
+      // Cidade sumia no logout. Mutação que mata: tirar `#saveDurableReceipt` do `release`.
+      const { saved, receipts } = withReceipts();
+      const { host, sessions } = buildHost(shard(), { itemCatalog, vocations, vocationLevel: 8, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      (sessions[0]?.participants[0] as CharacterRuntime).capacity = 400;
+      host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+      const sessionId = sessions[0]?.id as string;
+
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({
+        sessionId, characterId: 'p1', accountId: 'a1', reason: 'manual-exit', seq: 1,
+        vocation: 'knight',
+        equipment: { hand: `${sessionId}:p1:vocation` },
+        acquired: [{ itemId: 'steel-axe', origin: 'vocation-choice' }],
+      });
+      expect((saved[0] as { aggregates: { xpGained: number; goldGained: number } }).aggregates)
+        .toMatchObject({ xpGained: 0, goldGained: 0 });
+    });
+
+    it('quem não mexeu em nada sai sem extrato', async () => {
+      // Um extrato zerado por logout de praça seria uma linha de ledger por pessoa que fecha o
+      // jogo. Mutação que mata: gravar sem conferir `dirty`.
+      const { saved, receipts } = withReceipts();
+      const { host } = buildHost(shard(), { itemCatalog, vocations, vocationLevel: 8, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      host.attach(new FakeSocket(), 'p1');
+
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved).toHaveLength(0);
+    });
+
+    it('a drenagem também grava o estado do shard', async () => {
+      const { saved, receipts } = withReceipts();
+      const { host } = buildHost(shard(), { itemCatalog, vocations, vocationLevel: 8, receipts });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+
+      await host.drainAll();
+
+      expect(saved).toHaveLength(1);
+      expect(saved[0]).toMatchObject({ reason: 'drain', vocation: 'knight' });
+    });
   });
 });

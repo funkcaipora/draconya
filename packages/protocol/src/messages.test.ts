@@ -185,7 +185,7 @@ describe('outfit colours on the creature (FUN-104)', () => {
   it('the session state carries the same creature shape, colours included', () => {
     const state: S2CMessage = {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0 },
+      self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
       world: { groundItems: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
@@ -239,7 +239,7 @@ describe('the live analyzer (FUN-110)', () => {
 describe('the bot configuration in force rides the session state (FUN-111)', () => {
   const state: S2CMessage = {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0 },
+    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
     world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
@@ -276,8 +276,9 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // mensagem com os dois preenchidos.
     const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
     // E `ammunition` (#152): um nó anterior manda sem, e o seletor lista nada.
+    // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
-      ...withIds, monsters: [], ammunition: [],
+      ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({ ...hunt, lootDrops: 0 })),
     }]);
     const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number }> }> | null;
@@ -324,11 +325,41 @@ describe('the bestiary (FUN-113, §18)', () => {
       ...base,
       monsters: [{ id: 'rat', name: 'Rat' }],
       ammunition: [],
+      vocations: [],
+      vocationLevel: 8,
       bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
     } as unknown as S2CMessage;
     expect(decodeS2C(encodeS2C(full))).toEqual([full]);
     const decoded = decodeS2C(encodeS2C(base as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
     expect(decoded?.[0]?.['monsters']).toEqual([]);
     expect(decoded?.[0]).not.toHaveProperty('bestiary');
+  });
+});
+
+describe('vocation choice (#154)', () => {
+  it('is intention only: the client names the vocation, and the opcode is 15', () => {
+    // O 14 foi do `select-ammo` (#152); a ADR 0026 registra o 15. Mutação que mata: trocar
+    // por 14 (duplicado) ou apagar a linha (o schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER['choose-vocation']).toBe(15);
+    expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight' }).success).toBe(true);
+    expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: '' }).success).toBe(false);
+    // Nada além do id: a arma, o slot e os stats são do servidor (invariante 4).
+    expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight', weapon: 'steel-axe' }).success).toBe(true);
+  });
+
+  it('carries the vocation in player-stats and session-state, null until chosen', () => {
+    // `default(null)`: um nó `game` anterior manda sem, e o cliente não abre o diálogo por
+    // isso — `vocationLevel` também vem `0` do catálogo antigo.
+    const stats = S2C_SCHEMAS['player-stats'].parse({
+      health: 1, maxHealth: 1, mana: 1, maxMana: 1, level: 8, xp: 0, capacity: 0, gold: 0, staminaMs: 0,
+    });
+    expect(stats.vocationId).toBeNull();
+    expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
+    const catalogue = S2C_SCHEMAS.catalogue.parse({
+      hunts: [], items: [],
+      bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+    });
+    expect(catalogue.vocations).toEqual([]);
+    expect(catalogue.vocationLevel).toBe(0);
   });
 });

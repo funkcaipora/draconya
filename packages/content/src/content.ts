@@ -273,6 +273,22 @@ export function buildContent(raw: RawContent): Content {
   if (kitTwoHanded && kitSlots.has('shield')) {
     problems.push('progression: o kit de nascimento não pode ter arma de duas mãos e escudo ao mesmo tempo');
   }
+  // A arma de cada vocação (#154, ADR 0026 decisão 3): existe, é arma, e exige a própria
+  // vocação. Sem a última, "a arma da vocação" seria uma arma que qualquer um veste.
+  for (const vocation of vocations.values()) {
+    if (vocation.startingWeaponItemId === undefined) continue;
+    const weapon = itemDefinitions.get(vocation.startingWeaponItemId);
+    if (weapon === undefined) {
+      problems.push(`vocation/${vocation.id}: a arma inicial "${vocation.startingWeaponItemId}" não existe`);
+      continue;
+    }
+    if (weapon.kind !== 'weapon') {
+      problems.push(`vocation/${vocation.id}: "${weapon.id}" não é arma`);
+    }
+    if (weapon.requires.vocationId !== vocation.id) {
+      problems.push(`vocation/${vocation.id}: "${weapon.id}" precisa exigir a própria vocação`);
+    }
+  }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 

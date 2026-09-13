@@ -582,6 +582,41 @@ describe('level up e penalidade de morte dentro da hunt', () => {
     expect(cobrança(true)).toBeLessThan(cobrança(false));
   });
 
+  it('a vocação escolhida no level 8 rege o level 9, e só ele (#154, ADR 0026 decisão 1)', () => {
+    // A escolha não recalcula nada na hora (`progression.ts`: não é retroativa); o PRÓXIMO
+    // level up sobe pela tabela da vocação — que é o que a #154 liga. Mutação que mata: o
+    // ruleset ler `vocations` por um id que não é o escolhido, ou `chooseVocation` não gravar.
+    const knight = {
+      id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+    };
+    const withKnight = content({ vocations: [knight] });
+    const at = (hz: number): { max: number; level: number } => {
+      const { session, hero } = start({ loaded: withKnight, difficulty: 'bold' });
+      hero.level = 8;
+      // A um ponto do 9: o primeiro abate sobe de level.
+      hero.xp = totalXpForLevel(9, progression as Progression) - 1;
+      const before = statsForLevel(8, null, progression as Progression);
+      hero.maxHealth = before.maxHealth;
+      hero.health = before.maxHealth;
+      const chosen = hero.chooseVocation(
+        withKnight.vocations.get('knight') as NonNullable<ReturnType<typeof withKnight.vocations.get>>,
+        null, { catalog: withKnight.items, vocationLevel: progression.vocationLevel, instanceId: 's:hero:vocation' },
+      );
+      expect(chosen.ok).toBe(true);
+      // Nada muda no instante da escolha.
+      expect(hero.maxHealth).toBe(before.maxHealth);
+      run(session, 240_000, 1000 / hz);
+      return { max: hero.maxHealth, level: hero.level };
+    };
+    const ten = at(10);
+    expect(ten.level).toBeGreaterThanOrEqual(9);
+    // Do 8 para o `level` final: cada level acima do 8 soma o `healthPerLevel` do Knight (15),
+    // não o da base (5).
+    const expected = statsForLevel(8, null, progression as Progression).maxHealth + (ten.level - 8) * 15;
+    expect(ten.max).toBe(expected);
+    expect(at(1)).toEqual(ten);
+  });
+
   it('sair ou ser encerrado por regra NÃO custa XP: quem paga é quem morre', () => {
     const { session, hero } = start({ difficulty: 'bold' });
     hero.level = 20;

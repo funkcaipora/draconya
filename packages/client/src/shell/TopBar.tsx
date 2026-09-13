@@ -28,6 +28,10 @@ export function TopBar({ open, toggle }: {
   const characterId = useHudSlice((state) => state.characterId);
   const level = useHudSlice((state) => state.level);
   const gold = useHudSlice((state) => state.gold);
+  // A vocação ao lado do level (#154): o NOME vem do catálogo, o id do `player-stats`.
+  const vocationId = useHudSlice((state) => state.vocationId);
+  const vocationName = useHudSlice((state) =>
+    state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
   // O nome vem da lista da conta: o HUD só conhece o id, e o nome é o que a tela do Huntera
   // mostra ao lado do level. Ausente (entrou pela URL, FUN-97) fica o id, que ao menos é dele.
   // A LISTA é a fatia, e a busca é daqui: `useStoreSlice` memoiza por estado da store, e um
@@ -39,7 +43,10 @@ export function TopBar({ open, toggle }: {
     <header className="topbar" aria-label="barra do topo">
       <div className="topbar-identity">
         <span className="topbar-name">{name ?? characterId ?? '—'}</span>
-        <span className="topbar-level">LV {level}</span>
+        <span className="topbar-level">
+          {`LV ${String(level)}`}
+          {vocationId !== null && ` · ${vocationName ?? vocationId}`}
+        </span>
       </div>
       <Vitals />
       <div className="topbar-gold" title="gold">

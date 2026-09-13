@@ -94,7 +94,7 @@ const characterRow = async (
   database: NonNullable<typeof db>, characterId: string,
 ): Promise<{
   xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-  ammo: unknown;
+  ammo: unknown; vocation: string | null;
 }> => {
   const [row] = await database.database.db
     .select({
@@ -102,13 +102,14 @@ const characterRow = async (
       skills: characters.skills,
       bestiary: characters.bestiary,
       ammo: characters.ammo,
+      vocation: characters.vocation,
       staminaMs: characters.staminaMs,
     })
     .from(characters)
     .where(eq(characters.id, characterId));
   return row as {
     xp: number; gold: number; level: number; staminaMs: number; skills: unknown; bestiary: unknown;
-    ammo: unknown;
+    ammo: unknown; vocation: string | null;
   };
 };
 
@@ -563,6 +564,55 @@ describe.runIf(ready)('a munição escolhida chega ao Postgres pelo extrato (#15
     await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3 });
     await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
     expect((await characterRow(database, characterId)).ammo).toEqual({ arrow: 'onyx-arrow' });
+  });
+});
+
+describe.runIf(ready)('a vocação chega ao Postgres pelo extrato, UMA vez (#154, ADR 0026 decisão 1)', () => {
+  it('grava a escolha; um segundo extrato com outra vocação não sobrescreve; sem o campo não toca', async () => {
+    // `coalesce`: a coluna só sai de `null` uma vez. Mutação que mata: trocar o `coalesce` por
+    // atribuição direta — o `druid` do segundo extrato passaria por cima do `knight`.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    expect((await characterRow(database, characterId)).vocation).toBeNull();
+    const receipts = new ReceiptStore(redis);
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId) });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).vocation).toBeNull();
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 2, vocation: 'knight' });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).vocation).toBe('knight');
+
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 3, vocation: 'druid' });
+    await receipts.save({ ...receiptOf(randomUUID(), characterId), seq: 4 });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+    expect((await characterRow(database, characterId)).vocation).toBe('knight');
+  });
+
+  it('a arma de vocação vira instância com a proveniência dela, e o loot continua loot', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await receipts.save({
+      ...receiptOf(sessionId, characterId),
+      vocation: 'knight',
+      acquired: [
+        { instanceId: `${sessionId}:${characterId}:vocation`, itemId: 'steel-axe', quantity: 1, origin: 'vocation-choice' },
+        { instanceId: `${sessionId}:0`, itemId: 'spike-sword', quantity: 1 },
+      ],
+      equipment: { hand: `${sessionId}:${characterId}:vocation` },
+    });
+    await writePendingReceipts({ database: database.database.db, receipts, logger, progression });
+
+    const rows = await database.database.db
+      .select({ id: itemInstances.id, origin: itemInstances.origin, slot: itemInstances.equippedSlot })
+      .from(itemInstances)
+      .where(eq(itemInstances.ownerCharacterId, characterId))
+      .orderBy(asc(itemInstances.id));
+    expect(rows.find((row) => row.id.endsWith(':vocation'))).toMatchObject({ origin: 'vocation-choice', slot: 'hand' });
+    expect(rows.find((row) => row.id === `${sessionId}:0`)).toMatchObject({ origin: 'loot', slot: null });
   });
 });
 
