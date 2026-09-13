@@ -889,3 +889,27 @@ describe('loot de item, agora que existe catálogo (FUN-76)', () => {
       .toThrow(ContentError);
   });
 });
+
+describe('a arma inicial da vocação (#154, ADR 0026 decisão 3)', () => {
+  const axe = {
+    id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+    weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
+  };
+
+  it('aceita a arma que existe, é arma e exige a própria vocação', () => {
+    const content = buildContent(base({ vocations: [{ ...knight, startingWeaponItemId: 'steel-axe' }], items: [axe] }));
+    expect(content.vocations.get('knight')?.startingWeaponItemId).toBe('steel-axe');
+  });
+
+  it('recusa arma inexistente, item que não é arma, e arma que qualquer um veste', () => {
+    // Mutação que mata: apagar qualquer uma das três conferências em `buildContent`.
+    expect(() => buildContent(base({ vocations: [{ ...knight, startingWeaponItemId: 'nope' }] })))
+      .toThrow(/arma inicial "nope" não existe/);
+    const helmet = { ...axe, id: 'leather-helmet', kind: 'armor', slot: 'head', weapon: undefined };
+    expect(() => buildContent(base({ vocations: [{ ...knight, startingWeaponItemId: 'leather-helmet' }], items: [helmet] })))
+      .toThrow(/não é arma/);
+    const anyones = { ...axe, id: 'machete', requires: {} };
+    expect(() => buildContent(base({ vocations: [{ ...knight, startingWeaponItemId: 'machete' }], items: [anyones] })))
+      .toThrow(/precisa exigir a própria vocação/);
+  });
+});

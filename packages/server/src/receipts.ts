@@ -70,6 +70,12 @@ export interface SessionReceipt {
    */
   readonly ammo?: Readonly<Record<string, string>>;
   /**
+   * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
+   * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
+   * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
+   */
+  readonly vocation?: string;
+  /**
    * O layout de equipamento no fim da sessão (§21.4, FUN-82): `slot → instanceId`.
    *
    * ABSOLUTO, como as skills: a sessão sabe o estado final, e mandar delta exigiria que os dois
@@ -265,6 +271,10 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // A munição (#152): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
       ? { ammo: value['ammo'] as Record<string, string> }
+      : {}),
+    // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
+    ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0
+      ? { vocation: value['vocation'] }
       : {}),
     // Lista de PERMISSÃO, como o resto desta função: campo que não entra aqui some no caminho
     // de volta sem erro nenhum. Já aconteceu com as skills.

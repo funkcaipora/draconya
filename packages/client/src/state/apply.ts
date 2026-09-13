@@ -144,6 +144,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
         ammo: message.ammo,
+        vocationId: message.vocationId,
       }));
       return;
 
@@ -203,6 +204,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           items: message.items,
           // A munição (#152): o seletor no slot do escudo lista a família do bow por aqui.
           ammunition: message.ammunition,
+          // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui.
+          vocations: message.vocations,
+          vocationLevel: message.vocationLevel,
           ...(message.bestiary === undefined ? {} : { bestiary: message.bestiary }),
         },
       }));
@@ -306,6 +310,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         health: message.self.health, maxHealth: message.self.maxHealth,
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
+        vocationId: message.self.vocationId,
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre

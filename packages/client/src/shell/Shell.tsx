@@ -27,6 +27,7 @@ import { Bestiary } from './Bestiary.js';
 import { HuntMenu } from './HuntMenu.js';
 import { BotPanel } from './BotPanel.js';
 import { Inventory } from './Inventory.js';
+import { VocationChoice } from './VocationChoice.js';
 import { TopBar } from './TopBar.js';
 import type { WindowId } from './TopBar.js';
 
@@ -72,6 +73,9 @@ export function Shell() {
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}
         {open.bot && <BotPanel onClose={() => { toggle('bot'); }} />}
+        {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
+            quando `vocationId` chega — quem decide se ela existe é o estado, não a barra. */}
+        <VocationChoice />
         <Chat />
       </div>
     </AssetPackContext.Provider>

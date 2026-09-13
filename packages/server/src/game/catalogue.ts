@@ -103,6 +103,19 @@ export function buildCatalogue(content: Content): Catalogue {
       appearanceId: ammo.appearanceId,
       requires: ammo.requires.level === undefined ? {} : { level: ammo.requires.level },
     })),
+    // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui — a tela não
+    // pode ter o 8 em código. Só os ganhos e a arma inicial (id de item); nada de fórmula.
+    vocations: [...content.vocations.values()]
+      .filter((vocation) => vocation.startingWeaponItemId !== undefined)
+      .map((vocation) => ({
+        id: vocation.id,
+        name: vocation.name,
+        healthPerLevel: vocation.healthPerLevel,
+        manaPerLevel: vocation.manaPerLevel,
+        capacityPerLevel: vocation.capacityPerLevel,
+        startingWeaponItemId: vocation.startingWeaponItemId as string,
+      })),
+    vocationLevel: content.progression.vocationLevel,
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Só id e nome, em ordem de id para a mensagem ser a mesma a cada boot: a arte
     // chega pelo `creature-appear`, e o resto — vida, ataque, XP — é balanceamento que o

@@ -221,6 +221,27 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
   });
 
+  it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {
+    // A vocação é escrita uma vez pelo `jobs` e volta pelo ticket a cada entrada — sem isto o
+    // diálogo do level 8 reapareceria a cada login. Mutação que mata: tirar o espalhamento.
+    const issuedWith = async (vocation: string | null) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, vocation })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith('knight')).toMatchObject({ vocation: 'knight' });
+    expect(await issuedWith(null)).not.toHaveProperty('vocation');
+  });
+
   it('resolve o nó ANTES de abrir a trava de linha (FUN-53)', async () => {
     // Qual nó de jogo está vivo não tem relação nenhuma com a linha do personagem, e
     // descobrir isso é `SCAN` mais `MGET` no Redis. Segurando a trava enquanto isso acontece,

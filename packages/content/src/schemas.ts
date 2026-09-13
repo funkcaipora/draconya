@@ -478,6 +478,13 @@ export const vocationSchema = z.object({
   /** A skill que escala as magias de ATAQUE desta vocação (#155, ADR 0026 d.5): `magic`, e `distance` no Paladin. */
   spellSkill: z.string().min(1).default('magic'),
   /**
+   * A arma que a vocação recebe ao ser escolhida (#154, ADR 0026 decisão 3). `buildContent`
+   * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
+   * um veste não é "a arma da vocação". Opcional no SCHEMA, e não no conteúdo real: as quatro
+   * vocações têm a sua, e o conteúdo de teste que não fala de item precisa de vocação sem arma.
+   */
+  startingWeaponItemId: z.string().min(1).optional(),
+  /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
    */

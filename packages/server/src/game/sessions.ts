@@ -161,16 +161,18 @@ export function createCitySessionFactory(
   shard: CityShard = new CityShard(content, now),
 ): SessionFactory {
   return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
-    // Vocação ainda não é persistida (§7.4 a coloca no level 8, e a escolha é FUN-30): até
-    // lá, todo personagem cresce pela tabela base.
-    const stats = statsForLevel(initialCharacter.level, null, content.progression);
+    // A vocação vem do ticket (#154): escolhida no level 8, escrita uma vez pelo `jobs`. A que
+    // saiu do conteúdo cai para a tabela base — o id fica, os stats não (mesma regra da hunt).
+    const vocationId = initialCharacter.vocation ?? null;
+    const vocation = vocationId === null ? null : content.vocations.get(vocationId) ?? null;
+    const stats = statsForLevel(initialCharacter.level, vocation, content.progression);
     const character = new CharacterRuntime({
       id: characterId,
       position: UNPLACED,
       ...INITIAL_FLAGS,
       level: initialCharacter.level,
       xp: initialCharacter.xp,
-      vocationId: null,
+      vocationId,
       health: stats.maxHealth, maxHealth: stats.maxHealth,
       mana: stats.maxMana, maxMana: stats.maxMana,
       capacity: stats.capacity,

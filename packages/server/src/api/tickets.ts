@@ -167,6 +167,8 @@ export function createTicketHandler(
         ...bestiaryOf(character.bestiary),
         // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
         ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
+        // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
+        ...(character.vocation === null ? {} : { vocation: character.vocation }),
         // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
         // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
         inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),

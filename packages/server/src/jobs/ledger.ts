@@ -216,7 +216,9 @@ async function applyProgression(
         itemId: item.itemId,
         ownerCharacterId: receipt.characterId,
         quantity: item.quantity,
-        origin: 'loot',
+        // A proveniência vem do `sim` (#154): a arma de vocação é `'vocation-choice'`; o que
+        // não diz é loot — inclusive o extrato de um nó anterior.
+        origin: item.origin ?? 'loot',
       })))
       // O id vem do `sim` e é determinístico (`sessionId:n`), então inserir de novo é inserir
       // a mesma chave primária.
@@ -243,6 +245,11 @@ async function applyProgression(
       ...skills,
       ...bestiary,
       ...ammo,
+      // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
+      // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
+      ...(receipt.vocation === undefined
+        ? {}
+        : { vocation: sql`coalesce(${characters.vocation}, ${receipt.vocation})` }),
       // O level é DERIVADO da XP nova, nunca copiado do extrato: copiar faria um extrato
       // antigo, processado fora de ordem, rebaixar um personagem que já subiu.
       ...(progression === undefined ? {} : { level: levelForXp(xp, progression) }),

@@ -202,6 +202,8 @@ async function main(): Promise<void> {
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,
       ammunition: content.ammunition,
+      vocations: content.vocations,
+      vocationLevel: content.progression.vocationLevel,
       // Nome e outfit de quem nasce na hunt (FUN-103). Mesmo raciocínio do catálogo de itens:
       // o host recebe o mapa, não o `Content` — e o mapa é do conteúdo fixado no boot.
       monsterCatalog: content.monsters,

@@ -1,7 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
-import type { AmmoFamily, Ammunition } from '@draconya/content';
+import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
@@ -144,6 +144,20 @@ export interface CharacterState {
 export type AmmoRefusal = 'level-too-low';
 export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly reason: AmmoRefusal };
 
+/** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
+export type VocationRefusal = 'level-too-low' | 'already-chosen';
+export type VocationResult =
+  | { readonly ok: true; readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none' }
+  | { readonly ok: false; readonly reason: VocationRefusal };
+
+export interface VocationChoiceOptions {
+  readonly catalog: ReadonlyMap<string, Item>;
+  /** `progression.vocationLevel` — quem tem o conteúdo lê e passa; o `sim` não conhece a tabela aqui. */
+  readonly vocationLevel: number;
+  /** A identidade da arma nova — decidida por quem conhece a sessão (ver a spec da #154, DT-03). */
+  readonly instanceId: string;
+}
+
 export class CharacterRuntime {
   readonly id: string;
   position: Point;
@@ -229,6 +243,42 @@ export class CharacterRuntime {
     }
     this.ammo.set(ammo.family, ammo.id);
     return { ok: true };
+  }
+
+  /**
+   * Escolhe a vocação (#154, ADR 0026 decisão 1) — uma vez, no level da escolha ou depois.
+   *
+   * A arma entra pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
+   * mãos). A escolha vale MESMO que a arma não vista: sem capacidade ela vai para a Caixa de
+   * Loot, com escudo vestido e bow ela fica na mochila — perder a vocação por causa de peso
+   * seria punir a decisão pela mochila. `retarget` NÃO é chamado: a tabela da vocação vale do
+   * próximo level em diante (`progression.ts`), e o ruleset já lê `vocationId` a cada level up.
+   *
+   * `weapon` é `null` para a vocação sem arma inicial — só no conteúdo de teste; as quatro
+   * reais têm a sua.
+   */
+  chooseVocation(vocation: Vocation, weapon: Item | null, options: VocationChoiceOptions): VocationResult {
+    if (this.vocationId !== null) return { ok: false, reason: 'already-chosen' };
+    if (this.level < options.vocationLevel) return { ok: false, reason: 'level-too-low' };
+
+    // A vocação PRIMEIRO: `equip` confere `requires.vocationId` contra `this.vocationId`, e a
+    // arma exige exatamente a que está sendo escolhida.
+    this.vocationId = vocation.id;
+    if (weapon === null) return { ok: true, weapon: 'none' };
+
+    const carried: CarriedItem = {
+      instanceId: options.instanceId,
+      itemId: weapon.id,
+      quantity: 1,
+      origin: 'vocation-choice',
+    };
+    if (!this.inventory.add(carried, options.catalog, this).ok) {
+      this.lootBox.push(carried);
+      return { ok: true, weapon: 'in-loot-box' };
+    }
+    // `equip` troca com o que está na mão: a machete volta para a mochila sozinha.
+    const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
+    return { ok: true, weapon: equipped.ok ? 'equipped' : 'in-backpack' };
   }
 
   getState(): CharacterState {

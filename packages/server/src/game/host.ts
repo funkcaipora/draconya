@@ -19,9 +19,10 @@ import type {
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Vocation } from '@draconya/content';
 import type {
-  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult,
+  CarriedItem, CharacterRuntime, HuntRuleset, InventoryRefusal, InventoryResult, InventoryState,
+  VocationRefusal,
 } from '@draconya/sim';
 import type { SessionDirectory } from '../directory.js';
 import type { SnapshotStore } from '../snapshots.js';
@@ -119,6 +120,12 @@ export interface SessionHostOptions {
    */
   readonly ammunition?: ReadonlyMap<string, Ammunition>;
   /**
+   * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
+   * Ausentes: nada se escolhe, e a recusa é honesta — como munição e itens.
+   */
+  readonly vocations?: ReadonlyMap<string, Vocation>;
+  readonly vocationLevel?: number;
+  /**
    * O catálogo de monstros (FUN-103), para nome e `outfitId` de quem nasce na hunt.
    *
    * O `sim` não conhece nome nem arte: o evento de nascimento traz só o `monsterId`, e é aqui
@@ -188,6 +195,17 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
   'stack-too-large': 'Essa pilha é grande demais.',
 };
 
+const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
+  'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
+  'already-chosen': 'Você já escolheu a sua vocação.',
+};
+
+/** Agregados zerados: o extrato de estado durável do shard não credita nada (#154). */
+const EMPTY_AGGREGATES: Aggregates = {
+  durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+  itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+};
+
 /**
  * Os itens que ESTA sessão criou e que estão na mochila (FUN-88).
  *
@@ -196,14 +214,31 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
  * linha no banco e não precisa ser inserido de novo.
  */
 function acquiredBy(character: CharacterRuntime, sessionId: string): BoxedItem[] {
+  return acquiredByState(character.inventory.getState(), sessionId);
+}
+
+/**
+ * A mesma pergunta sobre o ESTADO (#154): é o que o snapshot irrestaurável tem em mãos. A arma
+ * de vocação nasce EQUIPADA com o prefixo da sessão, então o equipado também conta — sem isto
+ * ela nunca viraria linha de `item_instance`.
+ */
+function acquiredByState(inventory: InventoryState, sessionId: string): BoxedItem[] {
   const prefix = `${sessionId}:`;
-  return character.inventory.backpack.filter((item) => item.instanceId.startsWith(prefix));
+  const born = (item: CarriedItem): boolean => item.instanceId.startsWith(prefix);
+  const equipped = Object.values(inventory.equipped).filter(
+    (item): item is CarriedItem => item !== undefined && born(item),
+  );
+  return [...inventory.backpack.filter(born), ...equipped];
 }
 
 /** O layout de equipamento como o extrato o leva: `slot → instanceId`. */
 function equipmentOf(character: CharacterRuntime): Record<string, string> {
+  return equipmentOfState(character.inventory.getState());
+}
+
+function equipmentOfState(inventory: InventoryState): Record<string, string> {
   const equipped: Record<string, string> = {};
-  for (const [slot, item] of Object.entries(character.inventory.getState().equipped)) {
+  for (const [slot, item] of Object.entries(inventory.equipped)) {
     if (item !== undefined) equipped[slot] = item.instanceId;
   }
   return equipped;
@@ -243,6 +278,8 @@ function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
       arrow: character?.ammo.get('arrow') ?? null,
       bolt: character?.ammo.get('bolt') ?? null,
     },
+    // A vocação (#154): `null` até a escolha.
+    vocationId: character?.vocationId ?? null,
   };
 }
 
@@ -342,6 +379,13 @@ interface HostedSession {
    * teria como recusar, e o jogador receberia o mesmo gold duas vezes.
    */
   credited: boolean;
+  /**
+   * Personagens de um SHARD com estado durável pendente (#154): vocação, equipamento, munição
+   * e arma de vocação mudam na praça e, sem isto, sumiam no logout. Quem entra aqui recebe um
+   * extrato de estado durável ao sair (`#saveDurableReceipt`); quem não mexeu em nada, não —
+   * um extrato zerado por logout de praça seria uma linha de ledger por pessoa que fecha o jogo.
+   */
+  readonly dirty: Set<string>;
   /**
    * Quantos itens esta sessão já entregou, na última vez que o inventário foi mandado.
    *
@@ -702,7 +746,9 @@ export class SessionHost {
     if (shared) {
       // Num shard, sair é SAIR — não encerrar (FUN-71, ADR 0023). O jogador que fecha o jogo
       // na praça não pode levar a praça junto, e nada há a creditar: a Cidade não gera
-      // progresso (§37).
+      // progresso (§37). O que ela gera é ESTADO (#154) — e ele sai antes de o participante
+      // sair, porque `leave` o tira da lista.
+      await this.#saveDurableReceipt(characterId, hosted, 'manual-exit');
       hosted.session.leave(characterId);
       this.#announceDeparture(hosted, characterId);
       // A cópia vazia deixa de ser hospedada. A próxima entrada cria outra, já na versão de
@@ -804,6 +850,10 @@ export class SessionHost {
         return;
       case 'select-ammo':
         this.#requestAmmo(viewer, message.ammoId);
+        return;
+      case 'choose-vocation':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
+        this.#requestVocation(viewer, message.vocationId);
         return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
@@ -917,10 +967,14 @@ export class SessionHost {
   #requestEquip(viewer: Viewer, instanceId: string): void {
     const character = this.#ownerOf(viewer.characterId);
     if (character === undefined) return;
-    this.#answerInventory(
-      viewer,
-      character.inventory.equip(instanceId, character, this.#options.itemCatalog ?? EMPTY_ITEMS),
-    );
+    const result = character.inventory.equip(instanceId, character, this.#options.itemCatalog ?? EMPTY_ITEMS);
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
+  }
+
+  /** O personagem mudou estado durável num shard (#154): o logout precisa gravar. */
+  #markDirty(characterId: string): void {
+    this.#hostedSession(characterId)?.dirty.add(characterId);
   }
 
   #requestUnequip(viewer: Viewer, slot: string): void {
@@ -932,7 +986,9 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Esse lugar não existe.' });
       return;
     }
-    this.#answerInventory(viewer, character.inventory.unequip(slot as ItemSlot));
+    const result = character.inventory.unequip(slot as ItemSlot);
+    if (result.ok) this.#markDirty(viewer.characterId);
+    this.#answerInventory(viewer, result);
   }
 
   /**
@@ -954,9 +1010,63 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Seu level não basta para essa munição.' });
       return;
     }
+    hosted.dirty.add(character.id);
     const stats = playerStatsOf(character);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+  }
+
+  /**
+   * Escolher a vocação (#154, ADR 0026 decisão 1). Processada NA CHEGADA, como equipar. Quem
+   * decide é o `sim`; o host resolve vocação e arma no conteúdo fixado na sessão (invariante
+   * 7), traduz a recusa, e no sucesso manda vitais e inventário — na Cidade não há ciclo que
+   * os compare.
+   */
+  #requestVocation(viewer: Viewer, vocationId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const vocations = this.#options.vocations;
+    const vocationLevel = this.#options.vocationLevel;
+    if (vocations === undefined || vocationLevel === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Este servidor não tem vocações.' });
+      return;
+    }
+    const vocation = vocations.get(vocationId);
+    if (vocation === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa vocação não existe.' });
+      return;
+    }
+    const weapon = vocation.startingWeaponItemId === undefined
+      ? null
+      : this.#options.itemCatalog?.get(vocation.startingWeaponItemId) ?? null;
+    if (vocation.startingWeaponItemId !== undefined && weapon === null) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'A arma dessa vocação não existe.' });
+      return;
+    }
+    const result = character.chooseVocation(vocation, weapon, {
+      catalog: this.#options.itemCatalog ?? EMPTY_ITEMS,
+      vocationLevel,
+      // Uma por personagem, e com o id DELE no meio: numa cópia da Cidade dois personagens
+      // compartilham `session.id`, e `${session.id}:${lootSeq}` colidiria na chave primária
+      // de `item_instance`. O prefixo da sessão é o que `acquiredBy` filtra.
+      instanceId: `${hosted.session.id}:${character.id}:vocation`,
+    });
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
+      return;
+    }
+    if (result.weapon === 'in-loot-box') {
+      viewer.send({
+        type: 'system-message', level: 'info',
+        text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
+      });
+    }
+    hosted.dirty.add(character.id);
+    const stats = playerStatsOf(character);
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    this.#sendInventory(character.id);
   }
 
   #ownerOf(characterId: string): CharacterRuntime | undefined {
@@ -1838,6 +1948,7 @@ export class SessionHost {
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: false,
+      dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
       sentAnalyzer: null,
@@ -2014,7 +2125,9 @@ export class SessionHost {
         // Shard não credita e não encerra por personagem (FUN-71, ADR 0023): a praça não gera
         // progresso (§37), e chamar `end` uma vez por participante mandaria o mesmo extrato
         // zerado para duzentas pessoas. Sair basta, e `release` faz isso logo abaixo.
-        if (hosted.session.ruleset.shared !== true) {
+        if (hosted.session.ruleset.shared === true) {
+          await this.#saveDurableReceipt(characterId, hosted, reason);
+        } else {
           const receipt = hosted.session.end(reason);
           await this.#saveReceipt(characterId, hosted, receipt);
           for (const viewer of hosted.viewers) {
@@ -2087,6 +2200,8 @@ export class SessionHost {
       // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
       // login se ficasse só na sessão.
       ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
+      ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
       // onde ele está, e é só isso que precisa atravessar.
       ...(owner === undefined ? {} : { equipment: equipmentOf(owner) }),
@@ -2101,15 +2216,50 @@ export class SessionHost {
     // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
     // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
     // `jobs` faria o prazo começar até dez segundos depois, e por acaso.
-    if (owner !== undefined && owner.lootBox.length > 0) {
-      await this.#options.lootBoxes?.save(receipt.sessionId, owner.lootBox)
-        .catch((error: unknown) => {
-          this.#logger.error(
-            { error, characterId, sessionId: receipt.sessionId },
-            'Failed to save the session loot box',
-          );
-        });
-    }
+    await this.#saveLootBox(characterId, receipt.sessionId, owner);
+  }
+
+  async #saveLootBox(characterId: string, sessionId: string, owner: CharacterRuntime | undefined): Promise<void> {
+    if (owner === undefined || owner.lootBox.length === 0) return;
+    await this.#options.lootBoxes?.save(sessionId, owner.lootBox)
+      .catch((error: unknown) => {
+        this.#logger.error({ error, characterId, sessionId }, 'Failed to save the session loot box');
+      });
+  }
+
+  /**
+   * O extrato de ESTADO DURÁVEL de um shard (#154).
+   *
+   * O shard não credita progresso (ADR 0023) — mas guarda estado: vocação, equipamento, arma
+   * de vocação e munição mudam na praça e, sem isto, sumiam no logout (o `equip` da FUN-82 e
+   * o `select-ammo` do #152 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
+   * Agregados zerados: a linha de ledger que o `jobs` insere é a chave de idempotência
+   * (`UNIQUE (session_id, seq)`), não um crédito. `seq` avança na cópia compartilhada, e
+   * cada extrato tem o seu.
+   */
+  async #saveDurableReceipt(characterId: string, hosted: HostedSession, reason: EndReason): Promise<void> {
+    const receipts = this.#options.receipts;
+    const accountId = this.#accountIdByCharacter.get(characterId);
+    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    if (receipts === undefined || accountId === undefined || owner === undefined) return;
+    if (!hosted.dirty.has(characterId)) return;
+    hosted.session.ledgerSeq += 1;
+    await receipts.save({
+      sessionId: hosted.session.id,
+      characterId,
+      accountId,
+      reason,
+      seq: hosted.session.ledgerSeq,
+      aggregates: EMPTY_AGGREGATES,
+      notableEvents: [],
+      ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
+      equipment: equipmentOf(owner),
+      acquired: acquiredBy(owner, hosted.session.id),
+      ...(owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
+    });
+    hosted.dirty.delete(characterId);
+    await this.#saveLootBox(characterId, hosted.session.id, owner);
   }
 
   /** Grava todas as sessões hospedadas. Chamado pelo timer e pela drenagem. */
@@ -2218,6 +2368,7 @@ export class SessionHost {
         maxMana: self.maxMana,
         level: self.level,
         xp: self.xp,
+        vocationId: self.vocationId,
       },
       world: {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
@@ -2359,6 +2510,14 @@ export class SessionHost {
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
         ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
+        // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
+        // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
+        ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+        ...(owner?.inventory === undefined ? {} : {
+          equipment: equipmentOfState(owner.inventory),
+          acquired: acquiredByState(owner.inventory, snapshot.id),
+        }),
+        ...(owner?.lootBox === undefined || owner.lootBox.length === 0 ? {} : { lootBox: owner.lootBox }),
       });
     } catch (error) {
       // Falhar aqui perde o crédito, e é por isso que o snapshot NÃO é apagado em seguida
@@ -2388,6 +2547,7 @@ export class SessionHost {
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
       credited: false,
+      dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
       sentAnalyzer: null,
