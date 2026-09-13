@@ -10,3 +10,4 @@ coverage/
 # Sem a barra final: numa worktree `things` pode ser um symlink para o pacote de outra, e
 # `things/` só casa diretório de verdade.
 things
+dump.rdb
