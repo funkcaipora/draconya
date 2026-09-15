@@ -215,11 +215,11 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
     )).toHaveLength(1);
   });
 
-  it('recusa item SEMPRE — o catálogo existe, mas usar item exige inventário', () => {
-    // Desde a FUN-76 o catálogo existe, então a recusa mudou de motivo: não é mais "não há
-    // catálogo", é "não há inventário" (FUN-82). Aceitar a regra faria o bot escolhê-la e o
-    // atuador recusá-la em silêncio a cada avaliação — um slot morto que o jogador não
-    // consegue explicar.
+  it('recusa item SEMPRE — o catálogo e o inventário existem, mas falta o atuador', () => {
+    // Desde a FUN-76 o catálogo existe e desde a FUN-82 (#160) o inventário também — a recusa
+    // mudou de motivo de novo: não é mais "não há catálogo" nem "não há inventário", é "não há
+    // atuador". Aceitar a regra faria o bot escolhê-la e o atuador recusá-la em silêncio a cada
+    // avaliação — um slot morto que o jogador não consegue explicar.
     const problems = validateBotConfig(
       config({
         support: [{
@@ -230,11 +230,11 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
       content,
     );
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('inventário');
+    expect(problems[0]).toContain('atuador');
   });
 
   it('e o item que nem existe no catálogo é recusado por OUTRO motivo', () => {
-    // A distinção importa para quem lê: "não existe" manda corrigir o id; "exige inventário"
+    // A distinção importa para quem lê: "não existe" manda corrigir o id; "exige um atuador"
     // manda esperar. Uma mensagem só para os dois casos faria o jogador procurar um erro de
     // digitação que não está lá.
     const problems = validateBotConfig(
@@ -247,7 +247,7 @@ describe('a referência cruzada, que a FUN-73 deixou como gancho (FUN-74, FUN-77
       content,
     );
     expect(problems[0]).toContain('não existe');
-    expect(problems[0]).not.toContain('inventário');
+    expect(problems[0]).not.toContain('atuador');
   });
 });
 

@@ -65,13 +65,14 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
           }
           return;
         case 'item':
-          // O catálogo existe desde a FUN-76, e a referência é conferida — mas USAR um item
-          // exige inventário, que é a FUN-82. Aceitar a regra agora faria o bot escolhê-la e o
-          // atuador recusá-la em silêncio a cada avaliação: um slot morto que o jogador não
-          // consegue explicar, que é o formato exato que este vocabulário existe para impedir.
+          // O catálogo existe desde a FUN-76, e o inventário existe desde a FUN-82 (#160) — mas
+          // não há ATUADOR que execute usar um item. Aceitar a regra agora faria o bot
+          // escolhê-la e o atuador recusá-la em silêncio a cada avaliação: um slot morto que o
+          // jogador não consegue explicar, que é o formato exato que este vocabulário existe
+          // para impedir.
           problems.push(
             content.items.has(rule.do.itemId)
-              ? `${where}: usar item exige inventário, que ainda não existe`
+              ? `${where}: usar item exige um atuador, que ainda não existe`
               : `${where}: item "${rule.do.itemId}" não existe`,
           );
       }
