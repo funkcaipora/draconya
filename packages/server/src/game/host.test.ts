@@ -1896,7 +1896,7 @@ describe('equipar pelo socket (FUN-82)', () => {
   const catalogo = new Map([
     ['sword', {
       id: 'sword', name: 'Sword', appearanceId: 1, kind: 'weapon' as const, slot: 'hand' as const,
-      weight: 10, stackable: false, twoHanded: false, attack: 20, armor: 0,
+      weight: 10, value: 0, stackable: false, twoHanded: false, attack: 20, armor: 0,
       requires: { level: 20 },
     }],
   ]);
@@ -2425,7 +2425,7 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
   // A aparência vem da tabela e não do schema desde a FUN-94, então ela entra depois do parse.
   const catalogo = new Map([['sword', {
     ...itemSchema.parse({
-      id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 20,
+      id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 20,
     }),
     appearanceId: 3264,
   }]]);
@@ -3159,11 +3159,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
   } as const;
   /** As armas de tiro do #152, e a flecha grátis que o bow atira sem ninguém escolher. */
   const BOW = {
-    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, twoHanded: true,
+    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0, twoHanded: true,
     weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
   };
   const WAND = {
-    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1,
+    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
   };
   const ARROW = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 };
@@ -3884,7 +3884,7 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
 describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () => {
   const axe = {
     ...itemSchema.parse({
-      id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+      id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21,
       weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
     }),
     appearanceId: 1,
@@ -4030,8 +4030,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
 });
 
 describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
-  const rock = { ...itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5 }), appearanceId: 1 };
-  const sword = { ...itemSchema.parse({ id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24 }), appearanceId: 2 };
+  const rock = { ...itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 }), appearanceId: 1 };
+  const sword = { ...itemSchema.parse({ id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 }), appearanceId: 2 };
   const itemCatalog = new Map([[rock.id, rock], [sword.id, sword]]);
   const progression = { ...TEST_PROGRESSION, satchelInitialSlots: 10, containerRow: 5 } as never;
   const warnings = (socket: FakeSocket) =>

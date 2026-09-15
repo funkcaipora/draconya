@@ -10,12 +10,12 @@ import {
   appearancesSchema,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  ammunitionSchema, bestiarySchema, itemSchema, skillSchema, spellSchema, staminaSchema,
+  ammunitionSchema, bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
   supplySchema, tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster,
-  Pack, Progression, Skill, Spell, Stamina, Supply, Vocation,
+  Pack, PartyConfig, Progression, Skill, Spell, Stamina, Supply, Vocation,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -35,6 +35,8 @@ export interface Content {
   readonly combat: Combat;
   /** Teto e taxa de recuperação da stamina (§10). */
   readonly stamina: Stamina;
+  /** A party de hunt (§15, ADR 0027): teto de membros e pool de XP por vocações únicas. */
+  readonly party: PartyConfig;
   /**
    * Os marcos do Bestiário e o bônus por marco (§18, FUN-113). Opcional: sem ele o abate
    * continua contado no personagem, só não há marco nem bônus — é o conteúdo de teste que
@@ -92,6 +94,7 @@ export interface RawContent {
   readonly progression?: readonly unknown[];
   readonly combat?: readonly unknown[];
   readonly stamina?: readonly unknown[];
+  readonly party?: readonly unknown[];
   readonly bestiary?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
@@ -166,6 +169,13 @@ export function buildContent(raw: RawContent): Content {
   // custo morar onde ninguém procura por ele.
   if (stamina === undefined) {
     problems.push('stamina/baseline.json ausente: sem ele não há teto de stamina');
+  }
+  const parties = parseAll('party', raw.party ?? [], partySchema, problems);
+  const party = parties.get('baseline');
+  // Ausente é ERRO, como bot: solo é uma party de um, e a tabela é o que diz quanto vale cada
+  // vocação a mais — número que o designer ajusta, e que não pode morar em código.
+  if (party === undefined) {
+    problems.push('party/baseline.json ausente: sem ele não há pool de XP por vocação');
   }
   const bots = parseAll('bot', raw.bot ?? [], botSchema, problems);
   const bot = bots.get('baseline');
@@ -570,6 +580,7 @@ export function buildContent(raw: RawContent): Content {
       : [`progression/${progression.id}: ${progression._open}`]),
     ...(combat?._open === undefined ? [] : [`combat/${combat.id}: ${combat._open}`]),
     ...(stamina?._open === undefined ? [] : [`stamina/${stamina.id}: ${stamina._open}`]),
+    ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...openOf('spell', spells),
     ...openOf('supply', supplies),
@@ -592,6 +603,7 @@ export function buildContent(raw: RawContent): Content {
     progression: progression as Progression,
     combat: combat as Combat,
     stamina: stamina as Stamina,
+    party: party as PartyConfig,
     ...(bestiary === undefined ? {} : { bestiary }),
     maps,
     routes,

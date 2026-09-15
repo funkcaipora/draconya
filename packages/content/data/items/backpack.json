@@ -5,5 +5,6 @@
   "slot": "back",
   "initialSlots": 20,
   "weight": 18,
-  "_open": "A mochila do kit de nascimento (ADR 0026, decisão 6): 20 lugares iniciais (o Huntera), crescendo por linhas enquanto houver capacidade (#160)."
+  "value": 5,
+  "_open": "A mochila do kit de nascimento (ADR 0026, decisão 6): 20 lugares iniciais (o Huntera), crescendo por linhas enquanto houver capacidade (#160). value: TibiaWiki: o NPC não compra mochila; 5 é 1/4 dos 20 de compra, provisório até a autovenda (E5) decidir."
 }

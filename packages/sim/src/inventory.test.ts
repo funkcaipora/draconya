@@ -8,25 +8,25 @@ import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 // então o schema não a produz e ela entra aqui à mão. O que este teste exercita é peso, slot e
 // empilhamento — arte não muda nenhum dos três.
 const define = (over: Record<string, unknown>): Item => ({
-  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, ...over }),
+  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over }),
   appearanceId: 1,
 });
 
 const catalog = new Map<string, Item>([
-  ['sword', define({ id: 'sword', kind: 'weapon', slot: 'hand', weight: 50, attack: 24 })],
-  ['armor', define({ id: 'armor', kind: 'armor', slot: 'chest', weight: 90, armor: 4 })],
-  ['helmet', define({ id: 'helmet', kind: 'armor', slot: 'head', weight: 20, armor: 2 })],
+  ['sword', define({ id: 'sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 })],
+  ['armor', define({ id: 'armor', kind: 'armor', slot: 'chest', weight: 90, value: 0, armor: 4 })],
+  ['helmet', define({ id: 'helmet', kind: 'armor', slot: 'head', weight: 20, value: 0, armor: 2 })],
   // Empilhável: o queijo — munição deixou de ser item (ADR 0026), e o schema já não a aceita.
-  ['arrow', define({ id: 'arrow', kind: 'other', weight: 1, stackable: true })],
+  ['arrow', define({ id: 'arrow', kind: 'other', weight: 1, value: 0, stackable: true })],
   ['rock', define({ id: 'rock', kind: 'other', weight: 5 })],
-  ['bow', define({ id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } })],
+  ['bow', define({ id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } })],
   ['shield', define({ id: 'shield', kind: 'shield', slot: 'shield', weight: 40 })],
   ['great-sword', define({
-    id: 'great-sword', kind: 'weapon', slot: 'hand', weight: 60, attack: 40,
+    id: 'great-sword', kind: 'weapon', slot: 'hand', weight: 60, value: 0, attack: 40,
     requires: { level: 20 },
   })],
   ['druid-staff', define({
-    id: 'druid-staff', kind: 'weapon', slot: 'hand', weight: 30, attack: 12,
+    id: 'druid-staff', kind: 'weapon', slot: 'hand', weight: 30, value: 0, attack: 12,
     requires: { vocationId: 'druid' },
   })],
 ]);
@@ -268,8 +268,8 @@ describe('estado', () => {
 });
 
 describe('mochila e bolsa posicionais (#160, ADR 0026 decisão 6)', () => {
-  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20 });
-  const cheese = define({ id: 'cheese', kind: 'other', weight: 1, stackable: true });
+  const backpack = define({ id: 'backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 });
+  const cheese = define({ id: 'cheese', kind: 'other', weight: 1, value: 0, stackable: true });
   const withContainers = new Map<string, Item>([...catalog, ['backpack', backpack], ['cheese', cheese]]);
   const huntera: ContainerRules = { backpackSlots: 20, satchelSlots: 10, row: 5 };
   const rich = wearer({ capacity: 100_000 });

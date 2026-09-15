@@ -9,17 +9,17 @@ import type { CharacterState, VocationChoiceOptions } from './character.js';
 // e isso é `progression.test.ts`.
 
 const define = (over: Record<string, unknown>): Item => ({
-  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, ...over }),
+  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over }),
   appearanceId: 1,
 });
 
 const catalog = new Map<string, Item>([
-  ['machete', define({ id: 'machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 })],
+  ['machete', define({ id: 'machete', kind: 'weapon', slot: 'hand', weight: 16.5, value: 0, attack: 12 })],
   ['steel-axe', define({
-    id: 'steel-axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21, requires: { vocationId: 'knight' },
+    id: 'steel-axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' },
   })],
   ['bow', define({
-    id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true,
+    id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true,
     weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' }, requires: { vocationId: 'paladin' },
   })],
   ['shield', define({ id: 'shield', kind: 'shield', slot: 'shield', weight: 40 })],

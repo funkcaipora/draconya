@@ -70,7 +70,7 @@ if (baseProgression === undefined) throw new Error('conteúdo de teste sem progr
 const raw: RawContent = {
   ...base,
   items: [{
-    id: 'rat-tooth', name: 'Dente de Rato', kind: 'other', weight: 1,
+    id: 'rat-tooth', name: 'Dente de Rato', kind: 'other', weight: 1, value: 0,
   }],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num

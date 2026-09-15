@@ -1,7 +1,7 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_ADVANCED_POLICY, TEST_COMBAT, TEST_HUNT, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_ADVANCED_POLICY, TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA, testContent,
 } from '../testing/content.js';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { Progression } from '@draconya/content';
@@ -64,7 +64,7 @@ describe('session restorer', () => {
 
   it('refuses a hunt that left the content, instead of resuming the wrong one', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
-      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
+      progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
       // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
       bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000,
         advancedFromLevel: 50,

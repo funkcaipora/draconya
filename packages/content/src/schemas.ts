@@ -310,6 +310,13 @@ export const itemSchema = z.strictObject({
   initialSlots: z.number().int().positive().optional(),
   /** Em unidades de capacidade. Capacidade é do personagem (§21.4). */
   weight: z.number().nonnegative(),
+  /**
+   * Preço de venda ao NPC, em gold (#188, ADR 0027 decisão 6). OBRIGATÓRIO e sem default: um
+   * item sem preço é decisão de conteúdo, e o schema recusar é o que faz a decisão ser tomada.
+   * Zero é "não se vende" — a bolsa da party o devolve ao líder em vez de vendê-lo. É o mesmo
+   * campo que a autovenda (§22.1, E5) vai ler.
+   */
+  value: z.number().int().nonnegative(),
   /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
@@ -653,6 +660,38 @@ export const staminaSchema = z.object({
 });
 
 export type Stamina = z.infer<typeof staminaSchema>;
+
+/**
+ * A party de hunt (§15, ADR 0027, #188): o teto de membros e o pool de XP por número de
+ * VOCAÇÕES ÚNICAS entre os membros elegíveis — `pool% = min(100 + 25 × únicas, 200)` é como a
+ * tabela foi preenchida, mas quem manda é a tabela. Indexada só por vocações únicas: o número
+ * de membros não entra no pool, só na divisão (o PRD pedia as duas dimensões; a segunda seria
+ * coluna repetida). Percentuais NÃO DECRESCENTES e uma chave para cada `1..maxMembers`.
+ */
+export const partySchema = z.object({
+  id: z.literal('baseline'),
+  maxMembers: z.number().int().min(2).max(8),
+  xpPoolPercentByUniqueVocations: z.record(z.string().regex(/^[1-9]\d*$/), z.number().int().min(100)),
+  /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
+  matchmakingLevelRange: z.number().int().nonnegative().default(0),
+  _open: z.string().optional(),
+}).superRefine((party, ctx) => {
+  let previous = 0;
+  for (let n = 1; n <= party.maxMembers; n++) {
+    const percent = party.xpPoolPercentByUniqueVocations[String(n)];
+    if (percent === undefined) {
+      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations sem a chave "${String(n)}"` });
+      return;
+    }
+    if (percent < previous) {
+      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations["${String(n)}"] é menor que a anterior` });
+      return;
+    }
+    previous = percent;
+  }
+});
+
+export type PartyConfig = z.infer<typeof partySchema>;
 
 /**
  * O Bestiário (§18, FUN-113): os marcos de abates por monstro e o que cada marco vale.

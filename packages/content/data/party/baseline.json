@@ -1,0 +1,7 @@
+{
+  "id": "baseline",
+  "maxMembers": 4,
+  "xpPoolPercentByUniqueVocations": { "1": 125, "2": 150, "3": 175, "4": 200 },
+  "matchmakingLevelRange": 0,
+  "_open": "§15.3: 25 % por vocação única, teto 100 % (ADR 0027). A tabela existe para o PRD (aceitar tabela por composição) e para balancear sem mexer no sim. matchmakingLevelRange é §43.2, ainda aberto — 0 desliga o filtro."
+}

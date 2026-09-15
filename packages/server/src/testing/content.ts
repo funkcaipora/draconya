@@ -60,6 +60,8 @@ export const TEST_COMBAT = {
 };
 
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+/** A party de hunt (ADR 0027): a tabela real, para solo ser party de um. */
+export const TEST_PARTY = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
 
 const TEST_RAT = {
   id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
@@ -98,7 +100,7 @@ export function rawTestContent(): RawContent {
   // `packages/content/data/appearances/baseline.json`, escrita à mão.
   const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
-    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA],
+    progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
     spells: [TEST_SPELL], supplies: [TEST_SUPPLY],
  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
  bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,

@@ -27,6 +27,20 @@ describe('loadContent', () => {
     expect(content.bestiary?.xpBonusPercentPerMilestone).toBe(1);
   });
 
+  it('carrega a tabela da party real, e todo item do repositório tem preço de venda (#188)', () => {
+    // A tabela é a do ADR 0027: 25 % por vocação única, teto 100 %. E `value` é obrigatório no
+    // schema — este teste prende que o conteúdo REAL passa, e diz quais itens ainda têm o
+    // preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
+    const content = loadContent(DATA);
+    expect(content.party.maxMembers).toBe(4);
+    expect(content.party.xpPoolPercentByUniqueVocations).toEqual({ '1': 125, '2': 150, '3': 175, '4': 200 });
+    for (const item of content.items.values()) {
+      expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
+    }
+    expect(content.items.get('bow')?.value).toBe(130);
+    expect(content.items.get('cheese')?.value).toBe(0);
+  });
+
   it('o conteúdo real tem o bot padrão do personagem novo, e mana para a primeira magia (FUN-114)', () => {
     // O MVP é "hunt + magias + poção funcionando" no PRIMEIRO minuto: sem isto o personagem
     // novo entrava só no golpe básico até abrir a tela do bot, e sem mana até o level 4.

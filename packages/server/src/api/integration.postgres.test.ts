@@ -37,10 +37,10 @@ function integrationContent(): Content {
   const raw = rawTestContent();
   const armory = {
     items: [
-      { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 },
-      { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20 },
+      { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, value: 0, attack: 12 },
+      { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 },
       // A arma do Knight (#154): exige a vocação, como as quatro de verdade.
-      { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+      { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21,
         requires: { vocationId: 'knight' } },
     ],
     vocations: [{
