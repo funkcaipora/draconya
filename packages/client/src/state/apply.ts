@@ -324,9 +324,25 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           receivedAtMs: nowMs,
           ended: false,
         },
+        // A party (#196): o estado SUBSTITUI, como o inventário. Ausente é solo.
+        party: message.party ?? null,
+        partyBag: message.partyBag ?? null,
+        lastSettlement: null,
       }));
       return;
     }
+
+    case 'party-state':
+      hud.set((state) => ({ ...state, party: message }));
+      return;
+
+    case 'party-bag':
+      hud.set((state) => ({ ...state, partyBag: message }));
+      return;
+
+    case 'party-settlement':
+      hud.set((state) => ({ ...state, lastSettlement: message }));
+      return;
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de

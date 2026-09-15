@@ -87,6 +87,15 @@ export const SERVER_TO_CLIENT = {
    */
   'ground-item-appear': 22,
   'ground-item-disappear': 23,
+  /**
+   * A party (#196, ADR 0027). Três mensagens só S2C: quem está nela (`party-state` — sai no
+   * attach e quando a composição ou a liderança mudam), o que há na bolsa compartilhada
+   * (`party-bag` — a cada mudança) e o que o settlement pagou (`party-settlement` — ao sair
+   * alguém e no fim). Não há C2S: formar party é HTTP, e sair é `leave-hunt` (10).
+   */
+  'party-state': 24,
+  'party-bag': 25,
+  'party-settlement': 26,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

@@ -14,7 +14,7 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PresenceEvent, Receipt, Session,
+  Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
   SessionSnapshot, SessionType,
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -448,7 +448,11 @@ interface HostedSession {
    * personagem. `null` é "ninguém recebeu ainda", e o primeiro ciclo com visualizador manda;
    * o `session-attach`, que já leva tudo no `session-state`, também o escreve.
    */
-  sentAnalyzer: SentAnalyzer | null;
+  /**
+   * Por PERSONAGEM desde o #196: os agregados são de cada participante (#187), e quem olha um
+   * membro da party vê os dele — não a soma. Em solo é um só, como antes.
+   */
+  readonly sentAnalyzer: Map<string, SentAnalyzer>;
   /**
    * A soma dos abates do Bestiário ENTREGUE a quem olha cada personagem (FUN-113), por
    * `characterId` — o mesmo mecanismo de `sentStats`, para uma grandeza que só sobe. Entrada
@@ -1422,7 +1426,7 @@ export class SessionHost {
         case 'party-bag-changed':
         case 'party-settlement':
         case 'party-state':
-          // A party no fio é #196; até lá o hospedeiro ignora estes.
+          this.#presentParty(hosted, event);
           continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
@@ -1679,20 +1683,26 @@ export class SessionHost {
    */
   #presentAnalyzer(hosted: HostedSession): void {
     if (hosted.viewers.size === 0) return;
-    const { aggregates, notableEvents } = hosted.session;
-    const sent = hosted.sentAnalyzer;
-    if (sent !== null && sameAnalyzer(sent, aggregates, notableEvents.length)) return;
-    // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e mandá-la
-    // inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo repetição.
-    // Sem entrega anterior (ninguém recebeu nada ainda) vai tudo, que é o que a tela precisa.
-    const since = sent?.eventCount ?? 0;
-    hosted.sentAnalyzer = { aggregates: { ...aggregates }, eventCount: notableEvents.length };
-    const message: S2CMessage = {
-      type: 'analyzer',
-      aggregates: { ...aggregates },
-      notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
-    };
-    for (const viewer of hosted.viewers) viewer.send(message);
+    const { notableEvents } = hosted.session;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const aggregates = hosted.session.aggregatesOf(character.id);
+      const sent = hosted.sentAnalyzer.get(character.id);
+      if (sent !== undefined && sameAnalyzer(sent, aggregates, notableEvents.length)) continue;
+      // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e
+      // mandá-la inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo
+      // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo.
+      const since = sent?.eventCount ?? 0;
+      hosted.sentAnalyzer.set(character.id, { aggregates: { ...aggregates }, eventCount: notableEvents.length });
+      const message: S2CMessage = {
+        type: 'analyzer',
+        aggregates: { ...aggregates },
+        notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
+      };
+      for (const viewer of hosted.viewers) {
+        if (viewer.characterId === character.id) viewer.send(message);
+      }
+    }
   }
 
   /**
@@ -1749,11 +1759,77 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
-    // O `session-state` acabou de levar os agregados: o ciclo seguinte não precisa repetir.
-    hosted.sentAnalyzer = {
-      aggregates: { ...hosted.session.aggregates },
+    // O `session-state` acabou de levar os agregados DELE: o ciclo seguinte não precisa repetir.
+    hosted.sentAnalyzer.set(characterId, {
+      aggregates: { ...hosted.session.aggregatesOf(characterId) },
       eventCount: hosted.session.notableEvents.length,
+    });
+  }
+
+  /**
+   * A party no fio (#196): os três eventos do `sim` viram as três mensagens, para TODOS os
+   * visualizadores da sessão — a party é privada como a hunt, e todo membro vê a bolsa e o
+   * settlement. O HP dos companheiros vai só no `party-state` (attach e mudança de
+   * composição); no meio o cliente já recebe `creature-health` de cada um.
+   */
+  #presentParty(hosted: HostedSession, event: PartyEvent): void {
+    let message: S2CMessage;
+    switch (event.kind) {
+      case 'party-state': {
+        const block = this.#partyBlock(hosted);
+        if (block.party === undefined) return;
+        message = { type: 'party-state', ...block.party };
+        break;
+      }
+      case 'party-bag-changed':
+        message = {
+          type: 'party-bag', gold: event.gold, weight: event.weight, capacity: event.capacity,
+          items: event.items.map((item) => ({ instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity })),
+        };
+        break;
+      case 'party-settlement':
+        message = { type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })) };
+        break;
+      case 'member-left':
+        return;
+    }
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  /** O bloco `party`/`partyBag` do `session-state` (#196), do estado do ruleset. Vazio em solo. */
+  #partyBlock(hosted: HostedSession): { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } {
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const party = ruleset.party;
+    if (party === undefined) return {};
+    const state = ruleset.getState?.();
+    const leaderId = hosted.session.participants.some((p) => p.id === party.leaderId)
+      ? party.leaderId
+      : hosted.session.participants[0]?.id ?? party.leaderId;
+    const block: { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } = {
+      party: {
+        leaderId,
+        mode: party.mode,
+        members: hosted.session.participants.map((member) => ({
+          characterId: member.id,
+          name: this.#nameByCharacter.get(member.id) ?? member.id,
+          alive: member.alive,
+          healthPercent: member.maxHealth > 0 ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100))) : 0,
+        })),
+      },
     };
+    const bag = state?.partyBag;
+    if (bag !== undefined) {
+      let weight = 0;
+      for (const item of bag.items) weight += (this.#options.itemCatalog?.get(item.itemId)?.weight ?? 0) * item.quantity;
+      // A capacidade é a soma dos PRESENTES agora — o snapshot guarda a última calculada.
+      let capacity = 0;
+      for (const member of hosted.session.participants) capacity += member.capacity;
+      block.partyBag = {
+        gold: bag.gold, weight, capacity,
+        items: bag.items.map((item) => ({ instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity })),
+      };
+    }
+    return block;
   }
 
   #participantOf(hosted: HostedSession, characterId: string): CharacterRuntime | undefined {
@@ -2074,7 +2150,7 @@ export class SessionHost {
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
-      sentAnalyzer: null,
+      sentAnalyzer: new Map(),
       sentBestiary: new Map(),
     };
     this.#sessions.set(next.id, successor);
@@ -2510,8 +2586,11 @@ export class SessionHost {
           return appearanceId === undefined ? [] : [{ id: corpse.id, position: corpse.position, appearanceId }];
         }),
       },
-      aggregates: { ...session.aggregates },
+      // Os agregados DESTE personagem (#187, #196): numa party, o que ele rendeu — não a soma.
+      aggregates: { ...session.aggregatesOf(characterId) },
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
+      // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
+      ...this.#partyBlock(hosted),
       // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
       // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
       // "Salvar" dali apagava as regras que a hunt estava executando.
@@ -2719,7 +2798,7 @@ export class SessionHost {
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
-      sentAnalyzer: null,
+      sentAnalyzer: new Map(),
       sentBestiary: new Map(),
     };
     this.#sessions.set(session.id, hosted);

@@ -69,6 +69,10 @@ export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
  * contador que nunca desce —, então a tela não soma nada: cada mensagem substitui a anterior.
  */
 export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
+/** A party (#196): quem está nela, do `session-state` e do `party-state`. */
+export type PartyView = Readonly<S2CProps<'party-state'>>;
+export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
+export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
 
 /**
  * O que o personagem carrega e veste (§21.5, FUN-90).
@@ -165,6 +169,14 @@ export interface HudState {
    * o `sim` não grava zero para todo monstro do conteúdo.
    */
   readonly bestiary: BestiaryCounts | null;
+  /**
+   * A party desta sessão (#196). `null` é solo — e é o que todo `session-state` sem o bloco
+   * diz. A bolsa só existe no modo compartilhado; o último settlement fica até o próximo
+   * `session-state` limpar, para a tela dizer "vendeu N, você levou M" depois de alguém sair.
+   */
+  readonly party: PartyView | null;
+  readonly partyBag: PartyBagView | null;
+  readonly lastSettlement: PartySettlementView | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -184,6 +196,9 @@ export const INITIAL_HUD: HudState = {
   catalogue: null,
   inventory: null,
   bestiary: null,
+  party: null,
+  partyBag: null,
+  lastSettlement: null,
 };
 
 /**

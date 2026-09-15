@@ -646,8 +646,13 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   ciclo — 482 em 120 s medidos, mais que `creature-move`. O HUD mostra horas e minutos, e o
   valor entregue continua em milissegundos; só o gatilho arredonda. O herói do helper da
   FUN-109 tem stamina justamente para o teste de "ciclo sem mudança" queimar como a produção.
-- **`sentAnalyzer` é o mesmo mecanismo para o analisador** (FUN-110), por SESSÃO — os agregados
-  são da sessão, não do personagem. Compara nove agregados e a contagem de eventos notáveis,
+- **`sentAnalyzer` é o mesmo mecanismo para o analisador** (FUN-110), por PERSONAGEM desde o
+  #196 — os agregados são de cada participante (#187), e quem olha um membro da party vê os
+  dele, não a soma; em solo é um só. `session-state.aggregates` também é dele. A party vai no
+  fio por três mensagens S2C (`party-state` no attach e na mudança de composição, `party-bag`
+  a cada item, `party-settlement` ao sair e no fim) e pelo bloco `party`/`partyBag` do
+  `session-state`, montado por `#partyBlock` do estado do ruleset — a capacidade da bolsa é a
+  soma dos PRESENTES agora, não a do snapshot. Compara nove agregados e a contagem de eventos notáveis,
   e `durationMs` fica de fora pela mesma razão da stamina: muda em todo ciclo. Até a FUN-110
   os agregados só saíam no `session-state` e no `session-ended`, e a janela ficava em zero a
   hunt inteira — três abates, level 2, gold no HUD, e "Mortos 0" — porque `docs/product` e o
