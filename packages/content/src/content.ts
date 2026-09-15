@@ -213,6 +213,11 @@ export function buildContent(raw: RawContent): Content {
     if (spell.group !== undefined && spell.groupCooldownMs === undefined) {
       problems.push(`${where}: group sem groupCooldownMs`);
     }
+    // Sem primário o secundário vira o único grupo da magia, com semântica diferente da
+    // documentada em combat.md — o modelo da #155 é o secundário ser o SEGUNDO livro.
+    if (spell.secondaryGroup !== undefined && spell.group === undefined) {
+      problems.push(`${where}: secondaryGroup sem group`);
+    }
     if (spell.secondaryGroup !== undefined && spell.groupCooldownMs !== undefined
       && spell.secondaryGroup.cooldownMs < spell.groupCooldownMs) {
       problems.push(`${where}: o grupo secundário tranca por menos tempo que o primário`);

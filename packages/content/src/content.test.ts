@@ -971,3 +971,18 @@ describe('magia de vocação (#156–#159)', () => {
     expect(() => buildContent(base({ spells: [{ ...orphan, vocationId: 'knight' }] }))).not.toThrow();
   });
 });
+
+describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
+  it('recusa secondaryGroup sem group, e cita o id', () => {
+    // O secundário é o segundo livro (combat.md); sem o primeiro ele vira o único, com
+    // semântica diferente da documentada. Mutação que mata: tirar esta conferência de
+    // `buildContent`.
+    const spell = {
+      id: 'exura-vita', name: 'Exura Vita', manaCost: 160, cooldownMs: 1000,
+      secondaryGroup: { name: 'stance', cooldownMs: 2000 },
+      effect: { kind: 'heal', amount: 200 },
+    };
+    expect(() => buildContent(base({ spells: [spell] })))
+      .toThrow(/spell\/exura-vita: secondaryGroup sem group/);
+  });
+});
