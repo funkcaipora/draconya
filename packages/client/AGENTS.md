@@ -525,11 +525,12 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   são escalados por `1 / zoom`, senão um nome de dez pixels a 3× vira letreiro. A barra do topo
   tem nome, level, vitais, gold e os botões que abrem e fecham cada janela; cada janela é a
   seção de sempre, posicionada numa coluna absoluta — e a moldura É a seção, para que uma seção
-  que devolve `null` (analisador na Cidade) não deixe moldura vazia. O bot é uma sobreposição
-  fora das colunas: dentro delas ficaria por baixo da barra do topo. Analisador, Bestiário e
-  Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre minimizada é
-  janela que abre vazia. No celular (≤ 720 px) a tela vira página: o mundo numa faixa de 40vh e
-  as janelas empilhadas embaixo, roláveis — o caso de uso móvel é configurar o bot (§5.1).
+  que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
+  esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. Analisador,
+  Bestiário e Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre
+  minimizada é janela que abre vazia. No celular (≤ 720 px) a tela vira página: o mundo numa
+  faixa de 40vh e as janelas empilhadas embaixo, roláveis — o caso de uso móvel é configurar o
+  bot (§5.1).
 - **Num painel oculto o `requestAnimationFrame` roda a ~1 Hz, e a tela parece quebrada sem
   estar.** Foi meia hora perdida na FUN-115: o rato saía como retângulo em toda captura, o pacote
   respondia em 5 ms, e o laço de quadro é que só rodava uma vez por segundo — cada quadro novo

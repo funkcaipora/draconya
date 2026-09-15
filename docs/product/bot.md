@@ -67,7 +67,7 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 |---|---|---|
 | `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
 | `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77; a runa de ataque, #165, é supply e vai na categoria `rune`) |
-| `item` | `itemId` | M8 — ainda não existe; a regra é **sempre** recusada |
+| `item` | `itemId` | `packages/content/data/items/*.json` (FUN-76) — a regra é **sempre** recusada: o catálogo existe, mas falta o atuador que usa item (#160 deu o inventário, não o atuador) |
 
 Toda regra pode carregar `enabled: false` (#162): fica no slot, sai da avaliação. Ausente é ligada.
 
@@ -186,15 +186,19 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 
 ## Divergências do PRD
 
-Vazio por enquanto. É aqui que vai o que foi construído diferente do especificado, e por quê.
+**`enabled` é opcional, não `default(true)`.** A spec original de #162 tinha
+`enabled: z.boolean().default(true)`; a implementação usa `.optional()` com a mesma semântica
+(ausente é ligada) porque um default explícito obrigaria as ~86 fixtures de regra existentes a
+declarar o óbvio. `compileBot` filtra por `enabled !== false` na compilação, não pelo valor
+materializado pelo schema (PR #175).
 
 ## Decidido (ADR 0026): painel fixo, interruptor por regra, runa
 
 - **A tela vira um painel fixo na coluna da esquerda**, abaixo da lista de hunts, no estilo do
   vBot do OTClientV8 (MIT): uma linha compacta por regra com um interruptor liga/desliga, a
   edição fina (condição, operador, valor, ação) por cima; minimizável pela barra do topo, nunca
-  removível. A regra ganha `enabled` (default `true`) e o compilador pula a desligada. É o PRD
-  §5.3 (bot à esquerda). Issue #162.
+  removível. A regra ganha `enabled?: boolean`, opcional e ausente é ligada (ver
+  "Divergências"), e o compilador pula a desligada. É o PRD §5.3 (bot à esquerda). Issue #162.
 - **A categoria `rune` ganha o que lançar**: a Avalanche entra como supply de ataque em área
   (decisão 8), com requisito de level e magic level e preço por uso. Issue #165 — entregue;
   a tela tranca a opção abaixo do level, e quem recusa é o servidor. Detalhe em
@@ -214,7 +218,7 @@ O que ele faz, por tipo de ação:
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no monstro mais próximo e **atribui** (`recordDamage`) | level, cooldown, sem alvo, fora de alcance, mana |
 | `supply` com efeito `heal`/`mana` | repõe HP ou mana e **debita gold** | gold insuficiente |
 | `supply` com efeito `damage` (runa, #165) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita gold** | level, magic level, sem alvo, fora de alcance, gold — nesta ordem; sem cooldown próprio |
-| `item` | nada | sempre — não há catálogo |
+| `item` | nada | sempre — o catálogo existe, mas falta o atuador que usa item |
 
 Três coisas que não podem mudar sem pensar duas vezes:
 
@@ -285,9 +289,8 @@ não podem mudar sem pensar duas vezes:
 Quando o alvo morre, a postura deixa de mandar e o passo volta a ser o da rota: o `rejoinNearest`
 do walker reentra pelo tile mais próximo. É o mesmo caminho de quem foi empurrado para fora.
 
-`keep-distance` só faz sentido com arma de alcance maior que 1, **que ainda não existe**. A
-postura entra por interface agora para a geometria já ter teste, e passa a valer no dia em que
-houver arco ou varinha.
+`keep-distance` só faz sentido com arma de alcance maior que 1 — o bow (6) e a wand/rod (3)
+existem desde a #152, e `#attackRangeOf` já lê o alcance da arma equipada.
 
 ### Por que a versão do vocabulário NÃO subiu
 

@@ -1,6 +1,6 @@
 # Contas, autenticação e personagens
 
-**Status:** parcial — autenticação e CRUD inicial implementados; onboarding visual e escolha de vocação continuam pendentes
+**Status:** parcial — autenticação e CRUD inicial implementados; escolha de vocação entregue (#154, ADR 0026); onboarding visual continua pendente
 **PRD:** §7.1–§7.4
 **Épico:** E0
 
@@ -36,7 +36,7 @@ Excluir um personagem usa soft delete para preservar identidade histórica e fut
 - Sessão HTTP usa cookie httpOnly, `SameSite=Lax` e `Secure` em produção.
 - `AUTH_DEV_MODE=true` só existe para desenvolvimento e nunca pode subir em produção.
 - Coins ficam em `account.coins`.
-- Personagem nasce com `vocation = NULL`; a escolha continua reservada ao level 8.
+- Personagem nasce com `vocation = NULL`; a escolha acontece a partir do level 8, uma vez, pela intenção `choose-vocation` (#154, ADR 0026 decisão 1).
 - Premium é por personagem (`premium_until`).
 - Stamina nasce em 24 horas e é representada por `stamina_ms` + `stamina_updated_at`.
 - Personagens por conta são ilimitados; o teto de dois é de personagens ativos e fica no Redis.
