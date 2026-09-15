@@ -274,7 +274,9 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   seis dos catorze pontos do bueiro sem monstro em qualquer pull), com mais cada ponto recebe
   o mesmo tanto; determinístico, igual em dois servidores com o mesmo conteúdo. O tile livre é
   procurado até o `radius` DO PONTO, que a rota autora. Rota sem ponto de spawn é hunt sem
-  monstro.
+  monstro. Com `spawnClearRadius` da hunt (#236), tile a menos disso de um participante vivo
+  conta como bloqueado: o spawn ADIA (`SPAWN_RETRY_MS`), nunca cancela — a densidade é a da
+  dificuldade, e é o que a referência §29 pede ao mandar não copiar a supressão do TFS.
 - **O cadáver é um evento de presença, e é só visual** (`ground-item-appeared` /
   `ground-item-vanished`, FUN-123). O `sim` diz QUAL monstro morreu e ONDE; a arte é da tabela,
   resolvida no hospedeiro (invariante 6). O prazo é o evento `CORPSE` na fila, com

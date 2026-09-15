@@ -38,12 +38,21 @@ function run(session: Session, durationMs: number, stepMs: number): void {
 }
 
 describe('a Rat Cellars real (FUN-123)', () => {
-  it('cada pull mantém exatamente o monsterCount dele vivo: 2, 5 e 8', () => {
+  it('cada pull atinge exatamente o monsterCount dele vivo, e nunca passa: 2, 5 e 8', () => {
     for (const [difficulty, count] of [['cautious', 2], ['bold', 5], ['reckless', 8]] as const) {
       const { session, ruleset } = enter(real(), difficulty);
-      // Dois segundos: todo lugar nasceu (o respawn é de 2 s), e o herói ainda está andando.
-      run(session, 2_500, 100);
-      expect(ruleset.monsters.filter((m) => m.alive).length, difficulty).toBe(count);
+      // O lugar do ponto 0 é o tile em que o herói entra: com `spawnClearRadius` (#236) ele
+      // só nasce quando o herói se afasta, e pelo laço inteiro um lugar recém-vagado espera
+      // o herói sair de perto. A densidade é a da dificuldade — alcançada, e nunca excedida —,
+      // mas num instante qualquer pode faltar o lugar que o herói está pisando.
+      let most = 0;
+      for (let t = 0; t < 10_000; t += 100) {
+        session.advanceBy(100);
+        const alive = ruleset.monsters.filter((m) => m.alive).length;
+        expect(alive, difficulty).toBeLessThanOrEqual(count);
+        most = Math.max(most, alive);
+      }
+      expect(most, difficulty).toBe(count);
     }
   });
 

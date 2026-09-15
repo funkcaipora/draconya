@@ -246,6 +246,17 @@ describe('a rota da hunt é apontada, não inferida', () => {
 });
 
 
+describe('o raio livre do spawn (#236)', () => {
+  it('ausente é zero: o conteúdo de teste continua nascendo em cima de quem está lá', () => {
+    expect(buildContent(base()).hunts.get('rat-cellars')?.spawnClearRadius).toBe(0);
+  });
+
+  it('recusa raio negativo', () => {
+    expect(() => buildContent(base({ hunts: [{ ...cellars, spawnClearRadius: -1 }] })))
+      .toThrow(/spawnClearRadius/);
+  });
+});
+
 describe('a tabela da party (#188, ADR 0027)', () => {
   it('refuses content without it: solo is a party of one, and the pool lives in content', () => {
     expect(() => buildContent({ ...base(), party: [] })).toThrow(/party\/baseline/);
