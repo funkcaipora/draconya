@@ -80,3 +80,23 @@ e a segunda plataforma em `platforms`. O comentário no job diz isso no lugar on
 
 A regra do `AGENTS.md` — dependência nativa nova precisa de binário para as duas arquiteturas —
 **continua valendo**. Ela só deixou de ser verificada pelo CI, e passou a ser conferida à mão.
+
+## Emenda — 2026-09-15: dependência de GitHub é referenciada por tarball, não por `github:`
+
+O `uWebSockets.js` não está no npm; `packages/server/package.json` o declarava como
+`github:uNetworking/uWebSockets.js#v20.69.0`. O `pnpm` resolvia isso para o tarball
+`https://codeload.github.com/...` no lockfile de `main`, e funcionava — até o Dependabot regenerar
+o lockfile: ele reescreve a mesma entrada como `git+ssh://git@github.com/...`, e o runner do CI
+não tem chave SSH. Toda PR do Dependabot (#181–#184) morria no `pnpm install --frozen-lockfile`
+com `Host key verification failed`, antes de qualquer teste — inclusive bump de segurança (#222).
+
+**Decisão:** dependência hospedada no GitHub é declarada pela **URL do tarball com o SHA do
+commit** — `https://codeload.github.com/<org>/<repo>/tar.gz/<sha>` —, nunca por `github:` nem por
+`git+ssh`. É a forma que o lockfile já usava, que qualquer runner sem credencial resolve e que o
+Dependabot não reescreve. Atualizar a versão é trocar o SHA (a tag `v20.69.0` aponta para
+`dddd8ffd…`); o Dependabot não acompanha essa dependência, e isso é aceito — ela anda junto com o
+Node maior, como a emenda anterior já diz.
+
+Descartada: `git config url."https://github.com/".insteadOf "git@github.com:"` no `ci.yml` e no
+`Dockerfile` — funciona, mas exige que cada consumidor novo (Coolify, o laptop de quem clonar)
+lembre da mesma linha; a URL de tarball não depende de ninguém lembrar de nada.
