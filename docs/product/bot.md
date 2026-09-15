@@ -307,7 +307,7 @@ mil regras salvas.
 |---|---|---|
 | `hp-below` | o HP do personagem cai **abaixo** de `percent` | vale |
 | `out-of-gold` | o saldo (entrada + delta) chega a zero | vale |
-| `party-member-lost` | um companheiro saiu ou morreu | **inerte** — party é F3 |
+| `party-member-lost` | um companheiro saiu ou morreu | vale (#193): dispara no `onLeave` do outro, em cascata; quem sai leva o próprio extrato |
 
 Quatro coisas que não podem mudar sem pensar duas vezes:
 
@@ -318,7 +318,10 @@ Quatro coisas que não podem mudar sem pensar duas vezes:
   mil de gold e gastou um.
 - **`party-member-lost` ignora o próprio personagem**, mesmo morto. Sem isso, quem morre sozinho
   encerraria por "companheiro caiu" em vez de por morte — e o motivo é o que o jogador lê ao
-  voltar.
+  voltar. Desde o #193 ela não é predicado periódico: dispara quando OUTRO membro sai (por
+  morte, regra ou pedido), em cascata e na ordem de entrada, e quem a tem SAI — `exit-rule` no
+  extrato dele; os outros ficam. Em party, sair e morrer são `leave`, não `end`: o último a
+  sair encerra a sessão, com o motivo dele.
 - **Encerra por `exit-rule`, nunca por `manual-exit`.** O jogador não pediu para sair; a regra
   dele decidiu. Trocar os dois é o extrato mentindo sobre quem encerrou.
 

@@ -18,6 +18,7 @@
 
 import type { WorldPoint } from './movement.js';
 import type { CarriedItem } from './inventory.js';
+import type { Departure } from './session.js';
 
 /**
  * Alguém levou dano. `amount` é o APLICADO — `min(dano, vida)` —, o que a barra perdeu.
@@ -123,4 +124,27 @@ export interface PartySettlement {
   readonly shares: ReadonlyArray<{ readonly characterId: string; readonly gold: number }>;
 }
 
-export type PartyEvent = PartyBagChanged | PartySettlement;
+/**
+ * A composição da party mudou (#193): quem lidera, quem está presente e vivo. Sai no `leave`
+ * — de quem sai, da cascata e da liderança que passa. Só participantes PRESENTES.
+ */
+export interface PartyState {
+  readonly kind: 'party-state';
+  readonly leaderId: string;
+  readonly members: ReadonlyArray<{ readonly characterId: string; readonly alive: boolean }>;
+}
+
+/**
+ * Um membro saiu por decisão do RULESET (#193): morte, ou regra de saída — o hospedeiro não
+ * chamou `leave`, então precisa receber a saída com o extrato e o personagem, para gravar
+ * um e devolver o outro à Cidade. `Session.leave` pelo socket não passa por aqui: quem chamou
+ * já tem os dois na mão.
+ */
+export interface MemberLeft {
+  readonly kind: 'member-left';
+  readonly characterId: string;
+  readonly reason: 'death' | 'exit-rule';
+  readonly departure: Departure;
+}
+
+export type PartyEvent = PartyBagChanged | PartySettlement | PartyState | MemberLeft;
