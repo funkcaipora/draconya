@@ -314,7 +314,8 @@ describe('authentication and characters with PostgreSQL, Redis and WebSocket', (
     expect(session.aggregates.kills).toBeGreaterThan(0);
     expect(hero.goldDelta).toBeGreaterThan(0);
 
-    const receipt = session.end('manual-exit');
+    const [receipt] = session.end('manual-exit');
+    if (receipt === undefined) throw new Error('sem extrato');
     expect(receipt.aggregates.goldGained).toBe(hero.goldDelta);
     await receipts.save({
       sessionId: session.id, characterId: character.id, accountId: owner.accountId,

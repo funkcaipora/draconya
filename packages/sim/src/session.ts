@@ -86,7 +86,13 @@ export interface SessionSnapshot {
   readonly schedule: ScheduleState;
   readonly rng: RngState;
   readonly participants: readonly CharacterState[];
+  /** A SOMA — o que o analisador lê. Por participante está em `aggregatesByCharacter`. */
   readonly aggregates: Aggregates;
+  /**
+   * Os agregados de CADA participante (#187, ADR 0027). Opcional: snapshot anterior não tem, e
+   * a restauração atribui `aggregates` inteiro ao único participante que existia então.
+   */
+  readonly aggregatesByCharacter?: Readonly<Record<string, Aggregates>>;
   readonly notableEvents: readonly NotableEvent[];
   readonly ledgerSeq: number;
   readonly endedReason: EndReason | null;
@@ -140,11 +146,39 @@ export interface Aggregates {
   bestSpellHit: number;
 }
 
+/**
+ * O extrato de UM participante (#187, ADR 0027 decisão 2).
+ *
+ * Uma sessão com N donos produz N extratos, cada um com os agregados DAQUELE personagem e um
+ * `seq` próprio: o ledger é `UNIQUE (session_id, seq)` (invariante 10), e quatro extratos da
+ * mesma sessão precisam de quatro chaves. O `seq` é alocado no instante em que o extrato é
+ * emitido — no `end`, na ordem de entrada; no `leave`, na hora da saída.
+ */
 export interface Receipt {
   readonly sessionId: string;
+  readonly characterId: string;
   readonly reason: EndReason;
+  readonly seq: number;
   readonly aggregates: Aggregates;
   readonly notableEvents: readonly NotableEvent[];
+}
+
+/** O que `leave` devolve: quem saiu, e o extrato dele. */
+export interface Departure {
+  readonly character: CharacterRuntime;
+  readonly receipt: Receipt;
+}
+
+const NO_RECEIPTS: readonly Receipt[] = [];
+
+/** As chaves que SOMAM. `bestBasicHit` e `bestSpellHit` são máximo — ver `Session.credit`. */
+const MAX_AGGREGATE_KEYS: ReadonlySet<keyof Aggregates> = new Set(['bestBasicHit', 'bestSpellHit']);
+
+export function zeroAggregates(): Aggregates {
+  return {
+    durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+    itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+  };
 }
 
 /**
@@ -271,10 +305,16 @@ export class Session {
 
   readonly participants: CharacterRuntime[] = [];
   readonly notableEvents: NotableEvent[] = [];
-  readonly aggregates: Aggregates = {
-    durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
-    itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
-  };
+  /**
+   * A SOMA materializada dos participantes (#187, DT-01). É o que o hospedeiro compara por ciclo
+   * (`sameAnalyzer`) e o que o bench lê — varrer N participantes a cada leitura seria custo no
+   * caminho quente. **Não escrever aqui diretamente**: `credit` escreve no participante e aqui
+   * no mesmo passo, e é a única forma de os dois números continuarem batendo.
+   */
+  readonly aggregates: Aggregates = zeroAggregates();
+  readonly #aggregatesByCharacter = new Map<string, Aggregates>();
+  /** Os extratos do `end`, memoizados: `end` duas vezes devolve os mesmos, sem `seq` novo. */
+  #receipts: readonly Receipt[] | null = null;
 
   /** Sequência para idempotência econômica: `UNIQUE (session_id, seq)` (invariante 10). */
   ledgerSeq = 0;
@@ -319,6 +359,14 @@ export class Session {
     session.notableEvents.push(...snapshot.notableEvents);
     for (const state of snapshot.participants) {
       session.participants.push(new CharacterRuntime(state));
+    }
+    if (snapshot.aggregatesByCharacter !== undefined) {
+      for (const [id, own] of Object.entries(snapshot.aggregatesByCharacter)) {
+        session.#aggregatesByCharacter.set(id, { ...own });
+      }
+    } else if (snapshot.participants.length === 1 && snapshot.participants[0] !== undefined) {
+      // Snapshot anterior ao #187: um dono só, e a soma É o agregado dele.
+      session.#aggregatesByCharacter.set(snapshot.participants[0].id, { ...snapshot.aggregates });
     }
     if (snapshot.ruleset !== undefined) ruleset.restore?.(snapshot.ruleset);
     ruleset.onResume?.(session);
@@ -369,20 +417,65 @@ export class Session {
    * É a operação que faltava para a Cidade compartilhada existir: antes disto, "sair" só sabia
    * ser `end`, e um jogador saindo da praça encerraria a praça para todo mundo.
    *
-   * **Só faz sentido em shard**, e é o hospedeiro quem sabe disso — aqui a checagem seria uma
-   * regra de servidor dentro do motor. O que este método garante é o mínimo: quem saiu sai da
-   * lista, o ruleset é avisado para desfazer o que a entrada fez, e a sessão não termina.
-   *
-   * Não mexe em agregado nem em extrato: no shard não há nada a creditar (§37), e numa sessão
-   * privada esta chamada não acontece.
+   * Desde o #187 vale em QUALQUER sessão com mais de um dono — a party de hunt (ADR 0027) é a
+   * outra: quem sai leva o próprio extrato, e a sessão continua para os outros. O que este
+   * método garante: quem saiu sai da lista, o ruleset é avisado para desfazer o que a entrada
+   * fez, o extrato dele é emitido com `seq` próprio, e a sessão não termina. Numa sessão de um
+   * dono só o hospedeiro não chama isto — lá sair é `end`.
    */
-  leave(characterId: string): CharacterRuntime | null {
+  leave(characterId: string, reason: EndReason = 'manual-exit'): Departure | null {
     const index = this.participants.findIndex((participant) => participant.id === characterId);
     if (index < 0) return null;
     const [character] = this.participants.splice(index, 1);
     if (character === undefined) return null;
     this.ruleset.onLeave?.(this, character);
-    return character;
+    // O extrato sai DEPOIS do `onLeave`: o settlement da bolsa da party escreve o gold de quem
+    // sai, e ele precisa estar no extrato dele. Numa sessão privada, o hospedeiro não chama
+    // isto; num shard ele descarta o extrato (agregados zerados) — mas o `seq` é consumido do
+    // mesmo jeito, e isso é inofensivo: o que o ledger exige é unicidade, não continuidade.
+    const receipt = this.#receiptFor(character, reason);
+    this.#aggregatesByCharacter.delete(characterId);
+    return { character, receipt };
+  }
+
+  /**
+   * Os agregados DESTE participante (#187). Cria zerado na primeira leitura — um personagem que
+   * entra numa sessão em curso começa do zero, inclusive em `durationMs`.
+   */
+  aggregatesOf(characterId: string): Aggregates {
+    let own = this.#aggregatesByCharacter.get(characterId);
+    if (own === undefined) {
+      own = zeroAggregates();
+      this.#aggregatesByCharacter.set(characterId, own);
+    }
+    return own;
+  }
+
+  /**
+   * Soma `delta` no participante E na sessão, no mesmo passo. `best*Hit` é MÁXIMO, não soma —
+   * é o único campo em que "somar" mentiria, e é por isso que o método existe em vez de
+   * `aggregatesOf(id).x += n` espalhado pelo ruleset.
+   */
+  credit(characterId: string, key: keyof Aggregates, delta: number): void {
+    const own = this.aggregatesOf(characterId);
+    if (MAX_AGGREGATE_KEYS.has(key)) {
+      own[key] = Math.max(own[key], delta);
+      this.aggregates[key] = Math.max(this.aggregates[key], delta);
+      return;
+    }
+    own[key] += delta;
+    this.aggregates[key] += delta;
+  }
+
+  #receiptFor(character: CharacterRuntime, reason: EndReason): Receipt {
+    return {
+      sessionId: this.id,
+      characterId: character.id,
+      reason,
+      seq: ++this.ledgerSeq,
+      aggregates: { ...this.aggregatesOf(character.id) },
+      notableEvents: [...this.notableEvents],
+    };
   }
 
   /**
@@ -404,7 +497,10 @@ export class Session {
     if (dtMs === 0) return;
 
     const targetMs = this.#logicalNowMs + dtMs;
+    // Tempo de sessão, não de personagem: todo presente envelhece junto. É o único agregado que
+    // o ruleset não escreve — e a soma NÃO é `N × dt`: durationMs da sessão é o tempo dela.
     this.aggregates.durationMs += dtMs;
+    for (const participant of this.participants) this.aggregatesOf(participant.id).durationMs += dtMs;
 
     let processed = 0;
     for (;;) {
@@ -500,7 +596,7 @@ export class Session {
   kill(character: CharacterRuntime): void {
     character.alive = false;
     character.health = 0;
-    this.aggregates.deaths++;
+    this.credit(character.id, 'deaths', 1);
     this.record('death', character.id);
     resolveDeath(this, { kind: 'character', character });
   }
@@ -514,31 +610,31 @@ export class Session {
     );
   }
 
-  end(reason: EndReason): Receipt {
+  end(reason: EndReason): readonly Receipt[] {
     if (!this.#endedReason) {
       this.#endedReason = reason;
       this.ruleset.onEnd(this, reason);
       this.record('ended', reason);
+      // Um por participante presente, na ordem de entrada — e emitidos AGORA, depois do
+      // `onEnd`, para o que ele escreveu (settlement) estar dentro.
+      this.#receipts = this.participants.map((participant) => this.#receiptFor(participant, reason));
     }
-    return this.receipt() as Receipt;
+    return this.receipts();
   }
 
   /**
-   * O extrato da sessão encerrada, ou `null` enquanto ela vive.
+   * Os extratos da sessão encerrada, ou vazio enquanto ela vive.
    *
    * Existe porque quem encerra nem sempre é quem precisa do extrato: a morte encerra a hunt
    * de DENTRO do ruleset (§26.1), e o servidor descobre depois, no ciclo. Sem isto ele
    * precisaria chamar `end` de novo só para receber o extrato de volta — o que funciona, e
    * lê como se estivesse encerrando uma sessão já encerrada.
    */
-  receipt(): Receipt | null {
-    if (this.#endedReason === null) return null;
-    return {
-      sessionId: this.id,
-      reason: this.#endedReason,
-      aggregates: { ...this.aggregates },
-      notableEvents: [...this.notableEvents],
-    };
+  receipts(): readonly Receipt[] {
+    if (this.#endedReason === null) return NO_RECEIPTS;
+    // Sessão restaurada já encerrada (o snapshot foi gravado depois do `end`): os extratos
+    // foram gravados por quem encerrou; aqui não há o que emitir de novo.
+    return this.#receipts ?? NO_RECEIPTS;
   }
 
   getRngState(): RngState {
@@ -564,6 +660,9 @@ export class Session {
       rng: this.rng.getState(),
       participants: this.participants.map((p) => p.getState()),
       aggregates: { ...this.aggregates },
+      aggregatesByCharacter: Object.fromEntries(
+        [...this.#aggregatesByCharacter].map(([id, own]) => [id, { ...own }]),
+      ),
       notableEvents: [...this.notableEvents],
       ledgerSeq: this.ledgerSeq,
       endedReason: this.#endedReason,

@@ -636,9 +636,10 @@ describe('encerramento', () => {
   it('por ação manual, com extrato', () => {
     const { session } = start();
     run(session, 10_000, 100);
-    const receipt = session.end('manual-exit');
+    const [receipt] = session.end('manual-exit');
 
     expect(session.ended).toBe('manual-exit');
+    if (receipt === undefined) throw new Error('sem extrato');
     expect(receipt.reason).toBe('manual-exit');
     expect(receipt.aggregates.kills).toBeGreaterThan(0);
     expect(receipt.notableEvents.map((e) => e.type)).toContain('ended');
@@ -692,11 +693,12 @@ describe('troca de dificuldade', () => {
     const { session, hero } = start({ loaded });
     run(session, 10_000, 100);
 
-    const { session: nova, receipt } = changeDifficulty(session, {
+    const { session: nova, receipts: [receipt] } = changeDifficulty(session, {
       content: loaded, to: 'bold', newSessionId: 'session-2', nowMs: session.nowMs,
     });
 
     expect(session.ended).toBe('manual-exit');
+    if (receipt === undefined) throw new Error('sem extrato');
     expect(receipt.aggregates.kills).toBeGreaterThan(0);
     expect(receipt.notableEvents.find((e) => e.type === 'difficulty-changed')?.detail)
       .toBe('cautious → bold');
@@ -3323,7 +3325,7 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
     // "o analisador me deu mais gold do que caiu na conta".
     const { session } = start({ difficulty: 'bold' });
     run(session, 30_000, 100);
-    const receipt = session.end('manual-exit');
+    const [receipt] = session.end('manual-exit');
 
     expect(receipt?.aggregates).toEqual(session.aggregates);
   });

@@ -527,7 +527,7 @@ describe('a Cidade é um SHARD: uma cópia, muitos personagens (FUN-71, ADR 0023
     const [session] = entrar(new CityShard(content, () => 0), 'p1', 'p2');
     if (session === undefined) throw new Error('a praça não foi criada');
 
-    expect(session.leave('p1')?.id).toBe('p1');
+    expect(session.leave('p1')?.character.id).toBe('p1');
     expect(session.ended).toBeNull();
     expect(session.participants.map((p) => p.id)).toEqual(['p2']);
   });
