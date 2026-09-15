@@ -16,6 +16,9 @@ export interface LoadOptions {
   readonly pingIntervalMs: number;
   readonly rampMs: number;
   readonly json: string | null;
+  /** Tamanho da party (#198): 1 é solo, o de sempre; N agrupa as sessões de N em N. */
+  readonly party: number;
+  readonly partyMode: 'split' | 'shared';
 }
 
 export class ArgumentError extends Error {}
@@ -39,6 +42,8 @@ const DEFAULTS = {
   difficulty: 'cautious',
   pingIntervalMs: 1_000,
   rampMs: 2,
+  party: 1,
+  partyMode: 'split' as const,
 };
 
 export function parseArguments(argv: readonly string[], cpuCount: number): LoadOptions {
@@ -69,6 +74,12 @@ export function parseArguments(argv: readonly string[], cpuCount: number): LoadO
     throw new ArgumentError(`--mode é "attached" ou "detached", não "${mode}"`);
   }
 
+  const partyMode = flags.get('party-mode') ?? DEFAULTS.partyMode;
+  if (partyMode !== 'split' && partyMode !== 'shared') {
+    throw new ArgumentError(`--party-mode é "split" ou "shared", não "${partyMode}"`);
+  }
+  const party = Math.max(1, Math.floor(number('party', DEFAULTS.party)));
+
   const sessions = Math.floor(number('sessions', DEFAULTS.sessions));
   // Um worker por core, no máximo, e nunca mais workers que sessões: processo que abre zero
   // sessão só custa memória e polui o relatório com uma fatia vazia.
@@ -89,6 +100,8 @@ export function parseArguments(argv: readonly string[], cpuCount: number): LoadO
     pingIntervalMs: number('ping', DEFAULTS.pingIntervalMs),
     rampMs: number('ramp', DEFAULTS.rampMs),
     json: flags.get('json') ?? null,
+    party,
+    partyMode,
   };
 }
 
@@ -98,6 +111,8 @@ export const USAGE = `
 
   --sessions N     quantas sessões abrir (padrão 1000)
   --mode M         attached | detached (padrão detached)
+  --party N        agrupa as sessões em parties de N (padrão 1, solo); a sobra vai solo
+  --party-mode M   split | shared (padrão split) — só com --party > 1
   --duration D     10m, 90s, 1500ms (padrão 60s)
   --workers N      processos worker (padrão: núcleos, no máximo 8)
   --api URL        base do api (padrão http://127.0.0.1:8080)

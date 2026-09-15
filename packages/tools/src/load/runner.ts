@@ -70,6 +70,21 @@ export function slice(sessions: number, workers: number): number[] {
   return Array.from({ length: workers }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
+/**
+ * A divisão com parties (#198): uma party NÃO atravessa workers — cada worker recebe fatias
+ * inteiras de `party` sessões, e a sobra (`sessions % party`) entra solo no último. Dividir
+ * as sessões cruas e deixar cada worker agrupar as suas quebrava parties no meio: 20 sessões
+ * em 2 workers de 10 davam 2 parties + 2 solos POR worker, e o relatório dizia "5 de 4".
+ */
+export function slicePartied(sessions: number, workers: number, party: number): number[] {
+  if (party <= 1) return slice(sessions, workers);
+  const parties = Math.floor(sessions / party);
+  const shares = slice(parties, workers).map((n) => n * party);
+  const solo = sessions - parties * party;
+  shares[shares.length - 1] = (shares[shares.length - 1] ?? 0) + solo;
+  return shares;
+}
+
 async function runWorker(options: LoadOptions, sessions: number): Promise<SessionSample[]> {
   return new Promise((resolve) => {
     const child = fork(WORKER, [], {
@@ -89,6 +104,8 @@ async function runWorker(options: LoadOptions, sessions: number): Promise<Sessio
       mode: options.mode,
       durationMs: options.durationMs,
       huntId: options.huntId,
+    party: options.party,
+    partyMode: options.partyMode,
       difficulty: options.difficulty,
       pingIntervalMs: options.pingIntervalMs,
       rampMs: options.rampMs,
@@ -106,7 +123,7 @@ export async function runLoad(): Promise<number> {
     return 1;
   }
 
-  const shares = slice(options.sessions, options.workers);
+  const shares = slicePartied(options.sessions, options.workers, options.party);
   console.error(
     `abrindo ${options.sessions} sessões em ${options.workers} worker(s), modo ${options.mode}…`,
   );
@@ -128,6 +145,8 @@ export async function runLoad(): Promise<number> {
     apiUrl: options.apiUrl,
     huntId: options.huntId,
     difficulty: options.difficulty,
+    party: options.party,
+    partyMode: options.partyMode,
   }, samples, { before, after });
 
   console.log(formatReport(report));

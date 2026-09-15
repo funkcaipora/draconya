@@ -804,7 +804,10 @@ export class SessionHost {
       // abaixo o snapshot — a outra cópia do progresso — é apagado.
       const receipt = receiptOf(hosted, characterId);
       if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
-      this.#sessions.delete(hosted.session.id);
+      // Some daqui quando não sobra ninguém dela (#198): numa party, soltar um membro não pode
+      // apagar a sessão que os outros ainda vão creditar — a drenagem passa por eles em seguida.
+      const remaining = this.#charactersOf(hosted.session.id).filter((id) => id !== characterId);
+      if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
     }
 
     this.#sessionIdByCharacter.delete(characterId);
