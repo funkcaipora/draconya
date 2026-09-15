@@ -19,7 +19,7 @@
 import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content,
-  Hunt, HuntDifficulty, Item, Monster, Progression, Route, Skill, Spell, SpellArea, SpawnPoint,
+  Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, Route, Skill, Spell, SpellArea, SpawnPoint,
   Stamina, Supply, Tilemap, Vocation, Weapon,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
@@ -36,6 +36,7 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
+import { xpShare } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
 import { compileBot } from '../bot.js';
@@ -143,6 +144,7 @@ function runnerState(runner: Runner): RunnerState {
 }
 
 const NO_TILES: readonly WorldPoint[] = [];
+const NO_MEMBERS: readonly CharacterRuntime[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
@@ -249,6 +251,11 @@ export interface HuntRulesetOptions {
   readonly combat: Combat;
   readonly progression: Progression;
   readonly stamina: Stamina;
+  /**
+   * A tabela da party (#190, ADR 0027). Sempre presente: solo é party de um, e `xpShare`
+   * devolve a XP inteira sem ler a tabela.
+   */
+  readonly party: PartyConfig;
   readonly vocations: ReadonlyMap<string, Vocation>;
   /** Catálogo de magias (FUN-74). Vazio é uma hunt em que nenhuma magia sai. */
   readonly spells: ReadonlyMap<string, Spell>;
@@ -2187,15 +2194,13 @@ export class HuntRuleset implements Ruleset {
   #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     const killer = findById(session.participants, credit.lastHitBy);
-    // O abate conta SEMPRE — para quem matou, ou para o dono da sessão quando a fonte sumiu
-    // (#187: o agregado é por participante, e um abate sem ninguém não tem onde morar).
-    const counted = killer ?? session.participants[0];
-    if (counted !== undefined) session.credit(counted.id, 'kills', 1);
+    // O abate conta SEMPRE, para todo presente: "matei N" é a pergunta do analisador de cada
+    // um (#190, DT-01), e a party matou junto. Em solo é o de sempre — conta mesmo com a fonte
+    // sumida ou o dono morto; o extrato mentiria se dissesse que não.
+    for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
 
-    // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, a
-    // recompensa não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt
-    // (§10.2), e vale para loot E para XP. O abate continua contando em todos os casos: o
-    // jogador matou, e o extrato mentiria se dissesse que não.
+    // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, o LOOT
+    // não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt (§10.2).
     if (definition !== undefined && killer !== null && killer.alive && !isExhausted(killer)) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
@@ -2205,36 +2210,10 @@ export class HuntRuleset implements Ruleset {
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
       this.#deliverLoot(session, killer, loot.items);
-
-      // A XP sai com o bônus de Bestiário de ANTES deste abate (DT-04): o abate que alcança um
-      // marco é pago pela regra que valia quando começou, e o marco vale do próximo em diante.
-      // Por isso `applyXpBonus` vem antes de `record`, e a ordem é contrato — invertida, o
-      // abate 10 000 seria o único da vida do personagem a render diferente dos vizinhos. O
-      // arredondamento é para baixo, e a conta é em inteiro (ver `Bestiary.applyXpBonus`).
-      const experience = killer.bestiary.applyXpBonus(
-        definition.experience, this.#options.bestiary,
-      );
-      const change = grantXp(killer, experience, this.#vocationOf(killer), this.#options.progression);
-      session.credit(killer.id, 'xpGained', experience);
-      // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
-      // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
-      if (change !== null) {
-        session.record('level-up', String(change.to));
-        // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
-        // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
-        // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
-        // anuncia nada, então "até a reanexação".
-        this.#emitCharacterHealth(session, killer);
-      }
-      // O abate conta no Bestiário DENTRO deste `if`, e não fora (DT-03, §18.6): stamina zero
-      // não conta abate, pela MESMA condição que não paga XP nem loot. Duas condições
-      // divergiriam na primeira mudança em uma delas. E fechar um marco é evento notável, como
-      // o level up: acontece cinco vezes por monstro na vida inteira do personagem.
-      const reached = killer.bestiary.record(monster.monsterId, this.#options.bestiary);
-      if (reached.milestoneReached !== null) {
-        session.record('bestiary-milestone', `${monster.monsterId}/${reached.milestoneReached}`);
-      }
     }
+    // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
+    // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
+    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, killer);
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
@@ -2290,6 +2269,54 @@ export class HuntRuleset implements Ruleset {
    * Nada aqui escreve banco. O `sim` não faz I/O (invariante 1): o que ele faz é registrar
    * onde cada coisa ficou, e o extrato leva.
    */
+  /**
+   * A XP de um abate, dividida pela party (#190, ADR 0027 decisão 3).
+   *
+   * `pool = floor(xp × tabela[vocações únicas] / 100)`, `cota = floor(pool / elegíveis)`, resto
+   * descartado. Elegível é quem está VIVO com stamina — a condição que sempre decidiu se o
+   * matador recebia, aplicada a cada membro. Em solo, `xpShare` devolve a XP inteira sem ler
+   * a tabela, e o único elegível é o matador: nada muda, inclusive quando a fonte do golpe
+   * sumiu — aí o solo continua sem XP, porque o único candidato não é o matador (DT-04).
+   *
+   * A ordem é contrato: para cada elegível, na ordem de ENTRADA, `applyXpBonus` (o bônus de
+   * Bestiário de ANTES deste abate — DT-04 da FUN-113) → `grantXp` → `record` no Bestiário.
+   * Nada aqui consome RNG.
+   */
+  #grantPartyXp(
+    session: Session, monster: MonsterRuntime, definition: Monster, killer: CharacterRuntime | null,
+  ): void {
+    const eligible = session.participants.length === 1
+      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
+      : session.participants.filter((p) => p.alive && !isExhausted(p));
+    if (eligible.length === 0) return;
+    const share = xpShare(definition.experience, eligible, this.#options.party);
+    const solo = session.participants.length === 1;
+    for (const member of eligible) {
+      const experience = member.bestiary.applyXpBonus(share, this.#options.bestiary);
+      const change = grantXp(member, experience, this.#vocationOf(member), this.#options.progression);
+      session.credit(member.id, 'xpGained', experience);
+      // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
+      // hunt de oito horas que o jogador quer ver ao voltar (§16.2). Em party o detalhe diz
+      // DE QUEM (DT-02); em solo fica como sempre foi, e `event-text.ts` lê o formato solo.
+      if (change !== null) {
+        session.record('level-up', solo ? String(change.to) : `${member.id}/${String(change.to)}`);
+        // E reescreve `health`/`maxHealth` pela tabela (`retarget`): a barra sai daqui como
+        // de todo lugar que a escreve (FUN-109). Sem isto, a barra sobre o herói ficava com o
+        // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
+        // anuncia nada, então "até a reanexação".
+        this.#emitCharacterHealth(session, member);
+      }
+      // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
+      // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
+      // notável, como o level up: acontece cinco vezes por monstro na vida do personagem.
+      const reached = member.bestiary.record(monster.monsterId, this.#options.bestiary);
+      if (reached.milestoneReached !== null) {
+        const detail = `${monster.monsterId}/${String(reached.milestoneReached)}`;
+        session.record('bestiary-milestone', solo ? detail : `${member.id}/${detail}`);
+      }
+    }
+  }
+
   #deliverLoot(
     session: Session, character: CharacterRuntime, items: readonly LootItem[],
   ): void {
@@ -2545,6 +2572,7 @@ export function createHuntRuleset(
     ammunition: content.ammunition,
     // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
     // `exactOptionalPropertyTypes`.
+    party: content.party,
     ...(content.bestiary === undefined ? {} : { bestiary: content.bestiary }),
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,

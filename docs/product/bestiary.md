@@ -49,6 +49,10 @@ do `sim` é a verdadeira.
 - O abate que **alcança** um marco é pago com o multiplicador de antes; o marco vale do abate
   seguinte em diante (DT-04, ver Divergências).
 - Abate com stamina zero não conta, não dá XP e não dá loot — uma condição só.
+- **Em party o abate conta para todo membro elegível** (vivo, com stamina), não só para quem
+  deu o golpe (#190, ADR 0027 decisão 4): party é o jeito previsto de jogar, e o Bestiário é
+  progressão por monstro, não por golpe. O bônus de XP de cada um continua individual e se
+  aplica à cota dele.
 - O contador é **absoluto** no ticket e no extrato, e o ledger fica com o **maior** por monstro
   (DT-02): abate nunca desce, então um extrato antigo processado fora de ordem não rebaixa nada,
   sem precisar de guarda de instante. É o padrão das skills (FUN-75).
