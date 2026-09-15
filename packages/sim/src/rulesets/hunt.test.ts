@@ -147,6 +147,14 @@ const items = [
     id: 'plate', name: 'Plate Armor', kind: 'armor', slot: 'chest',
     weight: 80, value: 0, armor: 9,
   },
+  // Alcance 3, bem acima do desarmado (1): é o que o teste do #216 precisa para distinguir
+  // "alcance do bot" de "alcance de quem está de mãos vazias". `manaPerHit` alto e o herói
+  // sem mana (`character()` começa em 0) garantem que ela nunca bate sozinha — o teste mede
+  // a CONTAGEM de alvos, não o golpe.
+  {
+    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 } },
+  },
 ];
 
 // A aparência é DERIVADA (FUN-94). Estes testes falam de combate, rota, loot e bot; a arte não
@@ -1277,6 +1285,61 @@ describe('cadência das cinco categorias (FUN-84)', () => {
     };
 
     expect(run(1_000)).toBe(run(100));
+  });
+});
+
+// --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
+
+describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {
+  // A sala 4×3 do `arena` (routeIndex 4, radius 2) alcança à vontade: os três ratos do
+  // `bold` são repostos a 2 e 3 tiles do herói, que entra em (1, 1) — fora do alcance
+  // desarmado (1) e dentro do alcance da wand (3).
+  const wand: InventoryState = {
+    backpack: [], equipped: { hand: { instanceId: 'i1', itemId: 'wand', quantity: 1 } },
+  };
+
+  const withCountRule = (inventory?: InventoryState) => {
+    const actuator = recorder();
+    const session = createHuntSession({
+      id: 'targets-in-reach', content: content(), huntId: 'arena', difficulty: 'bold',
+      createdAtMs: 0,
+      botConfig: botConfig({
+        attack: [{ when: { kind: 'targets', op: '>=', count: 3 }, do: { kind: 'spell', spellId: 'x' } }],
+      }),
+      actuator,
+    });
+    const hero = character(inventory === undefined ? {} : { inventory });
+    session.enter(hero);
+    return { session, ruleset: session.ruleset as HuntRuleset, actuator };
+  };
+
+  /** Reposiciona os três ratos do `bold`, todos > 1 e <= 3 tiles do herói em (1, 1). */
+  const spreadRats = (ruleset: HuntRuleset): void => {
+    const [a, b, c] = ruleset.monsters;
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: 3, y: 1 };
+    b.position = { x: 4, y: 1 };
+    c.position = { x: 4, y: 3 };
+  };
+
+  it('com a wand na mão (alcance 3), "targets >= 3" DISPARA', () => {
+    const { session, ruleset, actuator } = withCountRule(wand);
+    session.advanceBy(50);
+    spreadRats(ruleset);
+
+    run(session, 3_000, 100);
+
+    expect(actuator.done.some((a) => a.kind === 'spell' && a.spellId === 'x')).toBe(true);
+  });
+
+  it('desarmado (alcance 1), os MESMOS três ratos NÃO disparam a regra', () => {
+    const { session, ruleset, actuator } = withCountRule();
+    session.advanceBy(50);
+    spreadRats(ruleset);
+
+    run(session, 3_000, 100);
+
+    expect(actuator.done).toHaveLength(0);
   });
 });
 
