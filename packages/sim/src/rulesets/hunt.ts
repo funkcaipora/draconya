@@ -1747,11 +1747,18 @@ export class HuntRuleset implements Ruleset {
 
     // §20.3 sem a regra de saída: a hunt CONTINUA, sem poção, e o personagem pode morrer. Vale
     // a linha no extrato pela mesma razão que a stamina zerada vale: descobrir isso só pelo
-    // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo.
-    const runner = this.#runnerOf(character.id);
-    if (!runner.warnedNoGold) {
-      runner.warnedNoGold = true;
-      session.record('supply-unaffordable', supply.id);
+    // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo. Mas só
+    // `not-enough-gold` é ESTA notícia (#217): as outras recusas da runa (#165) não são "sem
+    // gold". `level-too-low`/`magic-level-too-low` o `BotPanel` já tranca na configuração — a
+    // única forma de aparecer aqui é um level-down depois de configurada, e mesmo assim não é
+    // pergunta de gold; `no-target`/`out-of-range` são a mira falhando a cada segundo, o mesmo
+    // silêncio que `castSpell` já dá às magias.
+    if (result.reason === 'not-enough-gold') {
+      const runner = this.#runnerOf(character.id);
+      if (!runner.warnedNoGold) {
+        runner.warnedNoGold = true;
+        session.record('supply-unaffordable', supply.id);
+      }
     }
     return result;
   }

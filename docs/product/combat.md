@@ -207,6 +207,13 @@ O que difere da magia de ataque, e por quê:
 - **A ordem das recusas**: `level-too-low` → `magic-level-too-low` → `no-target` →
   `out-of-range` → `not-enough-gold`. O gold é conferido **depois** da mira, pela mesma razão
   que a mana da magia sai por último: recusar antes de saber se há alvo é debitar sem lançar.
+- **Só `not-enough-gold` vira linha no extrato** (#217), o aviso único de `§20.3`. As outras
+  quatro recusas são silenciosas — a mesma mudez que `castSpell` já dá à magia: `level-too-low`
+  e `magic-level-too-low` o `BotPanel` já tranca na configuração (a única forma de aparecer é
+  um level-down depois de configurada, e mesmo assim não é pergunta de gold); `no-target` e
+  `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
+  há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
+  flag de gold por uma recusa que nunca foi sobre gold — o defeito que a #217 corrigiu.
 - **O dano é o mesmo pipeline** (`resolveDamage` com `kind: 'magic'`, `#applyHits` da hunt —
   o mesmo que a magia usa), com atribuição e morte por alvo.
 

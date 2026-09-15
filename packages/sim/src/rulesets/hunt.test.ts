@@ -3924,11 +3924,44 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
     const young = withRune(29, 1_000);
     expect(young.session.aggregates.suppliesUsed).toBe(0);
     expect(young.session.aggregates.goldSpent).toBe(0);
+    // A recusa é de LEVEL, não de gold (#217): o personagem tem 1.000 de saldo, e o
+    // `BotPanel` já tranca a runa fora de alcance na configuração. O aviso único de gold não
+    // pode queimar por uma recusa que nunca foi sobre gold.
+    expect(young.session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(0);
+    const state = young.session.ruleset.getState?.() as { warnedNoGold?: boolean };
+    expect(state.warnedNoGold).toBe(false);
     const at = (hz: number) => {
       const { session, hero } = withRune(30, 1_000, hz);
       return { uses: session.aggregates.suppliesUsed, gold: hero.goldDelta, kills: session.aggregates.kills };
     };
     expect(at(1)).toEqual(at(10));
+  });
+
+  it('depois, com o level da runa mas sem gold de verdade, o aviso sai — e só ele (#217)', () => {
+    // Mesma runa; agora o level deixou de ser o problema e o gold é. O flag continua livre
+    // para queimar aqui, porque cada `withRune` cria uma sessão nova.
+    const { session } = withRune(30, 0);
+    const avisos = session.notableEvents.filter((e) => e.type === 'supply-unaffordable');
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]?.detail).toBe('avalanche-rune');
+    const state = session.ruleset.getState?.() as { warnedNoGold?: boolean };
+    expect(state.warnedNoGold).toBe(true);
+  });
+
+  it('sem monstro a runa recusa por no-target repetidamente, e nenhuma linha sai (#217)', () => {
+    // O "when" é da vida do personagem, não dos alvos: a categoria tenta lançar a cada
+    // vencimento mesmo sem ninguém para mirar, e cada tentativa recusa por `no-target` — a
+    // mesma recusa que `castSpell` já deixa muda para a magia.
+    const { session, hero } = withSpells(botConfig({
+      rune: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    }), { gold: 10_000, supplies: [...supplies, rune], monsters: false });
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+
+    run(session, 10_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBe(0);
+    expect(session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(0);
   });
 });
 
