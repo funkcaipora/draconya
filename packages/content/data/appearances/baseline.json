@@ -162,11 +162,11 @@
       "effect": 13
     },
     "apprentices-strike-sorcerer": {
-      "effect": 15,
+      "effect": 16,
       "missile": 4
     },
     "flame-strike-sorcerer": {
-      "effect": 15,
+      "effect": 16,
       "missile": 4
     },
     "ice-strike-sorcerer": {
@@ -178,7 +178,7 @@
       "missile": 5
     },
     "terra-strike-sorcerer": {
-      "effect": 16,
+      "effect": 17,
       "missile": 30
     },
     "haste-sorcerer": {
@@ -223,7 +223,7 @@
       "effect": 17
     },
     "strong-flame-strike": {
-      "effect": 15,
+      "effect": 16,
       "missile": 4
     },
     "strong-energy-strike": {
@@ -231,7 +231,7 @@
       "missile": 5
     },
     "mud-attack": {
-      "effect": 16,
+      "effect": 17,
       "missile": 30
     },
     "chill-out": {
@@ -241,11 +241,11 @@
       "effect": 13
     },
     "apprentices-strike-druid": {
-      "effect": 15,
+      "effect": 16,
       "missile": 4
     },
     "flame-strike-druid": {
-      "effect": 15,
+      "effect": 16,
       "missile": 4
     },
     "ice-strike-druid": {
@@ -260,7 +260,7 @@
       "missile": 5
     },
     "terra-strike-druid": {
-      "effect": 16,
+      "effect": 17,
       "missile": 30
     },
     "haste-druid": {
@@ -298,7 +298,7 @@
       "effect": 42
     },
     "strong-terra-strike": {
-      "effect": 16,
+      "effect": 17,
       "missile": 30
     },
     "forked-thorns": {
