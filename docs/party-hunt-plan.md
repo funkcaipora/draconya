@@ -333,24 +333,24 @@ e o índice `receipts:char:*`, que já é por personagem.
 
 ---
 
-## 9. Issues do milestone M13 · Party de hunt (ordem de execução)
+## 9. Issues do milestone [M13 · Party de hunt](https://github.com/funkcaipora/draconya/milestone/3) (ordem de execução)
 
 | # | Escopo | Task | Bloqueada por |
 |---|---|---|---|
-| 1 | docs | ADR 0027 — party: uma sessão com N donos, XP por vocação única, dois modos de loot/custo; decisões do §8 fechadas | — |
-| 2 | sim | **Agregados e extrato por participante**; `leave` em qualquer ruleset; `ledgerSeq` por extrato; `session.aggregates` como soma. Sem mudança de comportamento em solo (todos os testes atuais passam intactos) | 1 |
-| 3 | content | `party/baseline.json` + schema; `itemSchema.value` em todo item do repositório | 1 |
-| 4 | sim | `party.ts` puro: vocações únicas, pool, divisão com resto, settlement da bolsa — só funções e testes de tabela | 3 |
-| 5 | sim | XP em party no `#onMonsterDied`: elegíveis, cota, Bestiário para todos, `experience-gain` por membro; 1 Hz == 10 Hz | 2, 4 |
-| 6 | sim | modo `split`: sorteio do destinatário antes do loot, modificadores dele; solo sem sorteio novo (sequência de loot idêntica — teste que prende) | 5 |
-| 7 | sim | modo `shared`: rateio de supply em tempo real com cobertura pelo usuário; `PartyBag` com capacidade somada; settlement em `leave`/`end`; excedente e item sem valor para o líder | 5 |
-| 8 | sim | saída e morte de membro: `leave` com extrato, `party-member-lost` ativo, liderança passa, último sai encerra | 7 |
-| 9 | server | extratos por membro no Redis (`receipt:${sessionId}:${characterId}`), `#saveReceipt` por membro, caixa de loot do líder, snapshot/restauração com N; `jobs` intacto (teste Postgres de 4 extratos da mesma sessão) | 2, 8 |
-| 10 | server | party no `api`: store Redis, rotas de convite/aprovação/modo/início, um nó e um ticket por membro, sessão criada com N; limite de ativos por conta | 9 |
-| 11 | protocol | `party-state`, `party-bag`, `party-settlement`; `party` no ticket e no `session-state` | 9 |
-| 12 | client | painel de party na seleção de hunt, bolsa na direita, analisador por membro, HP dos companheiros | 10, 11 |
-| 13 | server/tools | **critério de saída §44.4**: cliente sintético com 4 personagens de 4 vocações numa party `shared` — cada um recebe 50 % da XP de cada rato, a bolsa vende e divide, o ledger tem 4 linhas da mesma sessão | 12 |
-| 14 | server | matchmaking por faixa de level (§15.2, §43.2) — fila em Redis; **opcional** no milestone, `matchmakingLevelRange` já existe para ele | 10 |
+| 1 · [#186](https://github.com/funkcaipora/draconya/issues/186) | docs | ADR 0027 — party: uma sessão com N donos, XP por vocação única, dois modos de loot/custo; decisões do §8 fechadas | — |
+| 2 · [#187](https://github.com/funkcaipora/draconya/issues/187) | sim | **Agregados e extrato por participante**; `leave` em qualquer ruleset; `ledgerSeq` por extrato; `session.aggregates` como soma. Sem mudança de comportamento em solo (todos os testes atuais passam intactos) | 1 |
+| 3 · [#188](https://github.com/funkcaipora/draconya/issues/188) | content | `party/baseline.json` + schema; `itemSchema.value` em todo item do repositório | 1 |
+| 4 · [#189](https://github.com/funkcaipora/draconya/issues/189) | sim | `party.ts` puro: vocações únicas, pool, divisão com resto, settlement da bolsa — só funções e testes de tabela | 3 |
+| 5 · [#190](https://github.com/funkcaipora/draconya/issues/190) | sim | XP em party no `#onMonsterDied`: elegíveis, cota, Bestiário para todos, `experience-gain` por membro; 1 Hz == 10 Hz | 2, 4 |
+| 6 · [#191](https://github.com/funkcaipora/draconya/issues/191) | sim | modo `split`: sorteio do destinatário antes do loot, modificadores dele; solo sem sorteio novo (sequência de loot idêntica — teste que prende) | 5 |
+| 7 · [#192](https://github.com/funkcaipora/draconya/issues/192) | sim | modo `shared`: rateio de supply em tempo real com cobertura pelo usuário; `PartyBag` com capacidade somada; settlement em `leave`/`end`; excedente e item sem valor para o líder | 5 |
+| 8 · [#193](https://github.com/funkcaipora/draconya/issues/193) | sim | saída e morte de membro: `leave` com extrato, `party-member-lost` ativo, liderança passa, último sai encerra | 7 |
+| 9 · [#194](https://github.com/funkcaipora/draconya/issues/194) | server | extratos por membro no Redis (`receipt:${sessionId}:${characterId}`), `#saveReceipt` por membro, caixa de loot do líder, snapshot/restauração com N; `jobs` intacto (teste Postgres de 4 extratos da mesma sessão) | 2, 8 |
+| 10 · [#195](https://github.com/funkcaipora/draconya/issues/195) | server | party no `api`: store Redis, rotas de convite/aprovação/modo/início, um nó e um ticket por membro, sessão criada com N; limite de ativos por conta | 9 |
+| 11 · [#196](https://github.com/funkcaipora/draconya/issues/196) | protocol | `party-state`, `party-bag`, `party-settlement`; `party` no ticket e no `session-state` | 9 |
+| 12 · [#197](https://github.com/funkcaipora/draconya/issues/197) | client | painel de party na seleção de hunt, bolsa na direita, analisador por membro, HP dos companheiros | 10, 11 |
+| 13 · [#198](https://github.com/funkcaipora/draconya/issues/198) | server/tools | **critério de saída §44.4**: cliente sintético com 4 personagens de 4 vocações numa party `shared` — cada um recebe 50 % da XP de cada rato, a bolsa vende e divide, o ledger tem 4 linhas da mesma sessão | 12 |
+| 14 · [#199](https://github.com/funkcaipora/draconya/issues/199) | server | matchmaking por faixa de level (§15.2, §43.2) — fila em Redis; **opcional** no milestone, `matchmakingLevelRange` já existe para ele | 10 |
 
 **Pronto quando:** quatro personagens, um de cada vocação, entram numa party em modo compartilhado
 a partir da Cidade; cada rato rende 50 % da XP a cada um; o que cai vai para a bolsa do líder, é
