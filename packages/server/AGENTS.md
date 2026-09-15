@@ -609,6 +609,10 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
 
 - Ações do jogador são processadas **na chegada**, não enfileiradas para o tick. Enfileirar
   adiciona até 100 ms de jitter em cima do ping — irrelevante na hunt, fatal no PvP manual.
+- `uWebSockets.js` vem do GitHub, e é declarado pela **URL de tarball com SHA**
+  (`https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/<sha>`), não por `github:` —
+  o Dependabot reescreve `github:` como `git+ssh` no lockfile e o CI, sem chave SSH, morre no
+  `pnpm install` (#222, emenda no ADR 0013). Atualizar é trocar o SHA pelo da tag nova.
 - `uWebSockets.js` não é a API do `ws`. Não presuma compatibilidade. O `HttpRequest` do
   `upgrade` só vale DURANTE o handler: qualquer header ou query que o caminho assíncrono vá
   usar precisa ser lido antes, e mexer na resposta depois de `onAborted` derruba o processo.
