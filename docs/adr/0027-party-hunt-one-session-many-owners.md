@@ -1,6 +1,6 @@
 # 0027 — Party de hunt: uma sessão com N donos, XP por vocação única e dois modos de loot e custo
 
-**Status:** proposto
+**Status:** aceito
 **Data:** 2026-09-15
 **Contexto técnico:** `packages/sim` (session, hunt ruleset, novo `party.ts`), `packages/content`
 (`party/`, `item.value`), `packages/protocol` (party no ticket e no `session-state`),

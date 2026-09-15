@@ -29,6 +29,11 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 - Market sem taxa de listagem e sem comissão sobre venda.
 - Coins são vendáveis no Market por gold, transferindo-se de conta para conta.
 - Supplies abstratos não são listados no Market como pilha tradicional (não existem como item físico).
+- Em party no modo `shared` (M13, ADR 0027), o supply é rateado na hora — `floor(c/n)` de cada
+  presente, resto do usuário — e o loot cai numa bolsa que é **vendida** pelo `value` de cada item
+  e dividida entre os presentes a cada saída e no fim; `value: 0` não se vende e vai para o
+  líder. É a primeira venda ao NPC do jogo, e usa o mesmo campo que a autovenda (§22.1) vai usar.
+  Ver `party.md`.
 
 ## Parâmetros de balanceamento
 
