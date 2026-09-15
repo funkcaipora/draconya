@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ArgumentError, parseArguments, parseDuration } from './args.js';
-import { buildReport, percentiles, type SessionSample } from './report.js';
-import { slice } from './runner.js';
+import { buildReport, formatReport, percentiles, type SessionSample } from './report.js';
+import { slice, slicePartied } from './runner.js';
 
 const none = { heapBytes: null, sessions: null, tickDurationUs: null };
 const empty = { before: none, after: none };
@@ -41,6 +41,34 @@ describe('argumentos', () => {
   it('cai para o número de núcleos, com teto', () => {
     expect(parseArguments([], 4).workers).toBe(4);
     expect(parseArguments([], 64).workers).toBe(8);
+  });
+});
+
+describe('parties no cliente de carga (#198)', () => {
+  it('reads --party and --party-mode, defaults to solo, and refuses a mode that does not exist', () => {
+    expect(parseArguments([], 4)).toMatchObject({ party: 1, partyMode: 'split' });
+    expect(parseArguments(['--party', '4', '--party-mode', 'shared'], 4)).toMatchObject({ party: 4, partyMode: 'shared' });
+    expect(parseArguments(['--party', '0'], 4).party).toBe(1);
+    expect(() => parseArguments(['--party-mode', 'pooled'], 4)).toThrow(ArgumentError);
+  });
+
+  it('never splits a party across workers: whole parties per worker, the remainder solo in the last', () => {
+    // Mutação que mata: `slice(20, 2)` cru — cada worker agruparia 2 parties + 2 solos, e o
+    // relatório mentiria "5 de 4".
+    expect(slicePartied(20, 2, 4)).toEqual([12, 8]);
+    expect(slicePartied(10, 3, 4)).toEqual([4, 4, 2]);
+    expect(slicePartied(7, 2, 1)).toEqual([4, 3]);
+    for (const [sessions, workers, party] of [[20, 2, 4], [1000, 8, 3], [5, 4, 4]] as const) {
+      expect(slicePartied(sessions, workers, party).reduce((a, b) => a + b, 0)).toBe(sessions);
+    }
+  });
+
+  it('the report says how many parties of what size were formed, and the remainder that went solo', () => {
+    const report = buildReport({
+      sessions: 10, mode: 'detached', durationMs: 1_000, workers: 1, apiUrl: 'http://x',
+      huntId: 'arena', difficulty: 'cautious', party: 4, partyMode: 'shared',
+    }, [], { before: { heapBytes: null, sessions: null, tickDurationUs: null }, after: { heapBytes: null, sessions: null, tickDurationUs: null } });
+    expect(formatReport(report)).toContain('2 de 4 (shared) + 2 solo');
   });
 });
 

@@ -363,6 +363,20 @@ CONTA — `gold anterior + ganho − gasto` —, e não por "é maior que zero".
 analisador têm teste cada um; o que faltava era alguém afirmar que os quatro contam a MESMA
 história sobre a mesma hunt.
 
+## O critério de saída do M13, como teste (#198)
+
+`api/party-exit.postgres.test.ts` prova que quatro personagens de quatro vocações rendem
+JUNTOS numa party compartilhada — e que cada um leva a sua parte ao banco, da mesma sessão:
+a party pelo `api`, o líder abre o socket com o ticket da party (é ESSE socket que cria a hunt
+com os quatro) e fecha, os outros três nunca conectam, cada rato de 5 XP rende 2 a cada um
+(pool 200 % ÷ 4), um membro entra e sai levando a cota do settlement, a drenagem grava os
+outros três, e o ledger tem quatro linhas do mesmo `session_id` cuja soma é o que caiu. Duas
+armadilhas que ele pegou: a arena de teste comum tem 2×2 de chão e quatro heróis a ENCHEM
+(nenhum rato nasce, a hunt fica parada sem erro — o teste tem arena própria), e `release` de
+um membro apagava a sessão que os outros ainda iam creditar na drenagem (agora só some quando
+não sobra ninguém dela, como `#replace`). O cliente de carga ganhou `--party N` e
+`--party-mode`: uma party não atravessa workers (`slicePartied`), e a sobra entra solo.
+
 ## O critério de saída da Fase 1 (FUN-44)
 
 `src/api/phase-one-exit.postgres.test.ts` roda o roteiro inteiro com socket, Postgres e Redis de verdade:

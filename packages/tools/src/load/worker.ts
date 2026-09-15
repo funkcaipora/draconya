@@ -6,7 +6,7 @@
 // cada um ganha o próprio laço de eventos. Sem isso, o gargalo medido seria o do cliente de
 // carga, e o relatório mediria a ferramenta em vez do servidor.
 
-import { openSession, type LoadMode, type SyntheticSession } from './session.js';
+import { openParty, openSession, type LoadMode, type SyntheticSession } from './session.js';
 import type { SessionSample } from './report.js';
 
 export interface WorkerCommand {
@@ -19,6 +19,9 @@ export interface WorkerCommand {
   readonly pingIntervalMs: number;
   /** Espaçamento entre aberturas, em ms. Ver `RAMP`. */
   readonly rampMs: number;
+  /** Tamanho da party (#198). 1 é solo. */
+  readonly party: number;
+  readonly partyMode: 'split' | 'shared';
 }
 
 export interface WorkerResult {
@@ -29,20 +32,31 @@ async function run(command: WorkerCommand): Promise<WorkerResult> {
   const open: SyntheticSession[] = [];
   const pending: Array<Promise<void>> = [];
 
-  for (let i = 0; i < command.sessions; i++) {
+  const sessionOptions = {
+    apiUrl: command.apiUrl,
+    mode: command.mode,
+    huntId: command.huntId,
+    difficulty: command.difficulty,
+    pingIntervalMs: command.pingIntervalMs,
+  };
+  // Parties de N (#198): as sessões deste worker vão de N em N; a sobra (`sessions % party`)
+  // entra solo, e o relatório diz quantas parties foram formadas.
+  const size = Math.max(1, command.party);
+  const parties = size > 1 ? Math.floor(command.sessions / size) : 0;
+  const solo = command.sessions - parties * size;
+  for (let i = 0; i < parties + solo; i++) {
     // Rampa, não avalanche. Abrir mil sessões no mesmo tick mede o pico de handshake do
     // servidor, que é uma pergunta diferente de "quanto custa manter mil sessões" — e é a
     // segunda que a projeção de custo usa.
     if (command.rampMs > 0) {
       await new Promise((resolve) => { setTimeout(resolve, command.rampMs); });
     }
-    pending.push(openSession({
-      apiUrl: command.apiUrl,
-      mode: command.mode,
-      huntId: command.huntId,
-      difficulty: command.difficulty,
-      pingIntervalMs: command.pingIntervalMs,
-    }).then((session) => { open.push(session); }));
+    if (i < parties) {
+      pending.push(openParty({ ...sessionOptions, size, partyMode: command.partyMode })
+        .then((sessions) => { open.push(...sessions); }));
+    } else {
+      pending.push(openSession(sessionOptions).then((session) => { open.push(session); }));
+    }
   }
   await Promise.all(pending);
 
