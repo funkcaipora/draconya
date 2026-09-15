@@ -17,6 +17,7 @@
 // ela estava, e o cliente não guarda posição de quem acabou de descartar.
 
 import type { WorldPoint } from './movement.js';
+import type { CarriedItem } from './inventory.js';
 
 /**
  * Alguém levou dano. `amount` é o APLICADO — `min(dano, vida)` —, o que a barra perdeu.
@@ -105,3 +106,21 @@ export interface Shot {
 }
 
 export type CombatEvent = CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot;
+
+/** A bolsa da party mudou (#192): o que há nela, e quanto cabe. */
+export interface PartyBagChanged {
+  readonly kind: 'party-bag-changed';
+  readonly gold: number;
+  readonly items: readonly CarriedItem[];
+  readonly weight: number;
+  readonly capacity: number;
+}
+
+/** A bolsa foi vendida e dividida (#192): ao sair alguém, e no fim. */
+export interface PartySettlement {
+  readonly kind: 'party-settlement';
+  readonly total: number;
+  readonly shares: ReadonlyArray<{ readonly characterId: string; readonly gold: number }>;
+}
+
+export type PartyEvent = PartyBagChanged | PartySettlement;

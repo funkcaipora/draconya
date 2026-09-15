@@ -426,3 +426,27 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
     expect(useSupply(hero({ health: 10, gold: 100 }), potion).ok).toBe(true);
   });
 });
+
+describe('quem paga o supply é a Purse (#192, ADR 0027)', () => {
+  it('a refusing purse debits nothing and heals nothing; a paying one is charged after the checks', () => {
+    // Mutação que mata: debitar ou curar antes de `canAfford` — a poção sairia sem pagar.
+    const potion = { id: 'health-potion', name: 'Poção', price: 45, requires: {}, effect: { kind: 'heal' as const, amount: 80 } };
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 }, health: 10, maxHealth: 500, mana: 0, maxMana: 0,
+      level: 1, xp: 0, gold: 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    const paid: number[] = [];
+    const refusing = { canAfford: () => false, pay: (cost: number) => { paid.push(cost); } };
+    expect(useSupply(hero, potion, null, undefined, undefined, undefined, refusing)).toMatchObject({ ok: false, reason: 'not-enough-gold' });
+    expect(hero.health).toBe(10);
+    expect(hero.goldDelta).toBe(0);
+    expect(paid).toEqual([]);
+
+    const paying = { canAfford: () => true, pay: (cost: number) => { paid.push(cost); } };
+    expect(useSupply(hero, potion, null, undefined, undefined, undefined, paying)).toMatchObject({ ok: true, healed: 80, goldSpent: 45 });
+    expect(paid).toEqual([45]);
+    // A bolsa de UM é o de sempre: saldo dele, débito nele.
+    expect(useSupply(hero, potion)).toMatchObject({ ok: true, goldSpent: 45 });
+    expect(hero.goldDelta).toBe(-45);
+  });
+});

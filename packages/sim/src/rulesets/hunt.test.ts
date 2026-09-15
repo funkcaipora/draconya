@@ -4169,3 +4169,163 @@ describe('modo split — o loot vai para um membro sorteado (#191, ADR 0027 deci
     expect(at(1)).toEqual(at(10));
   });
 });
+
+describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)', () => {
+  // Rato com gold fixo 3 e uma espada (value 10, weight 30) sempre: cada abate é 3 de gold e
+  // um item na bolsa. Sem regeneração e sem monstro quando o assunto é só o rateio.
+  const sword = { id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 10, weapon: { kind: 'melee', range: 1 } };
+  const cheese = { id: 'loot-cheese', name: 'Cheese', kind: 'other', weight: 4, value: 0 };
+  const rich = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }, { itemId: 'loot-cheese', chance: 1, min: 1, max: 1 }] },
+  };
+  const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
+  const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
+    monsters: [rich], items: [...items, sword, cheese], supplies: [potion],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...over,
+  }));
+  const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold, goldDelta: 0, alive: true, cooldowns: {}, capacity,
+    });
+  };
+  const shared = (members: CharacterRuntime[], over: { content?: Content; botConfigs?: Record<string, BotConfig>; leader?: string } = {}) => {
+    const session = createHuntSession({
+      id: 'shared-session', content: over.content ?? loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: over.leader ?? members[0]?.id ?? '', mode: 'shared' },
+      ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
+    });
+    for (const m of members) session.enter(m);
+    return { session, ruleset: session.ruleset as HuntRuleset };
+  };
+  const drinkAlways = botConfig({ potion: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'health-potion' } }] });
+  const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
+  const noMonsters = () => loaded({ routes: [{ ...route, spawnPoints: [] }] });
+
+  it('a 14-gold potion with four present costs 3 from each and 5 from the user (3 + the remainder)', () => {
+    // Mutação que mata: `splitEqually` (resto nas primeiras cotas) em vez de "resto do usuário".
+    const { session } = shared(
+      [member('u', 100, 1_000, 10), member('a', 100), member('b', 100), member('c', 100)],
+      { content: noMonsters(), botConfigs: { u: drinkAlways } },
+    );
+    run(session, 1_500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(uses * 5);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(uses * 3);
+    expect(session.aggregates.goldSpent).toBe(uses * 14);
+    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0)).toBe(-uses * 14);
+  });
+
+  it('a member with 1 gold pays 1 and the user covers the rest; a user who cannot cover is refused for everyone', () => {
+    const { session } = shared(
+      [member('u', 100, 1_000, 10), member('poor', 1), member('b', 100), member('c', 100)],
+      { content: noMonsters(), botConfigs: { u: drinkAlways } },
+    );
+    run(session, 500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'poor')).toBe(1);
+    expect(spent(session, 'u')).toBe(uses * 5 + 2 * (uses - 1) + 2 + 0);
+    // …e ninguém fica negativo.
+    for (const p of session.participants) expect(p.gold + p.goldDelta).toBeGreaterThanOrEqual(0);
+
+    const broke = shared(
+      [member('u', 4, 1_000, 10), member('a', 0), member('b', 0), member('c', 0)],
+      { content: noMonsters(), botConfigs: { u: drinkAlways } },
+    );
+    run(broke.session, 500, 100);
+    expect(broke.session.aggregates.suppliesUsed).toBe(0);
+    expect(broke.session.aggregates.goldSpent).toBe(0);
+    for (const p of broke.session.participants) expect(p.goldDelta).toBe(0);
+    expect(broke.session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(1);
+  });
+
+  it('loot goes to the bag up to the summed capacity; the overflow lands in the leader\'s loot box', () => {
+    // Capacidade 35 + 35 = 70: duas espadas (30) cabem, a terceira não. O queijo (4) cabe.
+    const { session, ruleset } = shared([member('lead', 0, 35), member('b', 0, 35)]);
+    run(session, 60_000, 100);
+    const kills = session.aggregates.kills / 2;
+    expect(kills).toBeGreaterThan(2);
+    const bag = ruleset.getState().partyBag;
+    expect(bag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
+    expect(bag?.gold).toBe(kills * 3);
+    const swordsInBag = bag?.items.filter((i) => i.itemId === 'loot-sword').length ?? 0;
+    expect(swordsInBag).toBe(2);
+    const lead = session.participants.find((p) => p.id === 'lead');
+    expect(lead?.lootBox.filter((i) => i.itemId === 'loot-sword')).toHaveLength(kills - 2);
+    // Ninguém recebeu na mochila, e `itemsLooted` conta para os dois.
+    expect([...(lead?.inventory.items() ?? [])]).toHaveLength(0);
+    expect(session.aggregatesOf('b').itemsLooted).toBe(kills * 2);
+    expect(session.aggregatesOf('lead').itemsLooted).toBe(kills * 2);
+    const changed = session.drainEvents().filter((e) => e.kind === 'party-bag-changed');
+    expect(changed.length).toBeGreaterThan(0);
+  });
+
+  it('settlement on leave and on end: sold and split with the remainder in entry order, cheese to the leader', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0), member('c', 0)]);
+    run(session, 30_000, 100);
+    const before = ruleset.getState().partyBag;
+    const kills = session.aggregates.kills / 3;
+    expect(kills).toBeGreaterThan(0);
+    // total = 3 gold + 10 por espada, por abate; o queijo não vende.
+    const total = kills * 13;
+    expect(before?.gold).toBe(kills * 3);
+
+    const departure = session.leave('c', 'manual-exit');
+    const share = Math.floor(total / 3);
+    const extra = total - share * 3;
+    expect(departure?.receipt.aggregates.goldGained).toBe(share + (extra >= 3 ? 1 : 0));
+    expect(session.aggregatesOf('lead').goldGained).toBe(share + (extra >= 1 ? 1 : 0));
+    expect(session.aggregatesOf('b').goldGained).toBe(share + (extra >= 2 ? 1 : 0));
+    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0) + (departure?.character.goldDelta ?? 0)).toBe(total);
+    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+    // A capacidade é a soma dos PRESENTES, na hora — o level up reescreve `capacity`.
+    expect(ruleset.getState().partyBag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
+    const lead = session.participants.find((p) => p.id === 'lead');
+    expect([...(lead?.inventory.items() ?? [])].filter((i) => i.itemId === 'loot-cheese').reduce((n, i) => n + i.quantity, 0)).toBe(kills);
+    expect(session.notableEvents.find((e) => e.type === 'party-settlement')?.detail).toBe(`${String(total)}/3`);
+
+    // No fim: os dois que ficaram dividem o que caiu depois.
+    run(session, 20_000, 100);
+    const after = ruleset.getState().partyBag;
+    const later = (after?.gold ?? 0) + (after?.items.filter((i) => i.itemId === 'loot-sword').length ?? 0) * 10;
+    const receipts = session.end('manual-exit');
+    expect(receipts.map((r) => r.characterId)).toEqual(['lead', 'b']);
+    const gained = receipts.map((r) => r.aggregates.goldGained);
+    // A soma da SESSÃO inclui quem já saiu: é o total que a party ganhou.
+    expect((gained[0] ?? 0) + (gained[1] ?? 0) + (departure?.receipt.aggregates.goldGained ?? 0)).toBe(session.aggregates.goldGained);
+    expect(session.aggregates.goldGained).toBe(total + later);
+    const settlements = session.notableEvents.filter((e) => e.type === 'party-settlement');
+    expect(settlements).toHaveLength(2);
+    expect(settlements[1]?.detail).toBe(`${String(later)}/2`);
+  });
+
+  it('the bag survives the snapshot, with its weight and the next instance id', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 20_000, 100);
+    const state = ruleset.getState().partyBag;
+    expect((state?.items.length ?? 0)).toBeGreaterThan(0);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('x'));
+    expect((restored.ruleset as HuntRuleset).getState().partyBag).toEqual(state);
+    run(restored, 10_000, 100);
+    const ids = (restored.ruleset as HuntRuleset).getState().partyBag?.items.map((i) => i.instanceId) ?? [];
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('1 Hz == 10 Hz in shared', () => {
+    const at = (hz: number) => {
+      const { session, ruleset } = shared([member('lead', 50, 1_000, 10), member('b', 50)], { botConfigs: { lead: drinkAlways } });
+      run(session, 30_000, 1000 / hz);
+      return { bag: ruleset.getState().partyBag, spent: [spent(session, 'lead'), spent(session, 'b')] };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});

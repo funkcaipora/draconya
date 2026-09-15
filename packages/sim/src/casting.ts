@@ -338,6 +338,8 @@ export function useSupply(
   combat?: Combat,
   rng?: Rng,
   scaling?: SpellScaling,
+  /** Quem paga (#192). Ausente: o próprio usuário, do saldo dele — o solo de sempre. */
+  purse: Purse = ownPurse(user),
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -350,10 +352,10 @@ export function useSupply(
     }
     if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
-    if (balanceOf(user) < supply.price) return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    if (!purse.canAfford(supply.price)) return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
     // Chamador sem contexto de combate: a runa não existe para ele — nunca dano sem `rng`.
     if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
-    user.goldDelta -= supply.price;
+    purse.pay(supply.price);
     const hits: number[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
@@ -368,11 +370,11 @@ export function useSupply(
     return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
   }
 
-  if (balanceOf(user) < supply.price) {
+  if (!purse.canAfford(supply.price)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
 
-  user.goldDelta -= supply.price;
+  purse.pay(supply.price);
   return supply.effect.kind === 'heal'
     ? {
       ok: true,
@@ -390,6 +392,24 @@ export function useSupply(
       hits: NO_HITS,
       goldSpent: supply.price,
     };
+}
+
+/**
+ * Quem paga um supply (#192, ADR 0027). `canAfford` é conferido ANTES de qualquer efeito e
+ * `pay` debita depois — a ordem que `useSupply` sempre teve. Em solo é o próprio usuário; na
+ * party compartilhada é o rateio entre os presentes, que só o ruleset sabe montar.
+ */
+export interface Purse {
+  canAfford(cost: number): boolean;
+  pay(cost: number): void;
+}
+
+/** A bolsa de UM: o saldo dele, e o débito no `goldDelta` dele. */
+export function ownPurse(user: CharacterRuntime): Purse {
+  return {
+    canAfford: (cost) => balanceOf(user) >= cost,
+    pay: (cost) => { user.goldDelta -= cost; },
+  };
 }
 
 /** Gold disponível agora: o que entrou na sessão mais o que ela ganhou ou gastou. */

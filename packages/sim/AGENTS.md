@@ -135,6 +135,15 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   um `Receipt` por participante, cada um com `seq` próprio (o ledger é `UNIQUE (session_id,
   seq)`); `leave(id, reason)` vale em qualquer sessão e devolve quem saiu com o extrato dele,
   emitido DEPOIS do `onLeave` — é o que faz o settlement da bolsa entrar no extrato de quem sai.
+- **No modo compartilhado a bolsa é da SESSÃO, e a capacidade dela é derivada** (#192, ADR
+  0027). `#bag` guarda gold e itens; a capacidade é `Σ capacity` dos presentes calculada na
+  hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
+  pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
+  O settlement (`#settle`) roda no `onLeave` COM quem sai e no `onEnd`, antes de a `Session`
+  emitir os extratos — é o que põe o gold neles. O rateio do supply é uma `Purse` (`casting.ts`):
+  `useSupply` confere `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de
+  um (`ownPurse`) é o solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de
+  cada um, o resto do usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou.
 - **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
   Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
   seria uma segunda regra que ninguém escreveu. E `applyXpBonus` vem antes de `record` (DT-04)
