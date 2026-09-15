@@ -98,7 +98,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
               ? 'Munição'
               : `${inUse.name} · ${inUse.price === 0 ? 'grátis' : `${String(inUse.price)} gold/tiro`}`;
             return (
-              <li key={slot} className="slot slot-shield slot-ammo" style={slotStyle('ammo')}>
+              <li key={slot} className="slot slot-shield slot-ammo-picker" style={slotStyle('ammo')}>
                 <button type="button" className="slot-button" title={title} aria-label={`munição: ${title}`} onClick={() => { setPicker(ammoFamily); }}>
                   {inUse !== undefined && <ItemSprite appearanceId={inUse.appearanceId} name={inUse.name} />}
                 </button>

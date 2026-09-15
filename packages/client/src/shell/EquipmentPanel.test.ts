@@ -130,7 +130,14 @@ describe('a coluna da direita (#161)', () => {
       inventory: inventory({ equipped: { hand: { instanceId: 'b1', itemId: 'bow', quantity: 1 } } }),
     }));
     const free = await render();
-    expect(free).toContain('slot-ammo');
+    // #218: o seletor é o slot ESCUDO (`slot-shield`) com o contorno tracejado próprio
+    // (`slot-ammo-picker`); a classe `slot-ammo` continua sendo só do slot `ammo` de verdade
+    // — reaproveitá-la no seletor fazia o CSS de `grid-area: ammo` vencer o de `grid-area:
+    // shield` (mesma especificidade, declarado depois) e o seletor pulava para cima do slot
+    // de munição, esvaziando a área do escudo.
+    expect(free).toContain('class="slot slot-shield slot-ammo-picker"');
+    expect(free).not.toContain('class="slot slot-shield slot-ammo"');
+    expect(free).toContain('class="slot slot-ammo"');
     expect(free).toContain('munição: Arrow · grátis');
     expect(free).not.toContain('Escudo (vazio)');
     hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
