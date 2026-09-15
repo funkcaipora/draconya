@@ -771,7 +771,7 @@ export class HuntRuleset implements Ruleset {
     if (penalty.xpLost > 0) {
       // Entra no agregado como perda: o extrato é o que vira linha de ledger, e creditar a XP
       // ganha sem descontar a perdida daria ao jogador uma XP que ele não tem.
-      session.aggregates.xpGained -= penalty.xpLost;
+      session.credit(character.id, 'xpGained', -penalty.xpLost);
       session.record('xp-penalty', String(penalty.xpLost));
     }
     if (penalty.levelChange !== null) {
@@ -1330,7 +1330,7 @@ export class HuntRuleset implements Ruleset {
       const damage = hits[i] ?? 0;
       // Por ALVO, não a soma da área: "maior hit" é o maior golpe que alguém levou, e somar
       // uma área faria uma magia fraca em cinco alvos superar a mais forte do jogo em um.
-      session.aggregates.bestSpellHit = Math.max(session.aggregates.bestSpellHit, damage);
+      session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       const applied = monster.receiveDamage(damage);
       recordDamage(monster.contribution, character.id, applied);
@@ -1483,10 +1483,10 @@ export class HuntRuleset implements Ruleset {
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
       // ao ledger, e o personagem só carrega o delta.
-      session.aggregates.goldSpent += result.goldSpent;
+      session.credit(character.id, 'goldSpent', result.goldSpent);
       // E a CONTAGEM, que é outra pergunta: "gastei 4.000 de gold" e "bebi 80 poções" contam
       // coisas diferentes sobre a mesma hunt, e o §16.1 pede as duas.
-      session.aggregates.suppliesUsed += 1;
+      session.credit(character.id, 'suppliesUsed', 1);
       // O uso ANTES do que ele repôs (FUN-109), como a magia sai antes dos golpes dela. Uma
       // poção de mana para aqui: `healed` é zero e a barra de mana não é assunto desta issue.
       session.emit({
@@ -1914,7 +1914,7 @@ export class HuntRuleset implements Ruleset {
         // Gold gasto pela munição paga: no personagem E no agregado da sessão, como o supply
         // (§20.1). O extrato leva os dois ao ledger.
         character.goldDelta -= ammo.price;
-        session.aggregates.goldSpent += ammo.price;
+        session.credit(character.id, 'goldSpent', ammo.price);
       }
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
@@ -1985,7 +1985,7 @@ export class HuntRuleset implements Ruleset {
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
-    session.aggregates.bestBasicHit = Math.max(session.aggregates.bestBasicHit, resolved);
+    session.credit(character.id, 'bestBasicHit', resolved);
   }
 
   /**
@@ -2069,9 +2069,12 @@ export class HuntRuleset implements Ruleset {
    * party — os dados já vão estar lá.
    */
   #onMonsterDied(session: Session, monster: MonsterRuntime, credit: KillCredit): void {
-    session.aggregates.kills++;
     const definition = this.#options.monsters.get(monster.monsterId);
     const killer = findById(session.participants, credit.lastHitBy);
+    // O abate conta SEMPRE — para quem matou, ou para o dono da sessão quando a fonte sumiu
+    // (#187: o agregado é por participante, e um abate sem ninguém não tem onde morar).
+    const counted = killer ?? session.participants[0];
+    if (counted !== undefined) session.credit(counted.id, 'kills', 1);
 
     // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, a
     // recompensa não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt
@@ -2082,7 +2085,7 @@ export class HuntRuleset implements Ruleset {
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
       const loot = rollLoot(definition.loot, session.rng);
       killer.goldDelta += loot.gold;
-      session.aggregates.goldGained += loot.gold;
+      session.credit(killer.id, 'goldGained', loot.gold);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
       this.#deliverLoot(session, killer, loot.items);
@@ -2096,7 +2099,7 @@ export class HuntRuleset implements Ruleset {
         definition.experience, this.#options.bestiary,
       );
       const change = grantXp(killer, experience, this.#vocationOf(killer), this.#options.progression);
-      session.aggregates.xpGained += experience;
+      session.credit(killer.id, 'xpGained', experience);
       // Level up É evento notável, ao contrário do abate: é a única coisa que aconteceu numa
       // hunt de oito horas que o jogador quer ver ao voltar (§16.2).
       if (change !== null) {
@@ -2188,7 +2191,7 @@ export class HuntRuleset implements Ruleset {
       };
       // Conta no ANALISADOR aconteça o que acontecer com o destino: o item caiu, e é isso que
       // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
-      session.aggregates.itemsLooted += carried.quantity;
+      session.credit(character.id, 'itemsLooted', carried.quantity);
 
       if (character.inventory.add(carried, this.#options.items, character, this.#containerRules(character)).ok) continue;
 
@@ -2500,7 +2503,7 @@ export function changeDifficulty(
     readonly newSessionId: string;
     readonly nowMs: number;
   },
-): { readonly session: Session; readonly receipt: Receipt } {
+): { readonly session: Session; readonly receipts: readonly Receipt[] } {
   const ruleset = session.ruleset;
   if (!(ruleset instanceof HuntRuleset)) {
     throw new Error(`sessão ${session.id} não é uma hunt`);
@@ -2509,7 +2512,7 @@ export function changeDifficulty(
   const characters = [...session.participants];
 
   session.record('difficulty-changed', `${state.difficulty} → ${options.to}`);
-  const receipt = session.end('manual-exit');
+  const receipts = session.end('manual-exit');
 
   const next = createHuntSession({
     id: options.newSessionId,
@@ -2519,5 +2522,5 @@ export function changeDifficulty(
     createdAtMs: options.nowMs,
   });
   for (const character of characters) next.enter(character);
-  return { session: next, receipt };
+  return { session: next, receipts };
 }
