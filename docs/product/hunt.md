@@ -163,6 +163,13 @@ planejar — e planejar é justamente o que se ganha ao tornar o monstro previs�
 O respawn tem **prazo configurável por hunt**. Instantâneo faria a rota deixar de importar: o
 personagem mataria tudo parado num ponto só. Longo demais faz ele dar voltas em mapa vazio.
 
+**O monstro não nasce colado num participante** (#236): `spawnClearRadius` da hunt é a menos de
+quantos tiles de um participante vivo o tile é recusado. O spawn **adia** — tenta de novo a cada
+segundo, no evento que já existia — e nunca cancela: a densidade continua sendo a da
+dificuldade, que é o que a referência (§29) exige ao mandar não copiar a supressão do TFS. Sem
+isso, com `respawnDelayMs` igual ao intervalo de ataque, o rato nascia e morria no mesmo
+instante, e o cliente desenhava o dano num tile vazio. `0` desliga.
+
 Os três pulls — Cauteloso, Ousado, Agressivo — são **dados**, não código. Trocar `monsterCount`
 e a composição no JSON muda densidade e variedade sem tocar em lógica; há teste afirmando
 exatamente isso, porque se um pull novo exigisse código o formato estaria errado.
@@ -358,6 +365,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |

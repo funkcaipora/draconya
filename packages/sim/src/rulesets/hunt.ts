@@ -1119,7 +1119,7 @@ export class HuntRuleset implements Ruleset {
         const point = this.#options.route.spawnPoints[pointIndex] as SpawnPoint;
         return { at: point.at, radius: point.radius };
       },
-      this.#spawnBlocked,
+      this.#spawnBlockedFor(session),
       session.rng,
     );
     if (request === null) {
@@ -2771,8 +2771,29 @@ export class HuntRuleset implements Ruleset {
   }
 
   /** Para o spawn não há quem se mova: só parede e ocupação. */
-  readonly #spawnBlocked: Blocked = (x, y) =>
-    isBlocked(this.#options.map, x, y) || this.#world.occupied(x, y);
+  /**
+   * Onde um monstro NÃO nasce (#236): parede, tile ocupado — e, com `spawnClearRadius` > 0,
+   * qualquer tile a menos disso de um participante vivo. Sem o terceiro, o rato nascia no
+   * tile ao lado do herói e, com `respawnDelayMs` igual ao intervalo de ataque, morria no
+   * MESMO instante em que nascia (`Spawn` vence antes de `Attack`): o cliente recebia
+   * appear + hit + disappear num lote só e desenhava o dano num tile vazio.
+   *
+   * Recusar aqui é ADIAR, não cancelar: `#onSpawn` reagenda em `SPAWN_RETRY_MS`. A densidade
+   * continua sendo a da dificuldade — é a diferença para a supressão que a referência (§29)
+   * manda não copiar. Morto não conta: ele está saindo, e um cadáver que segura o spawn
+   * seria um raio que ninguém vê.
+   */
+  #spawnBlockedFor(session: Session): Blocked {
+    const radius = this.#options.hunt.spawnClearRadius;
+    return (x, y) => {
+      if (isBlocked(this.#options.map, x, y) || this.#world.occupied(x, y)) return true;
+      if (radius <= 0) return false;
+      for (const participant of session.participants) {
+        if (participant.alive && distance(participant.position, { x, y }) < radius) return true;
+      }
+      return false;
+    };
+  }
 
   /**
    * Remonta a ocupação do zero. Chamado UMA vez, no primeiro evento depois de a sessão nascer

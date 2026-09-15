@@ -482,6 +482,13 @@ export const huntSchema = z.object({
    * cadáver — o conteúdo de teste que não fala de arte.
    */
   corpseTtlMs: z.number().int().positive().optional(),
+  /**
+   * A menos de quantos tiles (Chebyshev) de um participante VIVO o monstro NÃO nasce (#236).
+   * O lugar não é perdido — o spawn espera e tenta de novo (`SPAWN_RETRY_MS` do ruleset); a
+   * densidade continua sendo a da dificuldade. `0` desliga, e é o default: o conteúdo de
+   * teste que cabe numa sala de 4×3 continua nascendo em cima de quem está lá.
+   */
+  spawnClearRadius: z.number().int().nonnegative().default(0),
 });
 
 export const vocationSchema = z.object({

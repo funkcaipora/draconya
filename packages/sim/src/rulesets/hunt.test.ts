@@ -4530,3 +4530,46 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     expect(at(1)).toEqual(at(10));
   });
 });
+
+describe('raio livre do spawn (#236)', () => {
+  // Ponto de spawn em (2,1), raio 1: colado no (1,1) em que o herói entra. Sem o raio livre o
+  // rato nasce no tile ao lado; com `respawnDelayMs` igual ao intervalo de ataque, nascia e
+  // morria no mesmo instante, e o cliente desenhava o golpe num tile vazio.
+  const adjacent = { ...route, spawnPoints: [{ routeIndex: 1, radius: 1 }] };
+  const cheb = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
+    Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+  it('não nasce a menos do raio de um participante vivo', () => {
+    const loaded = content({ routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    expect(ruleset.monsters).toHaveLength(0);
+  });
+
+  it('adia em vez de cancelar: nasce quando o herói se afasta, e longe dele', () => {
+    const loaded = content({ routes: [adjacent], hunts: [{ ...hunt, spawnClearRadius: 3 }] });
+    const { session, hero, ruleset } = start({ loaded });
+    let born: { x: number; y: number } | null = null;
+    let apart = 0;
+    for (let t = 0; t < 10_000 && born === null; t += 100) {
+      session.advanceBy(100);
+      for (const event of session.drainEvents()) {
+        if (event.kind !== 'creature-appeared') continue;
+        born = event.position;
+        // O herói dá no máximo um passo por fatia de 100 ms: nascido a ≥ 3 no instante do
+        // spawn, está a ≥ 2 quando a fatia acaba.
+        apart = cheb(hero.position, event.position);
+      }
+    }
+    expect(born).not.toBeNull();
+    expect(apart).toBeGreaterThanOrEqual(2);
+    expect(ruleset.monsters).toHaveLength(1);
+  });
+
+  it('sem o campo o raio é zero, e a fixture de hoje nasce como sempre', () => {
+    const loaded = content({ routes: [adjacent] });
+    const { session, ruleset } = start({ loaded });
+    session.advanceBy(100);
+    expect(ruleset.monsters).toHaveLength(1);
+  });
+});
