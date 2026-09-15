@@ -317,7 +317,10 @@ export const itemSchema = z.strictObject({
    * campo que a autovenda (§22.1, E5) vai ler.
    */
   value: z.number().int().nonnegative(),
-  /** Empilha na mesma linha de inventário? Munição empilha; espada não. */
+  /**
+   * Empilha na mesma linha de inventário? Queijo empilha; espada não. Munição não é item
+   * (#151) — nem tem este campo.
+   */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
   armor: z.number().int().nonnegative().default(0),

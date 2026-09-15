@@ -20,8 +20,9 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
   `Rng` da sessão; vira `goldDelta` no personagem e `goldGained` no extrato, e chega à linha do
   personagem pelo ledger com `(session_id, seq)` único — nunca por escrita direta em `gold`
   (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
-- A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — e a lista precisa ser
-  vazia até existir catálogo de itens; o carregador recusa o resto.
+- A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
+  cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
+  nele (ver "Divergências" abaixo).
 - Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente: é uma seleção (`packages/content/data/ammunition/`), e cada tiro da munição paga debita o preço dela.
 - Drop de supply por monstro credita gold, não gera pilha física.
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.

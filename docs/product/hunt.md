@@ -233,9 +233,10 @@ snapshot. Hoje a recompensa vai ao **último golpe**; o maior dano fica guardado
 bestiário lerem depois, sem migração. Dividir entre participantes é regra de produto, e entra com
 party.
 
-**O loot cai** — em gold. A tabela do monstro separa moeda de item (`loot.gold` e `loot.items`),
-porque gold é campo no personagem e não item; `items` fica vazio até o sistema de itens existir, e
-o carregador recusa qualquer coisa nele. O sorteio usa o `Rng` da sessão — a mesma semente rende o
+**O loot cai** — em gold e em item. A tabela do monstro separa moeda de item (`loot.gold` e
+`loot.items`), porque gold é campo no personagem e não item; desde a FUN-76/FUN-88 `items` é
+conferido contra o catálogo de itens e o item cai de verdade (ver [`economy.md`](./economy.md)).
+O sorteio usa o `Rng` da sessão — a mesma semente rende o
 mesmo loot, antes e depois de uma retomada — e uma linha com `chance: 0` não consome sorteio, para
 desabilitar uma linha não mudar o que as outras rendem. O gold vira `goldDelta` no personagem e
 `goldGained` no extrato, que o ledger leva à linha do personagem (invariante 10). Sem item de
@@ -374,11 +375,11 @@ e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não
 
 ## Divergências do PRD
 
-**Loot é só gold, por enquanto.** O §14 fala em XP *e* loot por abate; os dois caem desde a
-FUN-63, mas o loot de **item** não existe — não há item, inventário nem capacidade — e a tabela do
-monstro recusa qualquer `items` até o catálogo existir. A moeda é creditada como campo, não como
-item: fingir que gold é um item resolvido criaria um caminho econômico que ninguém desenharia de
-propósito.
+~~**Loot é só gold, por enquanto.**~~ → **Resolvido (FUN-76, FUN-88):** o loot de item
+existe — a tabela do monstro confere `items` contra o catálogo, e o item cai de verdade, na
+mochila se couber ou na Caixa de Loot da Sessão se não. Detalhe em
+[`economy.md`](./economy.md#divergências-do-prd). A moeda continua creditada como campo, não
+como item: gold nunca vira uma linha de `loot.items`.
 
 **A hunt hospeda um personagem por instância.** Party é da Fase 3; até lá, entrar com o segundo
 personagem é erro, não silêncio.
