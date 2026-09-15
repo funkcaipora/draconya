@@ -165,6 +165,37 @@ export const C2S_SCHEMAS = {
   'move-item': z.object({ from: Place, to: Place }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
+/** Quem está na party (#196): só os PRESENTES; quem saiu some da lista. */
+export const PartyState = z.object({
+  leaderId: z.string().min(1),
+  mode: z.enum(['split', 'shared']),
+  members: z.array(z.object({
+    characterId: z.string().min(1),
+    name: z.string().min(1),
+    alive: z.boolean(),
+    /** HP em percentual inteiro (0–100), para o painel — o absoluto é balanceamento. */
+    healthPercent: z.number().int().min(0).max(100),
+  })),
+});
+
+/** A bolsa compartilhada (#196, modo `shared`): itens, gold, e quanto cabe. */
+export const PartyBag = z.object({
+  gold: z.number().int().nonnegative(),
+  items: z.array(z.object({
+    instanceId: z.string().min(1),
+    itemId: z.string().min(1),
+    quantity: z.number().int().positive(),
+  })),
+  weight: z.number().nonnegative(),
+  capacity: z.number().nonnegative(),
+});
+
+/** O settlement da bolsa (#196): quanto rendeu e quem levou quanto. */
+export const PartySettlement = z.object({
+  total: z.number().int().nonnegative(),
+  shares: z.array(z.object({ characterId: z.string().min(1), gold: z.number().int().nonnegative() })),
+});
+
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
   welcome: z.object({ characterId: z.string(), contentVersion: z.string() }),
@@ -218,6 +249,9 @@ export const S2C_SCHEMAS = {
      * `game` anterior.
      */
     botConfig: z.unknown().optional(),
+    /** A party desta sessão (#196). Ausente em solo — e em todo nó anterior. */
+    party: PartyState.optional(),
+    partyBag: PartyBag.optional(),
   }),
   /**
    * A troca de cena (FUN-120): que mapa desenhar, e em que AMBIENTE (FUN-121) — `cavern`
@@ -249,6 +283,9 @@ export const S2C_SCHEMAS = {
   }),
   /** O item do chão sumiu — o cadáver apodreceu. */
   'ground-item-disappear': z.object({ id: z.number().int() }),
+  'party-state': PartyState,
+  'party-bag': PartyBag,
+  'party-settlement': PartySettlement,
   /**
    * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
    * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o

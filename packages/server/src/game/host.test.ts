@@ -2767,7 +2767,9 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
     ] as const;
     for (const field of fields) {
       const before = count();
-      session.aggregates[field] += 1;
+      // Pelo caminho que o ruleset usa (#187): o analisador é dos agregados DO PERSONAGEM
+      // (#196), e `credit` escreve neles e na soma. `best*Hit` é máximo — daí `atual + 1`.
+      session.credit('hero', field, session.aggregatesOf('hero')[field] + 1);
       runFor(100);
       expect(count(), field).toBe(before + 1);
     }
@@ -4278,5 +4280,113 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
     const state = socket.received().find((m) => m.type === 'session-state');
     if (state?.type !== 'session-state') throw new Error('sem session-state');
     expect(state.world.creatures.map((c) => c.name).sort()).toEqual(['Ana', 'Bia']);
+  });
+});
+
+describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
+  // Uma hunt de verdade com dois donos em modo compartilhado: o `session-state` de cada
+  // visualizador leva os agregados DELE e o bloco da party; a bolsa e o settlement viram
+  // mensagem para todos; o analisador é por personagem.
+  const rich = {
+    id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5, attack: 0, armor: 0,
+    attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
+  };
+  function partyHunt() {
+    const raw = rawTestContent();
+    const content = buildContent({
+      ...raw,
+      monsters: [rich],
+      progression: [{ ...TEST_PROGRESSION, startingMana: 0 }],
+    });
+    const stats = statsForLevel(1, null, content.progression);
+    let now = 0;
+    const member = (id: string) => new CharacterRuntime({
+      id, position: { x: 1, y: 1, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 0, maxMana: 0,
+      level: 1, xp: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+      staminaMs: 86_400_000, staminaUpdatedAtMs: 0, capacity: 400,
+    });
+    let shared: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      monsterCatalog: content.monsters, itemCatalog: content.items,
+      createSession: () => {
+        if (shared === null) {
+          shared = createHuntSession({
+            id: 'party-hunt', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+            partyOptions: { leaderId: 'lead', mode: 'shared' },
+          });
+          shared.enter(member('lead'));
+          shared.enter(member('b'));
+        }
+        return shared;
+      },
+      // Voltar à Cidade: uma sessão inerte qualquer, para o `leave-hunt` ter destino.
+      buildSession: (request) => (request.to === 'city'
+        ? new Session({ id: `city-${String(now)}`, contentVersion: content.version, ruleset: { ...countingRuleset().ruleset, type: 'city' }, rng: Rng.fromSeed('c'), createdAtMs: 0 })
+        : null),
+    });
+    const runFor = (ms: number) => { for (let t = 0; t < ms; t += 100) { now += 100; host.cycle(); } host.flush(); };
+    return { host, runFor, session: () => shared as Session | null };
+  }
+  const attach = (host: SessionHost, characterId: string) => {
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, characterId);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    return { socket, viewer };
+  };
+
+  it('session-state carries the party block and the aggregates of THAT character; analyzer is per viewer', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    const stateOf = (socket: FakeSocket) => socket.received().find((m) => m.type === 'session-state');
+    const leadState = stateOf(lead.socket);
+    if (leadState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared' });
+    expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent])).toEqual([['lead', true, 100], ['b', true, 100]]);
+    const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
+    expect(leadState.partyBag).toEqual({ gold: 0, items: [], weight: 0, capacity: capacity() });
+
+    // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números.
+    session()?.credit('lead', 'xpGained', 7);
+    runFor(200);
+    const analyzerOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'analyzer').at(-1);
+    const la = analyzerOf(lead.socket);
+    const ba = analyzerOf(b.socket);
+    if (la?.type !== 'analyzer') throw new Error('sem analyzer para lead');
+    // Os dois podem ter matado um rato no meio (XP dividida igual): a DIFERENÇA é o crédito
+    // só do líder — e é ela que a soma esconderia.
+    const bXp = ba?.type === 'analyzer' ? ba.aggregates.xpGained : 0;
+    expect(la.aggregates.xpGained - bXp).toBe(7);
+    expect(la.aggregates.xpGained).toBeLessThan(session()?.aggregates.xpGained ?? 0);
+  });
+
+  it('loot in shared mode reaches every viewer as party-bag, and a leave as party-settlement and party-state', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(20_000);
+    const bags = b.socket.received().filter((m) => m.type === 'party-bag');
+    expect(bags.length).toBeGreaterThan(0);
+    const lastBag = bags.at(-1);
+    if (lastBag?.type !== 'party-bag') throw new Error('sem party-bag');
+    expect(lastBag.gold).toBeGreaterThan(0);
+    // A capacidade é a soma dos presentes na hora (o level up a reescreve).
+    expect(lastBag.capacity).toBe(session()?.participants.reduce((n, p) => n + p.capacity, 0));
+
+    // `b` sai pelo socket: settlement para os dois, e o `party-state` novo diz quem ficou.
+    host.handle(b.viewer, { type: 'leave-hunt' });
+    runFor(500);
+    const settlement = lead.socket.received().filter((m) => m.type === 'party-settlement').at(-1);
+    if (settlement?.type !== 'party-settlement') throw new Error('sem party-settlement');
+    expect(settlement.total).toBe(lastBag.gold);
+    expect(settlement.shares.map((s) => s.characterId).sort()).toEqual(['b', 'lead']);
+    const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
+    if (state?.type !== 'party-state') throw new Error('sem party-state');
+    expect(state.members.map((m) => m.characterId)).toEqual(['lead']);
+    expect(session()?.participants.map((p) => p.id)).toEqual(['lead']);
   });
 });
