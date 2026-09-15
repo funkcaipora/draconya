@@ -229,15 +229,11 @@ export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntEx
       case 'party-member-lost':
         return {
           id: 'party-member-lost',
-          when: (view: HuntView) => {
-            // INERTE numa hunt de um, e por construção: o laço começa no segundo participante.
-            // Quando party existir (F3), "saiu" some da lista e "morreu" fica com `alive`
-            // falso — os dois casos que o §13.9 junta numa regra só.
-            for (let i = 1; i < view.participants.length; i += 1) {
-              if (!(view.participants[i] as CharacterRuntime).alive) return true;
-            }
-            return false;
-          },
+          // Não é predicado periódico (#193): dispara no `onLeave` de OUTRO membro — sair ou
+          // morrer, os dois casos que o §13.9 junta —, por `#onMemberLost`, pelo id. A view
+          // de cada runner leva só ele, então aqui não há o que olhar; e numa hunt de um não
+          // há de quem sair, por construção.
+          when: () => false,
         };
     }
   });
@@ -457,6 +453,8 @@ export class HuntRuleset implements Ruleset {
   #bag: PartyBagState | null = null;
   #bagWeight = 0;
   #bagSeq = 0;
+  /** Alguém saiu e a cascata do §13.9 ainda não rodou (#193). Ver `onLeave`. */
+  #lossPending = false;
   /**
    * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
    * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
@@ -729,6 +727,38 @@ export class HuntRuleset implements Ruleset {
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
     // teto a bolsa só para de aceitar, até o próximo settlement zerar.
     if (this.#bag !== null) this.#settle(session, [...session.participants, character]);
+    // A cascata do §13.9 NÃO roda aqui: `Session.leave` ainda vai emitir o extrato de quem
+    // está saindo, e uma cascata dentro do `onLeave` emitiria os extratos dos outros ANTES
+    // do dele — `seq` fora de ordem e o `member-left` do primeiro depois dos demais. Fica
+    // pendente e roda logo depois: em `#depart` (saída decidida aqui) ou no próximo evento
+    // (saída pelo socket, que o hospedeiro chama direto).
+    this.#lossPending = true;
+  }
+
+  /**
+   * A cascata pendente do §13.9 e a liderança que passa (#193): `#leader` já cai para o mais
+   * antigo presente; o que muda é avisar. Sem ninguém, nada a anunciar — a sessão encerra.
+   */
+  #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
+    if (!this.#lossPending) return;
+    this.#lossPending = false;
+    const cascaded = this.#onMemberLost(session);
+    if (session.participants.length === 0) {
+      // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele.
+      if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
+      return;
+    }
+    this.#emitPartyState(session);
+  }
+
+  #emitPartyState(session: Session): void {
+    if (this.#party === undefined) return;
+    const leader = this.#leader(session);
+    session.emit({
+      kind: 'party-state',
+      leaderId: leader?.id ?? this.#party.leaderId,
+      members: session.participants.map((p) => ({ characterId: p.id, alive: p.alive })),
+    });
   }
 
   #newRunner(config: BotConfig | undefined, state?: RunnerState): Runner {
@@ -764,6 +794,8 @@ export class HuntRuleset implements Ruleset {
    */
   onEvent(session: Session, event: ScheduledEvent): void {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
+    // Saída pelo socket (#193): a cascata roda no primeiro evento depois dela.
+    this.#flushLoss(session, 'manual-exit');
     this.#burnStamina(session);
 
     switch (event.kind) {
@@ -886,10 +918,48 @@ export class HuntRuleset implements Ruleset {
       this.#emitCharacterHealth(session, character);
     }
 
-    // Encerra quando não sobrou ninguém de pé. Com um personagem — o caso de hoje — é a
-    // morte dele; escrito assim, party não vira exceção espalhada quando chegar.
-    if (session.participants.some((p) => p.alive)) return;
-    session.end('death');
+    // Solo — ou party que virou solo —: a morte encerra a sessão (§26.1), como sempre. Em party
+    // (#193, ADR 0027 decisão 7) o morto SAI com o próprio extrato — penalidade dentro, e a
+    // cota do settlement (`onLeave`) — e a sessão continua para os outros.
+    if (session.participants.length <= 1) {
+      session.end('death');
+      return;
+    }
+    this.#depart(session, character.id, 'death');
+  }
+
+  /**
+   * Um membro sai por decisão do ruleset — morte ou regra de saída (#193): `leave` emite o
+   * extrato dele, e o hospedeiro recebe `member-left` com o extrato e o personagem, porque não
+   * foi ele quem chamou. O último a sair encerra a sessão com o motivo dele.
+   */
+  #depart(session: Session, characterId: string, reason: 'death' | 'exit-rule'): void {
+    const departure = session.leave(characterId, reason);
+    if (departure === null) return;
+    session.emit({ kind: 'member-left', characterId, reason, departure });
+    this.#flushLoss(session, reason);
+  }
+
+  /**
+   * Alguém saiu: quem tem a regra `party-member-lost` sai também (§13.9), em cascata e na
+   * ordem de entrada. A lista é copiada porque cada `leave` a muda no meio do laço — iterar
+   * a viva pularia um membro. O próprio que saiu não está mais nela, por construção.
+   */
+  #onMemberLost(session: Session): number {
+    let cascaded = 0;
+    for (const member of [...session.participants]) {
+      const runner = this.#runners.get(member.id);
+      if (runner === undefined) continue;
+      if (!runner.exitRules.some((rule) => rule.id === 'party-member-lost')) continue;
+      session.record('exit-rule', 'party-member-lost');
+      const departure = session.leave(member.id, 'exit-rule');
+      if (departure === null) continue;
+      // O `onLeave` deste marcou pendência de novo; a cascata É este laço, então a limpa.
+      this.#lossPending = false;
+      session.emit({ kind: 'member-left', characterId: member.id, reason: 'exit-rule', departure });
+      cascaded += 1;
+    }
+    return cascaded;
   }
 
   onEnd(session: Session, _reason: EndReason): void {
@@ -2064,8 +2134,13 @@ export class HuntRuleset implements Ruleset {
         // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
         // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
         session.record('exit-rule', rule.id);
-        session.end('exit-rule');
-        return;
+        // Solo: encerra. Party (#193): SAI, e os outros ficam — a regra é dele.
+        if (session.participants.length <= 1) {
+          session.end('exit-rule');
+          return;
+        }
+        this.#depart(session, character.id, 'exit-rule');
+        break;
       }
     }
   }

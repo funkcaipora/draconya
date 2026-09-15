@@ -2304,11 +2304,13 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     expect(semParty.when(view([alguem()]))).toBe(false);
   });
 
-  it('party-member-lost dispara quando um COMPANHEIRO cai — o dia em que party existir', () => {
-    const semParty = only({ kind: 'party-member-lost' });
-    const eu = alguem({ id: 'hero' });
-    const amigo = alguem({ id: 'friend', alive: false });
-    expect(semParty.when(view([eu, amigo]))).toBe(true);
+  it('party-member-lost não é predicado periódico: dispara no onLeave de outro membro (#193)', () => {
+    // A view de cada runner leva só ele (#203); quem dispara a regra é `#onMemberLost`, pelo
+    // id, quando um companheiro sai ou morre. O predicado é `false` sempre — e o teste de
+    // party é o do `describe('sair e morrer em party')`.
+    const rule = only({ kind: 'party-member-lost' });
+    expect(rule.id).toBe('party-member-lost');
+    expect(rule.when(view([alguem({ id: 'hero' }), alguem({ id: 'friend', alive: false })]))).toBe(false);
   });
 
   it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
@@ -4325,6 +4327,109 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
       const { session, ruleset } = shared([member('lead', 50, 1_000, 10), member('b', 50)], { botConfigs: { lead: drinkAlways } });
       run(session, 30_000, 1000 / hz);
       return { bag: ruleset.getState().partyBag, spent: [spent(session, 'lead'), spent(session, 'b')] };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
+  // Ratos que batem forte num membro de 1 HP: ele morre no primeiro golpe e SAI com o próprio
+  // extrato; os outros ficam. Regra `party-member-lost` em quem a configurou: cascata.
+  const killer = { ...rat, health: 30, attack: 50, attackRange: 1, experience: 0 };
+  const loaded = () => content({ monsters: [killer] });
+  const exitOnLoss = botConfig({ exit: [botExitRuleSchema.parse({ kind: 'party-member-lost' })] });
+  const member = (id: string, health?: number) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      // Level 10: acima do piso da penalidade de morte (8), para o extrato do morto ter XP negativa.
+      mana: 0, maxMana: stats.maxMana, level: 10, xp: totalXpForLevel(10, progression as Progression), vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  // Quem entra PRIMEIRO fica no tile inicial da rota, onde os ratos chegam antes: o frágil vai
+  // primeiro para morrer cedo; o líder é quem `leaderId` diz, não a ordem.
+  const party = (members: CharacterRuntime[], botConfigs: Record<string, BotConfig> = {}, leader = 'lead') => {
+    const session = createHuntSession({
+      id: 'leave-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: leader, mode: 'split' }, botConfigs,
+    });
+    for (const m of members) session.enter(m);
+    return session;
+  };
+  const left = (session: Session) => session.drainEvents().filter((e) => e.kind === 'member-left');
+
+  it('a dead member leaves with their own receipt — penalty inside — and the session goes on', () => {
+    // Mutação que mata: `session.end('death')` com alguém vivo — os outros perderiam a hunt.
+    const session = party([member('frail', 1), member('lead'), member('c')]);
+    run(session, 30_000, 100);
+    expect(session.ended).toBeNull();
+    expect(session.participants.map((p) => p.id)).toEqual(['lead', 'c']);
+    const events = left(session);
+    expect(events).toHaveLength(1);
+    const gone = events[0];
+    if (gone?.kind !== 'member-left') throw new Error('sem member-left');
+    expect(gone.reason).toBe('death');
+    expect(gone.departure.receipt).toMatchObject({ characterId: 'frail', reason: 'death' });
+    expect(gone.departure.receipt.aggregates.deaths).toBe(1);
+    expect(gone.departure.receipt.aggregates.xpGained).toBeLessThan(0);
+    expect(gone.departure.character.alive).toBe(false);
+    // Os monstros continuam vindo para quem ficou.
+    expect(session.aggregatesOf('lead').kills + session.aggregatesOf('c').kills).toBeGreaterThan(0);
+  });
+
+  it('party-member-lost cascades in entry order; whoever lacks the rule stays', () => {
+    const session = party(
+      [member('frail', 1), member('lead'), member('b'), member('c'), member('d')],
+      { b: exitOnLoss, c: exitOnLoss },
+    );
+    run(session, 30_000, 100);
+    const events = left(session);
+    expect(events.map((e) => (e.kind === 'member-left' ? [e.characterId, e.reason] : null))).toEqual([
+      ['frail', 'death'], ['b', 'exit-rule'], ['c', 'exit-rule'],
+    ]);
+    expect(session.participants.map((p) => p.id)).toEqual(['lead', 'd']);
+    expect(session.notableEvents.filter((e) => e.type === 'exit-rule' && e.detail === 'party-member-lost')).toHaveLength(2);
+    expect(session.ended).toBeNull();
+  });
+
+  it('when the leader dies the leadership passes to the oldest present, and party-state says so', () => {
+    const session = party([member('lead', 1), member('b'), member('c')]);
+    run(session, 30_000, 100);
+    const states = session.drainEvents().filter((e) => e.kind === 'party-state');
+    const last = states.at(-1);
+    if (last?.kind !== 'party-state') throw new Error('sem party-state');
+    expect(last.leaderId).toBe('b');
+    expect(last.members.map((m) => m.characterId)).toEqual(['b', 'c']);
+  });
+
+  it('the last one to leave ends the session with their reason, and no receipt is emitted twice', () => {
+    const session = party([member('lead', 1), member('b')], { b: exitOnLoss });
+    run(session, 30_000, 100);
+    expect(session.ended).toBe('exit-rule');
+    const events = left(session);
+    expect(events.map((e) => (e.kind === 'member-left' ? e.characterId : null))).toEqual(['lead', 'b']);
+    expect(session.receipts()).toEqual([]);
+    expect(session.participants).toEqual([]);
+  });
+
+  it('a party of two that loses one is a solo: the next death ends the session', () => {
+    const session = party([member('lead', 1), member('b', 1)]);
+    run(session, 30_000, 100);
+    expect(session.ended).toBe('death');
+    const events = left(session);
+    // O primeiro saiu por `leave`; o segundo era solo e ENCERROU — sem `member-left`.
+    expect(events).toHaveLength(1);
+    expect(session.receipts().map((r) => r.characterId)).toEqual(['b']);
+  });
+
+  it('1 Hz == 10 Hz with death and cascade', () => {
+    const at = (hz: number) => {
+      const session = party([member('frail', 1), member('lead'), member('b'), member('c')], { b: exitOnLoss });
+      run(session, 30_000, 1000 / hz);
+      return { present: session.participants.map((p) => p.id), left: left(session).map((e) => (e.kind === 'member-left' ? e.characterId : '')), ended: session.ended };
     };
     expect(at(1)).toEqual(at(10));
   });

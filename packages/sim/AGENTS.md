@@ -144,6 +144,14 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `useSupply` confere `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de
   um (`ownPurse`) é o solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de
   cada um, o resto do usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou.
+- **Em party, morrer e disparar regra de saída são `leave`, e a cascata roda DEPOIS do extrato
+  de quem saiu** (#193). `#depart` chama `session.leave` — que roda `onLeave` (settlement) e SÓ
+  ENTÃO emite o extrato — e emite `member-left` com o extrato e o personagem, porque o
+  hospedeiro não chamou. A cascata de `party-member-lost` (`#onMemberLost`) fica PENDENTE no
+  `onLeave` e roda em `#flushLoss`: logo depois em `#depart`, ou no primeiro evento seguinte
+  quando a saída veio do socket. Rodá-la dentro do `onLeave` emitia os extratos dos outros
+  antes do de quem saiu — `seq` fora de ordem e `member-left` invertido; foi assim que o
+  primeiro teste reprovou. O último a sair encerra, com o motivo dele; solo continua `end`.
 - **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
   Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
   seria uma segunda regra que ninguém escreveu. E `applyXpBonus` vem antes de `record` (DT-04)

@@ -1404,7 +1404,10 @@ export class SessionHost {
           continue;
         case 'party-bag-changed':
         case 'party-settlement':
-          // A party no fio é #196; até lá o evento existe e o hospedeiro o ignora.
+        case 'party-state':
+        case 'member-left':
+          // A party no fio é #196 e a saída por dentro do sim é #194; até lá o hospedeiro
+          // ignora os eventos.
           continue;
         case 'creature-moved':
           break;
