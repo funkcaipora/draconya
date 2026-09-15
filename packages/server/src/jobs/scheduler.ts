@@ -205,7 +205,6 @@ export function createJobs(
         await http.listen({ port: configuration.JOBS_PORT, host: '0.0.0.0' });
         logger.info({ port: configuration.JOBS_PORT }, 'Jobs metrics listening');
       }
-      // TODO(FUN-28): tomar o lock de singleton no Redis antes de começar a agendar.
       timer = setInterval(() => void cycle.run(), SCHEDULE_INTERVAL_MS);
       logger.info({ intervalMs: SCHEDULE_INTERVAL_MS }, 'Jobs started');
     },
