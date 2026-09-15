@@ -383,7 +383,7 @@ body {
 .ammo-option.active { border-color: var(--accent); }
 .ammo-option:disabled { opacity: 0.45; cursor: default; }
 .ammo-name { flex: 1 1 auto; }
-.slot-ammo { outline: 1px dashed var(--accent); outline-offset: -1px; }
+.slot-ammo-picker { outline: 1px dashed var(--accent); outline-offset: -1px; }
 
 /* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: o quadrado de pedra do
    pacote (34×34, o topo de `containerslot.png`), o ícone cinza do lugar quando vazio, o sprite
