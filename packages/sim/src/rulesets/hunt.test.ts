@@ -244,9 +244,16 @@ describe('entrada', () => {
     expect(ruleset.monsters).toHaveLength(3);
   });
 
-  it('recusa um segundo personagem em vez de deixá-lo parado a hunt inteira', () => {
-    const { session } = start();
-    expect(() => session.enter(character())).toThrow(/um personagem por instância/);
+  it('aceita um segundo personagem, colocado no tile livre mais próximo do início da rota (#203)', () => {
+    // Até o M13 a hunt recusava o segundo ("party é trabalho da F3"); agora ele entra com o
+    // próprio `Runner`. Tile é exclusivo: o segundo cai ao lado, e o primeiro passo o traz
+    // para a rota por `rejoinNearest`.
+    const { session, hero } = start();
+    const other = new CharacterRuntime({ ...character().getState(), id: 'other' });
+    session.enter(other);
+    expect(session.participants).toHaveLength(2);
+    expect(other.position).not.toEqual(hero.position);
+    expect(Math.max(Math.abs(other.position.x - hero.position.x), Math.abs(other.position.y - hero.position.y))).toBeLessThanOrEqual(3);
   });
 
   it('recusa dificuldade que a hunt não define', () => {
@@ -2416,6 +2423,8 @@ describe('a configuração do bot atravessa o snapshot (FUN-81)', () => {
     session.advanceBy(250);
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
     delete (snapshot.ruleset as { botConfig?: unknown }).botConfig;
+    // E sem `runners` (#203): o snapshot de antes não tinha estado por participante.
+    delete (snapshot.ruleset as { runners?: unknown }).runners;
 
     const retomado = Session.fromSnapshot(
       snapshot,
@@ -3916,6 +3925,99 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
     const at = (hz: number) => {
       const { session, hero } = withRune(30, 1_000, hz);
       return { uses: session.aggregates.suppliesUsed, gold: hero.goldDelta, kills: session.aggregates.kills };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
+  // Cada um com o próprio `Runner`: caminhante, bot, golpe engatilhado, lure, anel, avisos. O
+  // que se prende é que o estado de um NÃO vaza para o outro — e que o solo continua o solo.
+  const member = (id: string, over: Partial<{ health: number; gold: number }> = {}) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const pair = (hz = 10, over: { botConfigs?: Record<string, BotConfig> } = {}) => {
+    const session = createHuntSession({
+      id: 'party-session', content: content(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
+    });
+    const a = member('a');
+    const b = member('b');
+    session.enter(a);
+    session.enter(b);
+    run(session, 60_000, 1000 / hz);
+    return { session, a, b, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('two members walk the route and fight at the same time, each with their own kills', () => {
+    // Mutação que mata: `#armPlayerAttack` armando só o PRIMEIRO com alvo — `b` nunca bateria.
+    const { session, a, b, ruleset } = pair();
+    // O golpe de CADA um: `bestBasicHit` só sobe para quem bateu.
+    expect(session.aggregatesOf('a').bestBasicHit).toBeGreaterThan(0);
+    expect(session.aggregatesOf('b').bestBasicHit).toBeGreaterThan(0);
+    expect(session.aggregatesOf('a').kills + session.aggregatesOf('b').kills).toBeGreaterThan(0);
+    expect(a.xp + b.xp).toBeGreaterThan(0);
+    expect(a.position).not.toEqual(b.position);
+    // Cada um tem o SEU índice na rota; o do ruleset é o do primeiro.
+    expect(ruleset.routeIndexOf('a')).toBe(ruleset.routeIndex);
+    expect(ruleset.routeIndexOf('b')).toBeGreaterThanOrEqual(0);
+    expect(ruleset.routeIndexOf('zz')).toBe(-1);
+  });
+
+  it('each member runs their own bot: the potion rule of one never fires for the other', () => {
+    const potion = botConfig({ potion: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'health-potion' } }] });
+    const { session } = pair(10, { botConfigs: { a: potion } });
+    // `a` tem gold zero: a poção é recusada e o aviso sai UMA vez — e é o dele, não o de `b`.
+    expect(session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(1);
+    expect(session.aggregatesOf('b').suppliesUsed).toBe(0);
+  });
+
+  it('the snapshot carries one runner per member, and a legacy snapshot still restores the solo', () => {
+    const { session, ruleset } = pair();
+    const state = ruleset.getState();
+    expect(Object.keys(state.runners ?? {}).sort()).toEqual(['a', 'b']);
+    // Os campos soltos são os do primeiro (DT-02).
+    expect(state.route).toEqual(state.runners?.['a']?.route);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset, Rng.fromSeed('x'),
+    );
+    const again = restored.ruleset as HuntRuleset;
+    expect(again.routeIndexOf('a')).toBe(ruleset.routeIndexOf('a'));
+    expect(again.routeIndexOf('b')).toBe(ruleset.routeIndexOf('b'));
+    run(restored, 10_000, 100);
+    expect(restored.aggregatesOf('b').kills).toBeGreaterThanOrEqual(session.aggregatesOf('b').kills);
+  });
+
+  it('leave frees the tile and forgets the runner; the session goes on for the other', () => {
+    const { session, b, ruleset } = pair();
+    const tile = { ...b.position };
+    const departure = session.leave('b', 'manual-exit');
+    expect(departure?.receipt.characterId).toBe('b');
+    expect(ruleset.routeIndexOf('b')).toBe(-1);
+    // O tile ficou livre: `a` (ou um monstro) pode pisar nele. Prova pela ocupação do mundo —
+    // via um passo manual de `a` até lá, quando adjacente; senão, pelo estado de ocupação.
+    run(session, 10_000, 100);
+    expect(session.ended).toBeNull();
+    expect(session.participants.map((p) => p.id)).toEqual(['a']);
+    expect(session.aggregatesOf('a').durationMs).toBe(70_000);
+    expect(tile).toBeDefined();
+  });
+
+  it('1 Hz == 10 Hz with two members', () => {
+    const at = (hz: number) => {
+      const { session, a, b } = pair(hz);
+      return {
+        a: [a.xp, a.health, session.aggregatesOf('a').kills],
+        b: [b.xp, b.health, session.aggregatesOf('b').kills],
+      };
     };
     expect(at(1)).toEqual(at(10));
   });

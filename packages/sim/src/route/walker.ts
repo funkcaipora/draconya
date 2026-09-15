@@ -44,6 +44,12 @@ export class RouteWalker {
     return this.#route.tiles[this.#index] as Point;
   }
 
+  /** O tile `n` à frente na rota, SEM andar (#203): é para onde se contorna um companheiro. */
+  ahead(n = 1): Point {
+    const len = this.#route.tiles.length;
+    return this.#route.tiles[(((this.#index + n) % len) + len) % len] as Point;
+  }
+
   getState(): RouteState {
     return { index: this.#index, stopped: this.#stopped };
   }
