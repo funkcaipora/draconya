@@ -1832,7 +1832,7 @@ export class HuntRuleset implements Ruleset {
    */
   #targetsInReach(character: CharacterRuntime): number {
     return countTargets(
-      this.#targetingOf(character), this.#monsters, character.position, this.#options.player.attackRange,
+      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
     );
   }
 

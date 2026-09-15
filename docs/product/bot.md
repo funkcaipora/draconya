@@ -55,7 +55,7 @@ errado em vez de dizer "nenhuma variante casou".
 |---|---|---|
 | `hp` | `op`, `percent` (0–100) | HP do personagem, em percentual do máximo |
 | `mana` | `op`, `percent` (0–100) | Mana do personagem, em percentual do máximo |
-| `targets` | `op`, `count` (≥ 0) | Quantos alvos estão ao alcance |
+| `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance da arma (#152, #216) |
 | `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
 
 **Operadores:** `<`, `<=`, `>`, `>=`. **Sem `==`** — comparar percentual exato quase nunca
