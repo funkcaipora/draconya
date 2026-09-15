@@ -1317,9 +1317,9 @@ describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desa
   const spreadRats = (ruleset: HuntRuleset): void => {
     const [a, b, c] = ruleset.monsters;
     if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
-    a.position = { x: 3, y: 1, z: 7 };
-    b.position = { x: 4, y: 1, z: 7 };
-    c.position = { x: 4, y: 3, z: 7 };
+    a.position = { x: 3, y: 1 };
+    b.position = { x: 4, y: 1 };
+    c.position = { x: 4, y: 3 };
   };
 
   it('com a wand na mão (alcance 3), "targets >= 3" DISPARA', () => {
