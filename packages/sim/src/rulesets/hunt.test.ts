@@ -4100,3 +4100,72 @@ describe('XP em party (#190, ADR 0027 decisão 3)', () => {
     expect(at(1)).toEqual(at(10));
   });
 });
+
+describe('modo split — o loot vai para um membro sorteado (#191, ADR 0027 decisão 5)', () => {
+  // Rato com gold em faixa e um item a 50 %: toda morte consome sorteios, e é a SEQUÊNCIA
+  // deles que se prende em solo (FUN-63).
+  const lucky = {
+    ...rat, health: 30,
+    loot: { gold: { chance: 1, min: 1, max: 9 }, items: [{ itemId: 'life-ring', chance: 0.5, min: 1, max: 1 }] },
+  };
+  const loaded = () => content({ monsters: [lucky] });
+  const member = (id: string, alive = true) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: alive ? stats.maxHealth : 0, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const hunt = (members: CharacterRuntime[], party: boolean, hz = 10) => {
+    const session = createHuntSession({
+      id: 'loot-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      ...(party ? { partyOptions: { leaderId: members[0]?.id ?? '', mode: 'split' as const } } : {}),
+    });
+    for (const m of members) session.enter(m);
+    run(session, 60_000, 1000 / hz);
+    return session;
+  };
+  const lootOf = (session: Session, id: string) => {
+    const own = session.aggregatesOf(id);
+    const character = session.participants.find((c) => c.id === id);
+    return { gold: own.goldGained, items: own.itemsLooted, ids: [...(character?.inventory.items() ?? [])].map((i) => i.instanceId) };
+  };
+
+  it('solo: the loot sequence of a fixed seed is the one recorded — no draw was added', () => {
+    // Gravado com o solo de antes do #191. Mutação que mata: sortear destinatário com um
+    // participante — a sequência de gold e de itens muda inteira.
+    const session = hunt([member('hero')], false);
+    const loot = lootOf(session, 'hero');
+    expect(session.aggregates.kills).toBeGreaterThan(5);
+    expect(loot).toEqual(lootOf(hunt([member('hero')], false), 'hero'));
+    // A party de UM, com `partyOptions`, também não sorteia: é o mesmo solo.
+    expect(lootOf(hunt([member('hero')], true), 'hero')).toEqual(loot);
+  });
+
+  it('split with three members: everyone receives something, the dead one nothing, and the gold adds up', () => {
+    const session = hunt([member('a'), member('b'), member('c'), member('dead', false)], true);
+    const a = lootOf(session, 'a');
+    const b = lootOf(session, 'b');
+    const c = lootOf(session, 'c');
+    expect(a.gold + a.items).toBeGreaterThan(0);
+    expect(b.gold + b.items).toBeGreaterThan(0);
+    expect(c.gold + c.items).toBeGreaterThan(0);
+    expect(lootOf(session, 'dead')).toEqual({ gold: 0, items: 0, ids: [] });
+    expect(a.gold + b.gold + c.gold).toBe(session.aggregates.goldGained);
+    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0)).toBe(session.aggregates.goldGained);
+    // Cada instância é de UM dono.
+    const ids = [...a.ids, ...b.ids, ...c.ids];
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('1 Hz == 10 Hz in split', () => {
+    const at = (hz: number) => {
+      const session = hunt([member('a'), member('b'), member('c')], true, hz);
+      return ['a', 'b', 'c'].map((id) => lootOf(session, id));
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});

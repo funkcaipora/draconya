@@ -300,6 +300,8 @@ export interface HuntRulesetOptions {
    * sendo a do primeiro a entrar — o caminho solo; quem entra com id aqui usa a sua.
    */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  /** A party desta instância (#191, ADR 0027). Ausente é solo. */
+  readonly partyOptions?: PartyOptions;
   /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
@@ -319,6 +321,15 @@ export interface CorpseState {
   readonly id: number;
   readonly monsterId: string;
   readonly position: WorldPoint;
+}
+
+/** Como a party divide loot e custo (ADR 0027 decisão 5). */
+export type PartyMode = 'split' | 'shared';
+
+/** A party desta instância (#191). Ausente é solo. FIXADA na sessão e no snapshot. */
+export interface PartyOptions {
+  readonly leaderId: string;
+  readonly mode: PartyMode;
 }
 
 export interface HuntRulesetState {
@@ -369,6 +380,8 @@ export interface HuntRulesetState {
    * lidos quando esta chave falta: é o snapshot anterior, de um dono só, sem bump.
    */
   readonly runners?: Readonly<Record<string, RunnerState>>;
+  /** A party, fixada (#191). Ausente é solo — inclusive todo snapshot anterior ao M13. */
+  readonly partyOptions?: PartyOptions;
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -430,6 +443,8 @@ export class HuntRuleset implements Ruleset {
   readonly #options: HuntRulesetOptions;
   /** Um `Runner` por participante presente (#203). Ver `Runner`. */
   readonly #runners = new Map<string, Runner>();
+  /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
+  #party: PartyOptions | undefined;
   /**
    * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
    * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
@@ -525,6 +540,7 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
+    this.#party = options.partyOptions;
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -575,6 +591,11 @@ export class HuntRuleset implements Ruleset {
   /** O ambiente da hunt (FUN-121), do conteúdo — `cavern` no bueiro. Ausente é superfície. */
   get ambience(): 'surface' | 'cavern' | undefined {
     return this.#options.hunt.ambience;
+  }
+
+  /** A party desta instância (#191), ou `undefined` em solo. */
+  get party(): PartyOptions | undefined {
+    return this.#party;
   }
 
   /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
@@ -890,6 +911,7 @@ export class HuntRuleset implements Ruleset {
       ammoFallbackTold: [...this.#ammoFallbackTold],
       ...(state.botConfig === undefined ? {} : { botConfig: state.botConfig }),
       runners,
+      ...(this.#party === undefined ? {} : { partyOptions: this.#party }),
     };
   }
 
@@ -952,6 +974,7 @@ export class HuntRuleset implements Ruleset {
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
+    this.#party = restored.partyOptions;
     // O estado por participante espera `onResume` (#203): os participantes ainda não existem —
     // a `Session` os reconstrói depois desta chamada. Sem `runners` é o snapshot de um dono
     // só, e os campos soltos são dele. Sem isto, uma hunt retomada no meio de um lure de
@@ -2199,21 +2222,26 @@ export class HuntRuleset implements Ruleset {
     // sumida ou o dono morto; o extrato mentiria se dissesse que não.
     for (const participant of session.participants) session.credit(participant.id, 'kills', 1);
 
-    // Sem dono (dano de fonte que sumiu) ou dono morto antes da vítima: o abate conta, o LOOT
-    // não — morto não recebe. Stamina zero bloqueia a RECOMPENSA, não a hunt (§10.2).
-    if (definition !== undefined && killer !== null && killer.alive && !isExhausted(killer)) {
+    const eligible = session.participants.length === 1
+      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
+      : session.participants.filter((p) => p.alive && !isExhausted(p));
+    // Quem recebe o loot (#191): em solo, o matador — se pode receber; sem dono (fonte que
+    // sumiu) ou dono morto, ninguém. Em party `split`, UM elegível sorteado; em `shared`,
+    // ninguém — a bolsa (#192).
+    const recipient = this.#lootRecipient(session, killer, eligible);
+    if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
       // (invariante 10) — nada aqui escreve banco, e nada aqui inventa saldo final.
-      const loot = rollLoot(definition.loot, session.rng);
-      killer.goldDelta += loot.gold;
-      session.credit(killer.id, 'goldGained', loot.gold);
+      const loot = rollLoot(this.#lootTableFor(definition, recipient), session.rng);
+      recipient.goldDelta += loot.gold;
+      session.credit(recipient.id, 'goldGained', loot.gold);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
-      this.#deliverLoot(session, killer, loot.items);
+      this.#deliverLoot(session, recipient, loot.items);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
-    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, killer);
+    if (definition !== undefined) this.#grantPartyXp(session, monster, definition, eligible);
     // Abate comum NÃO vira evento notável. `notableEvents` é a lista curta da tela de retorno
     // (§16.2), e uma hunt de oito horas com uma linha por rato não é lista, é log.
 
@@ -2283,11 +2311,8 @@ export class HuntRuleset implements Ruleset {
    * Nada aqui consome RNG.
    */
   #grantPartyXp(
-    session: Session, monster: MonsterRuntime, definition: Monster, killer: CharacterRuntime | null,
+    session: Session, monster: MonsterRuntime, definition: Monster, eligible: readonly CharacterRuntime[],
   ): void {
-    const eligible = session.participants.length === 1
-      ? (killer !== null && killer.alive && !isExhausted(killer) ? [killer] : NO_MEMBERS)
-      : session.participants.filter((p) => p.alive && !isExhausted(p));
     if (eligible.length === 0) return;
     const share = xpShare(definition.experience, eligible, this.#options.party);
     const solo = session.participants.length === 1;
@@ -2317,6 +2342,35 @@ export class HuntRuleset implements Ruleset {
     }
   }
 
+  /**
+   * Quem recebe o loot de um abate (#191, ADR 0027 decisão 5).
+   *
+   * Solo — ou party que virou solo —: o matador, e NENHUM sorteio. Um `rng` a mais aqui
+   * mudaria a sequência de loot de toda hunt existente (FUN-63), e o teste que grava a
+   * sequência é o que prende. Party `split` com ≥ 2: um elegível sorteado, uniforme, ANTES de
+   * `rollLoot` — os modificadores (Prey, quando existir) são do destinatário e mudam a tabela
+   * rolada. Party `shared`: ninguém; o loot vai para a bolsa (#192).
+   */
+  #lootRecipient(
+    session: Session, killer: CharacterRuntime | null, eligible: readonly CharacterRuntime[],
+  ): CharacterRuntime | null {
+    if (this.#party === undefined || session.participants.length < 2) {
+      return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
+    }
+    if (this.#party.mode === 'shared') return null;
+    if (eligible.length === 0) return null;
+    return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
+  }
+
+  /**
+   * A tabela de loot COMO o destinatário a vê. Identidade hoje: não há modificador de loot
+   * por personagem — o Prey (§19) é quem vai mexer aqui, e o gancho existe para ele entrar
+   * DEPOIS do sorteio do destinatário, e não antes.
+   */
+  #lootTableFor(definition: Monster, _recipient: CharacterRuntime): Monster['loot'] {
+    return definition.loot;
+  }
+
   #deliverLoot(
     session: Session, character: CharacterRuntime, items: readonly LootItem[],
   ): void {
@@ -2327,8 +2381,14 @@ export class HuntRuleset implements Ruleset {
       // vai existir.
       if (this.#options.items.get(rolled.itemId) === undefined) continue;
 
+      // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
+      // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
+      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre.
+      const instanceId = session.participants.length > 1
+        ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
+        : `${session.id}:${String(character.lootSeq++)}`;
       const carried: CarriedItem = {
-        instanceId: `${session.id}:${character.lootSeq++}`,
+        instanceId,
         itemId: rolled.itemId,
         quantity: rolled.quantity,
       };
@@ -2509,6 +2569,8 @@ export interface HuntSessionOptions {
   readonly botConfig?: BotConfig;
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
+  readonly partyOptions?: PartyOptions;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -2533,6 +2595,8 @@ export interface HuntRulesetExtras {
   readonly botConfig?: BotConfig;
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
+  readonly partyOptions?: PartyOptions;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -2543,7 +2607,7 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, botConfigs, exitRules, actuator } = extras;
+  const { premium, botConfig, botConfigs, partyOptions, exitRules, actuator } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -2582,6 +2646,7 @@ export function createHuntRuleset(
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
     ...(botConfigs === undefined ? {} : { botConfigs }),
+    ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
     // O cooldown de categoria vem do CONTEÚDO (§13.5), como todo parâmetro de balanceamento.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -2604,6 +2669,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.premium === undefined ? {} : { premium: options.premium }),
       ...(options.botConfig === undefined ? {} : { botConfig: options.botConfig }),
       ...(options.botConfigs === undefined ? {} : { botConfigs: options.botConfigs }),
+      ...(options.partyOptions === undefined ? {} : { partyOptions: options.partyOptions }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o
