@@ -128,7 +128,13 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  */
 const SETTLE_LIMIT = 50;
 
-const key = (sessionId: string): string => `receipt:${sessionId}`;
+/**
+ * Um extrato por MEMBRO (#194, ADR 0027): a party é uma sessão com N donos, e quatro extratos
+ * da mesma sessão não podem se sobrescrever. A chave antiga (`receipt:{sessionId}`) continua
+ * LIDA por um deploy: extrato em voo gravado por um nó anterior não pode se perder.
+ */
+const key = (sessionId: string, characterId: string): string => `receipt:${sessionId}:${characterId}`;
+const legacyKey = (sessionId: string): string => `receipt:${sessionId}`;
 /** Prefixo distinto de `receipt:`, de propósito: o `SCAN` de `pending` não pode pegá-lo. */
 const characterKey = (characterId: string): string => `receipts:char:${characterId}`;
 const RECEIPT_PATTERN = 'receipt:*';
@@ -150,10 +156,12 @@ export class ReceiptStore {
     // O extrato e a entrada de índice entram JUNTOS. O índice sozinho é um ponteiro para
     // lugar nenhum, que `pendingFor` limpa; o extrato sozinho seria pior — invisível para
     // quem emite o ticket, e o jogador voltaria a ver o personagem zerar (FUN-56).
+    // O índice guarda a CHAVE inteira (#194): `pendingFor` tem o `characterId`, mas guardar
+    // só o `sessionId` obrigaria a adivinhar entre a chave nova e a antiga.
     await exec(this.#redis
       .multi()
-      .set(key(receipt.sessionId), JSON.stringify(stored), 'PX', this.#ttlMs)
-      .sadd(index, receipt.sessionId)
+      .set(key(receipt.sessionId, receipt.characterId), JSON.stringify(stored), 'PX', this.#ttlMs)
+      .sadd(index, key(receipt.sessionId, receipt.characterId))
       .pexpire(index, this.#ttlMs));
   }
 
@@ -174,15 +182,17 @@ export class ReceiptStore {
    * gravou continua sendo creditado pela varredura do `jobs`, com o atraso de sempre.
    */
   async pendingFor(characterId: string, limit = SETTLE_LIMIT): Promise<SessionReceipt[]> {
-    const sessionIds = (await this.#redis.smembers(characterKey(characterId))).slice(0, limit);
-    if (sessionIds.length === 0) return [];
+    const members = (await this.#redis.smembers(characterKey(characterId))).slice(0, limit);
+    if (members.length === 0) return [];
 
-    const values = await this.#redis.mget(...sessionIds.map(key));
+    // Entrada de índice de antes do #194 é um `sessionId` cru; a de agora é a chave inteira.
+    const keys = members.map((member) => (member.startsWith('receipt:') ? member : legacyKey(member)));
+    const values = await this.#redis.mget(...keys);
     const receipts: SessionReceipt[] = [];
     const stale: string[] = [];
     for (const [index, raw] of values.entries()) {
       const parsed = raw === null ? null : parseReceipt(raw);
-      if (parsed === null) stale.push(sessionIds[index] as string);
+      if (parsed === null) stale.push(members[index] as string);
       else receipts.push(parsed);
     }
     // Índice apontando para extrato que não existe mais: ou ele expirou, ou um `remove`
@@ -217,9 +227,13 @@ export class ReceiptStore {
    * chama: derivá-lo aqui custaria um `GET` a mais para saber algo que o chamador tem na mão.
    */
   async remove(sessionId: string, characterId: string): Promise<void> {
+    // As duas chaves e as duas formas de índice: o extrato pode ter sido gravado por um nó
+    // anterior ao #194, e apagar só a nova o deixaria para a varredura creditar de novo —
+    // a chave única do ledger recusaria, mas o Redis ficaria com lixo até o TTL.
     await exec(this.#redis.multi()
-      .del(key(sessionId))
-      .srem(characterKey(characterId), sessionId));
+      .del(key(sessionId, characterId))
+      .del(legacyKey(sessionId))
+      .srem(characterKey(characterId), key(sessionId, characterId), sessionId));
   }
 }
 

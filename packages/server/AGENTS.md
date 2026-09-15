@@ -274,8 +274,22 @@ sobre estado QUENTE, o `CharacterRuntime` em memória, que continua tendo dono �
 Postgres é durável, e o extrato só existe depois que a sessão dona acabou: não há dono para
 disputar.
 
+Desde o #194 (ADR 0027) a chave é `receipt:{sessionId}:{characterId}` — **um extrato por
+membro**: a party é uma sessão com N donos, e quatro extratos da mesma sessão não podem se
+sobrescrever. A chave antiga `receipt:{sessionId}` e a entrada de índice com o `sessionId` cru
+continuam LIDAS e apagadas por um deploy (extrato em voo de um nó anterior), e a tolerância sai
+numa issue de limpeza depois. No hospedeiro, `hosted.credited` é um `Set` por personagem;
+`#succeed` percorre `session.receipts()` e `#settleOne` grava, avisa os visualizadores DAQUELE
+personagem e o devolve à Cidade; quem sai por dentro do `sim` (`member-left`: morte, regra de
+saída) entra em `hosted.departures` no ciclo — que é síncrono — e `#settleDepartures` grava
+depois, haja ou não visualizador; `leave-hunt` com mais de um dono é `leave`, não `end`; e
+`#replace` só apaga a sessão quando não sobra ninguém dela. Uma sessão retomada com N traz os
+outros membros: a conta de cada um vem do snapshot DELE, e o lease é registrado antes de
+qualquer coisa local existir — senão o lease expira, o login seguinte resolve para outro nó, e
+a cópia do snapshot revive a mesma sessão duas vezes.
+
 Para achar o extrato daquele personagem sem varrer o keyspace inteiro a cada login, o
-`ReceiptStore` mantém `receipts:char:{characterId}` ao lado de `receipt:{sessionId}`. **Os dois
+`ReceiptStore` mantém `receipts:char:{characterId}` ao lado (guardando a chave inteira). **Os dois
 prefixos são distintos de propósito:** nomear o índice `receipt:char:{id}` o poria dentro do
 `MATCH` do `SCAN` da varredura, e um SET no lugar de um extrato sai do `MGET` como nada — a
 varredura pararia de ver um extrato por ciclo, sem erro em lugar nenhum.

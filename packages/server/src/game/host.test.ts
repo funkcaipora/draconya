@@ -4091,3 +4091,134 @@ describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
     expect(saved[0]).toMatchObject({ layout: { r1: { container: 'satchel', index: 9 } }, equipment: {} });
   });
 });
+
+describe('a party no hospedeiro: um extrato por membro, saída por dentro do sim, retomada com N (#194, ADR 0027)', () => {
+  // Um ruleset mínimo com dois donos na MESMA sessão: `createSession` devolve a mesma
+  // instância para `a` e `b`, como o shard faz — e é assim que o host mapeia os dois para ela
+  // sem o ticket de party (#195). `KILL_B` é o evento que faz o ruleset tirar `b` por dentro.
+  const KILL_B = 'kill-b';
+  const END_ALL = 'end-all';
+  function partyRuleset() {
+    const ruleset: Ruleset = {
+      type: 'hunt',
+      hz: (attached) => (attached ? 10 : 1),
+      onEnter: () => {},
+      onEvent: (session, event) => {
+        if (event.kind === END_ALL) { session.end('drain'); return; }
+        if (event.kind !== KILL_B) return;
+        const departure = session.leave('b', 'death');
+        if (departure === null) return;
+        session.emit({ kind: 'member-left', characterId: 'b', reason: 'death', departure });
+      },
+      onCreatureDied: () => {},
+      onEnd: () => {},
+    };
+    return ruleset;
+  }
+  const member = (id: string) => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+  function partyHost(over: { restore?: SessionSnapshot } = {}) {
+    let now = 0;
+    const saved: Array<{ sessionId: string; characterId: string; seq: number; reason: string }> = [];
+    const registered: string[] = [];
+    const receipts = {
+      save: async (r: { sessionId: string; characterId: string; seq: number; reason: string }) => {
+        saved.push({ sessionId: r.sessionId, characterId: r.characterId, seq: r.seq, reason: r.reason });
+      },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async (characterId: string) => { registered.push(characterId); return true; },
+      succeed: async () => true,
+      release: async () => {},
+      releaseSlot: async () => {},
+      renew: async () => {},
+    } as unknown as SessionDirectory;
+    const ruleset = partyRuleset();
+    let shared: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, now: () => now, receipts, directory,
+      createSession: (characterId) => {
+        if (shared === null) {
+          shared = new Session({ id: 's-party', contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0 });
+          shared.enter(member('a'));
+          shared.enter(member('b'));
+        }
+        if (shared.participants.every((p) => p.id !== characterId)) shared.enter(member(characterId));
+        return shared;
+      },
+      buildSession: (request) => {
+        if (request.to !== 'city') return null;
+        return new Session({ id: `city-${String(now)}-${String(Math.random())}`, contentVersion: 'v-test', ruleset: { ...partyRuleset(), type: 'city' }, rng: Rng.fromSeed('c'), createdAtMs: 0 });
+      },
+      ...(over.restore === undefined ? {} : {
+        snapshots: {
+          load: async (characterId: string) => ({ characterId, accountId: `acc-${characterId}`, nodeId: 'n1', savedAtMs: 0, snapshot: over.restore }),
+          remove: async () => {}, save: async () => {},
+        } as unknown as SnapshotStore,
+        restoreSession: (snapshot: SessionSnapshot) => Session.fromSnapshot(snapshot, ruleset, Rng.fromSeed('r')),
+      }),
+    });
+    const runFor = (ms: number) => { for (let t = 0; t < ms; t += 100) { now += 100; host.cycle(); } host.flush(); };
+    return { host, saved, registered, runFor, session: () => shared as Session | null };
+  }
+  const settle = async () => { await new Promise((resolve) => { setTimeout(resolve, 0); }); await new Promise((resolve) => { setTimeout(resolve, 0); }); };
+
+  it('leave-hunt with two owners is a leave: one receipt, the other stays in the hunt', async () => {
+    // Mutação que mata: `end('manual-exit')` — `b` perderia a hunt, e dois extratos sairiam.
+    const { host, saved, session } = partyHost();
+    await host.prepare('a', undefined, 'acc-a');
+    await host.prepare('b', undefined, 'acc-b');
+    const a = host.attach(new FakeSocket(), 'a');
+    host.attach(new FakeSocket(), 'b');
+    host.handle(a, { type: 'leave-hunt' });
+    await settle();
+    expect(saved).toEqual([{ sessionId: 's-party', characterId: 'a', seq: 1, reason: 'manual-exit' }]);
+    expect(session()?.ended).toBeNull();
+    expect(session()?.participants.map((p) => p.id)).toEqual(['b']);
+    expect(host.sessionFor('b')?.id).toBe('s-party');
+    expect(host.sessionFor('a')?.id).not.toBe('s-party');
+  });
+
+  it('member-left from inside the sim is credited and sent to the city, even with nobody watching', async () => {
+    const { host, saved, runFor, session } = partyHost();
+    await host.prepare('a', undefined, 'acc-a');
+    await host.prepare('b', undefined, 'acc-b');
+    // Ninguém anexado: a saída acontece do mesmo jeito (invariante 3) — a 1 Hz.
+    session()?.scheduleIn(KILL_B, 100, { priority: 0 });
+    runFor(2_000);
+    await settle();
+    expect(saved).toEqual([{ sessionId: 's-party', characterId: 'b', seq: 1, reason: 'death' }]);
+    expect(session()?.participants.map((p) => p.id)).toEqual(['a']);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('b')?.id).not.toBe('s-party');
+  });
+
+  it('when the session ends, every remaining member gets their own receipt with their own seq', async () => {
+    const { host, saved, session, runFor } = partyHost();
+    await host.prepare('a', undefined, 'acc-a');
+    await host.prepare('b', undefined, 'acc-b');
+    session()?.scheduleIn(END_ALL, 100, { priority: 0 });
+    runFor(2_000);
+    await settle();
+    expect(saved.map((r) => [r.characterId, r.seq, r.reason])).toEqual([['a', 1, 'drain'], ['b', 2, 'drain']]);
+    expect(host.sessionFor('a')?.id).not.toBe('s-party');
+    expect(host.sessionFor('b')?.id).not.toBe('s-party');
+  });
+
+  it('a restored snapshot with two participants registers both, and the second attach reuses it', async () => {
+    const base = new Session({ id: 's-party', contentVersion: 'v-test', ruleset: partyRuleset(), rng: Rng.fromSeed('p'), createdAtMs: 0 });
+    base.enter(member('a'));
+    base.enter(member('b'));
+    const { host, registered, session } = partyHost({ restore: base.snapshot() });
+    await host.prepare('a', undefined, 'acc-a');
+    expect(registered.sort()).toEqual(['a', 'b']);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('b')?.id).toBe('s-party');
+    // O segundo a chegar NÃO cria outra cópia.
+    const second = await host.prepare('b', undefined, 'acc-b');
+    expect(second.created).toBe(false);
+    expect(session()).toBeNull();
+  });
+});
