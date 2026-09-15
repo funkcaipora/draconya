@@ -4022,3 +4022,81 @@ describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
     expect(at(1)).toEqual(at(10));
   });
 });
+
+describe('XP em party (#190, ADR 0027 decisão 3)', () => {
+  // Rato de 100 XP, para a tabela do plano (§3.3) ler direto: 4 únicas → 50 cada; 2 knights →
+  // 62; knight + sem vocação → 75; 4 únicas com um morto → 58 para os três vivos. E o abate
+  // conta no Bestiário de todo elegível (decisão 4).
+  const vocations = ['knight', 'druid', 'sorcerer', 'paladin'].map((id) => ({
+    id, name: id, healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10,
+  }));
+  const fat = { ...rat, experience: 100, health: 30 };
+  const loaded = () => content({ monsters: [fat], vocations });
+  const member = (id: string, vocationId: string | null, alive = true) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: alive ? stats.maxHealth : 0, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const party = (members: CharacterRuntime[], hz = 10, seconds = 60) => {
+    const session = createHuntSession({
+      id: 'xp-party', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    for (const m of members) session.enter(m);
+    run(session, seconds * 1_000, 1000 / hz);
+    return session;
+  };
+  const xpOf = (session: Session, id: string) => session.aggregatesOf(id).xpGained;
+  const findById = (list: readonly CharacterRuntime[], id: string) => list.find((c) => c.id === id) ?? null;
+  const killsOf = (session: Session) => session.aggregates.kills / session.participants.length;
+
+  it('four unique vocations: each member gets 50 % of every rat, and every one counts the kill', () => {
+    // Mutação que mata: creditar a XP inteira ao matador — um receberia 100 por rato.
+    const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin')]);
+    const kills = killsOf(session);
+    expect(kills).toBeGreaterThan(0);
+    for (const id of ['k', 'd', 's', 'p']) {
+      expect(xpOf(session, id)).toBe(kills * 50);
+      expect(findById(session.participants, id)?.bestiary.getState()).toEqual({ rat: kills });
+    }
+    expect(session.aggregates.xpGained).toBe(kills * 200);
+  });
+
+  it('two knights get 62 each (125 % ÷ 2); knight + no vocation get 75 each (150 % ÷ 2)', () => {
+    const kk = party([member('a', 'knight'), member('b', 'knight')]);
+    expect(xpOf(kk, 'a')).toBe(killsOf(kk) * 62);
+    expect(xpOf(kk, 'b')).toBe(killsOf(kk) * 62);
+    const kn = party([member('a', 'knight'), member('b', null)]);
+    expect(xpOf(kn, 'a')).toBe(killsOf(kn) * 75);
+    expect(xpOf(kn, 'b')).toBe(killsOf(kn) * 75);
+  });
+
+  it('a dead member gets nothing and leaves the vocation count: 4 unique with one dead is 58 for three', () => {
+    // O morto entra na sessão morto (fixture): nunca elegível, nunca conta como vocação única.
+    const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin', false)]);
+    const kills = killsOf(session);
+    expect(kills).toBeGreaterThan(0);
+    expect(xpOf(session, 'p')).toBe(0);
+    expect(findById(session.participants, 'p')?.bestiary.getState()).toEqual({});
+    for (const id of ['k', 'd', 's']) expect(xpOf(session, id)).toBe(kills * 58);
+  });
+
+  it('solo is untouched: the killer gets the whole 100, with the level-up detail as before', () => {
+    const session = party([member('k', 'knight')]);
+    expect(xpOf(session, 'k')).toBe(killsOf(session) * 100);
+    const levelUp = session.notableEvents.find((e) => e.type === 'level-up');
+    expect(levelUp?.detail).toMatch(/^\d+$/);
+  });
+
+  it('1 Hz == 10 Hz with four members', () => {
+    const at = (hz: number) => {
+      const session = party([member('k', 'knight'), member('d', 'druid'), member('s', 'sorcerer'), member('p', 'paladin')], hz);
+      return ['k', 'd', 's', 'p'].map((id) => [xpOf(session, id), findById(session.participants, id)?.health]);
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
