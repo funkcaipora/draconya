@@ -73,7 +73,7 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     const characterId = randomUUID();
     const sessionId = randomUUID();
     await store.save(receiptOf(sessionId, characterId));
-    await redis.del(`receipt:${sessionId}`);
+    await redis.del(`receipt:${sessionId}:${characterId}`);
 
     expect(await store.pendingFor(characterId)).toEqual([]);
     expect(await redis.smembers(`receipts:char:${characterId}`)).toEqual([]);
@@ -153,5 +153,40 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
 
     expect(keys).toHaveLength(1);
     expect(await store.pending()).toHaveLength(1);
+  });
+});
+
+describe.runIf(available)('one receipt per party member (#194, ADR 0027)', () => {
+  it('keeps two receipts of the same session apart, and removes one without touching the other', async () => {
+    // Mutação que mata: a chave antiga `receipt:{sessionId}` — o segundo `save` sobrescreveria
+    // o primeiro, e um membro da party perderia a hunt inteira.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await store.save(receiptOf(sessionId, 'a', { seq: 1 }));
+    await store.save(receiptOf(sessionId, 'b', { seq: 2 }));
+
+    expect((await store.pendingFor('a')).map((r) => [r.characterId, r.seq])).toEqual([['a', 1]]);
+    expect((await store.pendingFor('b')).map((r) => [r.characterId, r.seq])).toEqual([['b', 2]]);
+    expect(await store.pending()).toHaveLength(2);
+
+    await store.remove(sessionId, 'a');
+    expect(await store.pendingFor('a')).toEqual([]);
+    expect((await store.pendingFor('b')).map((r) => r.seq)).toEqual([2]);
+    expect(await store.pending()).toHaveLength(1);
+  });
+
+  it('still reads and removes a receipt written under the old key, with the old index entry', async () => {
+    // Deploy em rolagem: um nó anterior ao #194 gravou `receipt:{sessionId}` e o índice com o
+    // `sessionId` cru. Precisa ser lido por `pendingFor` E apagado por `remove`.
+    const store = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    const characterId = randomUUID();
+    await redis.set(`receipt:${sessionId}`, JSON.stringify({ ...receiptOf(sessionId, characterId), endedAtMs: 1 }));
+    await redis.sadd(`receipts:char:${characterId}`, sessionId);
+
+    expect((await store.pendingFor(characterId)).map((r) => r.sessionId)).toEqual([sessionId]);
+    await store.remove(sessionId, characterId);
+    expect(await store.pendingFor(characterId)).toEqual([]);
+    expect(await redis.exists(`receipt:${sessionId}`)).toBe(0);
   });
 });

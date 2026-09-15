@@ -158,6 +158,30 @@ describe.runIf(ready)('receipts to the ledger', () => {
     expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
   });
 
+  it('writes one ledger row per party member of the same session, and never twice (#194, ADR 0027)', async () => {
+    // Dois extratos com o MESMO `session_id` e `seq` 1 e 2: duas linhas, uma por membro; o
+    // reprocessamento bate na chave única e não duplica nenhuma das duas.
+    const database = db as NonNullable<typeof db>;
+    const a = await seedCharacter(database);
+    const b = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const sessionId = randomUUID();
+    await receipts.save(receiptOf(sessionId, a, { seq: 1 }));
+    await receipts.save(receiptOf(sessionId, b, { seq: 2 }));
+
+    const first = await writePendingReceipts({ database: database.database.db, receipts, logger });
+    expect(first).toEqual({ written: 2, failed: 0 });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(2);
+    expect(await receipts.pending()).toEqual([]);
+
+    await receipts.save(receiptOf(sessionId, a, { seq: 1 }));
+    await receipts.save(receiptOf(sessionId, b, { seq: 2 }));
+    await writePendingReceipts({ database: database.database.db, receipts, logger });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(2);
+    // E cada um recebeu o SEU crédito: o gold do extrato vai para a linha do dono do extrato.
+    expect((await characterRow(database, a)).gold).toBe((await characterRow(database, b)).gold);
+  });
+
   it('keeps the receipt when the write fails, instead of losing the credit', async () => {
     // Personagem inexistente viola a chave estrangeira. Perder o crédito em silêncio é o
     // defeito que este caminho existe para não ter.

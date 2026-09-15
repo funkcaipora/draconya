@@ -14,7 +14,7 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, GridPoint, PresenceEvent, Receipt, Session,
+  Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PresenceEvent, Receipt, Session,
   SessionSnapshot, SessionType,
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -403,11 +403,17 @@ interface HostedSession {
    */
   lastAdvancedAtMs: number;
   /**
-   * O extrato desta sessão já virou crédito? A drenagem grava e DEPOIS solta, e sem esta
-   * marca o `release` gravaria de novo com um `seq` novo — que a chave única do ledger não
-   * teria como recusar, e o jogador receberia o mesmo gold duas vezes.
+   * De quem o extrato já virou crédito (#194: um por membro). A drenagem grava e DEPOIS solta,
+   * e sem esta marca o `release` gravaria de novo com um `seq` novo — que a chave única do
+   * ledger não teria como recusar, e o jogador receberia o mesmo gold duas vezes.
    */
-  credited: boolean;
+  readonly credited: Set<string>;
+  /**
+   * Quem saiu por DENTRO do `sim` — morte ou regra de saída numa party (#193) — e ainda não
+   * foi gravado nem devolvido à Cidade. `#presentMoves` enfileira; `#settleDepartures` drena
+   * fora do ciclo, porque gravar é I/O.
+   */
+  readonly departures: MemberLeft[];
   /**
    * Personagens de um SHARD com estado durável pendente (#154): vocação, equipamento, munição
    * e arma de vocação mudam na praça e, sem isto, sumiam no logout. Quem entra aqui recebe um
@@ -1361,6 +1367,7 @@ export class SessionHost {
           this.#sendInventory(characterId);
         }
       }
+      if (hosted.departures.length > 0) void this.#settleDepartures(hosted);
       if (hosted.session.ended !== null) void this.#succeed(hosted);
     }
     this.flush();
@@ -1380,7 +1387,13 @@ export class SessionHost {
    */
   #presentMoves(hosted: HostedSession): void {
     const events = hosted.session.drainEvents();
-    if (events.length === 0 || hosted.viewers.size === 0) return;
+    if (events.length === 0) return;
+    // Sem ninguém olhando nada é apresentado — mas a saída de um membro (#194) não é
+    // apresentação: é extrato e Cidade, e acontece haja ou não visualizador (invariante 3).
+    if (hosted.viewers.size === 0) {
+      for (const event of events) if (event.kind === 'member-left') hosted.departures.push(event);
+      return;
+    }
 
     for (const event of events) {
       // Discriminar por `kind` ANTES de tocar em qualquer campo: a união cresceu na FUN-103 e
@@ -1405,9 +1418,12 @@ export class SessionHost {
         case 'party-bag-changed':
         case 'party-settlement':
         case 'party-state':
+          // A party no fio é #196; até lá o hospedeiro ignora estes.
+          continue;
         case 'member-left':
-          // A party no fio é #196 e a saída por dentro do sim é #194; até lá o hospedeiro
-          // ignora os eventos.
+          // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
+          // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
+          hosted.departures.push(event);
           continue;
         case 'creature-moved':
           break;
@@ -1861,24 +1877,29 @@ export class SessionHost {
    *      estraga a tela de retorno e o analisador.
    */
   async #succeed(hosted: HostedSession): Promise<void> {
-    const characters = this.#charactersOf(hosted.session.id);
-    const characterId = characters[0];
-    if (characterId === undefined) return;
-    if (characters.length > 1) {
-      // Party divide uma sessão, e um extrato por personagem é decisão de produto que ainda
-      // não foi tomada. Creditar o mesmo agregado N vezes seria pior que não creditar.
-      this.#logger.error(
-        { sessionId: hosted.session.id, characters: characters.length },
-        'Cannot succeed a session shared by more than one character',
-      );
-      return;
+    // Um extrato por participante (#187, #194): cada um credita, avisa os SEUS visualizadores
+    // e volta à Cidade, na ordem de entrada. Quem já saiu antes (`member-left`) não está aqui.
+    for (const receipt of hosted.session.receipts()) {
+      if (!this.#charactersOf(hosted.session.id).includes(receipt.characterId)) continue;
+      await this.#settleOne(hosted, receipt.characterId, receipt);
     }
-    const receipt = receiptOf(hosted, characterId);
-    if (receipt === null) return;
+  }
 
+  /** As saídas enfileiradas por `member-left` (#194), fora do ciclo. */
+  async #settleDepartures(hosted: HostedSession): Promise<void> {
+    while (hosted.departures.length > 0) {
+      const left = hosted.departures.shift() as MemberLeft;
+      await this.#settleOne(hosted, left.characterId, left.departure.receipt, left.departure.character);
+    }
+  }
+
+  async #settleOne(
+    hosted: HostedSession, characterId: string, receipt: Receipt, departed?: CharacterRuntime,
+  ): Promise<void> {
     try {
-      await this.#saveReceipt(characterId, hosted, receipt);
+      await this.#saveReceipt(characterId, hosted, receipt, departed);
       for (const viewer of hosted.viewers) {
+        if (viewer.characterId !== characterId) continue;
         viewer.send({
           type: 'session-ended',
           reason: receipt.reason,
@@ -1964,10 +1985,21 @@ export class SessionHost {
     // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
     // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
     if (hosted.session.ruleset.shared !== true) {
-      if (hosted.session.ended === null) hosted.session.end('manual-exit');
-      const receipt = receiptOf(hosted, characterId);
+      // Party (#194, ADR 0027): com mais de um dono, sair é SAIR — o extrato é o dele, a hunt
+      // continua para os outros, e a cascata do §13.9 roda no próximo evento do `sim`.
+      let receipt: Receipt | null;
+      let departed: CharacterRuntime | undefined;
+      if (hosted.session.ended === null && hosted.session.participants.length > 1) {
+        const departure = hosted.session.leave(characterId, 'manual-exit');
+        receipt = departure?.receipt ?? null;
+        departed = departure?.character;
+        this.#announceDeparture(hosted, characterId);
+      } else {
+        if (hosted.session.ended === null) hosted.session.end('manual-exit');
+        receipt = receiptOf(hosted, characterId);
+      }
       if (receipt !== null) {
-        await this.#saveReceipt(characterId, hosted, receipt);
+        await this.#saveReceipt(characterId, hosted, receipt, departed);
         for (const viewer of hosted.viewers) {
           if (viewer.characterId !== characterId) continue;
           viewer.send({
@@ -2020,9 +2052,10 @@ export class SessionHost {
       hosted.session.leave(characterId);
       this.#announceDeparture(hosted, characterId);
     }
-    if (hosted.session.ruleset.shared !== true || hosted.session.participants.length === 0) {
-      this.#sessions.delete(hosted.session.id);
-    }
+    // Some daqui quando não sobra ninguém dela — nem no shard nem na party (#194): os outros
+    // membros continuam na hunt, e apagar a sessão levaria a deles junto.
+    const remaining = this.#charactersOf(hosted.session.id).filter((id) => id !== characterId);
+    if (remaining.length === 0) this.#sessions.delete(hosted.session.id);
 
     // A próxima pode JÁ estar hospedada — voltar da hunt é chegar na praça em que os outros
     // estão (FUN-71). Montar um `HostedSession` novo aqui jogaria fora os visualizadores e os
@@ -2032,7 +2065,8 @@ export class SessionHost {
       session: next, viewers: new Set(), creatureIds: new Map(), nextCreatureId: 1,
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
-      credited: false,
+      credited: new Set(),
+      departures: [],
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
@@ -2252,6 +2286,8 @@ export class SessionHost {
     characterId: string,
     hosted: HostedSession,
     receipt: Receipt,
+    /** Quem saiu por `leave` já não está em `participants` (#194): quem chama o entrega. */
+    departed?: CharacterRuntime,
   ): Promise<void> {
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
@@ -2259,14 +2295,14 @@ export class SessionHost {
     // Uma sessão credita UMA vez. A drenagem grava e depois solta, e sem esta guarda o
     // `release` gravaria de novo com um `seq` novo — que a chave única do ledger não teria
     // como recusar, e o jogador receberia o mesmo gold duas vezes.
-    if (hosted.credited) return;
-    hosted.credited = true;
+    if (hosted.credited.has(characterId)) return;
+    hosted.credited.add(characterId);
     // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
     // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
     // repetida por retry de creditar duas vezes.
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
-    const owner = hosted.session.participants.find((p) => p.id === characterId);
+    const owner = departed ?? hosted.session.participants.find((p) => p.id === characterId);
     await receipts.save({
       sessionId: receipt.sessionId,
       characterId,
@@ -2494,6 +2530,23 @@ export class SessionHost {
     const resumed = await this.#resume(characterId, accountId);
     const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
     await this.#register(characterId, session, accountId);
+    // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
+    // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
+    // senão o lease deles expira, o login seguinte resolve para outro nó, e a cópia do
+    // snapshot que ele guardou revive a MESMA sessão duas vezes. A conta de cada um vem do
+    // snapshot dele; recusa de lease derruba a retomada inteira — nada local foi criado ainda.
+    const others = resumed === null
+      ? []
+      : session.participants.filter((p) => p.id !== characterId);
+    for (const other of others) {
+      const stored = await this.#options.snapshots?.load(other.id);
+      if (stored === null || stored === undefined) {
+        this.#logger.warn({ characterId: other.id, sessionId: session.id }, 'Party member has no snapshot of their own; hosting without a lease');
+        continue;
+      }
+      await this.#register(other.id, session, stored.accountId);
+      this.#accountIdByCharacter.set(other.id, stored.accountId);
+    }
     // Nome e cores ANTES de hospedar: `#createLocal` anuncia a chegada a quem já está na praça
     // (FUN-71), e o `creature-appear` desse anúncio lê as duas tabelas. Depois, quem já
     // estava veria o recém-chegado com o id no lugar do nome e sem cores — e só o próximo
@@ -2504,6 +2557,10 @@ export class SessionHost {
       this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
     }
     this.#createLocal(characterId, session, accountId);
+    for (const other of others) {
+      this.#sessionIdByCharacter.set(other.id, session.id);
+      this.#restingSince.set(other.id, this.#now());
+    }
     this.#adoptTicketBotConfig(characterId, session, initialCharacter);
     if (resumed !== null) {
       this.#resumedGapMs.set(characterId, resumed.gapMs);
@@ -2638,7 +2695,8 @@ export class SessionHost {
       // Vale tanto para a sessão nova quanto para a retomada de snapshot: as duas começam a
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
-      credited: false,
+      credited: new Set(),
+      departures: [],
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
