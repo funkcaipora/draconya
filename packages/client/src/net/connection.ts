@@ -12,6 +12,7 @@ import { decodeS2C, encodeC2S, type C2SMessage } from '@draconya/protocol';
 import { applyMessage } from '../state/apply.js';
 import { hud, type ConnectionStatus } from '../state/hud.js';
 import { backoffDelayMs } from './backoff.js';
+import { takeWsUrl } from './pending-ticket.js';
 
 /** O pedaço do WebSocket que isto usa. Estreito de propósito: o teste implementa à mão. */
 export interface SocketLike {

@@ -56,7 +56,16 @@ export function describeEvent(event: NotableEvent, names: EventNames = {}): stri
       return level === '' ? `Entrou em ${hunt}` : `Entrou em ${hunt} · ${level}`;
     }
     case 'entered-city': return 'Voltou para a cidade';
-    case 'level-up': return `Subiu de level · ${detail}`;
+    case 'level-up': {
+      // Em party o detalhe é `id/level` (#190): diz DE QUEM. Em solo, só o level, como sempre.
+      const [who, level] = detail.includes('/') ? detail.split('/') : [undefined, detail];
+      return who === undefined ? `Subiu de level · ${level ?? ''}` : `${who} subiu de level · ${level ?? ''}`;
+    }
+    case 'party-settlement': {
+      // `total/presentes` (#192): a bolsa foi vendida e dividida — ao sair alguém, e no fim.
+      const [total = '', present = ''] = detail.split('/');
+      return `Bolsa vendida: ${total} gold para ${present}`;
+    }
     case 'level-down': return `Perdeu level · ${detail}`;
     case 'xp-penalty': return `Perdeu ${detail} XP`;
     case 'skill-up': {

@@ -25,6 +25,7 @@ import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
 import { Bestiary } from './Bestiary.js';
 import { HuntMenu } from './HuntMenu.js';
+import { PartyBag } from './PartyBag.js';
 import { BotPanel } from './BotPanel.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
@@ -78,6 +79,8 @@ export function Shell() {
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
           <ContainerWindow container="backpack" collapsed={!open.inventory} />
           <ContainerWindow container="satchel" collapsed={!open.inventory} />
+          {/* A bolsa da party (#197): só no modo compartilhado; minimiza com o inventário. */}
+          <PartyBag collapsed={!open.inventory} />
           {open.analyzer && <Analyzer />}
           {open.bestiary && <Bestiary />}
         </div>

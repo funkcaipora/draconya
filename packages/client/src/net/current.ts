@@ -10,10 +10,22 @@
 
 import type { C2SMessage } from '@draconya/protocol';
 
-let current: { send(message: C2SMessage): void } | null = null;
+interface Current {
+  send(message: C2SMessage): void;
+  restart?(): void;
+}
 
-export function setConnection(connection: { send(message: C2SMessage): void } | null): void {
+let current: Current | null = null;
+
+export function setConnection(connection: Current | null): void {
   current = connection;
+}
+
+/** Reconecta — pedindo ticket de novo. É como a party entra na hunt (#197). */
+export function restartConnection(): boolean {
+  if (current?.restart === undefined) return false;
+  current.restart();
+  return true;
 }
 
 /**

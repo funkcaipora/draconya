@@ -12,6 +12,8 @@ import { useState } from 'react';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { HuntListing } from '../state/hud.js';
+import { PartyPanel } from './PartyPanel.js';
+import { PartyMembers } from './PartyMembers.js';
 
 /**
  * Os três tamanhos de pull do Huntera (FUN-123): Cauteloso, Ousado, Agressivo. Uma hunt define
@@ -97,11 +99,16 @@ export function HuntMenu() {
         catalogue === null
           ? <p className="quiet">Carregando…</p>
           : (
-            <ul className="hunt-list">
-              {catalogue.hunts.map((hunt) => (
-                <Hunt key={hunt.id} hunt={hunt} level={level} />
-              ))}
-            </ul>
+            <>
+              {/* A party (#197): na Cidade, a formação — é aqui que se escolhe a hunt, e a
+                  proposta É uma escolha de hunt; na hunt, os companheiros. */}
+              {hunting ? <PartyMembers /> : <PartyPanel hunts={catalogue.hunts} />}
+              <ul className="hunt-list">
+                {catalogue.hunts.map((hunt) => (
+                  <Hunt key={hunt.id} hunt={hunt} level={level} />
+                ))}
+              </ul>
+            </>
           )
       )}
     </section>
