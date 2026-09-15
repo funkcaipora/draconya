@@ -17,6 +17,7 @@ export * from './progression.js';
 export * from './stamina.js';
 export * from './skills.js';
 export * from './bestiary.js';
+export * from './party.js';
 export * from './inventory.js';
 export * from './casting.js';
 export * from './area.js';

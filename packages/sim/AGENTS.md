@@ -121,6 +121,20 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   não conta abate (§18.6) pela MESMA condição que não paga XP nem loot — duas condições
   divergem na primeira mudança em uma delas. `Bestiary.merge` fica com o maior por monstro,
   pela razão de `Skills.merge`.
+- **A party é aritmética pura em `party.ts` (#189, ADR 0027), e o ruleset só chama.** Quatro
+  contas em inteiro, sem RNG: `uniqueVocations` (`null` CONTA como uma vocação), `xpPool`
+  (`floor(xp × tabela[únicas] / 100)`; um elegível só devolve `xp` sem ler a tabela — solo é
+  100 %, e a linha `"1"` é da party de vocações iguais), `xpShare` (cota igual, resto
+  DESCARTADO — dar o resto a alguém seria prioridade por golpe, §15.5) e `settleBag`
+  (vende a bolsa por `item.value`, divide com `splitEqually` — resto UM a UM nos primeiros,
+  porque gold descartado é valor que o ledger não vê; `value: 0` vai em `unsold`, para o
+  líder, não para o gold). Nada aqui sabe o que é sessão; é o que permite testar por tabela.
+- **Agregados são POR PARTICIPANTE desde o #187, e `session.aggregates` é a SOMA.** Escreva
+  com `session.credit(id, key, delta)` — nunca `session.aggregates.x += n`: `credit` escreve
+  no participante e na soma no mesmo passo, e trata `best*Hit` como máximo. `end()` devolve
+  um `Receipt` por participante, cada um com `seq` próprio (o ledger é `UNIQUE (session_id,
+  seq)`); `leave(id, reason)` vale em qualquer sessão e devolve quem saiu com o extrato dele,
+  emitido DEPOIS do `onLeave` — é o que faz o settlement da bolsa entrar no extrato de quem sai.
 - **O bônus do Bestiário é GLOBAL, e o abate que fecha o marco é pago pela regra de ANTES.**
   Global (DT-01) porque o PRD diz "XP PvE permanente", não "XP daquele monstro" — por monstro
   seria uma segunda regra que ninguém escreveu. E `applyXpBonus` vem antes de `record` (DT-04)
