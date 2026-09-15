@@ -30,6 +30,7 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   /** A party antes da hunt (#195): o formulário em Redis e os limites do conteúdo. */
   readonly party?: PartyRouteDependencies['party'];
   readonly partyLimits?: PartyRouteDependencies['limits'];
+  readonly matchmakingLevelRange?: number;
 }
 
 export function createApi(
@@ -166,6 +167,7 @@ export function buildApi(
       settleProgress,
       locateSession,
       limits: partyLimits,
+      ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
     });
   }
 

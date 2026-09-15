@@ -20,6 +20,8 @@ function fakeClient(over: Partial<PartyClient> = {}): PartyClient {
     propose: async () => view({ huntId: 'arena', difficulty: 'bold' }),
     approve: async () => view(),
     start: async () => ({ sessionId: 's1', ticket: { ticket: 't', wsUrl: 'ws://n1/?ticket=t', expiresAtMs: 1, sessionId: 's1' } }),
+    seek: async () => ({ party: null }),
+    stopSeeking: async () => {},
     ...over,
   };
 }
@@ -80,5 +82,24 @@ describe('party store', () => {
     setPartyClient(fakeClient({ create: async () => { throw new Error('Você já está numa party.'); } }));
     await partyActions.create();
     expect(party.get()).toMatchObject({ error: 'Você já está numa party.', busy: false, party: null });
+  });
+});
+
+describe('matchmaking (#199)', () => {
+  it('seek waits when nobody matched, and the party that the polling finds ends the wait', async () => {
+    setPartyCharacter('me');
+    const mine = vi.fn<PartyClient['mine']>().mockResolvedValueOnce({ party: view({ leaderId: 'other' }), ticket: null });
+    setPartyClient(fakeClient({ mine }));
+    await partyActions.seek();
+    expect(party.get()).toMatchObject({ seeking: true, party: null });
+    await partyActions.refresh();
+    expect(party.get()).toMatchObject({ seeking: false, party: { leaderId: 'other' } });
+    // Casou na hora: nada a esperar.
+    setPartyClient(fakeClient({ seek: async () => ({ party: view() }) }));
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me' }));
+    await partyActions.seek();
+    expect(party.get()).toMatchObject({ seeking: false, party: { id: 'party-1' } });
+    await partyActions.stopSeeking();
+    expect(party.get().seeking).toBe(false);
   });
 });

@@ -539,6 +539,15 @@ recebe o bloco: se `party.sessionId` já está hospedada, o membro só entra nel
 validado ali com o conteúdo) e o host registra o lease dos outros com a conta do ticket —
 o membro que nunca conecta está na hunt do mesmo jeito (invariante 3).
 
+O matchmaking (#199, §15.2) FORMA a party, não a inicia: `POST /api/matchmaking/join` põe o
+personagem em `matchmaking:queue` (ZSET por instante) e casa NA HORA, num script Lua, com quem
+já esperava — na faixa de level de `content.party.matchmakingLevelRange` (`0` é qualquer um),
+livre de outra party, preferindo VOCAÇÕES DISTINTAS (é o que o bônus de XP premia) até
+`maxMembers`, tirando os escolhidos da fila no mesmo passo. A party formada tem o mais antigo
+como líder e segue o fluxo de sempre (propor, aprovar, iniciar). Uma party de dois se forma
+no instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para
+sempre, e o §15.2 admite começar com menos de quatro.
+
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
 `lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis

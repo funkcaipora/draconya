@@ -76,6 +76,9 @@ export interface PartyClient {
   propose(partyId: string, characterId: string, proposal: { huntId: string; difficulty: string; mode: 'split' | 'shared' }): Promise<PartyView>;
   approve(partyId: string, characterId: string): Promise<PartyView>;
   start(partyId: string, characterId: string): Promise<{ sessionId: string; ticket: PartyTicketView | null }>;
+  /** O matchmaking (#199): entra na fila e casa na hora, ou fica esperando (`party: null`). */
+  seek(characterId: string): Promise<{ party: PartyView | null }>;
+  stopSeeking(characterId: string): Promise<void>;
 }
 
 export const partyApi: PartyClient = {
@@ -87,4 +90,6 @@ export const partyApi: PartyClient = {
   propose: (partyId, characterId, proposal) => post(`/api/party/${partyId}/propose`, { characterId, ...proposal }),
   approve: (partyId, characterId) => post(`/api/party/${partyId}/approve`, { characterId }),
   start: (partyId, characterId) => post(`/api/party/${partyId}/start`, { characterId }),
+  seek: (characterId) => post('/api/matchmaking/join', { characterId }),
+  stopSeeking: async (characterId) => { await post('/api/matchmaking/leave', { characterId }); },
 };

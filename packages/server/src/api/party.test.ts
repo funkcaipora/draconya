@@ -154,6 +154,20 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect(((await as('p1').mine()).json() as { party: unknown }).party).not.toBeNull();
   });
 
+  it('matchmaking forms the party for two who queue, and the one in a hunt is refused (#199)', async () => {
+    const { as, app } = build({ locate: (characterId) => (characterId === 'p5' ? { type: 'hunt' } : null) });
+    expect((await as('p1').post('/api/matchmaking/join')).json()).toEqual({ party: null });
+    const matched = await as('p2').post('/api/matchmaking/join');
+    expect(matched.statusCode).toBe(200);
+    const formed = (matched.json() as { party: { leaderId: string; members: Array<{ characterId: string }> } | null }).party;
+    expect(formed?.leaderId).toBe('p1');
+    expect(formed?.members.map((m) => m.characterId)).toEqual(['p1', 'p2']);
+    expect((await as('p1').post('/api/matchmaking/join')).json()).toEqual({ error: 'already-in-party' });
+    expect((await as('p5').post('/api/matchmaking/join')).json()).toEqual({ error: 'not-in-city' });
+    expect((await as('p3').post('/api/matchmaking/leave')).statusCode).toBe(200);
+    expect(app).toBeDefined();
+  });
+
   it('caps the party at maxMembers, keeps one party per character, and only the leader proposes', async () => {
     const { app, as } = build();
     const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;

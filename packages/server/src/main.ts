@@ -174,6 +174,7 @@ async function main(): Promise<void> {
                 repository.listItemInstances(characterId),
               // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
               party: new PartyStore(redis),
+              matchmakingLevelRange: content.party.matchmakingLevelRange,
               partyLimits: {
                 maxMembers: content.party.maxMembers,
                 difficultiesOf: (huntId: string) => {

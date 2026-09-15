@@ -33,8 +33,11 @@ describe('PartyPanel', () => {
   it('without a party: create, or join by id', async () => {
     const html = await render();
     expect(html).toContain('Criar party');
+    expect(html).toContain('Procurar party');
     expect(html).toContain('aria-label="id da party"');
     expect(html).not.toContain('Iniciar');
+    party.set((state) => ({ ...state, seeking: true }));
+    expect(await render()).toContain('Cancelar busca');
   });
 
   it('as a member: approve when there is a proposal, never propose or start', async () => {

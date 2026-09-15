@@ -12,6 +12,8 @@
 //   party:{id}:approved   SET    quem aprovou a proposta atual
 //   party:{id}:tickets    HASH   characterId → ticket JSON   (depois do start; cada um pega o seu)
 //   party:by-char:{characterId}  STRING partyId  (um personagem está em NO MÁXIMO uma party)
+//   matchmaking:queue     ZSET   score = instante de entrada; member = characterId   (#199)
+//   matchmaking:{characterId}  HASH level, vocationId, accountId   TTL
 
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
@@ -78,6 +80,60 @@ redis.call('PEXPIRE', KEYS[4], tonumber(ARGV[6]))
 return 1
 `;
 
+const queueKey = 'matchmaking:queue';
+const queuedKey = (characterId: string): string => `matchmaking:${characterId}`;
+const QUEUE_TTL_MS = 10 * 60_000;
+
+/**
+ * O casamento (#199, §15.2) é UM script: lê a fila, filtra pela faixa de level e por quem
+ * ainda está livre, escolhe até `max − 1` companheiros preferindo VOCAÇÕES DISTINTAS — é o
+ * que o bônus de XP premia — e os TIRA da fila no mesmo passo. Dois `join` no mesmo instante
+ * não formam duas parties com o mesmo personagem porque só um deles encontra o outro na fila.
+ * Devolve a lista `[characterId, accountId, ...]` do grupo (quem chamou incluído), ou vazio.
+ */
+const MATCH = `
+local me = ARGV[1]
+local level = tonumber(ARGV[2])
+local vocation = ARGV[3]
+local range = tonumber(ARGV[4])
+local max = tonumber(ARGV[5])
+local queued = redis.call('ZRANGE', KEYS[1], 0, -1)
+local seen = {}
+seen[vocation] = true
+local candidates = {}
+for _, other in ipairs(queued) do
+  if other ~= me then
+    local info = redis.call('HMGET', 'matchmaking:' .. other, 'level', 'vocationId', 'accountId')
+    local free = redis.call('EXISTS', 'party:by-char:' .. other) == 0
+    if info[1] and free and (range == 0 or math.abs(tonumber(info[1]) - level) <= range) then
+      table.insert(candidates, { id = other, vocation = info[2] or '', account = info[3] or '' })
+    end
+  end
+end
+if #candidates == 0 then return {} end
+local chosen = {}
+for _, c in ipairs(candidates) do
+  if #chosen >= max - 1 then break end
+  if not seen[c.vocation] then seen[c.vocation] = true; table.insert(chosen, c) end
+end
+for _, c in ipairs(candidates) do
+  if #chosen >= max - 1 then break end
+  local already = false
+  for _, d in ipairs(chosen) do if d.id == c.id then already = true end end
+  if not already then table.insert(chosen, c) end
+end
+local out = {}
+redis.call('ZREM', KEYS[1], me)
+redis.call('DEL', 'matchmaking:' .. me)
+for _, c in ipairs(chosen) do
+  redis.call('ZREM', KEYS[1], c.id)
+  redis.call('DEL', 'matchmaking:' .. c.id)
+  table.insert(out, c.id)
+  table.insert(out, c.account)
+end
+return out
+`;
+
 export class PartyStore {
   readonly #redis: Redis;
   readonly #ttlMs: number;
@@ -90,6 +146,53 @@ export class PartyStore {
     this.#inviteTtlMs = options.inviteTtlMs ?? DEFAULT_INVITE_TTL_MS;
     this.#now = options.now ?? Date.now;
     this.#redis.defineCommand('joinParty', { numberOfKeys: 6, lua: JOIN });
+    this.#redis.defineCommand('matchParty', { numberOfKeys: 1, lua: MATCH });
+  }
+
+  /**
+   * Entra na fila de matchmaking (#199) e tenta casar AGORA. Devolve a party formada, ou
+   * `null` se ficou esperando. Quem já está numa party não entra na fila.
+   */
+  async enqueue(
+    characterId: string, accountId: string, level: number, vocationId: string | null,
+    range: number, maxMembers: number,
+  ): Promise<PartyRecord | null | 'in-party'> {
+    if (await this.#redis.exists(byCharacterKey(characterId)) === 1) return 'in-party';
+    await this.#redis.multi()
+      .zadd(queueKey, String(this.#now()), characterId)
+      .hset(queuedKey(characterId), { level: String(level), vocationId: vocationId ?? '', accountId })
+      .pexpire(queuedKey(characterId), QUEUE_TTL_MS)
+      .exec();
+    const redis = this.#redis as Redis & {
+      matchParty(queue: string, me: string, level: string, vocation: string, range: string, max: string): Promise<string[]>;
+    };
+    const matched = await redis.matchParty(queueKey, characterId, String(level), vocationId ?? '', String(range), String(maxMembers));
+    if (matched.length === 0) return null;
+    // O grupo saiu da fila junto; agora vira party — o mais antigo lidera, e é quem chamou
+    // por último quem a monta, com os que o script escolheu (todos livres, conferido ali).
+    const others: Array<{ characterId: string; accountId: string }> = [];
+    for (let i = 0; i + 1 < matched.length; i += 2) {
+      others.push({ characterId: matched[i] as string, accountId: matched[i + 1] as string });
+    }
+    const leader = others[0] ?? { characterId, accountId };
+    const party = leader.characterId === characterId
+      ? await this.create(characterId, accountId)
+      : await this.create(leader.characterId, leader.accountId);
+    if (party === null) return null;
+    const members = leader.characterId === characterId ? others : [{ characterId, accountId }, ...others.slice(1)];
+    for (const member of members) {
+      await this.invite(party.id, member.characterId);
+      await this.join(party.id, member.characterId, member.accountId, maxMembers);
+    }
+    return this.get(party.id);
+  }
+
+  async dequeue(characterId: string): Promise<void> {
+    await this.#redis.multi().zrem(queueKey, characterId).del(queuedKey(characterId)).exec();
+  }
+
+  async queued(characterId: string): Promise<boolean> {
+    return (await this.#redis.zscore(queueKey, characterId)) !== null;
   }
 
   /** Cria a party com o líder dentro. `null` se ele já está numa. */
