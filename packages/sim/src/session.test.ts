@@ -35,19 +35,19 @@ function testRuleset(): Ruleset {
       }
 
       const damage = session.rng.integer(10, 20);
-      session.aggregates.xpGained += damage;
-      session.aggregates.kills++;
+      session.credit(p.id, 'xpGained', damage);
+      session.credit(p.id, 'kills', 1);
       if (session.rng.chance(0.1)) {
-        session.aggregates.goldGained += session.rng.integer(1, 50);
+        session.credit(p.id, 'goldGained', session.rng.integer(1, 50));
       }
       session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
     },
   };
 }
 
-function character(): CharacterRuntime {
+function character(id = 'p1'): CharacterRuntime {
   return new CharacterRuntime({
-    id: 'p1',
+    id,
     position: { x: 0, y: 0, z: 7 },
     health: 500, maxHealth: 500,
     mana: 0, maxMana: 1000,
@@ -164,8 +164,9 @@ describe('lifecycle', () => {
     session.enter(character());
     const first = session.end('death');
     const second = session.end('drain' as EndReason);
-    expect(first.reason).toBe('death');
-    expect(second.reason).toBe('death');
+    expect(first[0]?.reason).toBe('death');
+    expect(second[0]?.reason).toBe('death');
+    expect(second).toBe(first);
     expect(session.ended).toBe('death');
   });
 
@@ -301,5 +302,79 @@ describe('relógio lógico (FUN-68)', () => {
       expect(event.dueAtMs).toBeGreaterThanOrEqual(0);
     }
     expect(snap.logicalNowMs).toBe(5000);
+  });
+});
+
+describe('agregados e extrato por participante (#187, ADR 0027)', () => {
+  const sessionWith = (...ids: string[]): Session => {
+    const session = new Session({
+      id: 's-party', contentVersion: 'v1', ruleset: testRuleset(),
+      rng: Rng.fromSeed('party'), createdAtMs: 0,
+    });
+    for (const id of ids) session.enter(character(id));
+    return session;
+  };
+
+  it('credit escreve no participante E na soma; best*Hit é máximo, não soma', () => {
+    // Mutação que mata: `own[key] += delta` para bestBasicHit — a soma passaria de 30 a 50.
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'xpGained', 5);
+    session.credit('b', 'xpGained', 7);
+    session.credit('a', 'bestBasicHit', 30);
+    session.credit('b', 'bestBasicHit', 20);
+    session.credit('a', 'bestBasicHit', 10);
+    expect(session.aggregatesOf('a').xpGained).toBe(5);
+    expect(session.aggregatesOf('b').xpGained).toBe(7);
+    expect(session.aggregates.xpGained).toBe(12);
+    expect(session.aggregatesOf('a').bestBasicHit).toBe(30);
+    expect(session.aggregatesOf('b').bestBasicHit).toBe(20);
+    expect(session.aggregates.bestBasicHit).toBe(30);
+  });
+
+  it('durationMs é tempo de SESSÃO: igual em todo presente, e a soma não é N × dt', () => {
+    const session = sessionWith('a', 'b');
+    session.advanceBy(1_000);
+    expect(session.aggregatesOf('a').durationMs).toBe(1_000);
+    expect(session.aggregatesOf('b').durationMs).toBe(1_000);
+    expect(session.aggregates.durationMs).toBe(1_000);
+  });
+
+  it('leave devolve o extrato de quem saiu com seq próprio, e end devolve só os que ficaram', () => {
+    // Mutação que mata: `seq` fixo por sessão — os dois extratos colidiriam no ledger.
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'xpGained', 5);
+    session.credit('b', 'xpGained', 7);
+    const departure = session.leave('a', 'manual-exit');
+    expect(departure?.receipt).toMatchObject({
+      sessionId: 's-party', characterId: 'a', reason: 'manual-exit', seq: 1,
+    });
+    expect(departure?.receipt.aggregates.xpGained).toBe(5);
+    expect(session.ended).toBeNull();
+    expect(session.participants.map((p) => p.id)).toEqual(['b']);
+
+    const receipts = session.end('death');
+    expect(receipts.map((r) => [r.characterId, r.seq, r.aggregates.xpGained])).toEqual([['b', 2, 7]]);
+    // Duas vezes: os mesmos, sem seq novo.
+    expect(session.end('drain')).toBe(receipts);
+    expect(session.ledgerSeq).toBe(2);
+    expect(session.leave('zz')).toBeNull();
+  });
+
+  it('o snapshot preserva os agregados por participante, e um snapshot antigo restaura o solo', () => {
+    const session = sessionWith('a', 'b');
+    session.credit('a', 'kills', 3);
+    session.credit('b', 'kills', 4);
+    const restored = Session.fromSnapshot(session.snapshot(), testRuleset(), Rng.fromSeed('x'));
+    expect(restored.aggregatesOf('a').kills).toBe(3);
+    expect(restored.aggregatesOf('b').kills).toBe(4);
+    expect(restored.aggregates.kills).toBe(7);
+
+    // Anterior ao #187: sem `aggregatesByCharacter`, um dono — a soma é dele.
+    const solo = sessionWith('a');
+    solo.credit('a', 'kills', 9);
+    const { aggregatesByCharacter: _dropped, ...legacy } = solo.snapshot();
+    const fromLegacy = Session.fromSnapshot(legacy, testRuleset(), Rng.fromSeed('x'));
+    expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
+    expect(fromLegacy.aggregates.kills).toBe(9);
   });
 });

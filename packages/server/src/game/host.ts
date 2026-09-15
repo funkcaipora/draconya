@@ -348,6 +348,11 @@ interface SentAnalyzer {
   readonly eventCount: number;
 }
 
+/** O extrato DESTE personagem entre os que a sessão emitiu (#187). `null` enquanto ela vive. */
+function receiptOf(hosted: HostedSession, characterId: string): Receipt | null {
+  return hosted.session.receipts().find((receipt) => receipt.characterId === characterId) ?? null;
+}
+
 function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: number): boolean {
   const a = sent.aggregates;
   return sent.eventCount === eventCount
@@ -783,7 +788,7 @@ export class SessionHost {
       // Creditar ANTES de soltar. Sem isto, sair do jogo dentro de uma hunt jogaria fora a XP
       // da sessão inteira: desde a FUN-54 o extrato é o único caminho até o banco, e logo
       // abaixo o snapshot — a outra cópia do progresso — é apagado.
-      const receipt = hosted.session.receipt();
+      const receipt = receiptOf(hosted, characterId);
       if (receipt !== null) await this.#saveReceipt(characterId, hosted, receipt);
       this.#sessions.delete(hosted.session.id);
     }
@@ -1861,7 +1866,7 @@ export class SessionHost {
       );
       return;
     }
-    const receipt = hosted.session.receipt();
+    const receipt = receiptOf(hosted, characterId);
     if (receipt === null) return;
 
     try {
@@ -1952,9 +1957,8 @@ export class SessionHost {
     // de pé com quem ficou, e a Cidade não gera progresso (§37). Encerrar aqui mandaria um
     // extrato de Cidade — zerado — para todo mundo que estivesse lá dentro.
     if (hosted.session.ruleset.shared !== true) {
-      const receipt = hosted.session.ended === null
-        ? hosted.session.end('manual-exit')
-        : hosted.session.receipt();
+      if (hosted.session.ended === null) hosted.session.end('manual-exit');
+      const receipt = receiptOf(hosted, characterId);
       if (receipt !== null) {
         await this.#saveReceipt(characterId, hosted, receipt);
         for (const viewer of hosted.viewers) {
@@ -2202,7 +2206,9 @@ export class SessionHost {
         if (hosted.session.ruleset.shared === true) {
           await this.#saveDurableReceipt(characterId, hosted, reason);
         } else {
-          const receipt = hosted.session.end(reason);
+          hosted.session.end(reason);
+          const receipt = receiptOf(hosted, characterId);
+          if (receipt === null) throw new Error(`no receipt for ${characterId} in ${sessionId}`);
           await this.#saveReceipt(characterId, hosted, receipt);
           for (const viewer of hosted.viewers) {
             if (viewer.characterId !== characterId) continue;
@@ -2248,9 +2254,9 @@ export class SessionHost {
     // como recusar, e o jogador receberia o mesmo gold duas vezes.
     if (hosted.credited) return;
     hosted.credited = true;
-    // `seq` avança na sessão: é metade da chave de idempotência do ledger (invariante 10), e
-    // é o que impede uma drenagem repetida por retry de creditar duas vezes.
-    hosted.session.ledgerSeq += 1;
+    // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
+    // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
+    // repetida por retry de creditar duas vezes.
     // A stamina do dono da sessão vai junto (FUN-54): sem ela, o tempo de hunt gasto nunca
     // chegaria ao banco, e reconectar devolveria a stamina de antes da hunt.
     const owner = hosted.session.participants.find((p) => p.id === characterId);
@@ -2259,7 +2265,7 @@ export class SessionHost {
       characterId,
       accountId,
       reason: receipt.reason,
-      seq: hosted.session.ledgerSeq,
+      seq: receipt.seq,
       aggregates: receipt.aggregates,
       notableEvents: receipt.notableEvents,
       ...(owner?.staminaMs === undefined || owner.staminaMs === null
@@ -2572,7 +2578,8 @@ export class SessionHost {
         // "sua sessão foi encerrada por manutenção", que é o que de fato aconteceu.
         reason: 'drain',
         seq: snapshot.ledgerSeq + 1,
-        aggregates: snapshot.aggregates,
+        // Os agregados DELE (#187); snapshot anterior só tem a soma, que era dele.
+        aggregates: snapshot.aggregatesByCharacter?.[characterId] ?? snapshot.aggregates,
         notableEvents: snapshot.notableEvents,
         ...(owner?.staminaMs === undefined || owner.staminaMs === null
           ? {}
