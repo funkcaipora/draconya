@@ -51,14 +51,14 @@ import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import { containerRulesFor } from '../inventory.js';
-import { TileOccupancy, canOccupy, move, movementDuration, place } from '../movement.js';
+import { TileOccupancy, canOccupy, move, movementDuration, place, placeNear } from '../movement.js';
 import type { Movable, MoveResult, WorldPoint } from '../movement.js';
+import type { RouteState } from '../route/walker.js';
 import { EventPriority } from '../schedule.js';
 import type { ScheduledEvent } from '../schedule.js';
 import { powerMultiplier } from '../skills.js';
 import { drainStamina, isExhausted } from '../stamina.js';
 import { RouteWalker } from '../route/walker.js';
-import type { RouteState } from '../route/walker.js';
 import { Session } from '../session.js';
 import type { Aggregates, EndReason, Receipt, Ruleset, SessionSnapshot } from '../session.js';
 
@@ -121,6 +121,27 @@ const SPAWN_RETRY_MS = 1000;
  * A mira de uma magia que não mira ninguém (cura). Congelada e compartilhada, como `NO_HITS`
  * em `casting.ts`: uma cura por segundo por personagem não precisa alocar um vetor vazio.
  */
+/** Até onde o segundo participante procura tile livre ao entrar (#203): o anel de `placeNear`. */
+const ENTRY_RADIUS = 3;
+
+function targetingOf(runner: Runner | undefined): Targeting {
+  return runner?.bot?.targeting ?? DEFAULT_TARGETING;
+}
+
+function runnerState(runner: Runner): RunnerState {
+  return {
+    route: runner.walker.getState(),
+    botScheduled: BOT_CATEGORIES.filter((category) => !runner.botReady[category]),
+    luring: runner.running,
+    ringReplaced: runner.ringReplaced,
+    playerAttackReady: runner.playerAttackReady,
+    warnedExhausted: runner.warnedExhausted,
+    warnedFullBackpack: runner.warnedFullBackpack,
+    warnedNoGold: runner.warnedNoGold,
+    ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
+  };
+}
+
 const NO_TILES: readonly WorldPoint[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
 
@@ -267,6 +288,11 @@ export interface HuntRulesetOptions {
    * um ruleset quiser outra política sem reescrever o resto.
    */
   readonly actuator?: BotActuator;
+  /**
+   * A configuração do bot de CADA participante, por id (#203, ADR 0027). `botConfig` continua
+   * sendo a do primeiro a entrar — o caminho solo; quem entra com id aqui usa a sua.
+   */
+  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
@@ -331,6 +357,12 @@ export interface HuntRulesetState {
   /** Ver `HuntRuleset.#ammoFallbackTold`. Ausente é vazio: snapshot anterior ao #152. */
   readonly ammoFallbackTold?: readonly string[];
   /**
+   * O estado por PARTICIPANTE (#203, ADR 0027): caminhante, bot, lure, anel, golpe engatilhado
+   * e avisos de cada um. Os campos soltos acima continuam escritos — com o do primeiro — e são
+   * lidos quando esta chave falta: é o snapshot anterior, de um dono só, sem bump.
+   */
+  readonly runners?: Readonly<Record<string, RunnerState>>;
+  /**
    * A configuração do bot, CRUA (FUN-81).
    *
    * Crua e não compilada: `CompiledBot` é um vetor de closures, e closure não serializa. O
@@ -347,19 +379,56 @@ export interface HuntRulesetState {
   readonly botConfig?: BotConfig;
 }
 
+/**
+ * O que é de UM participante dentro da hunt (#203). Antes do M13 tudo isto era campo da
+ * classe, e a hunt recusava o segundo personagem; agora é um `Runner` por id, e os eventos —
+ * que já carregavam `subject` — encontram o seu.
+ */
+interface Runner {
+  walker: RouteWalker;
+  /** O bot vigente, MUTÁVEL: o jogador troca no meio da hunt e vale na hora (FUN-81). */
+  bot: CompiledBot | undefined;
+  /** A configuração crua correspondente, para o snapshot. Anda junto com `bot`, sempre. */
+  botConfig: BotConfig | undefined;
+  exitRules: readonly HuntExitRule[];
+  /** Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada. */
+  readonly botReady: Record<BotCategory, boolean>;
+  /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
+  playerAttackReady: boolean;
+  /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
+  running: boolean;
+  /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
+  ringReplaced: string | null;
+  warnedExhausted: boolean;
+  warnedFullBackpack: boolean;
+  warnedNoGold: boolean;
+}
+
+/** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
+export interface RunnerState {
+  readonly route: RouteState;
+  readonly botScheduled: readonly BotCategory[];
+  readonly luring: boolean;
+  readonly ringReplaced: string | null;
+  readonly playerAttackReady: boolean;
+  readonly warnedExhausted: boolean;
+  readonly warnedFullBackpack: boolean;
+  readonly warnedNoGold: boolean;
+  readonly botConfig?: BotConfig;
+}
+
 export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
   readonly #options: HuntRulesetOptions;
+  /** Um `Runner` por participante presente (#203). Ver `Runner`. */
+  readonly #runners = new Map<string, Runner>();
   /**
-   * O bot vigente. MUTÁVEL, ao contrário do resto das opções: o jogador troca a configuração
-   * no meio da hunt e ela passa a valer na hora (FUN-81, §13).
+   * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
+   * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
    */
-  #bot: CompiledBot | undefined;
-  /** A configuração crua correspondente, para o snapshot. Anda junto com `#bot`, sempre. */
-  #botConfig: BotConfig | undefined;
+  #pendingRunners: { readonly byId: Readonly<Record<string, RunnerState>> | null; readonly legacy: RunnerState | null } | null = null;
   readonly #difficulty: HuntDifficulty;
-  #exitRules: readonly HuntExitRule[];
   /**
    * As regras injetadas por quem montou o ruleset, separadas das do jogador.
    *
@@ -369,7 +438,6 @@ export class HuntRuleset implements Ruleset {
    * voltar sem as regras de saída, e o teste de retomada pegou.
    */
   readonly #injectedExitRules: readonly HuntExitRule[];
-  #walker: RouteWalker;
   #spawner: Spawner;
   #monsters: MonsterRuntime[] = [];
   /**
@@ -385,71 +453,8 @@ export class HuntRuleset implements Ruleset {
   #corpses: CorpseState[] = [];
   #nextGroundItemId = 1;
 
-  /**
-   * Já avisou que a stamina zerou? A notícia sai UMA vez.
-   *
-   * O cenário comum é o jogador ausente: a hunt continua andando, gastando supply e não
-   * gerando nada (§10.2). Repetir o evento a cada tick encheria a lista curta da tela de
-   * retorno com a mesma linha até ela deixar de ser lista.
-   */
-  #warnedExhausted = false;
-
-  /**
-   * Já avisou que a mochila encheu? A notícia sai UMA vez (FUN-88).
-   *
-   * Mesma razão do aviso de stamina: uma linha por item que não coube encheria a lista curta
-   * da tela de retorno, e o que o jogador precisa saber é que ela encheu.
-   */
-  #warnedFullBackpack = false;
-
-  /**
-   * Já avisou que o gold acabou? A notícia sai UMA vez, como a da stamina.
-   *
-   * §20.3 sem a regra de saída: o personagem FICA, não paga o supply e pode morrer. Isso é
-   * comportamento, não erro — mas é o tipo de coisa que o jogador ausente precisa encontrar na
-   * tela de retorno, senão a hunt que acabou em morte não tem explicação nenhuma.
-   *
-   * Uma vez, e não por recusa: a categoria de poção tenta a cada mudança do mundo, e uma linha
-   * por tentativa encheria a lista curta até ela deixar de ser lista.
-   */
-  #warnedNoGold = false;
-
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
-
-  /** O golpe do personagem está engatilhado? Ver `#onPlayerAttack`. */
-  #playerAttackReady = true;
-
-  /**
-   * O personagem está CORRENDO para juntar monstros (§13.7, FUN-87)? Ver `#luring`.
-   *
-   * Começa em `true` porque o lure começa juntando: um personagem que nasce "lutando" com zero
-   * monstros ao redor pararia na rota esperando alguém aparecer.
-   */
-  #running = true;
-
-  /**
-   * Que anel estava no dedo quando a máquina equipou o dela (§13.8, FUN-87).
-   *
-   * `null` é "o dedo estava vazio". Precisa do snapshot: sem ele, uma hunt retomada com o anel
-   * equipado esqueceria o que restaurar, e o jogador acabaria a hunt sem o anel que era dele.
-   */
-  #ringReplaced: string | null = null;
-
-  /**
-   * Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada.
-   *
-   * É a mesma invariante do `#playerAttackReady`, e pela mesma razão: uma categoria com
-   * evento pendente **e** reavaliação imediata é ação dobrada. Concentrar o agendamento em
-   * `#scheduleBot` é o que a torna impossível de escrever errado.
-   *
-   * Engatilhada é o estado de quem avaliou e não achou regra válida: em vez de queimar um
-   * evento por segundo esperando o mundo mudar, ela dorme até `#armBot`. Um bot configurado
-   * e sem nada a fazer custa ZERO.
-   */
-  readonly #botReady: Record<BotCategory, boolean> = {
-    heal: true, potion: true, attack: true, rune: true, support: true,
-  };
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
@@ -513,11 +518,8 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
-    this.#botConfig = options.botConfig;
-    this.#bot = options.botConfig === undefined ? undefined : compileBot(options.botConfig);
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
-    this.#exitRules = this.#composeExitRules(options.botConfig);
     this.#skillsByGain = {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
       'distance-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'distance-hit'),
@@ -528,7 +530,6 @@ export class HuntRuleset implements Ruleset {
     for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       if (ammo.price === 0 && !this.#freeAmmo.has(ammo.family)) this.#freeAmmo.set(ammo.family, ammo);
     }
-    this.#walker = new RouteWalker(options.route);
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
   }
@@ -569,8 +570,15 @@ export class HuntRuleset implements Ruleset {
     return this.#options.hunt.ambience;
   }
 
+  /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
   get routeIndex(): number {
-    return this.#walker.index;
+    const first = this.#runners.values().next().value as Runner | undefined;
+    return first?.walker.index ?? -1;
+  }
+
+  /** O índice na rota de um participante, para quem tem o id. */
+  routeIndexOf(characterId: string): number {
+    return this.#runners.get(characterId)?.walker.index ?? -1;
   }
 
   /**
@@ -585,14 +593,13 @@ export class HuntRuleset implements Ruleset {
   }
 
   onEnter(session: Session, character: CharacterRuntime): void {
-    // Uma instância, um personagem — por enquanto, e de forma barulhenta.
-    //
-    // Party divide a rota (§14.7 fala em votação para trocar dificuldade), e sustentar isso
-    // pede um caminhante por participante. Aceitar o segundo em silêncio faria ele ficar
-    // parado no tile de entrada a hunt inteira, rendendo zero, sem nada explicando.
-    if (session.participants.length > 1) {
-      throw new Error('a hunt hospeda um personagem por instância; party é trabalho da F3');
-    }
+    // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
+    // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
+    // o primeiro a entrar.
+    const config = this.#options.botConfigs?.[character.id]
+      ?? (this.#runners.size === 0 ? this.#options.botConfig : undefined);
+    const runner = this.#newRunner(config);
+    this.#runners.set(character.id, runner);
     // A colocação passa pela MESMA legalidade que um passo (FUN-69). O primeiro tile da rota
     // é validado no carregamento do conteúdo (FUN-9), então uma recusa aqui é conteúdo
     // quebrado — e falhar alto é melhor que entrar dentro de uma parede.
@@ -611,11 +618,16 @@ export class HuntRuleset implements Ruleset {
     // Os containers ganham os tamanhos iniciais aqui (#160) — é onde o conteúdo existe, e é o
     // que migra um snapshot anterior sem bump: nunca encolhe.
     character.inventory.ensureContainers(this.#containerRules(character));
-    const refused = place(this.#world, character, this.#walker.current);
+    // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
+    // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
+    const at = runner.walker.current;
+    const refused = this.#runners.size === 1
+      ? place(this.#world, character, at)
+      : placeNear(this.#world, character, at, ENTRY_RADIUS);
     if (refused !== null) {
       throw new Error(
         `não dá para entrar na hunt "${this.#options.hunt.id}": o primeiro tile da rota ` +
-          `(${this.#walker.current.x},${this.#walker.current.y}) foi recusado — ${refused}`,
+          `(${at.x},${at.y}) foi recusado — ${refused}`,
       );
     }
     this.#occupancyStale = false;
@@ -642,16 +654,60 @@ export class HuntRuleset implements Ruleset {
       session.scheduleIn(MANA_REGEN, 0, { priority: EventPriority.Upkeep, subject: character.id });
     }
 
-    for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
-      session.scheduleIn(SPAWN, 0, { priority: EventPriority.Spawn, subject: String(slot) });
+    // Spawn e regras de saída são da INSTÂNCIA, não do participante (#203): entram na fila com
+    // o primeiro, e o segundo não os dobra.
+    if (this.#runners.size === 1) {
+      for (let slot = 0; slot < this.#spawner.slots.length; slot++) {
+        session.scheduleIn(SPAWN, 0, { priority: EventPriority.Spawn, subject: String(slot) });
+      }
+      session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
+        priority: EventPriority.Housekeeping,
+      });
     }
-    session.scheduleIn(EXIT_RULES, EXIT_RULE_INTERVAL_MS, {
-      priority: EventPriority.Housekeeping,
-    });
     // Só categoria COM regra entra na fila (FUN-84). Um personagem sem bot configurado — que
     // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
     // orça só existem para quem de fato configurou.
     this.#armBot(session, character.id);
+  }
+
+  /**
+   * Um participante saiu de uma hunt que continua (#203, ADR 0027): desfaz o que a entrada fez.
+   * O tile é liberado; o `Runner` some — os eventos dele ainda na fila vencem, não encontram o
+   * personagem e não fazem nada, como os de um morto. Quem o tinha como alvo perde o alvo no
+   * próximo passo, porque a mira é recalculada a cada vencimento.
+   */
+  onLeave(_session: Session, character: CharacterRuntime): void {
+    // REMONTA a ocupação no próximo evento, em vez de liberar `character.position`: numa
+    // transição quem sai já pode ter sido colocado no mapa de destino, e `TileOccupancy`
+    // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
+    this.#occupancyStale = true;
+    this.#runners.delete(character.id);
+    this.#ammoFallbackTold.delete(character.id);
+  }
+
+  #newRunner(config: BotConfig | undefined, state?: RunnerState): Runner {
+    const runner: Runner = {
+      walker: new RouteWalker(this.#options.route, state?.route),
+      bot: config === undefined ? undefined : compileBot(config),
+      botConfig: config,
+      exitRules: this.#composeExitRules(config),
+      botReady: { heal: true, potion: true, attack: true, rune: true, support: true },
+      playerAttackReady: state?.playerAttackReady ?? true,
+      running: state?.luring ?? true,
+      ringReplaced: state?.ringReplaced ?? null,
+      warnedExhausted: state?.warnedExhausted ?? false,
+      warnedFullBackpack: state?.warnedFullBackpack ?? false,
+      warnedNoGold: state?.warnedNoGold ?? false,
+    };
+    for (const category of state?.botScheduled ?? []) runner.botReady[category] = false;
+    return runner;
+  }
+
+  /** O `Runner` de um participante presente. Lançar é certo: evento de quem saiu é filtrado antes. */
+  #runnerOf(characterId: string): Runner {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) throw new Error(`no runner for character ${characterId}`);
+    return runner;
   }
 
   /**
@@ -703,8 +759,9 @@ export class HuntRuleset implements Ruleset {
     for (const character of session.participants) {
       if (!character.alive) continue;
       const exhausted = drainStamina(character, dtMs, this.#options.stamina);
-      if (!exhausted || this.#warnedExhausted) continue;
-      this.#warnedExhausted = true;
+      const runner = this.#runners.get(character.id);
+      if (!exhausted || runner === undefined || runner.warnedExhausted) continue;
+      runner.warnedExhausted = true;
       // Vale a linha no extrato: daqui para a frente a hunt queima supply sem gerar nada, e
       // descobrir isso só pelo gold que sumiu é como o modo idle perde a confiança de quem
       // deixou o personagem rendendo.
@@ -796,32 +853,58 @@ export class HuntRuleset implements Ruleset {
   }
 
   getState(): HuntRulesetState {
+    const runners: Record<string, RunnerState> = {};
+    for (const [id, runner] of this.#runners) runners[id] = runnerState(runner);
+    // Os campos soltos são os do PRIMEIRO runner (#203, DT-02): um nó anterior lendo este
+    // snapshot continua funcionando para o solo. Sem runner nenhum — sessão restaurada antes
+    // de `onResume`? não acontece; sessão vazia —, saem os defaults.
+    const first = this.#runners.values().next().value as Runner | undefined;
+    const solo = first === undefined
+      ? this.#newRunner(this.#options.botConfig)
+      : first;
+    const state = runnerState(solo);
     return {
       huntId: this.#options.hunt.id,
       difficulty: this.#options.difficulty,
-      route: this.#walker.getState(),
+      route: state.route,
       spawner: this.#spawner.getState(),
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
       nextGroundItemId: this.#nextGroundItemId,
-      warnedExhausted: this.#warnedExhausted,
-      warnedFullBackpack: this.#warnedFullBackpack,
-      warnedNoGold: this.#warnedNoGold,
+      warnedExhausted: state.warnedExhausted,
+      warnedFullBackpack: state.warnedFullBackpack,
+      warnedNoGold: state.warnedNoGold,
       staminaAnchorMs: this.#staminaAnchorMs,
-      playerAttackReady: this.#playerAttackReady,
-      botScheduled: BOT_CATEGORIES.filter((category) => !this.#botReady[category]),
-      luring: this.#running,
-      ringReplaced: this.#ringReplaced,
+      playerAttackReady: state.playerAttackReady,
+      botScheduled: [...state.botScheduled],
+      luring: state.luring,
+      ringReplaced: state.ringReplaced,
       ammoFallbackTold: [...this.#ammoFallbackTold],
-      ...(this.#botConfig === undefined ? {} : { botConfig: this.#botConfig }),
+      ...(state.botConfig === undefined ? {} : { botConfig: state.botConfig }),
+      runners,
     };
   }
 
-  /** Um snapshot anterior a #160 traz a lista plana: os containers ganham os tamanhos aqui. */
+  /**
+   * Depois do `restore`, com os participantes de pé: os `Runner`s são casados com eles aqui
+   * (#203) — por id quando o snapshot os tem, ou o legado de um dono só para o único que há.
+   * Um snapshot anterior a #160 traz a lista plana: os containers ganham os tamanhos aqui.
+   */
   onResume(session: Session): void {
+    const pending = this.#pendingRunners;
+    this.#pendingRunners = null;
     for (const character of session.participants) {
       character.inventory.ensureContainers(this.#containerRules(character));
+      if (this.#runners.has(character.id)) continue;
+      const state = pending?.byId?.[character.id]
+        ?? (pending?.byId === null && session.participants.length === 1 ? pending.legacy : null)
+        ?? null;
+      // A configuração volta CRUA e é recompilada (FUN-81). Sem isto, uma hunt retomada roda
+      // sem bot: continua andando e matando com o ataque básico, então nada PARECE quebrado —
+      // o que some é a cura, e o jogador descobre pelo personagem morto. As regras de SAÍDA
+      // vêm junto, pela mesma razão.
+      this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined));
     }
   }
 
@@ -839,7 +922,6 @@ export class HuntRuleset implements Ruleset {
           `"${this.#options.hunt.id}/${this.#options.difficulty}"`,
       );
     }
-    this.#walker = new RouteWalker(this.#options.route, restored.route);
     this.#spawner = new Spawner(
       this.#options.route.spawnPoints.length,
       this.#difficulty,
@@ -861,31 +943,27 @@ export class HuntRuleset implements Ruleset {
     // da sessão já trouxe de volta (FUN-123).
     this.#corpses = [...(restored.corpses ?? [])];
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
-    this.#warnedExhausted = restored.warnedExhausted;
-    this.#warnedFullBackpack = restored.warnedFullBackpack ?? false;
-    this.#warnedNoGold = restored.warnedNoGold ?? false;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
-    this.#playerAttackReady = restored.playerAttackReady ?? true;
-    for (const category of BOT_CATEGORIES) {
-      this.#botReady[category] = !(restored.botScheduled ?? []).includes(category);
-    }
-    // Sem isto, uma hunt retomada no meio de um lure de vinte monstros recomeçaria "correndo"
-    // e continuaria juntando por cima do que já estava junto.
-    this.#running = restored.luring ?? true;
-    this.#ringReplaced = restored.ringReplaced ?? null;
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
-    // A configuração volta CRUA e é recompilada aqui (FUN-81). Sem isto, uma hunt retomada
-    // roda sem bot: continua andando e matando com o ataque básico, então nada PARECE
-    // quebrado — o que some é a cura, e o jogador descobre pelo personagem morto.
-    if (restored.botConfig !== undefined) {
-      this.#botConfig = restored.botConfig;
-      this.#bot = compileBot(restored.botConfig);
-      // As regras de SAÍDA também. Esquecê-las aqui foi um defeito de verdade: a hunt voltava
-      // curando de novo, mas sem a regra que a tirava de lá — e o jogador que configurou
-      // "sair abaixo de 20%" descobriria pelo personagem morto.
-      this.#exitRules = this.#composeExitRules(restored.botConfig);
-    }
-    // Os participantes ainda não existem: a `Session` os reconstrói depois desta chamada.
+    // O estado por participante espera `onResume` (#203): os participantes ainda não existem —
+    // a `Session` os reconstrói depois desta chamada. Sem `runners` é o snapshot de um dono
+    // só, e os campos soltos são dele. Sem isto, uma hunt retomada no meio de um lure de
+    // vinte monstros recomeçaria "correndo" e continuaria juntando por cima do que já estava.
+    this.#runners.clear();
+    this.#pendingRunners = {
+      byId: restored.runners ?? null,
+      legacy: {
+        route: restored.route,
+        botScheduled: restored.botScheduled ?? [],
+        luring: restored.luring ?? true,
+        ringReplaced: restored.ringReplaced ?? null,
+        playerAttackReady: restored.playerAttackReady ?? true,
+        warnedExhausted: restored.warnedExhausted,
+        warnedFullBackpack: restored.warnedFullBackpack ?? false,
+        warnedNoGold: restored.warnedNoGold ?? false,
+        ...(restored.botConfig === undefined ? {} : { botConfig: restored.botConfig }),
+      },
+    };
     // A ocupação é remontada no primeiro evento, quando todo mundo já está de pé.
     this.#occupancyStale = true;
   }
@@ -958,8 +1036,9 @@ export class HuntRuleset implements Ruleset {
       priority: EventPriority.Movement, subject: subjectOf,
     });
     this.#scheduleMonsterAttack(session, monster, 0);
-    // Nasceu colado no personagem: se o golpe dele estava engatilhado, sai agora.
-    this.#armPlayerAttack(session);
+    // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
+    // um que o tem ao alcance (#203).
+    for (const character of session.participants) this.#armPlayerAttack(session, character);
   }
 
   /**
@@ -1001,40 +1080,62 @@ export class HuntRuleset implements Ruleset {
     //
     // Com LURE configurado (§13.7), quem decide parar deixa de ser "há um ao alcance" e passa a
     // ser a CONTAGEM: correr acumulando até `max`, limpar até cair abaixo de `min`.
-    if (this.#attackTarget(character) !== null && !this.#luring(character)) {
-      this.#walker.stop();
-      this.#armPlayerAttack(session);
+    const runner = this.#runnerOf(character.id);
+    if (this.#attackTarget(character) !== null && !this.#luring(runner, character)) {
+      runner.walker.stop();
+      this.#armPlayerAttack(session, character);
       return null;
     }
 
     // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
     // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
-    const posture = this.#holdPosture(session, character);
+    const posture = this.#holdPosture(session, runner, character);
     if (posture !== false) {
-      this.#armPlayerAttack(session);
+      this.#armPlayerAttack(session, character);
       return posture;
     }
 
     // Ninguém ao alcance: anda. Com postura `stand` o personagem NÃO persegue — ele percorre a
     // rota e deixa o monstro vir. É o que dispensa pathfinding dos dois lados (ADR 0009).
-    this.#walker.resume();
-    const to = this.#walker.step();
+    runner.walker.resume();
+    const to = runner.walker.step();
     if (to === null) return null;
-    const result = this.#step(session, character, to, character.id);
+    let result = this.#step(session, character, to, character.id);
     if (!result.ok) {
       if (result.reason === 'not-adjacent') {
         // O personagem não está onde a rota acha que ele está — andou à mão (FUN-69) ou foi
         // empurrado. Reentrar pelo tile mais próximo, em vez de segurar um índice que nunca
         // mais vai ficar adjacente.
-        this.#walker.rejoinNearest(character.position);
+        runner.walker.rejoinNearest(character.position);
+      } else if (this.#companionAt(session, character, to)) {
+        // Um COMPANHEIRO parado na rota (#203): ele está lutando ali, e esperar seria ficar
+        // atrás dele a hunt inteira — foi o que aconteceu. Contorna com o passo guloso rumo
+        // ao tile seguinte; o vencimento seguinte reentra pela rota (`not-adjacent` →
+        // `rejoinNearest`). Cercado, segura como faria com um monstro.
+        const around = greedyStep(character.position, runner.walker.ahead(), this.#blockedFor(character));
+        if (around === null) {
+          runner.walker.hold();
+        } else {
+          runner.walker.hold();
+          result = this.#step(session, character, { ...around, z: character.position.z }, character.id);
+        }
       } else {
         // Rota bloqueada por monstro é normal, e o walker precisa saber: sem `hold` o índice
         // avançaria e o personagem "pularia" o tile ocupado na volta seguinte.
-        this.#walker.hold();
+        runner.walker.hold();
       }
     }
-    this.#armPlayerAttack(session);
+    this.#armPlayerAttack(session, character);
     return result;
+  }
+
+  /** Há OUTRO participante vivo parado em `at`? É o bloqueio que se contorna, não se espera. */
+  #companionAt(session: Session, self: CharacterRuntime, at: GridPoint): boolean {
+    for (const other of session.participants) {
+      if (other === self || !other.alive) continue;
+      if (other.position.x === at.x && other.position.y === at.y) return true;
+    }
+    return false;
   }
 
   /**
@@ -1051,8 +1152,8 @@ export class HuntRuleset implements Ruleset {
    * `not-adjacent` e `rejoinNearest` reentra pelo tile mais próximo. O caminho de volta já
    * existia, e é o mesmo de quem foi empurrado.
    */
-  #holdPosture(session: Session, character: CharacterRuntime): MoveResult | null | false {
-    const posture = this.#targeting.posture;
+  #holdPosture(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
+    const posture = targetingOf(runner).posture;
     if (posture.kind === 'stand') return false;
 
     const target = this.#approachTarget(character);
@@ -1075,7 +1176,7 @@ export class HuntRuleset implements Ruleset {
     // mesmo que o passo guloso do monstro já faz (ADR 0009).
     if (to === null) return null;
 
-    this.#walker.stop();
+    runner.walker.stop();
     return this.#step(session, character, { ...to, z: from.z }, character.id);
   }
 
@@ -1090,16 +1191,20 @@ export class HuntRuleset implements Ruleset {
    * recompiladas junto: elas vêm da mesma configuração, e deixar as antigas valendo faria a
    * hunt encerrar por uma regra que o jogador acabou de apagar.
    */
-  configureBot(session: Session, config: BotConfig): void {
-    this.#botConfig = config;
-    this.#bot = compileBot(config);
-    this.#exitRules = this.#composeExitRules(config);
+  configureBot(session: Session, config: BotConfig, characterId?: string): void {
+    // De QUEM (#203): por id, ou o primeiro participante — o caminho solo de sempre.
+    const character = characterId === undefined
+      ? session.participants[0]
+      : findById(session.participants, characterId) ?? undefined;
+    if (character === undefined) return;
+    const runner = this.#runnerOf(character.id);
+    runner.botConfig = config;
+    runner.bot = compileBot(config);
+    runner.exitRules = this.#composeExitRules(config);
     // Categoria que ganhou regra agora precisa acordar. `#armBot` só toca as ENGATILHADAS, e
     // as que já tinham evento pendente seguem com ele — a invariante "engatilhada ou agendada"
     // continua valendo do outro lado de uma troca de configuração.
-    for (const character of session.participants) {
-      if (character.alive) this.#armBot(session, character.id);
-    }
+    if (character.alive) this.#armBot(session, character.id);
   }
 
   /**
@@ -1141,7 +1246,7 @@ export class HuntRuleset implements Ruleset {
 
     const target = this.#attackTarget(character);
     if (target === null) {
-      this.#playerAttackReady = true;
+      this.#runnerOf(characterId).playerAttackReady = true;
       return;
     }
 
@@ -1165,7 +1270,7 @@ export class HuntRuleset implements Ruleset {
    * memória de quem escreve a próxima chamada.
    */
   #schedulePlayerAttack(session: Session, characterId: string, delayMs: number): void {
-    this.#playerAttackReady = false;
+    this.#runnerOf(characterId).playerAttackReady = false;
     session.scheduleIn(PLAYER_ATTACK, delayMs, {
       priority: EventPriority.Attack, subject: characterId,
     });
@@ -1202,10 +1307,12 @@ export class HuntRuleset implements Ruleset {
    * segundo por ter tentado curar sem ter com quê.
    */
   #onBot(session: Session, category: BotCategory, characterId: string): void {
-    this.#botReady[category] = true;
-    const bot = this.#bot;
     const character = findById(session.participants, characterId);
-    if (bot === undefined || character === null || !character.alive) return;
+    if (character === null) return;
+    const runner = this.#runnerOf(characterId);
+    runner.botReady[category] = true;
+    const bot = runner.bot;
+    if (bot === undefined || !character.alive) return;
 
     const action = bot.select(category, this.#botViewOf(character));
     if (action === null) return;
@@ -1380,7 +1487,7 @@ export class HuntRuleset implements Ruleset {
       return this.#aim;
     }
 
-    const primary = selectTarget(this.#targeting, this.#monsters, character.position, range ?? 1);
+    const primary = selectTarget(this.#targetingOf(character), this.#monsters, character.position, range ?? 1);
     if (primary === null) return null;
     this.#collect(primary);
 
@@ -1505,8 +1612,9 @@ export class HuntRuleset implements Ruleset {
     // §20.3 sem a regra de saída: a hunt CONTINUA, sem poção, e o personagem pode morrer. Vale
     // a linha no extrato pela mesma razão que a stamina zerada vale: descobrir isso só pelo
     // personagem morto é como o modo idle perde a confiança de quem o deixou rendendo.
-    if (!this.#warnedNoGold) {
-      this.#warnedNoGold = true;
+    const runner = this.#runnerOf(character.id);
+    if (!runner.warnedNoGold) {
+      runner.warnedNoGold = true;
       session.record('supply-unaffordable', supply.id);
     }
     return result;
@@ -1523,10 +1631,11 @@ export class HuntRuleset implements Ruleset {
    * seria a ação dobrada.
    */
   #armBot(session: Session, characterId: string): void {
-    const bot = this.#bot;
+    const runner = this.#runnerOf(characterId);
+    const bot = runner.bot;
     if (bot === undefined) return;
     for (const category of BOT_CATEGORIES) {
-      if (!this.#botReady[category]) continue;
+      if (!runner.botReady[category]) continue;
       if ((bot.categories.get(category)?.length ?? 0) === 0) continue;
       this.#scheduleBot(session, category, characterId, 0);
     }
@@ -1536,7 +1645,7 @@ export class HuntRuleset implements Ruleset {
   #scheduleBot(
     session: Session, category: BotCategory, characterId: string, delayMs: number,
   ): void {
-    this.#botReady[category] = false;
+    this.#runnerOf(characterId).botReady[category] = false;
     session.scheduleIn(BOT_EVENT[category], delayMs, {
       // Depois do movimento e do ataque: o bot decide sobre o mundo já resolvido do instante.
       priority: EventPriority.Housekeeping, subject: characterId,
@@ -1560,8 +1669,8 @@ export class HuntRuleset implements Ruleset {
   }
 
   /** A política do jogador, ou a de sempre: mais próximo, sem preferência, sem sair da rota. */
-  get #targeting(): Targeting {
-    return this.#bot?.targeting ?? DEFAULT_TARGETING;
+  #targetingOf(character: CharacterRuntime): Targeting {
+    return targetingOf(this.#runners.get(character.id));
   }
 
   /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
@@ -1587,7 +1696,7 @@ export class HuntRuleset implements Ruleset {
    */
   #targetsInReach(character: CharacterRuntime): number {
     return countTargets(
-      this.#targeting, this.#monsters, character.position, this.#options.player.attackRange,
+      this.#targetingOf(character), this.#monsters, character.position, this.#options.player.attackRange,
     );
   }
 
@@ -1606,20 +1715,20 @@ export class HuntRuleset implements Ruleset {
    * "correr acumulando" funciona sem pathfinding novo, porque o passo guloso dos monstros já
    * os faz seguir.
    */
-  #luring(character: CharacterRuntime): boolean {
-    const lure = this.#bot?.lure;
+  #luring(runner: Runner, character: CharacterRuntime): boolean {
+    const lure = runner.bot?.lure;
     if (lure === undefined) return false;
 
     const perto = countTargets(
-      this.#targeting, this.#monsters, character.position,
+      targetingOf(runner), this.#monsters, character.position,
       this.#options.targetSearchRadius ?? 8,
     );
-    if (this.#running) {
-      if (perto >= lure.max) this.#running = false;
+    if (runner.running) {
+      if (perto >= lure.max) runner.running = false;
     } else if (perto < lure.min) {
-      this.#running = true;
+      runner.running = true;
     }
-    return this.#running;
+    return runner.running;
   }
 
   /**
@@ -1641,7 +1750,8 @@ export class HuntRuleset implements Ruleset {
    * máquina não pode ter o dedo mexido por ela.
    */
   #applyRingSwap(session: Session, character: CharacterRuntime): void {
-    const ring = this.#bot?.ringSwap;
+    const runner = this.#runnerOf(character.id);
+    const ring = runner.bot?.ringSwap;
     if (ring === undefined || !character.alive) return;
 
     const hp = percentOf(character.health, character.maxHealth);
@@ -1667,15 +1777,16 @@ export class HuntRuleset implements Ruleset {
     if (carried === undefined) return;
     if (!character.inventory.equip(carried.instanceId, character, this.#options.items).ok) return;
 
-    this.#ringReplaced = previous?.instanceId ?? null;
+    runner.ringReplaced = previous?.instanceId ?? null;
     session.record('ring-equipped', ring.itemId);
   }
 
   /** Tira o anel e devolve o anterior, se o jogador pediu para restaurar (§13.8). */
   #takeOffRing(session: Session, character: CharacterRuntime, restore: boolean): void {
     if (!character.inventory.unequip('finger', this.#containerRules(character)).ok) return;
-    const previous = this.#ringReplaced;
-    this.#ringReplaced = null;
+    const runner = this.#runnerOf(character.id);
+    const previous = runner.ringReplaced;
+    runner.ringReplaced = null;
     session.record('ring-removed', '');
     if (!restore || previous === null) return;
     // Falhar aqui é o anel anterior ter sumido no meio da hunt. O dedo fica vazio, que é o
@@ -1683,14 +1794,11 @@ export class HuntRuleset implements Ruleset {
     character.inventory.equip(previous, character, this.#options.items);
   }
 
-  #armPlayerAttack(session: Session): void {
-    if (!this.#playerAttackReady) return;
-    for (const character of session.participants) {
-      if (!character.alive) continue;
-      if (this.#attackTarget(character) === null) continue;
-      this.#schedulePlayerAttack(session, character.id, 0);
-      return;
-    }
+  #armPlayerAttack(session: Session, character: CharacterRuntime): void {
+    if (!this.#runnerOf(character.id).playerAttackReady) return;
+    if (!character.alive) return;
+    if (this.#attackTarget(character) === null) return;
+    this.#schedulePlayerAttack(session, character.id, 0);
   }
 
   /**
@@ -1872,19 +1980,27 @@ export class HuntRuleset implements Ruleset {
   }
 
   #applyExitRules(session: Session): void {
-    const view: HuntView = {
-      elapsedMs: session.aggregates.durationMs,
-      aggregates: session.aggregates,
-      participants: session.participants,
-      monstersAlive: this.#monsters.filter((m) => m.alive).length,
-    };
-    for (const rule of this.#exitRules) {
-      if (!rule.when(view)) continue;
-      // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
-      // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
-      session.record('exit-rule', rule.id);
-      session.end('exit-rule');
-      return;
+    const monstersAlive = this.#monsters.filter((m) => m.alive).length;
+    // As regras são de CADA participante (#203): a view de cada um leva só ele e os agregados
+    // dele — `hp-below` e `out-of-gold` leem `participants[0]`. O que disparar faz é da
+    // sessão: em solo, encerrar; em party, sair (#193).
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner === undefined) continue;
+      const view: HuntView = {
+        elapsedMs: session.aggregates.durationMs,
+        aggregates: session.aggregatesOf(character.id),
+        participants: [character],
+        monstersAlive,
+      };
+      for (const rule of runner.exitRules) {
+        if (!rule.when(view)) continue;
+        // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
+        // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
+        session.record('exit-rule', rule.id);
+        session.end('exit-rule');
+        return;
+      }
     }
   }
 
@@ -2199,8 +2315,9 @@ export class HuntRuleset implements Ruleset {
       // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
       // significar que ele nunca existiu, não que existe e ninguém consegue ver.
       character.lootBox.push(carried);
-      if (this.#warnedFullBackpack) continue;
-      this.#warnedFullBackpack = true;
+      const runner = this.#runnerOf(character.id);
+      if (runner.warnedFullBackpack) continue;
+      runner.warnedFullBackpack = true;
       // UMA linha no extrato, como o aviso de stamina. Uma por item encheria a lista curta da
       // tela de retorno até ela deixar de ser lista — e o que o jogador precisa saber é que a
       // mochila encheu, não qual das trinta flechas ficou de fora.
@@ -2257,7 +2374,7 @@ export class HuntRuleset implements Ruleset {
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
     return selectTarget(
-      this.#targeting, this.#monsters, character.position, this.#attackRangeOf(character),
+      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
     );
   }
 
@@ -2279,7 +2396,7 @@ export class HuntRuleset implements Ruleset {
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
     return selectTarget(
-      this.#targeting, this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
+      this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
   }
 
@@ -2363,6 +2480,8 @@ export interface HuntSessionOptions {
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
   readonly botConfig?: BotConfig;
+  /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
+  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -2385,6 +2504,8 @@ export interface HuntRulesetExtras {
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
   readonly botConfig?: BotConfig;
+  /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
+  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -2395,7 +2516,7 @@ export function createHuntRuleset(
   difficulty: HuntDifficultyName,
   extras: HuntRulesetExtras = {},
 ): HuntRuleset {
-  const { premium, botConfig, exitRules, actuator } = extras;
+  const { premium, botConfig, botConfigs, exitRules, actuator } = extras;
   // A configuração passa CRUA para o ruleset, e ele compila. Compilar aqui criaria uma segunda
   // forma de entrar — e as regras de saída, que saem da mesma configuração, ficariam de fora
   // de quem entrasse pela outra. Já aconteceu.
@@ -2432,6 +2553,7 @@ export function createHuntRuleset(
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),
     ...(botConfig === undefined ? {} : { botConfig }),
+    ...(botConfigs === undefined ? {} : { botConfigs }),
     ...(actuator === undefined ? {} : { actuator }),
     // O cooldown de categoria vem do CONTEÚDO (§13.5), como todo parâmetro de balanceamento.
     botCooldownMs: content.bot.categoryCooldownMs,
@@ -2453,6 +2575,7 @@ export function createHuntSession(options: HuntSessionOptions): Session {
       ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
       ...(options.premium === undefined ? {} : { premium: options.premium }),
       ...(options.botConfig === undefined ? {} : { botConfig: options.botConfig }),
+      ...(options.botConfigs === undefined ? {} : { botConfigs: options.botConfigs }),
       ...(options.actuator === undefined ? {} : { actuator: options.actuator }),
     }),
     // Semente derivada do id: a mesma sessão reproduz a mesma sequência de combate, que é o

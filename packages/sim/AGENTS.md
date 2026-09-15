@@ -212,9 +212,19 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **`luring` e `ringReplaced` viajam no snapshot.** Sem o primeiro, a hunt retomada volta
   correndo e junta por cima do bando que já estava junto; sem o segundo, ela esquece qual anel
   era do jogador e termina com o dedo vazio.
-- **`Session.leave` existe para o SHARD, e só para ele** (FUN-71, ADR 0023). Numa sessão privada
-  sair é encerrar; num shard, sair é sair, e quem fica não perde nada. `Ruleset.shared` é quem
-  diz de qual dos dois se trata, e ausente é `false` — a sessão de sempre.
+- **`Session.leave` vale em qualquer sessão com mais de um dono** (FUN-71, ADR 0023; #187, ADR
+  0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
+  `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
+- **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
+  rota, bot compilado, categorias engatilhadas, lure, anel, golpe engatilhado e os três avisos
+  são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e
+  `#runnerOf` encontra o seu. Spawn e regras de saída são da INSTÂNCIA e entram na fila com o
+  primeiro a entrar — o segundo não os dobra. O segundo entra por `placeNear` (tile é
+  exclusivo) e `rejoinNearest` o traz à rota; um companheiro PARADO na rota é contornado com
+  o passo guloso rumo ao tile seguinte (`walker.ahead()`), não esperado — esperar era ficar
+  atrás dele a hunt inteira, e foi o primeiro defeito da party. O snapshot leva `runners` por
+  id E os campos soltos do primeiro (um nó anterior continua lendo o solo); `restore` guarda o
+  que leu e `onResume` casa com os participantes, que só existem depois.
 - **`onLeave` da Cidade REMONTA a ocupação, não libera o tile de quem saiu.** Quando a saída
   acontece numa transição, quem sai já foi colocado no mapa da hunt para onde vai, e
   `TileOccupancy` guarda coordenada, não dono: liberar por `character.position` liberaria um tile
