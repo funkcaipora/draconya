@@ -1402,6 +1402,10 @@ export class SessionHost {
         case 'shot':
           this.#presentCombat(hosted, event);
           continue;
+        case 'party-bag-changed':
+        case 'party-settlement':
+          // A party no fio é #196; até lá o evento existe e o hospedeiro o ignora.
+          continue;
         case 'creature-moved':
           break;
       }

@@ -12,7 +12,7 @@ import type { CharacterState } from './character.js';
 import { resolveDeath } from './death.js';
 import type { KillCredit, Victim } from './death.js';
 import type { Rng, RngState } from './rng.js';
-import type { CombatEvent } from './combat-events.js';
+import type { CombatEvent, PartyEvent } from './combat-events.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { PresenceEvent } from './presence.js';
 import type { GridPoint } from './monster/step.js';
@@ -27,7 +27,7 @@ import type { ScheduleState, ScheduledEvent } from './schedule.js';
  * lado que conhece socket — e é isso que mantém a matemática igual entre a hunt anexada e a
  * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
  */
-export type DomainEvent = CreatureMoved | PresenceEvent | CombatEvent;
+export type DomainEvent = CreatureMoved | PresenceEvent | CombatEvent | PartyEvent;
 
 /**
  * Teto de eventos de domínio guardados à espera de quem os leia.
