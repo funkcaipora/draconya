@@ -88,6 +88,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
 
 // Magia e supply de teste (FUN-74, FUN-77). Números redondos de propósito: `strike` tira 40 de
 // um rato de 50, então dois golpes matam e o terceiro é ruído — dá para conferir a olho.
@@ -132,19 +133,19 @@ const skills = [
 const items = [
   {
     id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
-    weight: 1, armor: 2,
+    weight: 1, value: 0, armor: 2,
   },
   {
     id: 'other-ring', name: 'Other Ring', kind: 'ring', slot: 'finger',
-    weight: 1, armor: 1,
+    weight: 1, value: 0, armor: 1,
   },
   {
     id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
-    weight: 50, attack: 200,
+    weight: 50, value: 0, attack: 200,
   },
   {
     id: 'plate', name: 'Plate Armor', kind: 'armor', slot: 'chest',
-    weight: 80, armor: 9,
+    weight: 80, value: 0, armor: 9,
   },
 ];
 
@@ -154,7 +155,7 @@ const items = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], spells, supplies, skills, items,
+    stamina: [stamina], party: [party], spells, supplies, skills, items,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -3137,7 +3138,7 @@ describe('o item cai, e vai para algum lugar (FUN-88)', () => {
 
 describe('mochila e bolsa na hunt (#160, ADR 0026 decisão 6)', () => {
   const backpackItem = {
-    id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20,
+    id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20,
   };
   /** Um herói com a mochila nas costas, numa arena em que cada rato solta uma espada. */
   const withBackpack = (capacity: number) => {

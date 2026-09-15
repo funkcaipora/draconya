@@ -36,6 +36,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
 
 // A aparência é DERIVADA aqui (FUN-94): estes testes falam de loot, rota e referência cruzada,
 // e escrever a tabela à mão em cada um faria trinta fixtures carregarem um dado que nenhuma
@@ -43,7 +44,7 @@ const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 const base = (over: Partial<RawContent> = {}): RawContent => {
   const raw: RawContent = {
     monsters: [rat], hunts: [cellars], vocations: [knight],
-    progression: [baseline], combat: [combat], stamina: [stamina],
+    progression: [baseline], combat: [combat], stamina: [stamina], party: [party],
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -174,7 +175,7 @@ describe('progression baseline', () => {
     // `healthPerLevel` tem que ser editar JSON, nunca alterar lógica.
     expect(() => buildContent({
       monsters: [rat], hunts: [cellars], vocations: [knight], combat: [combat],
-      stamina: [stamina],
+      stamina: [stamina], party: [party],
     })).toThrow(/progression\/baseline/);
   });
 
@@ -198,7 +199,7 @@ describe('combat baseline', () => {
     // deixar de valer no dia em que ninguém estivesse olhando.
     expect(() => buildContent({
       monsters: [rat], hunts: [cellars], vocations: [knight], progression: [baseline],
-      stamina: [stamina],
+      stamina: [stamina], party: [party],
     })).toThrow(/combat\/baseline/);
   });
 
@@ -244,6 +245,47 @@ describe('a rota da hunt é apontada, não inferida', () => {
   });
 });
 
+
+describe('a tabela da party (#188, ADR 0027)', () => {
+  it('refuses content without it: solo is a party of one, and the pool lives in content', () => {
+    expect(() => buildContent({ ...base(), party: [] })).toThrow(/party\/baseline/);
+  });
+
+  it('is indexed on the content, with the pool by unique vocations', () => {
+    const content = buildContent(base());
+    expect(content.party.maxMembers).toBe(4);
+    expect(content.party.xpPoolPercentByUniqueVocations['4']).toBe(200);
+    expect(content.party.matchmakingLevelRange).toBe(0);
+  });
+
+  it('refuses a missing key, a decreasing percent, and maxMembers below two', () => {
+    // Mutação que mata: tirar o `superRefine` — a tabela `{ '1': 150, '2': 125 }` entraria, e o
+    // sim daria menos XP a uma party mais variada.
+    const table = (over: Record<string, unknown>) => () => buildContent({
+      ...base(),
+      party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 }, ...over }],
+    });
+    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175 } })).toThrow(/sem a chave "4"/);
+    expect(table({ xpPoolPercentByUniqueVocations: { '1': 150, '2': 125, '3': 175, '4': 200 } })).toThrow(/menor que a anterior/);
+    expect(table({ maxMembers: 1 })).toThrow(ContentError);
+    // Chave a mais é inofensiva.
+    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200 } })).not.toThrow();
+  });
+});
+
+describe('o preço de venda do item (#188, ADR 0027 decisão 6)', () => {
+  it('is mandatory, without a default: an item without a price is a content decision', () => {
+    // Mutação que mata: `value: z.number().int().nonnegative().default(0)`.
+    const sword = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 30, weapon: { kind: 'melee', range: 1 } };
+    const withSword = (item: Record<string, unknown>) => {
+      const { appearances: _table, ...raw } = base();
+      const items = [...(raw.items ?? []), item];
+      return { ...raw, items, appearances: [placeholderAppearances({ ...raw, items })] };
+    };
+    expect(() => buildContent(withSword(sword))).toThrow(/item "sword": value/);
+    expect(buildContent(withSword({ ...sword, value: 25 })).items.get('sword')?.value).toBe(25);
+  });
+});
 
 describe('stamina baseline', () => {
   it('refuses content without it: it is the simulation ceiling, not a detail', () => {
@@ -429,7 +471,7 @@ describe('a tabela de aparências (FUN-94)', () => {
     // completamente diferentes, e nenhum arquivo de entidade tocado.
     const espadaLocal = {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand',
-      weight: 50, attack: 24,
+      weight: 50, value: 0, attack: 24,
     };
     const outroPacote = buildContent(base({
       items: [espadaLocal],
@@ -679,7 +721,7 @@ describe('wall pieces by neighbourhood in the appearance table (FUN-105)', () =>
 describe('catálogo de itens (FUN-76)', () => {
   const espada = {
     id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
-    slot: 'hand', weight: 50, attack: 24, requires: { level: 15 },
+    slot: 'hand', weight: 50, value: 0, attack: 24, requires: { level: 15 },
   };
 
   it('monta o catálogo indexado por id, com os defaults do schema', () => {
@@ -710,11 +752,11 @@ describe('catálogo de itens (FUN-76)', () => {
   it('item empilhável e item com carga cabem no mesmo schema', () => {
     // O empilhável é o queijo, não a flecha: munição deixou de ser item (ADR 0026, decisão 3).
     const queijo = {
-      id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, stackable: true,
+      id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 0, stackable: true,
     };
     const anel = {
       id: 'time-ring', name: 'Time Ring', kind: 'ring', slot: 'finger',
-      weight: 1, durationMs: 600_000,
+      weight: 1, value: 0, durationMs: 600_000,
     };
     const content = buildContent(base({ items: [queijo, anel] }));
     expect(content.items.get('cheese')?.stackable).toBe(true);
@@ -724,10 +766,10 @@ describe('catálogo de itens (FUN-76)', () => {
 });
 
 describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)', () => {
-  const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, attack: 10 };
+  const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
 
   it('a mochila é container e se veste em `back`; as duas coisas andam juntas', () => {
-    const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, initialSlots: 20 };
+    const mochila = { id: 'backpack', name: 'Backpack', kind: 'container', slot: 'back', weight: 18, value: 0, initialSlots: 20 };
     expect(buildContent(base({ items: [mochila] })).items.get('backpack')?.slot).toBe('back');
     // Container tem lugares, e só ele (#160).
     expect(() => buildContent(base({ items: [{ ...mochila, initialSlots: undefined }] }))).toThrow(/precisa de initialSlots/);
@@ -740,7 +782,7 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   it('`twoHanded` só em arma', () => {
     expect(buildContent(base({ items: [{ ...espada, twoHanded: true }] })).items.get('sword')?.twoHanded).toBe(true);
     expect(buildContent(base({ items: [espada] })).items.get('sword')?.twoHanded).toBe(false);
-    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, twoHanded: true };
+    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, value: 0, twoHanded: true };
     expect(() => buildContent(base({ items: [capacete] }))).toThrow(/twoHanded/);
   });
 
@@ -769,25 +811,25 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     // Sem `weapon`, uma arma é corpo a corpo de alcance 1 — o que toda arma era.
     expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1 });
     const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
-    const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
     // Distância sem família, e família sem munição no catálogo, são as duas formas de um bow que
     // não atira nada.
     expect(() => buildContent(base({ items: [{ ...arco, weapon: { kind: 'distance', range: 6 } }], ammunition: [flecha] }))).toThrow(/precisa de "ammoFamily"/);
     expect(() => buildContent(base({ items: [arco] }))).toThrow(/não tem munição no catálogo/);
-    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
     expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.manaPerHit).toBe(2);
     expect(() => buildContent(base({ items: [{ ...varinha, weapon: { kind: 'wand', range: 3 } }] }))).toThrow(/precisa de "manaPerHit" e "damage"/);
     expect(() => buildContent(base({ items: [{ ...varinha, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 18, max: 8 } } }] }))).toThrow(/damage.min maior/);
     // Campo de um tipo em arma de outro, e `weapon` fora de arma: conteúdo quebrado.
     expect(() => buildContent(base({ items: [{ ...espada, weapon: { kind: 'melee', range: 1, manaPerHit: 2 } }] }))).toThrow(/só wand/);
     expect(() => buildContent(base({ items: [{ ...espada, weapon: { kind: 'melee', range: 1, ammoFamily: 'arrow' } }] }))).toThrow(/só arma de distância/);
-    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, weapon: { kind: 'melee', range: 1 } };
+    const capacete = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 1, value: 0, weapon: { kind: 'melee', range: 1 } };
     expect(() => buildContent(base({ items: [capacete] }))).toThrow(/só faz sentido em arma/);
   });
 
   it('o projétil da wand fica em appearances.weapons, de um lado só: arma muda é válida, linha órfã não (#152)', () => {
-    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
     const raw = base({ items: [varinha] });
     expect(buildContent(raw).appearances?.weapons).toEqual({});
     const comProjetil = { ...raw, appearances: [{ ...placeholderAppearances(raw), weapons: { wand: { missile: 5 } } }] };
@@ -810,9 +852,9 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
 });
 
 describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 decisão 2)', () => {
-  const machete = { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, attack: 12 };
-  const helmet = { id: 'leather-helmet', name: 'Leather Helmet', kind: 'armor', slot: 'head', weight: 22, armor: 1 };
-  const axe = { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 50, attack: 21, requires: { vocationId: 'knight' } };
+  const machete = { id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, value: 0, attack: 12 };
+  const helmet = { id: 'leather-helmet', name: 'Leather Helmet', kind: 'armor', slot: 'head', weight: 22, value: 0, armor: 1 };
+  const axe = { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 21, requires: { vocationId: 'knight' } };
   const withKit = (startingKit: unknown, items: unknown[] = [machete, helmet]) =>
     base({ items, progression: [{ ...baseline, startingKit }] });
 
@@ -845,8 +887,8 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
   });
 
   it('recusa arma de duas mãos com escudo: o kit não passa por `equip`, então a regra das mãos vale aqui', () => {
-    const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
-    const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40 };
+    const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0 };
     const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
     const withArmory = (startingKit: unknown) =>
       base({ items: [bow, shield], ammunition: [arrow], progression: [{ ...baseline, startingKit }] });
@@ -868,7 +910,7 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
 describe('loot de item, agora que existe catálogo (FUN-76)', () => {
   const espada = {
     id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
-    slot: 'hand', weight: 50, attack: 24,
+    slot: 'hand', weight: 50, value: 0, attack: 24,
   };
   const comLoot = (itemId: string) => ({
     ...rat, loot: { items: [{ itemId, chance: 0.1, min: 1, max: 1 }] },
@@ -895,7 +937,7 @@ describe('loot de item, agora que existe catálogo (FUN-76)', () => {
 
 describe('a arma inicial da vocação (#154, ADR 0026 decisão 3)', () => {
   const axe = {
-    id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21,
+    id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21,
     weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
   };
 

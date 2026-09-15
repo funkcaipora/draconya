@@ -4,6 +4,7 @@
   "kind": "weapon",
   "slot": "hand",
   "weight": 19,
+  "value": 100,
   "_open": "A arma inicial do Druid (ADR 0026, decisão 3): alcance 3, 1 de mana por golpe, dano 8–18 (TibiaWiki, terra — elemento ignorado até haver resistência).",
   "weapon": {
     "kind": "wand",

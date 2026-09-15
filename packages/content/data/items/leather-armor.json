@@ -4,5 +4,6 @@
   "kind": "armor",
   "slot": "chest",
   "weight": 60,
+  "value": 12,
   "armor": 4
 }

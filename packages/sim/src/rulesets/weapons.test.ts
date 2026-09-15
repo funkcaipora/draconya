@@ -59,17 +59,18 @@ const combat = {
   player: { attackPower: 25, attackIntervalMs: 1000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
+const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
 const skills = [
   { id: 'melee', name: 'Melee', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0 },
   { id: 'distance', name: 'Distance', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 }, damagePerLevel: 0 },
   { id: 'magic', name: 'Magic', startingLevel: 0, curve: { base: 4, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 }, damagePerLevel: 0 },
 ];
 const items = [
-  { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 1, attack: 30 },
-  { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
-  { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 10, max: 10 } } },
-  { id: 'staff', name: 'Staff', kind: 'weapon', slot: 'hand', weight: 1, requires: { vocationId: 'sorcerer' }, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 100, max: 100 } } },
-  { id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 1 },
+  { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 30 },
+  { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+  { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 10, max: 10 } } },
+  { id: 'staff', name: 'Staff', kind: 'weapon', slot: 'hand', weight: 1, value: 0, requires: { vocationId: 'sorcerer' }, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 100, max: 100 } } },
+  { id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 1, value: 0 },
 ];
 const ammunition = [
   { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 },
@@ -80,7 +81,7 @@ const ammunition = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], spells: [], supplies: [], skills, items, ammunition,
+    stamina: [stamina], party: [party], spells: [], supplies: [], skills, items, ammunition,
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [map], routes: [route], ...over,

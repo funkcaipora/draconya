@@ -3,6 +3,7 @@
   "name": "Cheese",
   "kind": "other",
   "weight": 4,
+  "value": 0,
   "stackable": true,
-  "_open": "O drop do rato do Tibia (39,4 %), só para a mochila e o extrato: comida ainda não faz nada — §20 do PRD não decide regeneração por comida."
+  "_open": "O drop do rato do Tibia (39,4 %), só para a mochila e o extrato: comida ainda não faz nada — §20 do PRD não decide regeneração por comida. value: Comida não tem preço de venda no NPC; a bolsa da party a devolve ao líder em vez de vender (ADR 0027)."
 }

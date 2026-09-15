@@ -80,8 +80,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       ...raw,
       items: [
         ...(raw.items ?? []),
-        { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
-        { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
+        { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+        { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
       ],
       ammunition: [
         { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 },
@@ -108,7 +108,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       ...raw,
       items: [
         ...(raw.items ?? []),
-        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, attack: 21, requires: { vocationId: 'knight' } },
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
       ],
       vocations: [
         { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },

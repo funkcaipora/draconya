@@ -27,6 +27,7 @@ export function loadContent(dir: string): Content {
     progression: readJsonDir(join(dir, 'progression')),
     combat: readJsonDir(join(dir, 'combat')),
     stamina: readJsonDir(join(dir, 'stamina')),
+    party: readJsonDir(join(dir, 'party')),
     bestiary: readJsonDir(join(dir, 'bestiary')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),

@@ -49,6 +49,7 @@ const content = buildContent({
     },
   }],
   stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
+  party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } }],
   bot: [{
     id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000,
     advancedFromLevel: 50,
@@ -65,11 +66,11 @@ const content = buildContent({
   items: [
     {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
-      slot: 'hand', weight: 50, attack: 24,
+      slot: 'hand', weight: 50, value: 0, attack: 24,
     },
     {
       id: 'life-ring', name: 'Life Ring', kind: 'ring',
-      slot: 'finger', weight: 1, armor: 2,
+      slot: 'finger', weight: 1, value: 0, armor: 2,
     },
   ],
 });
