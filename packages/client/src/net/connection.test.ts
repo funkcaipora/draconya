@@ -185,3 +185,12 @@ describe('connection', () => {
     expect(hud.get().connection).toBe('reconnecting');
   });
 });
+
+describe('o ticket oferecido por fora (#197)', () => {
+  it('is used once before asking the api, then the api is asked again', async () => {
+    const { offerWsUrl, takeWsUrl } = await import('./pending-ticket.js');
+    offerWsUrl('ws://party/?ticket=p');
+    expect(takeWsUrl()).toBe('ws://party/?ticket=p');
+    expect(takeWsUrl()).toBeNull();
+  });
+});

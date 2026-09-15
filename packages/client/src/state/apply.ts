@@ -11,6 +11,7 @@
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { appendCapped, hud } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
+import { partyEntered } from '../party/store.js';
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
@@ -329,6 +330,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
       }));
+      // A hunt da party começou de verdade (#197): a tela de formação fecha.
+      if (message.party !== undefined) partyEntered();
       return;
     }
 

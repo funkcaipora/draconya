@@ -504,6 +504,18 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
   `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
   o remetente por `setConfigSender` ao montar.
+- **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027).
+  `shell/PartyPanel.tsx` fica DENTRO do `HuntMenu` na Cidade (o Huntera põe a party na
+  seleção de caçada: propor uma hunt É escolher uma hunt), e `PartyMembers` no lugar dele
+  durante a hunt (nome, HP % — do `party-state` e, no meio, do `world` por nome, lido num
+  intervalo, porque o mundo não avisa ninguém); `PartyBag` na direita, só em `shared`,
+  minimiza com o inventário. A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
+  guarda a última cópia que o servidor devolveu — não importa `net/` (ADR 0007): a casca
+  injeta o cliente e o `enterHunt` em `useConnection`. O polling de `mine` a cada 2 s só
+  enquanto há party. **Entrar na hunt é oferecer o ticket à conexão e reconectar**
+  (`net/pending-ticket.ts`, `Connection.restart`): o `defaultRequestTicket` pega o oferecido
+  antes de pedir outro, e a reconexão de sempre — mesma `session-attach`, mesma troca de estado
+  — leva à hunt da party. Um segundo caminho de socket duplicaria tudo o que a reconexão já faz.
 - **O mundo ocupa a tela INTEIRA e o resto flutua por cima** (`shell/Shell.tsx`, `shell/TopBar.tsx`,
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir

@@ -60,3 +60,11 @@ describe('describeEvent (FUN-110)', () => {
     expect(describeEvent({ atMs: 0, type: 'boss-spawned' })).toBe('boss-spawned');
   });
 });
+
+describe('a party no extrato (#197)', () => {
+  it('reads the level-up of a companion and the bag settlement', () => {
+    expect(describeEvent({ atMs: 0, type: 'level-up', detail: '9' })).toBe('Subiu de level · 9');
+    expect(describeEvent({ atMs: 0, type: 'level-up', detail: 'ana/9' })).toBe('ana subiu de level · 9');
+    expect(describeEvent({ atMs: 0, type: 'party-settlement', detail: '130/3' })).toBe('Bolsa vendida: 130 gold para 3');
+  });
+});
