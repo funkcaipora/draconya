@@ -31,14 +31,16 @@ import type { SnapshotStore } from '../snapshots.js';
 import type { ReceiptStore } from '../receipts.js';
 import type { BoxedItem, LootBoxStore } from '../loot-box.js';
 import type { Logger } from '../log.js';
-import type { InitialCharacter } from '../tickets.js';
+import type { InitialCharacter, PartyTicket } from '../tickets.js';
 import { AreaOfInterest } from './aoi.js';
 import { Viewer, type ViewerOptions, type ViewerSocket } from './viewer.js';
 import { REFUSAL_TEXT, TransitionError, refuseTransition } from './transitions.js';
 import { TICK_LAG_BUDGET_MS, type GameMetrics } from './metrics.js';
 
 /** Cria a sessão de um personagem que ainda não tem uma. */
-export type SessionFactory = (characterId: string, initialCharacter?: InitialCharacter) => Session;
+export type SessionFactory = (
+  characterId: string, initialCharacter?: InitialCharacter, party?: PartyTicket,
+) => Session;
 
 /** Reconstrói uma sessão a partir de um snapshot. `null` = não dá para retomar (FUN-28). */
 export type SessionRestorer = (snapshot: SessionSnapshot) => Session | null;
@@ -622,10 +624,11 @@ export class SessionHost {
     characterId: string,
     initialCharacter?: InitialCharacter,
     accountId?: string,
+    party?: PartyTicket,
   ): Promise<PrepareResult> {
     const startedAt = performance.now();
     try {
-      return await this.#prepare(characterId, initialCharacter, accountId);
+      return await this.#prepare(characterId, initialCharacter, accountId, party);
     } finally {
       // O que o jogador espera ao reconectar: resolver o diretório, carregar o snapshot e
       // hospedar. É o número que o teste de carga cobra, e ele NÃO inclui o tempo de rede —
@@ -638,6 +641,7 @@ export class SessionHost {
     characterId: string,
     initialCharacter?: InitialCharacter,
     accountId?: string,
+    party?: PartyTicket,
   ): Promise<PrepareResult> {
     const existing = this.sessionFor(characterId);
     if (existing !== undefined) {
@@ -653,7 +657,7 @@ export class SessionHost {
       return { created: false };
     }
 
-    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId);
+    const preparation = this.#createAndRegister(characterId, initialCharacter, accountId, party);
     this.#preparations.set(characterId, preparation);
     try {
       await preparation;
@@ -2526,26 +2530,35 @@ export class SessionHost {
     characterId: string,
     initialCharacter: InitialCharacter | undefined,
     accountId: string | undefined,
+    party?: PartyTicket,
   ): Promise<void> {
-    const resumed = await this.#resume(characterId, accountId);
-    const session = resumed?.session ?? this.#options.createSession(characterId, initialCharacter);
+    // A party (#195): a sessão pode JÁ estar hospedada — outro membro chegou primeiro — e aí
+    // este só entra nela. Senão, ou é retomada de snapshot (que já traz os N), ou o primeiro
+    // ticket cria a hunt com todos.
+    const hostedParty = party === undefined ? undefined : this.#sessions.get(party.sessionId);
+    const resumed = hostedParty === undefined ? await this.#resume(characterId, accountId) : null;
+    const session = hostedParty?.session
+      ?? resumed?.session
+      ?? this.#options.createSession(characterId, initialCharacter, party);
     await this.#register(characterId, session, accountId);
     // Uma sessão retomada com MAIS de um dono (#194, ADR 0027) traz os outros membros da party
     // dentro: eles precisam do lease e do mapa deste nó antes de qualquer coisa local existir,
     // senão o lease deles expira, o login seguinte resolve para outro nó, e a cópia do
     // snapshot que ele guardou revive a MESMA sessão duas vezes. A conta de cada um vem do
     // snapshot dele; recusa de lease derruba a retomada inteira — nada local foi criado ainda.
-    const others = resumed === null
+    const others = resumed === null && (party === undefined || hostedParty !== undefined)
       ? []
       : session.participants.filter((p) => p.id !== characterId);
     for (const other of others) {
-      const stored = await this.#options.snapshots?.load(other.id);
-      if (stored === null || stored === undefined) {
+      // Da party recém-criada a conta vem do ticket; da retomada, do snapshot de cada um.
+      const fromTicket = party?.members.find((m) => m.characterId === other.id)?.accountId;
+      const otherAccount = fromTicket ?? (await this.#options.snapshots?.load(other.id))?.accountId;
+      if (otherAccount === undefined) {
         this.#logger.warn({ characterId: other.id, sessionId: session.id }, 'Party member has no snapshot of their own; hosting without a lease');
         continue;
       }
-      await this.#register(other.id, session, stored.accountId);
-      this.#accountIdByCharacter.set(other.id, stored.accountId);
+      await this.#register(other.id, session, otherAccount);
+      this.#accountIdByCharacter.set(other.id, otherAccount);
     }
     // Nome e cores ANTES de hospedar: `#createLocal` anuncia a chegada a quem já está na praça
     // (FUN-71), e o `creature-appear` desse anúncio lê as duas tabelas. Depois, quem já
@@ -2560,6 +2573,12 @@ export class SessionHost {
     for (const other of others) {
       this.#sessionIdByCharacter.set(other.id, session.id);
       this.#restingSince.set(other.id, this.#now());
+      // Nome, cores e bot dos outros membros vêm do bloco da party (#195): quem os vê no
+      // mundo precisa do nome, e a tela deles do bot — mesmo que nunca conectem.
+      const member = party?.members.find((m) => m.characterId === other.id);
+      if (member?.initialCharacter.name !== undefined) this.#nameByCharacter.set(other.id, member.initialCharacter.name);
+      if (member?.initialCharacter.outfitColors !== undefined) this.#colorsByCharacter.set(other.id, member.initialCharacter.outfitColors);
+      if (member !== undefined) this.#adoptTicketBotConfig(other.id, session, member.initialCharacter);
     }
     this.#adoptTicketBotConfig(characterId, session, initialCharacter);
     if (resumed !== null) {

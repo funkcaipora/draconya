@@ -28,6 +28,7 @@ import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
 import { ReceiptStore } from './receipts.js';
+import { PartyStore } from './party-store.js';
 import { LootBoxStore } from './loot-box.js';
 import type { Role } from './role.js';
 import { createDatabase } from './db/client.js';
@@ -171,6 +172,15 @@ async function main(): Promise<void> {
               // `game`, que não fala com o Postgres.
               listItemInstances: (characterId: string) =>
                 repository.listItemInstances(characterId),
+              // A party antes da hunt (#195): formulário em Redis, limites do conteúdo.
+              party: new PartyStore(redis),
+              partyLimits: {
+                maxMembers: content.party.maxMembers,
+                difficultiesOf: (huntId: string) => {
+                  const hunt = content.hunts.get(huntId);
+                  return hunt === undefined ? null : Object.keys(hunt.difficulties);
+                },
+              },
               settleProgress: (characterId: string) =>
                 settleCharacterProgress(characterId, {
                   database: database.db,

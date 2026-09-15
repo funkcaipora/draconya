@@ -12,6 +12,8 @@ import { registerAuthRoutes } from './auth.js';
 import { registerCharacterRoutes } from './characters.js';
 import type { CharacterRouteOptions } from './characters.js';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
+import { registerPartyRoutes } from './party.js';
+import type { PartyRouteDependencies } from './party.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
@@ -25,6 +27,9 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly locateSession?: (
     characterId: string,
   ) => Promise<{ sessionId: string; type: string } | null>;
+  /** A party antes da hunt (#195): o formulário em Redis e os limites do conteúdo. */
+  readonly party?: PartyRouteDependencies['party'];
+  readonly partyLimits?: PartyRouteDependencies['limits'];
 }
 
 export function createApi(
@@ -138,6 +143,30 @@ export function buildApi(
         ownsCharacter: repository.ownsCharacter.bind(repository),
       }),
     }));
+  }
+
+  // As rotas da party (#195) precisam de tudo o que o ticket precisa, mais o formulário e o
+  // diretório; sem qualquer um deles não existem — falhar aberto aqui seria party sem dono.
+  const party = dependencies.party;
+  const partyLimits = dependencies.partyLimits;
+  const locateSession = dependencies.locateSession;
+  const settleProgress = dependencies.settleProgress;
+  if (
+    tickets !== undefined && party !== undefined && partyLimits !== undefined
+    && auth !== undefined && repository !== undefined && locateSession !== undefined
+    && settleProgress !== undefined
+  ) {
+    registerPartyRoutes(app, {
+      party,
+      tickets,
+      authenticate: auth.authenticate.bind(auth),
+      ownsCharacter: repository.ownsCharacter.bind(repository),
+      getCharacter: repository.getCharacter.bind(repository),
+      listItemInstances: repository.listItemInstances.bind(repository),
+      settleProgress,
+      locateSession,
+      limits: partyLimits,
+    });
   }
 
   app.get('/metrics', async (_request, reply) => {

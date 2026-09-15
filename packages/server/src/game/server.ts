@@ -222,7 +222,7 @@ export function createGame(
           let created = false;
           if (claim !== null) {
             ({ created } = await host.prepare(
-              claim.characterId, claim.initialCharacter, claim.accountId,
+              claim.characterId, claim.initialCharacter, claim.accountId, claim.party,
             ));
           }
           // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`

@@ -4222,3 +4222,61 @@ describe('a party no hospedeiro: um extrato por membro, saída por dentro do sim
     expect(session()).toBeNull();
   });
 });
+
+describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com os N, os seguintes se anexam', () => {
+  const party = {
+    sessionId: 's-party', leaderId: 'a', mode: 'split' as const, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
+    ],
+  };
+  function build() {
+    const registered: string[] = [];
+    let created = 0;
+    const ruleset = countingRuleset().ruleset;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger,
+      directory: {
+        register: async (characterId: string) => { registered.push(characterId); return true; },
+        succeed: async () => true, release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+      } as unknown as SessionDirectory,
+      createSession: (characterId, _initial, ticket) => {
+        created += 1;
+        const session = new Session({ id: ticket?.sessionId ?? `s-${characterId}`, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0 });
+        for (const member of ticket?.members ?? [{ characterId }]) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+    });
+    return { host, registered, created: () => created };
+  }
+
+  it('creates once with everyone, registers every member, and the second ticket reuses the session', async () => {
+    // Mutação que mata: `#createAndRegister` ignorando `party.sessionId` já hospedada — o
+    // segundo ticket criaria uma segunda hunt com os mesmos dois personagens.
+    const { host, registered, created } = build();
+    const first = await host.prepare('b', party.members[1]?.initialCharacter, 'acc-b', party);
+    expect(first.created).toBe(true);
+    expect(created()).toBe(1);
+    expect(host.sessionFor('a')?.id).toBe('s-party');
+    expect(host.sessionFor('b')?.id).toBe('s-party');
+    expect(registered.sort()).toEqual(['a', 'b']);
+
+    const second = await host.prepare('a', party.members[0]?.initialCharacter, 'acc-a', party);
+    expect(second.created).toBe(false);
+    expect(created()).toBe(1);
+    // Quem chegou vê os dois, com nome.
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'a');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('sem session-state');
+    expect(state.world.creatures.map((c) => c.name).sort()).toEqual(['Ana', 'Bia']);
+  });
+});
