@@ -28,6 +28,36 @@ describe('city session factory', () => {
   });
 });
 
+describe('party session factory (#195, ADR 0027)', () => {
+  const party = {
+    sessionId: 's-party', leaderId: 'p1', mode: 'shared' as const, huntId: TEST_HUNT.id, difficulty: 'cautious',
+    members: [
+      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: totalXpForLevel(10, TEST_PROGRESSION as Progression), gold: 30 } },
+      // Um bot válido e um que o vocabulário recusa: só o válido compila.
+      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: totalXpForLevel(12, TEST_PROGRESSION as Progression), botConfig: { version: BOT_VOCABULARY_VERSION, heal: [], potion: [], attack: [], rune: [], support: [] } } },
+      { characterId: 'p3', accountId: 'a3', initialCharacter: { level: 1, xp: 0, botConfig: { version: 999 } } },
+    ],
+  };
+
+  it('creates the HUNT with every member inside, the party options fixed, and each validated bot', () => {
+    // Mutação que mata: entrar só o personagem do ticket — os outros nunca chegariam à hunt.
+    const session = createCitySessionFactory(testContent())('p2', party.members[1]?.initialCharacter, party);
+    expect(session.id).toBe('s-party');
+    expect(session.ruleset.type).toBe('hunt');
+    expect(session.participants.map((p) => [p.id, p.level, p.gold])).toEqual([['p1', 10, 30], ['p2', 12, 0], ['p3', 1, 0]]);
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.party).toEqual({ leaderId: 'p1', mode: 'shared' });
+    expect(Object.keys(ruleset.getState().runners ?? {}).sort()).toEqual(['p1', 'p2', 'p3']);
+    expect(ruleset.getState().runners?.['p2']?.botConfig).toBeDefined();
+    expect(ruleset.getState().runners?.['p3']?.botConfig).toBeUndefined();
+    expect(ruleset.getState().partyBag).toBeDefined();
+  });
+
+  it('without a party block it is the city of always', () => {
+    expect(createCitySessionFactory(testContent())('p1').ruleset.type).toBe('city');
+  });
+});
+
 describe('session restorer', () => {
   const content = testContent();
 

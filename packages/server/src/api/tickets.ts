@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import type { BestiaryState } from '@draconya/sim';
 import { isAmmoSelection, isBestiaryState } from '../tickets.js';
-import type { IssueFailure, TicketService } from '../tickets.js';
-import type { GameRepository } from '../db/repository.js';
+import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
+import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
 export interface Principal {
   readonly accountId: string;
@@ -14,7 +14,7 @@ export interface Principal {
 
 export interface TicketRouteDependencies {
   /** Só a emissão: a rota não consome ticket, e o tipo estreito é o que diz isso. */
-  readonly tickets: Pick<TicketService, 'issue' | 'resolveNode'>;
+  readonly tickets: Pick<TicketService, 'issue' | 'resolveNode' | 'revoke'>;
   /**
    * Quem está pedindo. A sessão HTTP é resolvida aqui e MORRE aqui: o que segue para o
    * socket é o ticket, nunca a credencial (invariante 4 aplicado à borda de entrada).
@@ -146,35 +146,12 @@ export function createTicketHandler(
     const issued = await withOwnedCharacter(
       principal.accountId,
       body.data.characterId,
-      async (character) => deps.tickets.issue(principal.accountId, character.id, {
-        level: character.level,
-        xp: character.xp,
-        name: character.name,
-        gold: character.gold,
-        // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
-        // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
-        ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
-        // As cores do outfit viajam no ticket como o nome (FUN-104): dado do personagem que só
-        // a apresentação lê, e o `game` não fala com o Postgres. Validadas AQUI, e não só no
-        // consumo: é o que faz o tipo do ticket dizer a verdade sem cast, e a linha é `jsonb`
-        // sem CHECK — um valor corrompido vira ausente, nunca personagem trancado fora.
-        ...outfitColorsOf(character.outfitColors),
-        // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
-        skills: character.skills,
-        // E o Bestiário, porque o bônus dos marcos escala a XP durante a hunt (FUN-113).
-        // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
-        // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
-        ...bestiaryOf(character.bestiary),
-        // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
-        ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
-        // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
-        ...(character.vocation === null ? {} : { vocation: character.vocation }),
-        // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
-        // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
-        inventory: inventoryOf(await deps.listItemInstances?.(character.id) ?? []),
-        staminaMs: character.staminaMs,
-        staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
-      }, resolution.node),
+      async (character) => deps.tickets.issue(
+        principal.accountId,
+        character.id,
+        initialCharacterOf(character, await deps.listItemInstances?.(character.id) ?? []),
+        resolution.node,
+      ),
     );
     if (issued === null) {
       return reply.code(404).send({ error: 'character-not-found' });
@@ -192,6 +169,46 @@ export function createTicketHandler(
       wsUrl: issued.value.wsUrl,
       expiresAtMs: issued.value.expiresAtMs,
     });
+  };
+}
+
+/**
+ * O que o ticket carrega de um personagem: a linha do banco, validada campo a campo. É a
+ * MESMA montagem para o ticket solo e para cada membro de uma party (#195) — o `game` não
+ * fala com o Postgres, e tudo o que a sessão precisa saber do personagem passa por aqui.
+ */
+export function initialCharacterOf(
+  character: CharacterRecord,
+  instances: Parameters<typeof inventoryOf>[0],
+): InitialCharacter {
+  return {
+    level: character.level,
+    xp: character.xp,
+    name: character.name,
+    gold: character.gold,
+    // A configuração do bot viaja no ticket (FUN-81): é assim que ela chega ao `game`,
+    // que não fala com o Postgres. Mesmo caminho de level, XP e gold.
+    ...(character.botConfig === null ? {} : { botConfig: character.botConfig }),
+    // As cores do outfit viajam no ticket como o nome (FUN-104): dado do personagem que só
+    // a apresentação lê, e o `game` não fala com o Postgres. Validadas AQUI, e não só no
+    // consumo: é o que faz o tipo do ticket dizer a verdade sem cast, e a linha é `jsonb`
+    // sem CHECK — um valor corrompido vira ausente, nunca personagem trancado fora.
+    ...outfitColorsOf(character.outfitColors),
+    // As skills entram na sessão porque escalam o dano DURANTE a hunt (FUN-75).
+    skills: character.skills,
+    // E o Bestiário, porque o bônus dos marcos escala a XP durante a hunt (FUN-113).
+    // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
+    // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
+    ...bestiaryOf(character.bestiary),
+    // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
+    ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
+    // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
+    ...(character.vocation === null ? {} : { vocation: character.vocation }),
+    // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o
+    // índice por dono, e roda uma vez por emissão de ticket — não no caminho de tick.
+    inventory: inventoryOf(instances),
+    staminaMs: character.staminaMs,
+    staminaUpdatedAtMs: character.staminaUpdatedAt.getTime(),
   };
 }
 

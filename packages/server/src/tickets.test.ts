@@ -252,6 +252,42 @@ describe.runIf(available)('session ticket', () => {
     expect(await tickets.issue('a1', 'p3')).toEqual({ ok: false, reason: 'active-limit' });
   });
 
+  it('carries the party block through the claim, and refuses a torn one (#195)', async () => {
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const party = {
+      sessionId: 's-party', leaderId: 'p1', mode: 'shared' as const, huntId: 'arena', difficulty: 'bold',
+      members: [
+        { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: 0 } },
+        { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: 5 } },
+      ],
+    };
+    const issued = await tickets.issue('a2', 'p2', { level: 12, xp: 5 }, undefined, party);
+    if (!issued.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(issued.value.ticket, 'n1')).toEqual({
+      accountId: 'a2', characterId: 'p2', nodeId: 'n1', initialCharacter: { level: 12, xp: 5 }, party,
+    });
+    // Um bloco torto (um membro só) derruba o ticket inteiro no consumo, como o `initialCharacter`.
+    const torn = await tickets.issue('a1', 'p1', undefined, undefined, { ...party, members: [party.members[0] as never] });
+    if (!torn.ok) throw new Error('expected a ticket');
+    expect(await tickets.consume(torn.value.ticket, 'n1')).toBeNull();
+  });
+
+  it('revoke frees the slot, the ticket and the reservation (#195)', async () => {
+    // O `start` de uma party emite N e desfaz os k−1 quando o k-ésimo falha. Mutação que
+    // mata: `revoke` sem o `SREM` do slot ativo — o terceiro personagem da conta continuaria
+    // recusado por um ticket que nunca vai ser usado.
+    const { directory, tickets } = build();
+    await directory.heartbeat('n1', NODE);
+    const first = await tickets.issue('a1', 'p1');
+    expect((await tickets.issue('a1', 'p2')).ok).toBe(true);
+    if (!first.ok) throw new Error('expected a ticket');
+    expect(await tickets.issue('a1', 'p3')).toEqual({ ok: false, reason: 'active-limit' });
+    await tickets.revoke(first.value.ticket, 'a1', 'p1');
+    expect(await tickets.consume(first.value.ticket, 'n1')).toBeNull();
+    expect((await tickets.issue('a1', 'p3')).ok).toBe(true);
+  });
+
   it('picks the least loaded node', async () => {
     const { directory, tickets } = build();
     await directory.heartbeat('n1', { sessions: 120, url: 'ws://n1:7171' });

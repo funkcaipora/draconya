@@ -504,6 +504,27 @@ perde o que a praça mudou, como já perdia. `#creditUnrestorable` passou a leva
 `equipment`, `acquired` e `lootBox` (o buraco de antes: item equipado numa sessão
 irrestaurável se perdia).
 
+## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
+
+`PartyStore` (`party:{id}`, `:members` ZSET por instante de entrada, `:accounts`, `:invites`,
+`:approved`, `:tickets`, `party:by-char:{characterId}`) é FORMULÁRIO, não estado quente — o
+personagem está na Cidade, que é inerte. Rotas em `api/party.ts`: `POST /api/party`,
+`/:id/invite` (`inviteeId`, porque `characterId` no corpo é o de QUEM fala), `/:id/join`
+(script Lua: convidado, com vaga, em nenhuma outra), `/:id/leave` (líder que sai passa a
+liderança ao mais antigo; sair desaprova todos), `/:id/propose` (só o líder; hunt e dificuldade
+validadas pelo conteúdo), `/:id/approve`, `/:id/start`, `GET /api/party/mine`. O `start` faz
+para N o que `POST /api/tickets` faz para um, nesta ORDEM: tudo o que recusa antes de reservar
+(aprovação de todos, todos na Cidade pelo diretório, liquidação de cada um); um nó só,
+resolvido pelo líder — o `consume` recusa ticket de nó errado; um ticket por membro com o
+MESMO `sessionId` e o mesmo bloco `party` (`TicketClaim.party`, com o `initialCharacter` de
+todos — montado por `initialCharacterOf`, o mesmo do ticket solo), e a falha do k-ésimo
+`revoke`a os k−1 (não há script Lua entre N contas: as chaves são de contas diferentes); só
+depois a party some e cada um pega o SEU ticket pelo `mine`, uma vez. No `game`, `prepare`
+recebe o bloco: se `party.sessionId` já está hospedada, o membro só entra nela; senão a
+`SessionFactory` cria a HUNT com os N (`partyHuntFor` em `sessions.ts`, bot de cada um
+validado ali com o conteúdo) e o host registra o lease dos outros com a conta do ticket —
+o membro que nunca conecta está na hunt do mesmo jeito (invariante 3).
+
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 
 `lootbox:{sessionId}`, TTL de 30 minutos a partir do encerramento (§21.6). A escolha entre Redis

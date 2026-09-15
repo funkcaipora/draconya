@@ -24,6 +24,26 @@ export interface TicketClaim {
   readonly characterId: string;
   readonly nodeId: string;
   readonly initialCharacter?: InitialCharacter;
+  /**
+   * A party (#195, ADR 0027): o MESMO bloco em cada ticket dos N membros, com o estado inicial
+   * de todos — o primeiro a chegar ao `game` cria a sessão com os N, os seguintes se anexam
+   * a ela. Vem do `api`, assinado como o resto (invariante 4): nada disto passa pelo cliente.
+   */
+  readonly party?: PartyTicket;
+}
+
+export interface PartyTicket {
+  readonly sessionId: string;
+  readonly leaderId: string;
+  readonly mode: 'split' | 'shared';
+  readonly huntId: string;
+  readonly difficulty: string;
+  /** Na ordem de entrada: é a ordem em que a sessão os recebe. */
+  readonly members: ReadonlyArray<{
+    readonly characterId: string;
+    readonly accountId: string;
+    readonly initialCharacter: InitialCharacter;
+  }>;
 }
 
 /** Estado persistido necessário para criar a primeira sessão sem confiar no cliente. */
@@ -276,6 +296,7 @@ export class TicketService {
     characterId: string,
     initialCharacter?: InitialCharacter,
     resolved?: NodeStatus,
+    party?: PartyTicket,
   ): Promise<IssueResult> {
     let node: NodeStatus | undefined = resolved;
     if (node === undefined) {
@@ -290,6 +311,7 @@ export class TicketService {
       characterId,
       nodeId: node.nodeId,
       ...(initialCharacter === undefined ? {} : { initialCharacter }),
+      ...(party === undefined ? {} : { party }),
     };
     const issuedAtMs = this.#now();
     const reservationTtlMs = this.#ttlMs + this.#graceMs;
@@ -331,6 +353,20 @@ export class TicketService {
         expiresAtMs: issuedAtMs + this.#ttlMs,
       },
     };
+  }
+
+  /**
+   * Desfaz uma emissão (#195): o `start` de uma party emite N tickets, e se o quarto falha os
+   * três primeiros não podem ficar reservando slot e apontando para uma sessão que não vai
+   * existir. Apaga o ticket, a reserva pendente e o slot ativo — como a varredura faria no
+   * prazo, só que agora.
+   */
+  async revoke(token: string, accountId: string, characterId: string): Promise<void> {
+    await this.#redis.multi()
+      .del(ticketKey(token))
+      .zrem(PENDING_KEY, pendingMember(accountId, characterId))
+      .srem(activeCharactersKey(accountId), characterId)
+      .exec();
   }
 
   /**
@@ -434,11 +470,44 @@ function parseClaim(raw: string): TicketClaim | null {
   const rawInitial = value['initialCharacter'];
   const initialCharacter = parseInitialCharacter(rawInitial);
   if (rawInitial !== undefined && initialCharacter === undefined) return null;
+  const rawParty = value['party'];
+  const party = parsePartyTicket(rawParty);
+  if (rawParty !== undefined && party === undefined) return null;
   return {
     accountId: value['accountId'],
     characterId: value['characterId'],
     nodeId: value['nodeId'],
     ...(initialCharacter === undefined ? {} : { initialCharacter }),
+    ...(party === undefined ? {} : { party }),
+  };
+}
+
+/** A party do ticket (#195), pela mesma régua do `initialCharacter`: torta é ticket recusado. */
+function parsePartyTicket(value: unknown): PartyTicket | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (
+    typeof raw['sessionId'] !== 'string' || typeof raw['leaderId'] !== 'string'
+    || (raw['mode'] !== 'split' && raw['mode'] !== 'shared')
+    || typeof raw['huntId'] !== 'string' || typeof raw['difficulty'] !== 'string'
+    || !Array.isArray(raw['members']) || raw['members'].length < 2
+  ) {
+    return undefined;
+  }
+  const members: PartyTicket['members'][number][] = [];
+  for (const entry of raw['members'] as unknown[]) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const member = entry as Record<string, unknown>;
+    const initialCharacter = parseInitialCharacter(member['initialCharacter']);
+    if (typeof member['characterId'] !== 'string' || typeof member['accountId'] !== 'string' || initialCharacter === undefined) {
+      return undefined;
+    }
+    members.push({ characterId: member['characterId'], accountId: member['accountId'], initialCharacter });
+  }
+  return {
+    sessionId: raw['sessionId'], leaderId: raw['leaderId'], mode: raw['mode'],
+    huntId: raw['huntId'], difficulty: raw['difficulty'], members,
   };
 }
 

@@ -17,6 +17,7 @@ import type { BotConfig, Content } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
+import type { InitialCharacter, PartyTicket } from '../tickets.js';
 
 /**
  * Campos ainda não persistidos pela FUN-11. Nível e XP chegam no ticket autenticado; nenhum
@@ -162,7 +163,50 @@ export function createCitySessionFactory(
   now: () => number = () => Date.now(),
   shard: CityShard = new CityShard(content, now),
 ): SessionFactory {
-  return (characterId, initialCharacter = { level: 1, xp: 0 }): Session => {
+  return (characterId, initialCharacter = { level: 1, xp: 0 }, party): Session => {
+    // A party (#195, ADR 0027): o primeiro ticket a chegar cria a hunt com os N — e ela nasce
+    // hunt, não Cidade. Os seguintes não passam por aqui: o host encontra a sessão pelo id.
+    if (party !== undefined) return partyHuntFor(content, party, now);
+    const character = characterFromTicket(content, characterId, initialCharacter, now);
+    // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
+    return shard.admit(character);
+  };
+}
+
+/**
+ * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
+ * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
+ * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
+ */
+function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
+  const accept = createBotConfigValidator(content);
+  const botConfigs: Record<string, BotConfig> = {};
+  for (const member of party.members) {
+    const raw = member.initialCharacter.botConfig;
+    if (raw === undefined) continue;
+    const decision = accept(raw, member.initialCharacter.level);
+    if (decision.ok) botConfigs[member.characterId] = decision.config;
+  }
+  const session = createHuntSession({
+    id: party.sessionId,
+    content,
+    huntId: party.huntId,
+    difficulty: party.difficulty as HuntDifficultyName,
+    createdAtMs: now(),
+    partyOptions: { leaderId: party.leaderId, mode: party.mode },
+    botConfigs,
+  });
+  for (const member of party.members) {
+    session.enter(characterFromTicket(content, member.characterId, member.initialCharacter, now));
+  }
+  return session;
+}
+
+/** O `CharacterRuntime` que um ticket descreve (FUN-12 … #154): o que o `api` leu do banco. */
+function characterFromTicket(
+  content: Content, characterId: string, initialCharacter: InitialCharacter, now: () => number,
+): CharacterRuntime {
+  {
     // A vocação vem do ticket (#154): escolhida no level 8, escrita uma vez pelo `jobs`. A que
     // saiu do conteúdo cai para a tabela base — o id fica, os stats não (mesma regra da hunt).
     const vocationId = initialCharacter.vocation ?? null;
@@ -205,9 +249,8 @@ export function createCitySessionFactory(
     // esse tempo é recuperação. Fazer a conta aqui, e não na leitura de cada consulta, é o
     // que mantém "quanto de stamina ele tem" uma pergunta barata durante a sessão.
     materializeStamina(character, now(), content.stamina);
-    // Entra na cópia compartilhada, e não numa Cidade só dele (FUN-71).
-    return shard.admit(character);
-  };
+    return character;
+  }
 }
 
 /**
