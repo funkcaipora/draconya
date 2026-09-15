@@ -109,6 +109,22 @@ ficava em zero a hunt inteira — foi o achado do passe de QA do MVP.
 Ela não aparece na Cidade: a praça não credita nada (§37), e uma janela de "0 XP, 0 gold" ali é
 ruído com aparência de informação.
 
+## Em party (M13, ADR 0027)
+
+Os agregados são **por participante** desde o #187: `Session.aggregatesOf(characterId)`, e
+`session.aggregates` é a soma. Cada membro vê no analisador **a própria linha** — a XP que a cota
+dele rendeu, o gold que ele ganhou e gastou (no modo `shared`, já rateado), os abates (que contam
+para todos os presentes) e os itens que caíram (para todos, no modo `shared`; para o sorteado, no
+`split`). O `session-state` e o `analyzer` que cada socket recebe levam os agregados do personagem
+daquele socket, e o servidor guarda o último enviado **por personagem** — dois membros na mesma
+sessão não compartilham o "já mandei isto".
+
+Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `level-up` com
+`id/level`, `bestiary-milestone` com `id/monstro/marco`, `exit-rule` com a regra (inclusive
+`party-member-lost`), e **`party-settlement`** com `total/presentes` — a bolsa foi vendida e
+dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
+`Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.
+
 ## Em aberto
 
 - Canais e escopo exatos de eventos notáveis e notificações de fim de sessão/morte/stamina (§16.2).

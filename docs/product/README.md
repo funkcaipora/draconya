@@ -48,7 +48,7 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Hunt | [`hunt.md`](./hunt.md) | parcial | E3 | §14 |
 | Cidade | [`city.md`](./city.md) | parcial | E1 | §6, §37 |
 | Chat | [`chat.md`](./chat.md) | parcial | E1 | — |
-| Party e matchmaking | [`party.md`](./party.md) | não implementado | E9 | §15, §43.2 |
+| Party e matchmaking | [`party.md`](./party.md) | implementado | E9 | §15, §43.2 |
 | Analisador de hunt | [`analyzer.md`](./analyzer.md) | parcial | E6 | §16, §43.10 |
 | Bestiário | [`bestiary.md`](./bestiary.md) | parcial | E7 | §18 |
 | Prey | [`prey.md`](./prey.md) | não implementado | E7 | §19, §43.4 |
