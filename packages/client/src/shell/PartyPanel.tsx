@@ -33,7 +33,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
 
   // O polling só enquanto há party (ou enquanto se está entrando): sem party não há o que
   // perguntar, e um `setInterval` por tela aberta seria uma requisição a cada 2 s para nada.
-  const polling = state.party !== null || state.entering;
+  const polling = state.party !== null || state.entering || state.seeking;
   useEffect(() => {
     if (!polling) return;
     const id = setInterval(() => { void partyActions.refresh(); }, POLL_MS);
@@ -56,6 +56,10 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
           <button type="button" disabled={state.busy} onClick={() => { void partyActions.create(); }}>
             Criar party
           </button>
+          {/* O matchmaking (#199): a fila FORMA a party; o resto é o fluxo de sempre. */}
+          {state.seeking
+            ? <button type="button" disabled={state.busy} onClick={() => { void partyActions.stopSeeking(); }}>Cancelar busca…</button>
+            : <button type="button" disabled={state.busy} onClick={() => { void partyActions.seek(); }}>Procurar party</button>}
           <div className="party-row">
             <input
               aria-label="id da party"

@@ -36,6 +36,8 @@ export interface PartyRouteDependencies {
   };
   /** Quanto tempo o ticket de cada membro fica esperando ser pego. Padrão: 30 s. */
   readonly ticketTtlMs?: number;
+  /** A faixa de level do matchmaking (#199, §43.2 aberto). `0` desliga o filtro. */
+  readonly matchmakingLevelRange?: number;
 }
 
 /** `inviteeId`, e não `characterId`: este é o personagem de QUEM convida, no mesmo corpo. */
@@ -118,6 +120,31 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (ticket !== null) return reply.send({ party: null, ticket });
     const party = await deps.party.of(query.data.characterId);
     return reply.send({ party: party === null ? null : view(party), ticket: null });
+  });
+
+  // O matchmaking (#199, §15.2): FORMA a party, não a inicia. Quem entra na fila ou casa na
+  // hora — e a party formada segue o fluxo de sempre: o líder propõe, os outros aprovam — ou
+  // fica esperando quem vier. A faixa de level é do conteúdo; `0` é "qualquer um".
+  app.post('/api/matchmaking/join', async (request, reply) => {
+    const me = await who(request, reply);
+    if (me === null) return;
+    const character = await deps.getCharacter(me.accountId, me.characterId);
+    if (character === null) return reply.code(404).send({ error: 'character-not-found' });
+    const location = await deps.locateSession(me.characterId);
+    if (location !== null && location.type !== 'city') return reply.code(409).send({ error: 'not-in-city' });
+    const result = await deps.party.enqueue(
+      me.characterId, me.accountId, character.level, character.vocation,
+      deps.matchmakingLevelRange ?? 0, deps.limits.maxMembers,
+    );
+    if (result === 'in-party') return reply.code(409).send({ error: 'already-in-party' });
+    return reply.send({ party: result === null ? null : view(result) });
+  });
+
+  app.post('/api/matchmaking/leave', async (request, reply) => {
+    const me = await who(request, reply);
+    if (me === null) return;
+    await deps.party.dequeue(me.characterId);
+    return reply.send({ ok: true });
   });
 
   app.post('/api/party/:id/invite', async (request, reply) => {

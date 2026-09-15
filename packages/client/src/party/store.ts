@@ -19,10 +19,12 @@ export interface PartyState {
   readonly error: string | null;
   /** O `start` aconteceu e o ticket foi oferecido à conexão: a tela some enquanto reconecta. */
   readonly entering: boolean;
+  /** Na fila do matchmaking (#199), esperando alguém compatível. */
+  readonly seeking: boolean;
 }
 
 export const INITIAL_PARTY: PartyState = {
-  characterId: null, party: null, busy: false, error: null, entering: false,
+  characterId: null, party: null, busy: false, error: null, entering: false, seeking: false,
 };
 
 export const party = createStore<PartyState>(INITIAL_PARTY);
@@ -89,9 +91,20 @@ export const partyActions = {
     if (started.ticket !== null) enter(started.ticket.wsUrl);
     return null;
   }),
+  /** O matchmaking (#199): entra na fila; casou na hora ou espera (e o polling vê chegar). */
+  seek: () => run(async (api, me) => {
+    const { party: formed } = await api.seek(me);
+    party.set((state) => ({ ...state, seeking: formed === null }));
+    return formed;
+  }),
+  stopSeeking: () => run(async (api, me) => {
+    await api.stopSeeking(me);
+    party.set((state) => ({ ...state, seeking: false }));
+    return undefined;
+  }),
   /**
-   * O polling (#197, DT-01): enquanto há party, pergunta ao servidor a cada 2 s. Quando vem
-   * um ticket, outro membro iniciou — e é hora de entrar.
+   * O polling (#197, DT-01): enquanto há party — ou se está na fila (#199) —, pergunta ao
+   * servidor a cada 2 s. Quando vem um ticket, outro membro iniciou — e é hora de entrar.
    */
   refresh: async (): Promise<void> => {
     const { characterId } = party.get();
@@ -102,7 +115,7 @@ export const partyActions = {
         enter(mine.ticket.wsUrl);
         return;
       }
-      party.set((state) => (state.entering ? state : { ...state, party: mine.party }));
+      party.set((state) => (state.entering ? state : { ...state, party: mine.party, seeking: state.seeking && mine.party === null }));
     } catch (error) {
       fail(error);
     }

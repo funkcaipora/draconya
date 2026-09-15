@@ -22,6 +22,7 @@
 //  12  party-store.test.ts
 //  13  api/party.test.ts
 //  14  api/party-exit.postgres.test.ts
+//  15  api/matchmaking.test.ts
 //
 // Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
 // arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;
