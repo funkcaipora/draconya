@@ -1,0 +1,28 @@
+/* As três fontes do design system, servidas pela MESMA origem que o resto do cliente
+ * (ADR 0022; #245, ADR 0029 D1) — nenhum @import de CDN, ao contrário de tokens/fonts.css do
+ * handoff. Os arquivos vêm de packages/client/public/fonts/ (Vite publicDir padrão), com o
+ * OFL.txt de cada família ao lado (DT-05).
+ */
+@font-face {
+  font-family: 'Cinzel';
+  src: url('/fonts/cinzel-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('/fonts/plex-sans-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
