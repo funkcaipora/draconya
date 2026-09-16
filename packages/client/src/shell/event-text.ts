@@ -7,7 +7,7 @@
 
 import type { NotableEvent } from '../state/hud.js';
 
-/** Os três tamanhos de pull (FUN-123, cópia do Huntera), em palavras. Os mesmos de `HuntMenu`. */
+/** Os três tamanhos de pull (FUN-123, cópia do Huntera), em palavras. Os mesmos de `HuntsModal`. */
 const DIFFICULTY_TEXT: Record<string, string> = {
   cautious: 'Cauteloso',
   bold: 'Ousado',

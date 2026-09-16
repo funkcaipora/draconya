@@ -16,10 +16,14 @@ Existem três tamanhos de pull — Cauteloso, Ousado e Agressivo (FUN-123, cópi
 
 A hunt termina por ação manual do jogador, por uma regra automática de saída configurada no bot, por morte, ou por outras condições de sessão que venham a ser adicionadas depois. Stamina chegando a zero, isoladamente, não encerra a hunt (ver `stamina.md`).
 
-## Escolher a hunt (FUN-79)
+## Escolher a hunt (FUN-79, #259)
 
-O menu fica no painel da esquerda, e mostra por hunt: nome, **level recomendado** e as
-dificuldades que ELA define — não obrigatoriamente as quatro.
+A escolha é um modal ("Escolha uma caçada", #259), aberto pela pill "Escolher caçada" sobre o
+mundo (na Cidade) ou pelo ícone Hunts do topo (nos dois estados); durante a hunt a pill vira
+"Sair da caçada". Mostra por hunt: nome, **level recomendado** e as dificuldades que ELA define —
+não obrigatoriamente as quatro. A formação da party (ADR 0027) é a coluna direita do mesmo modal;
+os companheiros DURANTE a hunt são um painel fixo próprio na coluna esquerda (`PartyMembers`,
+DS-14).
 
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário

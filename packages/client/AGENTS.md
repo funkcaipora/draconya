@@ -504,12 +504,15 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
   `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
   o remetente por `setConfigSender` ao montar.
-- **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027).
-  `shell/PartyPanel.tsx` fica DENTRO do `HuntMenu` na Cidade (o Huntera põe a party na
-  seleção de caçada: propor uma hunt É escolher uma hunt), e `PartyMembers` no lugar dele
-  durante a hunt (nome, HP % — do `party-state` e, no meio, do `world` por nome, lido num
-  intervalo, porque o mundo não avisa ninguém); `PartyBag` na direita, só em `shared`,
-  minimiza com o inventário. A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
+- **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
+  geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
+  `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
+  party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
+  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`CharacterPanel` (nome, HP % — do
+  `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
+  ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
+  (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`; `PartyBag` na direita, só em
+  `shared`, minimiza com o inventário. A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
   guarda a última cópia que o servidor devolveu — não importa `net/` (ADR 0007): a casca
   injeta o cliente e o `enterHunt` em `useConnection`. O polling de `mine` a cada 2 s só
   enquanto há party. **Entrar na hunt é oferecer o ticket à conexão e reconectar**
@@ -532,10 +535,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   emoji, D9), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
   faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
   marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
-  Analisador, Bestiário e Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre
-  minimizada é janela que abre vazia. No celular (≤ 720 px) a tela vira página: o mundo numa
-  faixa de 40vh e as janelas empilhadas embaixo, roláveis — o caso de uso móvel é configurar o
-  bot (§5.1).
+  Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que
+  abre minimizada é janela que abre vazia. **Hunts é EXCEÇÃO desde #259** (ADR 0029 D6): não é
+  mais uma seção da coluna, é o `HuntsModal` — modal sob demanda, fechado por padrão
+  (`DEFAULT_WINDOWS.hunts: false`); o que fica sempre visível sobre o mundo são as pills de
+  `HuntActions` ("Escolher caçada"/"Sair da caçada"). No celular (≤ 720 px) a tela vira página: o
+  mundo numa faixa de 40vh e as janelas empilhadas embaixo, roláveis — o caso de uso móvel é
+  configurar o bot (§5.1).
 - **Num painel oculto o `requestAnimationFrame` roda a ~1 Hz, e a tela parece quebrada sem
   estar.** Foi meia hora perdida na FUN-115: o rato saía como retângulo em toda captura, o pacote
   respondia em 5 ms, e o laço de quadro é que só rodava uma vez por segundo — cada quadro novo

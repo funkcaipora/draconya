@@ -212,10 +212,10 @@ body {
 /* O analisador (FUN-83). `.analyzer-head`/`.analyzer-toggle`/`.analyzer-summary`/
    `.analyzer-body`/`.analyzer-row`/`.analyzer-label`/`.analyzer-value` são o "Panel" informal
    de antes do design system, e continuam aqui porque outras sete telas ainda os usam
-   (`ContainerWindow`, `HuntMenu`, `Bestiary`, `PartyMembers`, `EquipmentPanel`, `AmmoPicker`,
-   `PartyBag`, `PartyPanel`) — cada uma migra para `Panel` na própria issue (DS-10 a DS-17,
-   #258 não mexe nelas). O próprio `Analyzer.tsx` não usa mais nenhuma delas desde #258: ele é
-   `Panel dock` (`ui.css`), e o bloco abaixo é a moldura NOVA. */
+   (`ContainerWindow`, `Bestiary`, `PartyMembers`, `EquipmentPanel`, `AmmoPicker`, `PartyBag`,
+   `PartyPanel`) — cada uma migra para `Panel` na própria issue (DS-10 a DS-17, #258 não mexe
+   nelas). O próprio `Analyzer.tsx` não usa mais nenhuma delas desde #258: ele é `Panel dock`
+   (`ui.css`), e o bloco abaixo é a moldura NOVA. */
 .analyzer { font-variant-numeric: tabular-nums; }
 .analyzer-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -444,25 +444,56 @@ body {
   .entry-select-head { flex-direction: column; align-items: flex-start; gap: 12px; }
 }
 
-/* Um BOTÃO dentro de uma janela: cor lisa e borda sólida desde #250 — o bisel do pacote saiu
-   (ADR 0029 D4). */
-.hunt-difficulties button {
-  background: #1b1b23;
-  border: 2px solid var(--line);
-  border-radius: 0;
-  color: inherit; font: inherit; font-size: 12px; cursor: pointer;
+/* A cor de aviso "abaixo do level recomendado" (FUN-79), reusada por `HuntsModal.tsx` (#259) —
+   é a única classe da antiga seleção de hunt fixa que sobrevive à troca para modal. */
+.hunt-warn { color: #e0c25a; }
+
+/* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
+.hunt-actions {
+  position: absolute; left: 0; right: 0; bottom: 24px;
+  display: flex; justify-content: center; gap: 8px;
+  pointer-events: none; z-index: 15;
 }
-.hunt-difficulties button:hover:not(:disabled) {
-  filter: brightness(1.2);
+.hunt-pill {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 7px;
+  height: 26px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid var(--gold-2); border-radius: 3px;
+  background: linear-gradient(180deg, var(--ash-3), var(--ash-2));
+  color: var(--parchment-2);
+  font: 700 8px var(--font-display); letter-spacing: .12em; text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .6), inset 0 1px rgba(255, 255, 255, .05);
+}
+.hunt-pill-danger {
+  border-color: var(--blood-5);
+  background: linear-gradient(180deg, #3d1315, #24090b);
+  color: var(--blood-7);
 }
 
-/* A seleção de hunt (FUN-79). Mesma linguagem do analisador: cabeçalho que abre e fecha. */
-.hunt-list { list-style: none; margin: 0; padding: 4px 0 0; display: grid; gap: 6px; }
-.hunt { border-top: 1px solid var(--separator); padding-top: 6px; }
-.hunt-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-.hunt-warn { color: #e0c25a; }
-.hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.hunt-difficulties button { padding: 2px 6px; }
+/* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
+.hunts-modal-body {
+  display: grid; grid-template-columns: 230px minmax(0, 1fr) 230px; gap: 12px; height: 430px;
+}
+.hunts-modal-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 5px;
+  overflow: auto; min-height: 0; padding: 0 2px 0 0; }
+.hunts-modal-row button {
+  display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: center;
+  width: 100%; padding: 6px; text-align: left; cursor: pointer;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.hunts-modal-row-selected button { border-color: var(--gold-4); background: var(--surface-selected); }
+.hunts-modal-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
+.hunts-modal-row-selected .hunts-modal-row-text strong { color: var(--gold-5); }
+/* `.item-sprite` (herdada de `ItemSprite`/`OutfitSprite`) é `position: absolute; inset: 1px`
+   sobre um ancestral quadrado — o mesmo contrato que `.ui-slot` cumpre para o inventário; este
+   span é esse ancestral aqui, do lado da lista de hunts (42 px, a largura da coluna do grid). */
+.hunts-modal-sprite { position: relative; width: 42px; height: 42px; }
+.hunts-modal-detail { min-width: 0; overflow: auto; }
+.hunts-modal-detail h2 { margin: 0 0 8px; font: 600 15px var(--font-display); color: var(--gold-5); }
+.hunts-modal-pulls { display: flex; gap: 6px; flex-wrap: wrap; }
+.hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
+.hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
@@ -747,9 +778,10 @@ body {
 .party-approved { color: #8fd18f; }
 
 /* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
-   de `PartyBag` é o `Panel` `dock` (`shell/ui/Panel.tsx`); aqui só o CONTEÚDO de dentro dele e o
-   painel de `PartyMembers`, que continua dentro da seção do `HuntMenu` (a moldura dela é a do
-   `HuntMenu`, para não dobrar caixa dentro de caixa). ------------------------------------------ */
+   de `PartyBag` é o `Panel` `dock` (`shell/ui/Panel.tsx`); a de `PartyMembers` é o próprio
+   `<section>` dela, que desde #259 é filha DIRETA de `.windows` — ganha a moldura informal de
+   `.windows > section` (a mesma que `BotPanel`/`CharacterPanel` usam) sem precisar de outra
+   seção por cima para emprestar borda. Aqui só o CONTEÚDO de dentro dos dois. ----------------- */
 .party-members-panel { display: flex; flex-direction: column; gap: 6px; }
 .party-mode {
   margin: 0;
