@@ -522,6 +522,9 @@ body {
 .hunts-modal-row-selected button { border-color: var(--gold-4); background: var(--surface-selected); }
 .hunts-modal-row-text strong { display: block; font: 600 10px var(--font-display); color: var(--parchment-1); }
 .hunts-modal-row-selected .hunts-modal-row-text strong { color: var(--gold-5); }
+/* Os dois metadados da linha ("level N+" e "M tamanhos de pull · K drops de loot") são spans
+   inline no JSX e saíam colados (#290): cada um vira bloco, abaixo do nome. */
+.hunts-modal-row-text > span { display: block; }
 /* `.item-sprite` (herdada de `ItemSprite`/`OutfitSprite`) é `position: absolute; inset: 1px`
    sobre um ancestral quadrado — o mesmo contrato que `.ui-slot` cumpre para o inventário; este
    span é esse ancestral aqui, do lado da lista de hunts (42 px, a largura da coluna do grid). */
