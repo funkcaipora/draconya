@@ -32,6 +32,14 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
 - Com a regra ativa: personagem sai da hunt quando o gold acaba.
 - Market sem taxa de listagem e sem comissão sobre venda.
+- O Market é um **livro de ordens de compra e venda** (bid/ask), não uma vitrine de listagem
+  única: cada lado mostra vendedor (ou comprador), quantidade, preço unitário e total — o
+  desenho do handoff do design system (`ShopModal`, aba "Leilão",
+  `ui_kits/draconya/Modals.jsx:226-253`; dados de exemplo em `ui_kits/draconya/data.js:66`, ver
+  a spec da issue #262 para os trechos). Decisão de produto de 2026-09-16
+  (`docs/design-system-plan.md` §10, item 6): "livro de ordens de compra e venda (vendedor,
+  quantidade, preço, total), sem taxa — os dois modelos juntos". A regra de "sem taxa" acima não
+  muda; o que esta linha fecha é o MECANISMO, que o PRD (§33.2) deixava em aberto.
 - Coins são vendáveis no Market por gold, transferindo-se de conta para conta.
 - Supplies abstratos não são listados no Market como pilha tradicional (não existem como item físico).
 - Em party no modo `shared` (M13, ADR 0027), o supply é rateado na hora — `floor(c/n)` de cada
@@ -91,3 +99,13 @@ acabar" é da FUN-86.
 ~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
 catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
 Sessão se não. Ver [`items.md`](./items.md).
+
+**O Market não é uma vitrine de listagem simples — é um livro de ordens (2026-09-16).** O PRD
+(§33.2) diz só que "todo item físico negociável pode ser colocado no Market por gold", sem
+especificar como a compra/venda acontece. A decisão de produto de 2026-09-16
+(`docs/design-system-plan.md` §10, item 6 — a entrar no ADR 0029 via #244) fecha isso como um
+livro de ordens de compra e venda, com as colunas comprador/vendedor, quantidade, preço e total,
+como o modal "Casa de leilões" do handoff do design system desenha. A regra de "sem taxa" (§32.3
+do PRD, já implementada acima) continua igual; só o mecanismo de correspondência entre oferta e
+demanda muda de "em aberto" para "livro de ordens". O E13 herda este desenho quando o Market for
+implementado; nenhuma tela é construída nesta task (D8 do `docs/design-system-plan.md`).
