@@ -20,6 +20,10 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
   `Rng` da sessão; vira `goldDelta` no personagem e `goldGained` no extrato, e chega à linha do
   personagem pelo ledger com `(session_id, seq)` único — nunca por escrita direta em `gold`
   (invariante 10). Stamina zero bloqueia o loot como bloqueia a XP (§10.2).
+- O encerramento só pode remover a sessão e seu snapshot depois de confirmar a gravação do
+  extrato no Redis (#267). Tentativas concorrentes aguardam a mesma gravação; falha permite
+  retry com o mesmo `(session_id, seq)`. Se o Redis gravou e a resposta se perdeu, repetir não
+  duplica gold nem XP, mesmo que o `jobs` já tenha liquidado a primeira tentativa.
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
   cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
   nele (ver "Divergências" abaixo).

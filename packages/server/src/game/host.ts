@@ -399,11 +399,12 @@ interface HostedSession {
    */
   lastAdvancedAtMs: number;
   /**
-   * De quem o extrato já virou crédito (#194: um por membro). A drenagem grava e DEPOIS solta,
-   * e sem esta marca o `release` gravaria de novo com um `seq` novo — que a chave única do
-   * ledger não teria como recusar, e o jogador receberia o mesmo gold duas vezes.
+   * De quem o extrato já foi confirmado no Redis (#194: um por membro). A liquidação no
+   * Postgres é posterior. A drenagem grava e DEPOIS solta; esta marca evita regravar no release.
    */
   readonly credited: Set<string>;
+  /** Tentativa em voo por membro: concorrentes aguardam inclusive a falha, sem soltar antes. */
+  readonly receiptSaves: Map<string, Promise<void>>;
   /**
    * Quem saiu por DENTRO do `sim` — morte ou regra de saída numa party (#193) — e ainda não
    * foi gravado nem devolvido à Cidade. `#presentMoves` enfileira; `#settleDepartures` drena
@@ -2149,6 +2150,7 @@ export class SessionHost {
       aoi: this.#interestManaged(next) ? new AreaOfInterest() : null,
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
+      receiptSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
@@ -2375,11 +2377,31 @@ export class SessionHost {
     const receipts = this.#options.receipts;
     const accountId = this.#accountIdByCharacter.get(characterId);
     if (receipts === undefined || accountId === undefined) return;
-    // Uma sessão credita UMA vez. A drenagem grava e depois solta, e sem esta guarda o
-    // `release` gravaria de novo com um `seq` novo — que a chave única do ledger não teria
-    // como recusar, e o jogador receberia o mesmo gold duas vezes.
     if (hosted.credited.has(characterId)) return;
-    hosted.credited.add(characterId);
+    const pending = hosted.receiptSaves.get(characterId);
+    if (pending !== undefined) return pending;
+
+    const saving = this.#persistReceipt(characterId, hosted, receipt, receipts, accountId, departed);
+    hosted.receiptSaves.set(characterId, saving);
+    try {
+      await saving;
+      // Só a confirmação permite esquecer sessão/snapshot. Marcar antes do await faria um
+      // retry após falha pular a gravação e perder o progresso (#267).
+      hosted.credited.add(characterId);
+    } finally {
+      // Resposta perdida também é falha: repetir o mesmo seq é seguro pelo ledger.
+      hosted.receiptSaves.delete(characterId);
+    }
+  }
+
+  async #persistReceipt(
+    characterId: string,
+    hosted: HostedSession,
+    receipt: Receipt,
+    receipts: ReceiptStore,
+    accountId: string,
+    departed?: CharacterRuntime,
+  ): Promise<void> {
     // O `seq` vem do `sim` (#187): é alocado quando o extrato é emitido, um por participante —
     // metade da chave de idempotência do ledger (invariante 10), e o que impede uma drenagem
     // repetida por retry de creditar duas vezes.
@@ -2797,6 +2819,7 @@ export class SessionHost {
       // ser cobradas a partir de agora, e não de um relógio que não é deste processo.
       lastAdvancedAtMs: this.#now(),
       credited: new Set(),
+      receiptSaves: new Map(),
       departures: [],
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,

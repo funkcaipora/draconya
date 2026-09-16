@@ -278,7 +278,11 @@ Desde o #194 (ADR 0027) a chave é `receipt:{sessionId}:{characterId}` — **um 
 membro**: a party é uma sessão com N donos, e quatro extratos da mesma sessão não podem se
 sobrescrever. A chave antiga `receipt:{sessionId}` e a entrada de índice com o `sessionId` cru
 continuam LIDAS e apagadas por um deploy (extrato em voo de um nó anterior), e a tolerância sai
-numa issue de limpeza depois. No hospedeiro, `hosted.credited` é um `Set` por personagem;
+numa issue de limpeza depois. No hospedeiro, `hosted.credited` é um `Set` por personagem,
+preenchido **só após confirmar a gravação no Redis** (#267), não ao iniciar a tentativa.
+`hosted.receiptSaves` compartilha a promessa em voo: drenagem e `release` concorrentes aguardam
+a mesma gravação, inclusive sua falha. Falha libera a tentativa para retry, mantendo sessão e
+snapshot; resposta perdida repete o mesmo `(session_id, seq)`, sem novo crédito no ledger.
 `#succeed` percorre `session.receipts()` e `#settleOne` grava, avisa os visualizadores DAQUELE
 personagem e o devolve à Cidade; quem sai por dentro do `sim` (`member-left`: morte, regra de
 saída) entra em `hosted.departures` no ciclo — que é síncrono — e `#settleDepartures` grava

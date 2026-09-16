@@ -217,6 +217,75 @@ describe('session host', () => {
     expect(ended).toBe(1);
   });
 
+  it('retries a failed receipt write before releasing the session and its snapshot (#267)', async () => {
+    const save = vi.fn<(receipt: Parameters<ReceiptStore['save']>[0]) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Redis unavailable'))
+      .mockResolvedValue(undefined);
+    const remove = vi.fn(async () => {});
+    const { host, sessions } = buildHost(countingRuleset().ruleset, {
+      receipts: { save } as unknown as ReceiptStore,
+      snapshots: { load: async () => null, remove } as unknown as SnapshotStore,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    sessions[0]?.credit('p1', 'goldGained', 50);
+    const socket = new FakeSocket();
+    host.attach(socket, 'p1');
+
+    expect(await host.drainAll()).toBe(0);
+    expect(host.sessionFor('p1')).toBe(sessions[0]);
+    expect(remove).not.toHaveBeenCalled();
+    expect(socket.received().filter((message) => message.type === 'session-ended')).toEqual([]);
+
+    expect(await host.drainAll()).toBe(1);
+    expect(save).toHaveBeenCalledTimes(2);
+    // A tentativa repete o MESMO extrato: resposta perdida também não pode duplicar crédito.
+    expect(save.mock.calls[1]?.[0]).toEqual(save.mock.calls[0]?.[0]);
+    expect(save.mock.calls[1]?.[0].aggregates.goldGained).toBe(50);
+    expect(host.sessionFor('p1')).toBeUndefined();
+    expect(remove).toHaveBeenCalledWith('p1');
+    expect(socket.received().filter((message) => message.type === 'session-ended')).toHaveLength(1);
+  });
+
+  it.each([false, true])('awaits the in-flight receipt before concurrent release, failure=%s (#267)', async (fails) => {
+    let resolveSave: () => void = () => {};
+    let rejectSave: (error: Error) => void = () => {};
+    const pending = new Promise<void>((resolve, reject) => {
+      resolveSave = resolve;
+      rejectSave = reject;
+    });
+    const save = vi.fn(() => pending);
+    const remove = vi.fn(async () => {});
+    const { host } = buildHost(countingRuleset().ruleset, {
+      receipts: { save } as unknown as ReceiptStore,
+      snapshots: { load: async () => null, remove } as unknown as SnapshotStore,
+    });
+    await host.prepare('p1', undefined, 'a1');
+    const draining = host.drainAll();
+    const releasing = host.release('p1');
+    const settled = Promise.allSettled([draining, releasing]);
+    await Promise.resolve();
+    const removedWhilePending = remove.mock.calls.length;
+    const hostedWhilePending = host.sessionFor('p1') !== undefined;
+
+    if (fails) rejectSave(new Error('Redis unavailable'));
+    else resolveSave();
+    const [drained, released] = await settled;
+
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(removedWhilePending).toBe(0);
+    expect(hostedWhilePending).toBe(true);
+    expect(drained).toEqual({ status: 'fulfilled', value: fails ? 0 : 1 });
+    expect(released.status).toBe(fails ? 'rejected' : 'fulfilled');
+    if (fails) {
+      expect(remove).not.toHaveBeenCalled();
+      expect(host.sessionFor('p1')).toBeDefined();
+      save.mockResolvedValue(undefined);
+      expect(await host.drainAll()).toBe(1);
+      expect(save).toHaveBeenCalledTimes(2);
+    }
+    expect(host.sessionFor('p1')).toBeUndefined();
+  });
+
 
   it('resumes from a snapshot instead of starting the character over', async () => {
     // Sem isto, cair o processo devolveria o personagem no estado inicial — e o produto
