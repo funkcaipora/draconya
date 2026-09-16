@@ -28,4 +28,11 @@ describe('Shell', () => {
     // Sem `inventory` ainda, as três existem dizendo que carregam — nunca somem.
     expect((right.match(/Carregando/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
+
+  // RF-02 (#252): o chat nasce aberto — é onde chegam as recusas do servidor
+  // (`system-message`), e uma janela que abre fechada esconderia a primeira da sessão.
+  it('the chat is mounted from the start (DEFAULT_WINDOWS.chat)', async () => {
+    const html = await render();
+    expect(html).toContain('aria-label="chat"');
+  });
 });

@@ -35,8 +35,8 @@ import type { WindowId } from './TopBar.js';
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
- * Chat nasce aberto (D5/DS-09, #251): ainda não há `open.chat` sendo lido por `Chat.tsx` — isso
- * é da issue seguinte (#252) — mas o `Record<WindowId, boolean>` já precisa da chave.
+ * Chat nasce aberto (D5/DS-09, #252): "é onde chegam as recusas do servidor" — uma janela que
+ * abre fechada esconderia a primeira recusa da sessão.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
@@ -84,7 +84,10 @@ export function Shell() {
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
             quando `vocationId` chega — quem decide se ela existe é o estado, não a barra. */}
         <VocationChoice />
-        <Chat />
+        {/* O chat é janela flutuante fixa (#252, ADR 0029 D5): mesmo padrão de open/close das
+            outras (hunts, analyzer, bestiary) — a diferença é só a POSIÇÃO, dada pelo próprio
+            componente via `.chat-window`, e não por uma coluna do `windows-left`/`windows-right`. */}
+        {open.chat && <Chat onClose={() => { toggle('chat'); }} />}
       </div>
     </AssetPackContext.Provider>
   );
