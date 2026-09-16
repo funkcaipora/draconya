@@ -5,8 +5,8 @@ import { PartyBag } from './PartyBag.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 
-// A bolsa compartilhada (#197): só em `shared`, com o que o servidor mandou — e o último
-// settlement dito para quem ficou.
+// A bolsa compartilhada (#197, DS-14): só em `shared`, com o que o servidor mandou — grade de
+// `Slot`, barra de capacidade em uso e o último settlement dito para quem ficou.
 
 const catalogue = {
   hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 8,
@@ -30,7 +30,14 @@ describe('PartyBag', () => {
     expect(await render()).toBe('');
   });
 
-  it('shows items by name, gold, weight over capacity, and the last settlement with my share', async () => {
+  it('an empty bag says so, without a grid', async () => {
+    hud.set((state) => ({ ...state, party: { leaderId: 'me', mode: 'shared', members: [] }, partyBag: { gold: 0, items: [], weight: 0, capacity: 500 } }));
+    const html = await render();
+    expect(html).toContain('vazia');
+    expect(html).not.toContain('party-bag-grid');
+  });
+
+  it('shows items in a Slot grid, gold, weight over capacity with a bar, and the last settlement with my share', async () => {
     hud.set((state) => ({
       ...state,
       party: { leaderId: 'me', mode: 'shared', members: [] },
@@ -38,14 +45,20 @@ describe('PartyBag', () => {
       lastSettlement: { total: 130, shares: [{ characterId: 'me', gold: 44 }, { characterId: 'b', gold: 43 }] },
     }));
     const html = await render();
+    expect(html).toContain('Bolsa da party');
     expect(html).toContain('60/800 oz · 27 gold');
-    expect(html).toContain('Espada');
-    expect(html).toContain('×2');
-    expect(html).toContain('ghost');
+    expect(html).toContain('title="Espada"');
+    // O `Slot` do design system (DS-04, #247) mostra a contagem crua, sem prefixo "×" — a spec
+    // desta issue foi escrita antes de `Slot.tsx` existir de fato; aqui se confere o real.
+    expect(html).toContain('<b class="ui-slot-count">2</b>');
+    expect(html).toContain('title="ghost"');
+    expect(html).toContain('party-bag-cap-fill');
+    expect(html).toContain('width:8%'); // 60/800 arredondado
     expect(html).toContain('vendeu 130 gold · você levou 44');
-    // Minimizada: só o cabeçalho.
+    // Minimizada: só o cabeçalho do Panel — o corpo (grade e settlement) some.
     const collapsed = await render(true);
     expect(collapsed).toContain('27 gold');
     expect(collapsed).not.toContain('Espada');
+    expect(collapsed).not.toContain('party-bag-grid');
   });
 });

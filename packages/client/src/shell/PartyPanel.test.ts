@@ -74,7 +74,7 @@ describe('PartyPanel', () => {
     expect(html).toContain('Alguém da party não está na cidade.');
   });
 
-  it('PartyMembers lists the companions with HP and the fallen one greyed', async () => {
+  it('PartyMembers lists the companions with HP, the mode as text, and the fallen one greyed', async () => {
     hud.set((state) => ({ ...state, party: { leaderId: 'lead', mode: 'shared', members: [
       { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80 },
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55 },
@@ -82,10 +82,21 @@ describe('PartyPanel', () => {
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
+    expect(html).toContain('Compartilhado');
     expect(html).toContain('★ Ana');
+    expect(html).toContain('party-companion-self');
     expect(html).toContain('você');
-    expect(html).toContain('width:80%');
-    expect(html).toContain('party-member-down');
+    expect(html).toContain('80 %');
+    expect(html).toContain('party-companion-down');
     expect(html).toContain('caiu');
+  });
+
+  it('PartyMembers shows "Dividido" for the split mode', async () => {
+    hud.set((state) => ({ ...state, party: { leaderId: 'me', mode: 'split', members: [
+      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
+    ] } }));
+    const { prelude } = await prerender(createElement(PartyMembers));
+    const html = await new Response(prelude).text();
+    expect(html).toContain('Dividido');
   });
 });
