@@ -60,3 +60,8 @@ a pergunta vai ser "onde fica esse número", não "qual era a regra".
 | Guildas | [`guilds.md`](./guilds.md) | não implementado | E12 | §29 |
 | Guild War | [`guild-war.md`](./guild-war.md) | não implementado | E12 | §30, §43.8 |
 | Monetização — Coins e Premium | [`monetization.md`](./monetization.md) | não implementado | E13 | §7.2, §7.3, §33.3, §34, §35 |
+| Configurações | [`settings.md`](./settings.md) | não implementado | — | — |
+| Amigos | [`future-systems.md#amigos`](./future-systems.md) | não implementado | — | — |
+| Arena | [`future-systems.md#arena`](./future-systems.md) | não implementado | — | §31 |
+| Bênçãos | [`future-systems.md#bênçãos`](./future-systems.md) | não implementado | — | — |
+| Soul | [`future-systems.md#soul`](./future-systems.md) | não implementado | — | — |
