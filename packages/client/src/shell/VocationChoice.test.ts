@@ -1,7 +1,9 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { VocationChoice } from './VocationChoice.js';
+import { resolveChosenVocationId } from './VocationChoice.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 
@@ -63,5 +65,64 @@ describe('VocationChoice', () => {
     expect(await render()).toBe('');
     hud.set((state) => ({ ...state, level: 10 }));
     expect(await render()).toContain('vocation-card');
+  });
+
+  // --- Casos novos (#249): Modal + cartões do design system, seleção em duas etapas -------
+
+  it('renders no element badge, even with a real vocation catalogue (RF-03)', async () => {
+    const html = await render();
+    expect(html).not.toContain('Badge');
+  });
+
+  it('renders no inline style on any of the four vocation-card buttons (RF-07)', async () => {
+    const html = await render();
+    const buttons = html.match(/<button[^>]*class="vocation-card"[^>]*>[\s\S]*?<\/button>/g) ?? [];
+    expect(buttons.length).toBe(4);
+    for (const button of buttons) expect(button).not.toContain('style="');
+  });
+
+  it('Modal.onClose is a no-op — the choice cannot be closed before choosing (RF-05)', async () => {
+    const source = await readFile(new URL('./VocationChoice.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('onClose={() => {}}');
+  });
+
+  it('sendIntent is wired only to the FORJAR button, never to a card click (RF-04)', async () => {
+    // Regressão vigiada: o comportamento antigo mandava `choose-vocation` no clique do
+    // cartão. `prerender` não dispara clique (Node sem DOM), então a garantia aqui é
+    // estrutural — como `resolveChosenVocationId` abaixo prova o cálculo em si.
+    const source = await readFile(new URL('./VocationChoice.tsx', import.meta.url), 'utf8');
+    const occurrences = source.match(/sendIntent\(/g) ?? [];
+    expect(occurrences.length).toBe(1);
+    const footerIndex = source.indexOf('footer={');
+    const cardOnClickIndex = source.indexOf("onClick={() => { setSelected(vocation.id); }}");
+    const sendIntentIndex = source.indexOf('sendIntent(');
+    expect(footerIndex).toBeGreaterThan(-1);
+    expect(cardOnClickIndex).toBeGreaterThan(-1);
+    // O `footer` (com o "FORJAR") vem ANTES da grade de cartões na árvore JSX — é uma prop do
+    // `Modal`, passada antes dos `children`. O único `sendIntent` fica DEPOIS do rodapé
+    // começar e ANTES do clique do cartão aparecer no código-fonte — ou seja, dentro do
+    // `Button` do rodapé, nunca dentro do `onClick` do cartão.
+    expect(sendIntentIndex).toBeGreaterThan(footerIndex);
+    expect(sendIntentIndex).toBeLessThan(cardOnClickIndex);
+  });
+});
+
+describe('resolveChosenVocationId (RF-04)', () => {
+  const vocations = catalogue.vocations;
+
+  it('falls back to the first vocation when FORJAR is clicked with no card selected', () => {
+    expect(resolveChosenVocationId(null, vocations)).toBe('knight');
+  });
+
+  it('keeps the selected card when it exists in the list', () => {
+    expect(resolveChosenVocationId('paladin', vocations)).toBe('paladin');
+  });
+
+  it('falls back to the first vocation when the selection no longer exists (catalogue swapped on reconnect)', () => {
+    expect(resolveChosenVocationId('an-old-vocation-no-longer-in-the-catalogue', vocations)).toBe('knight');
+  });
+
+  it('throws when called with an empty catalogue — a contract only the caller can violate', () => {
+    expect(() => resolveChosenVocationId(null, [])).toThrow();
   });
 });
