@@ -103,14 +103,8 @@ export interface SessionHostOptions {
    */
   readonly acceptBotConfig?: (raw: unknown, level: number) => BotConfigDecision;
   /**
-   * Persiste a configuração aceita. Ausente: ela vale nesta sessão e some no logout.
-   *
-   * É a ÚNICA escrita de banco do `game`, e é deliberada: a configuração é editada com o
-   * jogador conectado, e o processo que tem a conexão é este. Mandá-la pelo `api` obrigaria o
-   * cliente a manter sessão HTTP para uma ação de jogo, e ainda deixaria o `game` sem o valor.
-   *
-   * O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo ticket,
-   * que o `api` monta lendo a linha do personagem.
+   * Registra a preferência no Redis para jobs/api gravarem no Postgres (ADR 0028).
+   * Ausente ou falhando: aplica na sessão, mas devolve falha de salvamento ao jogador.
    */
   readonly saveBotConfig?: (characterId: string, config: BotConfig) => Promise<void>;
   /**
@@ -1214,10 +1208,12 @@ export class SessionHost {
   /**
    * O jogador salvou uma configuração de bot (FUN-81, §13).
    *
-   * A ordem importa e é: aceitar → aplicar → persistir. Aplicar antes de gravar é deliberado —
-   * a hunt em curso passa a usar a regra nova na hora, e uma falha do Postgres não pode fazer
-   * o jogador ficar sem a cura que acabou de configurar. O preço é uma configuração que vale
-   * nesta sessão e não volta na próxima, e esse é o lado certo para errar.
+   * A ordem importa e é: aceitar → aplicar → registrar → confirmar (ADR 0028). Aplicar antes
+   * de registrar é deliberado — a hunt em curso passa a usar a regra nova na hora, e uma falha
+   * de persistência não pode fazer o jogador ficar sem a cura que acabou de configurar. Já a
+   * confirmação espera o registro: `ok: true` significa que a preferência está no Redis, de
+   * onde `jobs`/`api` a levam ao Postgres, e `ok: false` diz ao jogador que a regra vale
+   * agora mas precisa ser salva de novo.
    */
   async #configureBot(viewer: Viewer, raw: unknown): Promise<void> {
     const accept = this.#options.acceptBotConfig;
@@ -1242,16 +1238,20 @@ export class SessionHost {
 
     this.#botByCharacter.set(viewer.characterId, decision.config);
     this.#applyBotConfig(hosted, decision.config);
-    viewer.send({ type: 'bot-config-result', ok: true });
-
-    // Persistir é o último passo, e falhar nele não desfaz o que já vale. O log é para quem
-    // investiga "salvei e voltou o antigo"; o jogador não pode fazer nada com esse erro.
+    // Aplicar continua imediato; confirmar espera o Redis aceitar a pendência.
+    // Falha não desfaz a regra em uso, mas permite ao jogador tentar salvar novamente.
     try {
-      await this.#options.saveBotConfig?.(viewer.characterId, decision.config);
+      if (this.#options.saveBotConfig === undefined) throw new Error('Bot persistence is unavailable');
+      await this.#options.saveBotConfig(viewer.characterId, decision.config);
+      viewer.send({ type: 'bot-config-result', ok: true });
     } catch (error) {
       this.#logger.error(
         { error, characterId: viewer.characterId }, 'Failed to persist bot configuration',
       );
+      viewer.send({
+        type: 'bot-config-result', ok: false,
+        reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
+      });
     }
   }
 

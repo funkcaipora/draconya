@@ -41,7 +41,7 @@ export interface GameDependencies {
   readonly now?: () => number;
   /** Aceita ou recusa uma configuração de bot (FUN-81). Ver `SessionHostOptions`. */
   readonly acceptBotConfig?: SessionHostOptions['acceptBotConfig'];
-  /** Persiste a configuração aceita. A única escrita de banco do `game`. */
+  /** Registra a configuração aceita no Redis; jobs/api escrevem no Postgres (ADR 0028). */
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];

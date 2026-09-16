@@ -211,6 +211,7 @@ describe('auth routes', () => {
   it('sets production cookies securely and uses only the configured callback destination', async () => {
     const sessions = new MemorySessions();
     const production = loadConfiguration({
+      PROCESSES: 'api',
       DATABASE_URL: 'postgres://localhost/test', REDIS_URL: 'redis://localhost',
       NODE_ENV: 'production', API_ORIGIN: 'https://play.example',
       WORKOS_API_KEY: 'test-key', WORKOS_CLIENT_ID: 'test-client',

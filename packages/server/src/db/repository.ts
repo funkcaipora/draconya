@@ -88,7 +88,7 @@ export interface GameRepository {
   /**
    * Cria o personagem. `initial.botConfig` é a configuração de bot com que ele NASCE (FUN-114)
    * — a padrão do conteúdo, gravada aqui porque o personagem novo precisa entrar na primeira
-   * hunt curando e atacando sem ter aberto tela nenhuma. Opaca, como em `saveBotConfig`.
+   * hunt curando e atacando sem ter aberto tela nenhuma. Opaca: quem valida o vocabulário é o host da sessão.
    *
    * `initial.kit` é com o que ele nasce VESTIDO (#153, ADR 0026 decisão 2): uma linha de
    * `item_instance` por peça, origem `starting-kit`, na MESMA transação do personagem —
@@ -113,17 +113,6 @@ export interface GameRepository {
     characterId: string,
     isCharacterActive?: CharacterActiveCheck,
   ): Promise<DeleteCharacterResult>;
-  /**
-   * Grava a configuração do bot (FUN-81).
-   *
-   * Escrita CEGA, sem ler antes: "o jogador salvou isto" é última-escrita-vence por natureza,
-   * e um read-modify-write aqui criaria uma corrida entre duas abas do mesmo jogador para
-   * resolver um conflito que não existe — a configuração é substituída inteira, nunca mesclada.
-   *
-   * Por isso também não participa da trava de linha da emissão de ticket (FUN-53): é um
-   * `UPDATE` de uma instrução, que não segura a linha nem depende de nada que esteja nela.
-   */
-  saveBotConfig(characterId: string, config: unknown): Promise<void>;
   /**
    * Cria uma instância de item para um personagem (FUN-76).
    *
@@ -322,19 +311,6 @@ export class DrizzleGameRepository implements GameRepository {
           .where(eq(itemInstances.id, row.id));
       }
     });
-  }
-
-  /**
-   * Grava a configuração do bot. Ver o contrato em `GameRepository.saveBotConfig`.
-   *
-   * Só atualiza personagem NÃO apagado: gravar num soft-deleted seria escrever num personagem
-   * que já não existe para o resto do sistema.
-   */
-  async saveBotConfig(characterId: string, config: unknown): Promise<void> {
-    await this.#db
-      .update(characters)
-      .set({ botConfig: config })
-      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)));
   }
 
   async softDeleteCharacter(

@@ -1765,7 +1765,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
   const mensagens = (socket: FakeSocket) =>
     socket.received().filter((m) => m.type === 'bot-config-result');
 
-  it('aceita, confirma ao jogador e PERSISTE', () => {
+  it('acknowledges only after persistence accepts the configuration', async () => {
     const saved: Array<{ characterId: string; config: unknown }> = [];
     const { ruleset } = countingRuleset();
     const { host } = buildHost(ruleset, {
@@ -1776,6 +1776,9 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     const viewer = host.attach(socket, 'p1');
 
     host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    host.flush();
+    expect(mensagens(socket)).toHaveLength(0);
+    await Promise.resolve();
     host.flush();
 
     expect(saved).toEqual([{ characterId: 'p1', config: CONFIG }]);
@@ -1805,7 +1808,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     expect(aviso?.type === 'bot-config-result' && aviso.reason).toContain('vocabulário');
   });
 
-  it('o gate de level recusa o bot avançado, e o mesmo config passa no 50', () => {
+  it('rejects advanced settings below level 50 and accepts them at level 50', async () => {
     // §13.2 pelo caminho de verdade: o level vem do personagem da sessão, nunca da mensagem.
     const { ruleset } = countingRuleset();
     const baixo = buildHost(ruleset, { acceptBotConfig: accepting, level: 49 });
@@ -1816,29 +1819,35 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     const aviso = mensagens(socketBaixo).find((m) => m.type === 'bot-config-result');
     expect(aviso?.type === 'bot-config-result' && aviso.reason).toContain('level 50');
 
-    const alto = buildHost(ruleset, { acceptBotConfig: accepting, level: 50 });
+    const alto = buildHost(ruleset, { acceptBotConfig: accepting, level: 50, saveBotConfig: async () => {} });
     const socketAlto = new FakeSocket();
     const viewerAlto = alto.host.attach(socketAlto, 'p1');
     alto.host.handle(viewerAlto, { type: 'bot-config', config: { version: 1, avancado: true } });
+    await Promise.resolve();
     alto.host.flush();
     expect(mensagens(socketAlto).some((m) => m.type === 'bot-config-result' && m.ok)).toBe(true);
   });
 
-  it('falha ao PERSISTIR não desfaz o que já vale para o jogador', () => {
-    // Aplicar antes de gravar é deliberado: uma falha do Postgres não pode fazer o jogador
-    // ficar sem a cura que acabou de configurar. O preço é a configuração não voltar na
-    // próxima conexão, e esse é o lado certo para errar.
+  it('reports persistence failure without reverting the active configuration', async () => {
     const { ruleset } = countingRuleset();
     const { host } = buildHost(ruleset, {
       acceptBotConfig: accepting,
-      saveBotConfig: async () => { throw new Error('postgres caiu'); },
+      saveBotConfig: async () => { throw new Error('Redis unavailable'); },
     });
     const socket = new FakeSocket();
     const viewer = host.attach(socket, 'p1');
-
-    expect(() => host.handle(viewer, { type: 'bot-config', config: CONFIG })).not.toThrow();
+    host.handle(viewer, { type: 'bot-config', config: CONFIG });
+    await Promise.resolve();
     host.flush();
-    expect(mensagens(socket).some((m) => m.type === 'bot-config-result' && m.ok)).toBe(true);
+    expect(mensagens(socket)).toContainEqual({
+      type: 'bot-config-result', ok: false,
+      reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
+    });
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    expect(socket.received()).toContainEqual(expect.objectContaining({
+      type: 'session-state', botConfig: CONFIG,
+    }));
   });
 
   it('host montado SEM validador avisa, em vez de aceitar em silêncio', () => {
