@@ -84,6 +84,16 @@ describe('o slot equipado (FUN-108)', () => {
     expect(html).not.toContain('Tirar');
   });
 
+  it('o slot vazio mostra o rótulo do lugar em texto, maiúsculo (#250)', async () => {
+    // Antes de #250: <span className="slot-empty" role="img" aria-label="Mão (vazio)" title="Mão" />
+    // não tinha filho — o quadrado saía vazio (ou com o ícone do pacote, se ele existisse).
+    // Mutação que mata: `label` em vez de `label.toUpperCase()`; texto ausente do filho do <span>.
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const html = await render();
+    expect(html).toContain('<span class="slot-empty" aria-label="Mão (vazio)" title="Mão">MÃO</span>');
+    expect(html).not.toContain('role="img"');
+  });
+
   it('a pilha vestida mostra a quantidade, que vem da MENSAGEM', async () => {
     // A quantidade do equipado viaja com ele (FUN-108); antes ela era `1` fixo porque o
     // slot não tinha de onde tirá-la. Mutação que mata: `quantity={1}` no slot vestido.

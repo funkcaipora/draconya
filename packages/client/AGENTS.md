@@ -538,20 +538,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   confira se o painel do navegador está visível (`tabs_context` diz).
 - **`inventory` e `catalogue` SUBSTITUEM, nunca acumulam.** O servidor manda o estado inteiro;
   montar a partir de pedaços daria uma mochila que diverge da dele sem nada acusar.
-- **A arte de UI vem do pacote, pelo CLIENTE, e nunca é versionada** (FUN-108). Moldura, pedra,
-  slot, ícone de slot vazio e barras de HP/mana são PNGs de
-  `things/<versão>/library/ui/images/`, servidos pelo mesmo caminho que os sprites
-  (`VITE_THINGS_URL`). `assets/ui.ts` é a única tabela — variável CSS → arquivo — e
-  `applyUiSkin` a põe no `:root` uma vez, ao montar o `Shell`; `shell.css` consome por
-  `var(--ui-x, <cor lisa>)` e **nunca escreve `url()` de arte**. Sem pacote, nenhuma variável
-  existe e a tela sai em cor lisa com a mesma estrutura — arte que não carrega não é razão de
-  a tela não abrir. Em `content/` continua entrando só `appearanceId` (invariante 6). **Em
-  produção, `library/ui/images` precisa estar no volume `things`** (o nginx serve o volume
-  inteiro, `deploy/nginx.conf`): um volume só com `catalog-content.json`, `.dat` e as folhas
-  desenha o mundo e deixa a casca lisa — o sintoma é só visual, com 404 de PNG na rede. E
-  **a origem não serve essa subpasta** — ela é derivada do `.rcc` pelo `pnpm assets:library`
-  —, então o script que baixa o pacote da origem não a traz; ela sobe da sua máquina, com o
-  `rsync` de `docs/deploy.md` ("O pacote de arte"), que exclui o resto de `library/`.
+- **A casca (painéis, barras, slots) é CSS puro desde #250** (ADR 0029 D4). A skin de pedra do
+  pacote do Tibia (`assets/ui.ts`, `applyUiSkin`, as variáveis de skin) foi aposentada — o
+  pacote de arte continua sendo a única fonte de sprite de item, outfit e mundo (ADR 0008;
+  `ItemSprite`, `TextureBook`), só a casca deixou de ler PNG nenhum dele. O revestimento com o
+  vidro ferro-forjado do design entra em `shell/tokens.css` e `shell.css` a partir de #251
+  (DS-08); até lá, os valores são os mesmos hex fixos que já eram o fallback de antes. Ver
+  `docs/design-system.md`.
 - **O pacote de arte é UM, montado no `Shell` e entregue por contexto** (`shell/useBrowserPack.ts`,
   `shell/AssetPackContext.tsx`). O viewport desenha o mundo com ele e o inventário desenha o
   sprite de cada item (`shell/ItemSprite.tsx`, um canvas de 32 px por item, `pack.object`);
