@@ -16,6 +16,7 @@
 // CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
 import { useState } from 'react';
+import { useHudSlice } from '../state/useSlice.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
@@ -25,7 +26,9 @@ import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
 import { Bestiary } from './Bestiary.js';
-import { HuntMenu } from './HuntMenu.js';
+import { HuntsModal } from './HuntsModal.js';
+import { HuntActions } from './HuntActions.js';
+import { PartyMembers } from './PartyMembers.js';
 import { PartyBag } from './PartyBag.js';
 import { BotPanel } from './BotPanel.js';
 import { CharacterPanel } from './CharacterPanel.js';
@@ -45,7 +48,11 @@ import type { WindowId } from './TopBar.js';
  * janela que abre fechada esconderia a primeira recusa da sessão.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
-  hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
+  // 'hunts' agora é um MODAL, não uma seção fixa (#259, ADR 0029 D6): nasce FECHADO — modal que
+  // nasce aberto empurraria uma decisão antes de a tela aparecer, e janela fixa é quem nasce
+  // aberta (DT-02 de #259). A pill "Escolher caçada"/"Sair da caçada" (`HuntActions`) é quem
+  // fica sempre visível, fora das colunas.
+  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
 };
 
 export function Shell() {
@@ -57,6 +64,11 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // Quem está numa hunt vê "Sair da caçada"; quem está na Cidade vê "Escolher caçada". O
+  // `sessionType` do analisador é o que o servidor disse por último — o cliente não adivinha
+  // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
+  const sessionType = useHudSlice((state) => state.analyzer.sessionType);
+  const hunting = sessionType !== null && sessionType !== 'city';
 
   // A geografia do Huntera (FUN-115): o mundo ocupa a tela inteira, e o resto FLUTUA por cima —
   // a barra do topo, as janelas à esquerda e à direita, o chat embaixo. Cada janela é a seção
@@ -69,13 +81,18 @@ export function Shell() {
         <Viewport />
         <TopBar open={open} toggle={toggle} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
-          {open.hunts && <HuntMenu />}
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
               montado; a barra do topo MINIMIZA, nunca remove. A edição fina abre por cima. */}
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
           {/* Personagem é FIXO (D6): sempre montado, sem `open.*` — minimiza pelo próprio
               cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Personagem"). */}
           <CharacterPanel />
+          {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
+              Personagem, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
+              menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
+              que sobra aqui são os COMPANHEIROS durante a hunt — `PartyMembers` já se esconde
+              sozinho fora de party (`state.party === null`), então não há `open.*` para ele. */}
+          <PartyMembers />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
           {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
@@ -101,6 +118,12 @@ export function Shell() {
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
             quando `vocationId` chega — quem decide se ela existe é o estado, não a barra. */}
         <VocationChoice />
+        {/* As pills de caçada (#259, D3/D6): centralizadas sobre o mundo, no rodapé — a faixa
+            de 124 px do handoff que as hospedaria não entra neste marco (D5), então o mundo a
+            ocupa e as pills flutuam direto sobre ele. O modal abre pelo MESMO `open.hunts` que a
+            pill aciona, ou pelo ícone "Hunts" do topo — os dois só alternam a mesma fatia. */}
+        <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
+        {open.hunts && <HuntsModal hunting={hunting} onClose={() => { toggle('hunts'); }} />}
         {/* O chat é janela flutuante fixa (#252, ADR 0029 D5): mesmo padrão de open/close das
             outras (hunts, analyzer, bestiary) — a diferença é só a POSIÇÃO, dada pelo próprio
             componente via `.chat-window`, e não por uma coluna do `windows-left`/`windows-right`. */}
