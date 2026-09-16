@@ -36,6 +36,14 @@ describe('Shell', () => {
     expect(html).toContain('aria-label="chat"');
   });
 
+  // RF-04 (#256, DS-13): o painel Personagem é FIXO na coluna esquerda, sem guarda de `open` —
+  // não há ícone "Personagem" na barra do topo para condicioná-lo.
+  it('windows-left always mounts CharacterPanel, unconditionally of open.*', async () => {
+    const html = await render();
+    const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
+    expect(left).toContain('PERSONAGEM');
+  });
+
   it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {
     // As vitais migraram do topo para o alto da coluna direita (ADR 0029 D3). Mutação que mata:
     // montar `<Vitals />` depois de `<EquipmentPanel />`, ou não montá-la em `Shell.tsx`.
