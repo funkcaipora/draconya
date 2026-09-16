@@ -1,6 +1,7 @@
 # 0029 — Sistema de design do cliente: tokens do handoff, chrome sobreposto e vidro ferro-forjado no lugar da pedra do pacote
 
-**Status:** aceito
+**Status:** parcialmente substituído pelo 0030 — as decisões 5 e 6 caem (barra de ações e
+janelas flutuantes entram), as decisões 2, 3 e 8 são emendadas; 1, 4, 7 e 9 continuam valendo
 **Data:** 2026-09-16
 **Contexto técnico:** `docs` (este ADR e `docs/design-system.md`); `packages/client` (regras que
 as issues DS-02…DS-19 e SV-01…SV-17 do M14/M15 implementam a partir daqui — nenhum arquivo de
