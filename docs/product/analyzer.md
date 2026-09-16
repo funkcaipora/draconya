@@ -72,10 +72,22 @@ Este sistema não define parâmetros numéricos de balanceamento — é uma espe
 Mora numa janela à direita (`packages/client/src/shell/Analyzer.tsx`), e é **DOM** — HUD em DOM,
 mundo em canvas. Nada nela toca `world`.
 
-**Nasce aberta** (FUN-115; o §16.1 dizia minimizada). Quem decide se a janela existe é a barra
-do topo, e uma janela que abre minimizada é uma janela que abre vazia. Quem a minimizar tem há
-quanto tempo a sessão roda na linha do cabeçalho. Ao encerrar ela reabre sozinha: aí o extrato é
-a notícia, e escondê-lo seria a sessão sumir em silêncio.
+**É um `Panel dock` FIXO desde #258 (D6).** Antes, a barra do topo montava e desmontava a janela
+inteira (`{open.analyzer && <Analyzer />}`); agora ela está sempre montada na coluna da direita,
+como `BotPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
+remove. **Nasce aberta** (FUN-115; o §16.1 dizia minimizada): quem decide se o corpo aparece é a
+barra do topo, e uma janela que abre minimizada é uma janela que abre vazia. Minimizada, o tempo
+de sessão fica na barra de título (`meta` do `Panel`). Ao encerrar ela reabre sozinha — um
+override local por cima do `collapsed` da barra —: aí o extrato é a notícia, e escondê-lo seria a
+sessão sumir em silêncio. Sem sessão, ou na Cidade, ela continua sem desenhar nada — essa
+continua sendo a única situação em que a janela não aparece, e não é o jogador que a removeu.
+
+**Os números viraram duas caixas** ("Sessão" e "Por hora", `Box`/`Line` sobre os primitivos
+`Panel`/`Kicker` do design system), no lugar da lista solta de linhas de antes — a taxa que
+aparecia como uma terceira coluna na mesma linha do valor absoluto agora é a caixa "Por hora"
+inteira. **A matemática não mudou**: `perHour` continua a única derivada, o "—" do campo opcional
+ausente continua a mesma regra (ver abaixo), e o relógio local continua o mesmo. Só a moldura ao
+redor trocou de pele.
 
 **Uma janela, duas telas.** Durante a hunt mostra o que está rendendo; ao voltar de um período
 offline mostra o mesmo, mais a lista curta de eventos notáveis (§16.2). São a mesma pergunta em

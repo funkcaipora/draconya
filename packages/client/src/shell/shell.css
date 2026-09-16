@@ -209,7 +209,13 @@ body {
 .chat-system-warning { color: var(--warn); }
 .chat-system-error { color: var(--danger); }
 
-/* O analisador (FUN-83). Nasce minimizado: ocupa uma linha até alguém abrir. */
+/* O analisador (FUN-83). `.analyzer-head`/`.analyzer-toggle`/`.analyzer-summary`/
+   `.analyzer-body`/`.analyzer-row`/`.analyzer-label`/`.analyzer-value` são o "Panel" informal
+   de antes do design system, e continuam aqui porque outras sete telas ainda os usam
+   (`ContainerWindow`, `HuntMenu`, `Bestiary`, `PartyMembers`, `EquipmentPanel`, `AmmoPicker`,
+   `PartyBag`, `PartyPanel`) — cada uma migra para `Panel` na própria issue (DS-10 a DS-17,
+   #258 não mexe nelas). O próprio `Analyzer.tsx` não usa mais nenhuma delas desde #258: ele é
+   `Panel dock` (`ui.css`), e o bloco abaixo é a moldura NOVA. */
 .analyzer { font-variant-numeric: tabular-nums; }
 .analyzer-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -228,13 +234,27 @@ body {
 /* O VALOR alinha em coluna; a taxa vai atrás e não reserva largura. Reservar espaço para uma
    taxa que a linha não tem espremia o rótulo no painel de 200px, e "Maior magia" quebrava. */
 .analyzer-value { flex: 0 0 auto; min-width: 52px; text-align: right; }
-.analyzer-rate { flex: 0 0 auto; color: var(--text-faint); }
 .analyzer-events {
   margin: 8px 0 0; padding: 0; list-style: none;
   border-top: 1px solid var(--separator); padding-top: 6px; color: var(--text-muted);
 }
 .analyzer-events li { margin: 0 0 2px; }
 .analyzer-event-time { color: var(--text-faint); margin-right: 6px; }
+
+/* A caixa "Sessão"/"Por hora" (#258, `Sec`/`Rows` do handoff — `Hud.jsx:188`, `Modals.jsx:1,3`).
+   `.analyzer-rate` (a taxa como terceira coluna na mesma linha) saiu: a taxa é a OUTRA caixa
+   agora, não uma coluna a mais na linha do valor absoluto. */
+.analyzer-box { border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1); padding: 6px 9px 4px; min-width: 0; }
+.analyzer-box + .analyzer-box { margin-top: 8px; }
+.analyzer-line {
+  display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 0;
+  gap: 8px; color: var(--text-muted); font: 8px var(--font-mono);
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.analyzer-line span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.analyzer-line b { font-weight: 500; color: var(--parchment-1); font-variant-numeric: tabular-nums; }
+/* "Mortes": cor de perigo, inspirada no `color(c)` do handoff (`Hud.jsx:184`, `c === "red"`). */
+.analyzer-line-danger b { color: var(--blood-7); }
 
 /* O Bestiário (FUN-113): a mesma janela do analisador — cabeçalho, linha, valor —, com o que
    só ele tem. Duas linhas por monstro, porque nome, abates, próximo marco e marcos não cabem

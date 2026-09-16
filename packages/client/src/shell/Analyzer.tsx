@@ -10,13 +10,22 @@
 // **Nada aqui pede `session-state`.** Os agregados chegam em `analyzer` quando mudam (FUN-110)
 // e a janela lê a store; pedir em laço para atualizar um número seria tráfego de volta gerado
 // por tráfego de entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
+//
+// **A moldura é o design system (#258, DS-15).** A janela deixou de ser uma seção que a barra
+// monta e desmonta e virou um `Panel dock` FIXO na coluna da direita, como `BotPanel`/
+// `EquipmentPanel` já são desde #161/#162 (D6 — "Fixo... nunca removido"). Os números, que eram
+// uma lista solta de linhas, viraram duas caixas — "Sessão" e "Por hora" — sobre `Box`/`Line`,
+// inspiradas em `Sec`/`Rows` do handoff (`Hud.jsx`, `AnalyzerWindow`). A matemática (`perHour`,
+// o "—" do campo opcional, o relógio local) não mudou uma linha.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { perHour } from '../state/hud.js';
 import type { Aggregates, NotableEvent } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { describeEvent } from './event-text.js';
 import type { EventNames } from './event-text.js';
+import { Panel } from './ui/Panel.js';
+import { Kicker } from './ui/Kicker.js';
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
@@ -58,43 +67,66 @@ function useElapsedMs(base: number, since: number, running: boolean): number {
   return base + Math.max(0, now - since);
 }
 
-function Row({ label, value, rate }: {
-  label: string; value: string; rate?: string;
-}) {
+/** Uma caixa com título mono (`Sec` do handoff — `Hud.jsx`, linha 188). */
+function Box({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="analyzer-row">
-      <span className="analyzer-label">{label}</span>
-      <span className="analyzer-value">{value}</span>
-      {rate !== undefined && <span className="analyzer-rate">{rate}</span>}
-    </div>
+    <section className="analyzer-box">
+      <Kicker tone="muted">{title}</Kicker>
+      {children}
+    </section>
   );
 }
 
-function Numbers({ aggregates, elapsedMs }: {
-  aggregates: Aggregates; elapsedMs: number;
-}) {
-  const balance = aggregates.goldGained - aggregates.goldSpent;
-  // `—` e não zero para o que o servidor NÃO mandou (FUN-78): zero é uma afirmação, e um nó
-  // antigo em deploy em rolagem simplesmente não afirmou nada sobre estes campos.
-  const optional = (value: number | undefined): string => (
-    value === undefined ? '—' : count(value)
-  );
-  const rate = (value: number): string => `${count(perHour(value, elapsedMs))}/h`;
-
+/**
+ * Uma linha rótulo/valor (`Line` do handoff — `Modals.jsx`, linha 3). Sem taxa embutida: a taxa
+ * é a OUTRA caixa, nunca uma terceira coluna na mesma linha (diferença em relação ao `Row` de
+ * antes desta task).
+ */
+function Line({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <div className="analyzer-numbers">
-      <Row label="Tempo" value={duration(elapsedMs)} />
-      <Row label="XP" value={count(aggregates.xpGained)} rate={rate(aggregates.xpGained)} />
-      <Row label="Gold" value={count(aggregates.goldGained)} rate={rate(aggregates.goldGained)} />
-      <Row label="Gastos" value={count(aggregates.goldSpent)} rate={rate(aggregates.goldSpent)} />
-      <Row label="Saldo" value={count(balance)} rate={rate(balance)} />
-      <Row label="Mortos" value={count(aggregates.kills)} rate={rate(aggregates.kills)} />
-      <Row label="Loot" value={optional(aggregates.itemsLooted)} />
-      <Row label="Supplies" value={optional(aggregates.suppliesUsed)} />
-      <Row label="Maior golpe" value={optional(aggregates.bestBasicHit)} />
-      <Row label="Maior magia" value={optional(aggregates.bestSpellHit)} />
-      {aggregates.deaths > 0 && <Row label="Mortes" value={count(aggregates.deaths)} />}
-    </div>
+    <p className={`analyzer-line${danger === true ? ' analyzer-line-danger' : ''}`}>
+      <span>{label}</span><b>{value}</b>
+    </p>
+  );
+}
+
+function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
+  const balance = aggregates.goldGained - aggregates.goldSpent;
+  // "—" e não zero para o que o servidor NÃO mandou (FUN-78): zero é uma afirmação, e um nó
+  // antigo em deploy em rolagem simplesmente não afirmou nada sobre estes campos.
+  const optional = (value: number | undefined): string => (value === undefined ? '—' : count(value));
+  return (
+    <Box title="Sessão">
+      <Line label="Tempo" value={duration(elapsedMs)} />
+      <Line label="XP" value={count(aggregates.xpGained)} />
+      <Line label="Gold" value={count(aggregates.goldGained)} />
+      <Line label="Gastos" value={count(aggregates.goldSpent)} />
+      <Line label="Saldo" value={count(balance)} />
+      <Line label="Mortos" value={count(aggregates.kills)} />
+      <Line label="Loot" value={optional(aggregates.itemsLooted)} />
+      <Line label="Supplies" value={optional(aggregates.suppliesUsed)} />
+      <Line label="Maior golpe" value={optional(aggregates.bestBasicHit)} />
+      <Line label="Maior magia" value={optional(aggregates.bestSpellHit)} />
+      {/* Só aparece com morte — "Mortes: 0" afirmaria o que ninguém disse. `danger`: inspirado
+          no `color(c)` do handoff (`Hud.jsx`, `c === "red"`). */}
+      {aggregates.deaths > 0 && <Line label="Mortes" value={count(aggregates.deaths)} danger />}
+    </Box>
+  );
+}
+
+function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
+  const balance = aggregates.goldGained - aggregates.goldSpent;
+  const rate = (value: number): string => `${count(perHour(value, elapsedMs))}/h`;
+  // Só as cinco que já tinham taxa antes desta task. Loot, Supplies, Maior golpe, Maior magia e
+  // Mortes nunca tiveram `rate()`, e continuam sem.
+  return (
+    <Box title="Por hora">
+      <Line label="XP" value={rate(aggregates.xpGained)} />
+      <Line label="Gold" value={rate(aggregates.goldGained)} />
+      <Line label="Gastos" value={rate(aggregates.goldSpent)} />
+      <Line label="Saldo" value={rate(balance)} />
+      <Line label="Mortos" value={rate(aggregates.kills)} />
+    </Box>
   );
 }
 
@@ -132,16 +164,30 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
   );
 }
 
-export function Analyzer() {
+/**
+ * O painel do analisador (#258). `collapsed`/`onToggle` como `BotPanel`/`EquipmentPanel`
+ * (#161/#162): a barra do topo MINIMIZA, nunca desmonta (D6 — "Fixo... nunca removido").
+ *
+ * A exceção que continua: sem sessão, ou na Cidade, a função retorna `null` — não é "removido
+ * pelo jogador" (o que D6 proíbe), é "não há sessão para analisar" (`analyzer.md`, "Ela não
+ * aparece na Cidade: a praça não credita nada"). Mudar essa regra está fora do escopo (§12 da
+ * spec da #258).
+ */
+export function Analyzer({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const analyzer = useHudSlice((state) => state.analyzer);
-  // **Nasce aberta** (FUN-115): quem decide se a janela existe é a barra do topo, e uma janela
-  // que abre minimizada é uma janela que abre vazia. Quem a minimizou tem o tempo no cabeçalho;
-  // ao encerrar, ela reabre sozinha — aí o extrato é a notícia, e escondê-lo seria a sessão
-  // sumir em silêncio.
-  const [open, setOpen] = useState(true);
+
+  // "Reabre sozinho ao encerrar" (comportamento de antes desta task) preservado como override
+  // LOCAL por cima do `collapsed` externo: no instante em que `ended` vira `true`, força aberto
+  // uma vez; depois disso quem manda de novo é a barra do topo de novo.
+  const [forceOpen, setForceOpen] = useState(false);
   useEffect(() => {
-    if (analyzer.ended) setOpen(true);
+    if (analyzer.ended) setForceOpen(true);
   }, [analyzer.ended]);
+  const effectiveCollapsed = forceOpen ? false : collapsed;
+  const handleToggle = (): void => {
+    setForceOpen(false);
+    onToggle?.();
+  };
 
   const { aggregates } = analyzer;
   const elapsedMs = useElapsedMs(
@@ -152,29 +198,24 @@ export function Analyzer() {
   // janela de "0 XP, 0 gold" na praça é ruído com aparência de informação.
   if (aggregates === null || analyzer.sessionType === 'city') return null;
 
+  // Aberta, o tempo já está na primeira linha da caixa "Sessão": repetir no cabeçalho é dizer o
+  // mesmo número duas vezes na mesma janela. `exactOptionalPropertyTypes` não deixa passar
+  // `undefined` explícito onde `meta` é opcional (mesmo padrão de `BotPanel.tsx`).
+  const meta = analyzer.ended ? 'encerrada' : (effectiveCollapsed ? duration(elapsedMs) : undefined);
+  const metaProps = meta === undefined ? {} : { meta };
+
   return (
-    <section className={`analyzer${open ? '' : ' analyzer-minimized'}`} aria-label="analisador">
-      <header className="analyzer-head">
-        <button
-          type="button"
-          className="analyzer-toggle"
-          aria-expanded={open}
-          onClick={() => { setOpen((value) => !value); }}
-        >
-          {open ? '▾' : '▸'} Analisador
-        </button>
-        {/* Aberta, o tempo já está na primeira linha do corpo: repetir no cabeçalho é dizer
-            o mesmo número duas vezes na mesma janela. */}
-        <span className="analyzer-summary">
-          {analyzer.ended ? 'encerrada' : (open ? '' : duration(elapsedMs))}
-        </span>
-      </header>
-      {open && (
-        <div className="analyzer-body">
-          <Numbers aggregates={aggregates} elapsedMs={elapsedMs} />
-          <Events events={analyzer.notableEvents} />
-        </div>
-      )}
-    </section>
+    <Panel
+      dock
+      title="ANALISADOR"
+      className="analyzer"
+      collapsed={effectiveCollapsed}
+      onToggle={handleToggle}
+      {...metaProps}
+    >
+      <SessionBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      <HourBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      <Events events={analyzer.notableEvents} />
+    </Panel>
   );
 }
