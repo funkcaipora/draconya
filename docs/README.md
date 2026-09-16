@@ -31,3 +31,4 @@ leitura do PRD confrontada com o que foi de fato construído, inclusive os ponto
 a implementação teve que resolver sozinha, sem esperar resposta.
 - [`infrastructure.md`](infrastructure.md) — fornecedores, recursos e custo estimado em três estágios. Vivo.
 - [`deploy.md`](deploy.md) — como subir local e na VPS, os três papéis, drenagem e backup. Vivo.
+- [`runtime-configuration.md`](runtime-configuration.md) — requisitos por papel, exemplos de ambiente e persistência do bot entre processos, com falhas, rollback e testes. Vivo.

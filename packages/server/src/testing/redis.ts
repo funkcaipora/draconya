@@ -7,7 +7,7 @@
 //
 // Um índice de banco por arquivo resolve sem serializar a suíte inteira. Índices em uso:
 //
-//   0  livre (é o banco do desenvolvimento local)
+//   0  jobs/bot-config.postgres.test.ts (somente destino descartável explícito)
 //   1  directory.test.ts
 //   2  tickets.test.ts
 //   3  auth/sessions.test.ts

@@ -43,8 +43,10 @@ import {
   createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
   createSessionRestorer,
 } from '../game/sessions.js';
-import { settleCharacterProgress, writePendingReceipts } from '../jobs/ledger.js';
+import { writePendingReceipts } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
+import { BotConfigStore } from '../bot-config-store.js';
+import { settleCharacterState } from '../jobs/character-state.js';
 import { ReceiptStore } from '../receipts.js';
 import { SnapshotStore } from '../snapshots.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
@@ -125,6 +127,7 @@ let repository: DrizzleGameRepository;
 let directory: SessionDirectory;
 let snapshots: SnapshotStore;
 let receipts: ReceiptStore;
+let botConfigs: BotConfigStore;
 let tickets: TicketService;
 let api: ReturnType<typeof buildApi>;
 let baseUrl: string;
@@ -153,6 +156,7 @@ async function startNode(nodeId: string): Promise<GameRole> {
   });
   const game = createGame(configuration, logger, {
     directory, tickets, snapshots, receipts,
+    saveBotConfig: (id, config) => botConfigs.save(id, config),
     contentVersion: content.version,
     createSession: createCitySessionFactory(content),
     buildSession: createSessionBuilder(content),
@@ -318,6 +322,7 @@ beforeAll(async () => {
   directory = new SessionDirectory(redis);
   snapshots = new SnapshotStore(redis);
   receipts = new ReceiptStore(redis);
+  botConfigs = new BotConfigStore(redis);
   tickets = new TicketService(redis, directory);
   const configuration = loadConfiguration({
     DATABASE_URL: database.url, REDIS_URL: process.env['TEST_REDIS_URL'],
@@ -333,7 +338,8 @@ beforeAll(async () => {
     // FUN-56: emitir ticket liquida o extrato pendente antes de ler a linha. Está aqui
     // porque é assim que o `main.ts` monta a rota — e este teste existe para exercitar o
     // caminho de produção, não uma versão dele.
-    settleProgress: (characterId) => settleCharacterProgress(characterId, {
+    settleProgress: (characterId) => settleCharacterState(characterId, {
+      botConfigs,
       database: (database as TestDatabase).database.db,
       receipts,
       logger,

@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { Redis } from 'ioredis';
 import { loadContent } from '@draconya/content/load';
 import { servedPackProblem } from './served-pack.js';
-import { loadConfiguration } from './config.js';
+import { loadConfiguration, type RoleName } from './config.js';
 import { createLogger } from './log.js';
 import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
@@ -23,7 +23,8 @@ import {
 import { createJobs } from './jobs/scheduler.js';
 import { createSingletonLock } from './jobs/lock.js';
 import { JobsMetrics } from './jobs/metrics.js';
-import { settleCharacterProgress } from './jobs/ledger.js';
+import { settleCharacterState } from './jobs/character-state.js';
+import { BotConfigStore } from './bot-config-store.js';
 import { SessionDirectory } from './directory.js';
 import { TicketService } from './tickets.js';
 import { SnapshotStore } from './snapshots.js';
@@ -37,38 +38,12 @@ import { RedisAuthSessionStore } from './auth/sessions.js';
 import { AuthService } from './auth/service.js';
 import { WorkOsIdentityProvider } from './auth/workos.js';
 
-const VALID_ROLES = ['api', 'game', 'jobs'] as const;
-type RoleName = (typeof VALID_ROLES)[number];
-
 /** Prazo para drenar antes de o orquestrador mandar SIGKILL. */
 const DRAIN_TIMEOUT_MS = 25_000;
 
-function requestedRoles(): RoleName[] {
-  // `PROCESSOS` foi o nome até a migração para inglês (ADR 0014). Um ambiente que ainda o
-  // declara é o pior caso possível: a variável é IGNORADA, o default entra no lugar, e quem
-  // pediu só `game` recebe os três papéis — inclusive um `api` e um `jobs` a mais por
-  // container, sem nada no log dizendo isso. Falhar no boot é a única reação honesta.
-  if (process.env['PROCESSOS'] !== undefined) {
-    throw new Error(
-      'PROCESSOS was renamed to PROCESSES (ADR 0014). Rename it; it is being ignored, and '
-      + 'the process would silently start every role instead of the ones you asked for.',
-    );
-  }
-  const raw = process.env['PROCESSES'] ?? 'api,game,jobs';
-  const requested = raw.split(',').map((role) => role.trim()).filter(Boolean);
-  const invalid = requested.filter((role) => !VALID_ROLES.includes(role as RoleName));
-  if (invalid.length > 0) {
-    throw new Error(
-      `Invalid PROCESSES value: ${invalid.join(', ')}. Valid roles: ${VALID_ROLES.join(', ')}`,
-    );
-  }
-  if (requested.length === 0) throw new Error('PROCESSES cannot be empty');
-  return requested as RoleName[];
-}
-
 async function main(): Promise<void> {
   const configuration = loadConfiguration();
-  const names = requestedRoles();
+  const names = configuration.PROCESSES;
   const logger = createLogger(configuration.LOG_LEVEL, names.join('+'));
 
   // Um cliente para os três papéis. Falhar aqui é melhor que falhar na primeira requisição:
@@ -87,19 +62,17 @@ async function main(): Promise<void> {
   const tickets = new TicketService(redis, directory);
   const snapshots = new SnapshotStore(redis);
   const receipts = new ReceiptStore(redis);
+  const botConfigs = new BotConfigStore(redis);
 
-  // Postgres só é exigido quando o papel `api` está presente. Um nó exclusivamente `game`
-  // continua sem conexão de banco no caminho quente da simulação.
-  // `api` precisa de banco para conta e personagem; `jobs` precisa para escrever o ledger
-  // (FUN-29). Um nó exclusivamente `game` segue SEM conexão de banco — é o caminho quente da
-  // simulação, e o AGENTS.md do pacote proíbe banco ali.
+  // Configuração já validada por papel: só api/jobs abrem Postgres, mesmo em modo solo.
   const needsDatabase = names.includes('api') || names.includes('jobs');
-  const database = needsDatabase ? createDatabase(configuration.DATABASE_URL) : null;
+  const database = needsDatabase && configuration.DATABASE_URL !== undefined
+    ? createDatabase(configuration.DATABASE_URL) : null;
   if (database !== null) await database.ping();
   const repository = database === null ? null : new DrizzleGameRepository(database.db);
   const authSessions = new RedisAuthSessionStore(redis, configuration.AUTH_SESSION_TTL_SECONDS);
 
-  const auth = repository === null
+  const auth = !names.includes('api') || repository === null
     ? null
     : new AuthService({
         repository,
@@ -183,7 +156,8 @@ async function main(): Promise<void> {
                 },
               },
               settleProgress: (characterId: string) =>
-                settleCharacterProgress(characterId, {
+                settleCharacterState(characterId, {
+                  botConfigs,
                   database: database.db,
                   receipts,
                   logger: apiLogger,
@@ -229,16 +203,12 @@ async function main(): Promise<void> {
       // A Caixa de Loot da Sessão (FUN-88). Redis, e não Postgres, porque ela EXPIRA — e
       // expirar precisa significar que o item nunca existiu.
       lootBoxes,
-      // A ÚNICA escrita de banco do `game`, e ela é uma instrução só. Sem banco configurado,
-      // a configuração vale na sessão e some no logout — degradação, não falha.
-      ...(repository === null
-        ? {}
-        : { saveBotConfig: (characterId: string, config: unknown) =>
-            repository.saveBotConfig(characterId, config) }),
+      // Mesmo caminho no modo solo e separado; a escrita durável pertence a jobs/api.
+      saveBotConfig: (characterId, config) => botConfigs.save(characterId, config),
     }),
     jobs: () => createJobs(configuration, logger.child({ role: 'jobs' }), {
       tickets, directory, snapshots, receipts, progression: content.progression,
-      lootBoxes,
+      lootBoxes, botConfigs,
       metrics: new JobsMetrics(configuration.NODE_ID),
       // O dono do lock é único POR PROCESSO, não por máquina (FUN-91): dois containers `jobs`
       // no mesmo host compartilham o `NODE_ID`, renovariam o lock um do outro, e os dois se

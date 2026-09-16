@@ -1,6 +1,6 @@
 # 0021 — O processo `game` escreve a configuração do bot
 
-**Status:** aceito
+**Status:** substituído pelo [ADR 0028](0028-role-configuration-and-bot-write-behind.md), em 2026-09-16. O texto abaixo preserva a decisão original.
 **Data:** 2026-09-10
 **Contexto técnico:** `server` — divisão de responsabilidade entre `api`, `game` e `jobs`
 

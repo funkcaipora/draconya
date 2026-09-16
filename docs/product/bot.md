@@ -351,7 +351,8 @@ exige que a configuração seja **durável** e que o processo que hospeda a sess
 | | quem | como |
 |---|---|---|
 | nascer | `api` | `createCharacter` grava `bot_config` com `content.bot.defaultConfig` (FUN-114) |
-| escrever | `game` | mensagem `bot-config` no socket → `UPDATE character SET bot_config` |
+| aceitar/aplicar | `game` | mensagem `bot-config` no socket → regra ativa → pendência no Redis |
+| persistir | `jobs` / `api` | pendência → `character.bot_config`; `api` processa antes da admissão |
 | ler | `api` | lê a linha ao emitir o ticket; a configuração viaja em `InitialCharacter` |
 
 **Todo personagem nasce com o bot padrão do conteúdo** (FUN-114): cura a 70 % de HP, poção de
@@ -361,14 +362,20 @@ entrava na primeira hunt só no golpe básico até abrir a tela e escrever regra
 do MVP não existiam no primeiro minuto. Personagem criado antes disso continua como estava: a
 coluna dele é dele. Os limiares são ponto de partida (`_open`), não balanceamento decidido.
 
-Os dois caminhos não se cruzam, e a decisão está no [ADR 0021](../adr/0021-the-game-process-writes-the-bot-configuration.md).
-A escrita é uma instrução só, sem `SELECT` antes: "o jogador salvou isto" é última-escrita-vence
-por natureza, a configuração é substituída inteira e nunca mesclada.
+O [ADR 0028](../adr/0028-role-configuration-and-bot-write-behind.md) substitui a escrita
+no Postgres pelo `game` que o ADR 0021 autorizava. Modo solo e separado usam o mesmo caminho:
+Redis recebe uma pendência por personagem, e `jobs` grava a preferência no ciclo de 10 s.
+Uma reconexão anterior ao ciclo passa pela mesma gravação no `api`, antes do ticket, inclusive
+em party. A preferência não movimenta valor e não gera linha econômica no ledger.
 
-**A ordem no servidor é aceitar → aplicar → persistir.** Aplicar antes de gravar é decisão: a
-hunt em curso usa a regra nova na hora, e uma falha do Postgres não deixa o jogador sem a cura
-que acabou de configurar. O preço é a configuração valer nesta sessão e não voltar na próxima —
-o lado certo para errar.
+**A ordem é aceitar → aplicar → registrar no Redis → confirmar.** Uma falha no Redis não
+desfaz a regra ativa, mas retorna falha de salvamento para o jogador tentar novamente. `ok: true`
+significa que o Redis aceitou a preferência; Postgres pode recebê-la depois. Falha do banco
+mantém a pendência sem TTL; a perda do Redis nessa janela ainda pode perder a edição.
+
+Consumidores travam a linha antes de ler a pendência e removem apenas o envelope que gravaram,
+depois do commit. Isso protege edições concorrentes e retry. O contrato completo, operação e
+limites estão em [`runtime-configuration.md`](../runtime-configuration.md).
 
 **Mudar no meio da hunt vale na hora.** A configuração é dado puro, então recompilar não tem
 risco; quem recompila é a própria sessão (invariante 9), nunca outro processo. As regras de saída
@@ -507,7 +514,7 @@ hunts: configurar o bot é o caso de uso móvel, §5.1) e o editor continua sobr
 
 **O interruptor salva sozinho.** Não há botão "Salvar" no painel: ligar, desligar, mover e
 remover agendam um `bot-config` com **debounce de 300 ms** (três toques são uma gravação, porque
-o servidor grava a configuração inteira — ADR 0021); o Salvar do editor manda na hora. Sem
+o servidor registra a configuração inteira — ADR 0028); o Salvar do editor manda na hora. Sem
 conexão a tela diz por quê e o rascunho fica tocado.
 
 **Nada na tela tem lista de opções em código.** Categorias, slots, magias e supplies vêm do
