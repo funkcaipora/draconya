@@ -1,11 +1,13 @@
 # docs/
 
-Índice. Ordem de leitura para quem chega no projeto: `prd-v0.9.md` → `architecture.md` →
-`technical-architecture.md` → `harness-plan.md`.
+Índice. Ordem de leitura para quem chega no projeto: `prd-v0.9.md` →
+`prd-interface-v1.md` → `architecture.md` → `technical-architecture.md` →
+`harness-plan.md`.
 
 | Documento | O que é | Natureza |
 |---|---|---|
 | [`prd-v0.9.md`](./prd-v0.9.md) | O que o produto pretendia ser na data do handoff técnico — a entrada deste projeto. | Instantâneo |
+| [`prd-interface-v1.md`](./prd-interface-v1.md) | Decisões de produto, experiência e direção visual do cliente web. | Instantâneo |
 | [`architecture.md`](./architecture.md) | Restrições que o design do jogo impõe ao motor. | Instantâneo |
 | [`technical-architecture.md`](./technical-architecture.md) | Arquitetura de sistema e plano de execução do MVP: épicos, fases, estimativas. | Instantâneo |
 | [`harness-plan.md`](./harness-plan.md) | Como o harness deste repositório (`CLAUDE.md`, hooks, skills, CI) foi projetado, e por quê. | Instantâneo |
