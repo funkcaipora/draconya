@@ -332,33 +332,58 @@ nomeado, para que o dono do servidor copie os arquivos com `scp`/`rsync` direto 
 precisar entrar em nenhum container. Dentro de `/backups`, cada serviço escreve na sua própria
 subpasta: `postgres/` e `redis/`.
 
-### As duas tarefas agendadas
+### As três tarefas agendadas
 
-Criadas em Coolify → recurso `draconya` → **Automation → Scheduled Tasks**. As duas rodam como
+Criadas em Coolify → recurso `draconya` → **Automation → Scheduled Tasks**. As três rodam como
 root no container do serviço indicado — `sh -c '...'`, nunca bash: as imagens
 `postgres:17-alpine` e `redis:7-alpine` só têm BusyBox, e `stat -c`, `find -mtime` e `date -u`
 existem nas duas, mas nenhum comando aqui pode depender de bashismo.
 
+O campo Command do Coolify é `varchar(255)`: passar da margem não recusa o comando ao salvar,
+recusa com `SQLSTATE[22001]: String data, right truncated` — foi o que aconteceu com a primeira
+versão do `postgres-dump` (mais legível, com espaços e aspas em `"$d"`/`"$f"`), que tinha 302
+caracteres. Os três comandos abaixo são os que rodam em produção desde 2026-09-16: sem espaço
+supérfluo, sem aspas onde a variável não tem por que conter espaço.
+
 **`postgres-dump`** — cron `0 3 * * *` (UTC) — container `postgres` — timeout 600s:
 
 ```sh
-sh -c 'set -e; d=/backups/postgres; mkdir -p "$d"; f="$d/draconya-$(date -u +%Y%m%dT%H%M).dump"; pg_dump -U draconya -Fc draconya -f "$f"; s=$(stat -c %s "$f"); [ "$s" -gt 1024 ] || { echo "dump pequeno demais: $s bytes"; rm -f "$f"; exit 1; }; find "$d" -name "*.dump" -mtime +14 -delete; ls -la "$d"'
+sh -c 'set -e;d=/backups/postgres;mkdir -p $d;f=$d/draconya-$(date -u +%Y%m%dT%H%M).dump;pg_dump -U draconya -Fc draconya -f $f;[ $(stat -c %s $f) -gt 1024 ]||{ rm -f $f;exit 1;};find $d -name "*.dump" -mtime +14 -delete;ls -la $d'
 ```
 
 **`redis-rdb`** — cron `10 3 * * *` (UTC) — container `redis` — timeout 300s:
 
 ```sh
-sh -c 'set -e; d=/backups/redis; mkdir -p "$d"; f="$d/dump-$(date -u +%Y%m%dT%H%M).rdb"; redis-cli --rdb "$f"; find "$d" -name "*.rdb" -mtime +14 -delete; ls -la "$d"'
+sh -c 'set -e;d=/backups/redis;mkdir -p $d;redis-cli --rdb $d/dump-$(date -u +%Y%m%dT%H%M).rdb;find $d -name "*.rdb" -mtime +14 -delete;ls -la $d'
 ```
 
-Os dois horários são propositalmente próximos, não simultâneos: o Redis (extratos ainda não
-liquidados, ADR 0024) e o Postgres não precisam de um snapshot atômico conjunto, mas dois
-`pg_dump`/`redis-cli --rdb` competindo por I/O no mesmo minuto seria desperdício sem motivo.
+**`postgres-restore-test`** — cron `0 4 * * 0` (UTC, semanal, domingo) — container `postgres` —
+timeout 600s:
+
+```sh
+sh -c 'set -e;createdb -U draconya restore_test;pg_restore -U draconya -d restore_test "$(ls -t /backups/postgres/*.dump|head -1)";psql -U draconya -d restore_test -Atc "select count(*) as characters from character";dropdb -U draconya restore_test'
+```
+
+A saída esperada é a contagem de linhas da tabela `character` — singular, é o nome real
+(`pgTable('character', ...)` em `packages/server/src/db/schema.ts`, não `characters`). Na
+primeira execução, 2026-09-16 01:57 UTC, deu 7.
+
+Os dois primeiros horários são propositalmente próximos, não simultâneos: o Redis (extratos
+ainda não liquidados, ADR 0024) e o Postgres não precisam de um snapshot atômico conjunto, mas
+dois `pg_dump`/`redis-cli --rdb` competindo por I/O no mesmo minuto seria desperdício sem
+motivo. `postgres-restore-test` roda de madrugada num dia à parte (domingo) porque depende do
+dump da noite anterior já estar completo, e é a mais pesada das três — um `pg_restore` inteiro
+contra um banco descartável.
+
+**Primeira execução real** (2026-09-16): `draconya-20260916T0153.dump` (18.204 bytes) e
+`dump-20260916T0155.rdb` (923 bytes).
 
 ### Retenção
 
-14 dias em disco, no próprio `find -mtime +14 -delete` de cada comando — sem histórico maior
-até que exista um destino fora do servidor (ver "Cópia para fora do servidor" abaixo).
+14 dias em disco, no próprio `find -mtime +14 -delete` de `postgres-dump` e `redis-rdb` — sem
+histórico maior até que exista um destino fora do servidor (ver "Cópia para fora do servidor"
+abaixo). `postgres-restore-test` não entra nessa conta: o banco `restore_test` que ela cria é
+derrubado (`dropdb`) no fim da própria execução, e não deixa arquivo em disco.
 
 O dump do Postgres é recusado (e apagado) se sair com menos de 1 KB: **dump truncado é pior
 que backup nenhum**, porque passa despercebido até o dia em que alguém precisa dele. O RDB do
@@ -371,16 +396,11 @@ silenciosa.
 **Backup que nunca foi restaurado não é backup, é esperança.** Teste pelo menos uma vez, e de
 novo quando o schema mudar de forma.
 
-**(i) Teste sem sair do servidor.** Rode como uma execução manual (Run Now) de uma tarefa
-agendada no container `postgres`, contra um banco descartável — nunca `draconya`:
-
-```sh
-sh -c 'set -e; createdb -U draconya draconya_restore_test; pg_restore -U draconya -d draconya_restore_test "$(ls -t /backups/postgres/*.dump | head -1)"; psql -U draconya -d draconya_restore_test -Atc "select count(*) from characters"; dropdb -U draconya draconya_restore_test'
-```
-
-Uma contagem de `characters` sem erro é o sinal de que o dump mais recente restaura de verdade.
-Não precisa disso, mas pode virar uma terceira tarefa agendada (ex.: semanal) se o dono do
-ambiente quiser essa checagem automática — hoje é manual.
+**(i) Teste sem sair do servidor.** Já não é manual: a tarefa agendada `postgres-restore-test`
+(seção anterior) roda toda semana contra o banco descartável `restore_test` — nunca `draconya`
+— e a saída é a contagem de linhas de `character`. Rodar Run Now nela a qualquer momento adianta
+a checagem sem esperar o cron; sem erro, e com uma contagem condizente com o que se espera no
+ambiente, é o sinal de que o dump mais recente restaura de verdade.
 
 **(ii) Restauração de verdade, num Postgres local** (não no staging — restaurar por cima do
 staging não é o caso de uso; é para investigar um incidente ou puxar dado para debug local):
@@ -416,7 +436,7 @@ dono do servidor — nunca neste repositório nem em chat. O backup da **própri
 (Settings → Backup) já está ligado, diário às 00:00 UTC, hoje só local (sem S3 configurado);
 quando o dono validar um destino S3/R2 ali, o backup de instância passa a subir sozinho, mas os
 dumps do jogo (`draconya-staging/postgres` e `.../redis`) são um recurso à parte do Coolify e
-vão continuar só em disco até ganhar uma terceira tarefa agendada que envie para esse mesmo S3
+vão continuar só em disco até ganhar uma quarta tarefa agendada que envie para esse mesmo S3
 — o comando exato depende de qual credencial/bucket o dono escolher, por isso não é inventado
 aqui.
 
