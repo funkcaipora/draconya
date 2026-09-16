@@ -778,6 +778,15 @@ body {
   .shell { position: static; height: auto; overflow: visible; display: flex; flex-direction: column; }
   .shell > .viewport { order: 0; }
   .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
+  /* O popover de regras de saída (#260) a 375 px: ancorado na ponta direita do chevron, os
+     262 px vazavam pela borda esquerda (#291). No celular ele ocupa a largura da linha da pill:
+     a linha (`.hunt-actions`) passa a ser o bloco de referência — `relative` continua no fluxo,
+     ao contrário do `absolute` do desktop — e a âncora do chevron deixa de posicionar. O resumo
+     "Saindo sozinho: …" segue a mesma referência, centrado sobre a linha. */
+  .shell > .hunt-actions { position: relative; }
+  .hunt-actions .exit-rules-anchor { position: static; }
+  .exit-rules-popover { left: 10px; right: 10px; width: auto; bottom: calc(100% + 4px); }
+  .exit-rules-summary { left: 10px; right: 10px; bottom: calc(100% + 2px); text-align: center; white-space: normal; }
   .viewport { position: relative; height: 40vh; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
