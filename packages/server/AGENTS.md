@@ -426,6 +426,10 @@ permitir retry. Não emitir sucesso antes de o callback terminar.
 - Confirma a pendência só depois do commit, com comparação/remoção atômicas do envelope.
   Nova edição nunca é removida pelo ACK da anterior, mesmo com configuração idêntica.
 - Retry após commit repete a substituição, sem efeito econômico. Não há entrada no ledger.
+- **Entrada corrompida vira AUSENTE, nunca admissão recusada** (#265) — a regra das cores do
+  outfit e do Bestiário. `load` a devolve marcada (`corrupt: true`, JSON inválido incluído), e
+  o consumidor a move para `bot-config:corrupt` com a mesma comparação do ACK, para uma edição
+  válida que chegou por cima ficar onde está. Só Redis fora do ar recusa a admissão.
 - `settleCharacterState` processa o bot antes do progresso, antes de tickets solo/party e
   da atualização da lista de personagens. Falhar recusa dado velho; não voltar ao callback
   antigo que só liquidava extratos no boot.

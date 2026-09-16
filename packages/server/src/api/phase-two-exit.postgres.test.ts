@@ -582,8 +582,8 @@ describe.runIf(ready)('persistência do bot entre processos (#263, ADR 0028)', (
 
   beforeEach(async () => {
     options = { database: db(), botConfigs, logger };
-    // Só a pendência, nunca `flushdb`: o fixture é compartilhado com o roteiro acima.
-    await redis.del('bot-config:pending');
+    // Só a fila e a quarentena, nunca `flushdb`: o fixture é compartilhado com o roteiro acima.
+    await redis.del('bot-config:pending', 'bot-config:corrupt');
     const account = await repository.ensureAccount({
       externalAuthId: randomUUID(), email: `${randomUUID()}@example.com`,
     });
@@ -679,6 +679,29 @@ describe.runIf(ready)('persistência do bot entre processos (#263, ADR 0028)', (
     const [row] = await db().select().from(characters).where(eq(characters.id, characterId));
     expect(row?.botConfig).toBeNull();
     expect(await botConfigs.load(characterId)).toBeNull();
+  });
+
+  it.each([
+    ['not JSON', 'not json'],
+    ['JSON without an envelope', JSON.stringify({ nope: 1 })],
+  ])('quarantines a corrupt pending entry (%s) instead of refusing admission', async (_, raw) => {
+    // Valor corrompido vira AUSENTE, nunca login recusado (#265) — a regra das cores do
+    // outfit e do Bestiário, aqui para a fila. A coluna fica como estava; o jogador salva de novo.
+    await redis.hset('bot-config:pending', characterId, raw);
+    const settled = await settleCharacterState(characterId, { ...options, receipts });
+    expect(settled).toEqual({ written: 0, failed: 0 });
+    expect(await stored()).toBeNull();
+    expect(await botConfigs.load(characterId)).toBeNull();
+    expect(await redis.hget('bot-config:corrupt', characterId)).toBe(raw);
+  });
+
+  it('never drops a valid edit that landed on top of a corrupt one', async () => {
+    await botConfigs.save(characterId, HEAL);
+    await botConfigs.quarantine(characterId, { serialized: 'garbage', corrupt: true });
+    expect(await botConfigs.load(characterId)).toEqual(expect.objectContaining({ config: HEAL }));
+    expect(await redis.hget('bot-config:corrupt', characterId)).toBe('garbage');
+    expect(await settleBotConfig(characterId, options)).toBe(1);
+    expect(await stored()).toEqual(HEAL);
   });
 
   it('fails admission instead of silently returning stale preferences', async () => {

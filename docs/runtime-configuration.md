@@ -114,14 +114,16 @@ Personagens antigos, inclusive os com `bot_config = null`, continuam compatívei
 | `api` e `jobs` concorrentes | trava da linha serializa a leitura da pendência e a escrita; leitura ocorre depois da trava |
 | Edição durante a transação | ACK por comparação preserva a nova pendência para o próximo consumidor |
 | Personagem excluído ou inexistente | consumidor descarta a pendência correspondente sem alterar personagem |
-| Pendência corrompida | falha registrada e pendência mantida para diagnóstico; não substitui silenciosamente o banco |
+| Pendência corrompida (não é `{ id, config }`) | vai para `bot-config:corrupt`, sai da fila e a admissão segue com a linha do Postgres; erro no log; uma edição válida gravada por cima sobrevive (#265) |
 | Perda do Redis antes da gravação durável | pode perder a última edição; AOF/backup são necessários; confirmação não equivale a commit de Postgres |
 
 Para diagnóstico, `HLEN bot-config:pending` mostra quantos personagens aguardam gravação,
-sem imprimir configurações. Os logs `Wrote bot configurations` e `Failed to persist bot
-configuration` registram resultado/erro; falhas de itens também incrementam a métrica de
-falha de ciclo. Não há alerta específico novo nesta entrega. Não usar `DEL`/`FLUSHDB` para
-destravar a fila: isso apaga preferências ainda não duráveis.
+sem imprimir configurações, e `HLEN bot-config:corrupt` quantas entradas foram postas em
+quarentena — o conteúdo fica lá, sem TTL, até quem investigar apagar com `HDEL`. Os logs
+`Wrote bot configurations`, `Failed to persist bot configuration` e `Quarantined a corrupt
+pending bot configuration` registram resultado/erro; falhas de itens também incrementam a
+métrica de falha de ciclo. Não há alerta específico novo nesta entrega. Não usar
+`DEL`/`FLUSHDB` para destravar a fila: isso apaga preferências ainda não duráveis.
 
 Implantação separada: consumidores `api/jobs` primeiro, produtores `game` depois. Para
 rollback, drenar o `game` novo, manter consumidores desta versão até o hash esvaziar e
@@ -134,8 +136,9 @@ só então restaurar consumidores antigos. O ADR 0021 fica como histórico subst
 - `game/host.test.ts`: confirmação após persistência e erro sem desfazer a regra ativa.
 - `api/phase-two-exit.postgres.test.ts`, bloco "persistência do bot entre processos":
   Redis/Postgres reais, ciclo de jobs, caso comum sem transação, retry após falha,
-  concorrência com edição durante a transação, ACK antigo, exclusão e socket em nó `game`
-  sem banco → novo ticket → outro nó, antes de qualquer ciclo de `jobs`.
+  concorrência com edição durante a transação, ACK antigo, exclusão, quarentena de entrada
+  corrompida e socket em nó `game` sem banco → novo ticket → outro nó, antes de qualquer
+  ciclo de `jobs`.
 
 Antes da entrega, instalar com `pnpm install --frozen-lockfile`, fornecer
 `TEST_REDIS_URL` e `DATABASE_TEST_URL` de serviços descartáveis e rodar `pnpm check` e
