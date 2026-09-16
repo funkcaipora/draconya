@@ -533,6 +533,27 @@ body {
 
 /* A coluna da direita (#161): set, mochila e bolsa fixos; minimizado é só o cabeçalho. */
 .windows > section.collapsed > *:not(header) { display: none; }
+
+/* A batalha (#254, DS-11, ADR 0029 D3/D4/D6): quem está na tela agora, fora o próprio
+   personagem e a party. Mesma linguagem do analisador (cabeçalho que abre e fecha), corpo com
+   lista. DÍVIDA CONHECIDA: quando o primitivo `Panel` de DS-04 chegar a esta seção,
+   `.battle-panel`/`.battle-list` são substituídos por ele, como as outras seções vão ser. */
+.battle-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.battle-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 2px;
+  align-items: center;
+}
+.battle-name { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-percent { grid-column: 2; color: var(--text-faint); font-size: 11px; }
+.battle-bar {
+  grid-column: 1 / -1; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
+  overflow: hidden;
+}
+.battle-bar-fill { display: block; height: 100%; }
+.battle-bar-ok .battle-bar-fill { background: var(--ok); }
+.battle-bar-warn .battle-bar-fill { background: var(--warn); }
+.battle-bar-danger .battle-bar-fill { background: var(--danger); }
+
 .container-head { display: flex; align-items: center; gap: 6px; }
 .container-head strong { flex: 1 1 auto; }
 .container-icon { display: inline-flex; width: 20px; height: 20px; overflow: hidden; }
@@ -651,15 +672,16 @@ body {
     background: transparent; border: 0; overflow: visible;
   }
   .windows > section { max-height: none; overflow: visible; }
-  /* A ordem dos blocos no celular (#161): set → mochila → bolsa → bot → hunts → analisador →
-     bestiário. As duas colunas viram uma, e `order` põe cada seção no lugar. */
+  /* A ordem dos blocos no celular (#161, #254): set → mochila → bolsa → batalha → bot → hunts →
+     analisador → bestiário. As duas colunas viram uma, e `order` põe cada seção no lugar. */
   .windows-left, .windows-right { display: flex; flex-direction: column; }
   .windows-right > .inventory { order: 1; }
   .windows-right > .container-window { order: 2; }
-  .windows-left > .bot-panel { order: 3; }
-  .windows-left > section { order: 4; }
-  .windows-right > .analyzer { order: 5; }
-  .windows-right > .bestiary { order: 6; }
+  .windows-right > .battle-panel { order: 3; }
+  .windows-left > .bot-panel { order: 4; }
+  .windows-left > section { order: 5; }
+  .windows-right > .analyzer { order: 6; }
+  .windows-right > .bestiary { order: 7; }
   .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   .chat { position: static; width: auto; margin: 10px; }
 }
