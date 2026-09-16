@@ -523,6 +523,10 @@ conexão a tela diz por quê e o rascunho fica tocado.
 catálogo. Se as duas divergirem sobre o que existe, o jogador configura o que o bot recusa — e
 descobre isso pelo extrato que não fecha, não por uma mensagem de erro.
 
+O editor mostra magias genéricas e só as da vocação atual; antes da escolha, ficam apenas as
+genéricas. Uma regra antiga que aponta para magia de outra vocação não é apagada nem rejeitada
+pela tela: ela aparece com o nome e o aviso de que precisa ser corrigida.
+
 **A ordem dos slots é a prioridade** (§13.4), então dá para mover uma regra para cima e para
 baixo: reordenar é configurar. A lista viaja como está — reordenar na hora de mandar mudaria o
 comportamento sem o jogador ter pedido, e ele não estaria lá para notar.
