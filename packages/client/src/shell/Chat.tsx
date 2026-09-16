@@ -9,6 +9,9 @@ import { Panel } from './ui/Panel.js';
  * A moldura (cabeçalho "CHAT", fio dourado, ×) é do `Panel` (DS-04, `shell/ui/Panel.tsx`); sem
  * `onToggle`, ele não desenha botão de minimizar — o chat só tem aberto/fechado, nunca
  * minimizado. `.chat-window` só posiciona; quem dá a moldura é o `Panel`.
+ * O `Panel` real não tem `onMinimize` nem `title="Fechar"` — atributos do handoff (spec §6) que
+ * não sobreviveram à implementação de DS-04; quem ler a spec sem olhar o diff esperaria essas
+ * props e não vai encontrá-las aqui.
  */
 export function Chat({ onClose }: { onClose: () => void }) {
   const chat = useHudSlice((state) => state.chat);

@@ -183,6 +183,10 @@ body {
   text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
 }
 
+/* Mensagem de sistema fora do chat (recusa de `bot-config` em `BotPanel.tsx`, erro de
+   `PartyPanel.tsx`): global porque essas telas não são o chat e não usam o prefixo `chat-`. */
+.system-warning { color: var(--warn); }
+.system-error { color: var(--danger); }
 
 /* O corpo do chat (`bodyClassName` do `Panel`, #252): rolagem própria, limitada, barra fina —
    `.ui-panel-body` já declara `overflow: auto`/`scrollbar-width: thin` (`ui.css`), aqui só o
