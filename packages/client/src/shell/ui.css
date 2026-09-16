@@ -1,0 +1,355 @@
+/* Os nove primitivos de controle do design system (#246, ADR 0029 D2): uma classe raiz por
+ * primitivo, um modificador por variante/tamanho, hover/foco/pressionado por pseudo-classe —
+ * nunca useState. Sobre os tokens de DS-02 (tokens.css), importado antes desta folha em
+ * shell.css. Nenhum seletor aqui referencia coisa que não seja variável de `tokens.css` ou
+ * cor/gradiente literal já presente no handoff (Button primary/gold, Switch traffic, …).
+ */
+
+/* ── Button ── */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 3px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .12s, color .12s, transform .12s;
+}
+.ui-button:disabled { cursor: not-allowed; opacity: .55; }
+.ui-button-block { display: flex; width: 100%; }
+.ui-button-sm { height: 30px; padding: 0 11px; }
+.ui-button-md { height: 36px; padding: 0 14px; }
+.ui-button-lg { height: 46px; padding: 12px 17px; border-radius: 7px; }
+
+.ui-button-primary {
+  border: 1px solid var(--blood-5);
+  background: var(--grad-blood);
+  color: var(--text-on-blood);
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-cta);
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 2px 0 rgba(0, 0, 0, .6);
+}
+.ui-button-primary:hover:not(:disabled) { background: linear-gradient(180deg, #a3222a, #7d1319 60%, #560c11); transform: translateY(-1px); }
+.ui-button-primary:active:not(:disabled) { transform: translateY(1px); }
+
+.ui-button-gold {
+  border: 1px solid rgba(216, 178, 106, .55);
+  background: linear-gradient(180deg, #d2ab60, #b58c43);
+  color: #191409;
+  font-family: var(--font-display);
+  letter-spacing: var(--tracking-cta);
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 #fff2;
+}
+.ui-button-gold:hover:not(:disabled) { background: linear-gradient(180deg, #e1bf7c, #cba359); transform: translateY(-1px); }
+.ui-button-gold:active:not(:disabled) { transform: translateY(1px); }
+
+.ui-button-secondary {
+  border: 1px solid var(--ash-6);
+  background: linear-gradient(180deg, var(--ash-4), var(--ash-3));
+  color: var(--parchment-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.ui-button-secondary.ui-button-sm { font-size: 8px; }
+.ui-button-secondary:hover:not(:disabled) { background: var(--ash-4); border-color: var(--gold-3); color: var(--gold-5); }
+
+.ui-button-ghost {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--parchment-3);
+  font-family: var(--font-body);
+}
+.ui-button-ghost:hover:not(:disabled) { border-color: var(--gold-3); color: var(--gold-5); }
+
+.ui-button-danger {
+  border: 1px solid var(--blood-4);
+  background: linear-gradient(180deg, #301a18, #211211);
+  color: var(--blood-7);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.ui-button-danger:hover:not(:disabled) { background: linear-gradient(180deg, #3d1a17, #2a1211); }
+
+.ui-button-text {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gold-4);
+  font-family: var(--font-body);
+}
+.ui-button-text:hover:not(:disabled) { color: var(--gold-5); }
+
+/* ── IconButton ── */
+.ui-icon-button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--ash-6);
+  border-radius: 2px;
+  background: var(--ash-3);
+  color: var(--text-muted);
+  font: 13px/1 var(--font-mono);
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.ui-icon-button-md { width: 19px; height: 19px; }
+.ui-icon-button-sm { width: 15px; height: 15px; }
+.ui-icon-button:hover:not(:disabled), .ui-icon-button-active {
+  border-color: var(--gold-3);
+  color: var(--gold-5);
+}
+.ui-icon-button-active { background: var(--surface-selected); }
+.ui-icon-button:disabled { cursor: not-allowed; opacity: .55; }
+
+/* ── Input (e o NumField, DT-03: size="sm" type="number") ── */
+.ui-input { display: block; margin-bottom: 18px; font-family: var(--font-body); }
+.ui-input-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.ui-input-label {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--parchment-3);
+  white-space: nowrap;
+}
+.ui-input-action {
+  border: 0;
+  background: none;
+  color: var(--gold-4);
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ui-input-action:hover { color: var(--gold-5); }
+.ui-input-footer { display: block; margin-top: 6px; font-size: 10px; color: var(--text-muted); }
+
+.ui-input-field {
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.ui-input-lg .ui-input-field {
+  height: 46px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, .125);
+  padding: 0 13px;
+  background: rgba(255, 255, 255, .016);
+  font-size: 14px;
+  font-family: var(--font-body);
+}
+.ui-input-lg .ui-input-field:focus { border-color: rgba(201, 162, 77, .6); background: rgba(255, 255, 255, .03); }
+.ui-input-md .ui-input-field, .ui-input-sm .ui-input-field {
+  height: 32px;
+  border-radius: 2px;
+  border: 1px solid var(--ash-5);
+  padding: 0 8px;
+  background: var(--surface-slot);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+.ui-input-sm .ui-input-field { height: 27px; }
+.ui-input-md .ui-input-field:focus, .ui-input-sm .ui-input-field:focus {
+  border-color: rgba(201, 162, 77, .6);
+  box-shadow: 0 0 0 1px rgba(166, 125, 52, .18);
+}
+.ui-input-field.ui-input-error { border-color: var(--blood-5); }
+.ui-input-field.ui-input-error ~ .ui-input-footer { color: var(--blood-7); }
+
+/* ── Select ── */
+.ui-select-wrap { display: block; }
+.ui-select-wrap.ui-select-inline {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+.ui-select-label {
+  display: block;
+  color: var(--text-muted);
+  font: 7px var(--font-mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.ui-select-wrap.ui-select-inline .ui-select-label { margin-bottom: 0; }
+.ui-select-field { position: relative; display: block; flex: 1; min-width: 0; }
+.ui-select {
+  width: 100%;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--ash-6);
+  background: var(--ash-3);
+  color: var(--text-primary);
+  outline: 0;
+  appearance: none;
+  cursor: pointer;
+}
+.ui-select-lg { height: 46px; border-radius: 7px; font: 14px var(--font-body); }
+.ui-select-md { height: 32px; border-radius: 4px; font: 11px var(--font-mono); }
+.ui-select-sm { height: 23px; border-radius: 4px; font: 9px var(--font-mono); }
+.ui-select-caret {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 8px;
+  pointer-events: none;
+}
+
+/* ── Checkbox ── */
+.ui-checkbox { display: flex; align-items: center; gap: 9px; font-family: var(--font-body); font-size: 11px; line-height: 1.5; color: var(--parchment-3); cursor: pointer; min-height: 24px; }
+.ui-checkbox-box {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ash-7);
+  border-radius: 2px;
+  background: var(--surface-slot);
+  color: #1a1206;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ui-checkbox-box::after { content: ''; }
+.ui-checkbox-checked { border-color: var(--gold-4); background: var(--grad-gold); }
+.ui-checkbox-checked::after { content: '✓'; }
+.ui-checkbox-box:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* ── Switch — role="switch" já carrega o estado semântico; a cor é decoração sobre isso ── */
+.ui-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 16px;
+  padding: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: var(--shadow-inset);
+  transition: background .15s, border-color .15s;
+}
+.ui-switch:disabled { cursor: not-allowed; opacity: .5; }
+.ui-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transition: left .15s var(--ease-out);
+}
+.ui-switch-on .ui-switch-knob { left: 15px; }
+
+.ui-switch-gold { border: 1px solid var(--ash-6); background: var(--surface-slot); }
+.ui-switch-gold.ui-switch-on { border-color: var(--gold-3); background: linear-gradient(180deg, #6b4d1c, #3a2a0f); }
+.ui-switch-gold .ui-switch-knob { background: var(--ash-7); }
+.ui-switch-gold.ui-switch-on .ui-switch-knob { background: var(--grad-gold); box-shadow: 0 0 6px rgba(201, 162, 77, .6); }
+
+.ui-switch-traffic { border: 1px solid var(--blood-4); background: linear-gradient(180deg, #4a1416, #2a0608); }
+.ui-switch-traffic.ui-switch-on { border-color: #3f8a48; background: linear-gradient(180deg, #2c5a32, #183520); }
+.ui-switch-traffic .ui-switch-knob { background: linear-gradient(180deg, #ef7d76, #b32a2f); box-shadow: 0 0 6px rgba(214, 72, 72, .5); }
+.ui-switch-traffic.ui-switch-on .ui-switch-knob { background: linear-gradient(180deg, #8fd98a, #4d9a5a); box-shadow: 0 0 6px rgba(95, 181, 106, .6); }
+
+/* ── Tabs ── */
+.ui-tabs-underline {
+  display: flex;
+  border-bottom: 1px solid var(--ash-5);
+  background: var(--ash-1);
+}
+.ui-tabs-underline .ui-tab {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 31px;
+  padding: 0 3px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: 8px var(--font-mono);
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+.ui-tabs-underline .ui-tab-active { background: var(--ash-3); color: var(--gold-5); }
+.ui-tabs-underline .ui-tab-active::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 0;
+  height: 2px;
+  background: var(--gold-3);
+  box-shadow: 0 0 5px rgba(186, 134, 58, .4);
+}
+
+.ui-tabs-pill { display: flex; gap: 6px; }
+.ui-tabs-pill .ui-tab {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--ash-5);
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--ash-3), var(--ash-2));
+  color: var(--text-muted);
+  font: 8px var(--font-mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ui-tabs-pill .ui-tab-active {
+  border-color: var(--gold-3);
+  background: linear-gradient(180deg, #3a2c1a, #211a12);
+  color: var(--gold-5);
+}
+
+/* ── Kicker ── */
+.ui-kicker {
+  display: block;
+  font: 500 7px var(--font-mono);
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+.ui-kicker-gold { color: var(--text-gold); }
+.ui-kicker-muted { color: var(--text-muted); }
+
+/* ── Badge — o tom escolhe cor de borda e de texto via variável local, uma vez por tom ── */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--badge-border);
+  border-radius: 3px;
+  background: rgba(13, 9, 8, .9);
+  color: var(--badge-text);
+  font: 9px var(--font-mono);
+  letter-spacing: .01em;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .5), inset 0 1px rgba(255, 255, 255, .04);
+  white-space: nowrap;
+}
+.ui-badge-dot { width: 8px; height: 8px; border-radius: 2px; background: currentColor; box-shadow: 0 0 6px currentColor; }
+.ui-badge-gold { --badge-border: var(--gold-2); --badge-text: var(--gold-5); }
+.ui-badge-haste { --badge-border: #41607a; --badge-text: var(--el-ice); }
+.ui-badge-exp { --badge-border: #3f6a44; --badge-text: #a8dc98; }
+.ui-badge-blood { --badge-border: var(--blood-4); --badge-text: var(--blood-7); }
+.ui-badge-fire { --badge-border: var(--el-fire-dim); --badge-text: var(--el-fire); }
+.ui-badge-energy { --badge-border: var(--el-energy-dim); --badge-text: var(--el-energy); }
+.ui-badge-ice { --badge-border: var(--el-ice-dim); --badge-text: var(--el-ice); }
+.ui-badge-earth { --badge-border: var(--el-earth-dim); --badge-text: var(--el-earth); }
+.ui-badge-holy { --badge-border: var(--el-holy-dim); --badge-text: var(--el-holy); }
+.ui-badge-muted { --badge-border: var(--ash-6); --badge-text: var(--text-muted); }

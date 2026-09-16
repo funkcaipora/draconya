@@ -21,6 +21,7 @@
  */
 @import './tokens.css';
 @import './fonts.css';
+@import './ui.css';
 
 :root {
   color-scheme: dark;
