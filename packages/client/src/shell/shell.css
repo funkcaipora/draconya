@@ -39,62 +39,89 @@ body {
 .shell {
   position: fixed; inset: 0;
   overflow: hidden;
+  /* --window-bg/--window-line/--window-head/--accent seguem aqui: a moldura de CADA seção
+     (`.windows > section`, o cabeçalho, o ammo picker) ainda lê essas variáveis — "uma seção
+     velha ao lado de uma nova é aceitável entre PRs" (plano §6). Só a CASCA (barra do topo e
+     as colunas) veste o design nesta task. */
   --window-bg: rgba(13, 15, 24, 0.9);
   --window-line: rgba(140, 150, 180, 0.28);
   --window-head: rgba(24, 28, 42, 0.95);
   --accent: #e2b84a;
-  --topbar-h: 46px;
+  --topbar-h: 65px;
+  --sidebar-w: 232px;
 }
 
 /* O mundo: o canvas acompanha o elemento, e o elemento é a tela. */
 .viewport { position: absolute; inset: 0; line-height: 0; overflow: hidden; background: #000; }
 .viewport canvas { display: block; }
 
-/* ---- A barra do topo -------------------------------------------------------------------- */
+/* ---- A barra do topo (#251, ADR 0029 D3/D8/D9) ------------------------------------------- */
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; height: var(--topbar-h);
-  display: flex; align-items: center; gap: 14px; padding: 0 12px;
-  box-sizing: border-box;
-  background: linear-gradient(rgba(10, 12, 20, 0.96), rgba(10, 12, 20, 0.86));
-  border-bottom: 1px solid var(--window-line);
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 14px; padding: 6px 13px; box-sizing: border-box;
+  border-bottom: 1px solid var(--gold-3);
+  background: linear-gradient(180deg, var(--ash-2) 0%, var(--ash-1) 74%, var(--ash-0) 100%);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+  font-family: var(--font-mono);
   z-index: 20;
 }
-.topbar-identity { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
-.topbar-name {
-  font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  max-width: 180px;
+.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.topbar-portrait {
+  display: grid; place-items: center; flex: none; width: 34px; height: 34px;
+  border: 1px solid var(--gold-3);
+  background: linear-gradient(145deg, var(--ash-4), var(--ash-1));
+  color: var(--gold-4); font: 600 12.5px var(--font-display);
 }
-.topbar-level { font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
+.topbar-identity { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.topbar-name {
+  max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--gold-5); font: 700 10px var(--font-display); letter-spacing: 0.025em;
+}
+.topbar-vocation {
+  margin-top: 3px; color: var(--text-muted); font-size: 7.5px; letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
 .topbar-gold {
-  display: flex; align-items: center; gap: 6px;
-  padding: 3px 10px; border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(226, 184, 74, 0.35);
-  color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; gap: 6px; height: 28px; min-width: 108px;
+  padding: 0 9px; border: 1px solid var(--ash-5); border-radius: 18px;
+  background: linear-gradient(180deg, var(--ash-4), var(--ash-2));
+  color: var(--gold-5); font: 700 9.5px var(--font-mono); font-variant-numeric: tabular-nums;
 }
 .topbar-coin {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #ffe08a, #b8860b 70%, #7a5a08);
+  width: 11px; height: 11px; flex: none; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f4ce5a, #b67606 72%);
 }
-.topbar-nav { display: flex; gap: 4px; margin-left: auto; }
-.topbar-button {
+.topbar-wordmark { justify-self: center; text-align: center; white-space: nowrap; }
+.topbar-wordmark b {
+  font: 700 12px var(--font-display); letter-spacing: 0.18em; color: var(--gold-5);
+  text-shadow: 0 1px #000;
+}
+.topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-icon-button {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
-  min-width: 56px; padding: 3px 6px;
-  background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; border-radius: 6px;
-  color: var(--text-muted); font: inherit; font-size: 10px; cursor: pointer;
+  width: 36px; padding: 1px; border: 1px solid var(--gold-1);
+  background: var(--ash-1); color: var(--text-muted); cursor: pointer;
 }
-.topbar-button:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
-.topbar-button-open { border-color: rgba(226, 184, 74, 0.5); color: #fff; }
-.topbar-icon { font-size: 15px; line-height: 1; }
+.topbar-icon-button-open { border-color: var(--gold-4); filter: brightness(1.16); }
+.topbar-icon-img { display: block; width: 36px; height: 36px; object-fit: cover; pointer-events: none; }
+.topbar-icon-glyph {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  color: var(--text-faint); font: 700 8px var(--font-mono); letter-spacing: 0.04em;
+}
+.topbar-icon-label { font-size: 6.5px; letter-spacing: 0.02em; color: inherit; }
 
-/* ---- As janelas -------------------------------------------------------------------------- */
+/* ---- As janelas (#251): colunas opacas de --sidebar-w, do topo até o rodapé -------------- */
 .windows {
-  position: absolute; top: calc(var(--topbar-h) + 10px); bottom: 10px;
-  display: flex; flex-direction: column; gap: 10px; width: 300px;
-  pointer-events: none; z-index: 10;
+  position: absolute; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w);
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 10px; box-sizing: border-box; overflow-y: auto;
+  background: var(--ash-1);
+  z-index: 10;
 }
-/* A coluna da esquerda para acima do chat; a da direita vai até embaixo. */
-.windows-left { left: 10px; bottom: 190px; }
-.windows-right { right: 10px; }
+.windows-left { left: 0; border-right: 1px solid var(--ash-5); }
+.windows-right { right: 0; border-left: 1px solid var(--ash-5); }
 .windows > section {
   pointer-events: auto;
   background: var(--window-bg);
@@ -611,15 +638,17 @@ body {
   .shell { position: static; height: auto; overflow: visible; }
   .viewport { position: relative; height: 40vh; }
   .topbar {
-    position: sticky; height: auto; flex-wrap: wrap; gap: 6px 10px; padding: 6px 8px;
+    position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
+    gap: 6px 10px; padding: 6px 8px;
   }
+  .topbar-wordmark { order: 3; width: 100%; }
+  .topbar-right { width: 100%; justify-content: space-between; }
   .topbar-name { max-width: 120px; }
   .bar { width: 96px; }
   .bar-hp .bar-fill, .bar-mana .bar-fill { background-size: 96px 18px; }
-  .topbar-nav { margin-left: 0; width: 100%; justify-content: space-between; }
-  .topbar-button { min-width: 0; flex: 1 1 0; }
   .windows, .windows-left, .windows-right {
-    position: static; width: auto; margin: 10px 10px 0; pointer-events: auto;
+    position: static; width: auto; height: auto; margin: 10px 10px 0;
+    background: transparent; border: 0; overflow: visible;
   }
   .windows > section { max-height: none; overflow: visible; }
   /* A ordem dos blocos no celular (#161): set → mochila → bolsa → bot → hunts → analisador →

@@ -35,9 +35,11 @@ import type { WindowId } from './TopBar.js';
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
+ * Chat nasce aberto (D5/DS-09, #251): ainda não há `open.chat` sendo lido por `Chat.tsx` — isso
+ * é da issue seguinte (#252) — mas o `Record<WindowId, boolean>` já precisa da chave.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
-  hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false,
+  hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
 };
 
 export function Shell() {
