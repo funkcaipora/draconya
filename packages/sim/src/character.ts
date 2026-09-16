@@ -172,8 +172,8 @@ export class CharacterRuntime {
   vocationId: string | null;
   staminaMs: number | null;
   staminaUpdatedAtMs: number;
-  /** Saldo de entrada. Ver `CharacterState.gold` — a sessão lê, nunca escreve. */
-  readonly gold: number;
+  /** Saldo-base privado; só `settleGoldDelta` pode incorporá-lo ao extrato já aceito. */
+  #gold: number;
   goldDelta: number;
   alive: boolean;
   speed: number;
@@ -209,7 +209,7 @@ export class CharacterRuntime {
     this.vocationId = state.vocationId ?? null;
     this.staminaMs = state.staminaMs ?? null;
     this.staminaUpdatedAtMs = state.staminaUpdatedAtMs ?? 0;
-    this.gold = state.gold ?? 0;
+    this.#gold = state.gold ?? 0;
     this.goldDelta = state.goldDelta;
     this.alive = state.alive;
     // Zero é "não sabe ainda": quem tem o conteúdo (o ruleset, ao entrar ou no primeiro
@@ -231,6 +231,22 @@ export class CharacterRuntime {
   /** Haste (#155): o multiplicador que `movementDuration` lê. `speed` continua sendo a base da tabela. */
   get speedScale(): number {
     return this.conditions.speedScale();
+  }
+
+  /** Saldo de entrada visível ao motor. A sessão só movimenta `goldDelta`. */
+  get gold(): number {
+    return this.#gold;
+  }
+
+  /**
+   * Incorpora a variação cujo extrato já foi aceito pelo hospedeiro.
+   *
+   * Não é ação de jogo nem pode ser chamada durante um tick: ela existe para a troca de
+   * sessão manter a mesma instância quente coerente enquanto o ledger durável a liquida.
+   */
+  settleGoldDelta(): void {
+    this.#gold += this.goldDelta;
+    this.goldDelta = 0;
   }
 
   /**

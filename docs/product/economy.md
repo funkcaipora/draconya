@@ -24,6 +24,9 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
   extrato no Redis (#267). Tentativas concorrentes aguardam a mesma gravação; falha permite
   retry com o mesmo `(session_id, seq)`. Se o Redis gravou e a resposta se perdeu, repetir não
   duplica gold nem XP, mesmo que o `jobs` já tenha liquidado a primeira tentativa.
+- Ao confirmar esse extrato, a sessão incorpora `goldDelta` em `gold` e zera o delta (#241).
+  A Cidade reaproveita o mesmo `CharacterRuntime` da hunt; sem essa passagem, um ticket novo
+  poderia liquidar o ledger e reencontrar a sessão quente com a base anterior.
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
   cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
   nele (ver "Divergências" abaixo).
