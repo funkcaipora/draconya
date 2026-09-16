@@ -1,7 +1,8 @@
 # Design system do cliente — plano de implementação (E14)
 
-**Status:** proposto em 2026-09-15 — as decisões de arquitetura vão para o ADR 0028 (a criar); este
-documento é o desenho, e as issues dos milestones M14 e M15 (a criar) apontam para cá.
+**Status:** proposto em 2026-09-15, com as dez perguntas do §10 respondidas pelo dono do produto em
+2026-09-16 — as decisões de arquitetura vão para o ADR 0028 (DS-01); este documento é o desenho, e
+as issues do milestone M14 apontam para cá (o M15 existe só como milestone com a lista do §5).
 **PRD:** §5 (plataforma e experiência do client), §8.2 (hotkeys guiadas), §13 (bot)
 **Origem:** o handoff "Design System MMORPG Medieval" gerado pelo Claude Design em 2026-09-15 —
 tokens, quinze primitivos, o fluxo de entrada, o HUD e catorze modais, em HTML/JSX de protótipo.
@@ -23,7 +24,7 @@ telas no cliente existente". O que vale como especificação:
 | `components/core/*.jsx` + `.d.ts` | 15 primitivos: Button, IconButton, Input, Select, Checkbox, Switch, Tabs, Kicker, Panel, Modal, Slot, VitalBar, StatRow, Badge, Stance | Reescritos em `.tsx` com classes CSS (ADR 0016; `scripts/source-policy.ts` recusa `.jsx`); os `.d.ts` viram as props |
 | `ui_kits/draconya/{Entry,Hud,Modals,App}.jsx` + `data.js` | O fluxo inteiro com dados de mentira (`DR.*`) | Só a aparência; todo dado vem do `catalogue`, do `hud` e da `account` — nenhuma lista de `data.js` vira constante |
 | `assets/fonts/*.woff2` | Cinzel e IBM Plex Sans (OFL), sem o `OFL.txt` junto | Baixadas de novo da distribuição oficial, com licença, em `packages/client/public/fonts/` |
-| `assets/hud-icons/*.png` | 14 ícones 128×128: 8 do tibia-idle (projeto do dono), 6 gerados em canvas | `packages/client/public/hud-icons/`, depois da confirmação do §10; glifo de reserva até lá |
+| `assets/hud-icons/*.png` | 14 ícones 128×128: 8 do tibia-idle (projeto do dono), 6 gerados em canvas — arte do dono, confirmado em 2026-09-16 | `packages/client/public/hud-icons/`, com glifo de reserva enquanto a imagem carrega |
 | `guidelines/*.html`, `DESIGN_SYSTEM.md`, `README.md` | Os fundamentos da marca em prosa | `docs/design-system.md` (a criar) e a skill `/design` |
 
 **O que o handoff não tem, e o plano precisa cobrir sozinho:**
@@ -82,11 +83,13 @@ mesma língua do CSS; importado por `shell.css`. As três fontes — Cinzel, IBM
 
 ### D3. O mundo continua em tela cheia; o chrome do design é sobreposto, sem `transform: scale`
 
-O layout do handoff — topo de 65 px, colunas de 232 px até o rodapé, faixa inferior de 124 px na
-coluna central — entra como **CSS absoluto por cima do canvas**, que segue ocupando `inset: 0`
+O layout do handoff — topo de 65 px, colunas de 232 px até o rodapé — entra como **CSS absoluto
+por cima do canvas**, que segue ocupando `inset: 0`
 com zoom inteiro (`zoomFor`: 1×, 2× a partir de 560 px, 3× a partir de 1400 — "pixel art a 1,5× é
 borrão"). As colunas ganham fundo opaco (`--ash-1`), como no design; o centro visível fica entre
-elas. Nenhum arquivo de `world/` muda.
+elas e vai até o rodapé — a faixa inferior de 124 px do handoff existia para a barra de ações, que
+não entra (D5), então o mundo a ocupa e as pills de caçada ficam centralizadas no rodapé dele.
+Nenhum arquivo de `world/` muda.
 
 - *Descartado:* o canvas de 1800×1010 com `transform: scale()` do protótipo. Escala fracionária
   borra a pixel art se o `<canvas>` estiver dentro da árvore escalada, e `transform` não dispara
@@ -113,13 +116,15 @@ junto com a pasta `library/ui/images` no volume de produção. O pacote de arte 
 - `docs/deploy.md` perde o passo do `rsync` de `library/ui/images`; o `AGENTS.md` do cliente
   perde a seção "A arte de UI vem do pacote" e ganha a do design system. **No mesmo commit.**
 
-### D5. O chat fica no canto inferior; a barra de ações espera o motor manual
+### D5. O chat é uma janela flutuante sobre o mundo; a barra de ações espera o motor manual
 
-A faixa inferior de 124 px do design hospeda o **chat**, num `Panel dock` com o título "CHAT",
-não a barra de ações 2×12.
+O **chat** é um `Panel` flutuante no canto inferior esquerdo, por cima do mundo, que **abre e fecha
+pelo ícone "Chat" do topo** (decisão do dono, 2026-09-16). Nasce aberto — é onde chegam as recusas
+do servidor (`system-message`) — e fica fixo no lugar (sem arraste, como as outras janelas). A
+barra de ações 2×12 do handoff não entra.
 
-- *Por quê:* o PRD §5.3 e o ADR 0026 (decisão 7) fixam o chat no canto inferior esquerdo, e o
-  chat é onde chegam as recusas do servidor (`system-message`) — tirá-lo da tela cega o jogador.
+- *Por quê o chat continua embaixo à esquerda:* PRD §5.3 e ADR 0026 (decisão 7). Fechá-lo é
+  escolha do jogador; a tela não o esconde por padrão.
 - *Por quê a barra não entra:* não existe intenção C2S de "usar magia/item agora" (a tabela
   `CLIENT_TO_SERVER` de `packages/protocol/src/messages.ts` tem dezesseis opcodes, de
   `authenticate` a `move-item`, sem `cast` nem `use-item`); toda ação de combate é regra do bot
@@ -135,7 +140,7 @@ não a barra de ações 2×12.
 |---|---|
 | Bot, Personagem, Party na hunt (esquerda) | Escolha uma caçada, com a formação da party dentro (ADR 0027) |
 | Set, bolsa, mochila, Batalha, bolsa da party, Analisador (direita) | Cyclopedia (aba Bestiário; Itens no M15) |
-| Chat (faixa inferior) | Editor de regra, Lure e alvo, Detalhes da caçada (M15) |
+| Chat (janela flutuante fixa no canto inferior esquerdo, abre e fecha pelo topo) | Editor de regra, Lure e alvo, Ring swap, Detalhes da caçada (M15) |
 
 - *Descartado:* janelas flutuantes arrastáveis (Analisador, bolsa da party). Exigem posição por
   janela, não fazem sentido no modo página do celular, e o handoff as implementa com `mousemove`
@@ -179,7 +184,9 @@ handoff (cores, tipo, tom de texto, estados, o que é placeholder, os números f
 skill `.claude/skills/design/` (a criar, a partir do `SKILL.md` do handoff) aponta para esse
 documento e para `tokens.css`. O zip do handoff não é versionado: é `.jsx` (proibido) e protótipo;
 fica com o dono do projeto. Os três emojis de hoje no topo (🎒 📈 📖) saem — o design diz "nenhum
-emoji", só glifos e PNG.
+emoji", só glifos e PNG. Os catorze PNGs do topo são arte do dono (os oito do tibia-idle são
+autorais, não sprites do cliente oficial — confirmado em 2026-09-16) e entram versionados em
+`packages/client/public/hud-icons/`, com uma nota de origem em `docs/design-system.md`.
 
 ---
 
@@ -189,9 +196,9 @@ emoji", só glifos e PNG.
 |---|---|---|
 | `shell.css` com paleta própria (`--text`, `--accent`, `--window-bg`) e a skin de pedra | `tokens.css` + `fonts.css` + `ui.css` + `shell.css` reescrita sobre os tokens | `packages/client/src/shell/` |
 | Estilo por seção, cada janela com a própria moldura | Toda seção é um `Panel` (`dock`); todo diálogo é um `Modal` | `shell/ui/Panel.tsx`, `shell/ui/Modal.tsx` (a criar) |
-| Barra do topo de 46 px com emoji e nome em `system-ui`; vitais no topo | Topo de 65 px: retrato-inicial, nome em Cinzel, "VOCAÇÃO · LV N", pill de gold, wordmark ao centro, ícones PNG de 36 px com glifo de reserva, `ConnectionBadge` à direita | `TopBar.tsx` |
-| Janelas de 300 px flutuando sobre o mundo, esquerda parando a 190 px do rodapé | Colunas de 232 px opacas até o rodapé; faixa inferior de 124 px na coluna central | `Shell.tsx`, `shell.css` |
-| Chat solto no canto, 340×170 | Chat na faixa inferior, `Panel dock` "CHAT" | `Chat.tsx` |
+| Barra do topo de 46 px com emoji e nome em `system-ui`; vitais no topo | Topo de 65 px: retrato-inicial, nome em Cinzel, "VOCAÇÃO · LV N", pill de gold, wordmark ao centro, seis ícones PNG de 36 px (Hunts, Bot, Inventário, Analisador, Cyclopedia, Chat) com glifo de reserva, `ConnectionBadge` à direita | `TopBar.tsx` |
+| Janelas de 300 px flutuando sobre o mundo, esquerda parando a 190 px do rodapé | Colunas de 232 px opacas até o rodapé; o mundo ocupa o centro inteiro, com as pills de caçada no rodapé dele | `Shell.tsx`, `shell.css` |
+| Chat solto no canto, 340×170, sempre visível | `Panel` flutuante "CHAT" no canto inferior esquerdo sobre o mundo, que abre e fecha pelo ícone do topo (nasce aberto) | `Chat.tsx` |
 | HP/mana no topo, a 2×, com PNG do pacote | `VitalBar` de 14 px no alto da coluna direita, CSS puro; os arcos circulares ao redor do jogador ficam para o viewport (PRD §5.4, item próprio — §8) | `Vitals.tsx` → `shell/ui/VitalBar.tsx` |
 | Set em `grid-template-areas` com ícone do pacote no slot vazio | Set 3×4 de slots de 30 px com rótulo no vazio e linha "Cap usado / total oz" | `EquipmentPanel.tsx` |
 | Mochila e bolsa em grade de 5 × 34 px | Mesmas 5 colunas (uma linha da tela é uma linha do container, #160 cresce de 5 em 5), slot de 26 px do design | `ContainerWindow.tsx` |
@@ -228,7 +235,7 @@ ou mensagem nova barata, e a tela junto), *fica de fora* (a tela omite; sem praz
 | Skills com %, Magic Level, Speed | o `sim` calcula skills (FUN-75) e speed; nada trafega | M15 (SV-04) | `player-stats` |
 | Soul | não existe em camada nenhuma | sistema | — |
 | Automações (renovar anel/colar, trocar munição por alvos, trocar arma por HP, comer) | não — o vocabulário do bot tem 4 condições e 3 ações, uma por regra | sistema (E4: vocabulário novo; `charges`/`durationMs` nunca consumidos; nenhum anel no conteúdo) | `botActionSchema` |
-| Ring swap (modal) | mecanismo pronto e opaco em `bot_config.ringSwap` | fica de fora até existir um item `finger` no catálogo — a tela abriria um seletor vazio | `content/data/items/` |
+| Ring swap (modal) | mecanismo pronto e opaco em `bot_config.ringSwap`; nenhum anel no catálogo | M15 (SV-16 cria Energy Ring e Life Ring; SV-17 a tela) | `content/data/items/`, `bot/store.ts` |
 | Lure e alvo (min/max, política, priorizar/ignorar, postura parado/seguir/manter distância) | sim (`lure` opaco; `targeting` já editável na store) | M15 (SV-09), com o gate de `catalogue.bot.advancedFromLevel` | `bot/store.ts` |
 | Regras de saída: HP abaixo de N %, acabar o gold, alguém do grupo sair | sim (`hp-below`, `out-of-gold`, `party-member-lost`), editáveis em `draft.exit` | M14 (DS-17) | `bot/store.ts` |
 | Regra de saída "acabar a capacidade" | não | M15 (SV-06: `kind` novo em `content` + `sim`) | `botExitRuleSchema` |
@@ -251,7 +258,8 @@ ou mensagem nova barata, e a tela junto), *fica de fora* (a tela omite; sem praz
 | Cyclopedia: Itens (Atq/Def, peso, descrição, dropado por) | peso sim; Atq/Def com SV-01; descrição e "dropado por" não existem | M15 (SV-08) parcial | `catalogue.items[]` |
 | Cyclopedia: Bosstiary; Bestiário com "estágios ★" | Bestiário sim (marcos e contagens, sem estágio nomeado); bosses não | Bestiário M14→M15 (SV-08); Bosstiary: sistema (E11) | `hud.bestiary` |
 | Abas Treino, Quests, Arena, Bosses na escolha de caçada | não | sistema (E8, E11; Arena não existe no PRD) | — |
-| Guild, Amigos, Prey, Loja/Leilão, Configurações | não | sistema (E12, E7, E13; Amigos e Configurações sem PRD) | `docs/product/` |
+| Guild, Prey, Loja/Leilão | não | sistema (E12, E7, E13 — o Leilão é livro de ordens sem taxa, decisão de 2026-09-16) | `docs/product/` |
+| Configurações, Amigos, Arena, Bênçãos, Soul | não existem no PRD | DS-19 registra Configurações como preferências de conta e os outros quatro como sistemas futuros em `docs/product/`; nenhuma tela até lá | `docs/product/` |
 | Login com e-mail e senha | contraria o ADR 0012 | fica de fora (D7) | `account/api.ts` |
 
 ---
@@ -260,9 +268,11 @@ ou mensagem nova barata, e a tela junto), *fica de fora* (a tela omite; sem praz
 
 Dois marcos. **M14** é só `client` e `docs`: fundação, revestimento e o fluxo de caçada — o jogo
 inteiro fica com a cara nova sem tocar `protocol`, `sim` ou `content`. **M15** é o servidor
-contando mais: seis mudanças pequenas de protocolo, cada uma com a tela que ela destrava. A
-separação existe para o M14 nunca misturar CSS com mensagem nova, e para o M15 poder ser
-reordenado sem travar o M14.
+contando mais: seis mudanças pequenas de protocolo, cada uma com a tela que ela destrava, mais os
+dois anéis que destravam o ring swap. A separação existe para o M14 nunca misturar CSS com
+mensagem nova, e para o M15 poder ser reordenado sem travar o M14. Em 2026-09-16 o M14 foi aberto
+com as suas issues; o M15 existe só como milestone, com esta lista na descrição, e as specs dele
+são escritas quando o M14 fechar, com os nomes reais dos componentes.
 
 Labels `E14 · Cliente` + `client` (`docs` para DS-01; `protocol`/`sim`/`content`/`server` conforme
 o pacote nas SV-*). Toda issue segue o template da skill `/spec`, cabe numa PR de um subagente e
@@ -292,8 +302,8 @@ tem `pnpm check` verde mais captura no navegador com o pacote de arte como crit�
 | # | Issue | Pacotes | Depende de | Tam. | Entrega | Aceite |
 |---|---|---|---|---|---|---|
 | DS-07 | client: aposentar a skin de pedra do pacote | client, docs | DS-04 | P | Remove `assets/ui.ts`, `ui.test.ts`, `applyUiSkin` no `Shell`, toda `var(--ui-*)` de `shell.css`; `.slot-empty` vira rótulo; `docs/deploy.md` e `AGENTS.md` do cliente atualizados | `grep -r "ui-" packages/client/src/shell/shell.css` vazio; sem `library/ui/images` na rede; `pnpm check` |
-| DS-08 | client: a casca e o topo do design | client | DS-07 | M | `Shell.tsx`/`shell.css`: topo 65 px, colunas 232 px opacas até o rodapé, faixa inferior 124 px, mundo intocado; `TopBar.tsx`: retrato-inicial, nome Cinzel, "VOCAÇÃO · LV N", pill de gold, wordmark ao centro (sem "players online"), ícones de 36 px (Hunts, Bot, Inventário, Analisador, Cyclopedia) — PNG de `public/hud-icons/` se o §10 já tiver confirmado, glifo do design senão —, `ConnectionBadge`; media query ≤720 preservada | `Shell.test.ts` continua prendendo a ordem da direita; teste novo prende os cinco ícones e a ausência de ícone sem janela; sem emoji no HTML; captura desktop e `resize_window` mobile |
-| DS-09 | client: o chat na faixa inferior | client | DS-08 | P | `Chat.tsx` num `Panel dock` "CHAT" na faixa inferior, mensagens de sistema em `--warn`/`--danger`, rolagem fina | Recusa do servidor (ex.: `bot-config` inválido) aparece no chat; captura |
+| DS-08 | client: a casca e o topo do design | client | DS-07 | M | `Shell.tsx`/`shell.css`: topo 65 px, colunas 232 px opacas até o rodapé, mundo intocado ocupando o centro até o rodapé; `TopBar.tsx`: retrato-inicial, nome Cinzel, "VOCAÇÃO · LV N", pill de gold, wordmark ao centro (sem "players online"), seis ícones PNG de 36 px de `public/hud-icons/` (Hunts, Bot, Inventário, Analisador, Cyclopedia, Chat) com glifo de reserva, `ConnectionBadge`; `WindowId` ganha `chat`; media query ≤720 preservada | `Shell.test.ts` continua prendendo a ordem da direita; teste novo prende os seis ícones e a ausência de ícone sem janela; sem emoji no HTML; captura desktop e `resize_window` mobile |
+| DS-09 | client: o chat como janela flutuante | client | DS-08 | P | `Chat.tsx` num `Panel` "CHAT" flutuante no canto inferior esquerdo sobre o mundo, `open.chat` no `Shell` (nasce aberto), fecha pelo × e pelo ícone do topo; mensagens de sistema em `--warn`/`--danger`, rolagem fina; no celular vira seção da página como as outras | Recusa do servidor (ex.: `bot-config` inválido) aparece no chat aberto; teste em `prerender` prende que nasce aberto; captura |
 
 #### Fase D — As colunas
 
@@ -313,11 +323,12 @@ tem `pnpm check` verde mais captura no navegador com o pacote de arte como crit�
 | DS-16 | client: escolha de caçada como modal, com a party dentro, e as pills sobre o mundo | client | DS-12, DS-14 | M | `HuntsModal.tsx` (a criar) 860×560: lista com sprite dos outfits, nome, "level N+", "n tamanhos de pull · n drops", seleção de pull, rodapé "Level recomendado é conselho, não trava" e "Entrar na caçada"/"Trocar de caçada"; coluna direita com o `PartyPanel` de formação; `HuntActions.tsx` (a criar): pill "⚔ Escolher caçada" na Cidade, "↩ Sair da caçada »" na hunt; `HuntMenu.tsx` removido; `Bestiary` continua na coluna até SV-08 | `HuntsModal.test.ts` em `prerender` (lista do catálogo, sem estimativa de XP/h); entrar e sair continuam `enter-hunt`/`leave-hunt`; formação da party inalterada; captura na Cidade e na hunt |
 | DS-17 | client: popover "Sair sozinho quando…" | client | DS-16 | P | Popover de 262 px no » da pill: HP abaixo de N %, acabar o gold, alguém do grupo sair (os três `kind` reais), gravando `draft.exit` pela store do bot; resumo "Saindo sozinho: …" | Teste em `prerender`; salvar manda `bot-config` com `exit`; captura |
 | DS-18 | client: passe de celular e QA visual do M14 | client, docs | DS-05…DS-17 | M | Cada tela a 375 px (`resize_window`) e a 1440/1920; capturas anexadas às issues de origem; defeitos viram issue própria; `docs/product/*.md` e `AGENTS.md` do cliente conferidos; milestone fechado | Lista de capturas completa; `pnpm check`; "Pronto quando" satisfeito |
+| DS-19 | docs: Configurações como preferências de conta e os sistemas futuros em `docs/product/` | docs | — | P | `docs/product/settings.md` (a criar; preferências de conta: idioma, som, tela — `não implementado`), e uma seção "sistemas futuros" ou arquivos próprios para Amigos, Arena, Bênçãos e Soul (`não implementado`, sem épico até o PRD os absorver); tabela de `docs/product/README.md` atualizada; `economy.md` registra o Market como livro de ordens de compra e venda sem taxa (decisão de 2026-09-16) | `pnpm docs-check` verde; cada arquivo novo com `**Status:**` na primeira linha não vazia |
 
 **Pronto quando (M14):** um jogador entra pelo login novo, escolhe o personagem num card, vê o HUD
-com topo, colunas e chat no design, entra numa hunt pelo modal, liga e desliga regras no painel do
-bot, escolhe quando sair sozinho, e lê o analisador — tudo com `pnpm check` verde, sem requisição
-fora da origem, e sem nenhuma tela mostrando dado que o servidor não mandou.
+com topo, colunas e o chat flutuante no design, entra numa hunt pelo modal, liga e desliga regras
+no painel do bot, escolhe quando sair sozinho, e lê o analisador — tudo com `pnpm check` verde,
+sem requisição fora da origem, e sem nenhuma tela mostrando dado que o servidor não mandou.
 
 ### M15 · Design system — o servidor conta mais
 
@@ -343,11 +354,14 @@ para um nó `game` anterior num deploy em rolagem não quebrar o cliente novo (o
 | SV-13 | client: modal Detalhes da caçada e loot possível | client | SV-02 | M | `HuntDetailsModal.tsx` (a criar) 680: monstros com vida e XP, loot possível; sem recorde de XP/h | Teste; captura |
 | SV-14 | client: retrato com o sprite do outfit | client | M14 | P | `Portrait.tsx` (a criar): canvas de 32 px do outfit do próprio personagem, lido do `world` por intervalo, no topo e nos cards de entrada quando houver | Teste; captura |
 | SV-15 | client: "N players online" no topo | client | SV-07 | P | O sub-título do wordmark, "—" sem a mensagem | Teste; captura |
+| SV-16 | content/sim: Energy Ring e Life Ring | content, sim | M14 | M | Dois itens de dedo (`slot: finger`, `appearanceId` pelo `/assets`): **Energy Ring** — enquanto vestido, o dano que o personagem sofre é descontado da mana em vez da vida (o que passar da mana vai à vida); **Life Ring** — +300 % da regeneração base de vida e mana. Números em `content`, efeito no `sim` com teste; sem carga por enquanto (`charges` continua não consumido) | Testes do `sim` para os dois efeitos; `content:check` verde; `items.md` |
+| SV-17 | client: modal Ring swap | client | SV-16 | P | `RingSwapModal.tsx` (a criar) 520: anel (do catálogo, `slot: finger`), equipar HP <, retirar HP > (validação `removeAbove > equipBelow`), piso de mana, ao retirar (restaurar / deixar vazio), diagrama; `bot/store.ts` passa a editar `ringSwap`; gate `advancedFromLevel` | `store.test.ts` prende `ringSwap` editado; teste do modal em `prerender`; captura com level 50 |
 
 **Pronto quando (M15):** a Cyclopedia lista itens com ataque e armadura; a escolha de caçada mostra
 os monstros e o loot de cada hunt; o painel Skills tem magic level e as skills com progresso; a
 party mostra vocação e mana de cada membro; o mundo diz a área, os buffs e o alvo; o topo conta os
-jogadores online; e nenhuma dessas mensagens quebra um cliente antigo em deploy em rolagem.
+jogadores online; um Knight de level 50 configura o ring swap com o Energy Ring e vê a mana cair no
+lugar da vida; e nenhuma dessas mensagens quebra um cliente antigo em deploy em rolagem.
 
 ---
 
@@ -363,10 +377,12 @@ DS-01 ─ DS-02 ─ DS-03 ─ DS-04 ─┬─ DS-05 ─ DS-06            (entrad
                                                  ├─ DS-14 ─┘
                                                  └─ DS-15
                                                             DS-18 fecha
+DS-19 (docs, independente, a qualquer momento)
 M15
 SV-01 ─┬─ SV-08          SV-04 ─ SV-10          SV-07 ─ SV-15
 SV-02 ─┴─ SV-13          SV-05 ─ SV-12          SV-09, SV-14 (só M14)
 SV-03 ─── SV-11          SV-06 (a quarta regra de saída entra em DS-17)
+SV-16 ─── SV-17
 ```
 
 - Até DS-04 nada muda na tela: tokens e primitivos entram sem consumidor, e o cliente abre igual.
@@ -409,15 +425,15 @@ SV-03 ─── SV-11          SV-06 (a quarta regra de saída entra em DS-17)
 
 | O que | Por quê agora não | Destrava |
 |---|---|---|
-| Ring swap (modal) | a UI existe no handoff e o mecanismo no servidor, mas não há anel no catálogo | item `finger` em `content/data/items/` (E5/E7); a tela é uma issue P depois |
 | Arcos circulares de HP/mana ao redor do jogador (PRD §5.4) | é desenho no viewport (Pixi), não HUD em DOM | issue própria no E14, fora deste plano |
 | Barra de ações com teclas, "Configurar ação" | não há intenção manual; hotkeys são do motor manual | **E10** |
 | Automações (anel/colar por carga, munição por alvos, arma por HP, comer) | vocabulário do bot não tem essas ações; `charges`/`durationMs` nunca consumidos | **E4** — vocabulário novo, com PRD |
 | Postura de combate; "Conjunto" por elemento; DPS/HPS; crítico e leech; gasto de outro membro | mecânicas de combate e agregações inexistentes | **E2** (#226, #235), analisador |
 | Despachar loot; raridade e PEGAR/VENDER por hunt | mecânicas de economia inexistentes | **E5** |
-| Loja, Leilão, cristais, Premium | E13 não começou; o "Leilão" desenhado é um livro de ordens, não o Market sem taxa do §33 | **E13**, com decisão de produto |
+| Loja, Leilão, cristais, Premium | E13 não começou | **E13** — decidido em 2026-09-16: o Market é um livro de ordens de compra e venda (vendedor, quantidade, preço, total), **sem taxa**; `economy.md` registra em DS-19 |
 | Guild, Prey, Bosstiary, Treino, Quests | sistemas não implementados | **E12, E7, E11, E8** |
-| Amigos, Arena, Bênçãos, Configurações, mundo/realm, Soul | não existem no PRD | decisão de produto antes de issue |
+| Configurações (preferências de conta: idioma, som, tela) | entra no PRD como sistema (2026-09-16), mas não há preferência real para persistir ainda | `docs/product/settings.md` em DS-19; a tela nasce com a primeira preferência (o idioma, quando a i18n vier) |
+| Amigos, Arena, Bênçãos, Soul; mundo/realm | viram sistemas futuros em `docs/product/` (DS-19), sem épico | um PRD para cada antes de qualquer issue |
 | i18n PT/EN | sem infraestrutura nem persistência de preferência | decisão de produto; endpoint de preferências |
 | Janelas arrastáveis, modal expandido do analisador, cap reservado da bolsa, "próximo level" | sem dado a mais, sem sentido no celular, ou a curva de XP não trafega | quando houver o que mostrar |
 | Aba Outfit do modal Personagem (editor de cores) | a cor própria só se lê (`world.creatures`); não há intenção C2S para trocá-la | intenção nova + gravação no `sim` (E7, aparência pós-tutorial do §7.4) |
@@ -432,7 +448,7 @@ SV-03 ─── SV-11          SV-06 (a quarta regra de saída entra em DS-17)
 - **O handoff está incompleto e inconsistente** (cinco modais sem arquivo, três tamanhos para o
   mesmo slot, duas bases de tela). As issues fixam os números do §1; quem executa não abre o
   protótipo para decidir.
-- **Dezoito PRs pequenas em `shell.css`.** Conflito é o risco de subagentes paralelos; a
+- **Dezenove PRs pequenas, dezessete delas em `shell.css`.** Conflito é o risco de subagentes paralelos; a
   mitigação é o bloco prefixado por seção (§6) e mesclar a fundação antes de abrir o leque.
 - **A expectativa de "barra de ações" e "loja" no topo.** O design vende telas que o produto não
   tem; a decisão D8 deixa o topo com cinco ícones. Está no §10 para o dono do produto confirmar.
@@ -453,26 +469,21 @@ SV-03 ─── SV-11          SV-06 (a quarta regra de saída entra em DS-17)
 
 ---
 
-## 10. Em aberto — decisões do dono do produto
+## 10. Decidido — as respostas do dono do produto (2026-09-16)
 
-1. **Barra de ações:** adiar para o E10 (recomendação), ou construir agora uma vista das regras
-   do bot (slot = regra, sem tecla nem quantidade) sabendo que ela duplica o painel do bot?
-2. **Chat na faixa inferior** (recomendação, PRD §5.3) ou num popover atrás do ícone "Chat" do
-   topo, como o design sugere?
-3. **Ícones PNG do tibia-idle:** confirmar que os oito "originais" são arte autoral do projeto do
-   dono e não sprites do cliente oficial, e em que termos podem ser versionados. Sem a
-   confirmação antes de DS-08, entram os glifos do design e os PNGs viram uma issue P depois.
-4. **Ícone de slot vazio:** o rótulo do design (recomendação, D4) ou manter as dez `--ui-slot-*`
-   do pacote por cima dele?
-5. **i18n:** fica para quando houver preferências de conta, ou entra uma tabela de strings pt-BR
-   agora, sem toggle, para preparar o terreno?
-6. **Leilão vs. Market:** o design desenha um livro de ordens; o PRD §33 descreve um Market de
-   listagem sem taxa. Qual vale, quando o E13 chegar?
-7. **Amigos, Arena, Bênçãos, Configurações, Soul:** existem no design e em lugar nenhum do PRD.
-   Entram no PRD ou saem do design?
-8. **Skills expostas (SV-04):** quanto o cliente vê — nível e % das três skills, ou também os
-   parâmetros da curva? A recomendação é nível e % — o resto é balanceamento que o cliente não
-   simula (invariante 4).
-9. **Um anel no conteúdo** só para destravar o ring swap agora, ou esperar o épico de itens?
-10. **Nome dos milestones:** "M14 · Design system — fundação e revestimento" e "M15 · Design
-    system — o servidor conta mais" são sugestões.
+1. **Barra de ações:** adiada para o E10. O painel do bot é a única vista das regras.
+2. **Chat:** janela flutuante sobre o mundo, no canto inferior esquerdo, que abre e fecha pelo
+   ícone do topo; nasce aberta. Sem faixa inferior no layout — o mundo vai até o rodapé.
+3. **Ícones PNG:** são arte do dono; os catorze entram versionados em `public/hud-icons/`.
+4. **Slot vazio:** o rótulo do design. `assets/ui.ts` sai inteiro.
+5. **i18n:** adiada; o cliente continua só em pt-BR.
+6. **Market:** livro de ordens de compra e venda (vendedor, quantidade, preço, total), **sem
+   taxa** — os dois modelos juntos. `economy.md` registra; o E13 herda.
+7. **Fora do PRD:** Configurações entra como sistema (preferências de conta); Amigos, Arena,
+   Bênçãos e Soul viram sistemas futuros em `docs/product/`, sem épico ainda (DS-19).
+8. **Skills expostas:** nível e % para o próximo, das três skills (SV-04).
+9. **Anéis:** entram no M15 — Energy Ring (o dano vai na mana em vez da vida) e Life Ring
+   (+300 % da regeneração base), e o modal Ring swap junto (SV-16, SV-17).
+10. **Milestones:** "M14 · Design system — fundação e revestimento" com as issues DS-01…DS-19;
+    "M15 · Design system — o servidor conta mais" criado só como milestone, com a lista do §5 na
+    descrição, para as specs serem escritas depois do M14. A PR #243 é mesclada quando o CI passar.
