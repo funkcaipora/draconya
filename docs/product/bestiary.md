@@ -24,9 +24,11 @@ Fechar um marco é evento notável, como o level up: aparece na lista curta do a
 (§16.2) como "Bestiário: Rato · marco 1 (+1 % XP)". O abate comum não aparece, pela regra de
 sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 
-**O que a tela mostra.** A janela do Bestiário mora na coluna da direita, abaixo do analisador,
-com a mesma linguagem — cabeçalho que abre e fecha, aberta por padrão desde a FUN-115 (a barra
-do topo é quem a mostra e esconde). Cada monstro do catálogo tem uma linha: nome, abates,
+**O que a tela mostra.** A janela do Bestiário mora na coluna da direita, abaixo do analisador —
+uma seção com cabeçalho próprio que abre e fecha; a barra do topo decide se ela existe
+(`open.bestiary`), não só se está minimizada. Diferente do analisador, que virou um `Panel dock`
+fixo desde #258, o Bestiário ainda não migrou para essa forma. Cada monstro do catálogo tem uma
+linha: nome, abates,
 "próximo marco" (ou "—" depois do último) e "marcos n/5"; a primeira linha do corpo é "Bônus de
 XP PvE: +n %", e minimizada o bônus fica no cabeçalho. Num servidor sem monstros no catálogo a
 janela diz "Este servidor não tem Bestiário" em vez de uma lista vazia com "+0 %".
