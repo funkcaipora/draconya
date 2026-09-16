@@ -2,9 +2,17 @@
 // direita, abaixo dos containers. O que se mostra é o que o servidor mandou — itens, gold e
 // `peso/capacidade` —, mais o último settlement, para quem ficou ler "vendeu N, você levou M".
 // O cliente não soma peso nem calcula cota (invariante 4).
+//
+// A moldura é o `Panel` `dock` do design system (DS-04, #247): o resumo de peso/gold vai no
+// `meta` do cabeçalho, e quem decide se o corpo existe é o `collapsed` que a barra do topo
+// injeta ("quem decide se a janela existe é a barra", `packages/client/AGENTS.md`) — o próprio
+// `Panel` some o corpo quando `collapsed` é `true`. Nenhum `onToggle` é passado: sem ele o
+// `Panel` não desenha o próprio botão de minimizar, que duplicaria o da barra "Inventário".
 
 import { useHudSlice } from '../state/useSlice.js';
 import { ItemSprite } from './ItemSprite.js';
+import { Panel } from './ui/Panel.js';
+import { Slot } from './ui/Slot.js';
 
 export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {
   const bag = useHudSlice((state) => state.partyBag);
@@ -16,38 +24,57 @@ export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {
 
   const named = (itemId: string) => catalogue?.items.find((item) => item.id === itemId);
   const mine = settlement?.shares.find((share) => share.characterId === me)?.gold;
+  // Sem "cap reservado" (docs/design-system-plan.md §4 — a reserva não existe no servidor):
+  // só total e em uso.
+  const capPercent = bag.capacity > 0 ? Math.min(100, Math.round((bag.weight / bag.capacity) * 100)) : 0;
 
   return (
-    <section className={`party-bag${collapsed ? ' collapsed' : ''}`} aria-label="bolsa da party">
-      <header className="analyzer-head">
-        <strong>Bolsa da party</strong>
-        <span className="entry-meta">{`${String(bag.weight)}/${String(bag.capacity)} oz · ${String(bag.gold)} gold`}</span>
-      </header>
-      {!collapsed && (
-        <>
-          {bag.items.length === 0
-            ? <p className="quiet">vazia</p>
-            : (
-              <ul className="party-bag-items">
-                {bag.items.map((item) => {
-                  const definition = named(item.itemId);
-                  return (
-                    <li key={item.instanceId} className="party-bag-item">
-                      {definition !== undefined && <ItemSprite appearanceId={definition.appearanceId} name={definition.name} />}
-                      <span>{definition?.name ?? item.itemId}</span>
-                      {item.quantity > 1 && <span className="entry-meta">{`×${String(item.quantity)}`}</span>}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          {settlement !== null && (
-            <p className="entry-meta">
-              {`Último settlement: vendeu ${String(settlement.total)} gold${mine === undefined ? '' : ` · você levou ${String(mine)}`}`}
-            </p>
+    <Panel
+      dock
+      title="Bolsa da party"
+      meta={`${String(bag.weight)}/${String(bag.capacity)} oz · ${String(bag.gold)} gold`}
+      collapsed={collapsed}
+    >
+      <div className="party-bag" aria-label="bolsa da party">
+        {bag.items.length === 0
+          ? <p className="quiet">vazia</p>
+          : (
+            <div className="party-bag-grid">
+              {bag.items.map((item) => {
+                const definition = named(item.itemId);
+                const name = definition?.name ?? item.itemId;
+                // `exactOptionalPropertyTypes` não deixa passar `count={undefined}` (a prop é
+                // `number | string`, sem `undefined` na união) — mesmo padrão de `BotPanel.tsx`:
+                // só entra na chamada quem de fato veio.
+                const countProps = item.quantity > 1 ? { count: item.quantity } : {};
+                return (
+                  // O nome completo vai no `title` — o mesmo padrão de `ContainerWindow.tsx`
+                  // (`title={wearable ? \`Vestir ${name}\` : name}`): o slot mostra sprite e
+                  // contagem, o nome é tooltip.
+                  <span key={item.instanceId} title={name}>
+                    <Slot
+                      size={30}
+                      kind="loot"
+                      label={name.slice(0, 4).toUpperCase()}
+                      icon={definition !== undefined
+                        ? <ItemSprite appearanceId={definition.appearanceId} name={definition.name} />
+                        : undefined}
+                      {...countProps}
+                    />
+                  </span>
+                );
+              })}
+            </div>
           )}
-        </>
-      )}
-    </section>
+        <div className="party-bag-cap" aria-label="capacidade em uso">
+          <span className="party-bag-cap-fill" style={{ width: `${String(capPercent)}%` }} />
+        </div>
+        {settlement !== null && (
+          <p className="entry-meta">
+            {`Último settlement: vendeu ${String(settlement.total)} gold${mine === undefined ? '' : ` · você levou ${String(mine)}`}`}
+          </p>
+        )}
+      </div>
+    </Panel>
   );
 }

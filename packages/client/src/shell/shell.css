@@ -712,8 +712,9 @@ body {
   .chat-window { position: static; width: auto; margin: 10px; }
 }
 
-/* --- party (#197) ------------------------------------------------------------------------ */
-.party-panel, .party-members-panel, .party-bag {
+/* --- party: formação (#197). Classes INALTERADAS nesta issue — a formação (PartyPanel.tsx)
+   é redesenhada em DS-16 (#259), dentro do modal de caçada, não aqui. */
+.party-panel {
   background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 6px;
   padding: 8px; display: flex; flex-direction: column; gap: 6px;
 }
@@ -724,8 +725,33 @@ body {
 .party-member { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .party-member-down { opacity: 0.5; }
 .party-approved { color: #8fd18f; }
-.party-hp { flex: 1 1 60px; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden; }
-.party-hp-fill { display: block; height: 100%; background: #c0392b; }
-.party-bag-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.party-bag-item { display: flex; gap: 6px; align-items: center; }
-.party-bag.collapsed { padding-bottom: 8px; }
+
+/* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
+   de `PartyBag` é o `Panel` `dock` (`shell/ui/Panel.tsx`); aqui só o CONTEÚDO de dentro dele e o
+   painel de `PartyMembers`, que continua dentro da seção do `HuntMenu` (a moldura dela é a do
+   `HuntMenu`, para não dobrar caixa dentro de caixa). ------------------------------------------ */
+.party-members-panel { display: flex; flex-direction: column; gap: 6px; }
+.party-mode {
+  margin: 0;
+  font: 7px var(--font-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.party-companions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.party-companion { display: flex; flex-direction: column; gap: 2px; }
+.party-companion-down { opacity: 0.55; }
+.party-companion-self { color: var(--gold-4); }
+.party-hp-row { display: flex; align-items: center; gap: 6px; }
+.party-hp { flex: 1 1 auto; min-width: 0; }
+
+.party-bag { display: flex; flex-direction: column; gap: 6px; }
+.party-bag-grid { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 3px; }
+.party-bag-cap {
+  position: relative;
+  height: 5px;
+  background: var(--ash-3);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.party-bag-cap-fill { display: block; height: 100%; background: var(--gold-3); }
