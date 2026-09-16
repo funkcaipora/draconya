@@ -29,6 +29,13 @@ describe('Shell', () => {
     expect((right.match(/Carregando/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
+  // RF-02 (#252): o chat nasce aberto — é onde chegam as recusas do servidor
+  // (`system-message`), e uma janela que abre fechada esconderia a primeira da sessão.
+  it('the chat is mounted from the start (DEFAULT_WINDOWS.chat)', async () => {
+    const html = await render();
+    expect(html).toContain('aria-label="chat"');
+  });
+
   it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {
     // As vitais migraram do topo para o alto da coluna direita (ADR 0029 D3). Mutação que mata:
     // montar `<Vitals />` depois de `<EquipmentPanel />`, ou não montá-la em `Shell.tsx`.
