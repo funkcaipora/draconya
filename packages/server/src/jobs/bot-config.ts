@@ -28,6 +28,8 @@ export async function settleBotConfig(
       .from(characters).where(eq(characters.id, characterId)).for('update');
     const pending = await options.botConfigs.load(characterId);
     if (pending === null) return null;
+    // Corrompida não tem o que gravar, e não pode ficar na fila bloqueando a admissão (#265).
+    if ('corrupt' in pending) return { pending, written: 0 };
     const writable = character !== undefined && character.deletedAt === null;
     if (writable) {
       await tx.update(characters).set({ botConfig: pending.config })
@@ -36,6 +38,13 @@ export async function settleBotConfig(
     return { pending, written: writable ? 1 : 0 };
   });
   if (result === null) return 0;
+  if ('corrupt' in result.pending) {
+    // Para diagnóstico, fora do caminho: o que ficou no banco é a última preferência válida,
+    // e o jogador salva de novo. O conteúdo não vai ao log — está em `bot-config:corrupt`.
+    options.logger.error({ characterId }, 'Quarantined a corrupt pending bot configuration');
+    await options.botConfigs.quarantine(characterId, result.pending);
+    return 0;
+  }
   // Só depois do commit. Queda aqui repete a substituição inteira, sem efeito econômico.
   await options.botConfigs.acknowledge(characterId, result.pending);
   return result.written;
