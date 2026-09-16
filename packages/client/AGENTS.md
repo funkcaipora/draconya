@@ -526,8 +526,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   tem nome, level, vitais, gold e os botões que abrem e fecham cada janela; cada janela é a
   seção de sempre, posicionada numa coluna absoluta — e a moldura É a seção, para que uma seção
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
-  esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. Analisador,
-  Bestiário e Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre
+  esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251
+  (ADR 0029, D3/D6/D8/D9), a casca veste o design system:** topo de 65 px com identidade, gold e
+  os seis ícones PNG das janelas (Hunts, Bot, Inventário, Analisador, Cyclopedia, Chat — nunca
+  emoji, D9), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
+  faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
+  marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
+  Analisador, Bestiário e Hunts nascem ABERTOS: quem decide se a janela existe é a barra, e janela que abre
   minimizada é janela que abre vazia. No celular (≤ 720 px) a tela vira página: o mundo numa
   faixa de 40vh e as janelas empilhadas embaixo, roláveis — o caso de uso móvel é configurar o
   bot (§5.1).
