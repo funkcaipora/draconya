@@ -10,6 +10,8 @@
 import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
 import type { BotCategory, BotConfig, BotRule } from '@draconya/content';
 import { createStore } from '../state/hud.js';
+import { DEFAULT_HP_BELOW_PERCENT, setHpBelowPercent, toggleExitRule } from './exit-rules.js';
+import type { ExitRuleKind } from './exit-rules.js';
 
 export type SaveState =
   /** Nada foi mandado desde a última mudança. */
@@ -176,6 +178,18 @@ export function removeRule(category: BotCategory, index: number): void {
     ...draft,
     rules: { ...draft.rules, [category]: draft.rules[category].filter((_, i) => i !== index) },
   }));
+  scheduleSave();
+}
+
+/** Liga, desliga ou reescreve uma regra de saída (#260) e salva — o mesmo debounce do interruptor de regra. */
+export function setExitRule(kind: ExitRuleKind, on: boolean, percent = DEFAULT_HP_BELOW_PERCENT): void {
+  edit((draft) => ({ ...draft, exit: toggleExitRule(draft.exit, kind, on, percent) }));
+  scheduleSave();
+}
+
+/** Reescreve só o percentual de `hp-below` (#260) e salva; as outras regras de saída ficam como estavam. */
+export function setExitHpBelowPercent(percent: number): void {
+  edit((draft) => ({ ...draft, exit: setHpBelowPercent(draft.exit, percent) }));
   scheduleSave();
 }
 

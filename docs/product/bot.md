@@ -541,3 +541,10 @@ configurou.
 O teto de cada categoria vem do catálogo, e a tela para de oferecer ao chegar nele. O gate do
 §13.2 aparece como aviso — "bot avançado a partir do level 50" —, e não como opção escondida:
 descobrir o limite montando uma configuração inteira e levando um não é pior que ler antes.
+
+**O popover "Sair sozinho quando…" (#260)** fica no chevron `»` da pill "Sair da caçada": três
+checkboxes — HP abaixo de N % (o percentual é editável só com a regra ligada), acabar o gold,
+alguém do grupo sair — que gravam a mesma lista `exit` do rascunho e salvam sozinhos, com o
+mesmo debounce do interruptor de regra. Fechado, um resumo ("Saindo sozinho: …") substitui o
+popover quando alguma regra está ligada. `out-of-capacity` não aparece: o schema não a tem
+ainda (M15).

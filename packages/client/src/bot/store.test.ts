@@ -3,7 +3,7 @@ import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
-  removeRule, setConfigSender, toConfig, toggleRule,
+  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, toConfig, toggleRule,
 } from './store.js';
 
 const rule = (percent: number, enabled = true) => ({
@@ -242,5 +242,72 @@ describe('o interruptor salva sozinho, com debounce (#162)', () => {
     putRule('heal', 0, rule(10));
     expect(sent).toHaveLength(2);
     expect(sent[1]?.heal.map((r) => (r.when as { percent: number }).percent)).toEqual([10, 50]);
+  });
+});
+
+describe('as regras de saída salvam sozinhas, com o mesmo debounce (#260)', () => {
+  const sent: BotConfig[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('várias mudanças em menos de 300 ms viram UMA mensagem, com o estado final (RF-06)', () => {
+    // Mutação que mata: mandar a cada toque (três mensagens), ou mandar só a última regra tocada.
+    setExitRule('hp-below', true);
+    vi.advanceTimersByTime(100);
+    setExitRule('out-of-gold', true);
+    vi.advanceTimersByTime(100);
+    setExitHpBelowPercent(45);
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.exit).toEqual(
+      expect.arrayContaining([{ kind: 'hp-below', percent: 45 }, { kind: 'out-of-gold' }]),
+    );
+    expect(sent[0]?.exit).toHaveLength(2);
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('ligar hp-below sem percentual anterior manda o DEFAULT (30)', () => {
+    setExitRule('hp-below', true);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent[0]?.exit).toEqual([{ kind: 'hp-below', percent: 30 }]);
+  });
+
+  it('desligar tira a regra da lista mandada, sem entrada morta', () => {
+    setExitRule('party-member-lost', true);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent[0]?.exit).toEqual([{ kind: 'party-member-lost' }]);
+    setExitRule('party-member-lost', false);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent[1]?.exit).toEqual([]);
+  });
+
+  it('recusa do servidor NÃO desfaz o que o jogador marcou no popover (RF-08)', () => {
+    setExitRule('hp-below', true, 20);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(bot.get().save).toBe('pending');
+
+    botResult(false, 'gold já em zero: out-of-gold é redundante');
+
+    expect(bot.get().save).toBe('refused');
+    expect(bot.get().reason).toContain('redundante');
+    expect(bot.get().draft.exit).toEqual([{ kind: 'hp-below', percent: 20 }]);
+  });
+
+  it('sem conexão o rascunho fica tocado e o próximo toque agenda de novo', () => {
+    setConfigSender(() => false);
+    setExitRule('out-of-gold', true);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(bot.get().save).toBe('refused');
+    expect(bot.get().touched).toBe(true);
+    expect(bot.get().draft.exit).toEqual([{ kind: 'out-of-gold' }]);
   });
 });
