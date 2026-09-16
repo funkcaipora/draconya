@@ -1,8 +1,9 @@
 # Design system do cliente — plano de implementação (E14)
 
 **Status:** proposto em 2026-09-15, com as dez perguntas do §10 respondidas pelo dono do produto em
-2026-09-16 — as decisões de arquitetura vão para o ADR 0029 (DS-01; era 0028 até o ADR 0028 ser tomado pela #263); este documento é o desenho, e
-as issues do milestone M14 apontam para cá (o M15 existe só como milestone com a lista do §5).
+2026-09-16 — as decisões de arquitetura vão para o ADR 0029 (DS-01; o número 0028 que este plano
+reservava foi tomado pela #263 antes); este documento é o desenho, e as issues do milestone M14
+apontam para cá (o M15 existe só como milestone com a lista do §5).
 **PRD:** §5 (plataforma e experiência do client), §8.2 (hotkeys guiadas), §13 (bot)
 **Origem:** o handoff "Design System MMORPG Medieval" gerado pelo Claude Design em 2026-09-15 —
 tokens, quinze primitivos, o fluxo de entrada, o HUD e catorze modais, em HTML/JSX de protótipo.
