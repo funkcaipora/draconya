@@ -472,7 +472,9 @@ body {
 }
 
 /* ---- O popover "Sair sozinho quando…" (#260, DS-17) --------------------------------------- */
-.exit-rules-anchor { position: relative; display: inline-flex; }
+/* O contêiner é pointer-events: none para o clique passar ao mundo; a âncora do popover
+   precisa religar como a pill, senão o chevron, o popover e o resumo ficam inclicáveis. */
+.exit-rules-anchor { position: relative; display: inline-flex; pointer-events: auto; }
 .exit-rules-toggle {
   width: 22px; height: 26px; padding: 0;
   border: 1px solid var(--blood-5); border-left: 0; border-radius: 0 3px 3px 0;
