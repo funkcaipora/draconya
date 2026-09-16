@@ -109,10 +109,11 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
               onDrop={(event) => { dropOn({ slot }, event, inventory); }}
             >
               {item === undefined
-                // O rótulo do lugar, maiúsculo, substitui o ícone cinza do pacote (ADR 0029 D4;
-                // a mesma regra do "—" de sempre — sem dado, a tela nunca deixa vazio quebrado).
-                // `role="img"` sai: agora há texto real dentro do <span>, não decoração de fundo.
-                ? <span className="slot-empty" aria-label={`${label} (vazio)`} title={label}>{label.toUpperCase()}</span>
+                // O rótulo do lugar, maiúsculo e cortado em 4 letras (#253, ADR 0029 D4), substitui
+                // o ícone cinza do pacote — a mesma regra do "—" de sempre: sem dado, a tela nunca
+                // deixa vazio quebrado. `aria-label`/`title` continuam com o nome INTEIRO; só o
+                // texto visível é cortado, como o `EquipmentSet` do handoff faz com todo nome.
+                ? <span className="slot-empty" aria-label={`${label} (vazio)`} title={label}>{label.slice(0, 4).toUpperCase()}</span>
                 : (
                   <button
                     type="button"
