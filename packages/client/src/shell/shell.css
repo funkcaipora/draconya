@@ -471,6 +471,41 @@ body {
   color: var(--blood-7);
 }
 
+/* ---- O popover "Sair sozinho quando…" (#260, DS-17) --------------------------------------- */
+.exit-rules-anchor { position: relative; display: inline-flex; }
+.exit-rules-toggle {
+  width: 22px; height: 26px; padding: 0;
+  border: 1px solid var(--blood-5); border-left: 0; border-radius: 0 3px 3px 0;
+  background: var(--ash-2); color: var(--gold-4);
+  font: 10px/1 var(--font-mono); cursor: pointer;
+}
+.exit-rules-toggle[aria-expanded="true"] { background: var(--surface-selected); }
+.exit-rules-popover {
+  position: absolute; right: 0; bottom: 34px; width: 262px; padding: 10px 12px 9px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--grad-panel);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .7), inset 0 0 0 1px #080505;
+}
+.exit-rules-hairline {
+  position: absolute; left: 14px; right: 14px; top: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-4), transparent);
+}
+.exit-rules-title {
+  display: block; margin-bottom: 8px; color: var(--parchment-1); font: 600 9px var(--font-mono);
+}
+.exit-rule-row {
+  display: flex; align-items: center; justify-content: space-between; height: 22px;
+  font: 8px var(--font-mono); color: var(--parchment-2); cursor: pointer;
+}
+.exit-rule-percent {
+  width: 32px; margin-left: 4px; background: var(--surface-slot); border: 1px solid var(--ash-5);
+  border-radius: 2px; color: inherit; font: inherit; text-align: right;
+}
+.exit-rules-summary {
+  position: absolute; right: 0; bottom: 32px; white-space: nowrap; padding: 3px 7px;
+  border: 1px solid var(--ash-5); border-radius: 2px; background: rgba(13, 9, 8, .92);
+  font: 6.5px var(--font-mono); color: var(--text-muted);
+}
+
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
 .hunts-modal-body {
   display: grid; grid-template-columns: 230px minmax(0, 1fr) 230px; gap: 12px; height: 430px;
