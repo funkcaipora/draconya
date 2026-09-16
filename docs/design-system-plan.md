@@ -281,6 +281,16 @@ tem `pnpm check` verde mais captura no navegador com o pacote de arte como crit�
 
 ### M14 · Design system — fundação e revestimento
 
+Milestone [4](https://github.com/funkcaipora/draconya/milestone/4), aberto em 2026-09-16 com as issues:
+
+| DS-01 | DS-02 | DS-03 | DS-04 | DS-05 | DS-06 | DS-07 | DS-08 | DS-09 | DS-10 |
+|---|---|---|---|---|---|---|---|---|---|
+| #244 | #245 | #246 | #247 | #248 | #249 | #250 | #251 | #252 | #253 |
+
+| DS-11 | DS-12 | DS-13 | DS-14 | DS-15 | DS-16 | DS-17 | DS-18 | DS-19 |
+|---|---|---|---|---|---|---|---|---|
+| #254 | #255 | #256 | #257 | #258 | #259 | #260 | #261 | #262 |
+
 #### Fase A — Fundação (nenhuma tela muda de cara)
 
 | # | Issue | Pacotes | Depende de | Tam. | Entrega | Aceite |
@@ -331,6 +341,8 @@ no painel do bot, escolhe quando sair sozinho, e lê o analisador — tudo com `
 sem requisição fora da origem, e sem nenhuma tela mostrando dado que o servidor não mandou.
 
 ### M15 · Design system — o servidor conta mais
+
+Milestone [5](https://github.com/funkcaipora/draconya/milestone/5), só com esta lista na descrição — as specs vêm depois do M14.
 
 Cada mudança de protocolo é **um campo, um schema, um teste**, e sempre opcional com `default`
 para um nó `game` anterior num deploy em rolagem não quebrar o cliente novo (o precedente de
