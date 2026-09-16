@@ -25,6 +25,14 @@ export class BotConfigStore {
     await this.redis.hset(KEY, characterId, JSON.stringify({ id: randomUUID(), config }));
   }
 
+  /**
+   * Há pendência? Um `HEXISTS`, para a admissão não abrir transação nem travar a linha do
+   * personagem no caso comum — nada pendente —, que é o de toda listagem e de quase todo ticket.
+   */
+  async hasPending(characterId: string): Promise<boolean> {
+    return (await this.redis.hexists(KEY, characterId)) === 1;
+  }
+
   async load(characterId: string): Promise<PendingBotConfig | null> {
     const serialized = await this.redis.hget(KEY, characterId);
     if (serialized === null) return null;

@@ -25,10 +25,10 @@
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
-import { buildContent, placeholderAppearances } from '@draconya/content';
+import { buildContent, botConfigSchema, placeholderAppearances } from '@draconya/content';
 import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
 import { AuthService } from '../auth/service.js';
@@ -46,7 +46,9 @@ import {
 import { writePendingReceipts } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
 import { BotConfigStore } from '../bot-config-store.js';
+import { settleBotConfig, writePendingBotConfigs } from '../jobs/bot-config.js';
 import { settleCharacterState } from '../jobs/character-state.js';
+import { createJobsCycle } from '../jobs/scheduler.js';
 import { ReceiptStore } from '../receipts.js';
 import { SnapshotStore } from '../snapshots.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
@@ -148,7 +150,10 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
+const nodeIds = new Set<string>();
+
 async function startNode(nodeId: string): Promise<GameRole> {
+  nodeIds.add(nodeId);
   const port = await availablePort();
   const configuration = loadConfiguration({
     DATABASE_URL: database?.url, REDIS_URL: process.env['TEST_REDIS_URL'], NODE_ENV: 'test',
@@ -301,7 +306,7 @@ async function retireNodes(): Promise<void> {
     await game.drain().catch(() => undefined);
     games.delete(game);
   }
-  for (const id of ['phase-two-a', 'phase-two-b', 'phase-two-c']) {
+  for (const id of nodeIds) {
     await redis.del(`node:${id}:heartbeat`);
   }
 }
@@ -553,4 +558,165 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     expect(back?.self.health).toBeGreaterThan(0);
     inbox.close();
   }, 120_000);
+});
+
+/**
+ * A persistência do bot sem Postgres no `game` (#263, ADR 0028), no MESMO fixture: o passo 2
+ * do roteiro acima é "configurar o bot pelo socket", e é o que este bloco prova que sobrevive
+ * — ao ciclo do `jobs`, à falha de cada serviço, a duas edições concorrentes, e à troca de nó
+ * antes de qualquer ciclo.
+ *
+ * Mora aqui, e não num arquivo próprio, porque os bancos de Redis de teste acabaram: `testing/redis.ts`
+ * lista 1 a 15, e o 0 é o do desenvolvimento local — um arquivo novo o tomaria e `flushdb`
+ * apagaria o diretório de sessões de quem roda `pnpm check` com um jogo aberto ao lado.
+ */
+describe.runIf(ready)('persistência do bot entre processos (#263, ADR 0028)', () => {
+  const db = () => (database as TestDatabase).database.db;
+  const EMPTY = botConfigSchema.parse({ version: 1, heal: [], potion: [], attack: [], rune: [], support: [] });
+  const HEAL = botConfigSchema.parse({ ...EMPTY, heal: [
+    { when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } },
+  ] });
+  let options: { database: ReturnType<typeof db>; botConfigs: BotConfigStore; logger: typeof logger };
+  let characterId: string;
+  let accountId: string;
+
+  beforeEach(async () => {
+    options = { database: db(), botConfigs, logger };
+    // Só a pendência, nunca `flushdb`: o fixture é compartilhado com o roteiro acima.
+    await redis.del('bot-config:pending');
+    const account = await repository.ensureAccount({
+      externalAuthId: randomUUID(), email: `${randomUUID()}@example.com`,
+    });
+    accountId = account.id;
+    characterId = (await repository.createCharacter(account.id, `Hero ${randomUUID()}`)).id;
+  });
+
+  const stored = async () => (await repository.getCharacter(accountId, characterId))?.botConfig;
+
+  it('writes through the jobs cycle and does not expire pending preferences', async () => {
+    await botConfigs.save(characterId, HEAL);
+    expect(await stored()).toBeNull();
+    expect(await redis.ttl('bot-config:pending')).toBe(-1);
+    await createJobsCycle(logger, { database: db(), botConfigs }).run();
+    expect(await stored()).toEqual(HEAL);
+    expect(await botConfigs.pendingCharacters()).toEqual([]);
+  });
+
+  it('does not open a transaction when nothing is pending', async () => {
+    // A admissão chama isto em toda listagem e em todo ticket: o caso comum custa um
+    // `HEXISTS`, nunca uma trava de linha.
+    const transaction = vi.spyOn(db(), 'transaction');
+    try {
+      expect(await settleBotConfig(characterId, options)).toBe(0);
+      expect(transaction).not.toHaveBeenCalled();
+    } finally { transaction.mockRestore(); }
+  });
+
+  it('keeps pending data when Postgres fails and retries successfully', async () => {
+    await botConfigs.save(characterId, HEAL);
+    const failure = vi.spyOn(db(), 'transaction').mockRejectedValueOnce(new Error('Database unavailable'));
+    try {
+      expect(await writePendingBotConfigs(options)).toEqual({ written: 0, failed: 1 });
+      expect(await stored()).toBeNull();
+      expect(await botConfigs.load(characterId)).not.toBeNull();
+    } finally { failure.mockRestore(); }
+    expect(await writePendingBotConfigs(options)).toEqual({ written: 1, failed: 0 });
+    expect(await stored()).toEqual(HEAL);
+  });
+
+  it('retries a committed write after an acknowledgement failure', async () => {
+    await botConfigs.save(characterId, HEAL);
+    const failure = vi.spyOn(botConfigs, 'acknowledge').mockRejectedValueOnce(new Error('Redis unavailable'));
+    try {
+      await expect(settleBotConfig(characterId, options)).rejects.toThrow('Redis unavailable');
+      expect(await stored()).toEqual(HEAL);
+      expect(await botConfigs.load(characterId)).not.toBeNull();
+    } finally { failure.mockRestore(); }
+    await settleBotConfig(characterId, options);
+    expect(await botConfigs.load(characterId)).toBeNull();
+    expect(await stored()).toEqual(HEAL);
+  });
+
+  it('does not acknowledge a newer edit, even when the payload is identical', async () => {
+    await botConfigs.save(characterId, HEAL);
+    const earlier = (await botConfigs.load(characterId))!;
+    await botConfigs.save(characterId, HEAL);
+    await botConfigs.acknowledge(characterId, earlier);
+    expect(await botConfigs.load(characterId)).not.toBeNull();
+    await settleBotConfig(characterId, options);
+    expect(await stored()).toEqual(HEAL);
+  });
+
+  it('serializes consumers and preserves an edit received during a database transaction', async () => {
+    await botConfigs.save(characterId, HEAL);
+    let read!: () => void;
+    let resume!: () => void;
+    const firstRead = new Promise<void>((resolve) => { read = resolve; });
+    const gate = new Promise<void>((resolve) => { resume = resolve; });
+    const originalLoad = botConfigs.load.bind(botConfigs);
+    const delayed = vi.spyOn(botConfigs, 'load').mockImplementationOnce(async (id) => {
+      const value = await originalLoad(id);
+      read();
+      await gate;
+      return value;
+    });
+    const first = settleBotConfig(characterId, options);
+    await firstRead;
+    try {
+      await botConfigs.save(characterId, EMPTY);
+      const second = settleBotConfig(characterId, options);
+      resume();
+      await Promise.all([first, second]);
+      expect(await stored()).toEqual(EMPTY);
+      expect(await botConfigs.load(characterId)).toBeNull();
+    } finally { resume(); delayed.mockRestore(); }
+  });
+
+  it('does not overwrite a deleted character or keep its pending entry forever', async () => {
+    await botConfigs.save(characterId, HEAL);
+    await db().update(characters).set({ deletedAt: new Date() }).where(eq(characters.id, characterId));
+    expect(await settleBotConfig(characterId, options)).toBe(0);
+    const [row] = await db().select().from(characters).where(eq(characters.id, characterId));
+    expect(row?.botConfig).toBeNull();
+    expect(await botConfigs.load(characterId)).toBeNull();
+  });
+
+  it('fails admission instead of silently returning stale preferences', async () => {
+    await botConfigs.save(characterId, HEAL);
+    const failure = vi.spyOn(botConfigs, 'load').mockRejectedValueOnce(new Error('Redis unavailable'));
+    try {
+      await expect(settleCharacterState(characterId, { ...options, receipts }))
+        .rejects.toThrow('Redis unavailable');
+    } finally { failure.mockRestore(); }
+    expect(await botConfigs.load(characterId)).not.toBeNull();
+  });
+
+  it('saves over a game-only socket and restores the edit on another node before any jobs cycle', async () => {
+    await retireNodes();
+    const { cookie, accountId: owner } = await login();
+    const created = await (await request('/api/characters', 'POST', cookie, {
+      name: `Player ${randomUUID().slice(0, 8).replace(/[^a-z]/g, 'a')}`,
+    })).json();
+    const playerId = String(created.id);
+
+    // O nó de jogo não recebe repositório (é o `PROCESSES=game` de produção), e mesmo assim salva.
+    await startNode('bot-node-one');
+    const inbox = await connect(cookie, playerId);
+    inbox.send({ type: 'bot-config', config: HEAL });
+    expect(await inbox.waitForNext('bot-config-result')).toEqual({ type: 'bot-config-result', ok: true });
+    expect((await repository.getCharacter(owner, playerId))?.botConfig).toBeNull();
+    expect(await botConfigs.load(playerId)).not.toBeNull();
+    inbox.close();
+
+    // Outro nó, antes de qualquer ciclo do `jobs`: é a ADMISSÃO que leva a edição ao banco.
+    await retireNodes();
+    await startNode('bot-node-two');
+    const reconnected = await connect(cookie, playerId);
+    reconnected.send({ type: 'session-attach' });
+    expect(await reconnected.waitForNext('session-state'))
+      .toEqual(expect.objectContaining({ botConfig: HEAL }));
+    expect((await repository.getCharacter(owner, playerId))?.botConfig).toEqual(HEAL);
+    expect(await botConfigs.load(playerId)).toBeNull();
+    reconnected.close();
+  }, 30_000);
 });

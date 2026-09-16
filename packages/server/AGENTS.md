@@ -418,8 +418,11 @@ permitir retry. Não emitir sucesso antes de o callback terminar.
 `BotConfigStore` mantém um envelope com UUID por edição em `bot-config:pending`, sem TTL.
 `jobs/bot-config.ts` é o consumidor compartilhado por `jobs` e pela admissão no `api`:
 
-- Trava a linha do personagem ANTES de ler a pendência do Redis; depois substitui `bot_config`.
-  Ler antes da trava permitiria a um consumidor atrasado sobrescrever a edição mais nova.
+- Sem pendência (`HEXISTS`) não abre transação: a admissão chama isto em toda listagem e em
+  todo ticket, e o caso comum precisa continuar custando só Redis, como `pendingFor` no ledger.
+- Com pendência, trava a linha do personagem ANTES de ler a pendência do Redis; depois
+  substitui `bot_config`. Ler antes da trava permitiria a um consumidor atrasado sobrescrever
+  a edição mais nova — o `HEXISTS` de fora só decide se vale abrir a transação.
 - Confirma a pendência só depois do commit, com comparação/remoção atômicas do envelope.
   Nova edição nunca é removida pelo ACK da anterior, mesmo com configuração idêntica.
 - Retry após commit repete a substituição, sem efeito econômico. Não há entrada no ledger.
@@ -432,7 +435,9 @@ permitir retry. Não emitir sucesso antes de o callback terminar.
 A janela até o ciclo de `jobs` ou próxima admissão depende da disponibilidade dos serviços.
 Redis perdido antes de gravar Postgres pode perder a pendência. AOF/backup continuam
 necessários; confirmação no socket significa aceitação no Redis, não commit de Postgres.
-Testes reais de concorrência e reconexão: `jobs/bot-config.postgres.test.ts`.
+Testes reais de concorrência e reconexão: o bloco "persistência do bot entre processos"
+de `api/phase-two-exit.postgres.test.ts` — no fixture da F2, porque os bancos de Redis de teste
+acabaram e o 0 é o do desenvolvimento local.
 
 ## As cores do outfit viajam no ticket, não no snapshot (FUN-104)
 
@@ -706,7 +711,7 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
 ## Testes de autenticação e admissão
 
 `TEST_REDIS_URL` deve apontar para um Redis descartável; os bancos listados em `testing/redis.ts`
-são apagados pelos testes — hoje 1 a 10, e a lista é verificada, não confiada.
+são apagados pelos testes — hoje 1 a 15, e a lista é verificada, não confiada.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

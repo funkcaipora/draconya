@@ -1841,7 +1841,7 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
     host.flush();
     expect(mensagens(socket)).toContainEqual({
       type: 'bot-config-result', ok: false,
-      reason: 'Bot configuration is active for this session but could not be saved. Please retry.',
+      reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
     });
     host.handle(viewer, { type: 'session-attach' });
     host.flush();

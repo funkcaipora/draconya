@@ -14,9 +14,16 @@ export interface BotConfigPersistenceOptions {
 export async function settleBotConfig(
   characterId: string, options: BotConfigPersistenceOptions,
 ): Promise<number> {
+  // Sem pendência não há transação: a admissão chama isto em toda listagem e em todo ticket,
+  // e no caso comum a resposta é um `HEXISTS` — nenhuma trava de linha, nenhuma ida ao
+  // Postgres. É a mesma economia que `settleCharacterProgress` faz com `pendingFor`. Uma
+  // edição que chegue entre esta leitura e a trava fica para o próximo ciclo ou admissão —
+  // exatamente como ficaria se tivesse chegado um instante depois desta chamada.
+  if (!(await options.botConfigs.hasPending(characterId))) return 0;
   const result = await options.database.transaction(async (tx) => {
     // Ler a pendência DEPOIS da trava serializa api/jobs sem relógio nem versão no schema.
-    // Um consumidor atrasado não pode sobrescrever a edição que outro já gravou.
+    // Um consumidor atrasado não pode sobrescrever a edição que outro já gravou. A leitura
+    // de fora, acima, só decide se vale abrir a transação; a que conta é esta.
     const [character] = await tx.select({ deletedAt: characters.deletedAt })
       .from(characters).where(eq(characters.id, characterId)).for('update');
     const pending = await options.botConfigs.load(characterId);

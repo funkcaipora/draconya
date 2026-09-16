@@ -95,10 +95,11 @@ Um boot saudável não prova a saúde do loop de simulação; essa observabilida
    e não gera linha econômica no ledger.
 5. Depois do commit, um script Lua compara o envelope e remove apenas a edição processada.
    A edição nova sobrevive a um consumidor atrasado, inclusive quando é idêntica à anterior.
-6. Na admissão, `settleCharacterState` processa a preferência antes do progresso. O callback
-   atende a emissão solo, a party e a lista de personagens. O ticket continua carregando
-   `InitialCharacter.botConfig`, lido do Postgres. O nó que recebe o ticket valida novamente
-   a preferência contra seu conteúdo antes de adotá-la.
+6. Na admissão, `settleCharacterState` processa a preferência antes do progresso. Sem
+   pendência é um `HEXISTS` e nenhuma transação — o caso comum de toda listagem e de quase
+   todo ticket. O callback atende a emissão solo, a party e a lista de personagens. O ticket
+   continua carregando `InitialCharacter.botConfig`, lido do Postgres. O nó que recebe o
+   ticket valida novamente a preferência contra seu conteúdo antes de adotá-la.
 
 Não há schema ou protocolo novo: `character.bot_config` e `bot-config-result` já existiam.
 Personagens antigos, inclusive os com `bot_config = null`, continuam compatíveis.
@@ -131,15 +132,16 @@ só então restaurar consumidores antigos. O ADR 0021 fica como histórico subst
 - `config.test.ts`: matriz de requisitos, URLs inválidas, WSS em produção e remoção de
   `THINGS_DIR`; `main.test.ts` chama a seleção real, sem copiar sua implementação.
 - `game/host.test.ts`: confirmação após persistência e erro sem desfazer a regra ativa.
-- `jobs/bot-config.postgres.test.ts`: Redis/Postgres reais, ciclo de jobs, retry após falha,
+- `api/phase-two-exit.postgres.test.ts`, bloco "persistência do bot entre processos":
+  Redis/Postgres reais, ciclo de jobs, caso comum sem transação, retry após falha,
   concorrência com edição durante a transação, ACK antigo, exclusão e socket em nó `game`
   sem banco → novo ticket → outro nó, antes de qualquer ciclo de `jobs`.
 
 Antes da entrega, instalar com `pnpm install --frozen-lockfile`, fornecer
 `TEST_REDIS_URL` e `DATABASE_TEST_URL` de serviços descartáveis e rodar `pnpm check` e
-`pnpm build`. Os testes de Redis apagam bancos exclusivos do destino de teste, incluindo
-agora o banco 0. Nunca apontar as variáveis de integração para serviços de desenvolvimento
-ou produção. Checks de assets sem pacote/OTBM local avisam que não conferiram esses arquivos.
+`pnpm build`. Os testes de Redis apagam os bancos 1 a 15 do destino de teste; o 0 continua
+sendo o do desenvolvimento local. Nunca apontar as variáveis de integração para serviços de
+produção. Checks de assets sem pacote/OTBM local avisam que não conferiram esses arquivos.
 
 ### Evidência da entrega — 2026-09-16
 

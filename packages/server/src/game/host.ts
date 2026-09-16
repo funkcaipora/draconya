@@ -1208,10 +1208,12 @@ export class SessionHost {
   /**
    * O jogador salvou uma configuração de bot (FUN-81, §13).
    *
-   * A ordem importa e é: aceitar → aplicar → persistir. Aplicar antes de gravar é deliberado —
-   * a hunt em curso passa a usar a regra nova na hora, e uma falha do Postgres não pode fazer
-   * o jogador ficar sem a cura que acabou de configurar. O preço é uma configuração que vale
-   * nesta sessão e não volta na próxima, e esse é o lado certo para errar.
+   * A ordem importa e é: aceitar → aplicar → registrar → confirmar (ADR 0028). Aplicar antes
+   * de registrar é deliberado — a hunt em curso passa a usar a regra nova na hora, e uma falha
+   * de persistência não pode fazer o jogador ficar sem a cura que acabou de configurar. Já a
+   * confirmação espera o registro: `ok: true` significa que a preferência está no Redis, de
+   * onde `jobs`/`api` a levam ao Postgres, e `ok: false` diz ao jogador que a regra vale
+   * agora mas precisa ser salva de novo.
    */
   async #configureBot(viewer: Viewer, raw: unknown): Promise<void> {
     const accept = this.#options.acceptBotConfig;
@@ -1246,7 +1248,10 @@ export class SessionHost {
       this.#logger.error(
         { error, characterId: viewer.characterId }, 'Failed to persist bot configuration',
       );
-      viewer.send({ type: 'bot-config-result', ok: false, reason: 'Bot configuration is active for this session but could not be saved. Please retry.' });
+      viewer.send({
+        type: 'bot-config-result', ok: false,
+        reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
+      });
     }
   }
 

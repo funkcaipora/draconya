@@ -16,7 +16,9 @@ import { characters } from '../db/schema.js';
 import { SessionDirectory } from '../directory.js';
 import { createGame } from '../game/server.js';
 import { createCitySessionFactory } from '../game/sessions.js';
-import { settleCharacterProgress, writePendingReceipts } from '../jobs/ledger.js';
+import { BotConfigStore } from '../bot-config-store.js';
+import { settleCharacterState } from '../jobs/character-state.js';
+import { writePendingReceipts } from '../jobs/ledger.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore } from '../receipts.js';
 import type { Role } from '../role.js';
@@ -60,6 +62,7 @@ let redis: Redis;
 let repository: DrizzleGameRepository;
 let directory: SessionDirectory;
 let receipts: ReceiptStore;
+let botConfigs: BotConfigStore;
 let app: ReturnType<typeof buildApi>;
 let game: Role;
 let baseUrl: string;
@@ -151,6 +154,7 @@ beforeAll(async () => {
     repository, sessions: new RedisAuthSessionStore(redis, 3600), devMode: true,
   });
   receipts = new ReceiptStore(redis);
+  botConfigs = new BotConfigStore(redis);
   const content = integrationContent();
   app = buildApi(configuration, logger, {
     auth, repository, tickets,
@@ -162,7 +166,9 @@ beforeAll(async () => {
       || (await directory.activeSlots(accountId)).includes(characterId),
     // A liquidação de verdade, não um stub: é ela que o ticket exige (FUN-56), e um stub
     // aqui deixaria a suíte passar com a rota configurada de um jeito que produção não usa.
-    settleProgress: (characterId) => settleCharacterProgress(characterId, {
+    // Desde o #263 ela leva o bot pendente junto (ADR 0028), como o `main.ts` liga.
+    settleProgress: (characterId) => settleCharacterState(characterId, {
+      botConfigs,
       database: database.database.db,
       receipts,
       logger,
@@ -175,6 +181,7 @@ beforeAll(async () => {
     // O extrato de estado durável do shard (#154) precisa de onde gravar; e a escolha de
     // vocação, do catálogo dela — ligados como o `main.ts` liga.
     receipts, vocations: content.vocations, vocationLevel: content.progression.vocationLevel,
+    saveBotConfig: (characterId, config) => botConfigs.save(characterId, config),
     createSession: createCitySessionFactory(content),
   });
   await game.start();

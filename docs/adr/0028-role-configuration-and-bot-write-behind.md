@@ -36,11 +36,14 @@ a aplicação imediata pela sessão dona.
    antes de liquidar progresso e emitir tickets solo/party, ou atualizar a lista de personagens.
    Assim, reconectar antes do próximo ciclo não recupera o bot antigo. Falha recusa a admissão,
    como já acontece com progresso não liquidado.
-6. O consumidor trava a linha do personagem, **depois** lê a pendência atual do Redis e
-   substitui `bot_config` na transação. Só após o commit confirma a pendência com comparação
-   e remoção atômicas no Redis. A ordem serializa `api/jobs`; a comparação protege uma edição
-   recebida durante o commit. Uma queda entre commit e confirmação repete a substituição,
-   sem repetir movimentação econômica. Personagem inexistente ou excluído não é atualizado.
+6. O consumidor confere antes, com um `HEXISTS`, se há pendência — sem pendência não abre
+   transação, porque a admissão o chama em toda listagem e em todo ticket e o caso comum
+   precisa continuar custando só Redis. Com pendência, trava a linha do personagem, **depois**
+   lê a pendência atual do Redis e substitui `bot_config` na transação. Só após o commit
+   confirma a pendência com comparação e remoção atômicas no Redis. A ordem serializa
+   `api/jobs`; a comparação protege uma edição recebida durante o commit. Uma queda entre
+   commit e confirmação repete a substituição, sem repetir movimentação econômica. Personagem
+   inexistente ou excluído não é atualizado.
 
 ## Alternativas descartadas
 
