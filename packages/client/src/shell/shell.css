@@ -162,27 +162,34 @@ body {
 .badge-failed { color: #c25b4a; border-color: #5a3430; }
 .badge-idle { color: #7a7a88; }
 
-/* HP e mana (FUN-108): duas barras como as do Tibia. O preenchimento tem a LARGURA da fração,
-   ancorado à esquerda — a barra cheia cortada na fração, ponta esquerda fica, direita some.
-   Cor lisa desde #250 (ADR 0029 D4); o revestimento com o vidro ferro-forjado do design entra
-   em #251 (DS-08). */
-.vitals { display: flex; gap: 8px; }
-.bar {
-  position: relative; width: 150px; height: 18px; overflow: hidden; border-radius: 4px;
-  background: #23232c;
+/* HP e mana (FUN-108): duas barras de 14 px no alto da coluna direita (#253, ADR 0029 D3/D4).
+   O preenchimento tem a LARGURA da fração, ancorado à esquerda — a barra cheia cortada na
+   fração, ponta esquerda fica, direita some. Vidro ferro-forjado sobre os tokens do design,
+   como o resto da coluna desde #251. */
+.windows-right > .vitals {
+  display: flex; flex-direction: column; gap: 4px; order: 0;
+  padding: 8px 10px; margin: 0;
+  border-bottom: 1px solid var(--ash-5);
+  background: var(--ash-1);
 }
+.bar {
+  position: relative; height: 14px; overflow: hidden; border-radius: 2px;
+  border: 1px solid #080505;
+}
+.bar-hp { background: var(--vital-hp-track); }
+.bar-mana { background: var(--vital-mp-track); }
 .bar-fill {
   position: absolute; top: 0; bottom: 0; left: 0;
   transition: width 120ms linear;
 }
-.bar-hp .bar-fill { background: #c25b4a; }
-.bar-mana .bar-fill { background: #4a7fc2; }
+.bar-hp .bar-fill { background: var(--vital-hp); }
+.bar-mana .bar-fill { background: var(--vital-mp); }
 .bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
-  font-size: 12px; font-weight: 600; color: #fff; line-height: 1;
+  font: 500 7.5px var(--font-mono); color: var(--parchment-1); letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   /* Contorno preto, como o número dentro da barra do Tibia: lê sobre o vermelho e sobre o azul. */
-  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
+  text-shadow: 0 1px 2px #000, 1px 0 #000, -1px 0 #000;
 }
 
 
@@ -408,13 +415,13 @@ body {
 
 /* Um BOTÃO dentro de uma janela: cor lisa e borda sólida desde #250 — o bisel do pacote saiu
    (ADR 0029 D4). */
-.hunt-difficulties button, .bot-add, .bot-actions button {
+.hunt-difficulties button {
   background: #1b1b23;
   border: 2px solid var(--line);
   border-radius: 0;
   color: inherit; font: inherit; font-size: 12px; cursor: pointer;
 }
-.hunt-difficulties button:hover:not(:disabled), .bot-add:hover, .bot-actions button:hover {
+.hunt-difficulties button:hover:not(:disabled) {
   filter: brightness(1.2);
 }
 
@@ -426,66 +433,54 @@ body {
 .hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .hunt-difficulties button { padding: 2px 6px; }
 
-/* O painel do bot (FUN-89; fixo à esquerda desde #162). Densa de propósito: são cinco categorias
-   na mesma coluna, e cada regra é UMA linha — interruptor, texto, engrenagem, setas. O vBot. */
-.bot-panel .bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.bot-title strong { flex: 1 1 auto; }
-/* Minimizado: só o cabeçalho fica. A seção nunca desmonta. */
-.windows > section.collapsed > *:not(header) { display: none; }
+/* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
+   de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
+   texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
+   (`shell/ui.css`); o que resta aqui é só o conteúdo específico do bot. */
+/* Minimizado: só o cabeçalho fica. A seção nunca desmonta — `Panel` já não desenha o corpo
+   quando `collapsed`, então não há filho a esconder aqui. */
 .bot-category { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
 .bot-category-head { display: flex; align-items: baseline; gap: 6px; }
 .bot-category-head strong { flex: 1 1 auto; }
-.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
-.bot-rule { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bot-category-slots { color: var(--text-faint); font: 7px var(--font-mono); }
+.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 4px; }
+.bot-rule { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .bot-rule-off .bot-rule-text { color: var(--text-faint); text-decoration: line-through; }
 .bot-rule-text {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 11px;
+  font: 8px var(--font-mono); color: var(--parchment-1);
 }
-/* O interruptor: verde ligado, vermelho desligado — a cor do BotSwitch do vBot. */
-.bot-switch {
-  flex: 0 0 auto; width: 26px; height: 14px; border-radius: 7px; border: 1px solid var(--line);
-  padding: 0; cursor: pointer; background: #7a2b2b; position: relative;
-}
-.bot-switch::after {
-  content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
-  border-radius: 50%; background: #fff; transition: left 120ms;
-}
-.bot-switch[aria-checked="true"] { background: #2e8b57; }
-.bot-switch[aria-checked="true"]::after { left: 13px; }
 .bot-rule-order { display: flex; flex-direction: column; flex: 0 0 auto; }
 .bot-rule-order button {
-  background: none; border: none; padding: 0; line-height: 1;
-  color: var(--text-muted); font-size: 9px; cursor: pointer;
+  width: 14px; height: 9px; padding: 0; line-height: 1;
+  background: none; border: none; color: var(--text-muted); font: 7px/1 var(--font-mono); cursor: pointer;
 }
-.bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
-/* O editor de uma regra: sobreposição pequena, a linha larga de antes — condição, operador,
-   valor, ação — porque ela não cabe em 300 px. É o "Setup" do vBot. */
-.rule-editor {
-  position: fixed; inset: 0; z-index: 30;
-  background: rgba(6, 6, 10, 0.7);
-  display: grid; place-items: center; padding: 16px;
+.bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
+
+/* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
+   CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
+   ações. */
+.rule-editor-row { display: grid; grid-template-columns: 1.2fr 0.6fr 0.8fr; gap: 6px; align-items: end; }
+.rule-editor-divider {
+  display: flex; align-items: center; gap: 8px; margin: 10px 0 6px;
 }
-.rule-editor-body {
-  width: 100%; max-width: 520px; box-sizing: border-box;
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+.rule-editor-divider::before, .rule-editor-divider::after { content: ''; flex: 1; height: 1px; background: var(--ash-5); }
+.rule-editor-divider span { font: 500 7px var(--font-mono); color: var(--gold-4); letter-spacing: .14em; }
+.rule-action-list { display: grid; gap: 4px; }
+.rule-action {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; text-align: left;
+  height: 30px; padding: 0 10px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); color: var(--parchment-2); font: 8.5px var(--font-mono); cursor: pointer;
 }
-/* No celular a linha larga quebra em vez de espremer: seis caixinhas de 30px não são
-   configuráveis com o dedo. */
+.rule-action:disabled { color: var(--text-faint); cursor: not-allowed; opacity: .6; }
+.rule-action-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
+.rule-editor-note { margin: 10px 2px 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
+.rule-editor-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
+.rule-editor-actions { display: flex; gap: 8px; }
+
 @media (max-width: 520px) {
-  .bot-rule-wide { flex-wrap: wrap; }
-  .bot-rule-wide select[aria-label="ação"] { flex-basis: 100%; }
+  .rule-editor-row { grid-template-columns: 1fr; }
 }
-.bot-rule select, .bot-rule input {
-  background: #131319; border: 1px solid var(--line); border-radius: 3px;
-  padding: 1px 2px; color: inherit; font: inherit; font-size: 11px; min-width: 0;
-}
-.bot-rule select[aria-label="ação"] { flex: 1 1 auto; }
-.bot-rule input { width: 52px; }
-.bot-add, .bot-actions button { padding: 2px 8px; }
-.bot-actions { display: flex; gap: 6px; }
 
 /* A escolha de vocação (#154, #249) com os cards do design system (ADR 0029 D2/D7).
    A sobreposição própria de antes some: scrim, painel e fio dourado passam a ser do `Modal`
@@ -558,48 +553,54 @@ body {
 .container-head strong { flex: 1 1 auto; }
 .container-icon { display: inline-flex; width: 20px; height: 20px; overflow: hidden; }
 .container-icon canvas { width: 20px; height: 20px; }
-/* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). */
+/* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). Slot de
+   26 px (#253, ADR 0029 D4) — ver `.container-grid .slot` abaixo, junto de `.equipment .slot`. */
 .container-grid {
   list-style: none; margin: 6px 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(5, 34px); gap: 3px; justify-content: center;
+  display: grid; grid-template-columns: repeat(5, 26px); gap: 3px; justify-content: center;
 }
 .slot-empty-place { opacity: 0.85; }
 .slot[draggable], .slot-button[draggable] { cursor: grab; }
-.capacity { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
-/* O seletor de munição: sobreposição pequena, ancorada ao painel do set. */
+.capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-4); }
+/* O seletor de munição: sobreposição pequena, "Panel ancorado" ao painel do set — fio dourado
+   no topo, como o resto do design (#253, §5 DS-10). */
 .ammo-picker {
-  position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 280px;
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); padding: 0 0 8px;
+  position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 260px;
+  background: var(--grad-panel); border: 1px solid var(--gold-2); border-top: 2px solid var(--gold-4);
+  border-radius: 4px; box-shadow: var(--shadow-panel); padding: 0 0 8px;
 }
 .ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
 .ammo-option {
   width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; text-align: left;
-  background: #131319; border: 1px solid var(--line); border-radius: 4px; color: inherit; font: inherit; cursor: pointer;
+  background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  color: var(--parchment-2); font: 8px var(--font-mono); cursor: pointer;
 }
-.ammo-option.active { border-color: var(--accent); }
+.ammo-option.active { border-color: var(--gold-4); color: var(--gold-5); }
 .ammo-option:disabled { opacity: 0.45; cursor: default; }
 .ammo-name { flex: 1 1 auto; }
-.slot-ammo-picker { outline: 1px dashed var(--accent); outline-offset: -1px; }
+.slot-ammo-picker { outline: 1px dashed var(--gold-4); outline-offset: -1px; }
 
-/* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: o quadrado de pedra do
-   pacote (34×34, o topo de `containerslot.png`), o ícone cinza do lugar quando vazio, o sprite
-   do item quando cheio. Sem pacote: quadrado de cor lisa, sem ícone, com a inicial do nome. */
+/* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: 30 px no set, 26 px na
+   mochila e na bolsa (#253, ADR 0029 D4/DT-04) — o tamanho vem do CONTEXTO (`.equipment .slot`,
+   `.container-grid .slot`), não de uma classe por tamanho. O lugar vazio mostra o RÓTULO
+   (`.slot-empty`), nunca um ícone de pacote; o sprite do item entra por `.item-sprite`. */
 .inventory { display: flex; flex-direction: column; gap: 6px; }
 .inventory > .equipment { margin-top: 6px; }
 .inventory .quiet { color: var(--text-faint); }
 
 /* O equipamento no desenho de corpo do Tibia: cabeça em cima, mãos ao lado do peito, pés
-   embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. */
+   embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. Vidro
+   ferro-forjado sobre os tokens (#253), como o resto da coluna desde #251. */
 .equipment {
-  list-style: none; margin: 0 auto; padding: 0;
-  display: grid; grid-template-columns: repeat(3, 34px); gap: 3px;
+  list-style: none; margin: 8px auto; padding: 8px;
+  display: grid; grid-template-columns: repeat(3, 30px); gap: 3px; justify-content: center;
   grid-template-areas:
     "neck head back"
     "hand chest shield"
     "finger legs ammo"
     ". feet .";
+  border: 1px solid var(--ash-5); border-radius: 6px;
+  background: linear-gradient(145deg, var(--ash-3), var(--ash-2));
 }
 .slot-back { grid-area: back; }
 .slot-head { grid-area: head; }
@@ -613,9 +614,15 @@ body {
 .slot-ammo { grid-area: ammo; }
 
 .slot {
-  position: relative; width: 34px; height: 34px; box-sizing: border-box;
-  background: #1e1e27;
+  position: relative; box-sizing: border-box;
+  background: var(--surface-slot); border: 1px solid var(--ash-5);
 }
+/* Tamanho por CONTEXTO (DT-04): `.slot` não sabe se está no set ou num container — quem sabe é
+   o pai. `.item-sprite` acompanha para o sprite não vazar da moldura. */
+.equipment .slot { width: 30px; height: 30px; }
+.container-grid .slot { width: 26px; height: 26px; }
+.equipment .item-sprite, .equipment .item-sprite canvas { width: 28px; height: 28px; }
+.container-grid .item-sprite, .container-grid .item-sprite canvas { width: 24px; height: 24px; }
 .slot-button, .slot-item, .slot-empty {
   position: absolute; inset: 0; margin: 0; padding: 0;
   background: none; border: none; color: inherit; font: inherit;
@@ -627,7 +634,7 @@ body {
 .slot-empty {
   inset: 1px;
   display: grid; place-items: center;
-  font-size: 6.5px; letter-spacing: 0.02em; text-transform: uppercase;
+  font: 500 5.5px var(--font-mono); letter-spacing: 0.01em; text-transform: uppercase;
   color: var(--text-faint);
   text-align: center;
   pointer-events: none;
@@ -646,14 +653,19 @@ body {
   pointer-events: none;
 }
 
-.capacity { color: var(--text-muted); font-variant-numeric: tabular-nums; padding: 0 2px; }
+/* A capacidade e o gold, sob o set — moldura fina sobre os tokens (#253). */
+.capacity {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  height: 18px; margin: 0 auto 6px; padding: 0 6px; max-width: 168px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
+  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase;
+}
 
 /* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
    embaixo, roláveis. Duas colunas flutuantes de 300px não cabem em 375px, e o caso de uso
    móvel é configurar o bot e ler o extrato — não jogar de olho no mundo.
    Fica no FIM da folha de propósito: as regras daqui têm a mesma especificidade das de cima,
-   e na cascata quem vem depois ganha — no meio da folha, `.bar { width: 96px }` perdia para o
-   `.bar { width: 150px }` declarado depois. */
+   e na cascata quem vem depois ganha. */
 @media (max-width: 720px) {
   body { overflow: auto; }
   .shell { position: static; height: auto; overflow: visible; }
@@ -665,15 +677,15 @@ body {
   .topbar-wordmark { order: 3; width: 100%; }
   .topbar-right { width: 100%; justify-content: space-between; }
   .topbar-name { max-width: 120px; }
-  .bar { width: 96px; }
-  .bar-hp .bar-fill, .bar-mana .bar-fill { background-size: 96px 18px; }
   .windows, .windows-left, .windows-right {
     position: static; width: auto; height: auto; margin: 10px 10px 0;
     background: transparent; border: 0; overflow: visible;
   }
   .windows > section { max-height: none; overflow: visible; }
-  /* A ordem dos blocos no celular (#161, #254): set → mochila → bolsa → batalha → bot → hunts →
-     analisador → bestiário. As duas colunas viram uma, e `order` põe cada seção no lugar. */
+  /* A ordem dos blocos no celular (#161, #253, #254): vitais → set → mochila → bolsa → batalha →
+     bot → hunts → analisador → bestiário. As duas colunas viram uma, e `order` põe cada seção no
+     lugar; as vitais (#253) não precisam de regra aqui — `order: 0` já vem da regra base de
+     `.windows-right > .vitals`, e é o menor `order` da coluna. */
   .windows-left, .windows-right { display: flex; flex-direction: column; }
   .windows-right > .inventory { order: 1; }
   .windows-right > .container-window { order: 2; }

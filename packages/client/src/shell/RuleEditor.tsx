@@ -9,9 +9,15 @@
 import { useState } from 'react';
 import { BOT_CONDITION_KINDS } from '@draconya/content';
 import type { BotCategory, BotCondition, BotRule } from '@draconya/content';
-import { putRule } from '../bot/store.js';
+import { bot, putRule } from '../bot/store.js';
+import { useStoreSlice } from '../state/useSlice.js';
 import type { BotVocabulary } from '../state/hud.js';
 import { CONDITION_TEXT } from './rule-text.js';
+import { CATEGORY_TEXT } from './BotPanel.js';
+import { Modal } from './ui/Modal.js';
+import { Select } from './ui/Select.js';
+import { Input } from './ui/Input.js';
+import { Button } from './ui/Button.js';
 
 /** Os quatro do §13.3. **Sem `==`**: comparar percentual exato quase nunca dispara. */
 const OPERATORS = ['<', '<=', '>', '>='] as const;
@@ -85,59 +91,80 @@ export function RuleEditor({ category, index, initial, vocabulary, level, onClos
       locked: level > 0 && level < spell.minLevel,
     }));
 
+  // A meta "slot N/M" (RF-06): N é a posição 1-based (a nova entra no FIM da categoria — mesma
+  // regra de sempre, §13.4); M é o teto do catálogo, igual ao "n/slots" do cabeçalho da Category.
+  const rules = useStoreSlice(bot, (state) => state.draft.rules[category]);
+  const slots = vocabulary.slots[category] ?? 0;
+  const slotNumber = (index ?? rules.length) + 1;
+
   return (
-    <div className="rule-editor" role="dialog" aria-label="editar regra">
-      <div className="rule-editor-body">
-        <div className="bot-rule bot-rule-wide">
-          <select
-            aria-label="condição"
-            value={rule.when.kind}
-            onChange={(event) => { setRule({ ...rule, when: blankCondition(event.target.value) }); }}
-          >
-            {BOT_CONDITION_KINDS
-              .filter((kind) => !vocabulary.advancedOnly.conditions.includes(kind) || level >= vocabulary.advancedFromLevel)
-              .map((kind) => <option key={kind} value={kind}>{CONDITION_TEXT[kind] ?? kind}</option>)}
-          </select>
-          <select
-            aria-label="operador"
-            value={rule.when.op}
-            onChange={(event) => {
-              setRule({ ...rule, when: { ...rule.when, op: event.target.value } as BotCondition });
-            }}
-          >
-            {OPERATORS.map((op) => <option key={op} value={op}>{op}</option>)}
-          </select>
-          <input
-            aria-label="valor"
-            type="number"
-            min={0}
-            max={rule.when.kind === 'targets' ? 99 : 100}
-            value={conditionValue(rule.when)}
-            onChange={(event) => { setRule({ ...rule, when: withValue(rule.when, Number(event.target.value)) }); }}
-          />
-          <select
-            aria-label="ação"
-            value={actionId}
-            onChange={(event) => {
-              const id = event.target.value;
+    <Modal
+      open
+      onClose={onClose}
+      title={`${index === null ? 'Nova regra' : 'Editar regra'} · ${CATEGORY_TEXT[category]}`}
+      width={480}
+      meta={`slot ${String(slotNumber)}/${String(slots)}`}
+      footer={
+        <>
+          <span className="rule-editor-hint">Salvar manda agora · quem decide é o servidor</span>
+          <span className="rule-editor-actions">
+            <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+            {/* Salvar aplica ao rascunho e manda AGORA (invariante 4): quem decide se vale é o
+                servidor, e a recusa chega em bot-config-result sem desfazer nada — putRule é a
+                MESMA função de antes. */}
+            <Button variant="primary" size="sm" onClick={() => { putRule(category, index, rule); onClose(); }}>Salvar</Button>
+          </span>
+        </>
+      }
+    >
+      <div className="rule-editor-row">
+        <Select
+          label="Condição"
+          size="md"
+          value={rule.when.kind}
+          options={BOT_CONDITION_KINDS
+            .filter((kind) => !vocabulary.advancedOnly.conditions.includes(kind) || level >= vocabulary.advancedFromLevel)
+            .map((kind) => ({ value: kind, label: CONDITION_TEXT[kind] ?? kind }))}
+          onChange={(value) => { setRule({ ...rule, when: blankCondition(value) }); }}
+        />
+        <Select
+          label="Operador"
+          size="md"
+          value={rule.when.op}
+          options={OPERATORS.map((op) => ({ value: op, label: op }))}
+          onChange={(value) => { setRule({ ...rule, when: { ...rule.when, op: value } as BotCondition }); }}
+        />
+        <Input
+          label="Valor"
+          size="sm"
+          type="number"
+          value={String(conditionValue(rule.when))}
+          onChange={(event) => { setRule({ ...rule, when: withValue(rule.when, Number(event.target.value)) }); }}
+        />
+      </div>
+      <div className="rule-editor-divider"><span>→ AÇÃO</span></div>
+      <div className="rule-action-list">
+        {actions.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            data-action-id={action.id}
+            disabled={action.locked}
+            className={`rule-action${action.id === actionId ? ' rule-action-selected' : ''}`}
+            onClick={() => {
               setRule({
                 ...rule,
-                do: supplies !== null ? { kind: 'supply', supplyId: id } : { kind: 'spell', spellId: id },
+                do: supplies !== null ? { kind: 'supply', supplyId: action.id } : { kind: 'spell', spellId: action.id },
               });
             }}
           >
-            {actions.map((action) => (
-              <option key={action.id} value={action.id} disabled={action.locked}>{action.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="bot-actions">
-          {/* Salvar aplica ao rascunho e manda AGORA (invariante 4: intenção; quem decide é o
-              servidor, e a recusa chega em `bot-config-result` sem desfazer nada). */}
-          <button type="button" onClick={() => { putRule(category, index, rule); onClose(); }}>Salvar</button>
-          <button type="button" className="entry-quiet" onClick={onClose}>Cancelar</button>
-        </div>
+            {action.label}
+          </button>
+        ))}
       </div>
-    </div>
+      <p className="rule-editor-note">
+        Dentro da categoria a avaliação é de cima para baixo: a primeira regra válida executa. HP e Mana comparam percentual, nunca valor absoluto.
+      </p>
+    </Modal>
   );
 }

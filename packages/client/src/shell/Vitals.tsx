@@ -5,6 +5,11 @@ import { useHudSlice } from '../state/useSlice.js';
  * com o número dentro. O trilho e o preenchimento são cor lisa desde #250 (ADR 0029 D4) — a
  * skin de pedra do pacote saiu inteira.
  *
+ * **Desde #253 (ADR 0029 D3/D8), `<Vitals />` é montado no ALTO da coluna direita**
+ * (`Shell.tsx`, primeiro filho de `.windows-right`), a 14 px — não mais entre o nome e o gold
+ * na barra do topo (`TopBar.tsx`): o design não desenha HP/mana lá. Nenhuma linha de LÓGICA
+ * deste arquivo muda com a mudança de lugar; só o CSS por baixo (`shell.css`) veste os tokens.
+ *
  * O preenchimento é um elemento com a LARGURA da fração e a imagem no tamanho da barra
  * inteira, ancorada à esquerda: o que se vê é a barra cheia CORTADA na fração, como o
  * cliente do Tibia faz com o retângulo de recorte — a ponta esquerda fica, a direita some.

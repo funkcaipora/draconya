@@ -94,6 +94,17 @@ describe('o slot equipado (FUN-108)', () => {
     expect(html).not.toContain('role="img"');
   });
 
+  it('o rótulo do slot vazio é cortado em 4 letras, mas aria-label e title ficam com o nome inteiro (#253, DT-02)', async () => {
+    // "Pescoço" (7 letras) sai como "PESC" no texto visível — o `EquipmentSet` do handoff corta
+    // todo nome em 4 letras. `aria-label`/`title` continuam com "Pescoço" por inteiro: só o
+    // texto DENTRO do <span> é cortado. Mutação que mata: `label.toUpperCase()` sem `.slice(0, 4)`
+    // (deixaria "PESCOÇO" inteiro no texto visível).
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const html = await render();
+    expect(html).toContain('<span class="slot-empty" aria-label="Pescoço (vazio)" title="Pescoço">PESC</span>');
+    expect(html).not.toContain('>PESCOÇO<');
+  });
+
   it('a pilha vestida mostra a quantidade, que vem da MENSAGEM', async () => {
     // A quantidade do equipado viaja com ele (FUN-108); antes ela era `1` fixo porque o
     // slot não tinha de onde tirá-la. Mutação que mata: `quantity={1}` no slot vestido.

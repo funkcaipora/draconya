@@ -10,7 +10,6 @@ import { useState } from 'react';
 import { account } from '../account/store.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
-import { Vitals } from './Vitals.js';
 
 export type WindowId = 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
 
@@ -93,11 +92,6 @@ export function TopBar({ open, toggle }: {
           <span className="topbar-coin" aria-hidden="true" />
           {integer.format(gold)}
         </div>
-        {/* Provisório (#251 → #253/DS-10): o design não desenha HP/mana no topo — eles migram
-            para uma VitalBar de 14 px no alto da coluna direita. Até DS-10 existir, HP e mana
-            ficam aqui para nunca sumirem da tela ("O estado da conexão fica na tela": o mesmo
-            vale para o que mantém o personagem vivo). */}
-        <Vitals />
       </div>
       <div className="topbar-wordmark">
         <b>DRACONYA</b>

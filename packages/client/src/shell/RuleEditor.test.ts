@@ -41,18 +41,44 @@ describe('RuleEditor', () => {
     });
   });
 
+  // RF-06/RF-07: `Modal` de 480 px, meta "slot N/M" (N 1-based, M o teto da categoria) e o
+  // rodapé com o aviso "Salvar manda agora · quem decide é o servidor" e Cancelar/Salvar.
+  it('is a 480px Modal with the "slot N/M" meta and the footer note', async () => {
+    const html = await render('rune', 30);
+    expect(html).toContain('style="width:480px"');
+    expect(html).toMatch(/ui-panel-meta">slot 1\/10</);
+    expect(html).toContain('Salvar manda agora · quem decide é o servidor');
+    expect(html).toContain('Cancelar');
+    expect(html).toContain('>Salvar<');
+  });
+
+  // RF-08: condição e operador em `Select`, valor em `Input`, ação como lista de botões.
+  it('uses Select for condition/operator, Input for the value, and a button list for the action', async () => {
+    const html = await render('potion', 1);
+    expect(html).toContain('ui-select');
+    expect(html).toContain('ui-input');
+    expect(html).not.toContain('aria-label="condição"');
+    expect(html).not.toContain('aria-label="operador"');
+    expect(html).not.toContain('aria-label="valor"');
+    expect(html).not.toContain('<select aria-label="ação"');
+    expect(html).not.toMatch(/<option[^>]*disabled/);
+  });
+
   it('offers the rune in the rune category, locked below its level', async () => {
     // Mutação que mata: `locked: false` fixo para supply — o level 10 veria a runa aberta.
     const young = await render('rune', 10);
     expect(young).toContain('Avalanche Rune (14 gold)');
     expect(young).not.toContain('Poção de Vida');
-    expect(young).toMatch(/<option[^>]*value="avalanche-rune"[^>]*disabled/);
+    expect(young).toMatch(/<button[^>]*data-action-id="avalanche-rune"[^>]*disabled=""/);
     const veteran = await render('rune', 30);
-    expect(veteran).not.toMatch(/<option[^>]*value="avalanche-rune"[^>]*disabled/);
+    expect(veteran).not.toMatch(/<button[^>]*data-action-id="avalanche-rune"[^>]*disabled=""/);
     // E a poção nunca aparece trancada: `requires` vazio.
     const potion = await render('potion', 1);
     expect(potion).toContain('Poção de Vida');
     expect(potion).not.toContain('Avalanche');
-    expect(potion).not.toMatch(/<option[^>]*disabled/);
+    expect(potion).not.toMatch(/data-action-id="health-potion"[^>]*disabled=""/);
+    // Level bem alto: a poção continua liberada.
+    const veteranPotion = await render('potion', 99);
+    expect(veteranPotion).not.toMatch(/data-action-id="health-potion"[^>]*disabled=""/);
   });
 });

@@ -1,7 +1,8 @@
 // A geografia do §5.3 (FUN-24), com a cara do Huntera (FUN-115).
 //
 // O mundo ocupa a tela inteira; a barra do topo, as janelas à esquerda e à direita e o chat
-// flutuam por cima. HP, mana, gold e o estado da conexão moram na barra.
+// flutuam por cima. Gold e o estado da conexão moram na barra; HP e mana moram no alto da
+// coluna direita desde #253 (`Vitals`, primeiro filho de `windows-right`).
 //
 // A GEOGRAFIA É FIXA (§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda,
 // chat embaixo — nos mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao
@@ -30,6 +31,7 @@ import { BotPanel } from './BotPanel.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
 import { VocationChoice } from './VocationChoice.js';
+import { Vitals } from './Vitals.js';
 import { TopBar } from './TopBar.js';
 import type { WindowId } from './TopBar.js';
 
@@ -70,6 +72,9 @@ export function Shell() {
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
+          {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
+              não desenha HP/mana no design (#251). */}
+          <Vitals />
           {/* A coluna do OTClient (#161): set, mochila e bolsa FIXOS — um botão da barra
               minimiza os três juntos —, e abaixo deles o analisador e o Bestiário. */}
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
