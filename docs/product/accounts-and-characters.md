@@ -1,6 +1,6 @@
 # Contas, autenticação e personagens
 
-**Status:** parcial — autenticação e CRUD inicial implementados; escolha de vocação entregue (#154, ADR 0026); onboarding visual continua pendente
+**Status:** parcial — autenticação e CRUD inicial implementados; escolha de vocação entregue (#154, ADR 0026); a metade "entrada" do onboarding visual (login, grade de personagens, criação) entregue pelo design system (#248, ADR 0029 D7/D8); a escolha de vocação como `ClassCard` do design fica pendente (#249)
 **PRD:** §7.1–§7.4
 **Épico:** E0
 
