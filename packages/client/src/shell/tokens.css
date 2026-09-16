@@ -1,0 +1,217 @@
+/* Tokens do design system (#245, ADR 0029 D1). Fundido dos quatro arquivos do handoff
+ * (design_handoff_draconya/tokens/{colors,typography,spacing,effects}.css — colados na
+ * íntegra em "Referência do design" desta issue), num arquivo só (DT-01).
+ *
+ * Espaçamento e slots vêm CORRIGIDOS: o handoff documenta números diferentes dos que as
+ * telas do próprio handoff desenham (plano §1). Esta folha adota o que está DESENHADO.
+ * O token da faixa inferior (124 px no handoff) não existe aqui: essa faixa era para a barra
+ * de ações, que o plano D5 não constrói — o mundo ocupa até o rodapé.
+ */
+
+/* ── Cores (tokens/colors.css do handoff, sem alteração) ── */
+:root {
+  /* ── Base: ash & ember neutrals (warm blacks) ── */
+  --ash-0: #070505;
+  --ash-1: #0d0908;
+  --ash-2: #140e0d;
+  --ash-3: #1c1413;
+  --ash-4: #261b19;
+  --ash-5: #342523;
+  --ash-6: #4a3733;
+  --ash-7: #6b544f;
+  --ash-8: #9a837c;
+  --ash-9: #c8b6ad;
+
+  /* ── Blood: primary red (dragon blood) ── */
+  --blood-1: #2a0608;
+  --blood-2: #470a0f;
+  --blood-3: #6e0f14;
+  --blood-4: #8f1a20;
+  --blood-5: #b32a2f;
+  --blood-6: #d64848;
+  --blood-7: #ef7d76;
+
+  /* ── Gold: old gold accent (hoard) ── */
+  --gold-1: #3a2a0f;
+  --gold-2: #6b4d1c;
+  --gold-3: #9c7a2f;
+  --gold-4: #c9a24d;
+  --gold-5: #e3c26f;
+  --gold-6: #f2dda3;
+
+  /* ── Parchment: text on dark ── */
+  --parchment-1: #f3ead7;
+  --parchment-2: #e6d9bf;
+  --parchment-3: #cbbc9f;
+  --parchment-4: #a4967c;
+  --parchment-5: #776b58;
+
+  /* ── Elements (spells / damage types) ── */
+  --el-holy: #f1dc8c;
+  --el-holy-dim: #6b5a2a;
+  --el-ice: #7fc4ea;
+  --el-ice-dim: #23495c;
+  --el-earth: #7fa35a;
+  --el-earth-dim: #2d3d1f;
+  --el-fire: #f0722e;
+  --el-fire-dim: #5e2b12;
+  --el-energy: #b57bff;
+  --el-energy-dim: #46306b;
+  --el-death: #8f8f9c;
+  --el-physical: #c8b6ad;
+
+  /* ── Vocations ── */
+  --voc-knight: #b32a2f;
+  --voc-paladin: #d9b95c;
+  --voc-druid: #6fb7c9;
+  --voc-sorcerer: #a56bff;
+
+  /* ── Vitals ── */
+  --vital-hp: #c8323a;
+  --vital-hp-track: #2a0f10;
+  --vital-mp: #3d5ec8;
+  --vital-mp-track: #0f1530;
+  --vital-exp: #c9a24d;
+  --vital-exp-track: #2a2210;
+  --vital-soul: #8e5cd6;
+  --vital-stamina: #4d9a5a;
+
+  /* ── Feedback ── */
+  --ok: #5fb56a;
+  --warn: #d9a441;
+  --danger: #d64848;
+  --info: #7fc4ea;
+  --online: #5fb56a;
+
+  /* ── Semantic surfaces ── */
+  --bg-world: var(--ash-0);
+  --bg-app: var(--ash-1);
+  --surface-panel: rgba(13, 9, 8, 0.92);
+  --surface-panel-solid: var(--ash-2);
+  --surface-raised: var(--ash-3);
+  --surface-inset: var(--ash-1);
+  --surface-slot: #0a0707;
+  --surface-hover: rgba(201, 162, 77, 0.06);
+  --surface-selected: rgba(110, 15, 20, 0.35);
+  --surface-scrim: rgba(7, 5, 5, 0.72);
+
+  /* ── Semantic borders ── */
+  --border-subtle: rgba(201, 162, 77, 0.12);
+  --border-default: rgba(201, 162, 77, 0.22);
+  --border-strong: rgba(201, 162, 77, 0.45);
+  --border-gold: var(--gold-4);
+  --border-blood: var(--blood-4);
+  --border-inset: rgba(0, 0, 0, 0.7);
+
+  /* ── Semantic text ── */
+  --text-primary: var(--parchment-1);
+  --text-secondary: var(--parchment-3);
+  --text-muted: var(--parchment-4);
+  --text-faint: var(--parchment-5);
+  --text-gold: var(--gold-4);
+  --text-blood: var(--blood-6);
+  --text-on-gold: #1a1206;
+  --text-on-blood: var(--parchment-1);
+  --text-link: var(--gold-5);
+  --text-link-hover: var(--gold-6);
+
+  /* ── Semantic actions ── */
+  --action-primary: var(--blood-3);
+  --action-primary-hover: var(--blood-4);
+  --action-primary-active: var(--blood-2);
+  --action-gold: var(--gold-4);
+  --action-gold-hover: var(--gold-5);
+  --action-ghost-border: var(--border-default);
+  --focus-ring: var(--gold-4);
+
+  /* ── Tipografia (tokens/typography.css do handoff, sem alteração) ── */
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --text-display-xl: 54px;
+  --text-display-lg: 21px;
+  --text-display-md: 17px;
+  --text-display-sm: 14px;
+  --text-display-xs: 12px;
+
+  --text-body-lg: 12px;
+  --text-body-md: 11px;
+  --text-body-sm: 11px;
+  --text-body-xs: 10px;
+
+  --text-mono-lg: 12px;
+  --text-mono-md: 9px;
+  --text-mono-sm: 8px;
+  --text-mono-xs: 8px;
+  --text-mono-2xs: 7px;
+
+  --leading-tight: 1.05;
+  --leading-snug: 1.25;
+  --leading-normal: 1.5;
+
+  --tracking-kicker: 0.4em;
+  --tracking-caps: 0.2em;
+  --tracking-title: 0.14em;
+  --tracking-cta: 0.13em;
+  --tracking-wide: 0.08em;
+  --tracking-display: 0.07em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ── Espaçamento e raio (tokens/spacing.css do handoff, sem alteração) ── */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+  --space-9: 64px;
+
+  --radius-none: 0;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-pill: 999px;
+
+  /* ── Slots e geografia do HUD — CORRIGIDO (plano §1; DT-02, DT-03) ── */
+  --slot-size-container: 26px;  /* ContainerWindow, mochila e bolsa */
+  --slot-size-equipment: 30px;  /* EquipmentPanel, PartyBag */
+  --slot-size-action: 36px;     /* ícones do topo (TopBar); a barra de ações não entra (D5) */
+  --hud-topbar-h: 65px;         /* corrigido de 56px */
+  --hud-side-w: 232px;
+  --panel-title-h: 34px;        /* corrigido de 36px */
+  --control-h: 32px;
+  --control-h-lg: 44px;
+
+  /* ── Efeitos (tokens/effects.css do handoff, sem alteração) ── */
+  --shadow-panel: 0 8px 24px rgba(0,0,0,0.65), 0 1px 0 rgba(201,162,77,0.12) inset;
+  --shadow-modal: 0 24px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(201,162,77,0.18);
+  --shadow-inset: inset 0 2px 4px rgba(0,0,0,0.85), inset 0 -1px 0 rgba(201,162,77,0.08);
+  --shadow-slot: inset 0 2px 3px rgba(0,0,0,0.9), inset 0 0 0 1px rgba(0,0,0,0.6);
+  --shadow-button: 0 2px 0 rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+  --glow-gold: 0 0 0 1px var(--gold-4), 0 0 14px rgba(201,162,77,0.35);
+  --glow-blood: 0 0 0 1px var(--blood-5), 0 0 16px rgba(179,42,47,0.45);
+  --glow-focus: 0 0 0 2px rgba(201,162,77,0.45);
+
+  --grad-gold: linear-gradient(180deg, #e3c26f 0%, #c9a24d 55%, #9c7a2f 100%);
+  --grad-blood: linear-gradient(180deg, #8f1a20 0%, #6e0f14 60%, #470a0f 100%);
+  --grad-panel: linear-gradient(180deg, rgba(28,20,19,0.96) 0%, rgba(13,9,8,0.96) 100%);
+  --grad-titlebar: linear-gradient(180deg, #1c1413 0%, #140e0d 100%);
+  --grad-ember-vignette: radial-gradient(ellipse at 50% 30%, rgba(110,15,20,0.32) 0%, rgba(7,5,5,0) 55%);
+  --grad-protect-bottom: linear-gradient(180deg, rgba(7,5,5,0) 0%, rgba(7,5,5,0.85) 100%);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+
+  --blur-panel: 8px;
+}

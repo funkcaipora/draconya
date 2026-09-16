@@ -19,6 +19,9 @@
  *   hitpoints-manapoints-bar-border.png 94×11, o TRILHO vazio (não é preenchimento)
  * As barras são desenhadas a 2× (188×22) com `image-rendering: pixelated`.
  */
+@import './tokens.css';
+@import './fonts.css';
+
 :root {
   color-scheme: dark;
   /* Texto sobre pedra (brilho ~70) precisa de mais contraste que sobre o fundo quase preto.
@@ -35,9 +38,9 @@
 
 body {
   margin: 0;
-  background: #000;
-  color: var(--text);
-  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font: 13px/1.4 var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   overflow: hidden;
 }
 
