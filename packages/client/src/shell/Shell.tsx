@@ -21,6 +21,7 @@ import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
 import { Viewport } from './Viewport.js';
+import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
 import { Bestiary } from './Bestiary.js';
@@ -79,6 +80,9 @@ export function Shell() {
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
           <ContainerWindow container="backpack" collapsed={!open.inventory} />
           <ContainerWindow container="satchel" collapsed={!open.inventory} />
+          {/* A batalha (#254, DS-11): quem está na tela, fora o próprio personagem e a party —
+              esses já têm painel próprio. Minimiza sozinha (DT-02). */}
+          <BattlePanel />
           {/* A bolsa da party (#197): só no modo compartilhado; minimiza com o inventário. */}
           <PartyBag collapsed={!open.inventory} />
           {open.analyzer && <Analyzer />}
