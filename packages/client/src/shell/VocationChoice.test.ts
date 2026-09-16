@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { VocationChoice, resolveChosenVocationId } from './VocationChoice.js';
+import { VocationChoice } from './VocationChoice.js';
+import { resolveChosenVocationId } from './VocationChoice.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 
