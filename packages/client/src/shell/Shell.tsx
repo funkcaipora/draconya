@@ -39,8 +39,10 @@ import type { WindowId } from './TopBar.js';
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
- * Chat nasce aberto (D5/DS-09, #252): "é onde chegam as recusas do servidor" — uma janela que
- * abre fechada esconderia a primeira recusa da sessão.
+ * O analisador também é FIXO desde #258 (D6): `open.analyzer` só minimiza, nunca desmonta —
+ * uma janela que existe sozinha continua não aparecendo sem sessão (`Analyzer.tsx` devolve
+ * `null`). Chat nasce aberto (D5/DS-09, #252): "é onde chegam as recusas do servidor" — uma
+ * janela que abre fechada esconderia a primeira recusa da sessão.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
@@ -89,7 +91,9 @@ export function Shell() {
           <BattlePanel />
           {/* A bolsa da party (#197): só no modo compartilhado; minimiza com o inventário. */}
           <PartyBag collapsed={!open.inventory} />
-          {open.analyzer && <Analyzer />}
+          {/* O analisador é FIXO (#258, D6): sempre montado; a barra do topo MINIMIZA, nunca
+              desmonta — o mesmo padrão de `BotPanel`/`EquipmentPanel` acima. */}
+          <Analyzer collapsed={!open.analyzer} onToggle={() => { toggle('analyzer'); }} />
           {open.bestiary && <Bestiary />}
         </div>
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
