@@ -19,7 +19,11 @@ const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [], items: [], vocations: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+    // `heal` no teto (2 regras para 2 slots): prova que "+ regra" some quando a categoria
+    // enche. `potion` continua com folga (0/4): prova que "+ regra" aparece com folga. As
+    // outras três ficam em 0/0 (sem slot algum) para o único "+ regra" da tela ser o de `potion`
+    // — isolando a asserção de contagem sem depender de quais ações cada categoria oferece.
+    slots: { heal: 2, potion: 4, attack: 0, rune: 0, support: 0 },
     advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' }],
     supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {} }],
@@ -42,30 +46,53 @@ beforeEach(() => {
 });
 
 describe('BotPanel', () => {
-  it('is a section with the five categories, the slot counters, and one switch per rule', async () => {
+  it('is a Panel dock "Bot" with the five categories, slot counters and one switch per rule', async () => {
     const html = await render();
-    expect(html).toContain('aria-label="bot"');
+    // RF-01: `Panel dock` com `title="Bot"`, classe própria `bot-panel` sobre a do primitivo.
+    expect(html).toMatch(/class="ui-panel[^"]*ui-panel--dock[^"]*bot-panel"/);
+    expect(html).toMatch(/ui-panel-title">Bot</);
     for (const name of ['Cura', 'Poções', 'Ataque', 'Runas e itens', 'Suporte']) expect(html).toContain(name);
-    expect(html).toContain('2/3');
+    expect(html).toContain('2/2');
     expect(html).toContain('0/4');
-    // Dois interruptores: um ligado, um desligado — e a linha desligada marcada.
+    // RF-03: um `role="switch"` `ui-switch-traffic` por regra, `aria-checked` correto.
     expect((html.match(/role="switch"/g) ?? []).length).toBe(2);
+    expect((html.match(/ui-switch-traffic/g) ?? []).length).toBe(2);
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain('aria-checked="false"');
     expect(html).toContain('bot-rule-off');
+    // A seta contígua na mesma string — envolvê-la num <span> quebraria esta asserção.
     expect(html).toContain('HP ≤ 70 % → Cura');
+    // RF-04: "+ regra" (Button secondary) presente onde há folga (potion), ausente no teto (heal).
+    expect((html.match(/ui-button-secondary/g) ?? []).length).toBe(1);
+    expect(html).toContain('+ regra');
     // Sem "fechar": o painel é fixo. Sem "Salvar": o interruptor salva sozinho.
     expect(html).not.toContain('fechar');
     expect(html).not.toContain('>Salvar<');
+    // RF-10: nenhuma classe antiga.
+    expect(html).not.toContain('bot-switch');
+    expect(html).not.toContain('<select aria-label="ação"');
+  });
+
+  it('RF-02: the meta shows saving/saved conforme `save`, and nothing for idle/refused', async () => {
+    bot.set((state) => ({ ...state, save: 'idle' }));
+    expect(await render()).not.toContain('ui-panel-meta');
+    bot.set((state) => ({ ...state, save: 'pending' }));
+    expect(await render()).toMatch(/ui-panel-meta">salvando…</);
+    bot.set((state) => ({ ...state, save: 'saved' }));
+    expect(await render()).toMatch(/ui-panel-meta">salvo</);
+    bot.set((state) => ({ ...state, save: 'refused', reason: 'Sem conexão.' }));
+    const refused = await render();
+    expect(refused).not.toContain('ui-panel-meta');
+    expect(refused).toContain('Sem conexão.');
   });
 
   it('keeps the header when collapsed, and exists without a catalogue', async () => {
     const collapsed = await render({ collapsed: true });
-    expect(collapsed).toContain('collapsed');
-    expect(collapsed).toContain('<strong>Bot</strong>');
+    expect(collapsed).toContain('ui-panel--collapsed');
+    expect(collapsed).toMatch(/ui-panel-title">Bot</);
     hud.set((state) => ({ ...state, catalogue: null }));
     const loading = await render();
     expect(loading).toContain('Carregando');
-    expect(loading).toContain('aria-label="bot"');
+    expect(loading).toContain('bot-panel');
   });
 });

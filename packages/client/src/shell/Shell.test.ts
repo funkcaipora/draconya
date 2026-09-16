@@ -35,4 +35,15 @@ describe('Shell', () => {
     const html = await render();
     expect(html).toContain('aria-label="chat"');
   });
+
+  it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {
+    // As vitais migraram do topo para o alto da coluna direita (ADR 0029 D3). Mutação que mata:
+    // montar `<Vitals />` depois de `<EquipmentPanel />`, ou não montá-la em `Shell.tsx`.
+    const html = await render();
+    const right = html.slice(html.indexOf('janelas à direita'));
+    const vitalsIndex = right.indexOf('class="vitals"');
+    const setIndex = right.indexOf('aria-label="set"');
+    expect(vitalsIndex).toBeGreaterThan(0);
+    expect(setIndex).toBeGreaterThan(vitalsIndex);
+  });
 });
