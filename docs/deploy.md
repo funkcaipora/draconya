@@ -312,18 +312,118 @@ parecia um defeito do cliente até alguém abrir a aba de rede.
 
 ## Backup
 
-```bash
-./scripts/backup-postgres.sh
+Staging roda por `compose.coolify.yml`, não por `compose.prod.yml` — por isso não é
+`scripts/backup-postgres.sh` que faz o backup lá (ver "O que não muda" no fim desta seção). O
+backup do staging é feito por **tarefas agendadas do próprio Coolify** (recurso `draconya` →
+Automation → Scheduled Tasks), gravando num diretório montado por bind nos containers
+`postgres` e `redis`.
+
+### Onde os backups ficam
+
+`compose.coolify.yml` monta, em cada um dos dois serviços, um segundo volume:
+
+```yaml
+- '/data/coolify/backups/draconya-staging:/backups'
 ```
 
-No cron, diariamente. Com `R2_BUCKET` definido, envia também para o Cloudflare R2 (egresso
-zero, e fora da máquina que pode morrer).
+É um **bind** (não volume nomeado) na mesma pasta onde o Coolify já grava os próprios backups
+(`/data/coolify/backups`) — a subpasta `draconya-staging` é deste recurso. Bind, e não volume
+nomeado, para que o dono do servidor copie os arquivos com `scp`/`rsync` direto do disco, sem
+precisar entrar em nenhum container. Dentro de `/backups`, cada serviço escreve na sua própria
+subpasta: `postgres/` e `redis/`.
 
-O script recusa dump menor que 1 KB, porque **dump truncado é pior que backup nenhum**: ele
-passa despercebido até o dia em que você precisa dele.
+### As duas tarefas agendadas
 
-**Backup que nunca foi restaurado não é backup, é esperança.** Teste a restauração pelo menos
-uma vez, e de novo quando o schema mudar de forma.
+Criadas em Coolify → recurso `draconya` → **Automation → Scheduled Tasks**. As duas rodam como
+root no container do serviço indicado — `sh -c '...'`, nunca bash: as imagens
+`postgres:17-alpine` e `redis:7-alpine` só têm BusyBox, e `stat -c`, `find -mtime` e `date -u`
+existem nas duas, mas nenhum comando aqui pode depender de bashismo.
+
+**`postgres-dump`** — cron `0 3 * * *` (UTC) — container `postgres` — timeout 600s:
+
+```sh
+sh -c 'set -e; d=/backups/postgres; mkdir -p "$d"; f="$d/draconya-$(date -u +%Y%m%dT%H%M).dump"; pg_dump -U draconya -Fc draconya -f "$f"; s=$(stat -c %s "$f"); [ "$s" -gt 1024 ] || { echo "dump pequeno demais: $s bytes"; rm -f "$f"; exit 1; }; find "$d" -name "*.dump" -mtime +14 -delete; ls -la "$d"'
+```
+
+**`redis-rdb`** — cron `10 3 * * *` (UTC) — container `redis` — timeout 300s:
+
+```sh
+sh -c 'set -e; d=/backups/redis; mkdir -p "$d"; f="$d/dump-$(date -u +%Y%m%dT%H%M).rdb"; redis-cli --rdb "$f"; find "$d" -name "*.rdb" -mtime +14 -delete; ls -la "$d"'
+```
+
+Os dois horários são propositalmente próximos, não simultâneos: o Redis (extratos ainda não
+liquidados, ADR 0024) e o Postgres não precisam de um snapshot atômico conjunto, mas dois
+`pg_dump`/`redis-cli --rdb` competindo por I/O no mesmo minuto seria desperdício sem motivo.
+
+### Retenção
+
+14 dias em disco, no próprio `find -mtime +14 -delete` de cada comando — sem histórico maior
+até que exista um destino fora do servidor (ver "Cópia para fora do servidor" abaixo).
+
+O dump do Postgres é recusado (e apagado) se sair com menos de 1 KB: **dump truncado é pior
+que backup nenhum**, porque passa despercebido até o dia em que alguém precisa dele. O RDB do
+Redis não tem o mesmo teste — `redis-cli --rdb` já falha (código de saída ≠ 0, sob `set -e`)
+se a conexão cair no meio, então um arquivo pequeno demais também não sobra no disco de forma
+silenciosa.
+
+### Restauração (runbook)
+
+**Backup que nunca foi restaurado não é backup, é esperança.** Teste pelo menos uma vez, e de
+novo quando o schema mudar de forma.
+
+**(i) Teste sem sair do servidor.** Rode como uma execução manual (Run Now) de uma tarefa
+agendada no container `postgres`, contra um banco descartável — nunca `draconya`:
+
+```sh
+sh -c 'set -e; createdb -U draconya draconya_restore_test; pg_restore -U draconya -d draconya_restore_test "$(ls -t /backups/postgres/*.dump | head -1)"; psql -U draconya -d draconya_restore_test -Atc "select count(*) from characters"; dropdb -U draconya draconya_restore_test'
+```
+
+Uma contagem de `characters` sem erro é o sinal de que o dump mais recente restaura de verdade.
+Não precisa disso, mas pode virar uma terceira tarefa agendada (ex.: semanal) se o dono do
+ambiente quiser essa checagem automática — hoje é manual.
+
+**(ii) Restauração de verdade, num Postgres local** (não no staging — restaurar por cima do
+staging não é o caso de uso; é para investigar um incidente ou puxar dado para debug local):
+
+```sh
+scp root@<servidor>:/data/coolify/backups/draconya-staging/postgres/draconya-XXXXXXXXTXXXX.dump .
+pg_restore -U draconya --clean --if-exists -d draconya draconya-XXXXXXXXTXXXX.dump
+```
+
+`--clean --if-exists` derruba os objetos existentes antes de recriar — por isso é contra um
+Postgres local dedicado a isso, nunca contra um banco com dado que importa.
+
+**(iii) Redis.** O RDB só é lido na subida do processo, então: parar o `redis`, trocar
+`/data/dump.rdb` (dentro do volume `redisdata`) pelo arquivo restaurado, subir de novo. A
+pegadinha é o `appendonly yes` do `compose.coolify.yml`: com AOF ligado, um Redis que já tem
+`appendonlydir` ignora o `dump.rdb` na subida e recarrega do AOF, não do RDB que acabou de
+trocar. Duas saídas — **recomendada: apagar `appendonlydir` antes de subir** (o RDB substitui o
+estado inteiro mesmo, então o AOF antigo não tem nada que valha preservar); a alternativa,
+subir uma vez com `redis-server --appendonly no` para forçar a leitura do RDB e só depois voltar
+ao `command` normal do compose, funciona mas é mais passo para o mesmo resultado.
+
+### Cópia para fora do servidor
+
+**(i) Hoje:** da máquina do dono, `rsync` ou `scp` puxando a pasta inteira:
+
+```sh
+rsync -av root@<servidor>:/data/coolify/backups/draconya-staging/ ./draconya-staging-backups/
+```
+
+**(ii) O que falta, registrado como pendência — não implementado aqui:** o Coolify tem
+integração nativa de **S3 Storage** (Storages → S3), com chaves de acesso configuradas pelo
+dono do servidor — nunca neste repositório nem em chat. O backup da **própria base do Coolify**
+(Settings → Backup) já está ligado, diário às 00:00 UTC, hoje só local (sem S3 configurado);
+quando o dono validar um destino S3/R2 ali, o backup de instância passa a subir sozinho, mas os
+dumps do jogo (`draconya-staging/postgres` e `.../redis`) são um recurso à parte do Coolify e
+vão continuar só em disco até ganhar uma terceira tarefa agendada que envie para esse mesmo S3
+— o comando exato depende de qual credencial/bucket o dono escolher, por isso não é inventado
+aqui.
+
+### O que não muda
+
+`scripts/backup-postgres.sh` continua como está — é da topologia de `compose.prod.yml` (VPS,
+ADR 0013), não do Coolify (ADR 0022), e staging não o usa.
 
 ## O que ainda falta para produção de verdade
 
