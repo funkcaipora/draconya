@@ -11,11 +11,10 @@
 // lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero render.
 //
 // O pacote de arte é montado AQUI (FUN-108) e desce por contexto: o viewport desenha o mundo
-// com ele, o inventário desenha o sprite de cada item, e a skin de UI — pedra, moldura, slot,
-// barras — entra por variável CSS no `:root`, uma vez. Ver `AssetPackContext`.
+// com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
+// CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
-import { useEffect, useState } from 'react';
-import { applyUiSkin } from '../assets/ui.js';
+import { useState } from 'react';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
@@ -50,12 +49,6 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
-
-  useEffect(() => {
-    // As variáveis vivem no `:root` e valem para a casca inteira. Não dependem do pacote ter
-    // CARREGADO — são URLs de PNG que o navegador busca sozinho —, só de haver um caminho.
-    applyUiSkin(document.documentElement, import.meta.env.VITE_THINGS_URL);
-  }, []);
 
   // A geografia do Huntera (FUN-115): o mundo ocupa a tela inteira, e o resto FLUTUA por cima —
   // a barra do topo, as janelas à esquerda e à direita, o chat embaixo. Cada janela é a seção

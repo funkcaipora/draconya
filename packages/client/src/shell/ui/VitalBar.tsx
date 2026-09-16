@@ -1,8 +1,7 @@
 // VitalBar: a barra horizontal de HP/mana/XP (DS-04, #247). Substitui Vitals.tsx/.bar de hoje
-// (shell.css:150-161), que usa PNG do pacote via --ui-hp-bar/--ui-mana-bar (aposentado em DS-07,
-// #250, que esta issue bloqueia). O preenchimento usa --vital-<kind> dos tokens — cor sólida,
-// não o gradiente hexadecimal do protótipo (ADR 0029 D1: cor duplicada fora do token diverge no
-// primeiro ajuste de paleta).
+// (shell.css), cuja skin de pedra do pacote foi aposentada em #250 (ADR 0029 D4). O
+// preenchimento usa --vital-<kind> dos tokens — cor sólida, não o gradiente hexadecimal do
+// protótipo (ADR 0029 D1: cor duplicada fora do token diverge no primeiro ajuste de paleta).
 //
 // `kind` não inclui "soul": Soul "não existe em camada nenhuma" no Draconya
 // (`docs/design-system-plan.md` §4), diferente do protótipo do handoff, que tem um quinto

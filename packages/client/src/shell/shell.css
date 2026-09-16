@@ -1,23 +1,12 @@
-/* Geografia do §5.3 e a skin do Tibia (FUN-108).
+/* Geografia do §5.3 (FUN-24), com a cara do Huntera (FUN-115).
  *
- * A arte de UI entra por variável CSS — `--ui-background`, `--ui-frame`, `--ui-slot`,
- * `--ui-bar-track`, `--ui-hp-bar`, `--ui-mana-bar`, `--ui-slot-<slot>` —, definidas no `:root`
- * por `applyUiSkin` (`assets/ui.ts`) a partir do caminho do pacote. **Sem pacote, nenhuma
- * existe**, e cada regra cai no fallback do `var()`: cor lisa, mesma estrutura. Nunca há
- * `url()` de arte escrito nesta folha — o caminho é do pacote, e o pacote não é versionado.
- *
- * Os números vêm dos PNGs, medidos pixel a pixel (não a olho):
- *   3pixel-frame-borderimage.png   102×102, moldura de 3 px em cada lado (de dentro para
- *                                  fora: claro 116, escuro 57, mais escuro 41) → slice 3
- *   2pixel-up-frame-borderimage.png 100×100, bisel "em relevo" de 2 px: claro (116) em cima e
- *                                  à esquerda, escuro (38) embaixo e à direita → slice 2
- *   containerslot.png              34×44; o slot é o quadrado de 34×34 do TOPO (as linhas
- *                                  33–42 repetem as 23–32; a 43 é a aresta clara de baixo)
- *   background.png                 96×96, pedra, brilho médio 70; background-dark.png, 56
- *   hitpoints-bar-filled.png       94×11, a barra vermelha CHEIA, com as pontas arredondadas
- *   mana-bar-filled.png            94×11 com alfa, a azul cheia
- *   hitpoints-manapoints-bar-border.png 94×11, o TRILHO vazio (não é preenchimento)
- * As barras são desenhadas a 2× (188×22) com `image-rendering: pixelated`.
+ * A skin de pedra do pacote (moldura, fundo, slot, barras — FUN-108) foi aposentada em #250
+ * (ADR 0029, decisão D4): painéis, barras e slots são CSS puro daqui em diante — cor lisa não é
+ * mais um FALLBACK de algo que pode carregar, é o único estado. O pacote de arte continua sendo
+ * a fonte de sprite de item, outfit e mundo (ADR 0008; `ItemSprite`, `TextureBook`) — só a casca
+ * perdeu a pedra. O revestimento com o vidro ferro-forjado do design entra em #251 (DS-08); até
+ * lá, os valores fixos abaixo são os mesmos hex que já eram o fallback de cada variável de
+ * skin, antes desta task existir.
  */
 @import './tokens.css';
 @import './fonts.css';
@@ -146,23 +135,21 @@ body {
 .badge-failed { color: #c25b4a; border-color: #5a3430; }
 .badge-idle { color: #7a7a88; }
 
-/* HP e mana (FUN-108): duas barras como as do Tibia, a 2×. O preenchimento tem a LARGURA da
-   fração e a imagem no tamanho da barra inteira, ancorada à esquerda — a barra cheia cortada
-   na fração, ponta esquerda fica, direita some. Com pacote o `var()` resolve para a imagem;
-   sem, para a cor lisa: é a MESMA declaração `background`, trocando só o primeiro valor. */
+/* HP e mana (FUN-108): duas barras como as do Tibia. O preenchimento tem a LARGURA da fração,
+   ancorado à esquerda — a barra cheia cortada na fração, ponta esquerda fica, direita some.
+   Cor lisa desde #250 (ADR 0029 D4); o revestimento com o vidro ferro-forjado do design entra
+   em #251 (DS-08). */
 .vitals { display: flex; gap: 8px; }
 .bar {
   position: relative; width: 150px; height: 18px; overflow: hidden; border-radius: 4px;
-  background: var(--ui-bar-track, #23232c) no-repeat 0 0 / 100% 100%;
-  image-rendering: pixelated;
+  background: #23232c;
 }
 .bar-fill {
   position: absolute; top: 0; bottom: 0; left: 0;
   transition: width 120ms linear;
-  image-rendering: pixelated;
 }
-.bar-hp .bar-fill { background: var(--ui-hp-bar, #c25b4a) no-repeat 0 0 / 150px 18px; }
-.bar-mana .bar-fill { background: var(--ui-mana-bar, #4a7fc2) no-repeat 0 0 / 150px 18px; }
+.bar-hp .bar-fill { background: #c25b4a; }
+.bar-mana .bar-fill { background: #4a7fc2; }
 .bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
   font-size: 12px; font-weight: 600; color: #fff; line-height: 1;
@@ -246,15 +233,11 @@ body {
   padding: 6px 8px; color: inherit; font: inherit;
 }
 
-/* Um BOTÃO dentro de uma janela: o bisel em relevo de 2 px do pacote sobre a pedra. Sem
-   pacote, a cor e a borda de antes. */
+/* Um BOTÃO dentro de uma janela: cor lisa e borda sólida desde #250 — o bisel do pacote saiu
+   (ADR 0029 D4). */
 .hunt-difficulties button, .bot-add, .bot-actions button {
-  background: #1b1b23 var(--ui-background, none) repeat;
+  background: #1b1b23;
   border: 2px solid var(--line);
-  border-image-source: var(--ui-frame-up, none);
-  border-image-slice: 2;
-  border-image-width: 2px;
-  border-image-repeat: repeat;
   border-radius: 0;
   color: inherit; font: inherit; font-size: 12px; cursor: pointer;
 }
@@ -420,8 +403,7 @@ body {
 
 .slot {
   position: relative; width: 34px; height: 34px; box-sizing: border-box;
-  /* `0 0` e sem `background-size`: o quadrado é o TOPO da imagem de 34×44, em pixel exato. */
-  background: #1e1e27 var(--ui-slot, none) no-repeat 0 0;
+  background: #1e1e27;
 }
 .slot-button, .slot-item, .slot-empty {
   position: absolute; inset: 0; margin: 0; padding: 0;
@@ -429,13 +411,15 @@ body {
 }
 .slot-button { cursor: pointer; }
 .slot-button:hover, .slot-button:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -1px; }
-/* O ícone do lugar vazio, a 40 %: `--slot-icon` vem inline de `Inventory.tsx` e aponta para a
-   `--ui-slot-<slot>` daquele lugar. Sem pacote a variável não resolve e o `var()` cai em
-   `none` — quadrado vazio, sem ícone quebrado. */
+/* O lugar vazio mostra o RÓTULO do slot (ADR 0029 D4), como o `EquipmentSet` do handoff: texto
+   pequeno, maiúsculo, cor apagada — nunca ícone quebrado, nunca dependência de pacote. */
 .slot-empty {
   inset: 1px;
-  background: var(--slot-icon, none) no-repeat center;
-  opacity: 0.4;
+  display: grid; place-items: center;
+  font-size: 6.5px; letter-spacing: 0.02em; text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
+  pointer-events: none;
 }
 .item-sprite {
   position: absolute; inset: 1px; width: 32px; height: 32px;

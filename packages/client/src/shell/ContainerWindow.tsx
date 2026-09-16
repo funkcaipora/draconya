@@ -3,8 +3,8 @@
 // Uma `MiniWindow` do OTClient, empilhada abaixo do set na coluna da direita: título com o
 // sprite do container e o nome, e uma grade de 5 lugares por linha — uma linha da tela é uma
 // linha do container (#160 cresce de 5 em 5), então "abriu uma linha" fica visível. `null` é
-// lugar vazio, desenhado com o quadrado de pedra do pacote (`--ui-slot`); pilha mostra a
-// quantidade no canto, como o Tibia.
+// lugar vazio, desenhado como um quadrado de cor lisa (a skin de pedra do pacote saiu em
+// #250, ADR 0029 D4); pilha mostra a quantidade no canto, como o Tibia.
 //
 // **Fixa e minimizável, nunca removida.** O clique veste (o caminho do celular); arrastar move
 // entre lugares ou para o corpo. A decisão de qual intenção sai é `drag-intent.ts`, puro; o

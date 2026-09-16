@@ -13,10 +13,7 @@
 // soma peso (FUN-90) e não decide o que cabe: `capacity` vem pronto do servidor.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { ItemSlot } from '@draconya/content';
-import { slotVariable } from '../assets/ui.js';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { ItemDefinition } from '../state/hud.js';
@@ -33,13 +30,9 @@ const SLOT_TEXT: Record<string, string> = {
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
-/**
- * O ícone cinza do lugar vazio entra por variável, e a variável é a de `assets/ui.ts` —
- * `--ui-slot-head`, `--ui-slot-hand`… Sem pacote ela não existe, e o CSS cai em "sem ícone".
- */
-function slotStyle(slot: ItemSlot): CSSProperties {
-  return { '--slot-icon': `var(${slotVariable(slot)})` } as CSSProperties;
-}
+// A skin de pedra do pacote saiu inteira em #250 (ADR 0029 D4): não há mais variável nenhuma
+// para injetar por `<li style={...}>` — o lugar vazio mostra o rótulo em texto (ver
+// `.slot-empty` em `shell.css`).
 
 function SlotContent({ definition, name, quantity }: {
   definition: ItemDefinition | undefined; name: string; quantity: number;
@@ -98,7 +91,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
               ? 'Munição'
               : `${inUse.name} · ${inUse.price === 0 ? 'grátis' : `${String(inUse.price)} gold/tiro`}`;
             return (
-              <li key={slot} className="slot slot-shield slot-ammo-picker" style={slotStyle('ammo')}>
+              <li key={slot} className="slot slot-shield slot-ammo-picker">
                 <button type="button" className="slot-button" title={title} aria-label={`munição: ${title}`} onClick={() => { setPicker(ammoFamily); }}>
                   {inUse !== undefined && <ItemSprite appearanceId={inUse.appearanceId} name={inUse.name} />}
                 </button>
@@ -112,12 +105,14 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
             <li
               key={slot}
               className={`slot slot-${slot}`}
-              style={slotStyle(slot)}
               onDragOver={(event) => { event.preventDefault(); }}
               onDrop={(event) => { dropOn({ slot }, event, inventory); }}
             >
               {item === undefined
-                ? <span className="slot-empty" role="img" aria-label={`${label} (vazio)`} title={label} />
+                // O rótulo do lugar, maiúsculo, substitui o ícone cinza do pacote (ADR 0029 D4;
+                // a mesma regra do "—" de sempre — sem dado, a tela nunca deixa vazio quebrado).
+                // `role="img"` sai: agora há texto real dentro do <span>, não decoração de fundo.
+                ? <span className="slot-empty" aria-label={`${label} (vazio)`} title={label}>{label.toUpperCase()}</span>
                 : (
                   <button
                     type="button"

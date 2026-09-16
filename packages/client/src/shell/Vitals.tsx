@@ -2,9 +2,8 @@ import { useHudSlice } from '../state/useSlice.js';
 
 /**
  * As barras de HP e mana, como no Tibia (FUN-108): duas barras horizontais, vermelha e azul,
- * com o número dentro. O trilho e o preenchimento vêm do pacote por variável CSS
- * (`--ui-bar-track`, `--ui-hp-bar`, `--ui-mana-bar`); sem pacote a estrutura é a mesma e só
- * o `background-image` some — barra de cor lisa.
+ * com o número dentro. O trilho e o preenchimento são cor lisa desde #250 (ADR 0029 D4) — a
+ * skin de pedra do pacote saiu inteira.
  *
  * O preenchimento é um elemento com a LARGURA da fração e a imagem no tamanho da barra
  * inteira, ancorada à esquerda: o que se vê é a barra cheia CORTADA na fração, como o
