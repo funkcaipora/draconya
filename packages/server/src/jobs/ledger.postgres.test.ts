@@ -1,14 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { asc, eq } from 'drizzle-orm';
-import { levelForXp } from '@draconya/sim';
+import { createHuntSession, levelForXp } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { accounts, characters, itemInstances, ledger } from '../db/schema.js';
 import { createLogger } from '../log.js';
 import { ReceiptStore, type SessionReceipt } from '../receipts.js';
 import { DrizzleGameRepository } from '../db/repository.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
+import { testContent, TEST_HUNT } from '../testing/content.js';
+import { SessionHost } from '../game/host.js';
+import { createCitySessionFactory } from '../game/sessions.js';
 import {
   countLedgerRows, creditOf, settleCharacterProgress, writePendingReceipts,
 } from './ledger.js';
@@ -121,6 +124,55 @@ describe('credit of a receipt', () => {
 });
 
 describe.runIf(ready)('receipts to the ledger', () => {
+  it('retries a lost receipt acknowledgement after settlement without crediting twice (#267)', async () => {
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const [owner] = await database.database.db.select({ accountId: characters.accountId })
+      .from(characters).where(eq(characters.id, characterId));
+    if (owner === undefined) throw new Error('Missing test character');
+    const receipts = new ReceiptStore(redis);
+    const persist = receipts.save.bind(receipts);
+    const save = vi.spyOn(receipts, 'save').mockImplementationOnce(async (receipt) => {
+      await persist(receipt);
+      // A escrita aconteceu, mas o game não recebeu a confirmação.
+      throw new Error('Receipt acknowledgement lost');
+    });
+    const content = testContent();
+    const sessionId = randomUUID();
+    const session = createHuntSession({
+      id: sessionId, content, huntId: TEST_HUNT.id, difficulty: 'cautious', createdAtMs: 0,
+    });
+    const character = createCitySessionFactory(content)(characterId).participants[0];
+    if (character === undefined) throw new Error('Missing test runtime');
+    session.enter(character);
+    session.credit(characterId, 'goldGained', 50);
+    session.credit(characterId, 'xpGained', 20);
+    const host = new SessionHost({
+      nodeId: 'receipt-retry-test', contentVersion: content.version, logger, receipts,
+      createSession: () => session,
+    });
+    await host.prepare(characterId, undefined, owner.accountId);
+    const sweep = { database: database.database.db, receipts, logger, progression };
+
+    expect(await host.drainAll()).toBe(0);
+    expect(host.sessionFor(characterId)).toBe(session);
+    expect(await receipts.pendingFor(characterId)).toHaveLength(1);
+    // O jobs pode liquidar ANTES de o game repetir a tentativa, removendo o extrato do Redis.
+    expect(await writePendingReceipts(sweep)).toEqual({ written: 1, failed: 0 });
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 50, xp: 20 });
+    expect(await receipts.pendingFor(characterId)).toEqual([]);
+
+    expect(await host.drainAll()).toBe(1);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]?.[0]).toEqual(save.mock.calls[0]?.[0]);
+    expect(await receipts.pendingFor(characterId)).toHaveLength(1);
+    expect(await writePendingReceipts(sweep)).toEqual({ written: 1, failed: 0 });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    expect(await characterRow(database, characterId)).toMatchObject({ gold: 50, xp: 20 });
+    expect(await receipts.pendingFor(characterId)).toEqual([]);
+    expect(host.sessionFor(characterId)).toBeUndefined();
+  });
+
   it('writes the receipt and clears it from Redis', async () => {
     const database = db as NonNullable<typeof db>;
     const characterId = await seedCharacter(database);
