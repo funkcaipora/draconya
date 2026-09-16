@@ -408,13 +408,13 @@ body {
 
 /* Um BOTÃO dentro de uma janela: cor lisa e borda sólida desde #250 — o bisel do pacote saiu
    (ADR 0029 D4). */
-.hunt-difficulties button, .bot-add, .bot-actions button {
+.hunt-difficulties button {
   background: #1b1b23;
   border: 2px solid var(--line);
   border-radius: 0;
   color: inherit; font: inherit; font-size: 12px; cursor: pointer;
 }
-.hunt-difficulties button:hover:not(:disabled), .bot-add:hover, .bot-actions button:hover {
+.hunt-difficulties button:hover:not(:disabled) {
   filter: brightness(1.2);
 }
 
@@ -426,66 +426,54 @@ body {
 .hunt-difficulties { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .hunt-difficulties button { padding: 2px 6px; }
 
-/* O painel do bot (FUN-89; fixo à esquerda desde #162). Densa de propósito: são cinco categorias
-   na mesma coluna, e cada regra é UMA linha — interruptor, texto, engrenagem, setas. O vBot. */
-.bot-panel .bot-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.bot-title strong { flex: 1 1 auto; }
-/* Minimizado: só o cabeçalho fica. A seção nunca desmonta. */
-.windows > section.collapsed > *:not(header) { display: none; }
+/* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
+   de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
+   texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
+   (`shell/ui.css`); o que resta aqui é só o conteúdo específico do bot. */
+/* Minimizado: só o cabeçalho fica. A seção nunca desmonta — `Panel` já não desenha o corpo
+   quando `collapsed`, então não há filho a esconder aqui. */
 .bot-category { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
 .bot-category-head { display: flex; align-items: baseline; gap: 6px; }
 .bot-category-head strong { flex: 1 1 auto; }
-.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 3px; }
-.bot-rule { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.bot-category-slots { color: var(--text-faint); font: 7px var(--font-mono); }
+.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 4px; }
+.bot-rule { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .bot-rule-off .bot-rule-text { color: var(--text-faint); text-decoration: line-through; }
 .bot-rule-text {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 11px;
+  font: 8px var(--font-mono); color: var(--parchment-1);
 }
-/* O interruptor: verde ligado, vermelho desligado — a cor do BotSwitch do vBot. */
-.bot-switch {
-  flex: 0 0 auto; width: 26px; height: 14px; border-radius: 7px; border: 1px solid var(--line);
-  padding: 0; cursor: pointer; background: #7a2b2b; position: relative;
-}
-.bot-switch::after {
-  content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px;
-  border-radius: 50%; background: #fff; transition: left 120ms;
-}
-.bot-switch[aria-checked="true"] { background: #2e8b57; }
-.bot-switch[aria-checked="true"]::after { left: 13px; }
 .bot-rule-order { display: flex; flex-direction: column; flex: 0 0 auto; }
 .bot-rule-order button {
-  background: none; border: none; padding: 0; line-height: 1;
-  color: var(--text-muted); font-size: 9px; cursor: pointer;
+  width: 14px; height: 9px; padding: 0; line-height: 1;
+  background: none; border: none; color: var(--text-muted); font: 7px/1 var(--font-mono); cursor: pointer;
 }
-.bot-rule-order button:disabled { opacity: 0.3; cursor: default; }
-/* O editor de uma regra: sobreposição pequena, a linha larga de antes — condição, operador,
-   valor, ação — porque ela não cabe em 300 px. É o "Setup" do vBot. */
-.rule-editor {
-  position: fixed; inset: 0; z-index: 30;
-  background: rgba(6, 6, 10, 0.7);
-  display: grid; place-items: center; padding: 16px;
+.bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
+
+/* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
+   CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
+   ações. */
+.rule-editor-row { display: grid; grid-template-columns: 1.2fr 0.6fr 0.8fr; gap: 6px; align-items: end; }
+.rule-editor-divider {
+  display: flex; align-items: center; gap: 8px; margin: 10px 0 6px;
 }
-.rule-editor-body {
-  width: 100%; max-width: 520px; box-sizing: border-box;
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+.rule-editor-divider::before, .rule-editor-divider::after { content: ''; flex: 1; height: 1px; background: var(--ash-5); }
+.rule-editor-divider span { font: 500 7px var(--font-mono); color: var(--gold-4); letter-spacing: .14em; }
+.rule-action-list { display: grid; gap: 4px; }
+.rule-action {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; text-align: left;
+  height: 30px; padding: 0 10px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); color: var(--parchment-2); font: 8.5px var(--font-mono); cursor: pointer;
 }
-/* No celular a linha larga quebra em vez de espremer: seis caixinhas de 30px não são
-   configuráveis com o dedo. */
+.rule-action:disabled { color: var(--text-faint); cursor: not-allowed; opacity: .6; }
+.rule-action-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
+.rule-editor-note { margin: 10px 2px 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
+.rule-editor-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
+.rule-editor-actions { display: flex; gap: 8px; }
+
 @media (max-width: 520px) {
-  .bot-rule-wide { flex-wrap: wrap; }
-  .bot-rule-wide select[aria-label="ação"] { flex-basis: 100%; }
+  .rule-editor-row { grid-template-columns: 1fr; }
 }
-.bot-rule select, .bot-rule input {
-  background: #131319; border: 1px solid var(--line); border-radius: 3px;
-  padding: 1px 2px; color: inherit; font: inherit; font-size: 11px; min-width: 0;
-}
-.bot-rule select[aria-label="ação"] { flex: 1 1 auto; }
-.bot-rule input { width: 52px; }
-.bot-add, .bot-actions button { padding: 2px 8px; }
-.bot-actions { display: flex; gap: 6px; }
 
 /* A escolha de vocação (#154, #249) com os cards do design system (ADR 0029 D2/D7).
    A sobreposição própria de antes some: scrim, painel e fio dourado passam a ser do `Modal`

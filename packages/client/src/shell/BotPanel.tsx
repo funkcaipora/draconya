@@ -28,8 +28,14 @@ import { bot, moveRule, removeRule, setConfigSender, toggleRule } from '../bot/s
 import type { BotVocabulary } from '../state/hud.js';
 import { RuleEditor, blankRule } from './RuleEditor.js';
 import { ruleText } from './rule-text.js';
+import { Panel } from './ui/Panel.js';
+import { Switch } from './ui/Switch.js';
+import { IconButton } from './ui/IconButton.js';
+import { Button } from './ui/Button.js';
 
-const CATEGORY_TEXT: Record<BotCategory, string> = {
+// `export`: o RuleEditor monta o título do Modal ("Editar regra · Cura") com o mesmo mapa —
+// duas cópias do mesmo BotCategory → string divergiriam no primeiro nome novo (DT-06).
+export const CATEGORY_TEXT: Record<BotCategory, string> = {
   heal: 'Cura',
   potion: 'Poções',
   attack: 'Ataque',
@@ -39,7 +45,7 @@ const CATEGORY_TEXT: Record<BotCategory, string> = {
 
 type Editing = { readonly category: BotCategory; readonly index: number | null; readonly initial: BotRule };
 
-/** A linha compacta: `[switch] HP ≤ 70 % → Cura [⚙] [▴▾]`. */
+/** A linha compacta: `[switch] HP ≤ 70 % → Cura [⚙] [▴▾] [×]`. */
 export function RuleRow({ rule, index, total, category, vocabulary, onEdit }: {
   rule: BotRule; index: number; total: number; category: BotCategory;
   vocabulary: BotVocabulary; onEdit: () => void;
@@ -49,24 +55,23 @@ export function RuleRow({ rule, index, total, category, vocabulary, onEdit }: {
   const enabled = rule.enabled !== false;
   return (
     <li className={`bot-rule${enabled ? '' : ' bot-rule-off'}`}>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        className="bot-switch"
-        aria-label={enabled ? 'desligar regra' : 'ligar regra'}
+      <Switch
+        tone="traffic"
+        on={enabled}
         title={enabled ? 'ligada' : 'desligada'}
-        onClick={() => { toggleRule(category, index); }}
+        onChange={() => { toggleRule(category, index); }}
       />
       <span className="bot-rule-text" title={`${text.when} → ${text.do}`}>
         {`${text.when} → ${text.do}`}
       </span>
-      <button type="button" className="entry-quiet" aria-label="editar regra" onClick={onEdit}>⚙</button>
+      <IconButton title="editar regra" onClick={onEdit}>⚙</IconButton>
+      {/* As setas ▴▾ continuam botões simples: o handoff também não usa IconButton aqui — ele
+          é 14×9, menor que o tamanho mínimo do IconButton (DT-07). */}
       <span className="bot-rule-order">
         <button type="button" aria-label="subir" disabled={index === 0} onClick={() => { moveRule(category, index, -1); }}>▴</button>
         <button type="button" aria-label="descer" disabled={index === total - 1} onClick={() => { moveRule(category, index, 1); }}>▾</button>
       </span>
-      <button type="button" className="entry-quiet" aria-label="remover regra" onClick={() => { removeRule(category, index); }}>×</button>
+      <IconButton title="remover regra" onClick={() => { removeRule(category, index); }}>×</IconButton>
     </li>
   );
 }
@@ -86,7 +91,7 @@ function Category({ category, vocabulary, onEdit }: {
           {open ? '▾' : '▸'}
         </button>
         <strong>{CATEGORY_TEXT[category]}</strong>
-        <span className="entry-meta">{`${String(rules.length)}/${String(slots)}`}</span>
+        <span className="bot-category-slots">{`${String(rules.length)}/${String(slots)}`}</span>
       </header>
       {open && (
         <>
@@ -106,9 +111,9 @@ function Category({ category, vocabulary, onEdit }: {
           {/* O teto vem do catálogo, e a tela para de oferecer ao chegar nele — o servidor recusa
               de qualquer jeito, e deixar clicar para receber "não" é um passo evitável. */}
           {rules.length < slots && fresh !== null && (
-            <button type="button" className="bot-add" onClick={() => { onEdit({ category, index: null, initial: fresh }); }}>
+            <Button variant="secondary" size="sm" block onClick={() => { onEdit({ category, index: null, initial: fresh }); }}>
               + regra
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -136,33 +141,27 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
     return () => { setConfigSender(null); };
   }, []);
 
-  const header = (
-    <header className="bot-title">
-      <strong>Bot</strong>
-      <span className="analyzer-summary">
-        {save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : ''}
-      </span>
-      {onToggle !== undefined && (
-        <button type="button" className="entry-quiet" aria-label={collapsed ? 'expandir' : 'minimizar'} onClick={onToggle}>
-          {collapsed ? '▸' : '▾'}
-        </button>
-      )}
-    </header>
-  );
+  const meta = save === 'pending' ? 'salvando…' : save === 'saved' ? 'salvo' : undefined;
+
+  // `exactOptionalPropertyTypes` não deixa passar `undefined` explícito onde a prop é opcional
+  // (mesmo padrão de Modal.tsx): só entra na chamada quem de fato veio.
+  const panelProps = {
+    ...(meta !== undefined ? { meta } : {}),
+    ...(onToggle !== undefined ? { onToggle } : {}),
+  };
+
   if (catalogue === null) {
     return (
-      <section className={`bot-panel${collapsed ? ' collapsed' : ''}`} aria-label="bot">
-        {header}
+      <Panel dock title="Bot" collapsed={collapsed} className="bot-panel" {...panelProps}>
         <p className="quiet">Carregando…</p>
-      </section>
+      </Panel>
     );
   }
   const vocabulary = catalogue.bot;
   const advanced = level >= vocabulary.advancedFromLevel;
 
   return (
-    <section className={`bot-panel${collapsed ? ' collapsed' : ''}`} aria-label="bot">
-      {header}
+    <Panel dock title="Bot" collapsed={collapsed} className="bot-panel" {...panelProps}>
       {!advanced && (
         // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
         // que o jogador descubra montando uma configuração inteira e levando um não.
@@ -174,6 +173,8 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
       {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
           "corrija isto" — apagar justamente o que precisa ser corrigido. */}
       {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+      {/* Aninhar o Modal aqui é seguro (DT-02: backdrop-filter não cria bloco de contenção para
+          position: fixed) e é o menor diff em relação ao código de antes. */}
       {editing !== null && (
         <RuleEditor
           category={editing.category}
@@ -184,6 +185,6 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
           onClose={() => { setEditing(null); }}
         />
       )}
-    </section>
+    </Panel>
   );
 }
