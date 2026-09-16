@@ -1,7 +1,7 @@
 # Design system do cliente — plano de implementação (E14)
 
 **Status:** proposto em 2026-09-15, com as dez perguntas do §10 respondidas pelo dono do produto em
-2026-09-16 — as decisões de arquitetura vão para o ADR 0028 (DS-01); este documento é o desenho, e
+2026-09-16 — as decisões de arquitetura vão para o ADR 0029 (DS-01; era 0028 até o ADR 0028 ser tomado pela #263); este documento é o desenho, e
 as issues do milestone M14 apontam para cá (o M15 existe só como milestone com a lista do §5).
 **PRD:** §5 (plataforma e experiência do client), §8.2 (hotkeys guiadas), §13 (bot)
 **Origem:** o handoff "Design System MMORPG Medieval" gerado pelo Claude Design em 2026-09-15 —
@@ -45,7 +45,7 @@ telas no cliente existente". O que vale como especificação:
 
 ---
 
-## 2. Decisões — o que vai para o ADR 0028
+## 2. Decisões — o que vai para o ADR 0029
 
 Cada uma com a alternativa descartada e o porquê. A regra que decide quase todas: **o cliente nunca
 mostra o que o servidor não disse** (invariante 4, e a regra do "—" do `AGENTS.md` do cliente).
@@ -295,7 +295,7 @@ Milestone [4](https://github.com/funkcaipora/draconya/milestone/4), aberto em 20
 
 | # | Issue | Pacotes | Depende de | Tam. | Entrega | Aceite |
 |---|---|---|---|---|---|---|
-| DS-01 | docs: ADR 0028, plano do design system, `docs/design-system.md` e skill `/design` | docs | — | P | ADR com D1–D9; este plano com Status "aprovado"; o resumo de marca com os números fixados; `.claude/skills/design/SKILL.md` | `pnpm docs-check` verde; ADR no índice; links resolvem |
+| DS-01 | docs: ADR 0029, plano do design system, `docs/design-system.md` e skill `/design` | docs | — | P | ADR com D1–D9; este plano com Status "aprovado"; o resumo de marca com os números fixados; `.claude/skills/design/SKILL.md` | `pnpm docs-check` verde; ADR no índice; links resolvem |
 | DS-02 | client: tokens do design system e fontes locais | client | DS-01 | P | `shell/tokens.css` (nomes do handoff, valores corrigidos: topo 65, barra 124, título 34), `shell/fonts.css`, `public/fonts/{cinzel,plex-sans,jetbrains-mono}-latin.woff2` da distribuição oficial com `OFL.txt` ao lado; `shell.css` importa os dois; `body` em `--font-body`/`--text-primary` sobre `--bg-app` | `pnpm check`; nenhuma requisição fora da origem (aba de rede); `tokens.css` sem `@import`; a tela atual abre igual |
 | DS-03 | client: primitivos de controle — Button, IconButton, Input, Select, Checkbox, Switch, Tabs, Kicker, Badge | client | DS-02 | M | `shell/ui/*.tsx` + `shell/ui.css`; variantes e tamanhos dos `.d.ts`; estados por CSS; `Switch` com `role="switch"` e `tone="traffic"`; `Input` com `size="sm"` numérico (o `NumField`) | Um `*.test.ts` por primitivo em `prerender` prendendo classes, `aria-*`, `disabled`; `grep -rl "state/\|bot/\|party/\|account/\|net/" packages/client/src/shell/ui` vazio (primitivo é folha, nunca lê store); `pnpm check` |
 | DS-04 | client: primitivos de contêiner — Panel, Modal, Slot, VitalBar, StatRow | client | DS-03 | M | `Panel` (título 34 px, fio dourado, `dock`, minimizar, rodapé), `Modal` (scrim, fecha no ×, no scrim e em Esc, um por vez), `Slot` (26/30/36, tecla, quantidade, vazio tracejado ou rótulo), `VitalBar` (hp/mp/exp), `StatRow` | Testes em `prerender`; `Modal` sem `open` não renderiza nada; o mesmo `grep` de DS-03 continua vazio; `pnpm check` |

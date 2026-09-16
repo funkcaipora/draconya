@@ -34,6 +34,12 @@ navegador, voltar e encontrar a sessão rodando — é testável inteiro em `loc
 `PROCESSES` decide quais sobem. A mesma imagem serve para o modo solo e para um papel por
 container — validar numa VPS pequena não exige desenho diferente do de escala.
 
+A configuração agora acompanha essa seleção: `api/jobs` exigem Postgres, somente `api`
+exige WorkOS em produção, e `game` exige um endereço público `wss`. O `game` separado salva
+preferências do bot pelo Redis; `jobs/api` as levam ao Postgres. Veja a
+[matriz de configuração, exemplos e roteiro de implantação/rollback](runtime-configuration.md).
+O healthcheck de um container isolado deve apontar para a porta do papel que ele executa.
+
 ## Drenagem
 
 Em `SIGTERM`, o processo drena na ordem `api` → `jobs` → `game`, com prazo de 25 s.

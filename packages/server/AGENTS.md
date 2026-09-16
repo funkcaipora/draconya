@@ -401,32 +401,38 @@ Duas regras ao mexer nele:
 o que um `kill -9` parece de fora. Não confundir com `drain()`, que credita — trocar as duas
 seria perder exatamente o progresso que o ADR 0010 existe para preservar.
 
-## A configuração do bot é a ÚNICA escrita de banco do `game` (FUN-81, ADR 0021)
+## Configuração por papel e preferências do bot (ADR 0028, #263)
 
-Até aqui a divisão era limpa: `api` e `jobs` falam com o Postgres, o `game` não. A configuração
-do bot quebra isso — ela é dado durável do personagem **e** é editada com o jogador conectado,
-e quem tem a conexão é o `game`.
+`config.ts` resolve `PROCESSES` antes dos requisitos e o `main.ts` usa essa mesma seleção.
+Redis é obrigatório para todos; Postgres para `api/jobs`; WorkOS para `api` de produção;
+`GAME_PUBLIC_URL` exige `ws/wss` sem credenciais, query ou fragmento, e WSS em produção
+com `game`. Papel duplicado, desconhecido, vazio ou `PROCESSOS` legado recusa o boot.
+`THINGS_DIR` pertence às ferramentas, não ao runtime. Matriz e exemplos em
+[`runtime-configuration.md`](../../docs/runtime-configuration.md).
 
-O que a mantém segura, e o que não pode mudar sem pensar duas vezes:
+**O `game` não escreve Postgres, nem no modo solo.** A exceção do ADR 0021 foi substituída.
+A sessão aceita e aplica o bot imediatamente; `saveBotConfig` grava a pendência no Redis.
+Só depois confirma `ok: true`. Falha mantém a regra ativa, mas responde `ok: false` para
+permitir retry. Não emitir sucesso antes de o callback terminar.
 
-- **Uma instrução, sem `SELECT` antes.** "O jogador salvou isto" é última-escrita-vence por
-  natureza: a configuração é substituída inteira, nunca mesclada. Sem read-modify-write não há
-  corrida entre duas abas do mesmo jogador.
-- **Não participa da trava de linha** da emissão de ticket nem da exclusão (FUN-53): não abre
-  transação, não segura a linha, não depende de nada que esteja nela.
-- **O `game` não recebe o repositório nem o `Content`** — recebe `saveBotConfig` e
-  `acceptBotConfig`, funções estreitas, do mesmo jeito que o `api` recebe `settleProgress`.
-- **A ordem é aceitar → aplicar → persistir.** Aplicar antes de gravar faz a hunt em curso usar a
-  regra nova na hora; falhar ao gravar não desfaz o que já vale. Há teste afirmando isso.
-- **Sem banco configurado o `game` roda igual**, e a configuração vale na sessão e some no
-  logout. Degradação, não falha.
+`BotConfigStore` mantém um envelope com UUID por edição em `bot-config:pending`, sem TTL.
+`jobs/bot-config.ts` é o consumidor compartilhado por `jobs` e pela admissão no `api`:
 
-O caminho de LEITURA é outro e não se cruza com este: a configuração chega pelo **ticket**, que
-o `api` monta lendo a linha — mesmo caminho de level, XP e gold, e pela mesma razão (invariante 4).
+- Trava a linha do personagem ANTES de ler a pendência do Redis; depois substitui `bot_config`.
+  Ler antes da trava permitiria a um consumidor atrasado sobrescrever a edição mais nova.
+- Confirma a pendência só depois do commit, com comparação/remoção atômicas do envelope.
+  Nova edição nunca é removida pelo ACK da anterior, mesmo com configuração idêntica.
+- Retry após commit repete a substituição, sem efeito econômico. Não há entrada no ledger.
+- `settleCharacterState` processa o bot antes do progresso, antes de tickets solo/party e
+  da atualização da lista de personagens. Falhar recusa dado velho; não voltar ao callback
+  antigo que só liquidava extratos no boot.
+- Configuração chega ao `game` no ticket e é validada contra o conteúdo fixado da sessão.
+  Só o dono altera a regra em memória; `api/jobs` escrevem apenas a preferência durável.
 
-Se um dia aparecer uma segunda escrita no `game`, o ADR 0021 deixa de valer como precedente:
-duas escritas já são um repositório, e aí a pergunta é se a divisão de processos ainda descreve
-o sistema.
+A janela até o ciclo de `jobs` ou próxima admissão depende da disponibilidade dos serviços.
+Redis perdido antes de gravar Postgres pode perder a pendência. AOF/backup continuam
+necessários; confirmação no socket significa aceitação no Redis, não commit de Postgres.
+Testes reais de concorrência e reconexão: `jobs/bot-config.postgres.test.ts`.
 
 ## As cores do outfit viajam no ticket, não no snapshot (FUN-104)
 

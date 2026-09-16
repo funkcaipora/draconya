@@ -22,6 +22,8 @@ import type { ReceiptStore } from '../receipts.js';
 import type { Database } from '../db/client.js';
 import { sweepOrphanedSessions } from './orphans.js';
 import type { Progression } from '@draconya/content';
+import type { BotConfigStore } from '../bot-config-store.js';
+import { writePendingBotConfigs } from './bot-config.js';
 import { writePendingReceipts } from './ledger.js';
 import type { JobsMetrics } from './metrics.js';
 import type { SingletonLock } from './lock.js';
@@ -33,6 +35,7 @@ export interface JobsDependencies {
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
   readonly database?: Database;
+  readonly botConfigs?: BotConfigStore;
   /** Curva de XP, para o `jobs` derivar o level ao creditar a progressão (FUN-54). */
   readonly progression?: Progression;
   /** Onde o ciclo conta o que fez (FUN-59). Ausente: o `jobs` roda igual, só não expõe nada. */
@@ -127,6 +130,14 @@ export function createJobsCycle(
         receiptsWritten = written;
         receiptsFailed = failed;
         if (written > 0 || failed > 0) logger.info({ written, failed }, 'Wrote session receipts');
+      }
+
+      if (dependencies.botConfigs !== undefined && dependencies.database !== undefined) {
+        const result = await writePendingBotConfigs({
+          database: dependencies.database, botConfigs: dependencies.botConfigs, logger,
+        });
+        if (result.written > 0 || result.failed > 0) logger.info(result, 'Wrote bot configurations');
+        if (result.failed > 0) metrics?.observeCycleFailure();
       }
 
       // FUN-28: sessão órfã é snapshot sem lease. Este ciclo NÃO retoma — retomar é
