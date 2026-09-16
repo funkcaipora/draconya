@@ -770,11 +770,19 @@ body {
    e na cascata quem vem depois ganha. */
 @media (max-width: 720px) {
   body { overflow: auto; }
-  .shell { position: static; height: auto; overflow: visible; }
+  /* A pill de caçada (#259) no celular (#291): mais um bloco da página, logo abaixo da faixa do
+     mundo — não flutua sobre as seções empilhadas. `.shell` vira coluna flex e `order` põe cada
+     filho no lugar sem mexer na ordem do JSX (que é a do desktop): mundo → pill → topo →
+     coluna esquerda → coluna direita → chat. Os filhos sem regra ficam em `order: 0`, ou seja,
+     junto do mundo — por isso o topo e as colunas recebem número explícito. */
+  .shell { position: static; height: auto; overflow: visible; display: flex; flex-direction: column; }
+  .shell > .viewport { order: 0; }
+  .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
   .viewport { position: relative; height: 40vh; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
     gap: 6px 10px; padding: 6px 8px;
+    order: 2;
   }
   .topbar-wordmark { order: 3; width: 100%; }
   .topbar-right { width: 100%; justify-content: space-between; }
@@ -783,6 +791,8 @@ body {
     position: static; width: auto; height: auto; margin: 10px 10px 0;
     background: transparent; border: 0; overflow: visible;
   }
+  .shell > .windows-left { order: 3; }
+  .shell > .windows-right { order: 4; }
   .windows > section { max-height: none; overflow: visible; }
   /* A ordem dos blocos no celular (#161, #253, #254, #256, #257, #259, #261): vitais → set →
      mochila → bolsa → batalha → bolsa da party → bot → personagem → party na hunt → analisador →
@@ -811,7 +821,7 @@ body {
   /* O chat vira seção da página como as outras (#252): sai do `position: fixed` sobre o mundo —
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
      o caso de uso móvel é configurar o bot (comentário de cima), não conversar (DT-05). */
-  .chat-window { position: static; width: auto; margin: 10px; }
+  .chat-window { position: static; width: auto; margin: 10px; order: 5; }
 }
 
 /* --- party: formação (#197). Classes INALTERADAS nesta issue — a formação (PartyPanel.tsx)
