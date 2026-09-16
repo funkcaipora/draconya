@@ -194,8 +194,9 @@ materializado pelo schema (PR #175).
 
 ## Decidido (ADR 0026): painel fixo, interruptor por regra, runa
 
-- **A tela vira um painel fixo na coluna da esquerda**, abaixo da lista de hunts, no estilo do
-  vBot do OTClientV8 (MIT): uma linha compacta por regra com um interruptor liga/desliga, a
+- **A tela vira um painel fixo na coluna da esquerda** — hoje o primeiro item dela, já que a
+  lista de hunts saiu dali para o `HuntsModal` (#259, ver `hunt.md`) —, no estilo do vBot do
+  OTClientV8 (MIT): uma linha compacta por regra com um interruptor liga/desliga, a
   edição fina (condição, operador, valor, ação) por cima; minimizável pela barra do topo, nunca
   removível. A regra ganha `enabled?: boolean`, opcional e ausente é ligada (ver
   "Divergências"), e o compilador pula a desligada. É o PRD §5.3 (bot à esquerda). Issue #162.
@@ -509,8 +510,9 @@ Cura [⚙] [▴▾] [×]` — e o interruptor, verde ligado e vermelho desligado
 configuração e conta para o teto; `compileBot` a pula, com custo zero no tick. A edição fina
 (condição, operador, valor, ação) abre **por cima**, no `RuleEditor` — porque a linha larga não
 cabe em 300 px, o motivo original da sobreposição da FUN-89 —, com Salvar e Cancelar; "+ regra"
-abre o mesmo editor com uma regra nova. No celular o painel é um bloco da página (o bot antes das
-hunts: configurar o bot é o caso de uso móvel, §5.1) e o editor continua sobreposição.
+abre o mesmo editor com uma regra nova. No celular o painel é um bloco da página (configurar o
+bot é o caso de uso móvel, §5.1; a caçada abre por modal em qualquer largura, sem entrar na
+pilha) e o editor continua sobreposição.
 
 **O interruptor salva sozinho.** Não há botão "Salvar" no painel: ligar, desligar, mover e
 remover agendam um `bot-config` com **debounce de 300 ms** (três toques são uma gravação, porque

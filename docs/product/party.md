@@ -106,9 +106,9 @@ morte encerra, loot é do matador sem sorteio.
 
 `session-state` leva `party` (líder, membros, vivos) e, no modo compartilhado, `partyBag`;
 `party-state`, `party-bag` e `party-settlement` chegam a cada mudança (opcodes 24–26, só
-servidor→cliente). Durante a hunt o menu mostra os companheiros com HP (`PartyMembers`); a bolsa
-aparece à direita, após a mochila, só em `shared` (`PartyBag`); o analisador é por personagem
-(`analyzer.md`).
+servidor→cliente). Durante a hunt a coluna esquerda mostra os companheiros com HP, num painel
+fixo (`PartyMembers`, #259); a bolsa aparece à direita, após a mochila, só em `shared`
+(`PartyBag`); o analisador é por personagem (`analyzer.md`).
 
 ## Regras
 

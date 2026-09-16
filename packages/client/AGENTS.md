@@ -491,8 +491,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
 - **O cliente NÃO soma peso** (FUN-90). Capacidade e peso vêm do servidor: quem sabe o que cabe
   é quem recusa, e a mesma conta em dois lugares diverge no primeiro item fracionário — com a
   versão do cliente sendo a errada.
-- **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, hunts e bot à
-  esquerda, chat embaixo, nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
+- **A geografia da tela é fixa** (§5.3, §5.5). Inventário e analisador à direita, bot e party à
+  esquerda, chat flutuante — hunts é exceção desde #259 (modal, não seção fixa; ver abaixo) —,
+  nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
   botão "Inventário" da barra minimiza as três (`collapsed` esconde tudo menos o cabeçalho),
@@ -526,7 +527,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   a vista em tiles é o que couber (`viewFor`), com teto em 18×14, que continua sendo o campo de
   visão da rede. **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
   são escalados por `1 / zoom`, senão um nome de dez pixels a 3× vira letreiro. A barra do topo
-  tem nome, level, vitais, gold e os botões que abrem e fecham cada janela; cada janela é a
+  tem nome, level, gold e os botões que abrem e fecham cada janela — as vitais (HP/mana) saíram
+  do topo desde #253 e ficam no alto da coluna direita (`Vitals`, primeiro filho de
+  `windows-right`); cada janela é a
   seção de sempre, posicionada numa coluna absoluta — e a moldura É a seção, para que uma seção
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
   esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251

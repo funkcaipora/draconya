@@ -781,14 +781,25 @@ body {
     background: transparent; border: 0; overflow: visible;
   }
   .windows > section { max-height: none; overflow: visible; }
-  /* A ordem dos blocos no celular (#161, #253, #254): vitais → set → mochila → bolsa → batalha →
-     bot → hunts → analisador → bestiário. As duas colunas viram uma, e `order` põe cada seção no
-     lugar; as vitais (#253) não precisam de regra aqui — `order: 0` já vem da regra base de
-     `.windows-right > .vitals`, e é o menor `order` da coluna. */
+  /* A ordem dos blocos no celular (#161, #253, #254, #256, #257, #259, #261): vitais → set →
+     mochila → bolsa → batalha → bolsa da party → bot → personagem → party na hunt → analisador →
+     bestiário. Cada coluna reordena só os PRÓPRIOS filhos — `.windows-left` e `.windows-right`
+     são dois flex containers separados, então os números de `order` não competem entre colunas,
+     só dentro de cada uma. As vitais (#253) não precisam de regra aqui — `order: 0` já vem da
+     regra base de `.windows-right > .vitals`, e é o menor `order` da coluna direita.
+     `PartyBag` (#257) e `CharacterPanel` (#256) montam `Panel` sem `className` própria — a raiz
+     fica só `ui-panel`/`ui-panel--dock`, sem classe para mirar — então caem no `<section>`
+     genérico da própria coluna, junto com `PartyMembers` (#259) à esquerda; dentro do mesmo
+     `order`, a ordem de montagem em `Shell.tsx` decide (#261: audit de RF-02 encontrou `PartyBag`
+     sem regra — caía em `order: 0`, à frente de tudo — e acrescentou o genérico da direita). */
   .windows-left, .windows-right { display: flex; flex-direction: column; }
   .windows-right > .inventory { order: 1; }
   .windows-right > .container-window { order: 2; }
   .windows-right > .battle-panel { order: 3; }
+  /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, entre Batalha e o
+     Analisador, como a coluna do OTClient já lista no D6 ("Set, bolsa, mochila, Batalha, bolsa
+     da party, Analisador"). */
+  .windows-right > section { order: 4; }
   .windows-left > .bot-panel { order: 4; }
   .windows-left > section { order: 5; }
   .windows-right > .analyzer { order: 6; }
