@@ -112,6 +112,7 @@ body {
     linear-gradient(145deg, var(--ash-4), var(--ash-1));
   color: var(--gold-4); font: 600 12.5px var(--font-display);
   box-shadow: inset 0 0 0 2px var(--ash-1), inset 0 0 0 3px rgba(208, 163, 75, 0.25), 0 1px 4px #000;
+  padding: 0; cursor: pointer;
 }
 .topbar-identity { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .topbar-name {
@@ -162,7 +163,7 @@ body {
    já resolve fundo, borda, sombra, cabeçalho e rolagem. */
 .windows > section {
   /* A coluna é a única rolagem no desktop. Cada seção mantém a altura do conteúdo para que
-     Bot, Personagem e Party nunca disputem a altura disponível nem escondam regras no meio —
+     Bot e Party nunca disputem a altura disponível nem escondam regras no meio —
      o mesmo padrão do <aside> do kit (App.jsx:11): overflow:auto no contêiner, sem min-height
      nem flex-shrink nos filhos (#289). */
   overflow: hidden;
@@ -175,8 +176,8 @@ body {
    como as outras janelas (D6, "nada arrastável"). O kit não desenha chat (ADR 0030 §3: "não há
    chat no HUD do kit"), então não há régua visual para a posição exata — só a regra de não
    cobrir conteúdo interativo da coluna. `left` começa depois de `--sidebar-w` (232px) em vez de
-   10px: preso ao canto, o chat cobria as últimas seções de `.windows-left` (Party, e o
-   Personagem antes dela) sempre que a coluna crescia até o rodapé (#288). */
+   10px: preso ao canto, o chat cobria as últimas seções de `.windows-left` (Party) sempre que
+   a coluna crescia até o rodapé (#288). */
 .chat-window {
   position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
 }
@@ -630,6 +631,30 @@ body {
 }
 .hunt-details-modal-close { margin-left: auto; }
 
+/* ---- O modal Personagem (#319, RC-06, ADR 0030 §3) --------------------------------------- */
+.character-modal-tabs { margin-bottom: 11px; }
+.character-modal-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 11px;
+}
+.character-modal-identity {
+  display: grid; grid-template-columns: 74px 1fr; gap: 11px; align-items: start;
+}
+.character-modal-portrait {
+  display: grid; place-items: center; width: 72px; height: 74px;
+  border: 1px dashed var(--ash-7); border-radius: 4px;
+  background: var(--surface-slot); color: var(--text-faint);
+  font: 5.5px var(--font-mono); letter-spacing: .08em;
+}
+.character-modal-name {
+  margin: 0 0 2px; color: var(--parchment-1);
+  font: 700 12.5px var(--font-display); letter-spacing: .03em;
+}
+.character-modal-vocation {
+  margin: 0 0 8px; color: var(--text-muted); font: 6.5px var(--font-mono);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.character-modal-vitals { display: flex; flex-direction: column; gap: 6px; }
+
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
    texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
@@ -889,7 +914,7 @@ body {
   }
   .shell > .windows-left { order: 3; }
   .shell > .windows-right { order: 4; }
-  /* A ordem dos blocos no celular (#161, #253, #254, #257, #259, #261, #317): vitais → set →
+  /* A ordem dos blocos no celular (#161, #253, #254, #257, #259, #261, #317, #319): vitais → set →
      mochila → bolsa → batalha → bolsa da party → bot → skills → party na hunt → analisador →
      bestiário. Cada coluna reordena só os PRÓPRIOS filhos — `.windows-left` e `.windows-right`
      são dois flex containers separados, então os números de `order` não competem entre colunas,

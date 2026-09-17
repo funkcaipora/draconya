@@ -364,9 +364,8 @@ pnpm tsx scripts/make-sheet-fixture.ts
   de `pnpm vitest run packages/client` (`environment: 'node'`, sem `jsdom`) — não é um caso raro
   de navegador, é o que os testes exercitam por padrão; leitura e escrita são só `try/catch` em
   volta, e falha de qualquer tipo cai no default (todas as seis visíveis), nunca num painel
-  vazio. `CharacterPanel.tsx` continua no repositório sem consumidor até a RC-06 (#319) reusar o
-  conteúdo dele na aba "Personagem" do modal de Personagem — não é código morto por engano, é
-  uma parada deliberada entre duas issues do mesmo marco (M17).
+  vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
+  `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
 
 ## Como testar
 
@@ -544,7 +543,8 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
   esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251
   (ADR 0029, D3/D6/D8/D9), a casca veste o design system:** topo de 65 px com identidade, gold e
-  os seis ícones PNG das janelas (Hunts, Bot, Inventário, Analisador, Cyclopedia, Chat — nunca
+  os sete ícones PNG das janelas (Personagem, Hunts, Bot, Inventário, Analisador, Cyclopedia,
+  Chat — nunca
   emoji, D9), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
   faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
   marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.

@@ -7,10 +7,10 @@ import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
 
 // A casca do design (#251, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
-// wordmark sem contagem de jogadores e os seis ícones PNG — nenhum emoji, nenhum ícone para
+// wordmark sem contagem de jogadores e os sete ícones PNG — nenhum emoji, nenhum ícone para
 // sistema inexistente. `prerender` roda a árvore inteira sem DOM.
 
-const OPEN = { hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
+const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
 
 async function render(open = OPEN): Promise<string> {
@@ -48,6 +48,7 @@ describe('TopBar', () => {
     }));
     const html = await render();
     expect(html).toContain('class="topbar-portrait"');
+    expect(html).toMatch(/<button[^>]*class="topbar-portrait"[^>]*data-window="character"/);
     expect(html).toContain('>A<'); // a inicial do nome
     expect(html).toContain('>Aldric<');
     // A ordem é "VOCAÇÃO · LV N" (DT-04): vocação primeiro. `react-dom/static` insere um
@@ -70,11 +71,13 @@ describe('TopBar', () => {
     expect(html).not.toContain(' · LV 3');
   });
 
-  it('shows the six window icons, and no icon for a system that does not exist', async () => {
+  it('shows Personagem as the first of seven window icons, and no nonexistent system icon', async () => {
     const html = await render();
-    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBeGreaterThanOrEqual(6);
-    expect((html.match(/data-window="/g) ?? []).length).toBe(6);
-    for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(7);
+    // Sete ícones de navegação e o retrato clicável carregam data-window.
+    expect((html.match(/data-window="/g) ?? []).length).toBe(8);
+    expect(html.indexOf('title="Personagem"')).toBeLessThan(html.indexOf('title="Hunts"'));
+    for (const label of ['Personagem', 'Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
     for (const label of ['Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
@@ -86,7 +89,7 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).not.toContain('topbar-icon-label');
     // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
-    for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
+    for (const label of ['Personagem', 'Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
   });
@@ -112,6 +115,6 @@ describe('TopBar', () => {
 
   it('every window icon carries aria-pressed (#306)', async () => {
     const html = await render();
-    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(7);
   });
 });
