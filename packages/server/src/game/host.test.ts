@@ -645,10 +645,10 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Três: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
-    // e stamina só viajam na segunda — e o Bestiário (`bestiary`, FUN-113), que só viaja na
-    // terceira. Os três na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(3);
+    // Quatro: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // e stamina só viajam na segunda —, as condições ativas (`active-conditions`, #341) e o
+    // Bestiário (`bestiary`, FUN-113), que só viaja na quarta. Os quatro na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(4);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -2788,7 +2788,10 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
 
     const received = socket.received();
     const enter = received.findIndex((m) => m.type === 'instance-enter');
-    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena' });
+    expect(received[enter]).toEqual({
+      type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena',
+      huntId: 'arena', difficulty: 'cautious',
+    });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
@@ -3619,10 +3622,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(hero().xp).toBeGreaterThan(0);
     expect(stats.at(-1)?.xp).toBe(hero().xp);
     expect(stats.length).toBeGreaterThan(1);
-    // E foi SÓ a XP: os outros oito campos são os do `session-attach`, em todos.
+    // E foi SÓ a XP (e o alvo do combate enquanto o monstro esteve vivo): os outros campos são os do `session-attach`.
     for (const s of stats) {
-      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs) })
-        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs) });
+      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs), targetId: null })
+        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs), targetId: null });
     }
   });
 
@@ -4642,5 +4645,248 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
     expect(partyStatesOf(lead.socket).length).toBe(3);
+  });
+});
+
+describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
+  const ofType = <T extends S2CMessage['type']>(messages: readonly S2CMessage[], type: T) =>
+    messages.filter((m): m is Extract<S2CMessage, { type: T }> => m.type === type);
+
+  function createHuntFixture(over: {
+    tanky?: boolean;
+    monsters?: boolean;
+    regen?: boolean;
+    ratAttack?: number;
+  } = {}) {
+    const raw = rawTestContent();
+    const ratOverride = {
+      ...(over.tanky ? { health: 100_000 } : {}),
+      ...(over.ratAttack !== undefined ? { attack: over.ratAttack } : {}),
+    };
+    const content = buildContent({
+      ...raw,
+      progression: [{
+        ...TEST_PROGRESSION,
+        startingMana: 200,
+        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+      }],
+      ...(over.monsters === false ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] } : {}),
+      ...(Object.keys(ratOverride).length > 0
+        ? {
+          monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+            m['id'] === 'rat' ? { ...m, ...ratOverride } : m),
+        }
+        : {}),
+    });
+    let now = 0;
+    const stats = statsForLevel(1, null, content.progression);
+    const host = new SessionHost({
+      nodeId: 'n1',
+      contentVersion: content.version,
+      logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`,
+          content,
+          huntId: 'arena',
+          difficulty: 'cautious',
+          createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: stats.maxHealth,
+          maxHealth: stats.maxHealth,
+          mana: stats.maxMana,
+          maxMana: stats.maxMana,
+          level: 1,
+          xp: 0,
+          gold: 0,
+          goldDelta: 0,
+          alive: true,
+          cooldowns: {},
+          staminaMs: 86_400_000 - 30_000,
+          staminaUpdatedAtMs: 0,
+        }));
+        return session;
+      },
+    });
+    const runFor = (ms: number, step = 100) => {
+      for (let t = 0; t < ms; t += step) {
+        now += step;
+        host.cycle();
+      }
+      host.flush();
+    };
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    const hero = () => host.sessionFor('hero')?.participants[0] as CharacterRuntime;
+    return {
+      host,
+      socket,
+      viewer,
+      runFor,
+      hero,
+      content,
+      received: () => socket.received(),
+      now: () => now,
+    };
+  }
+
+  it('targetId in player-stats reflects targeted monster creatureId, null when no target', () => {
+    const { runFor, received, host, hero } = createHuntFixture({ tanky: true });
+    // On attach at t=0, no monster has spawned yet; targetId is null
+    const initialStats = ofType(received(), 'player-stats').at(-1);
+    expect(initialStats).toBeDefined();
+    expect(initialStats?.targetId).toBeNull();
+
+    // Advance so the monster spawns and is targeted by the hero
+    runFor(200);
+
+    const statsWithTarget = ofType(received(), 'player-stats').find((s) => s.targetId !== null);
+    expect(statsWithTarget).toBeDefined();
+    expect(typeof statsWithTarget?.targetId).toBe('number');
+    expect(statsWithTarget!.targetId!).toBeGreaterThan(0);
+
+    // Verify creatureId matches the monster creatureId
+    const session = host.sessionFor('hero');
+    const huntRuleset = session?.ruleset as unknown as { attackTargetOf: (c: CharacterRuntime) => { subject: string; health: number } | null };
+    const targetMonster = huntRuleset.attackTargetOf(hero());
+    expect(targetMonster).not.toBeNull();
+
+    // Now kill the monster so target is cleared
+    targetMonster!.health = 0;
+    runFor(100);
+
+    const finalStats = ofType(received(), 'player-stats').at(-1);
+    expect(finalStats?.targetId).toBeNull();
+  });
+
+  it('sameStats correctly sends player-stats when ONLY targetId changes', () => {
+    // Disable regen and set rat attack to 0, ensuring health and mana do not change
+    const { runFor, received } = createHuntFixture({ tanky: true, regen: false, ratAttack: 0 });
+    const initialStats = ofType(received(), 'player-stats').at(-1);
+    expect(initialStats).toBeDefined();
+    expect(initialStats?.targetId).toBeNull();
+
+    // Advance until target is acquired
+    runFor(200);
+
+    const statsList = ofType(received(), 'player-stats');
+    expect(statsList.length).toBeGreaterThanOrEqual(2);
+    const updatedStats = statsList.at(-1)!;
+    expect(updatedStats.targetId).not.toBeNull();
+
+    // All other stats remain identical — ONLY targetId changed!
+    expect(updatedStats.health).toBe(initialStats!.health);
+    expect(updatedStats.maxHealth).toBe(initialStats!.maxHealth);
+    expect(updatedStats.mana).toBe(initialStats!.mana);
+    expect(updatedStats.maxMana).toBe(initialStats!.maxMana);
+    expect(updatedStats.level).toBe(initialStats!.level);
+    expect(updatedStats.xp).toBe(initialStats!.xp);
+    expect(updatedStats.gold).toBe(initialStats!.gold);
+    expect(updatedStats.speed).toBe(initialStats!.speed);
+  });
+
+  it('active-conditions is sent when condition applied, when expired, and not sent when no change', () => {
+    const { host, hero, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+
+    // 1. Initial attach sends active-conditions with empty conditions
+    const initialConditions = ofType(received(), 'active-conditions');
+    expect(initialConditions).toHaveLength(1);
+    expect(initialConditions[0]?.conditions).toEqual([]);
+
+    // 2. Idle cycles without conditions do NOT send duplicate active-conditions
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(1);
+
+    // 3. Applying a condition triggers active-conditions
+    hero().conditions.apply({
+      key: 'haste',
+      spellId: 'haste',
+      expiresAtMs: 30_000,
+      speedPercent: 30,
+    });
+    runFor(100);
+
+    const afterApply = ofType(received(), 'active-conditions');
+    expect(afterApply).toHaveLength(2);
+    expect(afterApply[1]?.conditions).toHaveLength(1);
+    expect(afterApply[1]?.conditions[0]).toMatchObject({
+      kind: 'haste',
+      remainingMs: expect.any(Number),
+    });
+    expect(afterApply[1]?.conditions[0]?.remainingMs).toBeGreaterThan(0);
+
+    // 4. Idle cycles while condition is active do NOT send duplicate active-conditions
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(2);
+
+    // 5. Reattaching client receives active-conditions snapshot
+    const socket2 = new FakeSocket();
+    const viewer2 = host.attach(socket2, 'hero');
+    host.handle(viewer2, { type: 'session-attach' });
+    host.flush();
+
+    const socket2Conditions = ofType(socket2.received(), 'active-conditions');
+    expect(socket2Conditions).toHaveLength(1);
+    expect(socket2Conditions[0]?.conditions).toHaveLength(1);
+    expect(socket2Conditions[0]?.conditions[0]?.kind).toBe('haste');
+
+    // 6. Expiring (removing) the condition sends active-conditions with empty conditions
+    hero().conditions.remove('haste');
+    runFor(100);
+
+    const afterExpire = ofType(received(), 'active-conditions');
+    expect(afterExpire).toHaveLength(3);
+    expect(afterExpire[2]?.conditions).toEqual([]);
+
+    // 7. Idle cycles after expiry do NOT duplicate
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(3);
+  });
+
+  it('instance-enter and session-state carry huntId and difficulty when in a hunt, but not in City', () => {
+    // 1. In hunt:
+    const { received: huntReceived } = createHuntFixture();
+    const huntEnter = ofType(huntReceived(), 'instance-enter').at(-1);
+    expect(huntEnter).toBeDefined();
+    expect(huntEnter?.huntId).toBe('arena');
+    expect(huntEnter?.difficulty).toBe('cautious');
+
+    const huntState = ofType(huntReceived(), 'session-state').at(-1);
+    expect(huntState).toBeDefined();
+    expect(huntState?.huntId).toBe('arena');
+    expect(huntState?.difficulty).toBe('cautious');
+
+    // 2. In City:
+    const content = testContent();
+    const cityHost = new SessionHost({
+      nodeId: 'n1',
+      contentVersion: content.version,
+      logger,
+      now: () => 0,
+      createSession: createCitySessionFactory(content),
+    });
+    const citySocket = new FakeSocket();
+    const cityViewer = cityHost.attach(citySocket, 'city-hero');
+    cityHost.handle(cityViewer, { type: 'session-attach' });
+    cityHost.flush();
+
+    const cityReceived = citySocket.received();
+    const cityEnter = ofType(cityReceived, 'instance-enter').at(-1);
+    expect(cityEnter).toBeDefined();
+    expect(cityEnter?.huntId).toBeUndefined();
+    expect(cityEnter?.difficulty).toBeUndefined();
+
+    const cityState = ofType(cityReceived, 'session-state').at(-1);
+    expect(cityState).toBeDefined();
+    expect(cityState?.huntId).toBeUndefined();
+    expect(cityState?.difficulty).toBeUndefined();
   });
 });

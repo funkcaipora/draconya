@@ -352,6 +352,7 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
         ammo: { arrow: null, bolt: null }, vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },

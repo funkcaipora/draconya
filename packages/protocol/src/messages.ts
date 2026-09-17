@@ -97,6 +97,11 @@ export const SERVER_TO_CLIENT = {
   'party-state': 24,
   'party-bag': 25,
   'party-settlement': 26,
+  /**
+   * Condições ativas do jogador (haste, buff, magic shield, cura ao longo do tempo).
+   * Sai no attach/enter e sempre que as condições ativas mudam (aplicadas ou expiradas).
+   */
+  'active-conditions': 27,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

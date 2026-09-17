@@ -422,6 +422,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     type: 'player-stats',
     health: 150, maxHealth: 150, mana: 20, maxMana: 20,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
+    targetId: null,
     ammo: { arrow: null, bolt: null }, vocationId: 'knight',
     speed: 292,
     skills: {
@@ -446,6 +447,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
     expect(decoded).toEqual([{
       ...rawOlderNode,
+      targetId: null,
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
@@ -623,4 +625,128 @@ describe('party presentation messages (#196, #339, SV-03)', () => {
     } as unknown as S2CMessage))).toBeNull();
   });
 });
+
+describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
+  it('round trips active-conditions (opcode 27)', () => {
+    expect(SERVER_TO_CLIENT['active-conditions']).toBe(27);
+    const msg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [
+        { kind: 'haste', remainingMs: 30000 },
+        { kind: 'buff', remainingMs: 10000 },
+        { kind: 'mana-shield', remainingMs: 5000 },
+        { kind: 'heal-over-time', remainingMs: 60000 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
+  });
+
+  it('round trips active-conditions with empty list', () => {
+    const emptyMsg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [],
+    };
+    expect(decodeS2C(encodeS2C(emptyMsg))).toEqual([emptyMsg]);
+  });
+
+  it('rejects active-conditions with invalid remainingMs or unknown kind', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'haste', remainingMs: -1 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'haste', remainingMs: 12.5 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'poison', remainingMs: 1000 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+
+  it('round trips instance-enter with and without huntId and difficulty', () => {
+    const withHunt: S2CMessage = {
+      type: 'instance-enter',
+      instanceId: 'inst-1',
+      map: 'rats-cave',
+      huntId: 'rats',
+      difficulty: 'easy',
+      ambience: 'cavern',
+    };
+    expect(decodeS2C(encodeS2C(withHunt))).toEqual([withHunt]);
+
+    const withoutHunt: S2CMessage = {
+      type: 'instance-enter',
+      instanceId: 'inst-2',
+      map: 'city-square',
+    };
+    expect(decodeS2C(encodeS2C(withoutHunt))).toEqual([withoutHunt]);
+  });
+
+  it('round trips session-state with and without huntId and difficulty', () => {
+    const baseSession: S2CMessage = {
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 5000,
+      huntId: 'rats',
+      difficulty: 'hard',
+      self: {
+        creatureId: 1,
+        characterId: 'c1',
+        health: 100,
+        maxHealth: 100,
+        mana: 50,
+        maxMana: 50,
+        level: 1,
+        xp: 0,
+        vocationId: null,
+        speed: 200,
+        skills: {},
+        magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { mapId: 'rats-cave', creatures: [], groundItems: [] },
+      aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(baseSession))).toEqual([baseSession]);
+
+    const { huntId: _h, difficulty: _d, ...citySession } = baseSession;
+    expect(decodeS2C(encodeS2C(citySession as S2CMessage))).toEqual([citySession]);
+  });
+
+  it('round trips player-stats with targetId (number and null)', () => {
+    const statsWithTarget: S2CMessage = {
+      type: 'player-stats',
+      health: 100,
+      maxHealth: 100,
+      mana: 50,
+      maxMana: 50,
+      level: 5,
+      xp: 1000,
+      capacity: 300,
+      gold: 50,
+      staminaMs: 50000,
+      targetId: 42,
+      ammo: { arrow: null, bolt: null },
+      vocationId: 'knight',
+      speed: 250,
+      skills: {},
+      magicLevel: { level: 0, percentToNext: 0 },
+    };
+    expect(decodeS2C(encodeS2C(statsWithTarget))).toEqual([statsWithTarget]);
+
+    const statsNullTarget: S2CMessage = {
+      ...statsWithTarget,
+      targetId: null,
+    };
+    expect(decodeS2C(encodeS2C(statsNullTarget))).toEqual([statsNullTarget]);
+
+    // An older node sending player-stats without targetId decodes to targetId: null
+    const { targetId: _t, ...olderStats } = statsWithTarget;
+    expect(decodeS2C(encodeS2C(olderStats as S2CMessage))).toEqual([statsNullTarget]);
+  });
+});
+
 

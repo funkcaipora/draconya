@@ -347,6 +347,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       hud.set((state) => ({ ...state, lastSettlement: message }));
       return;
 
+    case 'active-conditions':
+      // Consumida pelo HUD de condições (SV-12, #342).
+      return;
+
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
       // ser silenciosamente ignorada em produção.

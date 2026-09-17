@@ -22,7 +22,7 @@ import { ITEM_SLOTS } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
 import { containerRulesFor } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
+  CarriedItem, CharacterRuntime, ConditionKind, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
   InventoryState, Place, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
@@ -297,6 +297,7 @@ function skillProgressOf(
 function playerStatsOf(
   character: CharacterRuntime | undefined,
   skillCatalog?: ReadonlyMap<string, Skill>,
+  targetId: number | null = null,
 ): PlayerStats {
   const skills: Record<string, SkillProgress> = {};
   if (character !== undefined && skillCatalog !== undefined) {
@@ -314,6 +315,7 @@ function playerStatsOf(
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
+    targetId,
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
       bolt: character?.ammo.get('bolt') ?? null,
@@ -361,6 +363,7 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.xp === b.xp
     && a.capacity === b.capacity
     && a.gold === b.gold
+    && a.targetId === b.targetId
     && a.ammo.arrow === b.ammo.arrow
     && a.ammo.bolt === b.ammo.bolt
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
@@ -434,6 +437,36 @@ function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): bool
     ) return false;
   }
   return true;
+}
+
+type ConditionsSnapshot = ReadonlyMap<ConditionKind, number>;
+
+function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
+  const snapshot = new Map<ConditionKind, number>();
+  for (const condition of character.conditions.getState()) {
+    snapshot.set(condition.key, condition.expiresAtMs);
+  }
+  return snapshot;
+}
+
+function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, expiresAtMs] of a) {
+    if (b.get(key) !== expiresAtMs) return false;
+  }
+  return true;
+}
+
+function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
+  const conditions: { kind: ConditionKind; remainingMs: number }[] = [];
+  for (const [kind, expiresAtMs] of snapshot) {
+    conditions.push({
+      kind,
+      remainingMs: Math.max(0, Math.round(expiresAtMs - nowMs)),
+    });
+  }
+  conditions.sort((a, b) => a.kind.localeCompare(b.kind));
+  return { conditions };
 }
 
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
@@ -513,6 +546,8 @@ interface HostedSession {
   readonly sentBestiary: Map<string, number>;
   /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
   sentParty: S2CProps<'party-state'> | null;
+  /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
+  readonly sentConditions: Map<string, ConditionsSnapshot>;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -1145,7 +1180,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -1198,7 +1233,7 @@ export class SessionHost {
       });
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1423,6 +1458,7 @@ export class SessionHost {
       // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
       // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
       this.#presentStats(hosted);
+      this.#presentConditions(hosted);
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
       this.#presentAnalyzer(hosted);
@@ -1731,11 +1767,26 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character, this.#options.skillCatalog);
+      const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
       this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    }
+  }
+
+  #presentConditions(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const snapshot = conditionsSnapshotOf(character);
+      const last = hosted.sentConditions.get(character.id);
+      if (last !== undefined && sameConditions(last, snapshot)) continue;
+      hosted.sentConditions.set(character.id, snapshot);
+      this.#sendToViewersOf(hosted, character.id, {
+        type: 'active-conditions',
+        ...activeConditionsOf(snapshot, hosted.session.nowMs),
+      });
     }
   }
 
@@ -1803,10 +1854,12 @@ export class SessionHost {
     // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
     // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
     // transição, porque os dois passam por aqui; a instância é a própria sessão.
-    const { mapId, ambience } = hosted.session.ruleset;
+    const { mapId, ambience, huntId, difficulty } = hosted.session.ruleset;
     if (mapId !== undefined) {
       viewer.send({
         type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
+        ...(huntId === undefined ? {} : { huntId }),
+        ...(difficulty === undefined ? {} : { difficulty }),
         ...(ambience === undefined ? {} : { ambience }),
       });
     }
@@ -1814,9 +1867,15 @@ export class SessionHost {
     if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
     viewer.send(state);
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant, this.#options.skillCatalog);
+    const stats = playerStatsOf(participant, this.#options.skillCatalog, this.#targetIdOf(hosted, participant));
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    const snapshot = participant === undefined ? new Map() : conditionsSnapshotOf(participant);
+    hosted.sentConditions.set(characterId, snapshot);
+    viewer.send({
+      type: 'active-conditions',
+      ...activeConditionsOf(snapshot, hosted.session.nowMs),
+    });
     // E o Bestiário (FUN-113), pela mesma razão dos vitais: é progressão que só viaja em
     // mensagem própria, e sem ela quem reconecta veria a contagem em zero até o próximo abate
     // — na Cidade, que não tem ciclo, para sempre. `sentBestiary` é escrito aqui porque o que
@@ -2232,6 +2291,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,
+      sentConditions: new Map(),
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -2617,6 +2677,13 @@ export class SessionHost {
     return assigned;
   }
 
+  #targetIdOf(hosted: HostedSession, character: CharacterRuntime | undefined): number | null {
+    if (character === undefined) return null;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const target = ruleset.attackTargetOf?.(character) ?? null;
+    return target === null ? null : (hosted.creatureIds.get(target.subject) ?? null);
+  }
+
   /**
    * O estado ATUAL, montado do zero a cada pedido.
    *
@@ -2629,7 +2696,11 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(this.#participantOf(hosted, characterId), this.#options.skillCatalog);
+    const self = playerStatsOf(
+      this.#participantOf(hosted, characterId),
+      this.#options.skillCatalog,
+      this.#targetIdOf(hosted, this.#participantOf(hosted, characterId)),
+    );
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -2674,6 +2745,8 @@ export class SessionHost {
       type: 'session-state',
       sessionType: session.ruleset.type,
       elapsedMs: session.aggregates.durationMs,
+      ...(session.ruleset.huntId === undefined ? {} : { huntId: session.ruleset.huntId }),
+      ...(session.ruleset.difficulty === undefined ? {} : { difficulty: session.ruleset.difficulty }),
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
@@ -2914,6 +2987,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,
+      sentConditions: new Map(),
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

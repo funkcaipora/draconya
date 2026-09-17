@@ -4573,3 +4573,55 @@ describe('raio livre do spawn (#236)', () => {
     expect(ruleset.monsters).toHaveLength(1);
   });
 });
+
+describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
+  it('huntId e difficulty refletem a hunt e a dificuldade da instância', () => {
+    const { ruleset } = start({ difficulty: 'bold' });
+    expect(ruleset.huntId).toBe('arena');
+    expect(ruleset.difficulty).toBe('bold');
+  });
+
+  it('attackTargetOf devolve o monstro ao alcance do ataque ou null', () => {
+    const { session, hero, ruleset } = start();
+    // Antes de nascer qualquer monstro: sem alvo
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+
+    // Avança para o monstro nascer colado ao herói
+    session.advanceBy(100);
+    const target = ruleset.attackTargetOf(hero);
+    expect(target).not.toBeNull();
+    expect(target?.alive).toBe(true);
+  });
+
+  it('condições temporárias têm o mesmo expiresAtMs a 10 Hz e a 1 Hz (relógio lógico, sem acumulador de tick)', () => {
+    const always = { kind: 'hp' as const, op: '<=' as const, percent: 100 };
+    const cast = (spellId: string) => ({ when: always, do: { kind: 'spell' as const, spellId } });
+    const hasteSpell = {
+      id: 'haste-test', name: 'Haste', manaCost: 60, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+      effect: { kind: 'haste' as const, speedPercent: 30, durationMs: 30_000 },
+    };
+    const at = (hz: number) => {
+      const { session, hero } = withSpells(botConfig({ support: [cast('haste-test')] }), {
+        mana: 60, spells: [...spells, hasteSpell], monsters: false,
+      });
+      run(session, 5_000, 1000 / hz);
+      const condition = hero.conditions.get('haste');
+      return {
+        nowMs: session.nowMs,
+        expiresAtMs: condition?.expiresAtMs,
+        remainingMs: condition ? condition.expiresAtMs - session.nowMs : null,
+      };
+    };
+
+    const at10Hz = at(10);
+    const at1Hz = at(1);
+
+    expect(at10Hz.nowMs).toBe(5_000);
+    expect(at1Hz.nowMs).toBe(5_000);
+    expect(at10Hz.expiresAtMs).toBe(30_000);
+    expect(at1Hz.expiresAtMs).toBe(30_000);
+    expect(at10Hz.remainingMs).toBe(25_000);
+    expect(at1Hz.remainingMs).toBe(25_000);
+  });
+});
+

@@ -585,6 +585,18 @@ export class HuntRuleset implements Ruleset {
     return this.#world.map.id;
   }
 
+  get huntId(): string {
+    return this.#options.hunt.id;
+  }
+
+  get difficulty(): string {
+    return this.#options.difficulty;
+  }
+
+  attackTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    return this.#attackTarget(character);
+  }
+
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
   get groundItems(): readonly CorpseState[] {
     return this.#corpses;

@@ -242,6 +242,8 @@ export const S2C_SCHEMAS = {
      */
     sessionType: z.string(),
     elapsedMs: z.number(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
     /** Quem é o jogador nesta instância — sem isto a câmera não tem em quem centrar. */
     self: z.object({
       creatureId: z.number().int(),
@@ -287,6 +289,8 @@ export const S2C_SCHEMAS = {
   'instance-enter': z.object({
     instanceId: z.string(),
     map: z.string(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
     ambience: z.enum(['surface', 'cavern']).optional(),
   }),
   'creature-appear': CreatureState,
@@ -590,6 +594,7 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
+    targetId: z.number().int().nonnegative().nullable().default(null),
     /**
      * A munição escolhida por família (#152), a forma do Huntera (`ammo-selection`): `null` é
      * "a grátis". `default`: um nó `game` anterior manda sem, e o cliente mostra a grátis.
@@ -616,6 +621,15 @@ export const S2C_SCHEMAS = {
     reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed']),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+  }),
+  /**
+   * Condições ativas do jogador (#341, SV-05): tempo restante de cada condição temporária.
+   */
+  'active-conditions': z.object({
+    conditions: z.array(z.object({
+      kind: z.enum(['haste', 'buff', 'mana-shield', 'heal-over-time']),
+      remainingMs: z.number().int().nonnegative(),
+    })),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
