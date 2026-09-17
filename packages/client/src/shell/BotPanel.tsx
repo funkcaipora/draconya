@@ -28,6 +28,7 @@ import { bot, moveRule, removeRule, setConfigSender, toggleRule } from '../bot/s
 import type { BotVocabulary, ItemDefinition } from '../state/hud.js';
 import { defaultRingSwap, ringSwapSummary } from '../bot/ring-swap.js';
 import { RingSwapModal } from './RingSwapModal.js';
+import { LureTargetingModal } from './LureTargetingModal.js';
 import { RuleEditor, blankRule } from './RuleEditor.js';
 import { ruleText } from './rule-text.js';
 import { Panel } from './ui/Panel.js';
@@ -159,6 +160,7 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [ringSwapOpen, setRingSwapOpen] = useState(false);
+  const [lureOpen, setLureOpen] = useState(false);
   const draftRingSwap = useStoreSlice(bot, (state) => state.draft.ringSwap);
 
   // A store não importa `net/` (ADR 0007: o socket fica fora do render); o painel liga o
@@ -197,6 +199,9 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
         // que o jogador descubra montando uma configuração inteira e levando um não.
         <p className="quiet">{`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}</p>
       )}
+      <Button variant="secondary" size="sm" block onClick={() => { setLureOpen(true); }}>
+        ⌖ Lure e alvo
+      </Button>
       {BOT_CATEGORIES.map((category) => (
         <Category key={category} category={category} vocabulary={vocabulary} vocationId={vocationId} onEdit={setEditing} />
       ))}
@@ -220,6 +225,7 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
           onClose={() => { setRingSwapOpen(false); }}
         />
       )}
+      {lureOpen && <LureTargetingModal onClose={() => { setLureOpen(false); }} />}
       {/* Aninhar o Modal aqui é seguro (DT-02: backdrop-filter não cria bloco de contenção para
           position: fixed) e é o menor diff em relação ao código de antes. */}
       {editing !== null && (

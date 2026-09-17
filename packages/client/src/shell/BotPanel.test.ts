@@ -63,8 +63,9 @@ describe('BotPanel', () => {
     expect(html).toContain('bot-rule-off');
     // A seta contígua na mesma string — envolvê-la num <span> quebraria esta asserção.
     expect(html).toContain('HP ≤ 70 % → Cura');
-    // RF-04: "+ regra" (Button secondary) presente onde há folga (potion), ausente no teto (heal).
-    expect((html.match(/ui-button-secondary/g) ?? []).length).toBe(1);
+    // RF-04: "⌖ Lure e alvo" e "+ regra" (Button secondary) onde há folga (potion), ausente no teto (heal).
+    expect((html.match(/ui-button-secondary/g) ?? []).length).toBe(2);
+    expect(html).toContain('⌖ Lure e alvo');
     expect(html).toContain('+ regra');
     // Sem "fechar": o painel é fixo. Sem "Salvar": o interruptor salva sozinho.
     expect(html).not.toContain('fechar');
@@ -148,5 +149,16 @@ describe('BotPanel', () => {
     expect(source).toContain('ringSwapOpen && (');
     expect(source).toContain('<RingSwapModal');
     expect(source).toContain('onClose={() => { setRingSwapOpen(false); }}');
+  });
+
+  it('renders "⌖ Lure e alvo" button even when level < advancedFromLevel and wires opening modal', async () => {
+    hud.set((state) => ({ ...state, level: 10 })); // below advancedFromLevel (50)
+    const html = await render();
+    expect(html).toContain('⌖ Lure e alvo');
+
+    const source = await readFile(new URL('./BotPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('setLureOpen(true)');
+    expect(source).toContain('lureOpen && <LureTargetingModal');
+    expect(source).toContain('onClose={() => { setLureOpen(false); }}');
   });
 });

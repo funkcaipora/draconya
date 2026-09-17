@@ -398,8 +398,9 @@ ticket ou a última aceita —, e a tela do bot abre com ela. Até aí a tela na
 carregamento, e um "Salvar" dali apagava as regras que a hunt estava executando. A tela só a
 adota quando o rascunho local está intocado ou salvo: um rascunho tocado e não salvo — editado,
 pendente ou recusado, mesmo que apagado até ficar igual ao vazio — sobrevive à reconexão, pela
-mesma razão que sobrevive a uma recusa. `lure` e `ringSwap`, que nenhuma tela edita, passam
-opacos pelo rascunho: um "Salvar" de quem só mexeu na cura não apaga o anel.
+mesma razão que sobrevive a uma recusa. `lure` (SV-09, #345) e `ringSwap` (SV-17, #353) agora
+possuem interfaces dedicadas no cliente (modais "Lure e alvo" e "Ring swap"), salvando como
+campos de primeira classe no rascunho.
 
 ### O gate de level (§13.2)
 

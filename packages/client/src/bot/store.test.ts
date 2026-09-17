@@ -3,7 +3,8 @@ import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
-  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setRingSwap, toConfig, toggleRule,
+  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setIgnore, setLure, setPosture, setPrioritize,
+  setRingSwap, setTargetingPolicy, toConfig, toggleRule,
 } from './store.js';
 
 const rule = (percent: number, enabled = true) => ({
@@ -94,13 +95,14 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     expect(toConfig(draftFrom(original))).toEqual(original);
   });
 
-  it('lure passa opaco pelo rascunho', () => {
+  it('lure dá a volta inteira pelo rascunho como campo próprio', () => {
     const withLure = {
       ...config(),
       lure: { min: 2, max: 4 },
     };
-    expect(toConfig(draftFrom(withLure))).toEqual(withLure);
-    expect(draftFrom(withLure).advanced).toEqual({ lure: { min: 2, max: 4 } });
+    const draft = draftFrom(withLure);
+    expect(draft.lure).toEqual({ min: 2, max: 4 });
+    expect(toConfig(draft)).toEqual(withLure);
     expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('lure');
   });
 
@@ -346,3 +348,54 @@ describe('as regras de saída salvam sozinhas, com o mesmo debounce (#260)', () 
     expect(bot.get().draft.exit).toEqual([{ kind: 'out-of-gold' }]);
   });
 });
+
+describe('lure e targeting salvam com debounce (SV-09, #345)', () => {
+  const sent: BotConfig[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('setLure escreve draft.lure e manda com debounce', () => {
+    setLure({ min: 3, max: 7 });
+    expect(bot.get().draft.lure).toEqual({ min: 3, max: 7 });
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.lure).toEqual({ min: 3, max: 7 });
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('setTargetingPolicy, setPrioritize, setIgnore e setPosture em sequência mandam UMA mensagem', () => {
+    setTargetingPolicy('lowest-hp');
+    vi.advanceTimersByTime(100);
+    setPrioritize(['dragon', 'dragon-lord']);
+    vi.advanceTimersByTime(100);
+    setIgnore(['rat']);
+    vi.advanceTimersByTime(100);
+    setPosture({ kind: 'keep-distance', tiles: 3 });
+    expect(sent).toHaveLength(0);
+
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.targeting).toEqual({
+      policy: 'lowest-hp',
+      prioritize: ['dragon', 'dragon-lord'],
+      ignore: ['rat'],
+      posture: { kind: 'keep-distance', tiles: 3 },
+    });
+    expect(bot.get().draft.targeting).toEqual({
+      policy: 'lowest-hp',
+      prioritize: ['dragon', 'dragon-lord'],
+      ignore: ['rat'],
+      posture: { kind: 'keep-distance', tiles: 3 },
+    });
+  });
+});
+
