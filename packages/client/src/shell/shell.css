@@ -614,6 +614,16 @@ body {
   .rule-editor-row { grid-template-columns: 1fr; }
 }
 
+/* A personalização de Skills (#317) só organiza os controles; Modal, Checkbox e botões são os
+   primitivos do design system. Duas colunas mantêm as seis escolhas compactas. */
+.skills-customize-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+.skills-customize-note {
+  margin: 10px 2px 0;
+  font: 7.5px var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
 /* A escolha de vocação (#154, #249) com os cards do design system (ADR 0029 D2/D7).
    A sobreposição própria de antes some: scrim, painel e fio dourado passam a ser do `Modal`
    (shell/ui.css, #247). Este bloco cuida só da grade, do cartão e da cor por vocação — por
@@ -812,13 +822,13 @@ body {
   }
   .shell > .windows-left { order: 3; }
   .shell > .windows-right { order: 4; }
-  /* A ordem dos blocos no celular (#161, #253, #254, #256, #257, #259, #261): vitais → set →
-     mochila → bolsa → batalha → bolsa da party → bot → personagem → party na hunt → analisador →
+  /* A ordem dos blocos no celular (#161, #253, #254, #257, #259, #261, #317): vitais → set →
+     mochila → bolsa → batalha → bolsa da party → bot → skills → party na hunt → analisador →
      bestiário. Cada coluna reordena só os PRÓPRIOS filhos — `.windows-left` e `.windows-right`
      são dois flex containers separados, então os números de `order` não competem entre colunas,
      só dentro de cada uma. As vitais (#253) não precisam de regra aqui — `order: 0` já vem da
      regra base de `.windows-right > .vitals`, e é o menor `order` da coluna direita.
-     `PartyBag` (#257) e `CharacterPanel` (#256) montam `Panel` sem `className` própria — a raiz
+     `PartyBag` (#257) e `SkillsPanel` (#317) montam `Panel` sem `className` própria — a raiz
      fica só `ui-panel`/`ui-panel--dock`, sem classe para mirar — então caem no `<section>`
      genérico da própria coluna, junto com `PartyMembers` (#259) à esquerda; dentro do mesmo
      `order`, a ordem de montagem em `Shell.tsx` decide (#261: audit de RF-02 encontrou `PartyBag`

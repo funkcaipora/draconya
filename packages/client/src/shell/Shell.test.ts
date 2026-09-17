@@ -37,12 +37,12 @@ describe('Shell', () => {
     expect(html).toContain('aria-label="chat"');
   });
 
-  // RF-04 (#256, DS-13): o painel Personagem é FIXO na coluna esquerda, sem guarda de `open` —
-  // não há ícone "Personagem" na barra do topo para condicioná-lo.
-  it('windows-left always mounts CharacterPanel, unconditionally of open.*', async () => {
+  // RC-04 (#317): Skills é FIXO na coluna esquerda, sem guarda de open — não há ícone próprio
+  // na barra do topo para condicioná-lo.
+  it('windows-left always mounts SkillsPanel, unconditionally of open.*', async () => {
     const html = await render();
     const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
-    expect(left).toContain('PERSONAGEM');
+    expect(left).toContain('Skills');
   });
 
   it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {

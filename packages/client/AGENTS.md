@@ -357,6 +357,16 @@ pnpm tsx scripts/make-sheet-fixture.ts
   dos outros.
 - **Não recebe snapshot por tick.** Um passo chega uma vez, com origem, destino e duração; o
   cliente anima os ~400 ms.
+- **`SkillsPanel` é a primeira leitura/escrita de `localStorage` no cliente** (RC-04, #317,
+  `shell/skills-preference.ts`). É preferência de TELA — quais das seis linhas do painel Skills
+  aparecem —, nunca estado de jogo: não passa pelo servidor, não é lida de volta por outra aba
+  nem por outro personagem. `typeof localStorage === 'undefined'` (sem lançar) é o ambiente REAL
+  de `pnpm vitest run packages/client` (`environment: 'node'`, sem `jsdom`) — não é um caso raro
+  de navegador, é o que os testes exercitam por padrão; leitura e escrita são só `try/catch` em
+  volta, e falha de qualquer tipo cai no default (todas as seis visíveis), nunca num painel
+  vazio. `CharacterPanel.tsx` continua no repositório sem consumidor até a RC-06 (#319) reusar o
+  conteúdo dele na aba "Personagem" do modal de Personagem — não é código morto por engano, é
+  uma parada deliberada entre duas issues do mesmo marco (M17).
 
 ## Como testar
 
@@ -509,7 +519,7 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`CharacterPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
   (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`; `PartyBag` na direita, só em

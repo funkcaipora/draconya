@@ -31,7 +31,7 @@ import { HuntActions } from './HuntActions.js';
 import { PartyMembers } from './PartyMembers.js';
 import { PartyBag } from './PartyBag.js';
 import { BotPanel } from './BotPanel.js';
-import { CharacterPanel } from './CharacterPanel.js';
+import { SkillsPanel } from './SkillsPanel.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
 import { VocationChoice } from './VocationChoice.js';
@@ -84,11 +84,12 @@ export function Shell() {
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
               montado; a barra do topo MINIMIZA, nunca remove. A edição fina abre por cima. */}
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
-          {/* Personagem é FIXO (D6): sempre montado, sem `open.*` — minimiza pelo próprio
-              cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Personagem"). */}
-          <CharacterPanel />
+          {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
+              cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills").
+              CharacterPanel fica parado até #319 reaproveitá-lo no modal Personagem. */}
+          <SkillsPanel />
           {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
-              Personagem, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
+              Skills, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
               menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
               que sobra aqui são os COMPANHEIROS durante a hunt — `PartyMembers` já se esconde
               sozinho fora de party (`state.party === null`), então não há `open.*` para ele. */}
