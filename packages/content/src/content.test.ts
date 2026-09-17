@@ -68,6 +68,19 @@ describe('buildContent', () => {
   });
 });
 
+describe('classe do monstro (SV-20, #356)', () => {
+  it('monstro com class: mammal é aceito e propagado para content.monsters', () => {
+    const comClasse = { ...rat, class: 'mammal' as const };
+    const content = buildContent(base({ monsters: [comClasse] }));
+    expect(content.monsters.get('rat')?.class).toBe('mammal');
+  });
+
+  it('monstro com classe fora do vocabulário fechado é rejeitado', () => {
+    const classeInvalida = { ...rat, class: 'reptile' };
+    expect(() => buildContent(base({ monsters: [classeInvalida] }))).toThrow(ContentError);
+  });
+});
+
 describe('a tabela de loot (FUN-63)', () => {
   it('separa moeda de item: gold tem lugar próprio, e items é a lista', () => {
     const loot = buildContent(base()).monsters.get('rat')?.loot;

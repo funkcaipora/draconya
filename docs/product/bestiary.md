@@ -35,7 +35,10 @@ janela diz "Este servidor não tem Bestiário" em vez de uma lista vazia com "+0
 Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre que um muda); os
 marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7). O cliente
 não conta nada — o que ele calcula é "que marco vem depois", e se divergisse do `sim` a conta
-do `sim` é a verdadeira.
+do `sim` é a verdadeira. Desde a SV-20, `catalogue.monsters[]` também carrega `class` quando o
+conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`, hoje só `mammal`); é o dado que a
+`SideList` de categorias da Cyclopedia (RC-08) usa para agrupar — a tela em si ainda não lê o
+campo.
 
 ## Regras
 

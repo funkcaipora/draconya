@@ -413,9 +413,33 @@ export type Ammunition = AmmunitionDefinition & {
  */
 export type Item = ItemDefinition & { readonly appearanceId: number };
 
+/**
+ * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
+ * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO e
+ * crescido por monstro real: hoje só `rat` existe em `packages/content/data/monsters/`, e ele é
+ * um roedor — por isso o vocabulário nasce com UM valor. Uma classe nova entra na mesma PR que
+ * cria o primeiro monstro dela, nunca antes (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
+ * mentira vira constante — pré-popular as onze categorias do `data.js` do kit sem nenhum
+ * monstro real de oito delas seria exatamente isso).
+ *
+ * Identificador em inglês, valor de exibição em português fica para quem desenhar a `SideList`
+ * (RC-08/#321) — o mesmo desenho de `HUNT_DIFFICULTY_NAMES`/`cautious` (traduzido para
+ * "Cauteloso" só no cliente, `packages/client/src/shell/HuntsModal.tsx:25`) e de
+ * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
+ * Ver Decisão técnica DT-02.
+ */
+export const MONSTER_CLASSES = ['mammal'] as const;
+export type MonsterClass = (typeof MONSTER_CLASSES)[number];
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * A classe do monstro, para a Cyclopedia agrupar por categoria (SV-20). Vocabulário fechado
+   * em `MONSTER_CLASSES` — ver o comentário dela. Ausente: o monstro só aparece em "Todas as
+   * entradas" na tela (nenhuma categoria própria ainda).
+   */
+  class: z.enum(MONSTER_CLASSES).optional(),
   recommendedLevel: z.number().int().positive(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),

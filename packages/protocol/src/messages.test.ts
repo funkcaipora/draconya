@@ -406,6 +406,32 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('health');
     expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('experience');
   });
+
+  it('round trips monster class, and an older node decodes with it absent (SV-20, #356)', () => {
+    const withClass = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(withClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }]);
+
+    const withoutClass = {
+      ...withClass,
+      monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decodedWithout = decodeS2C(encodeS2C(withoutClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
+    expect(decodedWithout?.[0]?.monsters[0]?.id).toBe('rat');
+    expect(decodedWithout?.[0]?.monsters[0]?.name).toBe('Rat');
+    expect(decodedWithout?.[0]?.monsters[0]).not.toHaveProperty('class');
+  });
 });
 
 describe('vocation choice (#154)', () => {

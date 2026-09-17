@@ -475,6 +475,7 @@ export const S2C_SCHEMAS = {
     monsters: z.array(z.object({
       id: z.string().min(1),
       name: z.string().min(1),
+      class: z.string().optional(),
       health: z.number().int().positive().optional(),
       experience: z.number().int().nonnegative().optional(),
     })).default([]),

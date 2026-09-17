@@ -136,6 +136,7 @@ export function buildCatalogue(content: Content): Catalogue {
       .map((monster) => ({
         id: monster.id,
         name: monster.name,
+        ...(monster.class !== undefined ? { class: monster.class } : {}),
         health: monster.health,
         experience: monster.experience,
       }))

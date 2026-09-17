@@ -1,8 +1,12 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { loadContent } from '../../../content/src/load.js';
 import { buildCatalogue } from './catalogue.js';
 import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
 
+const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
 const content = testContent();
 
 describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
@@ -140,6 +144,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       { id: 'bat', name: 'Bat', health: 20, experience: 5 },
       { id: 'rat', name: 'Rat', health: 20, experience: 5 },
     ]);
+    expect('class' in (monsters[0] ?? {})).toBe(false);
+    expect('class' in (monsters[1] ?? {})).toBe(false);
   });
 
   it('leva os marcos e o bônus do Bestiário quando o conteúdo os tem, e a chave some quando não (FUN-113)', () => {
@@ -393,6 +399,25 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.difficultyDetails).toEqual([
       { id: 'cautious', monsterCount: 1 },
     ]);
+  });
+
+  it('leva class quando o conteúdo a define (como o rat do conteúdo real com mammal) e omite a chave quando ausente (SV-20, #356)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const rat = monsters.find((m) => m.id === 'rat');
+    expect(rat).toEqual({
+      id: 'rat',
+      name: 'Rat',
+      class: 'mammal',
+      health: 20,
+      experience: 5,
+    });
+    expect('class' in (rat ?? {})).toBe(true);
+
+    // Monstro sem class na fixture não tem a chave 'class'
+    const withoutClass = buildCatalogue(content).monsters[0];
+    expect(withoutClass).toBeDefined();
+    expect('class' in (withoutClass ?? {})).toBe(false);
   });
 });
 
