@@ -85,6 +85,10 @@ export function buildCatalogue(content: Content): Catalogue {
       // a confundiria com "o servidor não disse".
       slot: item.slot ?? null,
       twoHanded: item.twoHanded,
+      // Valor de venda ao NPC, ataque e armadura (#337).
+      value: item.value,
+      attack: item.attack,
+      armor: item.armor,
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip e o seletor. Mana
       // por golpe e faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined

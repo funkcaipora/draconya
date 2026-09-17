@@ -466,6 +466,13 @@ export const S2C_SCHEMAS = {
       /** Ocupa as duas mãos (#152). `default`: nó anterior manda sem. */
       twoHanded: z.boolean().default(false),
       /**
+       * Preço de venda ao NPC, ataque e armadura (#337). Opcionais sem default:
+       * um nó anterior manda sem, e o cliente novo não pode recusar a mensagem.
+       */
+      value: z.number().int().nonnegative().optional(),
+      attack: z.number().int().nonnegative().optional(),
+      armor: z.number().int().nonnegative().optional(),
+      /**
        * Como a arma bate (#152): o tipo e o alcance, para o tooltip e para o seletor de munição
        * saber a família. Mana por golpe e faixa de dano ficam de fora — são balanceamento que o
        * cliente não simula (invariante 4).

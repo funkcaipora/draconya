@@ -215,4 +215,38 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(rune).toEqual({ id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 30, magicLevel: 4 } });
     expect(JSON.stringify(rune)).not.toContain('basePower');
   });
+
+  it('leva valor de venda, ataque e armadura nas definições de item (#337)', () => {
+    // A tela precisa de valor (NPC de venda), ataque (armas) e armadura (equipamentos).
+    // São atributos base fixos definidos no conteúdo.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withEquipment = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 35, value: 25, attack: 14, armor: 0, weapon: { kind: 'melee', range: 1 } },
+        { id: 'shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 15, attack: 0, armor: 15 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+      ],
+    };
+    const content = buildContent({ ...withEquipment, appearances: [placeholderAppearances(withEquipment)] });
+    const { items } = buildCatalogue(content);
+
+    expect(items.find((item) => item.id === 'sword')).toMatchObject({
+      value: 25,
+      attack: 14,
+      armor: 0,
+    });
+    expect(items.find((item) => item.id === 'shield')).toMatchObject({
+      value: 15,
+      attack: 0,
+      armor: 15,
+    });
+    expect(items.find((item) => item.id === 'cheese')).toMatchObject({
+      value: 2,
+      attack: 0,
+      armor: 0,
+    });
+  });
 });
+
