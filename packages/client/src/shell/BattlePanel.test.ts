@@ -1,7 +1,8 @@
 import { createElement, type ReactElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { BattlePanel, battleTone } from './BattlePanel.js';
+import { BattlePanel, battleTone, sortBattleRows } from './BattlePanel.js';
+import type { BattleRow } from './BattlePanel.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { PartyView } from '../state/hud.js';
 import { world } from '../state/world.js';
@@ -52,9 +53,9 @@ describe('o painel Batalha (#254)', () => {
 
     expect(html).toContain('Batalha · 2');
     expect(html).toContain('Rat');
-    expect(html).toContain('50 %');
+    expect(html).toContain('50%');
     expect(html).toContain('Bat');
-    expect(html).toContain('100 %');
+    expect(html).toContain('100%');
     expect(html).not.toContain('você');
   });
 
@@ -66,6 +67,36 @@ describe('o painel Batalha (#254)', () => {
 
     expect(html).toContain('Batalha · 0');
     expect(html).toContain('Nenhuma criatura à vista.');
+  });
+
+  it('renderiza a ação Ordenar no cabeçalho (R7-05)', async () => {
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('title="Ordenar"');
+    expect(html).toContain('↕');
+  });
+
+  it('sortBattleRows: padrão preserva a ordem de chegada; hp-asc ordena por HP crescente', () => {
+    const rows: BattleRow[] = [
+      { id: 1, name: 'A', percent: 80 },
+      { id: 2, name: 'B', percent: 20 },
+      { id: 3, name: 'C', percent: 50 },
+    ];
+
+    expect(sortBattleRows(rows, 'default').map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(sortBattleRows(rows, 'hp-asc').map((r) => r.id)).toEqual([2, 3, 1]);
+    // a função não muta o array de entrada
+    expect(rows.map((r) => r.id)).toEqual([1, 2, 3]);
+  });
+
+  it('a linha da Batalha tem a coluna de 16 px com o placeholder tracejado do kit (R7-06)', async () => {
+    world.selfId = 3;
+    world.creatures.set(1, creature(1, { name: 'Rat', health: 10, maxHealth: 20 }));
+    world.creatures.set(3, creature(3, { name: 'você' }));
+
+    const html = await render(createElement(BattlePanel));
+
+    expect(html).toContain('battle-icon');
   });
 
   it('quem está na party não aparece na lista de Batalha (RF-05)', async () => {
@@ -101,7 +132,7 @@ describe('o painel Batalha (#254)', () => {
     const html = await render(createElement(BattlePanel));
 
     expect(html).toContain('Corpse');
-    expect(html).toContain('0 %');
+    expect(html).toContain('0%');
     expect(html).not.toContain('NaN');
   });
 });

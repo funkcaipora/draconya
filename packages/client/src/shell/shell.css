@@ -616,19 +616,28 @@ body {
 
 /* Panel já não desenha o corpo quando collapsed é true (decisão de render, não de CSS). */
 
-/* A batalha (#254, DS-11, ADR 0029 D3/D4/D6): quem está na tela agora, fora o próprio
-   personagem e a party. Mesma linguagem do analisador (cabeçalho que abre e fecha), corpo com
-   lista. DÍVIDA CONHECIDA: quando o primitivo `Panel` de DS-04 chegar a esta seção,
-   `.battle-panel`/`.battle-list` são substituídos por ele, como as outras seções vão ser. */
-.battle-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* A batalha (#254, DS-11, #308/FD-08; ADR 0029 D3/D4; ADR 0030): quem está na tela agora, fora o
+   próprio personagem e a party. A moldura (Panel) vem de #305/FD-05; aqui só o conteúdo da
+   lista. Coluna de 16 px com o quadrado tracejado do kit antes do nome (Hud.jsx:62 — placeholder,
+   sprite real fica de fora por ora, R7-06); linhas com `margin: 1px 0` (não `gap`, R7 — achado do
+   verificador) e "%" sem espaço (Hud.jsx:63). */
+.battle-list { list-style: none; margin: 4px 0 0; padding: 0; }
 .battle-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 2px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas: "icon name percent" "icon bar bar";
+  column-gap: 6px; row-gap: 2px;
   align-items: center;
+  margin: 1px 0;
 }
-.battle-name { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.battle-percent { grid-column: 2; color: var(--text-faint); font-size: 11px; }
+.battle-icon {
+  grid-area: icon; width: 16px; height: 16px;
+  border: 1px dashed var(--ash-6); border-radius: 2px; background: var(--surface-slot);
+}
+.battle-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-percent { grid-area: percent; color: var(--text-faint); font-size: 11px; }
 .battle-bar {
-  grid-column: 1 / -1; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
+  grid-area: bar; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
   overflow: hidden;
 }
 .battle-bar-fill { display: block; height: 100%; }
