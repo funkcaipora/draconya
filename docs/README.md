@@ -37,3 +37,4 @@ a implementação teve que resolver sozinha, sem esperar resposta.
 - [`kit-fidelity-plan.md`](kit-fidelity-plan.md) — o plano de fidelidade estrita ao ui_kit (pós-M14): decisões revisadas (ADR 0030), inventário de 148 achados e os marcos M16–M18 + M15 revisado. Instantâneo.
 - [`prd-ui-behavior.md`](prd-ui-behavior.md) — PRD de comportamento da interface e automações (v2, do dono do produto): a especificação funcional do motor de ações do M18. Instantâneo.
 - [`reviews/kit-fidelity-audit-2026-09-16.md`](reviews/kit-fidelity-audit-2026-09-16.md) — a evidência da auditoria kit × cliente por trás do ADR 0030 (9 regiões, verificação adversarial, mapa de capacidade do protocolo). Instantâneo.
+- [`kit-reference/`](kit-reference/README.md) — o ui_kit renderizado e capturado tela a tela (19 PNGs): a régua visual das issues do plano de fidelidade, para quem executa sem o zip do handoff. Instantâneo.

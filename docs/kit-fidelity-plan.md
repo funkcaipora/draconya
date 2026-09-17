@@ -12,6 +12,10 @@ dono, 2026-09-14) — regras RG-*, casos UC-*, prioridade RP-* e cooldown compar
 — auditoria de 24 agentes (9 regiões, verificação adversarial, 148 achados confirmados, nenhum
 refutado), sobre o cliente no commit `3299eb5`. Os ids `R0-01`…`R8-26` citados abaixo apontam
 para lá, cada um com evidência arquivo:linha dos dois lados.
+**Referência visual:** [kit-reference/](kit-reference/README.md) — o kit RENDERIZADO, capturado
+tela a tela (19 PNGs: entrada, HUD em caçada e na Cidade, popover de saída e os 14 modais com
+arquivo). É a régua de toda issue deste plano: quem executa não tem o zip — tem estas capturas, o
+JSX colado na spec e o achado da auditoria.
 
 ---
 
@@ -235,7 +239,9 @@ E2/E5/E7/E11/E12/E13 ──> na ordem que o dono priorizar, um PRD por vez
 ## 6. Verificação
 
 - Tudo do plano do M14 §7 continua: `prerender` por componente, `pnpm check`, captura por issue —
-  agora **lado a lado com o `index.html` do kit aberto no mesmo zoom**, que é a régua do dono.
+  agora **lado a lado com a captura correspondente de [kit-reference/](kit-reference/README.md)**,
+  no mesmo tamanho (1800×1010 no jogo). Quem executa anexa as duas no comentário de entrega; o
+  dono, se quiser, ainda compara com o `index.html` do zip — mas a régua versionada é a pasta.
 - `/compliance` roda em todo diff que tocar `sim/`, `protocol/` ou `content/` (M15/M18 inteiros).
 - Regressão de intenção: no M16/M17 nenhum `sendIntent` novo aparece; no M18 os novos opcodes
   passam pelo codec com teste, sempre opcionais com default (deploy em rolagem).
