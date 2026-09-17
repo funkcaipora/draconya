@@ -21,6 +21,10 @@ import { partyActions } from '../party/store.js';
 
 export const HEALTH_POLL_MS = 1_000;
 
+export function vocationAbbreviation(name: string): string {
+  return name.charAt(0).toUpperCase();
+}
+
 /**
  * Duplicado de propósito, e não importado de `PartyPanel.tsx` — a formação, que esta issue NÃO
  * toca (DS-16 é quem redesenha a formação, dentro do modal de caçada). Um módulo só para duas
@@ -45,6 +49,7 @@ export function PartyMembers({
 } = {}) {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
+  const catalogue = useHudSlice((state) => state.catalogue);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [, tick] = useState(0);
 
@@ -80,6 +85,13 @@ export function PartyMembers({
           const percent = percentFromWorld(member.name) ?? member.healthPercent;
           const isSelf = member.characterId === me;
           const isLeader = member.characterId === partyView.leaderId;
+          const vocation = member.vocationId !== null && member.vocationId !== undefined
+            ? catalogue?.vocations.find((v) => v.id === member.vocationId)
+            : undefined;
+          const vocAbbr = member.vocationId !== null && member.vocationId !== undefined
+            ? (vocation ? vocationAbbreviation(vocation.name) : member.vocationId)
+            : null;
+          const vocClass = vocation ? ` party-companion-voc-${vocation.id}` : '';
           return (
             <li
               key={member.characterId}
@@ -90,6 +102,19 @@ export function PartyMembers({
                 <span className={isSelf ? 'party-companion-self' : undefined}>
                   {isSelf ? 'você' : member.name}
                 </span>
+                {vocAbbr !== null && (
+                  <span
+                    className={`party-companion-voc${vocClass}`}
+                    title={vocation?.name ?? member.vocationId ?? undefined}
+                  >
+                    {vocAbbr}
+                  </span>
+                )}
+                {member.level !== undefined && (
+                  <span className="party-companion-level">
+                    {`LV ${String(member.level)}`}
+                  </span>
+                )}
               </div>
               <div className="party-companion-vitals">
                 <span className="party-hp-row">
@@ -98,6 +123,14 @@ export function PartyMembers({
                   </span>
                   <span className="entry-meta">{member.alive ? `${String(percent)} %` : 'caiu'}</span>
                 </span>
+                {member.manaPercent !== undefined && (
+                  <span className="party-hp-row">
+                    <span className="party-hp" aria-label={`Mana de ${member.name}`}>
+                      <VitalBar kind="mp" percent={member.alive ? member.manaPercent : 0} height={3} showText={false} />
+                    </span>
+                    <span className="entry-meta">{member.alive ? `${String(member.manaPercent)} %` : '—'}</span>
+                  </span>
+                )}
               </div>
             </li>
           );

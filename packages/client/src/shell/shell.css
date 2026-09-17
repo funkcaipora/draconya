@@ -997,6 +997,19 @@ body {
 }
 .party-companion-down { opacity: 0.55; }
 .party-companion-self { color: var(--gold-4); }
+.party-companion-voc {
+  font: 700 8.5px var(--font-mono);
+  letter-spacing: .04em;
+}
+.party-companion-voc-knight { color: var(--voc-knight); }
+.party-companion-voc-paladin { color: var(--voc-paladin); }
+.party-companion-voc-druid { color: var(--voc-druid); }
+.party-companion-voc-sorcerer { color: var(--voc-sorcerer); }
+
+.party-companion-level {
+  font: 8px var(--font-mono);
+  color: var(--text-muted);
+}
 .party-companion-vitals {
   display: flex;
   flex-direction: column;
