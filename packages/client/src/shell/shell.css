@@ -88,6 +88,25 @@ body {
   white-space: nowrap;
 }
 
+/* Latência e FPS sobre o mundo (RC-13, ADR 0030). O mundo ocupa a tela inteira neste cliente,
+   enquanto a coluna direita flutua sobre ele; no desktop o offset pula essa coluna para manter a
+   posição visual da régua. No celular, sem coluna sobre o mundo, a regra volta ao offset literal. */
+.world-status {
+  position: absolute; right: calc(var(--sidebar-w) + 12px); bottom: 8px; z-index: 1;
+  display: flex; align-items: center; gap: 10px;
+  font: 7.5px var(--font-mono); letter-spacing: .08em; color: var(--text-faint);
+  text-transform: uppercase; pointer-events: none;
+}
+.world-status-connection { display: inline-flex; align-items: center; }
+.world-status-dot {
+  display: inline-block; width: 5px; height: 5px; margin-right: 5px;
+  border-radius: 50%; background: var(--text-faint);
+}
+.world-status-dot-connected { background: var(--online); }
+.world-status-dot-connecting, .world-status-dot-reconnecting { background: var(--warn); }
+.world-status-dot-failed { background: var(--danger); }
+.world-status-dot-idle { background: var(--text-faint); }
+
 /* ---- A barra do topo (#251, ADR 0029 D3/D8/D9) ------------------------------------------- */
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; height: var(--topbar-h);
@@ -204,13 +223,6 @@ body {
 /* A faixa cobre o título, nunca as ações do Panel. O valor de 60px fica também inline no
    componente para o contrato de testes e para não depender da largura atual dos glifos. */
 .floating-window .ui-panel-actions { position: relative; z-index: 2; }
-
-.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
-.badge-connected { color: #6fc28a; border-color: #2f5a3c; }
-.badge-connecting, .badge-reconnecting { color: #c2a54a; border-color: #5a4f2f; }
-.badge-failed { color: #c25b4a; border-color: #5a3430; }
-.badge-idle { color: #7a7a88; }
-
 /* HP e mana (FUN-108): duas barras de 14 px no alto da coluna direita (#253, ADR 0029 D3/D4).
    O preenchimento tem a LARGURA da fração, ancorado à esquerda — a barra cheia cortada na
    fração, ponta esquerda fica, direita some. Gradiente de dois tons por kind e bisel, iguais
@@ -974,6 +986,7 @@ body {
   .exit-rules-popover { left: 10px; right: 10px; width: auto; bottom: calc(100% + 4px); }
   .exit-rules-summary { left: 10px; right: 10px; bottom: calc(100% + 2px); text-align: center; white-space: normal; }
   .world-stage { position: relative; height: 40vh; }
+  .world-status { right: 12px; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
     gap: 6px 10px; padding: 6px 8px;
