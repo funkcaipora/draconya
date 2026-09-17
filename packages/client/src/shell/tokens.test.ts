@@ -14,6 +14,7 @@ function read(relativePath: string): string {
 const tokensCss = read('./tokens.css');
 const fontsCss = read('./fonts.css');
 const shellCss = read('./shell.css');
+const uiCss = read('./ui.css');
 
 describe('tokens.css', () => {
   it('nunca usa @import (D1 — sem fonte por CDN)', () => {
@@ -49,5 +50,46 @@ describe('shell.css', () => {
     expect(shellCss).toMatch(/--font-body/);
     expect(shellCss).toMatch(/--text-primary/);
     expect(shellCss).toMatch(/--bg-app/);
+  });
+});
+
+describe('reset (#301, R0-01)', () => {
+  it('aplica box-sizing: border-box universal logo após o último @import', () => {
+    const resetRule = '*, *::before, *::after { box-sizing: border-box; }';
+    expect(shellCss).toContain(resetRule);
+    expect(shellCss.indexOf(resetRule)).toBeGreaterThan(shellCss.lastIndexOf('@import'));
+  });
+});
+
+describe(':focus-visible dourado (#301)', () => {
+  it('aplica o anel dourado nos seis primitivos interativos', () => {
+    const selectors = [
+      '\\.ui-button:focus-visible',
+      '\\.ui-icon-button:focus-visible',
+      '\\.ui-select:focus-visible',
+      '\\.ui-slot:focus-visible',
+      '\\.ui-switch:focus-visible',
+      '\\.ui-tab:focus-visible',
+    ];
+    for (const selector of selectors) {
+      const regex = new RegExp(
+        `${selector}\\s*\\{[^}]*outline:\\s*2px solid var\\(--focus-ring\\);\\s*outline-offset:\\s*2px;`,
+      );
+      expect(uiCss).toMatch(regex);
+    }
+  });
+
+  it('ui-checkbox-box usa outline-offset de 2px, não 1px', () => {
+    expect(uiCss).toMatch(
+      /\.ui-checkbox-box:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring\);\s*outline-offset:\s*2px;/,
+    );
+    expect(uiCss).not.toMatch(/\.ui-checkbox-box:focus-visible\s*\{[^}]*outline-offset:\s*1px;/);
+  });
+
+  it('ui-select mantém outline: 0 na base e ganha :focus-visible próprio', () => {
+    expect(uiCss).toMatch(/\.ui-select\s*\{[^}]*outline:\s*0;/);
+    expect(uiCss).toMatch(
+      /\.ui-select:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring\);\s*outline-offset:\s*2px;/,
+    );
   });
 });

@@ -12,6 +12,15 @@
 @import './fonts.css';
 @import './ui.css';
 
+/* Reset universal do kit (#301, ADR 0030, R0-01): o mesmo `*{box-sizing:border-box}` de
+   tmp-design-kit/handoff/ui_kits/draconya/index.html:4. Precisa vir DEPOIS dos três @import
+   acima — a especificação de CSS só aceita @import como as PRIMEIRAS regras de uma folha (fora
+   @charset); uma regra antes deles faz o navegador ignorar esse @import e os seguintes.
+   Sem isto, todo elemento com borda e largura/altura fixas (Slot, IconButton, Checkbox, o
+   ícone do topo) renderiza maior que o valor exato que a variante declara — a diferença é
+   2×(largura da borda + padding) em cada eixo. */
+*, *::before, *::after { box-sizing: border-box; }
+
 :root {
   color-scheme: dark;
   /* Texto sobre pedra (brilho ~70) precisa de mais contraste que sobre o fundo quase preto.
@@ -105,9 +114,14 @@ body {
   background: var(--ash-1); color: var(--text-muted); cursor: pointer;
 }
 .topbar-icon-button-open { border-color: var(--gold-4); filter: brightness(1.16); }
-.topbar-icon-img { display: block; width: 36px; height: 36px; object-fit: cover; pointer-events: none; }
+/* #301: com box-sizing:border-box (o reset acima), os 36px do botão passam a ser a caixa
+   INTEIRA — casando com o kit (Hud.jsx:20, <IconButton size={36}>). O conteúdo disponível cai
+   para 32px (36 − 2×1px de borda − 2×1px de padding); 36px de filho vazaria 2px de cada lado.
+   32 é literalmente o valor que o próprio kit usa dentro do botão (Hud.jsx:21, <img width="32"
+   height="32">), não uma compensação inventada — box-model.test.ts trava a conta. */
+.topbar-icon-img { display: block; width: 32px; height: 32px; object-fit: cover; pointer-events: none; }
 .topbar-icon-glyph {
-  display: grid; place-items: center; width: 36px; height: 36px;
+  display: grid; place-items: center; width: 32px; height: 32px;
   color: var(--text-faint); font: 700 8px var(--font-mono); letter-spacing: 0.04em;
 }
 .topbar-icon-label { font-size: 6.5px; letter-spacing: 0.02em; color: inherit; }

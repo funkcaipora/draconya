@@ -85,6 +85,7 @@
   font-family: var(--font-body);
 }
 .ui-button-text:hover:not(:disabled) { color: var(--gold-5); }
+.ui-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── IconButton ── */
 .ui-icon-button {
@@ -107,6 +108,7 @@
 }
 .ui-icon-button-active { background: var(--surface-selected); }
 .ui-icon-button:disabled { cursor: not-allowed; opacity: .55; }
+.ui-icon-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── Input (e o NumField, DT-03: size="sm" type="number") ── */
 .ui-input { display: block; margin-bottom: 18px; font-family: var(--font-body); }
@@ -201,6 +203,7 @@
 .ui-select-lg { height: 46px; border-radius: 7px; font: 14px var(--font-body); }
 .ui-select-md { height: 32px; border-radius: 4px; font: 11px var(--font-mono); }
 .ui-select-sm { height: 23px; border-radius: 4px; font: 9px var(--font-mono); }
+.ui-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-select-caret {
   position: absolute;
   right: 8px;
@@ -229,7 +232,7 @@
 .ui-checkbox-box::after { content: ''; }
 .ui-checkbox-checked { border-color: var(--gold-4); background: var(--grad-gold); }
 .ui-checkbox-checked::after { content: '✓'; }
-.ui-checkbox-box:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.ui-checkbox-box:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── Switch — role="switch" já carrega o estado semântico; a cor é decoração sobre isso ── */
 .ui-switch {
@@ -244,6 +247,7 @@
   transition: background .15s, border-color .15s;
 }
 .ui-switch:disabled { cursor: not-allowed; opacity: .5; }
+.ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-switch-knob {
   position: absolute;
   top: 2px;
@@ -266,6 +270,7 @@
 .ui-switch-traffic.ui-switch-on .ui-switch-knob { background: linear-gradient(180deg, #8fd98a, #4d9a5a); box-shadow: 0 0 6px rgba(95, 181, 106, .6); }
 
 /* ── Tabs ── */
+.ui-tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-tabs-underline {
   display: flex;
   border-bottom: 1px solid var(--ash-5);
@@ -451,6 +456,7 @@
 }
 .ui-slot[data-kind="loot"] { border-color: var(--gold-2); }
 .ui-slot:hover { border-color: var(--gold-3); }
+.ui-slot:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-slot--dashed { border-style: dashed; }
 .ui-slot--empty {
   border-color: var(--ash-5);
