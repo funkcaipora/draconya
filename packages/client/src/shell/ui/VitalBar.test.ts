@@ -12,6 +12,7 @@ describe('VitalBar', () => {
   it('com value/max mostra "N / M"', async () => {
     const html = await render({ kind: 'hp', value: 1200, max: 1500 });
     expect(html).toContain('1.200 / 1.500');
+    expect(html).toContain('data-kind="hp"');
   });
 
   it('com percent mostra "NN%" e ignora value/max', async () => {

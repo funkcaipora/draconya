@@ -29,6 +29,22 @@ describe('tokens.css', () => {
     expect(tokensCss).toMatch(/--slot-size-container:\s*26px/);
     expect(tokensCss).not.toMatch(/--hud-bottom-h/);
   });
+
+  it('define os gradientes de vitais do kit e o trilho neutro (#304, R0-08/R6-10)', () => {
+    expect(tokensCss).toMatch(/--grad-vital-hp:\s*linear-gradient\(180deg,\s*#d95a55,\s*#a52a2f\);/);
+    expect(tokensCss).toMatch(/--grad-vital-mp:\s*linear-gradient\(180deg,\s*#6f86d8,\s*#3d5ec8\);/);
+    expect(tokensCss).toMatch(/--grad-vital-exp:\s*linear-gradient\(180deg,\s*#e2c47a,\s*#a8823e\);/);
+    expect(tokensCss).toMatch(/--grad-vital-stamina:\s*linear-gradient\(180deg,\s*#7dc78a,\s*#4d9a5a\);/);
+    expect(tokensCss).toMatch(/--grad-vital-track:\s*linear-gradient\(180deg,\s*var\(--ash-4\),\s*var\(--ash-3\)\);/);
+
+    // Tokens de cor sólida e trilho colorido saíram (RF-06, DT-03)
+    expect(tokensCss).not.toMatch(/--vital-hp:/);
+    expect(tokensCss).not.toMatch(/--vital-mp:/);
+    expect(tokensCss).not.toMatch(/--vital-exp:/);
+    expect(tokensCss).not.toMatch(/--vital-stamina:/);
+    expect(tokensCss).not.toMatch(/--vital-hp-track:/);
+    expect(tokensCss).not.toMatch(/--vital-mp-track:/);
+  });
 });
 
 describe('fonts.css', () => {
@@ -66,6 +82,15 @@ describe('shell.css', () => {
     expect(shellCss).toMatch(/--font-body/);
     expect(shellCss).toMatch(/--text-primary/);
     expect(shellCss).toMatch(/--bg-app/);
+  });
+
+  it('aplica gradiente neutro no trilho .bar e gradiente por tipo em .bar-fill (#304, R6-10)', () => {
+    expect(shellCss).toMatch(/\.bar\s*\{[^}]*background:\s*var\(--grad-vital-track\);/);
+    expect(shellCss).not.toMatch(/\.bar-hp\s*\{[^}]*background:\s*var\(--vital-hp-track\);/);
+    expect(shellCss).not.toMatch(/\.bar-mana\s*\{[^}]*background:\s*var\(--vital-mp-track\);/);
+    expect(shellCss).toMatch(/\.bar-hp\s+\.bar-fill\s*\{[^}]*background:\s*var\(--grad-vital-hp\);/);
+    expect(shellCss).toMatch(/\.bar-mana\s+\.bar-fill\s*\{[^}]*background:\s*var\(--grad-vital-mp\);/);
+    expect(shellCss).toMatch(/\.bar-fill\s*\{[^}]*box-shadow:\s*inset 0 1px rgba\(255,255,255,\.18\),\s*inset 0 -1px rgba\(0,0,0,\.3\);/);
   });
 });
 
@@ -107,5 +132,15 @@ describe(':focus-visible dourado (#301)', () => {
     expect(uiCss).toMatch(
       /\.ui-select:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring\);\s*outline-offset:\s*2px;/,
     );
+  });
+});
+
+describe('ui.css (VitalBar)', () => {
+  it('usa --grad-vital-track no trilho e --grad-vital-<kind> no preenchimento (#304, R0-08)', () => {
+    expect(uiCss).toMatch(/\.ui-vital-track\s*\{[^}]*background:\s*var\(--grad-vital-track\);/);
+    expect(uiCss).toMatch(/\.ui-vital-fill\[data-kind="hp"\]\s*\{[^}]*background:\s*var\(--grad-vital-hp\);/);
+    expect(uiCss).toMatch(/\.ui-vital-fill\[data-kind="mp"\]\s*\{[^}]*background:\s*var\(--grad-vital-mp\);/);
+    expect(uiCss).toMatch(/\.ui-vital-fill\[data-kind="exp"\]\s*\{[^}]*background:\s*var\(--grad-vital-exp\);/);
+    expect(uiCss).toMatch(/\.ui-vital-fill\[data-kind="stamina"\]\s*\{[^}]*background:\s*var\(--grad-vital-stamina\);/);
   });
 });
