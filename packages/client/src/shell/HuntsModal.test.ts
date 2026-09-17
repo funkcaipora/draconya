@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,24 +163,34 @@ describe('enterHuntMessage (RF-04)', () => {
   });
 });
 
-describe('attemptEnter (RF-04)', () => {
-  it('closes the modal only when send() returns true', () => {
+describe('attemptEnter (RF-04, RF-09)', () => {
+  it('returns true and closes the modal when send() returns true', () => {
     const onClose = vi.fn();
-    attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => true, onClose);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => true, onClose)).toBe(true);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT close the modal when send() returns false (no connection)', () => {
+  it('returns false and does NOT close the modal when send() returns false', () => {
     const onClose = vi.fn();
-    attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => false, onClose);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => false, onClose)).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('never calls send(), nor closes, with a null message', () => {
+  it('returns false, never calls send(), nor closes, with a null message', () => {
     const send = vi.fn(() => true);
     const onClose = vi.fn();
-    attemptEnter(null, send, onClose);
+    expect(attemptEnter(null, send, onClose)).toBe(false);
     expect(send).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('stores the local hunt only after the successful attempt', async () => {
+    const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
+    const enterIndex = source.indexOf('const enter = (): void =>');
+    const attemptIndex = source.indexOf('if (attemptEnter(message, sendIntent, onClose)', enterIndex);
+    const storeIndex = source.indexOf('setCurrentHunt({ huntId: selected.id, difficulty });', enterIndex);
+    expect(enterIndex).toBeGreaterThan(-1);
+    expect(attemptIndex).toBeGreaterThan(enterIndex);
+    expect(storeIndex).toBeGreaterThan(attemptIndex);
   });
 });

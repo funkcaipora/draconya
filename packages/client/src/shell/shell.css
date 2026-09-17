@@ -470,7 +470,7 @@ body {
 /* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
 .hunt-actions {
   position: absolute; left: 0; right: 0; bottom: 24px;
-  display: flex; justify-content: center; gap: 0;
+  display: flex; justify-content: center; gap: 8px;
   pointer-events: none; z-index: 15;
 }
 .hunt-pill {
@@ -484,15 +484,11 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .6), inset 0 1px rgba(255, 255, 255, .05);
 }
-/* Sem chevron ao lado, "Escolher caçada" fica com os 4 cantos arredondados. Só a pill de saída
-   (abaixo) vira a metade esquerda de um botão partido — porque só ELA tem o chevron do popover
-   de saída colado do lado direito (#309, ADR 0030, achado "pill+chevron como botão partido").
-   `.hunt-actions{gap:0}` (acima) é o que cola as duas metades sem vão: hoje só dois filhos
-   existem nessa div — a pill e `.exit-rules-anchor` (renderizado por `ExitRulesPopover`) —, e
-   zerar o gap não afeta a pill solitária de "Escolher caçada" (só ela, sozinha, na div). Uma
-   issue futura que acrescente OUTRA pill ao lado deste par (ex.: RC-12, "Detalhes da caçada")
-   precisa envolver a pill+chevron de saída no próprio wrapper para reservar espaço FORA dele —
-   não reabrir este gap. */
+/* Sem chevron ao lado, "Escolher caçada" fica com os 4 cantos arredondados. A saída vira a
+   metade esquerda de um botão partido — só ela tem o chevron de regras colado ao lado (#309).
+   `hunt-exit-actions` fecha o vão INTERNO; o gap da faixa separa este par da pill de detalhes
+   quando ela existe (#325). */
+.hunt-exit-actions { display: inline-flex; gap: 0; }
 .hunt-pill-danger {
   border-color: var(--blood-5);
   border-radius: 3px 0 0 3px;
@@ -567,6 +563,27 @@ body {
 .hunts-modal-pulls { display: flex; gap: 6px; flex-wrap: wrap; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
+
+/* ---- "Detalhes da caçada" v1 (#325, RC-12) ---------------------------------------------- */
+/* A pill reusa `.hunt-pill`; só o selo de informação é específico desta ação. */
+.hunt-pill-icon {
+  display: grid; place-items: center; width: 12px; height: 12px;
+  border: 1px solid var(--gold-3); border-radius: 50%;
+  font: 700 7px var(--font-mono); color: var(--gold-4);
+}
+.hunt-details-modal-name {
+  margin: 0 0 8px; font: 600 14.5px var(--font-display); color: var(--gold-5);
+}
+/* Substitui a Box "Seu recorde", que não é uma métrica oficial: só dados verdadeiros da hunt
+   ocupam este espaço até os blocos de monstro, loot e descrição terem suporte no servidor. */
+.hunt-details-modal-info {
+  border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
+  padding: 8px 10px; min-width: 0;
+}
+.hunt-details-modal-empty {
+  margin: 0; padding: 4px 0; font: 11px var(--font-body); color: var(--text-muted); line-height: 1.5;
+}
+.hunt-details-modal-close { margin-left: auto; }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,

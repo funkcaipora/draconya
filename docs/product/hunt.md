@@ -25,6 +25,17 @@ não obrigatoriamente as quatro. A formação da party (ADR 0027) é a coluna di
 os companheiros DURANTE a hunt são um painel fixo próprio na coluna esquerda (`PartyMembers`,
 DS-14).
 
+**Detalhes da caçada, durante a hunt (#325).** A pill "ⓘ Detalhes da caçada" abre um modal com o
+nome, o nível recomendado e as dificuldades da hunt ativa — a mesma regra de "level recomendado é
+conselho" vale aqui. A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por
+este `HuntsModal`, nesta aba do navegador: uma hunt sobrevive ao navegador fechado (idle-first),
+mas o servidor ainda não diz, depois que a instância já começou, qual `catalogue.hunts[]` é essa
+— reabrir o jogo no meio de uma caçada existente não traz o nome de volta, e o modal diz isso em
+vez de inventar. Monstros, loot possível e descrição aparecem no kit e ainda não têm dado no
+servidor (M15: SV-02, SV-19, SV-21); a pill "Despachar loot" do kit espera o épico E5. "Seu
+recorde" (XP/h, gp/h) nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita
+abaixo.
+
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
 pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por
