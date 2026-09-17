@@ -10,7 +10,8 @@
 //
 // Nenhum componente daqui assina estado de MUNDO. Onde as criaturas estão é assunto do canvas,
 // que lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero
-// render. Overlays que precisam de uma leitura resumida amostram em intervalo explícito.
+// render. Overlays que precisam de uma leitura resumida amostram em intervalo explícito;
+// overlays de casca usam só fatias assináveis do HUD e da conta.
 //
 // O pacote de arte é montado AQUI (FUN-108) e desce por contexto: o viewport desenha o mundo
 // com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
@@ -39,6 +40,7 @@ import { VocationChoice } from './VocationChoice.js';
 import { Vitals } from './Vitals.js';
 import { TopBar } from './TopBar.js';
 import { WorldOverlay } from './WorldOverlay.js';
+import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
 
 /**
@@ -80,7 +82,13 @@ export function Shell() {
   return (
     <AssetPackContext.Provider value={loaded}>
       <div className="shell">
-        <Viewport />
+<div className="world-stage">
+          <Viewport />
+          {/* Arcos e nome do próprio jogador (#328, RC-15): sempre no centro da câmera, tanto
+              na Cidade quanto em hunt. Não pertence ao `Viewport`, cujo canvas é montado por
+              Pixi de forma imperativa. */}
+          <PlayerVitalsOverlay />
+        </div>
         <WorldOverlay hunting={hunting} />
         <TopBar open={open} toggle={toggle} />
         <div className="windows windows-left" aria-label="janelas à esquerda">

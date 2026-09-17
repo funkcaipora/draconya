@@ -53,9 +53,40 @@ body {
   --sidebar-w: 232px;
 }
 
-/* O mundo: o canvas acompanha o elemento, e o elemento é a tela. */
+/* O palco do mundo agrupa o canvas e os overlays DOM absolutos sobre ele. No celular ele fica
+   como referência própria: sem isso cada overlay duplicaria a faixa de 40vh do mundo. */
+.world-stage { position: absolute; inset: 0; }
 .viewport { position: absolute; inset: 0; line-height: 0; overflow: hidden; background: #000; }
 .viewport canvas { display: block; }
+
+/* ---- Arcos de HP/Mana do próprio jogador (#328, RC-15) ----------------------------------- */
+/* A câmera centraliza o personagem em `.world-stage`; o ponto sem tamanho mantém os SVGs e o
+   nome presos a esse centro, em vez de a um tile ou ao tamanho do mapa. */
+.player-vitals, .player-vitals * {
+  pointer-events: none;
+}
+.player-vitals {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 0; height: 0;
+  z-index: 5;
+}
+.vital-arc {
+  position: absolute; left: 50%; top: 50%; width: 200px; height: 200px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 4px #000);
+}
+.vital-arc-flip { transform: translate(-50%, -50%) scaleX(-1); }
+.vital-arc-track { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 9; stroke-linecap: butt; }
+.vital-arc-fill { fill: none; stroke-width: 7; }
+/* Cores literais da composição renderizada do kit, diferentes das barras laterais. */
+.vital-arc-fill-hp { stroke: #3fbf4a; }
+.vital-arc-fill-mp { stroke: #3d5ec8; }
+.player-vitals-name {
+  position: absolute; left: 0; top: -54px; transform: translateX(-50%);
+  font: 700 9px var(--font-mono); color: #8be26f;
+  text-shadow: 0 1px #000, 1px 0 #000, -1px 0 #000, 0 -1px #000;
+  white-space: nowrap;
+}
 
 /* ---- A barra do topo (#251, ADR 0029 D3/D8/D9) ------------------------------------------- */
 .topbar {
@@ -831,7 +862,7 @@ body {
      coluna esquerda → coluna direita → chat. Os filhos sem regra ficam em `order: 0`, ou seja,
      junto do mundo — por isso o topo e as colunas recebem número explícito. */
   .shell { position: static; height: auto; overflow: visible; display: flex; flex-direction: column; }
-  .shell > .viewport { order: 0; }
+.shell > .world-stage { order: 0; }
   .shell > .world-overlay { order: 1; position: static; padding: 6px 10px 0; z-index: auto; }
   .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
   /* O popover de regras de saída (#260) a 375 px: ancorado na ponta direita do chevron, os
@@ -843,7 +874,7 @@ body {
   .hunt-actions .exit-rules-anchor { position: static; }
   .exit-rules-popover { left: 10px; right: 10px; width: auto; bottom: calc(100% + 4px); }
   .exit-rules-summary { left: 10px; right: 10px; bottom: calc(100% + 2px); text-align: center; white-space: normal; }
-  .viewport { position: relative; height: 40vh; }
+  .world-stage { position: relative; height: 40vh; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
     gap: 6px 10px; padding: 6px 8px;
