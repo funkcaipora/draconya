@@ -33,6 +33,7 @@ import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
+import { createFpsMeter } from './fps.js';
 import { floorsBelow, shade, veilTint } from './floors.js';
 import {
   HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_FILL_HEIGHT, HEALTH_FILL_WIDTH,
@@ -124,6 +125,11 @@ export interface ViewportHandle {
    * chamada, de `null` para o pacote, quando ele carrega.
    */
   setPack(pack: AssetPack | null): void;
+  /**
+   * FPS médio dos últimos quadros, arredondado. É só leitura: o overlay consulta no próprio
+   * ritmo, sem o laço do Pixi disparar renderização React.
+   */
+  getFps(): number;
   destroy(): void;
 }
 
@@ -183,6 +189,8 @@ export async function mountViewport(
   let painted = '';
   /** Assinatura das posições INTEIRAS. A ordem de desenho só muda quando ela muda. */
   let ordered = '';
+  /** RC-13: recebe um delta por quadro e só é lido uma vez por segundo no overlay DOM. */
+  const fps = createFpsMeter();
   /**
    * A elevação de cada tile da janela pintada, por chave `x,y,z`: a criatura em cima da caixa
    * sobe o que a caixa mede. Refeita a cada repintura; consultada por criatura por quadro.
@@ -828,6 +836,7 @@ export async function mountViewport(
   }
 
   app.ticker.add(() => {
+    fps.record(app.ticker.deltaMS);
     const nowMs = performance.now();
     // A troca de cena é notada AQUI (FUN-121): o `instance-enter` põe o `mapId` no `world`, o
     // `world` não avisa ninguém (ADR 0007), e o laço de quadro é quem olha. A resposta que
@@ -877,6 +886,9 @@ export async function mountViewport(
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
       for (const entry of effectSprites.values()) entry.sprite.destroy();
       effectSprites.clear();
+    },
+    getFps() {
+      return fps.read();
     },
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();

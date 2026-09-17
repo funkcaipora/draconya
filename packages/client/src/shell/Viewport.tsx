@@ -6,6 +6,7 @@ import type { Scene } from '../world/scene.js';
 import { mountViewport } from '../world/viewport.js';
 import type { ViewportHandle } from '../world/viewport.js';
 import { useAssetPack } from './AssetPackContext.js';
+import { WorldStatusOverlay } from './WorldStatusOverlay.js';
 
 /**
  * De onde vem a cena de um `mapId`: de `things/<versão>/maps/<id>.json` — o mesmo caminho das
@@ -23,9 +24,10 @@ async function loadScene(mapId: string): Promise<Scene | null> {
 }
 
 /**
- * O canvas. Este componente monta e desmonta o Pixi e nada mais — o mundo NÃO passa por
- * prop nem por estado do React (ADR 0007). O laço de quadro lê `world` direto — inclusive o
- * `mapId` (FUN-121): a cena é buscada quando ele muda, pelo `loadScene` acima.
+ * O canvas. Este componente monta e desmonta o Pixi e também declara o overlay de status; o
+ * mundo NÃO passa por prop nem por estado do React (ADR 0007). O laço de quadro lê `world`
+ * direto — inclusive o `mapId` (FUN-121): a cena é buscada quando ele muda, pelo `loadScene`
+ * acima.
  *
  * **O Pixi sobe IMEDIATAMENTE, sem pacote, e a arte entra quando chega** (`setPack`). O
  * pacote vem do contexto, montado pelo `Shell` (FUN-108), e leva o que a rede levar para
@@ -108,5 +110,10 @@ export function Viewport() {
     };
   }, [loaded]);
 
-  return <div className="viewport" ref={holder} />;
+  return (
+    <div className="viewport" ref={holder}>
+      {/* O canvas é anexado pelo Pixi; este filho React absoluto pinta o status por cima dele. */}
+      <WorldStatusOverlay handleRef={handleRef} />
+    </div>
+  );
 }

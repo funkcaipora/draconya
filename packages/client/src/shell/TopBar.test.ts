@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 describe('TopBar', () => {
-  it('shows the portrait, name, "VOCAÇÃO · LV N", the gold pill and the connection badge after the icons', async () => {
+  it('shows the portrait, name, "VOCAÇÃO · LV N" and the gold pill', async () => {
     hud.set(() => ({
       ...INITIAL_HUD, characterId: 'c1', level: 12, gold: 2_134_760, vocationId: 'knight', catalogue,
     }));
@@ -68,10 +68,11 @@ describe('TopBar', () => {
     expect(vocationIndex).toBeGreaterThan(0);
     expect(levelIndex).toBeGreaterThan(vocationIndex);
     expect(html).toContain('2.134.760');
-    const statusIndex = html.indexOf('role="status"');
-    const lastIconIndex = html.lastIndexOf('ui-icon-button-lg');
-    expect(statusIndex).toBeGreaterThan(0);
-    expect(statusIndex).toBeGreaterThan(lastIconIndex);
+  });
+
+  it('does not render the connection status after it moved to the world overlay', async () => {
+    const html = await render();
+    expect(html).not.toContain('role="status"');
   });
 
   it('shows only "LV N", without "VOCAÇÃO ·", when vocationId is null (D8)', async () => {

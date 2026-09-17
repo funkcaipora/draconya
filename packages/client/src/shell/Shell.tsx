@@ -1,8 +1,8 @@
 // A geografia do §5.3 (FUN-24), com a cara do Huntera (FUN-115).
 //
 // O mundo ocupa a tela inteira; a barra do topo, as janelas à esquerda e à direita e o chat
-// flutuam por cima. Gold e o estado da conexão moram na barra; HP e mana moram no alto da
-// coluna direita desde #253 (`Vitals`, primeiro filho de `windows-right`).
+// flutuam por cima. Gold mora na barra; conexão, latência e FPS moram no overlay do mundo. HP
+// e mana moram no alto da coluna direita desde #253 (`Vitals`, primeiro filho de `windows-right`).
 //
 // A GEOGRAFIA É FIXA (§5.3, §5.5): inventário e analisador à direita, hunts e bot à esquerda,
 // chat embaixo — nos mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao

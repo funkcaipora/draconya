@@ -9,7 +9,6 @@
 import { useState } from 'react';
 import { account } from '../account/store.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { ConnectionBadge } from './ConnectionBadge.js';
 import { IconButton } from './ui/IconButton.js';
 import type { ChatBadgeTier } from './chat-badge.js';
 
@@ -130,7 +129,6 @@ export function TopBar({ open, toggle, chatBadge }: {
             />
           ))}
         </nav>
-        <ConnectionBadge />
       </div>
     </header>
   );
