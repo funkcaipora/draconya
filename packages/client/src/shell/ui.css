@@ -525,7 +525,7 @@
 .ui-vital-track {
   position: relative; overflow: hidden;
   border: 1px solid #080505;
-  background: linear-gradient(180deg, var(--ash-4), var(--ash-3));
+  background: var(--grad-vital-track);
   box-shadow: inset 0 1px 2px rgba(0,0,0,.7), 0 1px rgba(255,255,255,.04);
   border-radius: 1px;
 }
@@ -534,10 +534,10 @@
   box-shadow: inset 0 1px rgba(255,255,255,.18), inset 0 -1px rgba(0,0,0,.3);
   transition: width .18s var(--ease-out);
 }
-.ui-vital-fill[data-kind="hp"] { background: var(--vital-hp); }
-.ui-vital-fill[data-kind="mp"] { background: var(--vital-mp); }
-.ui-vital-fill[data-kind="exp"] { background: var(--vital-exp); }
-.ui-vital-fill[data-kind="stamina"] { background: var(--vital-stamina); }
+.ui-vital-fill[data-kind="hp"] { background: var(--grad-vital-hp); }
+.ui-vital-fill[data-kind="mp"] { background: var(--grad-vital-mp); }
+.ui-vital-fill[data-kind="exp"] { background: var(--grad-vital-exp); }
+.ui-vital-fill[data-kind="stamina"] { background: var(--grad-vital-stamina); }
 .ui-vital-text {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--parchment-1);

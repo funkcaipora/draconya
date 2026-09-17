@@ -67,14 +67,18 @@
   --voc-sorcerer: #a56bff;
 
   /* ── Vitals ── */
-  --vital-hp: #c8323a;
-  --vital-hp-track: #2a0f10;
-  --vital-mp: #3d5ec8;
-  --vital-mp-track: #0f1530;
-  --vital-exp: #c9a24d;
+  /* Só o TRILHO é neutro e único para todo `kind` (R6-10 — o próprio kit não lê os tokens
+     coloridos de trilho que declarava, e a tela renderizada vale sobre o arquivo de tokens dele,
+     docs/kit-fidelity-plan.md §1). O preenchimento é um gradiente de dois tons LITERAL por tipo,
+     igual ao hex do kit (VitalBar.jsx:3) — ADR 0030 corrige o limite do D1 do ADR 0029: a regra é
+     sobre ORIGEM da cor (aqui, um token só), não sobre ser gradiente ou sólida. */
   --vital-exp-track: #2a2210;
   --vital-soul: #8e5cd6;
-  --vital-stamina: #4d9a5a;
+  --grad-vital-hp: linear-gradient(180deg, #d95a55, #a52a2f);
+  --grad-vital-mp: linear-gradient(180deg, #6f86d8, #3d5ec8);
+  --grad-vital-exp: linear-gradient(180deg, #e2c47a, #a8823e);
+  --grad-vital-stamina: linear-gradient(180deg, #7dc78a, #4d9a5a);
+  --grad-vital-track: linear-gradient(180deg, var(--ash-4), var(--ash-3));
 
   /* ── Feedback ── */
   --ok: #5fb56a;

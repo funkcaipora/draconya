@@ -167,8 +167,11 @@ body {
 
 /* HP e mana (FUN-108): duas barras de 14 px no alto da coluna direita (#253, ADR 0029 D3/D4).
    O preenchimento tem a LARGURA da fração, ancorado à esquerda — a barra cheia cortada na
-   fração, ponta esquerda fica, direita some. Vidro ferro-forjado sobre os tokens do design,
-   como o resto da coluna desde #251. */
+   fração, ponta esquerda fica, direita some. Gradiente de dois tons por kind e bisel, iguais
+   ao kit (R0-08/R6-10); o TRILHO é sempre o gradiente neutro, nunca um tom por kind — o kit
+   também nunca usa --vital-hp-track/--vital-mp-track na tela renderizada (docs/kit-fidelity-
+   plan.md §1). Vidro ferro-forjado sobre os tokens do design, como o resto da coluna desde
+   #251. */
 .windows-right > .vitals {
   display: flex; flex-direction: column; gap: 4px; order: 0;
   padding: 8px 10px; margin: 0;
@@ -178,15 +181,15 @@ body {
 .bar {
   position: relative; height: 14px; overflow: hidden; border-radius: 2px;
   border: 1px solid #080505;
+  background: var(--grad-vital-track);
 }
-.bar-hp { background: var(--vital-hp-track); }
-.bar-mana { background: var(--vital-mp-track); }
 .bar-fill {
   position: absolute; top: 0; bottom: 0; left: 0;
+  box-shadow: inset 0 1px rgba(255,255,255,.18), inset 0 -1px rgba(0,0,0,.3);
   transition: width 120ms linear;
 }
-.bar-hp .bar-fill { background: var(--vital-hp); }
-.bar-mana .bar-fill { background: var(--vital-mp); }
+.bar-hp .bar-fill { background: var(--grad-vital-hp); }
+.bar-mana .bar-fill { background: var(--grad-vital-mp); }
 .bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
   font: 500 7.5px var(--font-mono); color: var(--parchment-1); letter-spacing: 0.02em;
