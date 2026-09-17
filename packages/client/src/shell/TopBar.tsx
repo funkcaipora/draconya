@@ -2,7 +2,7 @@
 //
 // Retrato-inicial (a cor de vocação chega com o sprite do outfit, SV-14), nome em Cinzel,
 // "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro (sem contagem de jogadores — SV-15
-// não existe ainda) e os seis ícones PNG de 36 px que abrem as janelas do M14. Nenhum ícone
+// não existe ainda) e os sete ícones PNG de 36 px que abrem as janelas existentes. Nenhum ícone
 // para sistema inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca
 // mostra o que o servidor não disse que existe.
 
@@ -12,14 +12,16 @@ import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
 import { IconButton } from './ui/IconButton.js';
 
-export type WindowId = 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
 
 /**
- * Os seis ícones da barra. `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono
+ * Os sete ícones da barra. `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono
  * do projeto, copiada do handoff (D9). `glyph` é o texto de reserva enquanto a imagem não
  * carrega: NUNCA emoji (D9 — "nenhum emoji, só glifos e PNG").
  */
 const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph: string }> = [
+  // Primeiro item, como a navegação do kit; a arte já existe no pacote público.
+  { id: 'character', label: 'Personagem', icon: 'character', glyph: 'PER' },
   { id: 'hunts', label: 'Hunts', icon: 'combat', glyph: 'HNT' },
   { id: 'bot', label: 'Bot', icon: 'actions', glyph: 'BOT' },
   { id: 'inventory', label: 'Inventário', icon: 'inventory', glyph: 'INV' },
@@ -75,9 +77,16 @@ export function TopBar({ open, toggle }: {
   return (
     <header className="topbar" aria-label="barra do topo">
       <div className="topbar-left">
-        {/* Sem onClick: "Personagem" é um painel fixo da coluna esquerda (DS-13), não um modal
-            que este retrato abriria — D6. */}
-        <span className="topbar-portrait" aria-hidden="true">{initial}</span>
+        {/* Retrato e primeiro ícone levam ao mesmo modal Personagem (#319, ADR 0030 §3). */}
+        <button
+          type="button"
+          className="topbar-portrait"
+          title="Personagem"
+          data-window="character"
+          onClick={() => { toggle('character'); }}
+        >
+          {initial}
+        </button>
         <div className="topbar-identity">
           <span className="topbar-name">{name ?? characterId ?? '—'}</span>
           <span className="topbar-vocation">

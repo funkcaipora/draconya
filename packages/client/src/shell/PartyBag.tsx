@@ -23,7 +23,7 @@ import { Slot } from './ui/Slot.js';
 export const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
 
 // Cada arquivo do shell formata número com o seu próprio Intl.NumberFormat (mesmo padrão de
-// `CharacterPanel.tsx:20-25`, comentado lá como DT-01: "não há módulo compartilhado ainda").
+// `CharacterModal.tsx`, comentado lá como DT-01: "não há módulo compartilhado ainda").
 const count = (value: number): string => Math.round(value).toLocaleString('pt-BR');
 
 export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {

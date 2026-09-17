@@ -20,8 +20,8 @@ import { useHudSlice } from '../state/useSlice.js';
  *
  * O texto é "valor / máximo" em pt-BR, como o kit (`VitalBar.jsx:4`, R6-01) — não só o valor
  * cru. O `Intl.NumberFormat` é local a este arquivo, o mesmo padrão de TopBar.tsx/
- * Analyzer.tsx/EquipmentPanel.tsx/CharacterPanel.tsx/Bestiary.tsx (DT-01: não há módulo
- * compartilhado ainda, decisão registrada em CharacterPanel.tsx).
+ * Analyzer.tsx/EquipmentPanel.tsx/CharacterModal.tsx/Bestiary.tsx (DT-01: não há módulo
+ * compartilhado ainda, decisão registrada em CharacterModal.tsx).
  */
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 

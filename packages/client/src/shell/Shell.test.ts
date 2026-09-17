@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
+import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Shell } from './Shell.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
@@ -53,6 +54,18 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     const html = await render();
     const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
     expect(left).toContain('Skills');
+  });
+
+  // RC-06 (#319): Personagem saiu da coluna e só monta como modal sob open.character.
+  it('does not leave a fixed CharacterPanel in the left column and gates CharacterModal by open.character', async () => {
+    const html = await render();
+    const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
+    expect(left).not.toContain('PERSONAGEM');
+    expect(html).not.toContain('aria-label="Personagem"');
+
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('{open.character && <CharacterModal');
+    expect(source).not.toContain('<CharacterPanel');
   });
 
   it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {

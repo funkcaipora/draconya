@@ -34,6 +34,7 @@ import { PartyMembers } from './PartyMembers.js';
 import { PartyBag } from './PartyBag.js';
 import { BotPanel } from './BotPanel.js';
 import { SkillsPanel } from './SkillsPanel.js';
+import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
 import { VocationChoice } from './VocationChoice.js';
@@ -52,6 +53,8 @@ import type { WindowId } from './TopBar.js';
  * janela que abre fechada esconderia a primeira recusa da sessão.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
+  // Personagem é modal como Hunts: começa fechado e só monta depois de uma intenção do jogador.
+  character: false,
   // 'hunts' agora é um MODAL, não uma seção fixa (#259, ADR 0029 D6): nasce FECHADO — modal que
   // nasce aberto empurraria uma decisão antes de a tela aparecer, e janela fixa é quem nasce
   // aberta (DT-02 de #259). A pill "Escolher caçada"/"Sair da caçada" (`HuntActions`) é quem
@@ -96,8 +99,7 @@ export function Shell() {
               montado; a barra do topo MINIMIZA, nunca remove. A edição fina abre por cima. */}
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
           {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
-              cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills").
-              CharacterPanel fica parado até #319 reaproveitá-lo no modal Personagem. */}
+              cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills"). */}
           <SkillsPanel />
           {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
               Skills, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
@@ -137,6 +139,7 @@ export function Shell() {
             pill aciona, ou pelo ícone "Hunts" do topo — os dois só alternam a mesma fatia. */}
         <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
         {open.hunts && <HuntsModal hunting={hunting} onClose={() => { toggle('hunts'); }} />}
+        {open.character && <CharacterModal onClose={() => { toggle('character'); }} />}
         {/* O chat é janela flutuante fixa (#252, ADR 0029 D5): mesmo padrão de open/close das
             outras (hunts, analyzer, bestiary) — a diferença é só a POSIÇÃO, dada pelo próprio
             componente via `.chat-window`, e não por uma coluna do `windows-left`/`windows-right`. */}
