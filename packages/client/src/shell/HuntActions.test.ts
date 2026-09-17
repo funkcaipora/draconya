@@ -4,10 +4,9 @@ import { prerender } from 'react-dom/static';
 import { describe, expect, it, vi } from 'vitest';
 import { HuntActions, leaveHunt } from './HuntActions.js';
 
-// RF-07 (#259): as duas pills sobre o mundo. `prerender` roda sem DOM — um clique real não
-// dispara (mesmo limite de VocationChoice.test.ts). A intenção de saída é uma função pura,
-// testada direto; a fiação do clique com ela (e com `onChoose`) é provada por inspeção do
-// código-fonte, o mesmo padrão que `VocationChoice.test.ts` já usa para o mesmo problema.
+// As pills sobre o mundo (#259, #325). `prerender` roda sem DOM — um clique real não dispara
+// (mesmo limite de VocationChoice.test.ts). A intenção de saída é uma função pura, testada
+// direto; a fiação do clique é provada por inspeção do código-fonte.
 
 async function render(hunting: boolean): Promise<string> {
   const { prelude } = await prerender(createElement(HuntActions, { hunting, onChoose: () => {} }));
@@ -19,14 +18,21 @@ describe('HuntActions', () => {
     const html = await render(false);
     expect(html).toContain('Escolher caçada');
     expect(html).not.toContain('Sair da caçada');
+    expect(html).not.toContain('Detalhes da caçada');
+    expect(html).not.toContain('hunt-pill-icon');
     expect(html).toContain('class="hunt-pill"');
     expect(html).not.toContain('hunt-pill-danger');
   });
 
-  it('hunting=true: shows the "↩ Sair da caçada" pill glued to a single "»" chevron (#309)', async () => {
+  it('hunting=true: puts details before the exit pair, without dispatching loot', async () => {
     const html = await render(true);
+    const detailsIndex = html.indexOf('Detalhes da caçada');
+    const exitIndex = html.indexOf('Sair da caçada');
+    expect(detailsIndex).toBeGreaterThan(-1);
+    expect(exitIndex).toBeGreaterThan(detailsIndex);
     expect(html).toContain('Sair da caçada');
     expect(html).not.toContain('Escolher caçada');
+    expect(html).not.toContain('Despachar loot');
     expect(html).toContain('hunt-pill-danger');
     // Antes desta correção existiam DOIS "»": o decorativo dentro do texto da pill (removido
     // agora) e o funcional do `ExitRulesPopover`. O kit desenha só um, no mesmo botão partido.
@@ -46,6 +52,13 @@ describe('HuntActions', () => {
     expect(onChooseIndex).toBeLessThan(huntingReturnIndex);
     // `leaveHunt(sendIntent)` mora DEPOIS do segundo `return` — o pill de saída.
     expect(leaveHuntCallIndex).toBeGreaterThan(huntingReturnIndex);
+  });
+
+  it('clears the local hunt identity only from the successful exit handler', async () => {
+    const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
+    const exitIndex = source.indexOf('if (leaveHunt(sendIntent)) setCurrentHunt(null);');
+    expect(exitIndex).toBeGreaterThan(-1);
+    expect(source.indexOf('<HuntDetailsModal', exitIndex)).toBeGreaterThan(exitIndex);
   });
 });
 
