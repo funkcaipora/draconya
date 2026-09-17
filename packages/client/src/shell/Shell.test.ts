@@ -19,6 +19,16 @@ beforeEach(() => {
 });
 
 describe('Shell', () => {
+it('always mounts the player vitals overlay inside the world stage (#328, RC-15)', async () => {
+    const html = await render();
+    const stageIndex = html.indexOf('class="world-stage"');
+    const vitalsIndex = html.indexOf('class="player-vitals"', stageIndex);
+    const topbarIndex = html.indexOf('class="topbar"', stageIndex);
+    expect(stageIndex).toBeGreaterThanOrEqual(0);
+    expect(vitalsIndex).toBeGreaterThan(stageIndex);
+    expect(topbarIndex).toBeGreaterThan(vitalsIndex);
+  });
+
   it('the right column is set → satchel → backpack → analyzer, always mounted, in that order (#307, RF-05)', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
