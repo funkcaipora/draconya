@@ -92,6 +92,22 @@ describe('shell.css', () => {
     expect(shellCss).toMatch(/\.bar-mana\s+\.bar-fill\s*\{[^}]*background:\s*var\(--grad-vital-mp\);/);
     expect(shellCss).toMatch(/\.bar-fill\s*\{[^}]*box-shadow:\s*inset 0 1px rgba\(255,255,255,\.18\),\s*inset 0 -1px rgba\(0,0,0,\.3\);/);
   });
+
+  it('a coluna das janelas tem barra de rolagem fina (#289, kit App.jsx:11)', () => {
+    expect(shellCss).toMatch(/\.windows\s*\{[^}]*scrollbar-width:\s*thin/);
+  });
+
+  it('as seções da coluna não encolhem nem rolam por dentro fora do modo página (#289)', () => {
+    const desktopRule = /\.windows > section\s*\{([^}]*)\}/.exec(shellCss)?.[1] ?? '';
+    expect(desktopRule).toMatch(/flex:\s*0 0 auto/);
+    expect(desktopRule).not.toMatch(/flex:\s*0 1 auto/);
+    expect(desktopRule).not.toMatch(/min-height:\s*0/);
+  });
+
+  it('o chat flutua depois da coluna esquerda, nunca sobre ela (#288)', () => {
+    expect(shellCss).toMatch(/\.chat-window\s*\{[^}]*left:\s*calc\(var\(--sidebar-w\)\s*\+\s*10px\)/);
+    expect(shellCss).not.toMatch(/\.chat-window\s*\{[^}]*left:\s*10px/);
+  });
 });
 
 describe('reset (#301, R0-01)', () => {
