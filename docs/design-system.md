@@ -39,6 +39,10 @@ tela (`docs/design-system-plan.md` §1). Hover = borda dourada + brilho; selecio
 interno; foco = 2px ouro; pressionar = `translateY(1px)`; desabilitado = opacidade .55. Nenhuma
 sombra colorida fora de glow de ouro/sangue em foco ou seleção.
 
+Janelas flutuantes usam FloatingWindow: arrastam pela faixa do título, fora dos 60 px dos botões,
+e lembram a posição por navegador em localStorage, nunca por conta ou sessão. Abaixo de 720 px
+viram blocos estáticos do modo página.
+
 ## Layout fixado (números que DS-02/DS-08 leem daqui)
 
 Topo: **65 px**. Colunas laterais: **232 px**, opacas até o rodapé. Título de painel: **34 px**.

@@ -150,6 +150,21 @@ body {
   position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
 }
 
+/* Janela reutilizável para dados de HUD que o kit põe sobre o mundo (#314). A posição é da
+   moldura inteira; Panel continua responsável por cabelo dourado, título, corpo e botões. */
+.floating-window {
+  position: fixed;
+  z-index: 20;
+  animation: ui-appear .2s var(--ease-out) both;
+}
+.floating-window-drag {
+  position: absolute; left: 0; top: 0; height: var(--panel-title-h);
+  z-index: 1; cursor: move; touch-action: none;
+}
+/* A faixa cobre o título, nunca as ações do Panel. O valor de 60px fica também inline no
+   componente para o contrato de testes e para não depender da largura atual dos glifos. */
+.floating-window .ui-panel-actions { position: relative; z-index: 2; }
+
 .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
 .badge-connected { color: #6fc28a; border-color: #2f5a3c; }
 .badge-connecting, .badge-reconnecting { color: #c2a54a; border-color: #5a4f2f; }
@@ -825,6 +840,9 @@ body {
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
      o caso de uso móvel é configurar o bot (comentário de cima), não conversar (DT-05). */
   .chat-window { position: static; width: auto; margin: 10px; order: 5; }
+  /* No modo página a janela deixa de flutuar e arrastar não tem função. */
+  .floating-window { position: static; margin: 10px 10px 0; z-index: auto; }
+  .floating-window-drag { pointer-events: none; }
 }
 
 /* --- party: formação (#197). Classes INALTERADAS nesta issue — a formação (PartyPanel.tsx)
