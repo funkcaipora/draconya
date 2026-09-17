@@ -80,9 +80,9 @@ describe('Analyzer — caixa "Sessão" (RF-02)', () => {
     // esquecer um deles — cada par rótulo/valor é conferido junto, não a lista de rótulos.
     expect(html).toContain('<span>Tempo</span><b>1 h 0 min</b>');
     expect(html).toContain('<span>XP</span><b>1.000</b>');
-    expect(html).toContain('<span>Gold</span><b>500</b>');
-    expect(html).toContain('<span>Gastos</span><b>200</b>');
-    expect(html).toContain('<span>Saldo</span><b>300</b>'); // goldGained - goldSpent
+    expect(html).toContain('<span>Gold</span><b>500 gp</b>');
+    expect(html).toContain('<span>Gastos</span><b>200 gp</b>');
+    expect(html).toContain('<span>Saldo</span><b>300 gp</b>'); // goldGained - goldSpent
     expect(html).toContain('<span>Mortos</span><b>10</b>');
     expect(html).toContain('<span>Loot</span><b>25</b>');
     expect(html).toContain('<span>Supplies</span><b>4</b>');
@@ -129,9 +129,9 @@ describe('Analyzer — caixa "Por hora" (RF-03)', () => {
     setActiveAnalyzer();
     const html = await render(createElement(Analyzer, {}));
     expect(html).toContain('<span>XP</span><b>1.000/h</b>');
-    expect(html).toContain('<span>Gold</span><b>500/h</b>');
-    expect(html).toContain('<span>Gastos</span><b>200/h</b>');
-    expect(html).toContain('<span>Saldo</span><b>300/h</b>');
+    expect(html).toContain('<span>Gold</span><b>500 gp/h</b>');
+    expect(html).toContain('<span>Gastos</span><b>200 gp/h</b>');
+    expect(html).toContain('<span>Saldo</span><b>300 gp/h</b>');
     expect(html).toContain('<span>Mortos</span><b>10/h</b>');
     // Loot, Supplies, Maior golpe e Maior magia nunca tiveram taxa — "Loot/h" nunca existiu.
     expect(html).not.toContain('Loot/h');
@@ -147,11 +147,11 @@ describe('Analyzer — painel FIXO (RF-01, RF-06)', () => {
     // nenhum efeito, porque o componente ignorava props e usava o próprio `useState`.
     setActiveAnalyzer();
     const open = await render(createElement(Analyzer, { collapsed: false }));
-    expect(open).toMatch(/ui-panel-title">ANALISADOR</);
+    expect(open).toMatch(/ui-panel-title">Analisador de caçada</);
     expect(open).toContain('analyzer-box');
 
     const collapsed = await render(createElement(Analyzer, { collapsed: true }));
-    expect(collapsed).toMatch(/ui-panel-title">ANALISADOR</);
+    expect(collapsed).toMatch(/ui-panel-title">Analisador de caçada</);
     expect(collapsed).toContain('ui-panel--collapsed');
     expect(collapsed).not.toContain('analyzer-box');
     expect(collapsed).not.toContain('Sessão');

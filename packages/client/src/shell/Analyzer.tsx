@@ -95,13 +95,15 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
   // "—" e não zero para o que o servidor NÃO mandou (FUN-78): zero é uma afirmação, e um nó
   // antigo em deploy em rolagem simplesmente não afirmou nada sobre estes campos.
   const optional = (value: number | undefined): string => (value === undefined ? '—' : count(value));
+  // "gp" é a unidade de gold do handoff inteiro (data.js:72, analyzerLive.sess — R4-18).
+  const gold = (value: number): string => `${count(value)} gp`;
   return (
     <Box title="Sessão">
       <Line label="Tempo" value={duration(elapsedMs)} />
       <Line label="XP" value={count(aggregates.xpGained)} />
-      <Line label="Gold" value={count(aggregates.goldGained)} />
-      <Line label="Gastos" value={count(aggregates.goldSpent)} />
-      <Line label="Saldo" value={count(balance)} />
+      <Line label="Gold" value={gold(aggregates.goldGained)} />
+      <Line label="Gastos" value={gold(aggregates.goldSpent)} />
+      <Line label="Saldo" value={gold(balance)} />
       <Line label="Mortos" value={count(aggregates.kills)} />
       <Line label="Loot" value={optional(aggregates.itemsLooted)} />
       <Line label="Supplies" value={optional(aggregates.suppliesUsed)} />
@@ -117,14 +119,17 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
 function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
   const balance = aggregates.goldGained - aggregates.goldSpent;
   const rate = (value: number): string => `${count(perHour(value, elapsedMs))}/h`;
+  // Mesma unidade "gp" da caixa "Sessão" (R4-18); o "/h" continua depois dela, como no kit
+  // ("Gold/h", "1.133.402 gp" — data.js:72, hour): a unidade vem antes da taxa, nunca depois.
+  const goldRate = (value: number): string => `${count(perHour(value, elapsedMs))} gp/h`;
   // Só as cinco que já tinham taxa antes desta task. Loot, Supplies, Maior golpe, Maior magia e
   // Mortes nunca tiveram `rate()`, e continuam sem.
   return (
     <Box title="Por hora">
       <Line label="XP" value={rate(aggregates.xpGained)} />
-      <Line label="Gold" value={rate(aggregates.goldGained)} />
-      <Line label="Gastos" value={rate(aggregates.goldSpent)} />
-      <Line label="Saldo" value={rate(balance)} />
+      <Line label="Gold" value={goldRate(aggregates.goldGained)} />
+      <Line label="Gastos" value={goldRate(aggregates.goldSpent)} />
+      <Line label="Saldo" value={goldRate(balance)} />
       <Line label="Mortos" value={rate(aggregates.kills)} />
     </Box>
   );
@@ -207,7 +212,7 @@ export function Analyzer({ collapsed = false, onToggle }: { collapsed?: boolean;
   return (
     <Panel
       dock
-      title="ANALISADOR"
+      title="Analisador de caçada"
       className="analyzer"
       collapsed={effectiveCollapsed}
       onToggle={handleToggle}
