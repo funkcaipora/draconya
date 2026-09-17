@@ -217,3 +217,40 @@ describe('slots e set fidelidade (#307)', () => {
   });
 });
 
+describe('TopBar fidelidade (#306)', () => {
+  it('aplica moldura de 4 lados, vinheta e sombra interna em .topbar (RF-01)', () => {
+    expect(shellCss).toMatch(/\.topbar\s*\{[^}]*border:\s*1px solid var\(--gold-1\);/);
+    expect(shellCss).toMatch(/\.topbar\s*\{[^}]*border-top-color:\s*var\(--ash-3\);/);
+    expect(shellCss).toMatch(/\.topbar\s*\{[^}]*border-bottom-color:\s*var\(--gold-3\);/);
+    expect(shellCss).toMatch(/\.topbar\s*\{[^}]*linear-gradient\(90deg,\s*rgba\(38,\s*27,\s*25,\s*0\.6\)/);
+    expect(shellCss).toMatch(/\.topbar\s*\{[^}]*box-shadow:[^}]*inset 0 -1px rgba\(201,\s*162,\s*77,\s*0\.1\);/);
+  });
+
+  it('aplica borda dourada e glow no disco da moeda, e sombras no pill de gold (RF-02)', () => {
+    expect(shellCss).toMatch(/\.topbar-gold\s*\{[^}]*padding:\s*0 6px 0 9px;/);
+    expect(shellCss).toMatch(/\.topbar-gold\s*\{[^}]*box-shadow:\s*inset 0 1px rgba\(255,\s*255,\s*255,\s*0\.05\),\s*0 1px 2px #000;/);
+    expect(shellCss).toMatch(/\.topbar-coin\s*\{[^}]*border:\s*1px solid #ffd66b;/);
+    expect(shellCss).toMatch(/\.topbar-coin\s*\{[^}]*box-shadow:\s*0 0 7px rgba\(215,\s*164,\s*38,\s*0\.4\);/);
+  });
+
+  it('aplica brilho dourado no wordmark DRACONYA (RF-03)', () => {
+    expect(shellCss).toMatch(
+      /\.topbar-wordmark b\s*\{[^}]*text-shadow:\s*0 1px #000,\s*0 0 18px rgba\(201,\s*162,\s*77,\s*0\.25\);/,
+    );
+  });
+
+  it('aplica gradiente radial e anéis internos no retrato (RF-04)', () => {
+    expect(shellCss).toMatch(
+      /\.topbar-portrait\s*\{[^}]*radial-gradient\(circle at 50% 42%,\s*#3a301c 0 18%,\s*transparent 19%\)/,
+    );
+    expect(shellCss).toMatch(
+      /\.topbar-portrait\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--ash-1\),\s*inset 0 0 0 3px rgba\(208,\s*163,\s*75,\s*0\.25\),\s*0 1px 4px #000;/,
+    );
+  });
+
+  it('remove completamente o rótulo e item sob o ícone (RF-05)', () => {
+    expect(shellCss).not.toMatch(/\.topbar-icon-label/);
+    expect(shellCss).not.toMatch(/\.topbar-nav-item/);
+  });
+});
+

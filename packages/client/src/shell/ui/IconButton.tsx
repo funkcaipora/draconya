@@ -13,6 +13,7 @@ export interface IconButtonProps {
   disabled?: boolean;
   onClick?: () => void;
   className?: string;
+  'data-window'?: string;
 }
 
 export function IconButton({
@@ -23,6 +24,7 @@ export function IconButton({
   disabled = false,
   onClick,
   className,
+  'data-window': dataWindow,
 }: IconButtonProps) {
   const classes = [
     'ui-icon-button',
@@ -32,7 +34,14 @@ export function IconButton({
   ].filter((value): value is string => value !== null).join(' ');
 
   return (
-    <button type="button" title={title} disabled={disabled} onClick={onClick} className={classes}>
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={classes}
+      data-window={dataWindow}
+    >
       {children}
     </button>
   );

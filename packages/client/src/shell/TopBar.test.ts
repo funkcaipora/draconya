@@ -82,6 +82,15 @@ describe('TopBar', () => {
     }
   });
 
+  it('never renders a permanent text label under a nav icon (R1-10) — only the title tooltip', async () => {
+    const html = await render();
+    expect(html).not.toContain('topbar-icon-label');
+    // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
+    for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
+      expect(html).toContain(`title="${label}"`);
+    }
+  });
+
   it('centers the "DRACONYA" wordmark without any player count', async () => {
     const html = await render();
     expect(html).toContain('DRACONYA');

@@ -32,32 +32,28 @@ const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
 /**
  * Um ícone de 36 px (R0-05: o uso mais visível do `IconButton` no kit), com o glifo de texto
- * como reserva se o PNG falhar ao carregar. `data-window` e o rótulo abaixo do ícone moram no
- * `<div>` que envolve o `IconButton` — R1-10 (tirar o rótulo, deixar só `title`) é achado de
- * OUTRA issue (FD-06); aqui o rótulo continua existindo, só a caixa clicável virou o primitivo.
+ * como reserva se o PNG falhar ao carregar. Nenhum rótulo de texto permanente é renderizado
+ * (R1-10), apenas o tooltip nativo `title`.
  */
 function NavIcon({ id, label, icon, glyph, open, onClick }: {
   id: WindowId; label: string; icon: string; glyph: string; open: boolean; onClick: () => void;
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div className="topbar-nav-item" data-window={id}>
-      <IconButton size="lg" title={label} active={open} onClick={onClick}>
-        {failed
-          ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
-          : (
-            <img
-              className="topbar-icon-img"
-              src={`/hud-icons/${icon}.png`}
-              width={32}
-              height={32}
-              alt=""
-              onError={() => { setFailed(true); }}
-            />
-          )}
-      </IconButton>
-      <span className="topbar-icon-label">{label}</span>
-    </div>
+    <IconButton size="lg" title={label} active={open} onClick={onClick} data-window={id}>
+      {failed
+        ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
+        : (
+          <img
+            className="topbar-icon-img"
+            src={`/hud-icons/${icon}.png`}
+            width={32}
+            height={32}
+            alt=""
+            onError={() => { setFailed(true); }}
+          />
+        )}
+    </IconButton>
   );
 }
 
