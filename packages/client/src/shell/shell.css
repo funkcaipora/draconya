@@ -759,6 +759,11 @@ body {
 .battle-bar-ok .battle-bar-fill { background: var(--ok); }
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
+.battle-row-selected {
+  border: 1px solid var(--blood-5); border-radius: 3px; background: var(--surface-selected);
+  margin: -2px -4px; padding: 2px 4px;
+}
+.battle-row-selected .battle-name { color: var(--blood-7); }
 
 .container-head { display: flex; align-items: center; gap: 6px; }
 .container-head strong { flex: 1 1 auto; }
@@ -1066,6 +1071,15 @@ body {
 .world-overlay-note {
   color: var(--text-faint);
 }
+
+.buff-bar {
+  position: absolute; left: 12px; bottom: calc(24px + 34px);
+  z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  pointer-events: none;
+}
+
 @media (max-width: 720px) {
   .world-overlay { display: none; }
+  .shell > .buff-bar { order: 1; position: static; padding: 4px 10px 0; z-index: auto; }
 }

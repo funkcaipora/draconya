@@ -10,7 +10,7 @@
 
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import {
-  appendCapped, hud, type PlayerSkills, type SkillProgress,
+  appendCapped, hud, type ActiveCondition, type PlayerSkills, type SkillProgress,
 } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
@@ -76,6 +76,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
     case 'instance-enter':
       enterInstance(message.instanceId, message.map, message.ambience ?? 'surface');
+      hud.set((state) => ({
+        ...state,
+        huntId: message.huntId ?? null,
+        difficulty: message.difficulty ?? null,
+      }));
       return;
 
     case 'ground-item-appear':
@@ -170,6 +175,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
+        targetId: (message as { targetId?: number | null }).targetId ?? state.targetId ?? null,
         ammo: message.ammo,
         vocationId: message.vocationId,
         speed: (message as { speed?: number }).speed ?? state.speed,
@@ -360,6 +366,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
         onlinePlayers: message.onlinePlayers ?? null,
+        targetId: (message.self as { targetId?: number | null }).targetId ?? null,
+        huntId: message.huntId ?? null,
+        difficulty: message.difficulty ?? null,
+        conditions: (message as { conditions?: readonly ActiveCondition[] }).conditions ?? [],
+        conditionsReceivedAtMs: nowMs,
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
       if (message.party !== undefined) partyEntered();
@@ -379,7 +390,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'active-conditions':
-      // Consumida pelo HUD de condições (SV-12, #342).
+      hud.set((state) => ({
+        ...state,
+        conditions: message.conditions,
+        conditionsReceivedAtMs: nowMs,
+      }));
       return;
 
     case 'player-count':

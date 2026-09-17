@@ -9,6 +9,8 @@
 
 import type { S2CProps } from '@draconya/protocol';
 
+export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
+
 export type ConnectionStatus =
   | 'idle'
   | 'connecting'
@@ -197,6 +199,12 @@ export interface HudState {
   readonly party: PartyView | null;
   readonly partyBag: PartyBagView | null;
   readonly lastSettlement: PartySettlementView | null;
+
+  readonly targetId: number | null;
+  readonly conditions: readonly ActiveCondition[];
+  readonly conditionsReceivedAtMs: number;
+  readonly huntId: string | null;
+  readonly difficulty: string | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -226,6 +234,11 @@ export const INITIAL_HUD: HudState = {
   party: null,
   partyBag: null,
   lastSettlement: null,
+  targetId: null,
+  conditions: [],
+  conditionsReceivedAtMs: 0,
+  huntId: null,
+  difficulty: null,
 };
 
 /**

@@ -23,6 +23,7 @@ import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
 import { Viewport } from './Viewport.js';
 import { WorldOverlay } from './WorldOverlay.js';
+import { BuffBar } from './BuffBar.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
@@ -81,6 +82,7 @@ export function Shell() {
       <div className="shell">
         <Viewport />
         <WorldOverlay hunting={hunting} />
+        <BuffBar />
         <TopBar open={open} toggle={toggle} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre

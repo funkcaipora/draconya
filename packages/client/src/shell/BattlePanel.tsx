@@ -3,8 +3,8 @@
 //
 // Segue o padrão que `PartyMembers.tsx` já usa (ADR 0007): `world` não tem `subscribe` — um
 // `creature-move` não pode causar render de React —, então a lista é amostrada por INTERVALO,
-// no mesmo `HEALTH_POLL_MS` de 1 s. Sem moldura de alvo: `targetId` não trafega ainda (M15,
-// SV-05), e nenhuma linha é clicável nesta issue.
+// no mesmo `HEALTH_POLL_MS` de 1 s. `targetId` trafega via `player-stats`/`session-state` (#341,
+// SV-05) e a criatura correspondente ganha a moldura `.battle-row-selected` (#348, SV-12).
 //
 // Não existe, no protocolo de hoje, um campo que diga "isto é um monstro" — `creature-appear`
 // não carrega tipo, e `catalogue.monsters` só tem `id`/`name` (packages/protocol/src/types.ts).
@@ -58,6 +58,7 @@ export function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
 
 export function BattlePanel() {
   const partyView = useHudSlice((state) => state.party);
+  const targetId = useHudSlice((state) => state.targetId);
   // Minimiza SOZINHO (DT-02): não passa pelo `open`/`toggle` do Shell, porque a barra do topo
   // (docs/design-system-plan.md §3) não tem um sétimo ícone para Batalha. É o mesmo desenho que
   // o primitivo `Panel` de DS-04 vai ter por dentro quando chegar a esta seção.
@@ -89,7 +90,10 @@ export function BattlePanel() {
         : (
           <ul className="battle-list">
             {rows.map((row) => (
-              <li key={row.id} className="battle-row">
+              <li
+                key={row.id}
+                className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
+              >
                 <span className="battle-name">{row.name}</span>
                 <span className="battle-percent">{`${String(row.percent)} %`}</span>
                 <span className={`battle-bar battle-bar-${battleTone(row.percent)}`} aria-label={`HP de ${row.name}`}>

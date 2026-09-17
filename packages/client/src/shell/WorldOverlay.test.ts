@@ -3,9 +3,42 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { WorldOverlay } from './WorldOverlay.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { PartyView } from '../state/hud.js';
+import type { Catalogue, PartyView } from '../state/hud.js';
 import { world } from '../state/world.js';
 import type { Creature } from '../state/world.js';
+
+const mockCatalogue: Catalogue = {
+  hunts: [
+    {
+      id: 'rat-cellars',
+      name: 'Rat Cellars',
+      recommendedLevel: 1,
+      lootDrops: 2,
+      outfitIds: [],
+      difficulties: ['cautious', 'bold', 'reckless'],
+      difficultyDetails: [
+        { id: 'cautious', monsterCount: 2 },
+        { id: 'bold', monsterCount: 5 },
+        { id: 'reckless', monsterCount: 8 },
+      ],
+      monsters: [],
+      loot: [],
+    },
+  ],
+  monsters: [],
+  ammunition: [],
+  bot: {
+    vocabularyVersion: 1,
+    advancedFromLevel: 50,
+    slots: {},
+    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    spells: [],
+    supplies: [],
+  },
+  items: [],
+  vocations: [],
+  vocationLevel: 8,
+};
 
 async function render(element: ReactElement): Promise<string> {
   const { prelude } = await prerender(element);
@@ -87,5 +120,45 @@ describe('o overlay de área e criaturas (#327, RC-14)', () => {
     const html = await render(createElement(WorldOverlay, { hunting: true }));
     expect(html).not.toContain('Covil');
     expect(html).not.toContain('Ousado');
+  });
+
+  it('mostra o nome da hunt e a dificuldade quando presentes no catálogo (#348, SV-12)', async () => {
+    hud.set((state) => ({
+      ...state,
+      huntId: 'rat-cellars',
+      difficulty: 'cautious',
+      catalogue: mockCatalogue,
+    }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+    expect(html).toContain('Rat Cellars · Cauteloso');
+    expect(html).toContain('0 criaturas no alcance');
+  });
+
+  it('sem huntId, não renderiza a linha da hunt, apenas a contagem', async () => {
+    hud.set((state) => ({
+      ...state,
+      huntId: null,
+      difficulty: 'cautious',
+      catalogue: mockCatalogue,
+    }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+    expect(html).not.toContain('Rat Cellars');
+    expect(html).not.toContain('Cauteloso');
+    expect(html).toContain('0 criaturas no alcance');
+  });
+
+  it('quando huntId não está no catálogo, não renderiza a linha da hunt', async () => {
+    hud.set((state) => ({
+      ...state,
+      huntId: 'unknown-hunt',
+      difficulty: 'cautious',
+      catalogue: mockCatalogue,
+    }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+    expect(html).not.toContain('Cauteloso');
+    expect(html).toContain('0 criaturas no alcance');
   });
 });

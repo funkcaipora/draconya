@@ -53,7 +53,7 @@ function duration(ms: number): string {
  * está parado e o denominador anda. É o lado certo para errar — melhor uma taxa levemente
  * pessimista que se corrige do que uma otimista inventada aqui.
  */
-function useElapsedMs(base: number, since: number, running: boolean): number {
+export function useElapsedMs(base: number, since: number, running: boolean): number {
   // `performance.now()`, e não `Date.now()`: `since` é o `receivedAtMs` que `applyMessage`
   // carimba com o relógio monotônico. Subtrair dele o relógio de calendário mostrava
   // "496968 h" — a época Unix em horas — na primeira vez que a janela abriu.
