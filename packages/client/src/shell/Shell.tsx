@@ -22,6 +22,7 @@ import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
 import { useWalkKeys } from './useWalkKeys.js';
 import { Viewport } from './Viewport.js';
+import { WorldOverlay } from './WorldOverlay.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
@@ -79,6 +80,7 @@ export function Shell() {
     <AssetPackContext.Provider value={loaded}>
       <div className="shell">
         <Viewport />
+        <WorldOverlay hunting={hunting} />
         <TopBar open={open} toggle={toggle} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
