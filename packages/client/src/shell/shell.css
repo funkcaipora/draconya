@@ -541,8 +541,12 @@ body {
 .hunts-modal-body {
   display: grid; grid-template-columns: 230px minmax(0, 1fr) 230px; gap: 12px; height: 430px;
 }
+/* Busca, contador e lista compartilham a coluna de 230 px; a lista ocupa só o espaço restante. */
+.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; }
+/* `Input` traz 18 px por padrão; nesta lista densa a distância do kit é 6 px. */
+.hunts-modal-search { margin-bottom: 6px; }
 .hunts-modal-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 5px;
-  overflow: auto; min-height: 0; padding: 0 2px 0 0; }
+  overflow: auto; min-height: 0; flex: 1 1 auto; padding: 0 2px 0 0; }
 .hunts-modal-row button {
   display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: center;
   width: 100%; padding: 6px; text-align: left; cursor: pointer;
