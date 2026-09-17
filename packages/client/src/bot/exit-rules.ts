@@ -1,15 +1,18 @@
 // As três regras de saída que o servidor conhece (#260; `botExitRuleSchema`,
-// `packages/content/src/schemas.ts:932-945`). A quarta regra do protótipo (capacidade cheia)
-// NÃO existe no schema — ela só entra no M15 (SV-06, `content`+`sim`); até lá o popover não a
-// oferece, porque oferecer uma regra que o servidor recusaria é configurar o jogador para um
-// "não" (o mesmo motivo de FUN-89 para o resto do vocabulário do bot).
+// `packages/content/src/schemas.ts:932-945`), na ORDEM do kit (#309, ADR 0030, R4-11/R5-05):
+// gold, grupo, HP por último — `data.js:75` do handoff lista `out-of-gold, out-of-capacity,
+// party-member-lost, hp-below`; tirando a quarta (ver abaixo), sobra essa ordem. A quarta regra
+// do protótipo (capacidade cheia) NÃO existe no schema — ela só entra no M15 (SV-06,
+// `content`+`sim`); até lá o popover não a oferece, porque oferecer uma regra que o servidor
+// recusaria é configurar o jogador para um "não" (o mesmo motivo de FUN-89 para o resto do
+// vocabulário do bot).
 //
 // Puro, sem `bot/store.ts` — o mesmo motivo de `shell/rule-text.ts` ser separado do painel:
 // texto e derivação se testam sem loja nenhuma.
 
 import type { BotExitRule } from '@draconya/content';
 
-export const EXIT_RULE_KINDS = ['hp-below', 'out-of-gold', 'party-member-lost'] as const;
+export const EXIT_RULE_KINDS = ['out-of-gold', 'party-member-lost', 'hp-below'] as const;
 export type ExitRuleKind = (typeof EXIT_RULE_KINDS)[number];
 
 /** O percentual com que `hp-below` nasce ao ser ligada pela primeira vez (o do handoff). */
