@@ -129,6 +129,11 @@ export function buildCatalogue(content: Content): Catalogue {
         startingWeaponItemId: vocation.startingWeaponItemId as string,
       })),
     vocationLevel: content.progression.vocationLevel,
+    progression: {
+      startingSpeed: content.progression.startingSpeed,
+      speedPerLevel: content.progression.speedPerLevel,
+      regen: { ...content.progression.regen },
+    },
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
     // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
     // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o

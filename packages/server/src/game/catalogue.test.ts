@@ -434,6 +434,30 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(huntWithoutDescription).toBeDefined();
     expect('description' in (huntWithoutDescription ?? {})).toBe(false);
   });
+
+  it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {
+    const { progression } = buildCatalogue(content);
+    expect(progression).toEqual({
+      startingSpeed: content.progression.startingSpeed,
+      speedPerLevel: content.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: content.progression.regen.healthPerSecond,
+        manaPerSecond: content.progression.regen.manaPerSecond,
+      },
+    });
+
+    const realContent = loadContent(DATA);
+    const realCatalogue = buildCatalogue(realContent);
+    expect(realCatalogue.progression).toEqual({
+      startingSpeed: realContent.progression.startingSpeed,
+      speedPerLevel: realContent.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: realContent.progression.regen.healthPerSecond,
+        manaPerSecond: realContent.progression.regen.manaPerSecond,
+      },
+    });
+  });
 });
+
 
 

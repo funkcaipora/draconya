@@ -139,7 +139,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Teto de pontos de passiva | `[ABERTO]` | caminho previsto: `packages/content/vocations` |
 | Base da curva de XP | 20 `[ABERTO — valor provisório: 20]` | `packages/content/data/progression/baseline.json`, `xp.base` |
 | Expoente da curva de XP | 2 `[ABERTO — valor provisório: 2]` | `packages/content/data/progression/baseline.json`, `xp.exponent` |
-| Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera]` | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
+| Velocidade do personagem | 278 no level 1, +2 por level, sem incremento por vocação `[ABERTO — valor provisório, do Huntera]`. `startingSpeed` / `speedPerLevel` e `regen` viajam também em `catalogue.progression` (#361, SV-25) | `packages/content/data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Corpo a Corpo — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/melee.json` |
 | Magia — início, curva, dano por nível | 0 / 400×1,1 / +3% `[ABERTO — valores provisórios]` | `packages/content/data/skills/magic.json` |

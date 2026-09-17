@@ -445,6 +445,67 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decodedWithout?.[0]?.monsters[0]?.name).toBe('Rat');
     expect(decodedWithout?.[0]?.monsters[0]).not.toHaveProperty('class');
   });
+
+  describe('vocation statics in the catalogue — speed and regen (#361, SV-25)', () => {
+    const baseCatalogue = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [],
+      ammunition: [],
+      vocations: [],
+      vocationLevel: 8,
+    };
+
+    it('round-trips with progression present in catalogue', () => {
+      const withProgression = {
+        ...baseCatalogue,
+        progression: {
+          startingSpeed: 278,
+          speedPerLevel: 2,
+          regen: {
+            healthPerSecond: 1,
+            manaPerSecond: 1,
+          },
+        },
+      } as unknown as S2CMessage;
+      const decoded = decodeS2C(encodeS2C(withProgression));
+      expect(decoded).toEqual([withProgression]);
+    });
+
+    it('round-trips without progression in catalogue: decoded message has progression: undefined (key not present)', () => {
+      const withoutProgression = {
+        ...baseCatalogue,
+      } as unknown as S2CMessage;
+      const decoded = decodeS2C(encodeS2C(withoutProgression)) as Array<Record<string, unknown>> | null;
+      expect(decoded).not.toBeNull();
+      expect(decoded?.[0]?.['progression']).toBeUndefined();
+      expect(decoded?.[0]).not.toHaveProperty('progression');
+    });
+
+    it('rejects invalid progression values (non-positive speed, negative regen)', () => {
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 0, speedPerLevel: 2, regen: { healthPerSecond: 1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 278, speedPerLevel: -1, regen: { healthPerSecond: 1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 278, speedPerLevel: 2, regen: { healthPerSecond: -1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+    });
+  });
 });
 
 describe('vocation choice (#154)', () => {

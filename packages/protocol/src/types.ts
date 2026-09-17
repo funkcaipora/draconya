@@ -598,6 +598,29 @@ export const S2C_SCHEMAS = {
     })).default([]),
     /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
     vocationLevel: z.number().int().nonnegative().default(0),
+    /**
+     * A tabela ESTÁTICA de velocidade e regeneração passiva (FUN-119/FUN-36/FUN-68, #361):
+     * quanto todo personagem tem ao nascer e quanto ganha por level, na fórmula
+     * `startingSpeed + (level - 1) * speedPerLevel` que `packages/sim/src/progression.ts`
+     * já usa — e o quanto ele regenera de HP/mana por segundo, que NÃO varia por level.
+     *
+     * Vocação-independente: hoje nenhuma vocação do conteúdo altera velocidade ou
+     * regeneração, então o campo vive UMA vez aqui, e não dentro de cada `vocations[]` — o
+     * mesmo motivo de `vocationLevel` já ser irmão de `vocations`, e não campo de cada uma.
+     *
+     * O valor AO VIVO (afetado por haste, level atual do personagem) é outro campo, em
+     * `player-stats` — SV-04 (#340), fora desta mensagem. `.optional()`, sem `.default()`,
+     * como `bestiary`: um nó `game` anterior a este deploy manda `catalogue` sem a chave, e o
+     * cliente trata ausência como "—", nunca como zero (a convenção de `Aggregates` opcionais).
+     */
+    progression: z.object({
+      startingSpeed: z.number().int().positive(),
+      speedPerLevel: z.number().int().nonnegative(),
+      regen: z.object({
+        healthPerSecond: z.number().nonnegative(),
+        manaPerSecond: z.number().nonnegative(),
+      }),
+    }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
