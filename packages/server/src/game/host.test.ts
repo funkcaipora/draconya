@@ -1,12 +1,12 @@
 import {
-  CharacterRuntime, Rng, Session, createHuntSession, statsForLevel,
+  CharacterRuntime, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema, placeholderAppearances,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, RawContent } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -4467,7 +4467,10 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const leadState = stateOf(lead.socket);
     if (leadState?.type !== 'session-state') throw new Error('sem session-state');
     expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared' });
-    expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent])).toEqual([['lead', true, 100], ['b', true, 100]]);
+    expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent, m.vocationId, m.level, m.manaPercent])).toEqual([
+      ['lead', true, 100, null, 1, 0],
+      ['b', true, 100, null, 1, 0],
+    ]);
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
     expect(leadState.partyBag).toEqual({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
@@ -4507,7 +4510,74 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(settlement.shares.map((s) => s.characterId).sort()).toEqual(['b', 'lead']);
     const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
     if (state?.type !== 'party-state') throw new Error('sem party-state');
-    expect(state.members.map((m) => m.characterId)).toEqual(['lead']);
+    expect(state.members.map((m) => [m.characterId, m.vocationId, m.level, m.manaPercent])).toEqual([
+      ['lead', null, 2, 100],
+    ]);
     expect(session()?.participants.map((p) => p.id)).toEqual(['lead']);
+  });
+
+  it('party-state refreshes live when vocation, level or mana change — not only on composition (#339, SV-03)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+
+    const partyStatesOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-state');
+    // Attach inicial leva party embutida no session-state; nenhum party-state isolado foi enviado
+    expect(partyStatesOf(lead.socket).length).toBe(0);
+
+    const s = session();
+    if (!s) throw new Error('sem session');
+    const memberB = s.participants.find((p) => p.id === 'b');
+    if (!memberB) throw new Error('sem member b');
+
+    // 1. Modificar mana dispara 1 party-state
+    memberB.maxMana = 100;
+    memberB.mana = 100;
+    runFor(100);
+    let states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(1);
+    expect(states[0]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', manaPercent: 100 }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(1);
+
+    // 2. Modificar level dispara mais 1 party-state
+    memberB.level = 2;
+    memberB.xp = totalXpForLevel(2, TEST_PROGRESSION as Progression);
+    runFor(100);
+    states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(2);
+    expect(states[1]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', level: 2 }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(2);
+
+    // 3. Modificar vocação dispara mais 1 party-state
+    memberB.vocationId = 'knight';
+    runFor(100);
+    states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(3);
+    expect(states[2]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', vocationId: 'knight' }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(3);
   });
 });

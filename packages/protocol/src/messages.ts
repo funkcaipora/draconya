@@ -89,7 +89,8 @@ export const SERVER_TO_CLIENT = {
   'ground-item-disappear': 23,
   /**
    * A party (#196, ADR 0027). Três mensagens só S2C: quem está nela (`party-state` — sai no
-   * attach e quando a composição ou a liderança mudam), o que há na bolsa compartilhada
+   * attach, quando a composição ou liderança mudam, e quando vocação, level ou mana de qualquer
+   * membro mudam via sameParty no host, #339), o que há na bolsa compartilhada
    * (`party-bag` — a cada mudança) e o que o settlement pagou (`party-settlement` — ao sair
    * alguém e no fim). Não há C2S: formar party é HTTP, e sair é `leave-hunt` (10).
    */

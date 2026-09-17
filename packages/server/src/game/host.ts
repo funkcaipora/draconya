@@ -380,6 +380,23 @@ function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   return total;
 }
 
+function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): boolean {
+  if (a.leaderId !== b.leaderId || a.mode !== b.mode || a.members.length !== b.members.length) {
+    return false;
+  }
+  for (let i = 0; i < a.members.length; i++) {
+    const x = a.members[i];
+    const y = b.members[i];
+    if (
+      !x || !y
+      || x.characterId !== y.characterId || x.name !== y.name || x.alive !== y.alive
+      || x.healthPercent !== y.healthPercent || x.vocationId !== y.vocationId
+      || x.level !== y.level || x.manaPercent !== y.manaPercent
+    ) return false;
+  }
+  return true;
+}
+
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
   | { readonly ok: true; readonly config: BotConfig }
@@ -455,6 +472,8 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
+  sentParty: S2CProps<'party-state'> | null;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -1371,6 +1390,7 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -1751,7 +1771,9 @@ export class SessionHost {
         ...(ambience === undefined ? {} : { ambience }),
       });
     }
-    viewer.send(this.#sessionState(hosted, characterId));
+    const state = this.#sessionState(hosted, characterId);
+    if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
+    viewer.send(state);
     const participant = this.#participantOf(hosted, characterId);
     const stats = playerStatsOf(participant);
     hosted.sentStats.set(characterId, stats);
@@ -1782,6 +1804,7 @@ export class SessionHost {
       case 'party-state': {
         const block = this.#partyBlock(hosted);
         if (block.party === undefined) return;
+        hosted.sentParty = block.party;
         message = { type: 'party-state', ...block.party };
         break;
       }
@@ -1798,6 +1821,15 @@ export class SessionHost {
         return;
     }
     for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
+  #presentPartyLive(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const party = this.#partyBlock(hosted).party;
+    if (party === undefined) return;
+    if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
+    hosted.sentParty = party;
+    for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
   }
 
   /** O bloco `party`/`partyBag` do `session-state` (#196), do estado do ruleset. Vazio em solo. */
@@ -1818,6 +1850,9 @@ export class SessionHost {
           name: this.#nameByCharacter.get(member.id) ?? member.id,
           alive: member.alive,
           healthPercent: member.maxHealth > 0 ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100))) : 0,
+          vocationId: member.vocationId,
+          level: member.level,
+          manaPercent: member.maxMana > 0 ? Math.max(0, Math.min(100, Math.round((member.mana / member.maxMana) * 100))) : 0,
         })),
       },
     };
@@ -2157,6 +2192,7 @@ export class SessionHost {
       sentStats: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentParty: null,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -2835,6 +2871,7 @@ export class SessionHost {
       sentStats: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentParty: null,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);

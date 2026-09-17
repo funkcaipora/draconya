@@ -75,7 +75,7 @@ describe('o painel Batalha (#254)', () => {
     hud.set((state) => ({
       ...state,
       party: party([
-        { characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100 },
+        { characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100, vocationId: null },
       ]),
     }));
 

@@ -175,6 +175,20 @@ export const PartyState = z.object({
     alive: z.boolean(),
     /** HP em percentual inteiro (0–100), para o painel — o absoluto é balanceamento. */
     healthPercent: z.number().int().min(0).max(100),
+    /**
+     * A vocação de cada membro (#339, SV-03).
+     * `null` é "ainda não escolheu" (level < 8, ADR 0026 decisão 1).
+     * `default(null)`: um nó game anterior manda sem.
+     */
+    vocationId: z.string().nullable().default(null),
+    /**
+     * O level de cada membro (#339, SV-03). Opcional.
+     */
+    level: z.number().int().positive().optional(),
+    /**
+     * Mana em percentual inteiro (0–100, #339, SV-03). Opcional.
+     */
+    manaPercent: z.number().int().min(0).max(100).optional(),
   })),
 });
 

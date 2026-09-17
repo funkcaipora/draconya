@@ -422,3 +422,101 @@ describe('move-item (#160)', () => {
     expect(schema.safeParse({ from: { container: 'backpack', index: -1 }, to: { slot: 'hand' } }).success).toBe(false);
   });
 });
+
+describe('party presentation messages (#196, #339, SV-03)', () => {
+  it('round trips party-state with vocationId, level and manaPercent', () => {
+    const message: S2CMessage = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'shared',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'knight',
+          level: 20,
+          manaPercent: 80,
+        },
+        {
+          characterId: 'p2',
+          name: 'Bob',
+          alive: false,
+          healthPercent: 0,
+          vocationId: null,
+          level: 5,
+          manaPercent: 0,
+        },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
+  it('decodes older party-state without vocationId, level, or manaPercent as vocationId: null, level: undefined, manaPercent: undefined', () => {
+    const older = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'split',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+        },
+      ],
+    } as unknown as S2CMessage;
+
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{
+      type: 'party-state';
+      members: Array<{
+        characterId: string;
+        vocationId: string | null;
+        level?: number;
+        manaPercent?: number;
+      }>;
+    }> | null;
+    const member = decoded?.[0]?.members[0];
+    expect(member?.vocationId).toBeNull();
+    expect(member?.level).toBeUndefined();
+    expect(member?.manaPercent).toBeUndefined();
+    expect(member).not.toHaveProperty('level');
+    expect(member).not.toHaveProperty('manaPercent');
+  });
+
+  it('rejects manaPercent greater than 100, fractional, or negative', () => {
+    const base = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'shared',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'sorcerer',
+          level: 25,
+          manaPercent: 50,
+        },
+      ],
+    } as unknown as S2CMessage;
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: 101 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: 50.5 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: -1 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+});
+

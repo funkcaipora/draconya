@@ -76,9 +76,9 @@ describe('PartyPanel', () => {
 
   it('PartyMembers lists the companions with HP, the mode as text, and the fallen one greyed', async () => {
     hud.set((state) => ({ ...state, party: { leaderId: 'lead', mode: 'shared', members: [
-      { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80 },
-      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55 },
-      { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0 },
+      { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80, vocationId: null },
+      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55, vocationId: null },
+      { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0, vocationId: null },
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
@@ -93,7 +93,7 @@ describe('PartyPanel', () => {
 
   it('PartyMembers shows "Dividido" for the split mode', async () => {
     hud.set((state) => ({ ...state, party: { leaderId: 'me', mode: 'split', members: [
-      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
+      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
