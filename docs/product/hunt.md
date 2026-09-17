@@ -39,6 +39,12 @@ se a hunt solta gold já tem isso em `lootDrops`. `catalogue.monsters[]` (a list
 Bestiário) ganha `health` e `experience` de cada monstro — nunca XP/h nem gold/h por hora, que
 continua fora por decisão de produto (parágrafo acima).
 
+**Contagem de monstros por dificuldade chega pelo catálogo** (SV-19, #355). Cada hunt leva
+`difficultyDetails: [{ id, monsterCount }]` — a quantidade total de monstros que cada
+dificuldade mantém vivos na instância, na mesma ordem de `difficulties`. É o que o cliente usa
+para exibir "Ousado · 4" nos botões de pull e no seletor de dificuldade da party, como no
+Huntera.
+
 **Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
 continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
 Esconder o botão transformaria um conselho em regra que ninguém escreveu.
@@ -374,7 +380,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |

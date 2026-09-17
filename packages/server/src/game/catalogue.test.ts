@@ -24,7 +24,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       // `lootDrops` é uma CONTAGEM de drops distintos (FUN-123), não uma taxa: continua sem
       // XP/h nem gold/h.
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'loot', 'lootDrops', 'monsters', 'name', 'outfitIds', 'recommendedLevel']);
+        .toEqual(['difficulties', 'difficultyDetails', 'id', 'loot', 'lootDrops', 'monsters', 'name', 'outfitIds', 'recommendedLevel']);
     }
   });
 
@@ -386,5 +386,14 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       { id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 },
     ]);
   });
+
+  it('leva a contagem de monstros por dificuldade na mesma ordem de difficulties (SV-19, #355)', () => {
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.difficultyDetails).toEqual([
+      { id: 'cautious', monsterCount: 1 },
+    ]);
+  });
 });
+
 

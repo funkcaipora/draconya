@@ -11,7 +11,14 @@ import type { PartyView } from '../party/api.js';
 // A formação da party (#197): quatro estados, um por vez. `prerender` roda sem DOM — o que se
 // prende é a estrutura e, sobretudo, que "Iniciar" só acende com todos aprovados.
 
-const hunts: HuntListing[] = [{ id: 'arena', name: 'Arena', recommendedLevel: 1, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 1, monsters: [], loot: [] }];
+const hunts: HuntListing[] = [{
+  id: 'arena', name: 'Arena', recommendedLevel: 1, difficulties: ['cautious', 'bold'],
+  difficultyDetails: [
+    { id: 'cautious', monsterCount: 2 },
+    { id: 'bold', monsterCount: 4 },
+  ],
+  outfitIds: [], lootDrops: 1, monsters: [], loot: [],
+}];
 
 async function render(): Promise<string> {
   const { prelude } = await prerender(createElement(PartyPanel, { hunts }));
@@ -64,6 +71,13 @@ describe('PartyPanel', () => {
     // Sozinho nunca inicia: party é de dois ou mais.
     withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }] });
     expect(await render()).toMatch(/<button[^>]*disabled[^>]*>Iniciar<\/button>/);
+  });
+
+  it('renders monster count in the difficulty select options (SV-19, #355)', async () => {
+    withParty({ leaderId: 'me', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: false }] });
+    const html = await render();
+    expect(html).toMatch(/<option value="cautious"[^>]*>Cauteloso · 2<\/option>/);
+    expect(html).toContain('<option value="bold">Ousado · 4</option>');
   });
 
   it('while entering, the form is gone and the error, when any, is shown', async () => {

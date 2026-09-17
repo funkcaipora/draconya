@@ -287,12 +287,13 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     expect(decodedWithIds).toEqual([{
       ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
-        ...hunt, lootDrops: 0, monsters: [], loot: [],
+        ...hunt, difficultyDetails: [], lootDrops: 0, monsters: [], loot: [],
       })),
     }]);
-    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number; monsters: unknown[]; loot: unknown[] }> }> | null;
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number; difficultyDetails: unknown[]; monsters: unknown[]; loot: unknown[] }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.lootDrops).toBe(0);
+    expect(decoded?.[0]?.hunts[0]?.difficultyDetails).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
   });
@@ -310,6 +311,24 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     const decoded = decodeS2C(encodeS2C(older)) as Array<{ hunts: Array<{ monsters: unknown[]; loot: unknown[] }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
+  });
+
+  it('round trips difficultyDetails per hunt, and an older node decodes them to an EMPTY list (SV-19, #355)', () => {
+    const withDetails = catalogue({
+      difficultyDetails: [
+        { id: 'cautious', monsterCount: 2 },
+        { id: 'bold', monsterCount: 4 },
+      ],
+    });
+    const decodedWithDetails = decodeS2C(encodeS2C(withDetails)) as Array<{ hunts: Array<{ difficultyDetails: Array<{ id: string; monsterCount: number }> }> }> | null;
+    expect(decodedWithDetails?.[0]?.hunts[0]?.difficultyDetails).toEqual([
+      { id: 'cautious', monsterCount: 2 },
+      { id: 'bold', monsterCount: 4 },
+    ]);
+
+    const older = catalogue({});
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{ hunts: Array<{ difficultyDetails: unknown[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.difficultyDetails).toEqual([]);
   });
 
   it('rejects an outfit id of zero: there is no appearance zero', () => {

@@ -33,6 +33,7 @@ export function buildCatalogue(content: Content): Catalogue {
       // Cópia mutável: `HuntListing` traz a união fechada e `readonly`, e a mensagem leva
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
+      difficultyDetails: difficultyDetailsOf(content, hunt.id),
       outfitIds: monsterOutfitsOf(content, hunt.id),
       lootDrops: lootDropsOf(content, hunt.id),
       monsters: monstersOf(content, hunt.id),
@@ -229,3 +230,23 @@ function monsterOutfitsOf(content: Content, huntId: string): number[] {
   }
   return [...outfits].sort((a, b) => a - b);
 }
+
+/**
+ * Quantos monstros cada dificuldade desta hunt mantém vivos, NO TOTAL (FUN-123,
+ * `huntDifficultySchema.monsterCount`) — o "Ousado · 4" que o Huntera mostra ao lado do nome
+ * da dificuldade. Mesma ORDEM de `Object.keys(hunt.difficulties)`, que é a MESMA fonte que
+ * `huntListings` usa para `difficulties` (`packages/sim/src/hunt/catalogue.ts:40`) — os dois
+ * lêem o mesmo objeto, então a ordem entre os dois campos é garantida sem precisar reordenar
+ * nada aqui.
+ */
+function difficultyDetailsOf(content: Content, huntId: string): { id: string; monsterCount: number }[] {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const details: { id: string; monsterCount: number }[] = [];
+  for (const [id, difficulty] of Object.entries(hunt.difficulties)) {
+    if (difficulty === undefined) continue;
+    details.push({ id, monsterCount: difficulty.monsterCount });
+  }
+  return details;
+}
+

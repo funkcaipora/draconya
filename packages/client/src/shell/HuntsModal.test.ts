@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HuntsModal, attemptEnter, enterHuntMessage, resolveSelection } from './HuntsModal.js';
+import { HuntsModal, attemptEnter, enterHuntMessage, pullLabel, resolveSelection } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
@@ -12,8 +12,25 @@ import { INITIAL_PARTY, party } from '../party/store.js';
 // aqui só se prende a ESTRUTURA e o que essas funções produzem por padrão.
 
 const hunts: HuntListing[] = [
-  { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2, monsters: [], loot: [] },
-  { id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7, monsters: [], loot: [] },
+  {
+    id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
+    difficulties: ['cautious', 'bold', 'reckless'],
+    difficultyDetails: [
+      { id: 'cautious', monsterCount: 2 },
+      { id: 'bold', monsterCount: 5 },
+      { id: 'reckless', monsterCount: 8 },
+    ],
+    outfitIds: [21], lootDrops: 2, monsters: [], loot: [],
+  },
+  {
+    id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60,
+    difficulties: ['cautious', 'bold'],
+    difficultyDetails: [
+      { id: 'cautious', monsterCount: 1 },
+      { id: 'bold', monsterCount: 3 },
+    ],
+    outfitIds: [], lootDrops: 7, monsters: [], loot: [],
+  },
 ];
 
 const catalogue: Catalogue = {
@@ -74,7 +91,7 @@ describe('HuntsModal', () => {
     const html = await render({ hunting: false });
     const detailIndex = html.indexOf('hunts-modal-detail');
     expect(detailIndex).toBeGreaterThan(-1);
-    expect(html.slice(detailIndex)).toMatch(/class="[^"]*ui-button-primary[^"]*">Cauteloso</);
+    expect(html.slice(detailIndex)).toMatch(/class="[^"]*ui-button-primary[^"]*">Cauteloso · 2</);
   });
 
   it('an empty catalogue.hunts shows the "no hunt" message, without pull buttons', async () => {
@@ -151,3 +168,35 @@ describe('attemptEnter (RF-04)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+describe('pullLabel (SV-19, #355)', () => {
+  it('appends · N when monsterCount is present', () => {
+    expect(pullLabel(hunts[0]!, 'bold')).toBe('Ousado · 5');
+    expect(pullLabel(hunts[0]!, 'cautious')).toBe('Cauteloso · 2');
+    expect(pullLabel(hunts[0]!, 'reckless')).toBe('Agressivo · 8');
+  });
+
+  it('falls back to just difficulty name when difficultyDetails is empty or missing that difficulty', () => {
+    const huntWithoutDetails: HuntListing = {
+      ...hunts[0]!,
+      difficultyDetails: [],
+    };
+    expect(pullLabel(huntWithoutDetails, 'bold')).toBe('Ousado');
+
+    const huntWithMissingDiff: HuntListing = {
+      ...hunts[0]!,
+      difficultyDetails: [{ id: 'cautious', monsterCount: 2 }],
+    };
+    expect(pullLabel(huntWithMissingDiff, 'reckless')).toBe('Agressivo');
+  });
+
+  it('falls back to raw difficulty key when unknown to DIFFICULTY_TEXT', () => {
+    const customHunt: HuntListing = {
+      ...hunts[0]!,
+      difficulties: ['nightmare'],
+      difficultyDetails: [{ id: 'nightmare', monsterCount: 10 }],
+    };
+    expect(pullLabel(customHunt, 'nightmare')).toBe('nightmare · 10');
+  });
+});
+

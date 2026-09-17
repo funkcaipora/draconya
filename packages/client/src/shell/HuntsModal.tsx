@@ -28,6 +28,18 @@ const DIFFICULTY_TEXT: Record<string, string> = {
 };
 
 /**
+ * O rótulo do botão de pull — "Ousado · 4" como o Huntera mostra (kit: Modals.jsx:52,
+ * `{n} · {c}`; SV-19). `difficultyDetails` é PARALELO a `difficulties` e opcional (deploy em
+ * rolagem — um catálogo de um nó `game` anterior à SV-19 chega com a lista vazia): sem
+ * contagem para esta dificuldade, o rótulo cai para só o nome, nunca "· undefined".
+ */
+export function pullLabel(hunt: HuntListing, difficulty: string): string {
+  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
+  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
+  return count === undefined ? label : `${label} · ${String(count)}`;
+}
+
+/**
  * A hunt e a dificuldade EFETIVAS dadas a seleção do jogador (RF-03).
  *
  * Sem `selectedId` na lista (reconexão trocou o catálogo com o modal aberto — §7 da spec), cai
@@ -137,7 +149,7 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
                     {selected.difficulties.map((d) => (
                       <Button key={d} variant={d === difficulty ? 'primary' : 'secondary'} size="sm"
                         onClick={() => { setPull(d); }}>
-                        {DIFFICULTY_TEXT[d] ?? d}
+                        {pullLabel(selected, d)}
                       </Button>
                     ))}
                   </div>

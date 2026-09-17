@@ -430,6 +430,14 @@ export const S2C_SCHEMAS = {
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
       /**
+       * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
+       * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
+       */
+      difficultyDetails: z.array(z.object({
+        id: z.string().min(1),
+        monsterCount: z.number().int().positive(),
+      })).default([]),
+      /**
        * Os outfits dos monstros desta hunt (FUN-112), para o cliente AQUECER as folhas deles
        * na Cidade, antes de o primeiro aparecer — sem isto o rato era um quadrado por seis a
        * dez segundos na primeira entrada. Só ids (invariante 6), resolvidos pelo servidor do

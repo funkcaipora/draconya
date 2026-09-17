@@ -19,6 +19,18 @@ const DIFFICULTY_TEXT: Record<string, string> = {
 };
 const MODE_TEXT = { split: 'Dividido', shared: 'Compartilhado' } as const;
 
+/**
+ * O rótulo do pull no seletor de dificuldade — "Ousado · 4" como o Huntera mostra (kit:
+ * Modals.jsx:52; SV-19). Duplicada de `HuntsModal.pullLabel` de propósito: os dois arquivos já
+ * duplicam `DIFFICULTY_TEXT`, e `HuntsModal` importa `PartyPanel` — importar de volta criaria
+ * um ciclo entre os dois módulos.
+ */
+function pullLabel(hunt: HuntListing, difficulty: string): string {
+  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
+  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
+  return count === undefined ? label : `${label} · ${String(count)}`;
+}
+
 /** De quanto em quanto tempo a tela pergunta ao servidor pela party (DT-01). */
 export const POLL_MS = 2_000;
 
@@ -107,7 +119,9 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
                   {hunts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
                 <select aria-label="dificuldade" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); }}>
-                  {(hunt?.difficulties ?? []).map((d) => <option key={d} value={d}>{DIFFICULTY_TEXT[d] ?? d}</option>)}
+                  {hunt === undefined ? null : hunt.difficulties.map((d) => (
+                    <option key={d} value={d}>{pullLabel(hunt, d)}</option>
+                  ))}
                 </select>
                 <select aria-label="modo" value={mode} onChange={(event) => { setMode(event.target.value as 'split' | 'shared'); }}>
                   <option value="split">{MODE_TEXT.split}</option>
