@@ -293,6 +293,11 @@ body {
   font-size: 13.5px;
 }
 .entry-tagline { font-size: 9px; letter-spacing: 0.22em; color: var(--text-faint); white-space: nowrap; }
+.entry-ready { display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.entry-ready-dot { width: 5px; height: 5px; border-radius: 50%; }
+.entry-ready-dot-ok { background: var(--ok); }
+.entry-ready-dot-warn { background: var(--warn); }
+.entry-ready-dot-danger { background: var(--danger); }
 .entry-main {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 30px;
   padding: 56px 24px 36px;
@@ -364,7 +369,7 @@ body {
 .entry-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 
 .entry-character-card {
-  display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 16px;
+  display: grid; grid-template-columns: 58px minmax(0, 1fr) 18px; align-items: center; gap: 16px;
   text-align: left; width: 100%; min-height: 108px; padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9px;
@@ -372,9 +377,20 @@ body {
   color: var(--text-primary); font-family: var(--font-body);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
 }
-.entry-character-card:hover:not(:disabled) { border-color: rgba(201, 162, 77, 0.35); }
+.entry-character-card:hover:not(:disabled) { border-color: rgba(201, 162, 77, 0.35); transform: translateY(-1px); }
 .entry-character-card:disabled { opacity: 0.5; cursor: default; }
+.entry-character-card--selected,
+.entry-character-card--selected:hover:not(:disabled) {
+  border-color: rgba(201, 162, 77, 0.65);
+  background: linear-gradient(145deg, rgba(58, 42, 15, 0.55), rgba(20, 14, 13, 0.92));
+}
+.entry-character-indicator { color: var(--gold-4); font-size: 12.5px; justify-self: center; }
+
+.entry-select-footer { display: flex; align-items: center; justify-content: flex-end; gap: 22px; margin-top: 26px; }
+.entry-select-hint { margin: 0; color: var(--text-muted); font-size: 11px; }
+.entry-enter-button { min-width: 250px; }
 .entry-avatar {
   width: 58px; height: 66px; display: grid; place-items: center;
   background: rgba(201, 162, 77, 0.04);
@@ -574,6 +590,7 @@ body {
    A sobreposição própria de antes some: scrim, painel e fio dourado passam a ser do `Modal`
    (shell/ui.css, #247). Este bloco cuida só da grade, do cartão e da cor por vocação — por
    seletor de atributo, nunca por `style` (ADR 0029 D2; ver DT-03 de #249). */
+.vocation-subtitle { margin: 0 0 14px; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
 .vocation-cards {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -609,6 +626,7 @@ body {
 .vocation-card[data-vocation="paladin"] .vocation-role { color: var(--voc-paladin); }
 .vocation-card[data-vocation="druid"] .vocation-role { color: var(--voc-druid); }
 .vocation-card[data-vocation="sorcerer"] .vocation-role { color: var(--voc-sorcerer); }
+.vocation-desc { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .vocation-gains { font-size: 11px; color: var(--text-muted); }
 .vocation-weapon { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .vocation-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
