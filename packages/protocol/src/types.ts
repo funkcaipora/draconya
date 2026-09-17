@@ -430,6 +430,11 @@ export const S2C_SCHEMAS = {
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
       /**
+       * O texto de apresentação da hunt (R8-13, SV-21). Opcional: hunt sem o campo ainda não
+       * teve o parágrafo escrito. Sem .default('') — ausência e string vazia são coisas diferentes.
+       */
+      description: z.string().min(1).optional(),
+      /**
        * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
        * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
        */

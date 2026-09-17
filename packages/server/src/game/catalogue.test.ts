@@ -419,6 +419,21 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(withoutClass).toBeDefined();
     expect('class' in (withoutClass ?? {})).toBe(false);
   });
+
+  it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
+    const realContent = loadContent(DATA);
+    const { hunts } = buildCatalogue(realContent);
+    const cellars = hunts.find((h) => h.id === 'rat-cellars');
+    expect(cellars?.description).toBe(
+      'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.',
+    );
+    expect('description' in (cellars ?? {})).toBe(true);
+
+    // Hunt sem description na fixture de teste omite a chave
+    const huntWithoutDescription = buildCatalogue(content).hunts[0];
+    expect(huntWithoutDescription).toBeDefined();
+    expect('description' in (huntWithoutDescription ?? {})).toBe(false);
+  });
 });
 
 

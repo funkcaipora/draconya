@@ -33,6 +33,7 @@ export function buildCatalogue(content: Content): Catalogue {
       // Cópia mutável: `HuntListing` traz a união fechada e `readonly`, e a mensagem leva
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
+      ...(hunt.description === undefined ? {} : { description: hunt.description }),
       difficultyDetails: difficultyDetailsOf(content, hunt.id),
       outfitIds: monsterOutfitsOf(content, hunt.id),
       lootDrops: lootDropsOf(content, hunt.id),

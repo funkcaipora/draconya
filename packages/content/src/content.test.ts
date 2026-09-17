@@ -81,6 +81,30 @@ describe('classe do monstro (SV-20, #356)', () => {
   });
 });
 
+describe('texto de apresentação da hunt (SV-21, #357)', () => {
+  it('aceita descrição válida e propaga para content.hunts', () => {
+    const comDescricao = {
+      ...cellars,
+      description: 'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia.',
+    };
+    const content = buildContent(base({ hunts: [comDescricao] }));
+    expect(content.hunts.get('rat-cellars')?.description).toBe(
+      'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia.',
+    );
+  });
+
+  it('aceita quando omitido e deixa description como undefined', () => {
+    const semDescricao = { ...cellars, description: undefined };
+    const content = buildContent(base({ hunts: [semDescricao] }));
+    expect(content.hunts.get('rat-cellars')?.description).toBeUndefined();
+  });
+
+  it('rejeita string vazia como descrição', () => {
+    const descricaoVazia = { ...cellars, description: '' };
+    expect(() => buildContent(base({ hunts: [descricaoVazia] }))).toThrow(ContentError);
+  });
+});
+
 describe('a tabela de loot (FUN-63)', () => {
   it('separa moeda de item: gold tem lugar próprio, e items é a lista', () => {
     const loot = buildContent(base()).monsters.get('rat')?.loot;

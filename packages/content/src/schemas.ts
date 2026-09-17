@@ -538,6 +538,12 @@ export const huntSchema = z.object({
    * teste que cabe numa sala de 4×3 continua nascendo em cima de quem está lá.
    */
   spawnClearRadius: z.number().int().nonnegative().default(0),
+  /**
+   * O texto de apresentação da hunt (R8-13), mostrado no modal de detalhes do kit quando
+   * #349/RC-12 o construir. Opcional: hunt sem o campo é hunt cujo parágrafo ainda não foi
+   * escrito. Só apresentação; a simulação não lê isto.
+   */
+  description: z.string().min(1).optional(),
 });
 
 export const vocationSchema = z.object({

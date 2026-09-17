@@ -331,6 +331,19 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     expect(decoded?.[0]?.hunts[0]?.difficultyDetails).toEqual([]);
   });
 
+  it('round trips hunt description when present, preserves absence when omitted, and rejects empty string (SV-21, #357)', () => {
+    const withDesc = catalogue({ description: 'Os porões de pedra sob Rookgaard' });
+    const decodedWithDesc = decodeS2C(encodeS2C(withDesc)) as Array<{ hunts: Array<{ description?: string }> }> | null;
+    expect(decodedWithDesc?.[0]?.hunts[0]?.description).toBe('Os porões de pedra sob Rookgaard');
+
+    const withoutDesc = catalogue({});
+    const decodedWithoutDesc = decodeS2C(encodeS2C(withoutDesc)) as Array<{ hunts: Array<{ description?: string }> }> | null;
+    expect(decodedWithoutDesc?.[0]?.hunts[0]?.description).toBeUndefined();
+    expect('description' in (decodedWithoutDesc?.[0]?.hunts[0] ?? {})).toBe(false);
+
+    expect(decodeS2C(encodeS2C(catalogue({ description: '' })))).toBeNull();
+  });
+
   it('rejects an outfit id of zero: there is no appearance zero', () => {
     expect(decodeS2C(encodeS2C(catalogue({ outfitIds: [0] })))).toBeNull();
   });

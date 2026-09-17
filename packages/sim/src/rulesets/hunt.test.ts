@@ -959,6 +959,16 @@ describe('seleção de hunt', () => {
     expect(huntListings(content({ hunts: [alta, hunt] })).map((h) => h.id))
       .toEqual(['arena', 'deep']);
   });
+
+  it('copia description quando definida e deixa undefined quando não definida (SV-21, #357)', () => {
+    const comDescricao = { ...hunt, description: 'Os porões de pedra sob Rookgaard.' };
+    const [com] = huntListings(content({ hunts: [comDescricao] }));
+    expect(com?.description).toBe('Os porões de pedra sob Rookgaard.');
+
+    const [sem] = huntListings(content({ hunts: [hunt] }));
+    expect(sem?.description).toBeUndefined();
+    expect('description' in (sem ?? {})).toBe(false);
+  });
 });
 
 describe('eventos de domínio (FUN-69)', () => {
