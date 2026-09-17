@@ -22,7 +22,7 @@ describe('Shell', () => {
   it('the right column is set → backpack → satchel → analyzer, always mounted, in that order', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const order = ['aria-label="set"', 'aria-label="mochila"', 'aria-label="bolsa"']
+    const order = ['ui-panel-title">Set', 'ui-panel-title">Mochila', 'ui-panel-title">Bolsa']
       .map((marker) => right.indexOf(marker));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -51,7 +51,7 @@ describe('Shell', () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
     const vitalsIndex = right.indexOf('class="vitals"');
-    const setIndex = right.indexOf('aria-label="set"');
+    const setIndex = right.indexOf('ui-panel-title">Set');
     expect(vitalsIndex).toBeGreaterThan(0);
     expect(setIndex).toBeGreaterThan(vitalsIndex);
   });
@@ -72,7 +72,7 @@ describe('Shell', () => {
     }));
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const satchelIndex = right.indexOf('aria-label="bolsa"');
+    const satchelIndex = right.indexOf('ui-panel-title">Bolsa');
     const analyzerIndex = right.indexOf('ui-panel-title">Analisador de caçada');
     expect(satchelIndex).toBeGreaterThan(0);
     expect(analyzerIndex).toBeGreaterThan(satchelIndex);

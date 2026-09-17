@@ -119,7 +119,7 @@ describe('a janela do Bestiário (FUN-113)', () => {
     const html = await render(createElement(Bestiary));
 
     expect(html).toContain('Bestiário');
-    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain('ui-panel--collapsed');
     expect(html).toContain('Bônus de XP PvE: +2 %');
     expect(html).not.toContain('+2 % XP');
     expect(html).toContain('próximo marco');

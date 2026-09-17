@@ -48,13 +48,6 @@ body {
 .shell {
   position: fixed; inset: 0;
   overflow: hidden;
-  /* --window-bg/--window-line/--window-head/--accent seguem aqui: a moldura de CADA seção
-     (`.windows > section`, o cabeçalho, o ammo picker) ainda lê essas variáveis — "uma seção
-     velha ao lado de uma nova é aceitável entre PRs" (plano §6). Só a CASCA (barra do topo e
-     as colunas) veste o design nesta task. */
-  --window-bg: rgba(13, 15, 24, 0.9);
-  --window-line: rgba(140, 150, 180, 0.28);
-  --window-head: rgba(24, 28, 42, 0.95);
   --accent: #e2b84a;
   --topbar-h: 65px;
   --sidebar-w: 232px;
@@ -136,31 +129,9 @@ body {
 }
 .windows-left { left: 0; border-right: 1px solid var(--ash-5); }
 .windows-right { right: 0; border-left: 1px solid var(--ash-5); }
-.windows > section {
-  pointer-events: auto;
-  background: var(--window-bg);
-  border: 1px solid var(--window-line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
-  /* A coluna é a única rolagem no desktop. Cada seção mantém a altura do conteúdo para que
-     Bot, Personagem e Party nunca disputem a altura disponível nem escondam regras no meio. */
-  overflow: hidden;
-  display: flex; flex-direction: column; flex: 0 0 auto;
-}
-/* O cabeçalho de cada seção é a barra de título da janela. */
-.windows > section > header {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 10px;
-  background: var(--window-head);
-  border-bottom: 1px solid var(--window-line);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: #fff;
-  position: sticky; top: 0;
-}
-.windows > section > *:not(header) { padding-left: 10px; padding-right: 10px; }
-.windows > section > *:last-child:not(header) { padding-bottom: 8px; }
-/* O inset horizontal já vem da regra de cima; aqui só o vertical. */
-.windows > section > .quiet { color: var(--text-faint); margin: 8px 0; }
+/* Cada filho de .windows é um Panel (ui/Panel.tsx, DS-04) desde #305 — a pele própria (ui.css)
+   já resolve fundo, borda, sombra, cabeçalho e rolagem. */
+.quiet { color: var(--text-faint); margin: 8px 0; }
 
 /* O chat: janela flutuante fixa no canto inferior esquerdo (#252, ADR 0029 D5). A moldura
    (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO por cima do mundo — sem arraste,
@@ -224,23 +195,12 @@ body {
 .chat-system-warning { color: var(--warn); }
 .chat-system-error { color: var(--danger); }
 
-/* O analisador (FUN-83). `.analyzer-head`/`.analyzer-toggle`/`.analyzer-summary`/
-   `.analyzer-body`/`.analyzer-row`/`.analyzer-label`/`.analyzer-value` são o "Panel" informal
-   de antes do design system, e continuam aqui porque outras sete telas ainda os usam
-   (`ContainerWindow`, `Bestiary`, `PartyMembers`, `EquipmentPanel`, `AmmoPicker`, `PartyBag`,
-   `PartyPanel`) — cada uma migra para `Panel` na própria issue (DS-10 a DS-17, #258 não mexe
-   nelas). O próprio `Analyzer.tsx` não usa mais nenhuma delas desde #258: ele é `Panel dock`
-   (`ui.css`), e o bloco abaixo é a moldura NOVA. */
+/* Analisador (FUN-83) e Bestiário (FUN-113) partilham `.analyzer-body`/`.analyzer-row`/
+   `.analyzer-label`/`.analyzer-value`/`.analyzer-events` para as LINHAS de dentro do corpo do
+   Panel, não para o cabeçalho — a moldura das duas janelas é ui/Panel.tsx (DS-04) desde #258
+   (Analyzer) e #305 (as sete seções que ainda usavam .analyzer-head/-toggle/-summary migraram
+   nesta issue; as três classes saíram por não terem mais consumidor). */
 .analyzer { font-variant-numeric: tabular-nums; }
-.analyzer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 4px 6px;
-}
-.analyzer-toggle {
-  background: none; border: none; padding: 0;
-  color: inherit; font: inherit; cursor: pointer;
-}
-.analyzer-summary { color: var(--text-muted); }
 .analyzer-body { padding: 4px 0 0; }
 .analyzer-row { display: flex; gap: 8px; align-items: baseline; }
 /* O rótulo QUEBRA em vez de ser cortado. Reticências escondem informação — "Maior ma…" e
@@ -654,8 +614,7 @@ body {
 .vocation-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 @media (max-width: 520px) { .vocation-cards { grid-template-columns: 1fr; } }
 
-/* A coluna da direita (#161): set, mochila e bolsa fixos; minimizado é só o cabeçalho. */
-.windows > section.collapsed > *:not(header) { display: none; }
+/* Panel já não desenha o corpo quando collapsed é true (decisão de render, não de CSS). */
 
 /* A batalha (#254, DS-11, ADR 0029 D3/D4/D6): quem está na tela agora, fora o próprio
    personagem e a party. Mesma linguagem do analisador (cabeçalho que abre e fecha), corpo com
@@ -677,10 +636,6 @@ body {
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
 
-.container-head { display: flex; align-items: center; gap: 6px; }
-.container-head strong { flex: 1 1 auto; }
-.container-icon { display: inline-flex; width: 20px; height: 20px; overflow: hidden; }
-.container-icon canvas { width: 20px; height: 20px; }
 /* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). Slot de
    26 px (#253, ADR 0029 D4) — ver `.container-grid .slot` abaixo, junto de `.equipment .slot`. */
 .container-grid {
@@ -694,8 +649,6 @@ body {
    no topo, como o resto do design (#253, §5 DS-10). */
 .ammo-picker {
   position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 260px;
-  background: var(--grad-panel); border: 1px solid var(--gold-2); border-top: 2px solid var(--gold-4);
-  border-radius: 4px; box-shadow: var(--shadow-panel); padding: 0 0 8px;
 }
 .ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
 .ammo-option {
@@ -712,9 +665,11 @@ body {
    mochila e na bolsa (#253, ADR 0029 D4/DT-04) — o tamanho vem do CONTEXTO (`.equipment .slot`,
    `.container-grid .slot`), não de uma classe por tamanho. O lugar vazio mostra o RÓTULO
    (`.slot-empty`), nunca um ícone de pacote; o sprite do item entra por `.item-sprite`. */
-.inventory { display: flex; flex-direction: column; gap: 6px; }
-.inventory > .equipment { margin-top: 6px; }
-.inventory .quiet { color: var(--text-faint); }
+/* .inventory continua como MARCADOR na raiz do Panel (EquipmentPanel.tsx), só para o
+   .windows-right > .inventory do @media — o layout do corpo é .inventory-body (bodyClassName),
+   porque display:flex no MESMO elemento que .ui-panel (display:grid) quebraria a grade do
+   Panel (mesma especificidade, ordem no arquivo decide, .inventory venceria por engano). */
+.inventory-body { display: flex; flex-direction: column; gap: 6px; }
 
 /* O equipamento no desenho de corpo do Tibia: cabeça em cima, mãos ao lado do peito, pés
    embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. Vidro
@@ -828,7 +783,6 @@ body {
   }
   .shell > .windows-left { order: 3; }
   .shell > .windows-right { order: 4; }
-  .windows > section { max-height: none; overflow: visible; }
   /* A ordem dos blocos no celular (#161, #253, #254, #256, #257, #259, #261): vitais → set →
      mochila → bolsa → batalha → bolsa da party → bot → personagem → party na hunt → analisador →
      bestiário. Cada coluna reordena só os PRÓPRIOS filhos — `.windows-left` e `.windows-right`
@@ -861,10 +815,8 @@ body {
 
 /* --- party: formação (#197). Classes INALTERADAS nesta issue — a formação (PartyPanel.tsx)
    é redesenhada em DS-16 (#259), dentro do modal de caçada, não aqui. */
-.party-panel {
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 6px;
-  padding: 8px; display: flex; flex-direction: column; gap: 6px;
-}
+/* Fundo/borda/padding são do Panel desde #305; via bodyClassName, só espaça os filhos do corpo. */
+.party-panel { display: flex; flex-direction: column; gap: 6px; }
 .party-form { display: flex; flex-direction: column; gap: 6px; }
 .party-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .party-row input, .party-row select { min-width: 0; flex: 1 1 90px; }
@@ -874,10 +826,8 @@ body {
 .party-approved { color: #8fd18f; }
 
 /* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
-   de `PartyBag` é o `Panel` `dock` (`shell/ui/Panel.tsx`); a de `PartyMembers` é o próprio
-   `<section>` dela, que desde #259 é filha DIRETA de `.windows` — ganha a moldura informal de
-   `.windows > section` (a mesma que `BotPanel`/`CharacterPanel` usam) sem precisar de outra
-   seção por cima para emprestar borda. Aqui só o CONTEÚDO de dentro dos dois. ----------------- */
+   de `PartyBag` e `PartyMembers` é o `Panel` `dock` (`shell/ui/Panel.tsx`). Aqui só o CONTEÚDO
+   de dentro dos dois. ----------------- */
 .party-members-panel { display: flex; flex-direction: column; gap: 6px; }
 .party-mode {
   margin: 0;

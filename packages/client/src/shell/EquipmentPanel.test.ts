@@ -140,7 +140,6 @@ describe('a coluna da direita (#161)', () => {
     expect((html.match(/class="slot slot-/g) ?? []).length).toBe(10);
     expect(html).toContain('10 / 400 oz');
     expect(html).toContain('1.234');
-    expect(html).toContain('aria-label="set"');
   });
 
   it('com um bow na mão, o escudo vira o seletor de munição — a grátis quando não há escolha, a escolhida quando há', async () => {
@@ -174,6 +173,6 @@ describe('a coluna da direita (#161)', () => {
     const { prelude } = await prerender(createElement(EquipmentPanel, { collapsed: true }));
     const html = await new Response(prelude).text();
     expect(html).toContain('collapsed');
-    expect(html).toContain('<strong>Set</strong>');
+    expect(html).toContain('<strong class="ui-panel-title">Set</strong>');
   });
 });

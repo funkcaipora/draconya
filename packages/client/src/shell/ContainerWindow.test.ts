@@ -36,20 +36,16 @@ beforeEach(() => {
 describe('ContainerWindow', () => {
   it('draws one place per position — 25 places, empty as a place, the stack with its count — and the title with the container', async () => {
     const html = await render('backpack');
-    expect(html).toContain('aria-label="mochila"');
     expect((html.match(/class="slot slot-empty-place"/g) ?? []).length).toBe(23);
     expect((html.match(/class="slot"/g) ?? []).length).toBe(2);
     expect(html).toContain('<span class="slot-count">7</span>');
     expect(html).toContain('title="Vestir Sword"');
     expect(html).toContain('title="Cheese"');
     expect(html).toContain('2/25');
-    // O ícone do container é o sprite do item nas costas.
-    expect(html).toContain('aria-label="Backpack"');
   });
 
   it('the satchel is a second window of the same shape, and says so when empty', async () => {
     const html = await render('satchel');
-    expect(html).toContain('aria-label="bolsa"');
     expect((html.match(/slot-empty-place/g) ?? []).length).toBe(10);
     expect(html).toContain('0/10');
   });
@@ -59,7 +55,7 @@ describe('ContainerWindow', () => {
     expect(await render('backpack')).toContain('Sem mochila nas costas');
     const collapsed = await render('backpack', true);
     expect(collapsed).toContain('collapsed');
-    expect(collapsed).toContain('<strong>Mochila</strong>');
+    expect(collapsed).toContain('<strong class="ui-panel-title">Mochila</strong>');
     hud.set((state) => ({ ...state, inventory: null }));
     expect(await render('backpack')).toContain('Carregando');
   });

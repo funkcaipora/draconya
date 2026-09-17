@@ -13,10 +13,11 @@
 import type { DragEvent } from 'react';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
-import type { Inventory, ItemDefinition } from '../state/hud.js';
+import type { Inventory } from '../state/hud.js';
 import { clickIntent, dropIntent, parsePlace, serializePlace } from './drag-intent.js';
 import type { DragPlace } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
+import { Panel } from './ui/Panel.js';
 
 const TITLE: Readonly<Record<'backpack' | 'satchel', string>> = { backpack: 'Mochila', satchel: 'Bolsa' };
 
@@ -40,38 +41,29 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
   const inventory = useHudSlice((state) => state.inventory);
   const catalogue = useHudSlice((state) => state.catalogue);
   const title = TITLE[container];
-
-  const header = (icon: ItemDefinition | undefined, count: string) => (
-    <header className="analyzer-head container-head">
-      {icon !== undefined && <span className="container-icon"><ItemSprite appearanceId={icon.appearanceId} name={icon.name} /></span>}
-      <strong>{title}</strong>
-      <span className="entry-meta">{count}</span>
-      {onToggle !== undefined && (
-        <button type="button" className="entry-quiet" aria-label={collapsed ? 'expandir' : 'minimizar'} onClick={onToggle}>
-          {collapsed ? '▸' : '▾'}
-        </button>
-      )}
-    </header>
-  );
+  const panelProps = onToggle === undefined ? {} : { onToggle };
 
   if (inventory === null || catalogue === null) {
     return (
-      <section className={`container-window${collapsed ? ' collapsed' : ''}`} aria-label={title.toLowerCase()}>
-        {header(undefined, '')}
+      <Panel dock title={title} className="container-window" collapsed={collapsed} {...panelProps}>
         <p className="quiet">Carregando…</p>
-      </section>
+      </Panel>
     );
   }
 
   const byId = new Map(catalogue.items.map((item) => [item.id, item]));
   const places = inventory[container];
-  const back = inventory.equipped['back'];
-  const icon = container === 'backpack' && back !== undefined ? byId.get(back.itemId) : undefined;
   const used = places.filter((place) => place !== null).length;
 
   return (
-    <section className={`container-window${collapsed ? ' collapsed' : ''}`} aria-label={title.toLowerCase()}>
-      {header(icon, `${String(used)}/${String(places.length)}`)}
+    <Panel
+      dock
+      title={title}
+      className="container-window"
+      meta={`${String(used)}/${String(places.length)}`}
+      collapsed={collapsed}
+      {...panelProps}
+    >
       {places.length === 0
         ? <p className="quiet">{container === 'backpack' ? 'Sem mochila nas costas' : 'Bolsa vazia'}</p>
         : (
@@ -120,6 +112,6 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
             })}
           </ul>
         )}
-    </section>
+    </Panel>
   );
 }

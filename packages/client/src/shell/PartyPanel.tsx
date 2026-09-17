@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { party, partyActions } from '../party/store.js';
 import type { HuntListing } from '../state/hud.js';
+import { Panel } from './ui/Panel.js';
 
 const DIFFICULTY_TEXT: Record<string, string> = {
   cautious: 'Cauteloso', bold: 'Ousado', reckless: 'Agressivo',
@@ -48,8 +49,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
   const hunt = hunts.find((h) => h.id === huntId) ?? hunts[0];
 
   return (
-    <section className="party-panel" aria-label="party">
-      <header className="analyzer-head"><strong>Party</strong></header>
+    <Panel dock title="Party" bodyClassName="party-panel">
       {state.entering && <p className="quiet">Entrando na hunt…</p>}
       {!state.entering && current === null && (
         <div className="party-form">
@@ -139,6 +139,6 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
         </div>
       )}
       {state.error !== null && <p className="system-error">{state.error}</p>}
-    </section>
+    </Panel>
   );
 }
