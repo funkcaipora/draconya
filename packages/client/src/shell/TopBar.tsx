@@ -6,10 +6,15 @@
 // para sistema inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca
 // mostra o que o servidor não disse que existe.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { account } from '../account/store.js';
+import type { OutfitColors } from '../assets/outfit.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
+import { world } from '../state/world.js';
+import { paintOf } from '../world/outfit-colors.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
+import { OutfitSprite } from './OutfitSprite.js';
+import { HEALTH_POLL_MS } from './PartyMembers.js';
 
 export type WindowId = 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
 
@@ -60,10 +65,23 @@ function NavIcon({ id, label, icon, glyph, open, onClick }: {
   );
 }
 
+function selfOutfit(): { appearanceId: number; colors: OutfitColors } | null {
+  if (world.selfId === null) return null;
+  const self = world.creatures.get(world.selfId);
+  if (self === undefined) return null;
+  return { appearanceId: self.appearanceId, colors: paintOf(self) };
+}
+
 export function TopBar({ open, toggle }: {
   open: Readonly<Record<WindowId, boolean>>;
   toggle: (id: WindowId) => void;
 }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => { setTick((t) => t + 1); }, HEALTH_POLL_MS);
+    return () => { clearInterval(timer); };
+  }, []);
+
   const characterId = useHudSlice((state) => state.characterId);
   const level = useHudSlice((state) => state.level);
   const gold = useHudSlice((state) => state.gold);
@@ -75,13 +93,20 @@ export function TopBar({ open, toggle }: {
   const onlinePlayers = useHudSlice((state) => state.onlinePlayers);
   const name = characters.find((character) => character.id === characterId)?.name ?? null;
   const initial = (name ?? characterId ?? '?').slice(0, 1).toUpperCase();
+  const outfit = selfOutfit();
 
   return (
     <header className="topbar" aria-label="barra do topo">
       <div className="topbar-left">
         {/* Sem onClick: "Personagem" é um painel fixo da coluna esquerda (DS-13), não um modal
             que este retrato abriria — D6. */}
-        <span className="topbar-portrait" aria-hidden="true">{initial}</span>
+        <span className="topbar-portrait" aria-hidden="true">
+          {outfit === null ? (
+            initial
+          ) : (
+            <OutfitSprite outfitId={outfit.appearanceId} name={name ?? characterId ?? undefined} colors={outfit.colors} />
+          )}
+        </span>
         <div className="topbar-identity">
           <span className="topbar-name">{name ?? characterId ?? '—'}</span>
           <span className="topbar-vocation">

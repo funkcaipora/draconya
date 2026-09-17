@@ -5,6 +5,8 @@ import { TopBar } from './TopBar.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
+import type { Creature } from '../state/world.js';
+import { world } from '../state/world.js';
 
 // A casca do design (#251, #351, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
 // wordmark com contagem de jogadores (SV-15) e os seis ícones PNG — nenhum emoji, nenhum ícone para
@@ -35,6 +37,8 @@ const catalogue: Catalogue = {
 beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD }));
   account.set(() => ({ ...INITIAL_ACCOUNT }));
+  world.selfId = null;
+  world.creatures.clear();
 });
 
 describe('TopBar', () => {
@@ -49,6 +53,7 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).toContain('class="topbar-portrait"');
     expect(html).toContain('>A<'); // a inicial do nome
+    expect(html).not.toContain('item-sprite');
     expect(html).toContain('>Aldric<');
     // A ordem é "VOCAÇÃO · LV N" (DT-04): vocação primeiro. `react-dom/static` insere um
     // comentário de fronteira entre os dois `{}` adjacentes, então o texto não fica contíguo.
@@ -113,5 +118,59 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).toContain('>—<');
     expect(html).toContain('>?<');
+  });
+
+  it('renders the outfit sprite inside .topbar-portrait when world.selfId and the creature exist', async () => {
+    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
+    account.set(() => ({
+      ...INITIAL_ACCOUNT,
+      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'hunt', sessionId: 's1' }],
+    }));
+    world.selfId = 1;
+    world.creatures.set(1, {
+      id: 1,
+      name: 'Aldric',
+      kind: 'player',
+      tile: { x: 0, y: 0 },
+      position: { x: 0, y: 0, z: 7 },
+      step: null,
+      moving: false,
+      stepProgress: 0,
+      targetTile: null,
+      direction: 'south',
+      appearanceId: 128,
+      colors: { head: 10, body: 20, legs: 30, feet: 40 },
+      health: 100,
+      maxHealth: 100,
+    } as unknown as Creature);
+    const html = await render();
+    expect(html).toContain('class="topbar-portrait"');
+    expect(html).toContain('class="item-sprite"');
+    expect(html).toMatch(/class="topbar-portrait"[^>]*>\s*<span class="item-sprite"/);
+  });
+
+  it('keeps the plain initial when the world does not have the self creature yet (city loading, entry)', async () => {
+    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
+    account.set(() => ({
+      ...INITIAL_ACCOUNT,
+      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null }],
+    }));
+    world.selfId = null;
+    const html = await render();
+    expect(html).not.toContain('item-sprite');
+    expect(html).toContain('>A<');
+  });
+
+  it('keeps the plain initial when selfId is set but the creature has not arrived yet (race)', async () => {
+    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
+    account.set(() => ({
+      ...INITIAL_ACCOUNT,
+      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null }],
+    }));
+    world.selfId = 1;
+    world.creatures.clear();
+    const html = await render();
+    expect(html).not.toContain('item-sprite');
+    expect(html).toContain('>A<');
   });
 });

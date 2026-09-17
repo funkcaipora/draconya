@@ -68,9 +68,13 @@ body {
 }
 .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .topbar-portrait {
+  position: relative;
   display: grid; place-items: center; flex: none; width: 34px; height: 34px;
   border: 1px solid var(--gold-3);
   background: linear-gradient(145deg, var(--ash-4), var(--ash-1));
+  color: var(--gold-4); font: 600 12.5px var(--font-display);
+}
+.topbar-portrait .item-initial {
   color: var(--gold-4); font: 600 12.5px var(--font-display);
 }
 .topbar-identity { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
