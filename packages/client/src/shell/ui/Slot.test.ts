@@ -47,4 +47,16 @@ describe('Slot', () => {
     const html = await render({ size, label: 'X' });
     expect(html).toContain(`${size}px`);
   });
+
+  it('repassa title, aria-label e draggable para o <button>', async () => {
+    const html = await render({
+      size: 30,
+      title: 'Tirar Sword',
+      ariaLabel: 'Sword',
+      draggable: true,
+    });
+    expect(html).toContain('title="Tirar Sword"');
+    expect(html).toContain('aria-label="Sword"');
+    expect(html).toContain('draggable="true"');
+  });
 });

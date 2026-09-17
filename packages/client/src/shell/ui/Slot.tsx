@@ -1,12 +1,12 @@
-// Slot: a célula quadrada de item/ação/equipamento (DS-04, #247). Três tamanhos fixos
-// (design-system-plan.md §1): 36 barra de ação, 30 equipamento e party, 26 container — quem
-// consome passa o número certo; o primitivo não escolhe o tamanho pelo `kind`.
+// Slot: a célula quadrada de item/ação/equipamento (DS-04, #247). Três tamanhos fixos: 36 barra
+// de ação, 30 equipamento/party, 26 container. Vazio mostra o RÓTULO do lugar; só cai no "+"
+// genérico sem rótulo nenhum (ADR 0029 D4).
 //
-// Vazio mostra o RÓTULO do lugar (ex. "PESCOÇO") quando `label` vem, e só cai no "+" genérico
-// quando não há rótulo nenhum (ex. "+ regra" tracejado do bot) — corrige o protótipo, que
-// desenhava "+" em todo slot vazio e ignorava `label` (ADR 0029 D4, decisão 4 do §10 do plano).
+// **Arraste nativo (#161, FD-07):** equipamento/container arrastam por cima de
+// `shell/drag-intent.ts`, PURO, que decide a MENSAGEM — `Slot` só repassa os handlers ao
+// `<button>`; quem decide o que sai é quem monta a tela, nunca o Slot (invariante 4).
 
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, DragEventHandler, ReactNode } from 'react';
 
 export interface SlotProps {
   /** Texto curto sem ícone: abreviação de magia/item, ou o rótulo do lugar vazio. */
@@ -24,10 +24,21 @@ export interface SlotProps {
   element?: 'holy' | 'ice' | 'earth' | 'fire' | 'energy' | 'death';
   onClick?: () => void;
   className?: string;
+  /** Nome completo para tooltip nativo — o texto/rótulo visível pode vir cortado. */
+  title?: string;
+  /** Rótulo para leitor de tela quando o conteúdo visível não basta (ex. "Pescoço (vazio)"). */
+  ariaLabel?: string;
+  /** Faz do slot a ORIGEM de um arrastar nativo. */
+  draggable?: boolean;
+  onDragStart?: DragEventHandler<HTMLButtonElement>;
+  /** Faz do slot o DESTINO de um arrastar nativo — quem chama decide se aceita (`preventDefault`). */
+  onDragOver?: DragEventHandler<HTMLButtonElement>;
+  onDrop?: DragEventHandler<HTMLButtonElement>;
 }
 
 export function Slot({
-  label, hotkey, count, empty, size, kind = 'action', icon, selected, dashed, element, onClick, className,
+  label, hotkey, count, empty, size, kind = 'action', icon, selected, dashed, element, onClick,
+  className, title, ariaLabel, draggable, onDragStart, onDragOver, onDrop,
 }: SlotProps) {
   const rootClass = [
     'ui-slot',
@@ -43,6 +54,12 @@ export function Slot({
       className={rootClass}
       data-kind={kind}
       onClick={onClick}
+      title={title}
+      aria-label={ariaLabel}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       style={{ '--slot-size': `${String(size)}px` } as CSSProperties}
     >
       {icon ?? (

@@ -23,12 +23,15 @@ describe('HuntActions', () => {
     expect(html).not.toContain('hunt-pill-danger');
   });
 
-  it('hunting=true: shows the "↩ Sair da caçada »" pill, and only that one', async () => {
+  it('hunting=true: shows the "↩ Sair da caçada" pill glued to a single "»" chevron (#309)', async () => {
     const html = await render(true);
     expect(html).toContain('Sair da caçada');
-    expect(html).toContain('»');
     expect(html).not.toContain('Escolher caçada');
     expect(html).toContain('hunt-pill-danger');
+    // Antes desta correção existiam DOIS "»": o decorativo dentro do texto da pill (removido
+    // agora) e o funcional do `ExitRulesPopover`. O kit desenha só um, no mesmo botão partido.
+    const chevronCount = (html.match(/»/g) ?? []).length;
+    expect(chevronCount).toBe(1);
   });
 
   it('wires onChoose to the non-hunting pill, and leaveHunt(sendIntent) to the exit pill', async () => {

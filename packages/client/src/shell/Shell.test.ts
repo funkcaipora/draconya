@@ -5,7 +5,7 @@ import { Shell } from './Shell.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Aggregates } from '../state/hud.js';
 
-// A geografia (§5.3, ADR 0026 d.7, #161): set, mochila e bolsa FIXOS à direita, nessa ordem,
+// A geografia (§5.3, ADR 0026 d.7, #161, #307): set, bolsa e mochila FIXOS à direita, nessa ordem,
 // antes do analisador e do Bestiário. `prerender` roda a árvore inteira sem DOM e sem efeitos
 // — o viewport monta vazio, e o que se prende é a ordem das seções.
 
@@ -19,10 +19,10 @@ beforeEach(() => {
 });
 
 describe('Shell', () => {
-  it('the right column is set → backpack → satchel → analyzer, always mounted, in that order', async () => {
+  it('the right column is set → satchel → backpack → analyzer, always mounted, in that order (#307, RF-05)', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const order = ['aria-label="set"', 'aria-label="mochila"', 'aria-label="bolsa"']
+    const order = ['ui-panel-title">Set', 'ui-panel-title">Bolsa', 'ui-panel-title">Mochila']
       .map((marker) => right.indexOf(marker));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -51,7 +51,7 @@ describe('Shell', () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
     const vitalsIndex = right.indexOf('class="vitals"');
-    const setIndex = right.indexOf('aria-label="set"');
+    const setIndex = right.indexOf('ui-panel-title">Set');
     expect(vitalsIndex).toBeGreaterThan(0);
     expect(setIndex).toBeGreaterThan(vitalsIndex);
   });
@@ -61,8 +61,8 @@ describe('Shell', () => {
   // mata: voltar a montá-lo condicionalmente em `Shell.tsx` faria este teste continuar passando
   // (a janela nasce aberta, `DEFAULT_WINDOWS.analyzer: true`) — quem prova "nunca desmonta" é
   // `Analyzer.test.ts` (`collapsed={true}` ainda com o cabeçalho no HTML); aqui só se prova que
-  // o `Panel dock` "ANALISADOR" está na coluna certa, depois de mochila e bolsa.
-  it('the analyzer is a fixed "ANALISADOR" panel in the right column, with an active session', async () => {
+  // o `Panel dock` "Analisador de caçada" está na coluna certa, depois de mochila e bolsa.
+  it('the analyzer is a fixed "Analisador de caçada" panel in the right column, with an active session', async () => {
     const aggregates: Aggregates = {
       durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
     };
@@ -72,9 +72,9 @@ describe('Shell', () => {
     }));
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const satchelIndex = right.indexOf('aria-label="bolsa"');
-    const analyzerIndex = right.indexOf('ui-panel-title">ANALISADOR');
-    expect(satchelIndex).toBeGreaterThan(0);
-    expect(analyzerIndex).toBeGreaterThan(satchelIndex);
+    const backpackIndex = right.indexOf('ui-panel-title">Mochila');
+    const analyzerIndex = right.indexOf('ui-panel-title">Analisador de caçada');
+    expect(backpackIndex).toBeGreaterThan(0);
+    expect(analyzerIndex).toBeGreaterThan(backpackIndex);
   });
 });

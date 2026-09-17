@@ -19,8 +19,10 @@ import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
+import { Panel } from './ui/Panel.js';
+import { IconButton } from './ui/IconButton.js';
 
-interface BattleRow {
+export interface BattleRow {
   readonly id: number;
   readonly name: string;
   readonly percent: number;
@@ -56,12 +58,27 @@ function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
   return rows;
 }
 
+/** As duas ordens do botão "Ordenar" (R7-05, DT-01): 'default' preserva a ordem de chegada de
+ * `battleRows` (a mesma de hoje); 'hp-asc' põe quem está mais perto de morrer primeiro. */
+export type BattleSortMode = 'default' | 'hp-asc';
+
+/**
+ * Pura, sem `world` nem estado: só reordena a lista que `battleRows` já montou. É apresentação
+ * — nenhuma intenção nova ao servidor, nenhum dado que o servidor não tenha mandado (invariante
+ * 4 intocado). Exportada para o teste unitário cobrir as duas ordens sem montar HTML.
+ */
+export function sortBattleRows(rows: readonly BattleRow[], mode: BattleSortMode): BattleRow[] {
+  if (mode === 'default') return [...rows];
+  return [...rows].sort((a, b) => a.percent - b.percent);
+}
+
 export function BattlePanel() {
   const partyView = useHudSlice((state) => state.party);
   // Minimiza SOZINHO (DT-02): não passa pelo `open`/`toggle` do Shell, porque a barra do topo
   // (docs/design-system-plan.md §3) não tem um sétimo ícone para Batalha. É o mesmo desenho que
   // o primitivo `Panel` de DS-04 vai ter por dentro quando chegar a esta seção.
   const [collapsed, setCollapsed] = useState(false);
+  const [sortMode, setSortMode] = useState<BattleSortMode>('default');
   const [, tick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => { tick((n) => n + 1); }, HEALTH_POLL_MS);
@@ -69,29 +86,34 @@ export function BattlePanel() {
   }, []);
 
   const partyNames = new Set(partyView?.members.map((member) => member.name) ?? []);
-  const rows = battleRows(partyNames);
+  const rows = sortBattleRows(battleRows(partyNames), sortMode);
 
   return (
-    <section className={`battle-panel${collapsed ? ' collapsed' : ''}`} aria-label="batalha">
-      <header className="analyzer-head">
-        <strong>{`Batalha · ${String(rows.length)}`}</strong>
-        <button
-          type="button"
-          className="entry-quiet"
-          aria-label={collapsed ? 'expandir' : 'minimizar'}
-          onClick={() => { setCollapsed((current) => !current); }}
+    <Panel
+      dock
+      title={`Batalha · ${String(rows.length)}`}
+      className="battle-panel"
+      collapsed={collapsed}
+      onToggle={() => { setCollapsed((c) => !c); }}
+      actions={(
+        <IconButton
+          title="Ordenar"
+          active={sortMode === 'hp-asc'}
+          onClick={() => { setSortMode((mode) => (mode === 'default' ? 'hp-asc' : 'default')); }}
         >
-          {collapsed ? '▸' : '▾'}
-        </button>
-      </header>
+          ↕
+        </IconButton>
+      )}
+    >
       {rows.length === 0
         ? <p className="quiet">Nenhuma criatura à vista.</p>
         : (
           <ul className="battle-list">
             {rows.map((row) => (
               <li key={row.id} className="battle-row">
+                <span className="battle-icon" aria-hidden="true" />
                 <span className="battle-name">{row.name}</span>
-                <span className="battle-percent">{`${String(row.percent)} %`}</span>
+                <span className="battle-percent">{`${String(row.percent)}%`}</span>
                 <span className={`battle-bar battle-bar-${battleTone(row.percent)}`} aria-label={`HP de ${row.name}`}>
                   <span className="battle-bar-fill" style={{ width: `${String(row.percent)}%` }} />
                 </span>
@@ -99,6 +121,7 @@ export function BattlePanel() {
             ))}
           </ul>
         )}
-    </section>
+    </Panel>
   );
 }
+

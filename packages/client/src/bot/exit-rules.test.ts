@@ -8,9 +8,9 @@ import {
 // RF-01/RF-02: as três regras que `botExitRuleSchema` conhece, e SÓ elas — a quarta regra do
 // protótipo (capacidade cheia) é M15/SV-06 e não existe no schema hoje.
 
-describe('EXIT_RULE_KINDS (RF-01, RF-02)', () => {
-  it('tem exatamente as três regras do schema, nessa ordem: HP → gold → grupo', () => {
-    expect(EXIT_RULE_KINDS).toEqual(['hp-below', 'out-of-gold', 'party-member-lost']);
+describe('EXIT_RULE_KINDS (RF-01, RF-02, R4-11)', () => {
+  it('tem exatamente as três regras do schema, na ordem do kit: gold → grupo → HP por último', () => {
+    expect(EXIT_RULE_KINDS).toEqual(['out-of-gold', 'party-member-lost', 'hp-below']);
   });
 });
 
@@ -108,7 +108,7 @@ describe('exitRulesSummary (RF-07)', () => {
     const rules: readonly BotExitRule[] = [
       { kind: 'party-member-lost' }, { kind: 'out-of-gold' }, { kind: 'hp-below', percent: 30 },
     ];
-    expect(exitRulesSummary(rules)).toBe('hp abaixo de 30 % · acabar o gold · alguém do grupo sair');
+    expect(exitRulesSummary(rules)).toBe('acabar o gold · alguém do grupo sair · hp abaixo de 30 %');
   });
 
   it('só lista as regras ligadas', () => {

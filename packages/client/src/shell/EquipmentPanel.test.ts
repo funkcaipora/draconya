@@ -75,7 +75,7 @@ describe('o slot equipado (FUN-108)', () => {
     expect(html).not.toContain('aria-label="item"');
   });
 
-  it('o slot vazio é um lugar, não um botão', async () => {
+  it('o slot vazio é um lugar com aria-label, não um botão de tirar', async () => {
     hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
 
     const html = await render();
@@ -85,24 +85,38 @@ describe('o slot equipado (FUN-108)', () => {
   });
 
   it('o slot vazio mostra o rótulo do lugar em texto, maiúsculo (#250)', async () => {
-    // Antes de #250: <span className="slot-empty" role="img" aria-label="Mão (vazio)" title="Mão" />
-    // não tinha filho — o quadrado saía vazio (ou com o ícone do pacote, se ele existisse).
-    // Mutação que mata: `label` em vez de `label.toUpperCase()`; texto ausente do filho do <span>.
     hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
     const html = await render();
-    expect(html).toContain('<span class="slot-empty" aria-label="Mão (vazio)" title="Mão">MÃO</span>');
+    expect(html).toContain('class="ui-slot ui-slot--empty"');
+    expect(html).toContain('title="Mão"');
+    expect(html).toContain('aria-label="Mão (vazio)"');
+    expect(html).toContain('>MÃO<');
     expect(html).not.toContain('role="img"');
   });
 
   it('o rótulo do slot vazio é cortado em 4 letras, mas aria-label e title ficam com o nome inteiro (#253, DT-02)', async () => {
-    // "Pescoço" (7 letras) sai como "PESC" no texto visível — o `EquipmentSet` do handoff corta
-    // todo nome em 4 letras. `aria-label`/`title` continuam com "Pescoço" por inteiro: só o
-    // texto DENTRO do <span> é cortado. Mutação que mata: `label.toUpperCase()` sem `.slice(0, 4)`
-    // (deixaria "PESCOÇO" inteiro no texto visível).
     hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
     const html = await render();
-    expect(html).toContain('<span class="slot-empty" aria-label="Pescoço (vazio)" title="Pescoço">PESC</span>');
+    expect(html).toContain('title="Pescoço"');
+    expect(html).toContain('aria-label="Pescoço (vazio)"');
+    expect(html).toContain('>PESC<');
     expect(html).not.toContain('>PESCOÇO<');
+  });
+
+  it('traceja os sete lugares do kit e mantém mão/peito/escudo sólidos (#307, RF-01)', async () => {
+    hud.set((state) => ({ ...state, catalogue, inventory: inventory() }));
+    const html = await render();
+    // Tracejados: head, neck, back, legs, feet, finger, ammo
+    for (const slot of ['head', 'neck', 'back', 'legs', 'feet', 'finger', 'ammo']) {
+      const match = html.match(new RegExp(`<li class="slot-${slot}"><button[^>]*class="([^"]*)"`));
+      expect(match?.[1]).toContain('ui-slot--dashed');
+    }
+    // Sólidos: hand, chest, shield
+    for (const slot of ['hand', 'chest', 'shield']) {
+      const match = html.match(new RegExp(`<li class="slot-${slot}"><button[^>]*class="([^"]*)"`));
+      expect(match?.[1]).not.toContain('ui-slot--dashed');
+      expect(match?.[1]).toContain('ui-slot');
+    }
   });
 
   it('a pilha vestida mostra a quantidade, que vem da MENSAGEM', async () => {
@@ -116,7 +130,7 @@ describe('o slot equipado (FUN-108)', () => {
       }),
     }));
 
-    expect(await render()).toContain('<span class="slot-count">40</span>');
+    expect(await render()).toContain('<b class="ui-slot-count">40</b>');
   });
 
   it('item vestido que o catálogo não conhece cai no id, e não em "item"', async () => {
@@ -134,13 +148,14 @@ describe('o slot equipado (FUN-108)', () => {
 });
 
 describe('a coluna da direita (#161)', () => {
-  it('mostra a capacidade e o gold do hud, sob os dez slots', async () => {
-    hud.set((state) => ({ ...state, catalogue, gold: 1234, inventory: inventory() }));
+  it('mostra a capacidade do hud sob os dez slots, com rótulo Cap e números pt-BR, sem gold (#307, RF-08)', async () => {
+    hud.set((state) => ({ ...state, catalogue, gold: 1234, inventory: inventory({ capacity: { used: 612, total: 3715 } }) }));
     const html = await render();
-    expect((html.match(/class="slot slot-/g) ?? []).length).toBe(10);
-    expect(html).toContain('10 / 400 oz');
-    expect(html).toContain('1.234');
-    expect(html).toContain('aria-label="set"');
+    expect((html.match(/class="slot-/g) ?? []).length).toBe(10);
+    expect(html).toContain('>Cap<');
+    expect(html).toContain('612 / 3.715 oz');
+    expect(html).not.toContain('capacity-gold');
+    expect(html).not.toContain('1.234');
   });
 
   it('com um bow na mão, o escudo vira o seletor de munição — a grátis quando não há escolha, a escolhida quando há', async () => {
@@ -152,13 +167,10 @@ describe('a coluna da direita (#161)', () => {
     }));
     const free = await render();
     // #218: o seletor é o slot ESCUDO (`slot-shield`) com o contorno tracejado próprio
-    // (`slot-ammo-picker`); a classe `slot-ammo` continua sendo só do slot `ammo` de verdade
-    // — reaproveitá-la no seletor fazia o CSS de `grid-area: ammo` vencer o de `grid-area:
-    // shield` (mesma especificidade, declarado depois) e o seletor pulava para cima do slot
-    // de munição, esvaziando a área do escudo.
-    expect(free).toContain('class="slot slot-shield slot-ammo-picker"');
-    expect(free).not.toContain('class="slot slot-shield slot-ammo"');
-    expect(free).toContain('class="slot slot-ammo"');
+    // (`slot-ammo-picker`); a classe `slot-ammo` continua sendo só do slot `ammo` de verdade.
+    expect(free).toContain('class="slot-shield"');
+    expect(free).toContain('slot-ammo-picker');
+    expect(free).toContain('class="slot-ammo"');
     expect(free).toContain('munição: Arrow · grátis');
     expect(free).not.toContain('Escudo (vazio)');
     hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
@@ -174,6 +186,6 @@ describe('a coluna da direita (#161)', () => {
     const { prelude } = await prerender(createElement(EquipmentPanel, { collapsed: true }));
     const html = await new Response(prelude).text();
     expect(html).toContain('collapsed');
-    expect(html).toContain('<strong>Set</strong>');
+    expect(html).toContain('<strong class="ui-panel-title">Set</strong>');
   });
 });

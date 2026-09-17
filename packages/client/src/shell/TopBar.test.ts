@@ -58,7 +58,7 @@ describe('TopBar', () => {
     expect(levelIndex).toBeGreaterThan(vocationIndex);
     expect(html).toContain('2.134.760');
     const statusIndex = html.indexOf('role="status"');
-    const lastIconIndex = html.lastIndexOf('topbar-icon-button');
+    const lastIconIndex = html.lastIndexOf('ui-icon-button-lg');
     expect(statusIndex).toBeGreaterThan(0);
     expect(statusIndex).toBeGreaterThan(lastIconIndex);
   });
@@ -72,13 +72,22 @@ describe('TopBar', () => {
 
   it('shows the six window icons, and no icon for a system that does not exist', async () => {
     const html = await render();
-    expect((html.match(/topbar-icon-button/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBeGreaterThanOrEqual(6);
     expect((html.match(/data-window="/g) ?? []).length).toBe(6);
     for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
     for (const label of ['Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
       expect(html).not.toContain(`title="${label}"`);
+    }
+  });
+
+  it('never renders a permanent text label under a nav icon (R1-10) — only the title tooltip', async () => {
+    const html = await render();
+    expect(html).not.toContain('topbar-icon-label');
+    // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
+    for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
+      expect(html).toContain(`title="${label}"`);
     }
   });
 
@@ -99,5 +108,10 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).toContain('>—<');
     expect(html).toContain('>?<');
+  });
+
+  it('every window icon carries aria-pressed (#306)', async () => {
+    const html = await render();
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBeGreaterThanOrEqual(6);
   });
 });

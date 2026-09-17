@@ -98,11 +98,12 @@ export function Shell() {
           {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
               não desenha HP/mana no design (#251). */}
           <Vitals />
-          {/* A coluna do OTClient (#161): set, mochila e bolsa FIXOS — um botão da barra
-              minimiza os três juntos —, e abaixo deles o analisador e o Bestiário. */}
+          {/* A coluna do OTClient (#161): set, bolsa e mochila FIXOS — um botão da barra
+              minimiza os três juntos (R7-02: a Bolsa vem antes da Mochila, como App.jsx do kit) —,
+              e abaixo deles o analisador e o Bestiário. */}
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
-          <ContainerWindow container="backpack" collapsed={!open.inventory} />
           <ContainerWindow container="satchel" collapsed={!open.inventory} />
+          <ContainerWindow container="backpack" collapsed={!open.inventory} />
           {/* A batalha (#254, DS-11): quem está na tela, fora o próprio personagem e a party —
               esses já têm painel próprio. Minimiza sozinha (DT-02). */}
           <BattlePanel />

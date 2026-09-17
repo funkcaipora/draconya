@@ -10,6 +10,7 @@ import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import type { Catalogue } from '../state/hud.js';
 import { ItemSprite } from './ItemSprite.js';
+import { Panel } from './ui/Panel.js';
 
 export type AmmoOption = Catalogue['ammunition'][number];
 
@@ -30,39 +31,37 @@ export function AmmoPicker({ family, onClose }: { family: string; onClose: () =>
 
   return (
     <div className="ammo-picker" role="dialog" aria-label="munição">
-      <header className="analyzer-head">
-        <strong>Munição</strong>
-        <button type="button" className="entry-quiet" aria-label="fechar" onClick={onClose}>×</button>
-      </header>
-      {options.length === 0 && <p className="quiet">Nenhuma munição</p>}
-      <ul className="ammo-options">
-        {options.map((option) => {
-          const locked = option.requires.level !== undefined && level > 0 && level < option.requires.level;
-          const active = (chosen ?? undefined) === option.id || (chosen === null && option.price === 0);
-          return (
-            <li key={option.id}>
-              <button
-                type="button"
-                className={`ammo-option${active ? ' active' : ''}`}
-                disabled={locked}
-                aria-pressed={active}
-                onClick={() => {
-                  // INTENÇÃO (invariante 4): o cliente diz QUAL; o servidor confere o level.
-                  sendIntent({ type: 'select-ammo', ammoId: option.id });
-                  onClose();
-                }}
-              >
-                <ItemSprite appearanceId={option.appearanceId} name={option.name} />
-                <span className="ammo-name">{option.name}</span>
-                <span className="entry-meta">
-                  {`atk ${String(option.attack)} · ${option.price === 0 ? 'grátis' : `${String(option.price)} gold/tiro`}`}
-                  {option.requires.level !== undefined && ` · lv ${String(option.requires.level)}`}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <Panel title="Munição" onClose={onClose}>
+        {options.length === 0 && <p className="quiet">Nenhuma munição</p>}
+        <ul className="ammo-options">
+          {options.map((option) => {
+            const locked = option.requires.level !== undefined && level > 0 && level < option.requires.level;
+            const active = (chosen ?? undefined) === option.id || (chosen === null && option.price === 0);
+            return (
+              <li key={option.id}>
+                <button
+                  type="button"
+                  className={`ammo-option${active ? ' active' : ''}`}
+                  disabled={locked}
+                  aria-pressed={active}
+                  onClick={() => {
+                    // INTENÇÃO (invariante 4): o cliente diz QUAL; o servidor confere o level.
+                    sendIntent({ type: 'select-ammo', ammoId: option.id });
+                    onClose();
+                  }}
+                >
+                  <ItemSprite appearanceId={option.appearanceId} name={option.name} />
+                  <span className="ammo-name">{option.name}</span>
+                  <span className="entry-meta">
+                    {`atk ${String(option.attack)} · ${option.price === 0 ? 'grátis' : `${String(option.price)} gold/tiro`}`}
+                    {option.requires.level !== undefined && ` · lv ${String(option.requires.level)}`}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Panel>
     </div>
   );
 }
