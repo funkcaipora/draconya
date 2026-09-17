@@ -126,6 +126,13 @@ componentes — este plano é a fonte.
 Fecha ~60 achados `[fidelidade]` — CSS, markup, texto, formatação — sem tocar protocolo nem
 reabrir decisão nenhuma. Os três QA abertos do M14 (#287, #288, #289) entram aqui.
 
+Milestone [6](https://github.com/funkcaipora/draconya/milestone/6), aberto em 2026-09-17 com as
+issues (specs completas no corpo de cada uma):
+
+| FD-01 | FD-02 | FD-03 | FD-04 | FD-05 | FD-06 | FD-07 | FD-08 | FD-09 | FD-10 | FD-11 | FD-12 | FD-13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| #301 | #302 | #303 | #304 | #305 | #306 | #307 | #308 | #309 | #310 | #311 | #312 | #313 |
+
 | # | Issue | Dep. | Tam. | Entrega (achados) |
 |---|---|---|---|---|
 | FD-01 | Reset global `box-sizing: border-box` e `:focus-visible` dourado em todos os primitivos | — | P | R0-01; anel de foco do kit em Button/IconButton/Select/Slot/Switch/Tab (hoje só o Checkbox tem) |
@@ -146,6 +153,13 @@ reabrir decisão nenhuma. Os três QA abertos do M14 (#287, #288, #289) entram a
 
 A geografia do kit, com os dados que já trafegam. Depende de FD-01/FD-05.
 
+Milestone [7](https://github.com/funkcaipora/draconya/milestone/7), aberto em 2026-09-17 com as
+issues (specs completas no corpo de cada uma):
+
+| RC-01 | RC-02 | RC-03 | RC-04 | RC-05 | RC-06 | RC-07 | RC-08 | RC-09 | RC-10 | RC-11 | RC-12 | RC-13 | RC-14 | RC-15 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| #314 | #315 | #316 | #317 | #318 | #319 | #320 | #321 | #322 | #323 | #324 | #325 | #326 | #327 | #328 |
+
 | # | Issue | Dep. | Tam. | Entrega |
 |---|---|---|---|---|
 | RC-01 | `FloatingWindow` (componente da casca) | FD-05 | M | Arrastável (implementação própria, não o hack do kit), posição inicial por janela, persistida por navegador em `localStorage`; abaixo de 720 px degrada para seção do modo página; anima `dsAppear`; faixa de arraste exclui os 60 px dos botões |
@@ -165,6 +179,9 @@ A geografia do kit, com os dados que já trafegam. Depende de FD-01/FD-05.
 | RC-15 | Arcos de HP/mana do próprio jogador | — | M | R4-06: arcos + nome sobre o sprite próprio (dado local; PRD §9/§10); overlay DOM sobre o canvas, sem tocar `world/` |
 
 ### M15 · O servidor conta mais — revisado
+
+Milestone [5](https://github.com/funkcaipora/draconya/milestone/5), com as issues abertas em
+2026-09-17: SV-01…SV-25 = #337…#361, na ordem (SV-01 → #337, SV-02 → #338, … SV-25 → #361).
 
 SV-01…SV-17 continuam como especificados no
 [plano do M14 §5](design-system-plan.md#m15--design-system--o-servidor-conta-mais), com uma
@@ -187,7 +204,9 @@ auditoria:
 ### M18 · Motor de ações e automações (E10 + E4, o coração do kit)
 
 O maior marco: é o que faz a coluna esquerda e o rodapé do kit existirem de verdade. **Abre com um
-ADR próprio** (vocabulário v2 do bot) e com as decisões P1/P4 do §3 confirmadas. A especificação
+ADR próprio** (vocabulário v2 do bot) e com as decisões P1/P4 do §3 confirmadas — a issue-portão é
+a [#362](https://github.com/funkcaipora/draconya/issues/362), no milestone
+[8](https://github.com/funkcaipora/draconya/milestone/8). A especificação
 funcional é o [PRD de comportamento](prd-ui-behavior.md) inteiro (RG-001…007, §15–§24, §28, §30–§33).
 
 Escopo por camada — as issues nascem via `/spec` quando o ADR do marco fechar:
