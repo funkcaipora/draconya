@@ -556,3 +556,24 @@ alguém do grupo sair — que gravam a mesma lista `exit` do rascunho e salvam s
 mesmo debounce do interruptor de regra. Fechado, um resumo ("Saindo sozinho: …") substitui o
 popover quando alguma regra está ligada. `out-of-capacity` não aparece: o schema não a tem
 ainda (M15).
+
+### Ring swap (SV-17, #353)
+
+A seção "Configurações avançadas" do painel só aparece quando o catálogo de itens possui ao menos um
+item com `slot: "finger"` (Energy Ring e Life Ring criados em SV-16) — sem dado real, sem tela (D8).
+A linha exibe o resumo da regra configurada (`‹nome do anel› · HP < X % → ≥ Y %` ou "Nenhum anel
+configurado") e o botão de engrenagem `[⚙]`.
+
+O clique abre o `RingSwapModal` (520 px de largura, captura `27-modal-swap-ring.png`), permitindo:
+- Selecionar qual anel do catálogo equipar;
+- Configurar os limiares de HP para equipar (`equipBelow`) e retirar (`removeAbove`);
+- Configurar o piso de mana (`manaFloor`), que impede o anel de drenar a mana necessária para cura;
+- Escolher a ação ao retirar: restaurar o anel equipado anteriormente ou deixar o slot de dedo vazio;
+- Visualizar o diagrama de transição de estado com a histerese entre entrada e saída.
+
+O modal valida que `removeAbove > equipBelow` (evitando troca contínua a cada golpe por ausência de
+faixa morta). Quando o level do personagem é inferior ao do bot avançado (`advancedFromLevel`, padrão 50),
+o painel esmaece a linha e o modal exibe aviso explicativo em destaque — a configuração fica salva localmente,
+mas o servidor recusa a ativação até o level requerido ser atingido. Salvar no modal dispara o envio
+imediato ao servidor (`setRingSwap` com `flushSave`), fechando o modal.
+

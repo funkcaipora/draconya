@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -94,5 +95,58 @@ describe('BotPanel', () => {
     const loading = await render();
     expect(loading).toContain('Carregando');
     expect(loading).toContain('bot-panel');
+  });
+
+  it('renders AdvancedSection only when catalogue has finger items', async () => {
+    // With default catalogue (items: []), AdvancedSection is absent
+    const htmlNoRings = await render();
+    expect(htmlNoRings).not.toContain('Configurações avançadas');
+    expect(htmlNoRings).not.toContain('Ring swap');
+
+    // With finger items in catalogue, AdvancedSection appears
+    const ringItem = {
+      id: 'energy-ring', name: 'Energy Ring', appearanceId: 10, weight: 2,
+      slot: 'finger', twoHanded: false,
+    };
+    hud.set((state) => ({
+      ...state,
+      catalogue: state.catalogue ? { ...state.catalogue, items: [ringItem] } : null,
+    }));
+
+    const htmlWithRings = await render();
+    expect(htmlWithRings).toContain('Configurações avançadas');
+    expect(htmlWithRings).toContain('LV 50+');
+    expect(htmlWithRings).toContain('Ring swap');
+    expect(htmlWithRings).toContain('Nenhum anel configurado');
+    expect(htmlWithRings).toContain('bot-advanced-row-locked'); // level 10 < 50
+  });
+
+  it('shows ring swap summary text in AdvancedSection when configured', async () => {
+    const ringItem = {
+      id: 'life-ring', name: 'Life Ring', appearanceId: 11, weight: 2,
+      slot: 'finger', twoHanded: false,
+    };
+    hud.set((state) => ({
+      ...state,
+      level: 60,
+      catalogue: state.catalogue ? { ...state.catalogue, items: [ringItem] } : null,
+    }));
+    edit((draft) => ({
+      ...draft,
+      ringSwap: { itemId: 'life-ring', equipBelow: 40, removeAbove: 75, manaFloor: 15, restorePrevious: true },
+    }));
+
+    const html = await render();
+    expect(html).toContain('Configurações avançadas');
+    expect(html).toContain('Life Ring · HP &lt; 40 % → ≥ 75 %');
+    expect(html).not.toContain('bot-advanced-row-locked'); // level 60 >= 50
+  });
+
+  it('wires the gear click to opening RingSwapModal', async () => {
+    const source = await readFile(new URL('./BotPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('onEditRingSwap={() => { setRingSwapOpen(true); }}');
+    expect(source).toContain('ringSwapOpen && (');
+    expect(source).toContain('<RingSwapModal');
+    expect(source).toContain('onClose={() => { setRingSwapOpen(false); }}');
   });
 });

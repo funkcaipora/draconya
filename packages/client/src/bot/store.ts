@@ -26,12 +26,12 @@ export interface BotDraft {
   readonly exit: BotConfig['exit'];
   readonly targeting: BotConfig['targeting'];
   /**
-   * O bot AVANÇADO (§13.2, FUN-87): `lure` e `ringSwap`, que nenhuma tela edita ainda. Passam
-   * OPACOS pelo rascunho — do servidor (`loadConfig`) de volta ao servidor (`toConfig`) — para
-   * um "Salvar" de quem só mexeu na cura não apagar o anel que a hunt está trocando. Sem isto,
-   * a tela carregava uma cópia com perda e a chamava de "salvo".
+   * O bot AVANÇADO (§13.2, FUN-87): `lure`, que nenhuma tela edita ainda. Passa
+   * OPACO pelo rascunho — do servidor (`loadConfig`) de volta ao servidor (`toConfig`) — para
+   * um "Salvar" de quem só mexeu na cura não apagar o lure.
    */
-  readonly advanced: Pick<BotConfig, 'lure' | 'ringSwap'>;
+  readonly advanced: Pick<BotConfig, 'lure'>;
+  readonly ringSwap?: BotConfig['ringSwap'];
 }
 
 export interface BotState {
@@ -84,6 +84,7 @@ export function toConfig(draft: BotDraft): BotConfig {
     targeting: draft.targeting,
     exit: draft.exit,
     ...draft.advanced,
+    ...(draft.ringSwap === undefined ? {} : { ringSwap: draft.ringSwap }),
     ...Object.fromEntries(
       BOT_CATEGORIES.map((category) => [category, draft.rules[category]]),
     ),
@@ -218,11 +219,17 @@ export function draftFrom(config: BotConfig): BotDraft {
     rules,
     exit: config.exit,
     targeting: config.targeting,
+    ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
     advanced: {
       ...(config.lure === undefined ? {} : { lure: config.lure }),
-      ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
     },
   };
+}
+
+/** Salva a configuração de ring swap (#353, SV-17) e manda na hora (é o "Salvar" do modal). */
+export function setRingSwap(ringSwap: BotConfig['ringSwap']): void {
+  edit((draft) => ({ ...draft, ringSwap }));
+  flushSave();
 }
 
 /**

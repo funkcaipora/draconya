@@ -565,6 +565,28 @@ body {
 }
 .bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
 
+/* Configurações avançadas do bot (#353, SV-17) */
+.bot-advanced { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.bot-advanced-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.bot-advanced-head strong { flex: 1 1 auto; font: 500 8px var(--font-mono); color: var(--parchment-1); }
+.bot-advanced-level { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.bot-advanced-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 4px 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.bot-advanced-row-locked { opacity: 0.55; }
+.bot-advanced-row-text {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+}
+.bot-advanced-row-text b {
+  font: 600 8px var(--font-mono); color: var(--parchment-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bot-advanced-row-text small {
+  font: 7px var(--font-mono); color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
    CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
    ações. */
@@ -589,6 +611,37 @@ body {
 
 @media (max-width: 520px) {
   .rule-editor-row { grid-template-columns: 1fr; }
+}
+
+/* O modal Ring swap (#353, SV-17; ADR 0030, captura 27-modal-swap-ring.png) */
+.ring-swap-locked { margin: 0 0 8px; font: 7px var(--font-mono); line-height: 1.5; }
+.ring-swap-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ring-swap-header > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ring-swap-name { font: 600 11px var(--font-display); color: var(--gold-5); }
+.ring-swap-note { font: 7.5px var(--font-mono); color: var(--text-faint); }
+.ring-swap-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.ring-swap-box {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.ring-swap-aside { margin: 2px 0 0; font: 7px var(--font-mono); color: var(--text-faint); }
+.ring-swap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.ring-swap-diagram {
+  display: flex; align-items: center; justify-content: space-around; padding: 8px 12px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-2);
+  text-align: center; margin-top: 4px;
+}
+.ring-swap-diagram span {
+  display: flex; flex-direction: column; align-items: center;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.ring-swap-diagram small { font: 7px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
+.ring-swap-diagram-arrow { font-size: 14px; color: var(--gold-4); flex: 0 0 auto; }
+.ring-swap-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; flex: 1 1 auto; }
+.ring-swap-actions { display: flex; gap: 8px; }
+
+@media (max-width: 520px) {
+  .ring-swap-columns, .ring-swap-row { grid-template-columns: 1fr; }
 }
 
 /* A escolha de vocação (#154, #249) com os cards do design system (ADR 0029 D2/D7).

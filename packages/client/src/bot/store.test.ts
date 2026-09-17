@@ -3,7 +3,7 @@ import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
-  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, toConfig, toggleRule,
+  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setRingSwap, toConfig, toggleRule,
 } from './store.js';
 
 const rule = (percent: number, enabled = true) => ({
@@ -94,18 +94,53 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     expect(toConfig(draftFrom(original))).toEqual(original);
   });
 
-  it('o bot AVANÇADO dá a volta também: lure e ringSwap passam opacos pelo rascunho', () => {
-    // Era a metade que faltava: a tela carregava a configuração de um level 50 sem `ringSwap`,
-    // chamava de "salvo", e o próximo "Salvar" apagava o anel que a hunt trocava. Mutação que
-    // mata: `draftFrom` sem `advanced`, ou `toConfig` sem o espalhamento.
-    const advanced = {
+  it('lure passa opaco pelo rascunho', () => {
+    const withLure = {
       ...config(),
       lure: { min: 2, max: 4 },
-      ringSwap: { itemId: 'life-ring', equipBelow: 40, removeAbove: 70, manaFloor: 0, restorePrevious: true },
     };
-    expect(toConfig(draftFrom(advanced))).toEqual(advanced);
-    // E sem eles a chave não aparece: `undefined` numa configuração é uma chave a mais no JSON.
+    expect(toConfig(draftFrom(withLure))).toEqual(withLure);
+    expect(draftFrom(withLure).advanced).toEqual({ lure: { min: 2, max: 4 } });
     expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('lure');
+  });
+
+  it('ringSwap dá a volta inteira pelo rascunho como campo próprio', () => {
+    const ringSwap = {
+      itemId: 'life-ring',
+      equipBelow: 40,
+      removeAbove: 70,
+      manaFloor: 10,
+      restorePrevious: true,
+    };
+    const withRingSwap = {
+      ...config(),
+      ringSwap,
+    };
+    const draft = draftFrom(withRingSwap);
+    expect(draft.ringSwap).toEqual(ringSwap);
+    expect(toConfig(draft)).toEqual(withRingSwap);
+    expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('ringSwap');
+  });
+
+  it('setRingSwap atualiza o rascunho e dispara flushSave imediatamente', () => {
+    const sent: BotConfig[] = [];
+    setConfigSender((c) => { sent.push(c); return true; });
+    try {
+      const ringSwap = {
+        itemId: 'energy-ring',
+        equipBelow: 50,
+        removeAbove: 60,
+        manaFloor: 10,
+        restorePrevious: true,
+      };
+      setRingSwap(ringSwap);
+      expect(bot.get().draft.ringSwap).toEqual(ringSwap);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.ringSwap).toEqual(ringSwap);
+      expect(bot.get().save).toBe('pending');
+    } finally {
+      setConfigSender(null);
+    }
   });
 
   it('com a tela pristina, a configuração vira o rascunho, já como "salvo"', () => {
