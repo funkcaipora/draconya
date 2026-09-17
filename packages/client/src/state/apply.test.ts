@@ -850,3 +850,36 @@ describe('o inventário (FUN-90)', () => {
     expect(hud.get().inventory?.backpack).toEqual([]);
   });
 });
+
+describe('jogadores online (SV-07/SV-15, #351)', () => {
+  const sessionState = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state',
+    sessionType: 'hunt',
+    elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1',
+      health: 100, maxHealth: 100, mana: 50, maxMana: 50, level: 1, xp: 0, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
+    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+    ...over,
+  } as unknown as S2CMessage);
+
+  it('player-count atualiza o total de jogadores online no HUD', () => {
+    applyMessage({ type: 'player-count', count: 1284 }, 0);
+    expect(hud.get().onlinePlayers).toBe(1284);
+  });
+
+  it('session-state com onlinePlayers define onlinePlayers', () => {
+    applyMessage(sessionState({ onlinePlayers: 42 }), 0);
+    expect(hud.get().onlinePlayers).toBe(42);
+  });
+
+  it('session-state sem onlinePlayers define onlinePlayers como null mesmo se já definido', () => {
+    hud.set((state) => ({ ...state, onlinePlayers: 100 }));
+    applyMessage(sessionState(), 0);
+    expect(hud.get().onlinePlayers).toBeNull();
+  });
+});

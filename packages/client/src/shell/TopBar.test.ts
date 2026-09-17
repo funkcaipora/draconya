@@ -6,8 +6,8 @@ import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
 
-// A casca do design (#251, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
-// wordmark sem contagem de jogadores e os seis ícones PNG — nenhum emoji, nenhum ícone para
+// A casca do design (#251, #351, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
+// wordmark com contagem de jogadores (SV-15) e os seis ícones PNG — nenhum emoji, nenhum ícone para
 // sistema inexistente. `prerender` roda a árvore inteira sem DOM.
 
 const OPEN = { hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
@@ -82,10 +82,24 @@ describe('TopBar', () => {
     }
   });
 
-  it('centers the "DRACONYA" wordmark without any player count', async () => {
+  it('renders formatted number "1.284 players online" inside .topbar-online when onlinePlayers is 1284', async () => {
+    hud.set((state) => ({ ...state, onlinePlayers: 1284 }));
     const html = await render();
     expect(html).toContain('DRACONYA');
-    expect(html).not.toContain('online');
+    expect(html).toContain('class="topbar-online"');
+    expect(html).toContain('1.284 players online');
+  });
+
+  it('renders "0 players online" inside .topbar-online when onlinePlayers is 0', async () => {
+    hud.set((state) => ({ ...state, onlinePlayers: 0 }));
+    const html = await render();
+    expect(html).toContain('0 players online');
+  });
+
+  it('renders "—" inside .topbar-online when onlinePlayers is null', async () => {
+    hud.set((state) => ({ ...state, onlinePlayers: null }));
+    const html = await render();
+    expect(html).toContain('<span class="topbar-online">—</span>');
   });
 
   it('never renders an emoji', async () => {

@@ -1,8 +1,8 @@
-// A barra do topo, na casca do design (#251 — D3, D8, D9 de docs/design-system-plan.md).
+// A barra do topo, na casca do design (#251, #351 — D3, D8, D9 de docs/design-system-plan.md).
 //
 // Retrato-inicial (a cor de vocação chega com o sprite do outfit, SV-14), nome em Cinzel,
-// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro (sem contagem de jogadores — SV-15
-// não existe ainda) e os seis ícones PNG de 36 px que abrem as janelas do M14. Nenhum ícone
+// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro com contagem de jogadores online
+// (SV-15, #351) e os seis ícones PNG de 36 px que abrem as janelas do M14. Nenhum ícone
 // para sistema inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca
 // mostra o que o servidor não disse que existe.
 
@@ -72,6 +72,7 @@ export function TopBar({ open, toggle }: {
   const vocationName = useHudSlice((state) =>
     state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
   const characters = useStoreSlice(account, (state) => state.characters);
+  const onlinePlayers = useHudSlice((state) => state.onlinePlayers);
   const name = characters.find((character) => character.id === characterId)?.name ?? null;
   const initial = (name ?? characterId ?? '?').slice(0, 1).toUpperCase();
 
@@ -95,6 +96,9 @@ export function TopBar({ open, toggle }: {
       </div>
       <div className="topbar-wordmark">
         <b>DRACONYA</b>
+        <span className="topbar-online">
+          {onlinePlayers === null ? '—' : `${integer.format(onlinePlayers)} players online`}
+        </span>
       </div>
       <div className="topbar-right">
         <nav className="topbar-nav" aria-label="janelas">

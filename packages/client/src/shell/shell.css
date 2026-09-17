@@ -97,6 +97,11 @@ body {
   font: 700 12px var(--font-display); letter-spacing: 0.18em; color: var(--gold-5);
   text-shadow: 0 1px #000;
 }
+.topbar-online {
+  display: block; margin-top: 3px;
+  font: 7.5px var(--font-mono); letter-spacing: 0.12em; color: var(--text-muted);
+  text-transform: uppercase;
+}
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
 .topbar-nav { display: flex; gap: 4px; }
 .topbar-icon-button {

@@ -329,6 +329,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         party: message.party ?? null,
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
+        onlinePlayers: message.onlinePlayers ?? null,
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
       if (message.party !== undefined) partyEntered();
@@ -352,6 +353,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'player-count':
+      // Sem `sameX`/comparação (a #343 documenta por quê: republicado a cada 30 s sem checar
+      // mudança). Aplicar direto é a única regra — não há "e se for igual" a considerar aqui.
+      hud.set((state) => ({ ...state, onlinePlayers: message.count }));
       return;
 
     case 'party-spending':

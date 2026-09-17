@@ -141,6 +141,13 @@ export interface HudState {
    */
   readonly connection: ConnectionStatus;
 
+  /**
+   * O total de jogadores online (SV-07/SV-15). `null` até o primeiro `player-count` ou
+   * `session-state.onlinePlayers` chegar — nunca `0`: zero seria uma afirmação que o servidor
+   * ainda não fez (invariante 4/D8). A TopBar mostra "—" enquanto for `null`.
+   */
+  readonly onlinePlayers: number | null;
+
   readonly chat: readonly ChatLine[];
   readonly systemMessages: readonly SystemLine[];
 
@@ -190,6 +197,7 @@ export const INITIAL_HUD: HudState = {
   vocationId: null,
   latencyMs: null,
   connection: 'idle',
+  onlinePlayers: null,
   chat: [],
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
