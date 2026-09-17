@@ -29,6 +29,26 @@ describe('round trip', () => {
     expect(decodeS2C(encoded)).toEqual([msg]);
   });
 
+  it('encodes and decodes party-spending with and without estimatedShare', () => {
+    const withEstimated: S2CMessage = {
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 250, estimatedShare: 100 },
+        { characterId: 'b', goldSpent: 12.5, estimatedShare: 100 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(withEstimated))).toEqual([withEstimated]);
+
+    const withoutEstimated: S2CMessage = {
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 0 },
+        { characterId: 'b', goldSpent: 50 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(withoutEstimated))).toEqual([withoutEstimated]);
+  });
+
   it('accepts ArrayBuffer as well as Uint8Array', () => {
     const frame = encodeC2S(walk);
     const copy = frame.slice().buffer;

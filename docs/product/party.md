@@ -104,11 +104,11 @@ morte encerra, loot é do matador sem sorteio.
 
 ### O que o cliente vê
 
-`session-state` leva `party` (líder, membros, vivos, vocação, level, manaPercent) e, no modo
+`session-state` leva `party` (líder, membros, vivos, vocação, level, manaPercent), `partySpending` (gasto de cada um e a prévia de rateio) e, no modo
 compartilhado, `partyBag`; `party-state` leva a composição dos membros com HP, vocação
 (`vocationId`), level (`level`) e percentual de mana (`manaPercent`), reenviado ao vivo sempre que
 qualquer um desses valores, a composição ou a liderança mudam (via `sameParty` no host, #339).
-`party-bag` e `party-settlement` chegam a cada mudança (opcodes 24–26, só servidor→cliente). Durante
+`party-bag`, `party-settlement` e `party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente). Durante
 a hunt a coluna esquerda mostra os companheiros com HP, num painel fixo (`PartyMembers`, #259); a
 bolsa aparece à direita, após a mochila, só em `shared` (`PartyBag`); o analisador é por
 personagem (`analyzer.md`).

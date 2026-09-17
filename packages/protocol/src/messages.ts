@@ -115,6 +115,16 @@ export const SERVER_TO_CLIENT = {
    * economiza em rede — um inteiro pequeno, a cada 30 s, para quem estiver conectado.
    */
   'player-count': 28,
+  /**
+   * O gasto de cada membro da party e a prévia do rateio do settlement (#354, SV-18): quanto
+   * cada um já gastou em supply nesta sessão, e — em modo `shared` — quanto receberia se a
+   * bolsa fosse liquidada AGORA. Broadcast, como `party-bag`: o Mapa de Capacidade do protocolo
+   * (docs/reviews/kit-fidelity-audit-2026-09-16.md, AVISO 4) registra que `analyzer` — que TEM
+   * `goldSpent` por participante — só vai a quem olha aquele personagem; "gasto de cada membro
+   * visível a todos" não é ligar um campo, é agregar e mandar a TODOS os visualizadores, o que
+   * só `party-bag`/`party-state`/`party-settlement` fazem hoje.
+   */
+  'party-spending': 29,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

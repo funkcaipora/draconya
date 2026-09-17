@@ -4628,6 +4628,49 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(settlements[1]?.detail).toBe(`${String(later)}/2`);
   });
 
+  it('partySpendingPreview: calling repeatedly does not mutate bag, does not emit events, and matches real settlement', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0), member('c', 0)]);
+    run(session, 30_000, 100);
+
+    const bagBefore = JSON.parse(JSON.stringify(ruleset.getState().partyBag));
+    session.drainEvents();
+
+    const preview1 = ruleset.partySpendingPreview(session);
+    const preview2 = ruleset.partySpendingPreview(session);
+
+    expect(preview1).toBeDefined();
+    expect([...(preview1?.entries() ?? [])]).toEqual([...(preview2?.entries() ?? [])]);
+    expect(JSON.parse(JSON.stringify(ruleset.getState().partyBag))).toEqual(bagBefore);
+    expect(session.drainEvents()).toHaveLength(0);
+
+    let previewSum = 0;
+    for (const gold of preview1!.values()) previewSum += gold;
+
+    // Termina a sessão e verifica que o total do settlement real bate com a soma do preview
+    session.end('manual-exit');
+    const settlementEvent = session.drainEvents().find((e) => e.kind === 'party-settlement');
+    expect(settlementEvent).toBeDefined();
+    if (settlementEvent?.kind === 'party-settlement') {
+      expect(previewSum).toBe(settlementEvent.total);
+    }
+  });
+
+  it('partySpendingPreview: returns undefined in split mode and in solo', () => {
+    const solo = createHuntSession({
+      id: 'solo-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    solo.enter(member('solo', 0));
+    expect((solo.ruleset as HuntRuleset).partySpendingPreview(solo)).toBeUndefined();
+
+    const splitSession = createHuntSession({
+      id: 'split-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split' },
+    });
+    splitSession.enter(member('lead', 0));
+    splitSession.enter(member('b', 0));
+    expect((splitSession.ruleset as HuntRuleset).partySpendingPreview(splitSession)).toBeUndefined();
+  });
+
   it('the bag survives the snapshot, with its weight and the next instance id', () => {
     const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
     run(session, 20_000, 100);

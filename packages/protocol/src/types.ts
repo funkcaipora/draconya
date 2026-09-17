@@ -219,6 +219,21 @@ export const PartySettlement = z.object({
   shares: z.array(z.object({ characterId: z.string().min(1), gold: z.number().int().nonnegative() })),
 });
 
+/**
+ * O gasto de cada membro e a prévia de rateio da party (#354, SV-18). `estimatedShare` é a
+ * MESMA conta do `party-settlement` real, chamada como leitura — por isso é `.optional()`, e
+ * não `.nullable()`: ausente é "não se aplica" (modo `split`, ou nó `game` anterior a esta
+ * issue), nunca um zero fabricado (D8).
+ */
+export const PartySpending = z.object({
+  shares: z.array(z.object({
+    characterId: z.string().min(1),
+    /** O MESMO número de `Aggregates.goldSpent` — não int-constrained, como lá (types.ts:56). */
+    goldSpent: z.number(),
+    estimatedShare: z.number().int().nonnegative().optional(),
+  })),
+});
+
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
   welcome: z.object({ characterId: z.string(), contentVersion: z.string() }),
@@ -280,6 +295,7 @@ export const S2C_SCHEMAS = {
     /** A party desta sessão (#196). Ausente em solo — e em todo nó anterior. */
     party: PartyState.optional(),
     partyBag: PartyBag.optional(),
+    partySpending: PartySpending.optional(),
     /**
      * O total de jogadores online (SV-07) — o mesmo número do `player-count` mais recente,
      * para quem reanexa não ficar sem ele até o próximo ciclo de 30 s. Ausente: nó `game`
@@ -323,6 +339,7 @@ export const S2C_SCHEMAS = {
   'party-state': PartyState,
   'party-bag': PartyBag,
   'party-settlement': PartySettlement,
+  'party-spending': PartySpending,
   /**
    * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
    * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o

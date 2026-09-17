@@ -634,6 +634,18 @@ export class HuntRuleset implements Ruleset {
     return this.#party;
   }
 
+  /**
+   * Prévia pura do rateio da bolsa compartilhada (#354, SV-18): quanto cada presente receberia se a bolsa
+   * fosse liquidada AGORA — a MESMA conta de `#settle` (linha 2578), chamada como LEITURA, sem
+   * gravar nada e sem esvaziar a bolsa. `undefined` fora do modo `shared` (não há bolsa a ratear)
+   * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
+   */
+  partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
+    if (this.#party?.mode !== 'shared' || this.#bag === null) return undefined;
+    const presentIds = session.participants.map((p) => p.id);
+    return settleBag(this.#bag, presentIds, this.#options.items).shares;
+  }
+
   /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
   get routeIndex(): number {
     const first = this.#runners.values().next().value as Runner | undefined;

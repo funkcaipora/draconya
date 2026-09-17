@@ -1,5 +1,5 @@
 import {
-  CharacterRuntime, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
+  CharacterRuntime, HuntRuleset, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -4479,7 +4479,8 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
   };
-  function partyHunt() {
+  function partyHunt(options?: { mode?: 'shared' | 'split' }) {
+    const mode = options?.mode ?? 'shared';
     const raw = rawTestContent();
     const content = buildContent({
       ...raw,
@@ -4502,7 +4503,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
         if (shared === null) {
           shared = createHuntSession({
             id: 'party-hunt', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
-            partyOptions: { leaderId: 'lead', mode: 'shared' },
+            partyOptions: { leaderId: 'lead', mode },
           });
           shared.enter(member('lead'));
           shared.enter(member('b'));
@@ -4645,6 +4646,108 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
     expect(partyStatesOf(lead.socket).length).toBe(3);
+  });
+
+  it('broadcasts party-spending to all viewers on spending or bag change, and previews settlement in shared mode', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+
+    // Attach inicial já enviou session-state com partySpending; nenhum party-spending avulso
+    const spendingOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-spending');
+    expect(spendingOf(lead.socket).length).toBe(0);
+    expect(spendingOf(b.socket).length).toBe(0);
+
+    // 1. Creditar goldSpent para o líder: ambos recebem party-spending com shares de lead e b
+    session()?.credit('lead', 'goldSpent', 50);
+    runFor(100);
+    const leadSpendings = spendingOf(lead.socket);
+    const bSpendings = spendingOf(b.socket);
+    expect(leadSpendings.length).toBe(1);
+    expect(bSpendings.length).toBe(1);
+    expect(leadSpendings[0]).toEqual({
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 50, estimatedShare: 2 },
+        { characterId: 'b', goldSpent: 0, estimatedShare: 1 },
+      ],
+    });
+    expect(bSpendings[0]).toEqual(leadSpendings[0]);
+
+    // Avançar o tempo sem alterações NÃO duplica envio de party-spending
+    runFor(300);
+    expect(spendingOf(lead.socket).length).toBe(1);
+    expect(spendingOf(b.socket).length).toBe(1);
+
+    // 2. Loot na bolsa: soma dos estimatedShares bate com bag.gold
+    runFor(20_000);
+    const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
+    expect(bag?.gold).toBeGreaterThan(0);
+    const lastSpending = spendingOf(lead.socket).at(-1);
+    if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
+    const sumEstimated = lastSpending.shares.reduce((sum, s) => sum + (s.estimatedShare ?? 0), 0);
+    expect(sumEstimated).toBe(bag?.gold);
+
+    // Avançar tempo após settle ou sem mudanças não duplica
+    const countAfterLoot = spendingOf(lead.socket).length;
+    runFor(100);
+    expect(spendingOf(lead.socket).length).toBe(countAfterLoot);
+  });
+
+  it('split mode: estimatedShare is undefined on all shares in session-state and party-spending', () => {
+    const { host, runFor, session } = partyHunt({ mode: 'split' });
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+
+    const stateOf = (socket: FakeSocket) => socket.received().find((m) => m.type === 'session-state');
+    const leadState = stateOf(lead.socket);
+    if (leadState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(leadState.partySpending?.shares).toBeDefined();
+    for (const share of leadState.partySpending!.shares) {
+      expect(share.estimatedShare).toBeUndefined();
+    }
+
+    session()?.credit('lead', 'goldSpent', 30);
+    runFor(100);
+    const lastSpending = lead.socket.received().filter((m) => m.type === 'party-spending').at(-1);
+    if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
+    for (const share of lastSpending.shares) {
+      expect(share.estimatedShare).toBeUndefined();
+    }
+  });
+
+  it('solo hunt: session-state.partySpending is undefined and no party-spending is sent', () => {
+    const raw = rawTestContent();
+    const content = buildContent(raw);
+    let now = 0;
+    const soloHost = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      createSession: (characterId) => {
+        const s = createHuntSession({
+          id: `solo-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        s.enter(new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+          level: 1, xp: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return s;
+      },
+    });
+    const soloSocket = new FakeSocket();
+    const viewer = soloHost.attach(soloSocket, 'solo-char');
+    soloHost.handle(viewer, { type: 'session-attach' });
+    soloHost.flush();
+
+    const soloState = soloSocket.received().find((m) => m.type === 'session-state');
+    if (soloState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(soloState.partySpending).toBeUndefined();
+
+    for (let t = 0; t < 300; t += 100) { now += 100; soloHost.cycle(); }
+    soloHost.flush();
+
+    const spendingMessages = soloSocket.received().filter((m) => m.type === 'party-spending');
+    expect(spendingMessages).toHaveLength(0);
   });
 });
 

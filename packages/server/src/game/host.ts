@@ -405,6 +405,39 @@ function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: nu
     && a.bestSpellHit === aggregates.bestSpellHit;
 }
 
+/** Um share de `party-spending` (#354, SV-18): o gasto do membro, e a prévia dele se pedir agora. */
+type PartySpendingShare = S2CProps<'party-spending'>['shares'][number];
+
+/**
+ * Os shares de `party-spending` (#354, SV-18) — o gasto de CADA participante, sempre (a MESMA
+ * leitura de `Aggregates.goldSpent` que `#presentAnalyzer` já usa por personagem), mais a
+ * prévia do settlement (`estimatedShare`), só em modo `shared`, reaproveitando
+ * `HuntRuleset.partySpendingPreview` — a MESMA conta do `party-settlement` real. `undefined`
+ * sem party: D8, nada a mandar.
+ */
+function partySpendingSharesOf(hosted: HostedSession): PartySpendingShare[] | undefined {
+  const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+  if (ruleset.party === undefined) return undefined;
+  const estimated = ruleset.partySpendingPreview?.(hosted.session);
+  return hosted.session.participants.map((member) => ({
+    characterId: member.id,
+    goldSpent: hosted.session.aggregatesOf(member.id).goldSpent,
+    ...(estimated?.has(member.id) ? { estimatedShare: estimated.get(member.id) } : {}),
+  }));
+}
+
+/** Compara os shares ENTREGUES por último com os de agora, campo a campo — como `sameAnalyzer`. */
+function sameSpending(a: readonly PartySpendingShare[], b: readonly PartySpendingShare[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined || y === undefined) return false;
+    if (x.characterId !== y.characterId || x.goldSpent !== y.goldSpent || x.estimatedShare !== y.estimatedShare) return false;
+  }
+  return true;
+}
+
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
@@ -546,6 +579,13 @@ interface HostedSession {
   readonly sentBestiary: Map<string, number>;
   /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
   sentParty: S2CProps<'party-state'> | null;
+  /**
+   * Os shares de `party-spending` ENTREGUES por último (#354, SV-18) — por SESSÃO, como
+   * `party-bag`, não por personagem: a mensagem é UMA SÓ, para todos os visualizadores. `null`
+   * é "ninguém recebeu ainda" ou "sessão sem party" (D8); o primeiro ciclo com visualizador, ou
+   * o `session-attach`, escreve o real.
+   */
+  sentSpending: readonly PartySpendingShare[] | null;
   /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
   readonly sentConditions: Map<string, ConditionsSnapshot>;
   /**
@@ -1485,6 +1525,7 @@ export class SessionHost {
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
       this.#presentAnalyzer(hosted);
+      this.#presentSpending(hosted);
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
@@ -1889,6 +1930,7 @@ export class SessionHost {
     const state = this.#sessionState(hosted, characterId);
     if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
     viewer.send(state);
+    hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
     const stats = playerStatsOf(participant, this.#options.skillCatalog, this.#targetIdOf(hosted, participant));
     hosted.sentStats.set(characterId, stats);
@@ -1951,6 +1993,26 @@ export class SessionHost {
     if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
     hosted.sentParty = party;
     for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
+  }
+
+  /**
+   * O gasto de cada membro e a prévia de rateio, a TODOS os visualizadores da sessão (#354,
+   * SV-18) — broadcast, como `#presentParty`, e não por personagem: o AVISO 4 do Mapa de
+   * Capacidade (docs/reviews/kit-fidelity-audit-2026-09-16.md) registra que `analyzer`, que TEM
+   * `goldSpent` por participante, só vai a quem olha aquele personagem — "gasto de todos visível
+   * a todos" não é ligar um campo, é agregar e distribuir, o modelo que `party-bag` já segue.
+   *
+   * Gateado por comparação (`sameSpending`), como `sameStats`/`sameAnalyzer` — mas por SESSÃO
+   * (`hosted.sentSpending`), não por personagem: a mensagem é uma só para todo mundo.
+   */
+  #presentSpending(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const shares = partySpendingSharesOf(hosted);
+    if (shares === undefined) return; // sem party (D8): nada a mandar
+    if (hosted.sentSpending !== null && sameSpending(hosted.sentSpending, shares)) return;
+    hosted.sentSpending = shares;
+    const message: S2CMessage = { type: 'party-spending', shares: shares.map((s) => ({ ...s })) };
+    for (const viewer of hosted.viewers) viewer.send(message);
   }
 
   /** O bloco `party`/`partyBag` do `session-state` (#196), do estado do ruleset. Vazio em solo. */
@@ -2315,6 +2377,7 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentParty: null,
       sentConditions: new Map(),
+      sentSpending: null,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -2767,6 +2830,7 @@ export class SessionHost {
       });
     }
 
+    const spendingShares = partySpendingSharesOf(hosted);
     return {
       type: 'session-state',
       sessionType: session.ruleset.type,
@@ -2802,6 +2866,7 @@ export class SessionHost {
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
       // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
       ...this.#partyBlock(hosted),
+      ...(spendingShares === undefined ? {} : { partySpending: { shares: spendingShares } }),
       // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
       // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
       // "Salvar" dali apagava as regras que a hunt estava executando.
@@ -3015,6 +3080,7 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentParty: null,
       sentConditions: new Map(),
+      sentSpending: null,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
