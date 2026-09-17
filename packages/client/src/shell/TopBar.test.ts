@@ -58,7 +58,7 @@ describe('TopBar', () => {
     expect(levelIndex).toBeGreaterThan(vocationIndex);
     expect(html).toContain('2.134.760');
     const statusIndex = html.indexOf('role="status"');
-    const lastIconIndex = html.lastIndexOf('topbar-icon-button');
+    const lastIconIndex = html.lastIndexOf('ui-icon-button-lg');
     expect(statusIndex).toBeGreaterThan(0);
     expect(statusIndex).toBeGreaterThan(lastIconIndex);
   });
@@ -72,7 +72,7 @@ describe('TopBar', () => {
 
   it('shows the six window icons, and no icon for a system that does not exist', async () => {
     const html = await render();
-    expect((html.match(/topbar-icon-button/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBeGreaterThanOrEqual(6);
     expect((html.match(/data-window="/g) ?? []).length).toBe(6);
     for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);

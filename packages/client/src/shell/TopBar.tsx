@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { account } from '../account/store.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
+import { IconButton } from './ui/IconButton.js';
 
 export type WindowId = 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
 
@@ -29,34 +30,34 @@ const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph:
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
-/** Um ícone de 36 px, com o glifo de texto como reserva se o PNG falhar ao carregar. */
+/**
+ * Um ícone de 36 px (R0-05: o uso mais visível do `IconButton` no kit), com o glifo de texto
+ * como reserva se o PNG falhar ao carregar. `data-window` e o rótulo abaixo do ícone moram no
+ * `<div>` que envolve o `IconButton` — R1-10 (tirar o rótulo, deixar só `title`) é achado de
+ * OUTRA issue (FD-06); aqui o rótulo continua existindo, só a caixa clicável virou o primitivo.
+ */
 function NavIcon({ id, label, icon, glyph, open, onClick }: {
   id: WindowId; label: string; icon: string; glyph: string; open: boolean; onClick: () => void;
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <button
-      type="button"
-      className={`topbar-icon-button${open ? ' topbar-icon-button-open' : ''}`}
-      aria-pressed={open}
-      title={label}
-      data-window={id}
-      onClick={onClick}
-    >
-      {failed
-        ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
-        : (
-          <img
-            className="topbar-icon-img"
-            src={`/hud-icons/${icon}.png`}
-            width={36}
-            height={36}
-            alt=""
-            onError={() => { setFailed(true); }}
-          />
-        )}
+    <div className="topbar-nav-item" data-window={id}>
+      <IconButton size="lg" title={label} active={open} onClick={onClick}>
+        {failed
+          ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
+          : (
+            <img
+              className="topbar-icon-img"
+              src={`/hud-icons/${icon}.png`}
+              width={32}
+              height={32}
+              alt=""
+              onError={() => { setFailed(true); }}
+            />
+          )}
+      </IconButton>
       <span className="topbar-icon-label">{label}</span>
-    </button>
+    </div>
   );
 }
 

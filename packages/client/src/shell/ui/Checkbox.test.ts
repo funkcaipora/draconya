@@ -33,4 +33,16 @@ describe('Checkbox', () => {
     expect(html).toContain('ui-checkbox-label');
     expect(html).toContain('Ignorar corpse');
   });
+
+  it('tamanho vira a custom property --checkbox-size', async () => {
+    const html = await render({ checked: false });
+    expect(html).toContain('--checkbox-size');
+    expect(html).toContain('15px');
+  });
+
+  it.each([12, 13, 15] as const)('size=%d aplica --checkbox-size:%dpx', async (size) => {
+    const html = await render({ checked: false, size });
+    expect(html).toContain('--checkbox-size');
+    expect(html).toContain(`${size}px`);
+  });
 });

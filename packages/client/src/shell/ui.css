@@ -28,10 +28,12 @@
   background: var(--grad-blood);
   color: var(--text-on-blood);
   font-family: var(--font-display);
+  font-size: 12px;
   letter-spacing: var(--tracking-cta);
   text-transform: uppercase;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 2px 0 rgba(0, 0, 0, .6);
 }
+.ui-button-primary.ui-button-lg { font-size: 14px; }
 .ui-button-primary:hover:not(:disabled) { background: linear-gradient(180deg, #a3222a, #7d1319 60%, #560c11); transform: translateY(-1px); }
 .ui-button-primary:active:not(:disabled) { transform: translateY(1px); }
 
@@ -40,10 +42,12 @@
   background: linear-gradient(180deg, #d2ab60, #b58c43);
   color: #191409;
   font-family: var(--font-display);
+  font-size: 12px;
   letter-spacing: var(--tracking-cta);
   text-transform: uppercase;
   box-shadow: inset 0 1px 0 #fff2;
 }
+.ui-button-gold.ui-button-lg { font-size: 14px; }
 .ui-button-gold:hover:not(:disabled) { background: linear-gradient(180deg, #e1bf7c, #cba359); transform: translateY(-1px); }
 .ui-button-gold:active:not(:disabled) { transform: translateY(1px); }
 
@@ -53,6 +57,7 @@
   color: var(--parchment-2);
   font-family: var(--font-mono);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -64,6 +69,8 @@
   background: transparent;
   color: var(--parchment-3);
   font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
 }
 .ui-button-ghost:hover:not(:disabled) { border-color: var(--gold-3); color: var(--gold-5); }
 
@@ -73,6 +80,7 @@
   color: var(--blood-7);
   font-family: var(--font-mono);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -83,6 +91,8 @@
   background: transparent;
   color: var(--gold-4);
   font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
 }
 .ui-button-text:hover:not(:disabled) { color: var(--gold-5); }
 .ui-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -107,6 +117,19 @@
   color: var(--gold-5);
 }
 .ui-icon-button-active { background: var(--surface-selected); }
+.ui-icon-button-lg {
+  width: 36px;
+  height: 36px;
+  padding: 1px;
+  border-radius: 0;
+  background: var(--ash-1);
+  border-color: var(--gold-1);
+}
+.ui-icon-button-lg.ui-icon-button-active {
+  background: var(--ash-1);
+  border-color: var(--gold-4);
+  filter: brightness(1.16);
+}
 .ui-icon-button:disabled { cursor: not-allowed; opacity: .55; }
 .ui-icon-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
@@ -217,8 +240,8 @@
 /* ── Checkbox ── */
 .ui-checkbox { display: flex; align-items: center; gap: 9px; font-family: var(--font-body); font-size: 11px; line-height: 1.5; color: var(--parchment-3); cursor: pointer; min-height: 24px; }
 .ui-checkbox-box {
-  width: 15px;
-  height: 15px;
+  width: var(--checkbox-size, 15px);
+  height: var(--checkbox-size, 15px);
   flex: none;
   display: grid;
   place-items: center;
@@ -226,7 +249,7 @@
   border-radius: 2px;
   background: var(--surface-slot);
   color: #1a1206;
-  font-size: 11px;
+  font-size: calc(var(--checkbox-size, 15px) - 4px);
   font-weight: 700;
 }
 .ui-checkbox-box::after { content: ''; }

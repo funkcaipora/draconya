@@ -22,7 +22,7 @@ describe('IconButton', () => {
     expect(off).not.toContain('ui-icon-button-active');
   });
 
-  it.each(['sm', 'md'] as const)('size="%s" carries its class', async (size) => {
+  it.each(['sm', 'md', 'lg'] as const)('size="%s" carries its class', async (size) => {
     const html = await render({ size, children: '×' });
     expect(html).toContain(`ui-icon-button-${size}`);
   });

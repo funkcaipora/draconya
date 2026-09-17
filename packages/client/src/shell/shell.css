@@ -108,23 +108,13 @@ body {
 }
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
 .topbar-nav { display: flex; gap: 4px; }
-.topbar-icon-button {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  width: 36px; padding: 1px; border: 1px solid var(--gold-1);
-  background: var(--ash-1); color: var(--text-muted); cursor: pointer;
-}
-.topbar-icon-button-open { border-color: var(--gold-4); filter: brightness(1.16); }
-/* #301: com box-sizing:border-box (o reset acima), os 36px do botão passam a ser a caixa
-   INTEIRA — casando com o kit (Hud.jsx:20, <IconButton size={36}>). O conteúdo disponível cai
-   para 32px (36 − 2×1px de borda − 2×1px de padding); 36px de filho vazaria 2px de cada lado.
-   32 é literalmente o valor que o próprio kit usa dentro do botão (Hud.jsx:21, <img width="32"
-   height="32">), não uma compensação inventada — box-model.test.ts trava a conta. */
+.topbar-nav-item { display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .topbar-icon-img { display: block; width: 32px; height: 32px; object-fit: cover; pointer-events: none; }
 .topbar-icon-glyph {
   display: grid; place-items: center; width: 32px; height: 32px;
   color: var(--text-faint); font: 700 8px var(--font-mono); letter-spacing: 0.04em;
 }
-.topbar-icon-label { font-size: 6.5px; letter-spacing: 0.02em; color: inherit; }
+.topbar-icon-label { font-size: 6.5px; letter-spacing: 0.02em; color: var(--text-muted); }
 
 /* ---- As janelas (#251): colunas opacas de --sidebar-w, do topo até o rodapé -------------- */
 .windows {

@@ -109,3 +109,47 @@ describe(':focus-visible dourado (#301)', () => {
     );
   });
 });
+
+describe('Button fidelidade (#303, R0-04)', () => {
+  it('primary, gold, ghost e text declaram font-size: 12px', () => {
+    for (const variant of ['primary', 'gold', 'ghost', 'text']) {
+      const regex = new RegExp(`\\.ui-button-${variant}\\s*\\{[^}]*font-size:\\s*12px;`);
+      expect(uiCss).toMatch(regex);
+    }
+  });
+
+  it('apenas primary e gold aumentam para 14px em size="lg"', () => {
+    expect(uiCss).toMatch(/\.ui-button-primary\.ui-button-lg\s*\{\s*font-size:\s*14px;\s*\}/);
+    expect(uiCss).toMatch(/\.ui-button-gold\.ui-button-lg\s*\{\s*font-size:\s*14px;\s*\}/);
+    expect(uiCss).not.toMatch(/ui-button-ghost\.ui-button-lg/);
+    expect(uiCss).not.toMatch(/ui-button-text\.ui-button-lg/);
+  });
+
+  it('pesos de fonte correspondem ao kit: secondary/danger 500, ghost/text 400', () => {
+    expect(uiCss).toMatch(/\.ui-button-secondary\s*\{[^}]*font-weight:\s*500;/);
+    expect(uiCss).toMatch(/\.ui-button-danger\s*\{[^}]*font-weight:\s*500;/);
+    expect(uiCss).toMatch(/\.ui-button-ghost\s*\{[^}]*font-weight:\s*400;/);
+    expect(uiCss).toMatch(/\.ui-button-text\s*\{[^}]*font-weight:\s*400;/);
+  });
+});
+
+describe('IconButton fidelidade (#303, R0-05)', () => {
+  it('ui-icon-button-lg mede 36px com estilo do kit', () => {
+    expect(uiCss).toMatch(/\.ui-icon-button-lg\s*\{[^}]*width:\s*36px;\s*height:\s*36px;/);
+    expect(uiCss).toMatch(/\.ui-icon-button-lg\s*\{[^}]*background:\s*var\(--ash-1\);/);
+    expect(uiCss).toMatch(/\.ui-icon-button-lg\s*\{[^}]*border-color:\s*var\(--gold-1\);/);
+  });
+
+  it('ui-icon-button-lg ativo ganha borda gold-4 e brightness', () => {
+    expect(uiCss).toMatch(/\.ui-icon-button-lg\.ui-icon-button-active\s*\{[^}]*border-color:\s*var\(--gold-4\);/);
+    expect(uiCss).toMatch(/\.ui-icon-button-lg\.ui-icon-button-active\s*\{[^}]*filter:\s*brightness\(1\.16\);/);
+  });
+});
+
+describe('Checkbox fidelidade (#303, R0-07)', () => {
+  it('usa custom property --checkbox-size com fallback 15px e font-size calc', () => {
+    expect(uiCss).toMatch(/\.ui-checkbox-box\s*\{[^}]*width:\s*var\(--checkbox-size,\s*15px\);/);
+    expect(uiCss).toMatch(/\.ui-checkbox-box\s*\{[^}]*height:\s*var\(--checkbox-size,\s*15px\);/);
+    expect(uiCss).toMatch(/\.ui-checkbox-box\s*\{[^}]*font-size:\s*calc\(var\(--checkbox-size,\s*15px\)\s*-\s*4px\);/);
+  });
+});
