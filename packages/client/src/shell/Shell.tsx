@@ -8,8 +8,9 @@
 // chat embaixo — nos mesmos lugares em hunt e em conteúdo manual. A tela não se reorganiza ao
 // trocar de atividade; em PvP manual, procurar onde a poção foi parar é o que custa a luta.
 //
-// Nenhum componente daqui lê estado de MUNDO. Onde as criaturas estão é assunto do canvas, que
-// lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero render.
+// Nenhum componente daqui assina estado de MUNDO. Onde as criaturas estão é assunto do canvas,
+// que lê `world` direto no laço de quadro — é o que faz 40 criaturas andando custarem zero
+// render. Overlays que precisam de uma leitura resumida amostram em intervalo explícito.
 //
 // O pacote de arte é montado AQUI (FUN-108) e desce por contexto: o viewport desenha o mundo
 // com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
@@ -37,6 +38,7 @@ import { ContainerWindow } from './ContainerWindow.js';
 import { VocationChoice } from './VocationChoice.js';
 import { Vitals } from './Vitals.js';
 import { TopBar } from './TopBar.js';
+import { WorldOverlay } from './WorldOverlay.js';
 import type { WindowId } from './TopBar.js';
 
 /**
@@ -79,6 +81,7 @@ export function Shell() {
     <AssetPackContext.Provider value={loaded}>
       <div className="shell">
         <Viewport />
+        <WorldOverlay hunting={hunting} />
         <TopBar open={open} toggle={toggle} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre

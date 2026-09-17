@@ -467,6 +467,20 @@ body {
    é a única classe da antiga seleção de hunt fixa que sobrevive à troca para modal. */
 .hunt-warn { color: #e0c25a; }
 
+/* ---- O overlay de área e criaturas, sobre o mundo (#327, RC-14) --------------------------- */
+/* No cliente as colunas flutuam sobre o mundo inteiro; os offsets deixam o texto no mesmo canto
+   visível que o kit, sem passar por baixo da barra ou da coluna direita. */
+.world-overlay {
+  position: absolute; top: calc(var(--topbar-h) + 10px); right: calc(var(--sidebar-w) + 12px);
+  z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  pointer-events: none;
+}
+.world-overlay-line {
+  text-align: right; font: 7px var(--font-mono); color: var(--text-faint);
+  letter-spacing: .1em; text-transform: uppercase; line-height: 1.6;
+}
+
 /* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
 .hunt-actions {
   position: absolute; left: 0; right: 0; bottom: 24px;
@@ -818,6 +832,7 @@ body {
      junto do mundo — por isso o topo e as colunas recebem número explícito. */
   .shell { position: static; height: auto; overflow: visible; display: flex; flex-direction: column; }
   .shell > .viewport { order: 0; }
+  .shell > .world-overlay { order: 1; position: static; padding: 6px 10px 0; z-index: auto; }
   .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
   /* O popover de regras de saída (#260) a 375 px: ancorado na ponta direita do chevron, os
      262 px vazavam pela borda esquerda (#291). No celular ele ocupa a largura da linha da pill:
