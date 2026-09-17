@@ -2,6 +2,12 @@
  * (ADR 0022; #245, ADR 0029 D1) — nenhum @import de CDN, ao contrário de tokens/fonts.css do
  * handoff. Os arquivos vêm de packages/client/public/fonts/ (Vite publicDir padrão), com o
  * OFL.txt de cada família ao lado (DT-05).
+ *
+ * JetBrains Mono (#302, R0-03): o kit pede os pesos 400/500/600/700 (Panel.jsx, VitalBar.jsx,
+ * Slot.jsx, Hud.jsx), e o único .woff2 self-hosted é a instância estática Regular (400) — sem
+ * fvar, sem glifo em outro peso (confirmado com fontTools). Uma faixa de font-weight ampla nesse
+ * arquivo faria o navegador CONFIAR na declaração e desistir do negrito sintético, piorando o
+ * resultado. A correção é um @font-face por peso, cada um com o arquivo estático certo.
  */
 @font-face {
   font-family: 'Cinzel';
@@ -15,7 +21,7 @@
   font-family: 'IBM Plex Sans';
   src: url('/fonts/plex-sans-latin.woff2') format('woff2');
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 100 700;
   font-display: swap;
 }
 
@@ -24,5 +30,29 @@
   src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
   font-style: normal;
   font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-500-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-600-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-700-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 700;
   font-display: swap;
 }

@@ -37,6 +37,22 @@ describe('fonts.css', () => {
     expect(fontsCss).toMatch(/url\(['"]\/fonts\/jetbrains-mono-latin\.woff2['"]\)/);
     expect(fontsCss).not.toMatch(/fonts\.googleapis\.com|fonts\.gstatic\.com/);
   });
+
+  it('serve JetBrains Mono nos quatro pesos reais que o HUD usa (#302, R0-03)', () => {
+    expect(fontsCss).toMatch(/url\(['"]\/fonts\/jetbrains-mono-500-latin\.woff2['"]\)/);
+    expect(fontsCss).toMatch(/url\(['"]\/fonts\/jetbrains-mono-600-latin\.woff2['"]\)/);
+    expect(fontsCss).toMatch(/url\(['"]\/fonts\/jetbrains-mono-700-latin\.woff2['"]\)/);
+    // um @font-face por peso, nunca uma faixa — o arquivo 400 é estático, não teria os outros pesos
+    const jetbrainsBlocks = fontsCss.match(/@font-face\s*\{[^}]*JetBrains Mono[^}]*\}/g) ?? [];
+    expect(jetbrainsBlocks).toHaveLength(4);
+    for (const weight of ['400', '500', '600', '700']) {
+      expect(jetbrainsBlocks.some((block) => new RegExp(`font-weight:\\s*${weight};`).test(block))).toBe(true);
+    }
+  });
+
+  it('amplia IBM Plex Sans para a faixa real do arquivo variável (#302, R0-13)', () => {
+    expect(fontsCss).toMatch(/IBM Plex Sans[\s\S]*?font-weight:\s*100 700;/);
+  });
 });
 
 describe('shell.css', () => {
