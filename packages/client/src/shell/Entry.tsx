@@ -13,7 +13,7 @@ import { useStoreSlice } from '../state/useSlice.js';
 import { account } from '../account/store.js';
 import type { AccountState } from '../account/store.js';
 import { beginLogin } from '../account/api.js';
-import { create, play, refresh, signOut } from '../account/actions.js';
+import { create, NO_SERVER_MESSAGE, play, refresh, signOut } from '../account/actions.js';
 import { Button } from './ui/Button.js';
 import type { CharacterSummary } from '../account/api.js';
 
@@ -55,10 +55,15 @@ export interface EntryReadiness {
  * `busy` NÃO entra aqui de propósito: toda chamada (criar personagem, trocar de conta, entrar)
  * liga `busy` por uma fração de segundo, e piscar o indicador do cabeçalho a cada clique seria
  * ruído, não sinal de prontidão (DT-04).
+ *
+ * Só a mensagem genérica (`NO_SERVER_MESSAGE`, o ramo `else` de `attempt`) significa falta de
+ * conexão. Qualquer outro `state.error` é uma recusa da API — nome inválido, limite de
+ * personagens, login recusado — e nesses casos o SERVIDOR respondeu; o texto dela já aparece em
+ * `.entry-error`, e o indicador continua "Pronto para entrar".
  */
 export function entryReadiness(state: Pick<AccountState, 'phase' | 'error'>): EntryReadiness {
   if (state.phase === 'checking') return { tone: 'warn', label: 'Conectando…' };
-  if (state.error !== null) return { tone: 'danger', label: 'Sem conexão com o servidor.' };
+  if (state.error === NO_SERVER_MESSAGE) return { tone: 'danger', label: 'Sem conexão com o servidor.' };
   return { tone: 'ok', label: 'Pronto para entrar' };
 }
 

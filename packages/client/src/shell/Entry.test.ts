@@ -4,6 +4,7 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Entry, entryReadiness } from './Entry.js';
 import { account, INITIAL_ACCOUNT } from '../account/store.js';
+import { NO_SERVER_MESSAGE } from '../account/actions.js';
 
 // A tela de entrada (#248, ADR 0029 D7/D8): o design vestido sobre as três fases que a FUN-97
 // já tinha. `prerender` roda o componente sem DOM — o `useEffect` de `refresh()` não roda em
@@ -128,18 +129,20 @@ describe('entryReadiness (R1-14)', () => {
     });
   });
 
-  it('com erro: tom danger e texto "Sem conexão com o servidor."', () => {
+  it('sem resposta do servidor: tom danger; recusa da API: continua ok', () => {
     expect(
-      entryReadiness({ phase: 'anonymous', error: 'Não foi possível falar com o servidor.' }),
+      entryReadiness({ phase: 'anonymous', error: NO_SERVER_MESSAGE }),
     ).toEqual({
       tone: 'danger',
       label: 'Sem conexão com o servidor.',
     });
+    // O servidor RESPONDEU com uma recusa (nome inválido, limite de personagens, login
+    // recusado) — não é falta de conexão. A frase já aparece em `.entry-error`.
     expect(
       entryReadiness({ phase: 'ready', error: 'Nome inválido: de 2 a 30 letras, espaço, apóstrofo ou hífen.' }),
     ).toEqual({
-      tone: 'danger',
-      label: 'Sem conexão com o servidor.',
+      tone: 'ok',
+      label: 'Pronto para entrar',
     });
   });
 });
