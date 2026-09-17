@@ -1,7 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Entry } from './Entry.js';
+import { Entry, entryReadiness } from './Entry.js';
 import { account, INITIAL_ACCOUNT } from '../account/store.js';
 
 // A tela de entrada (#248, ADR 0029 D7/D8): o design vestido sobre as três fases que a FUN-97
@@ -89,7 +90,7 @@ describe('Entry', () => {
     expect(await render()).toContain('class="entry-error"');
   });
 
-  it('busy: cartões e o cartão de criar ficam desabilitados (RF-08)', async () => {
+  it('busy: cartões, o cartão de criar e o botão de entrar ficam desabilitados (RF-08)', async () => {
     account.set((state) => ({
       ...state,
       phase: 'ready',
@@ -100,10 +101,86 @@ describe('Entry', () => {
       ],
     }));
     const html = await render();
-    // O cartão do personagem e o cartão "+ NOVO PERSONAGEM" são os dois `<button disabled`
-    // da grade — o botão "Trocar de conta" (`Button` primitivo) não entra nessa contagem porque
-    // não desabilita por `busy` (é uma troca de conta, não uma chamada em duplicidade).
+    // O cartão do personagem, o cartão "+ NOVO PERSONAGEM" e o botão "ENTRAR NO JOGO" são
+    // os três `<button disabled` da grade — o botão "Trocar de conta" (`Button` primitivo)
+    // não entra nessa contagem porque não desabilita por `busy`.
     const disabledButtons = html.match(/<button[^>]*disabled/g) ?? [];
-    expect(disabledButtons.length).toBeGreaterThanOrEqual(2);
+    expect(disabledButtons.length).toBe(3);
+  });
+});
+
+describe('entryReadiness (R1-14)', () => {
+  it('checking: tom warn e texto "Conectando…"', () => {
+    expect(entryReadiness({ phase: 'checking', error: null })).toEqual({
+      tone: 'warn',
+      label: 'Conectando…',
+    });
+  });
+
+  it('anonymous ou ready sem erro: tom ok e texto "Pronto para entrar"', () => {
+    expect(entryReadiness({ phase: 'anonymous', error: null })).toEqual({
+      tone: 'ok',
+      label: 'Pronto para entrar',
+    });
+    expect(entryReadiness({ phase: 'ready', error: null })).toEqual({
+      tone: 'ok',
+      label: 'Pronto para entrar',
+    });
+  });
+
+  it('com erro: tom danger e texto "Sem conexão com o servidor."', () => {
+    expect(
+      entryReadiness({ phase: 'anonymous', error: 'Não foi possível falar com o servidor.' }),
+    ).toEqual({
+      tone: 'danger',
+      label: 'Sem conexão com o servidor.',
+    });
+    expect(
+      entryReadiness({ phase: 'ready', error: 'Nome inválido: de 2 a 30 letras, espaço, apóstrofo ou hífen.' }),
+    ).toEqual({
+      tone: 'danger',
+      label: 'Sem conexão com o servidor.',
+    });
+  });
+});
+
+describe('seleção de personagem em duas etapas (R1-16)', () => {
+  it('ready com 2 personagens, sem seleção: conta de ◇ = 2, ◆ ausente, sem classe selected, botão ENTRAR NO JOGO disabled', async () => {
+    account.set((state) => ({
+      ...state,
+      phase: 'ready',
+      identity: { accountId: 'a1', email: 'aldric@draconya.gg' },
+      characters: [
+        { id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null },
+        { id: 'c2', name: 'Sem Voc', level: 1, xp: 0, gold: 0, vocation: null, state: 'hunt', sessionId: null },
+      ],
+    }));
+    const html = await render();
+    const hollowMatches = html.match(/◇/g) ?? [];
+    const filledMatches = html.match(/◆/g) ?? [];
+    expect(hollowMatches.length).toBe(2);
+    expect(filledMatches.length).toBe(0);
+    expect(html).not.toContain('entry-character-card--selected');
+    expect(html).toContain('ENTRAR NO JOGO');
+    expect(html).toContain('Selecione um personagem para continuar.');
+    const enterButtonMatch = html.match(/<button[^>]*class="[^"]*entry-enter-button[^"]*"[^>]*>/);
+    expect(enterButtonMatch).not.toBeNull();
+    expect(enterButtonMatch?.[0]).toContain('disabled');
+  });
+
+  it('play() é chamado exatamente uma vez no arquivo, dentro de CharacterGrid e nunca em CharacterCard', async () => {
+    const source = await readFile(new URL('./Entry.tsx', import.meta.url), 'utf8');
+    const matches = source.match(/void play\(/g) ?? [];
+    expect(matches.length).toBe(1);
+    const characterCardIndex = source.indexOf('function CharacterCard');
+    const characterGridIndex = source.indexOf('function CharacterGrid');
+    const entryIndex = source.indexOf('function Entry()');
+    const playIndex = source.indexOf('void play(');
+
+    expect(characterCardIndex).toBeGreaterThan(-1);
+    expect(characterGridIndex).toBeGreaterThan(-1);
+    expect(entryIndex).toBeGreaterThan(-1);
+    expect(playIndex).toBeGreaterThan(characterGridIndex);
+    expect(playIndex).toBeLessThan(entryIndex);
   });
 });
