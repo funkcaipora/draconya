@@ -21,7 +21,7 @@ O bot também administra targeting: mirar no alvo mais próximo, no de menor ou 
 
 O bot avançado (level 50+) adiciona duas máquinas de estado sobre o mesmo motor. A primeira é o lure dinâmico: o jogador define um intervalo mínimo/máximo de monstros — por exemplo, mínimo 4 e máximo 8 — e o personagem alterna entre percorrer a rota acumulando inimigos (quando a contagem está abaixo do mínimo) e parar para limpar o grupo (quando atinge o máximo), retomando o percurso quando a contagem volta a cair abaixo do mínimo. A segunda é o ring swap: uma máquina de estados para Energy Ring e anéis semelhantes, com limiares de entrada e saída propositalmente diferentes para evitar troca repetitiva perto do mesmo percentual (por exemplo: equipar com HP < 50%, retirar com HP >= 60%, ou retirar por Mana < 10%). Ao retirar, o jogador escolhe entre restaurar o anel anteriormente equipado ou deixar o slot vazio.
 
-Por fim, o jogador pode configurar duas regras automáticas de saída da hunt: sair se algum membro da party sair ou morrer, e sair se o próprio gold acabar. Se a segunda regra não estiver ativa e o gold acabar, o personagem permanece na hunt, incapaz de pagar supplies, e pode morrer.
+Por fim, o jogador pode configurar quatro regras automáticas de saída da hunt: sair se o HP cair abaixo de um percentual, sair se algum membro da party sair ou morrer, sair se o próprio gold acabar, e sair se o peso carregado alcançar ou ultrapassar a capacidade total. Se a regra de gold não estiver ativa e o gold acabar, o personagem permanece na hunt, incapaz de pagar supplies, e pode morrer.
 
 ## Regras
 
@@ -34,7 +34,7 @@ Por fim, o jogador pode configurar duas regras automáticas de saída da hunt: s
 - Targeting suportado: mais próximo, menor HP, maior HP, priorizar específicas, ignorar específicas, seguir alvo, permanecer parado, manter distância configurada.
 - Lure dinâmico: intervalo mínimo/máximo de monstros configurável; abaixo do mínimo percorre a rota acumulando, no máximo para e limpa, retoma quando cai abaixo do mínimo de novo.
 - Ring swap: limiares de entrada e saída distintos (histerese); ao retirar, jogador escolhe restaurar o anel anterior ou deixar o slot vazio.
-- Regras de saída configuráveis: (1) sair se membro da party sair/morrer; (2) sair se o próprio gold acabar. Sem a regra (2) ativa, gold zerado não tira o personagem da hunt.
+- Regras de saída configuráveis: (1) sair se o HP cair abaixo de um percentual; (2) sair se membro da party sair/morrer; (3) sair se o próprio gold acabar; (4) sair se o peso carregado alcançar ou ultrapassar a capacidade total. Sem a regra (3) ativa, gold zerado não tira o personagem da hunt.
 
 ## O vocabulário, por inteiro (FUN-73)
 
@@ -312,8 +312,9 @@ mil regras salvas.
 | `hp-below` | o HP do personagem cai **abaixo** de `percent` | vale |
 | `out-of-gold` | o saldo (entrada + delta) chega a zero | vale |
 | `party-member-lost` | um companheiro saiu ou morreu | vale (#193): dispara no `onLeave` do outro, em cascata; quem sai leva o próprio extrato |
+| `out-of-capacity` | o peso carregado (containers + equipado) alcança ou ultrapassa a capacidade total | vale (SV-06); sem faixa morta — ao contrário do ring swap, não há "entrar" de novo depois de sair |
 
-Quatro coisas que não podem mudar sem pensar duas vezes:
+Cinco coisas que não podem mudar sem pensar duas vezes:
 
 - **A comparação de HP é estrita.** Com `<=`, quem configurasse "sair abaixo de 100%" veria a
   hunt encerrar no instante em que entrasse, de vida cheia, sem ter tomado um golpe.
@@ -326,6 +327,7 @@ Quatro coisas que não podem mudar sem pensar duas vezes:
   morte, regra ou pedido), em cascata e na ordem de entrada, e quem a tem SAI — `exit-rule` no
   extrato dele; os outros ficam. Em party, sair e morrer são `leave`, não `end`: o último a
   sair encerra a sessão, com o motivo dele.
+- **`out-of-capacity` não tem faixa morta, e é intencional.** `out-of-gold` também não tem: as duas são binárias, ligou-desligou, sem número editável. Inventar uma margem aqui seria um parâmetro que nem o kit nem o PRD pedem — se o dono decidir por histerese depois, é ADR novo, porque muda o contrato do schema (que hoje não tem parâmetro nenhum neste `kind`).
 - **Encerra por `exit-rule`, nunca por `manual-exit`.** O jogador não pediu para sair; a regra
   dele decidiu. Trocar os dois é o extrato mentindo sobre quem encerrou.
 

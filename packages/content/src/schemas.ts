@@ -942,6 +942,10 @@ export const botExitRuleSchema = z.discriminatedUnion('kind', [
    * configuração salva não mudar de forma quando party existir.
    */
   z.object({ kind: z.literal('party-member-lost') }),
+  /**
+   * SV-06: encerra quando o peso carregado alcança ou ultrapassa a capacidade total.
+   */
+  z.object({ kind: z.literal('out-of-capacity') }),
 ]);
 
 /**

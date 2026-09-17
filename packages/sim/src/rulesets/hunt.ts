@@ -197,7 +197,10 @@ export interface HuntExitRule {
  * isso `hp-below` carrega o percentual no id: duas regras de HP com limites diferentes
  * precisam ser distinguíveis na tela de retorno.
  */
-export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntExitRule[] {
+export function compileExitRules(
+  rules: readonly BotExitRule[],
+  items: ReadonlyMap<string, Item>,
+): readonly HuntExitRule[] {
   return rules.map((rule) => {
     switch (rule.kind) {
       case 'hp-below': {
@@ -234,6 +237,16 @@ export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntEx
           // de cada runner leva só ele, então aqui não há o que olhar; e numa hunt de um não
           // há de quem sair, por construção.
           when: () => false,
+        };
+      case 'out-of-capacity':
+        return {
+          id: 'out-of-capacity',
+          when(view) {
+            const self = view.participants[0];
+            if (self === undefined || !self.alive) return false;
+            if (self.capacity <= 0) return false;
+            return self.inventory.weight(items) >= self.capacity;
+          },
         };
     }
   });
@@ -1816,7 +1829,7 @@ export class HuntRuleset implements Ruleset {
    */
   #composeExitRules(config: BotConfig | undefined): readonly HuntExitRule[] {
     if (config === undefined) return this.#injectedExitRules;
-    return [...compileExitRules(config.exit), ...this.#injectedExitRules];
+    return [...compileExitRules(config.exit, this.#options.items), ...this.#injectedExitRules];
   }
 
   #botCooldownMs(): number {

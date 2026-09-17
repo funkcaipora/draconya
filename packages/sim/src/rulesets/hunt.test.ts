@@ -1,5 +1,5 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
-import type { Content, Progression, RawContent } from '@draconya/content';
+import type { Content, Item, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import type { BestiaryState } from '../bestiary.js';
@@ -2180,7 +2180,13 @@ describe('a equivalência entre taxas vale para a postura também', () => {
 /** Uma hunt sem monstro nenhum: aqui o assunto é quando ela ENCERRA, não o que acontece nela. */
 const withExit = (
   exit: readonly Record<string, unknown>[],
-  over: { health?: number; gold?: number; goldDelta?: number } = {},
+  over: {
+    health?: number;
+    gold?: number;
+    goldDelta?: number;
+    capacity?: number;
+    inventory?: InventoryState;
+  } = {},
 ) => {
   const loaded = buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
@@ -2199,6 +2205,8 @@ const withExit = (
     mana: stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 500, goldDelta: over.goldDelta ?? 0, alive: true, cooldowns: {},
+    capacity: over.capacity ?? stats.capacity,
+    ...(over.inventory !== undefined ? { inventory: over.inventory } : {}),
   });
   session.enter(hero);
   return { session, hero };
@@ -2292,6 +2300,34 @@ describe('regras de saída (FUN-86)', () => {
     run(session, 5_000, 100);
     expect(session.ended).toBe('exit-rule');
   });
+
+  it('out-of-capacity encerra por `exit-rule` e o extrato registra o motivo', () => {
+    const inv: InventoryState = {
+      backpack: [{ instanceId: 'sw1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // sword pesa 50 no catálogo de teste da hunt; capacidade do herói 50
+    const { session } = withExit(
+      [{ kind: 'out-of-capacity' }],
+      { capacity: 50, inventory: inv },
+    );
+    run(session, 5_000, 100);
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('out-of-capacity');
+  });
+
+  it('sem a regra out-of-capacity, capacidade excedida deixa a hunt correr', () => {
+    const inv: InventoryState = {
+      backpack: [{ instanceId: 'sw1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    const { session } = withExit(
+      [],
+      { capacity: 50, inventory: inv },
+    );
+    run(session, 5_000, 100);
+    expect(session.ended).toBeNull();
+  });
 });
 
 describe('os predicados de saída, isolados (FUN-86)', () => {
@@ -2308,8 +2344,14 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     monstersAlive: 0,
   });
 
+  const exitCatalog = new Map<string, Item>([
+    ['sword', { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0 } as Item],
+    ['plate', { id: 'plate', name: 'Plate Armor', kind: 'armor', slot: 'chest', weight: 80, value: 0 } as Item],
+  ]);
+
   const alguem = (over: Partial<{
     id: string; health: number; maxHealth: number; gold: number; goldDelta: number; alive: boolean;
+    capacity: number; inventory: InventoryState;
   }> = {}): CharacterRuntime => new CharacterRuntime({
     id: over.id ?? 'hero', position: { x: 1, y: 1, z: 7 },
     health: over.health ?? 100, maxHealth: over.maxHealth ?? 100,
@@ -2317,10 +2359,12 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     staminaMs: null, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
     alive: over.alive ?? true, cooldowns: {},
+    ...(over.capacity !== undefined ? { capacity: over.capacity } : {}),
+    ...(over.inventory !== undefined ? { inventory: over.inventory } : {}),
   });
 
-  const only = (rule: Record<string, unknown>) =>
-    (compileExitRules([botExitRuleSchema.parse(rule)])[0] as HuntExitRule);
+  const only = (rule: Record<string, unknown>, catalog: ReadonlyMap<string, Item> = exitCatalog) =>
+    (compileExitRules([botExitRuleSchema.parse(rule)], catalog)[0] as HuntExitRule);
 
   it('hp-below compara ESTRITAMENTE: 100% de vida não dispara uma regra de 100%', () => {
     // Com `<=`, quem configurasse "sair abaixo de 100%" veria a hunt encerrar no instante em
@@ -2376,8 +2420,49 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     expect(rule.when(view([alguem({ id: 'hero' }), alguem({ id: 'friend', alive: false })]))).toBe(false);
   });
 
+  it('out-of-capacity dispara quando peso >= capacidade (tanto == quanto >)', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // peso == capacidade (50 == 50)
+    expect(semCap.when(view([alguem({ capacity: 50, inventory: inv50 })]))).toBe(true);
+    // peso > capacidade (50 > 40)
+    expect(semCap.when(view([alguem({ capacity: 40, inventory: inv50 })]))).toBe(true);
+  });
+
+  it('out-of-capacity não dispara quando peso < capacidade', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // peso < capacidade (50 < 100)
+    expect(semCap.when(view([alguem({ capacity: 100, inventory: inv50 })]))).toBe(false);
+  });
+
+  it('out-of-capacity não dispara quando capacidade <= 0', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    expect(semCap.when(view([alguem({ capacity: 0, inventory: inv50 })]))).toBe(false);
+    expect(semCap.when(view([alguem({ capacity: -10, inventory: inv50 })]))).toBe(false);
+  });
+
+  it('out-of-capacity não dispara sobre personagem morto', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    expect(semCap.when(view([alguem({ alive: false, capacity: 50, inventory: inv50 })]))).toBe(false);
+  });
+
   it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
-    expect(compileExitRules([])).toEqual([]);
+    expect(compileExitRules([], new Map())).toEqual([]);
   });
 });
 
