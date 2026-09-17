@@ -848,6 +848,12 @@ body {
 .party-member { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .party-member-down { opacity: 0.5; }
 .party-approved { color: #8fd18f; }
+.party-kick {
+  width: 14px; height: 14px; padding: 0; border: 0; background: none;
+  color: var(--text-faint); font: 10px/1 var(--font-mono); cursor: pointer;
+}
+.party-kick:hover { color: var(--danger); }
+.party-kick:disabled { opacity: 0.5; cursor: default; }
 
 /* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
    de `PartyBag` é o `Panel` `dock` (`shell/ui/Panel.tsx`); a de `PartyMembers` é o próprio

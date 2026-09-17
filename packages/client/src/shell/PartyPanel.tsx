@@ -91,8 +91,19 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
           <ul className="party-members">
             {current.members.map((member) => (
               <li key={member.characterId} className="party-member">
-                <span>{`${member.characterId === current.leaderId ? '★ ' : ''}${member.characterId === me ? 'você' : member.characterId}`}</span>
+                <span>{`${member.characterId === current.leaderId ? '★ ' : ''}${member.characterId === me ? 'você' : member.name}`}</span>
                 <span className={member.approved ? 'party-approved' : 'entry-meta'}>{member.approved ? '✓ aprovou' : 'aguardando'}</span>
+                {leader && member.characterId !== me && (
+                  <button
+                    type="button"
+                    className="party-kick"
+                    title="Remover da party"
+                    disabled={state.busy}
+                    onClick={() => { void partyActions.kick(member.characterId); }}
+                  >
+                    ×
+                  </button>
+                )}
               </li>
             ))}
           </ul>

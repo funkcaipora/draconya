@@ -89,22 +89,39 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     const { as, issued } = build();
     const created = await as('p1').post('/api/party');
     expect(created.statusCode).toBe(200);
-    const id = (created.json() as { id: string }).id;
+    const createdBody = created.json() as { id: string; members: Array<{ characterId: string; name: string; approved: boolean }> };
+    const id = createdBody.id;
+    expect(createdBody.members).toEqual([{ characterId: 'p1', name: 'Hero p1', approved: false }]);
 
     expect((await as('p2').post(`/api/party/${id}/join`)).statusCode).toBe(409);
     // `p2` não é o líder — e ainda nem está na party.
     expect((await as('p2').post(`/api/party/${id}/invite`, { inviteeId: 'p3' })).statusCode).toBe(403);
     expect((await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' })).statusCode).toBe(200);
-    expect((await as('p2').post(`/api/party/${id}/join`)).statusCode).toBe(200);
+    const joined = await as('p2').post(`/api/party/${id}/join`);
+    expect(joined.statusCode).toBe(200);
+    expect((joined.json() as { members: Array<{ characterId: string; name: string; approved: boolean }> }).members).toEqual([
+      { characterId: 'p1', name: 'Hero p1', approved: false },
+      { characterId: 'p2', name: 'Hero p2', approved: false },
+    ]);
 
     // Sem proposta não se aprova nem se inicia.
     expect((await as('p2').post(`/api/party/${id}/approve`)).statusCode).toBe(409);
     expect((await as('p1').post(`/api/party/${id}/propose`, { huntId: 'nope', difficulty: 'bold', mode: 'shared' })).statusCode).toBe(400);
-    expect((await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'shared' })).statusCode).toBe(200);
+    const proposed = await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'shared' });
+    expect(proposed.statusCode).toBe(200);
+    expect((proposed.json() as { members: Array<{ characterId: string; name: string; approved: boolean }> }).members).toEqual([
+      { characterId: 'p1', name: 'Hero p1', approved: true },
+      { characterId: 'p2', name: 'Hero p2', approved: false },
+    ]);
     // Não aprovado por todos: recusa, e NADA foi emitido.
     expect((await as('p1').post(`/api/party/${id}/start`)).json()).toEqual({ error: 'not-approved' });
     expect(issued).toEqual([]);
-    expect((await as('p2').post(`/api/party/${id}/approve`)).statusCode).toBe(200);
+    const approved = await as('p2').post(`/api/party/${id}/approve`);
+    expect(approved.statusCode).toBe(200);
+    expect((approved.json() as { members: Array<{ characterId: string; name: string; approved: boolean }> }).members).toEqual([
+      { characterId: 'p1', name: 'Hero p1', approved: true },
+      { characterId: 'p2', name: 'Hero p2', approved: true },
+    ]);
 
     const started = await as('p1').post(`/api/party/${id}/start`);
     expect(started.statusCode).toBe(200);
@@ -159,13 +176,70 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     expect((await as('p1').post('/api/matchmaking/join')).json()).toEqual({ party: null });
     const matched = await as('p2').post('/api/matchmaking/join');
     expect(matched.statusCode).toBe(200);
-    const formed = (matched.json() as { party: { leaderId: string; members: Array<{ characterId: string }> } | null }).party;
+    const formed = (matched.json() as { party: { leaderId: string; members: Array<{ characterId: string; name: string; approved: boolean }> } | null }).party;
     expect(formed?.leaderId).toBe('p1');
-    expect(formed?.members.map((m) => m.characterId)).toEqual(['p1', 'p2']);
+    expect(formed?.members).toEqual([
+      { characterId: 'p1', name: 'Hero p1', approved: false },
+      { characterId: 'p2', name: 'Hero p2', approved: false },
+    ]);
     expect((await as('p1').post('/api/matchmaking/join')).json()).toEqual({ error: 'already-in-party' });
     expect((await as('p5').post('/api/matchmaking/join')).json()).toEqual({ error: 'not-in-city' });
     expect((await as('p3').post('/api/matchmaking/leave')).statusCode).toBe(200);
     expect(app).toBeDefined();
+  });
+
+  it('kick removes member, rejects non-leader, self-kick, and non-member, returning updated members with names (#358)', async () => {
+    const { as } = build();
+    const created = await as('p1').post('/api/party');
+    expect(created.statusCode).toBe(200);
+    const id = (created.json() as { id: string }).id;
+
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p3' });
+    await as('p3').post(`/api/party/${id}/join`);
+
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'shared' });
+    await as('p2').post(`/api/party/${id}/approve`);
+
+    // Não-líder tentando expulsar -> 403
+    const p2Kick = await as('p2').post(`/api/party/${id}/kick`, { targetId: 'p3' });
+    expect(p2Kick.statusCode).toBe(403);
+    expect(p2Kick.json()).toEqual({ error: 'not-leader' });
+
+    // Líder tentando expulsar a si mesmo -> 409
+    const selfKick = await as('p1').post(`/api/party/${id}/kick`, { targetId: 'p1' });
+    expect(selfKick.statusCode).toBe(409);
+    expect(selfKick.json()).toEqual({ error: 'cannot-kick-self' });
+
+    // Líder tentando expulsar não-membro -> 409
+    const nonMemberKick = await as('p1').post(`/api/party/${id}/kick`, { targetId: 'p4' });
+    expect(nonMemberKick.statusCode).toBe(409);
+    expect(nonMemberKick.json()).toEqual({ error: 'target-not-a-member' });
+
+    // Party inexistente -> 404
+    const notFoundKick = await as('p1').post('/api/party/nope/kick', { targetId: 'p2' });
+    expect(notFoundKick.statusCode).toBe(404);
+    expect(notFoundKick.json()).toEqual({ error: 'party-not-found' });
+
+    // Body inválido -> 400
+    const invalidBody = await as('p1').post(`/api/party/${id}/kick`, {});
+    expect(invalidBody.statusCode).toBe(400);
+    expect(invalidBody.json()).toEqual({ error: 'invalid-body' });
+
+    // Líder expulsa p2 -> 200, p2 removido, aprovações resetadas, nomes presentes
+    const kick = await as('p1').post(`/api/party/${id}/kick`, { targetId: 'p2' });
+    expect(kick.statusCode).toBe(200);
+    const body = kick.json() as { members: Array<{ characterId: string; name: string; approved: boolean }> };
+    expect(body.members).toEqual([
+      { characterId: 'p1', name: 'Hero p1', approved: false },
+      { characterId: 'p3', name: 'Hero p3', approved: false },
+    ]);
+
+    // Expulsar membro já removido -> 409
+    const kickAgain = await as('p1').post(`/api/party/${id}/kick`, { targetId: 'p2' });
+    expect(kickAgain.statusCode).toBe(409);
+    expect(kickAgain.json()).toEqual({ error: 'target-not-a-member' });
   });
 
   it('caps the party at maxMembers, keeps one party per character, and only the leader proposes', async () => {

@@ -27,7 +27,7 @@ async function render(): Promise<string> {
 const withParty = (over: Partial<PartyView>) => {
   party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: {
     id: 'party-1', leaderId: 'me', mode: 'split', huntId: null, difficulty: null,
-    members: [{ characterId: 'me', approved: false }], ...over,
+    members: [{ characterId: 'me', name: 'Eu', approved: false }], ...over,
   } }));
 };
 
@@ -48,7 +48,7 @@ describe('PartyPanel', () => {
   });
 
   it('as a member: approve when there is a proposal, never propose or start', async () => {
-    withParty({ leaderId: 'lead', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'lead', approved: true }, { characterId: 'me', approved: false }] });
+    withParty({ leaderId: 'lead', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'lead', name: 'lead', approved: true }, { characterId: 'me', name: 'Eu', approved: false }] });
     const html = await render();
     expect(html).toContain('★ lead');
     expect(html).toContain('>Aprovar<');
@@ -59,25 +59,56 @@ describe('PartyPanel', () => {
 
   it('as the leader: propose and invite, and Iniciar is disabled until everyone approved', async () => {
     // Mutação que mata: `everyoneApproved` ignorando um membro — o botão acenderia cedo.
-    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: false }] });
+    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', name: 'Eu', approved: true }, { characterId: 'b', name: 'Bob', approved: false }] });
     const waiting = await render();
     expect(waiting).toContain('>Propor<');
     expect(waiting).toContain('aria-label="convidar"');
     expect(waiting).toMatch(/<button[^>]*disabled[^>]*>Iniciar<\/button>/);
 
-    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: true }] });
+    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', name: 'Eu', approved: true }, { characterId: 'b', name: 'Bob', approved: true }] });
     const ready = await render();
     expect(ready).toMatch(/<button type="button">Iniciar<\/button>/);
     // Sozinho nunca inicia: party é de dois ou mais.
-    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }] });
+    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', name: 'Eu', approved: true }] });
     expect(await render()).toMatch(/<button[^>]*disabled[^>]*>Iniciar<\/button>/);
   });
 
   it('renders monster count in the difficulty select options (SV-19, #355)', async () => {
-    withParty({ leaderId: 'me', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: false }] });
+    withParty({ leaderId: 'me', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', name: 'Eu', approved: true }, { characterId: 'b', name: 'Bob', approved: false }] });
     const html = await render();
     expect(html).toMatch(/<option value="cautious"[^>]*>Cauteloso · 2<\/option>/);
     expect(html).toContain('<option value="bold">Ousado · 4</option>');
+  });
+
+  it('renders member names and kick button only for leader on other members (#358)', async () => {
+    // Como líder: vê nomes dos outros membros e o botão de kick '×' nos outros, mas não em si
+    withParty({
+      leaderId: 'me',
+      members: [
+        { characterId: 'me', name: 'Eu', approved: true },
+        { characterId: 'b', name: 'Bob', approved: false },
+      ],
+    });
+    const leaderHtml = await render();
+    expect(leaderHtml).toContain('★ você');
+    expect(leaderHtml).toContain('Bob');
+    expect(leaderHtml).toContain('class="party-kick"');
+    expect(leaderHtml).toContain('title="Remover da party"');
+    const kickCountLeader = (leaderHtml.match(/class="party-kick"/g) ?? []).length;
+    expect(kickCountLeader).toBe(1);
+
+    // Como membro comum: vê nomes, mas NÃO vê botão de kick
+    withParty({
+      leaderId: 'lead',
+      members: [
+        { characterId: 'lead', name: 'Alice', approved: true },
+        { characterId: 'me', name: 'Eu', approved: false },
+      ],
+    });
+    const memberHtml = await render();
+    expect(memberHtml).toContain('★ Alice');
+    expect(memberHtml).toContain('você');
+    expect(memberHtml).not.toContain('class="party-kick"');
   });
 
   it('while entering, the form is gone and the error, when any, is shown', async () => {

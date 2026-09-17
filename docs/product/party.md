@@ -1,8 +1,8 @@
 # Party e matchmaking de hunt
 
-**Status:** implementado — M13 (#185–#199, #203; ADR 0027). Matchmaking por vocação e faixa de
+**Status:** implementado — M13 (#185–#199, #203; ADR 0027), M15 (#358: kick do líder e nomes na formação). Matchmaking por vocação e faixa de
 level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`)
-**Última atualização:** 2026-09-15
+**Última atualização:** 2026-09-17
 **PRD:** §15, §43.2
 **Épico:** E9
 
@@ -18,13 +18,17 @@ sockets abertos, como o solo: o membro que nunca abriu o navegador recebe a mesm
 
 A formação é do `api`, em Redis, transitória (chaves `party:{id}` com TTL de 30 min; convite com
 TTL de 2 min). O fluxo é o do PRD §15.2 — **procurar/criar → reunir → líder propõe → membros
-aprovam → iniciar** — sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/leave`, `/propose`,
+aprovam → iniciar** — sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/leave`, `/kick`, `/propose`,
 `/approve`, `/start`, `GET /api/party/mine`). Nenhum opcode novo cliente→servidor: a tela
 (`PartyPanel`, dentro da seleção de hunt) só manda intenção e pergunta o estado a cada 2 s.
 
-- Quem cria é o líder. Só o líder convida (por id de personagem), propõe `{ huntId, difficulty,
-  mode }` e inicia. Convidado entra por id da party; um personagem está em no máximo uma party
-  (`party:by-char:{id}`), e o teto é `maxMembers` (4).
+- Quem cria é o líder. Só o líder convida (por id de personagem), expulsa outros membros (`POST
+  /api/party/:id/kick` com `targetId`; #358), propõe `{ huntId, difficulty, mode }` e inicia.
+  Expulsar outro membro desaprova a proposta corrente (a composição mudou), nunca admite auto-kick
+  (para isso existe `leave`) nem expulsar quem não é membro. Convidado entra por id da party; um
+  personagem está em no máximo uma party (`party:by-char:{id}`), e o teto é `maxMembers` (4).
+- A visão da party (`PartyMemberView`, #358) inclui o nome do personagem (`name`, além de
+  `characterId` e `approved`) resolvido a partir da conta do membro na party.
 - **Iniciar exige**: ≥ 2 membros, todos aprovaram a proposta atual (trocar a proposta zera as
   aprovações), hunt e dificuldade existentes, todos na Cidade ou em repouso (invariante 8), e o
   progresso pendente de cada um liquidado. Aí o `api` escolhe **um nó** (o do líder) e emite um

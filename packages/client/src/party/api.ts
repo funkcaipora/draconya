@@ -6,6 +6,7 @@ import { API_URL, ApiError } from '../account/api.js';
 
 export interface PartyMemberView {
   readonly characterId: string;
+  readonly name: string;
   readonly approved: boolean;
 }
 
@@ -37,6 +38,8 @@ const REFUSAL: Record<string, string> = {
   'in-another-party': 'Você está em outra party.',
   'party-not-found': 'Essa party não existe mais.',
   'not-leader': 'Só o líder pode fazer isso.',
+  'cannot-kick-self': 'Você não pode expulsar a si mesmo — use sair da party.',
+  'target-not-a-member': 'Esse personagem não está mais na party.',
   'not-a-member': 'Você não está nessa party.',
   'nothing-proposed': 'O líder ainda não propôs uma hunt.',
   'not-approved': 'Nem todos aprovaram ainda.',
@@ -73,6 +76,7 @@ export interface PartyClient {
   invite(partyId: string, characterId: string, inviteeId: string): Promise<void>;
   join(partyId: string, characterId: string): Promise<PartyView>;
   leave(partyId: string, characterId: string): Promise<void>;
+  kick(partyId: string, characterId: string, targetId: string): Promise<PartyView>;
   propose(partyId: string, characterId: string, proposal: { huntId: string; difficulty: string; mode: 'split' | 'shared' }): Promise<PartyView>;
   approve(partyId: string, characterId: string): Promise<PartyView>;
   start(partyId: string, characterId: string): Promise<{ sessionId: string; ticket: PartyTicketView | null }>;
@@ -87,6 +91,7 @@ export const partyApi: PartyClient = {
   invite: async (partyId, characterId, inviteeId) => { await post(`/api/party/${partyId}/invite`, { characterId, inviteeId }); },
   join: (partyId, characterId) => post(`/api/party/${partyId}/join`, { characterId }),
   leave: async (partyId, characterId) => { await post(`/api/party/${partyId}/leave`, { characterId }); },
+  kick: (partyId, characterId, targetId) => post(`/api/party/${partyId}/kick`, { characterId, targetId }),
   propose: (partyId, characterId, proposal) => post(`/api/party/${partyId}/propose`, { characterId, ...proposal }),
   approve: (partyId, characterId) => post(`/api/party/${partyId}/approve`, { characterId }),
   start: (partyId, characterId) => post(`/api/party/${partyId}/start`, { characterId }),
