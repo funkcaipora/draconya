@@ -1,7 +1,9 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HuntsModal, attemptEnter, enterHuntMessage, resolveSelection } from './HuntsModal.js';
+import {
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, resolveSelection,
+} from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
@@ -33,6 +35,13 @@ beforeEach(() => {
 });
 
 describe('HuntsModal', () => {
+  it('renders the name search and the visible-hunts count', async () => {
+    const html = await render({ hunting: false });
+
+    expect(html).toContain('placeholder="⌕ Buscar uma caçada ou criatura"');
+    expect(html).toContain('2 caçadas disponíveis');
+  });
+
   it('RF-01: lists every hunt of the catalogue with sprite, name, "level N+" and pulls/drops', async () => {
     const html = await render({ hunting: false });
     for (const hunt of hunts) {
@@ -82,12 +91,35 @@ describe('HuntsModal', () => {
     const html = await render({ hunting: false });
     expect(html).toContain('Nenhuma caçada disponível neste servidor.');
     expect(html).not.toContain('hunts-modal-pulls');
+    expect(html).not.toContain('Buscar uma caçada ou criatura');
   });
 
   it('catalogue === null shows "Carregando…"', async () => {
     hud.set((state) => ({ ...state, catalogue: null }));
     const html = await render({ hunting: false });
     expect(html).toContain('Carregando…');
+    expect(html).not.toContain('Buscar uma caçada ou criatura');
+  });
+});
+
+describe('filterHunts (RF-08)', () => {
+  it('returns every hunt in the same order for empty or whitespace-only search', () => {
+    expect(filterHunts(hunts, '')).toEqual(hunts);
+    expect(filterHunts(hunts, '   ')).toEqual(hunts);
+  });
+
+  it('matches a name substring without differentiating case', () => {
+    expect(filterHunts(hunts, 'DRAG')).toEqual([hunts[1]]);
+  });
+
+  it('returns an empty list when no name matches', () => {
+    expect(filterHunts(hunts, 'hydra')).toEqual([]);
+  });
+
+  it('does not replace the selection when the filter hides it', () => {
+    expect(filterHunts(hunts, 'rat')).toEqual([hunts[0]]);
+    expect(resolveSelection(hunts, 'dragon-lair', null))
+      .toEqual({ hunt: hunts[1], difficulty: 'cautious' });
   });
 });
 

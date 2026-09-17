@@ -1,7 +1,7 @@
 // "Escolha uma caçada" (#259, ADR 0029 D6). A party de formação mora na coluna direita — ADR
 // 0027: propor uma hunt É escolher uma hunt. Sem abas (Treino/Quests/Arena/Bosses não existem,
-// D8), sem busca (fora do contrato desta issue), sem "Loot possível" nem grade de criaturas
-// (D8 — `catalogue.hunts[]` não tem `monsters` nem `loot`; ver M15 SV-02/SV-13).
+// D8), com busca só por NOME (#324 — `catalogue.hunts[]` não traz criaturas), sem "Loot
+// possível" nem grade de criaturas (D8 — `catalogue.hunts[]` não tem `monsters` nem `loot`).
 //
 // **A lógica de seleção é pura e exportada** (`resolveSelection`, `enterHuntMessage`,
 // `attemptEnter`): `prerender` (`react-dom/static`) roda a árvore sem DOM e sem eventos, então
@@ -18,6 +18,7 @@ import { OutfitSprite } from './OutfitSprite.js';
 import { PartyPanel } from './PartyPanel.js';
 import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
+import { Input } from './ui/Input.js';
 import { Kicker } from './ui/Kicker.js';
 
 /** Os três tamanhos de pull do Huntera (FUN-123), em palavras — os mesmos de `event-text.ts`. */
@@ -26,6 +27,18 @@ const DIFFICULTY_TEXT: Record<string, string> = {
   bold: 'Ousado',
   reckless: 'Agressivo',
 };
+
+/**
+ * As hunts cujo nome contém `query`, sem diferenciar maiúsculas de minúsculas.
+ *
+ * A busca por criatura do kit não entra: `catalogue.hunts[]` ainda não tem `monsters[]`. Busca
+ * vazia devolve a lista inteira na mesma ordem; não há ordenação por relevância inventada aqui.
+ */
+export function filterHunts(hunts: readonly HuntListing[], query: string): HuntListing[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery === '') return [...hunts];
+  return hunts.filter((hunt) => hunt.name.toLowerCase().includes(normalizedQuery));
+}
 
 /**
  * A hunt e a dificuldade EFETIVAS dadas a seleção do jogador (RF-03).
@@ -95,8 +108,10 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
   const level = useHudSlice((state) => state.level);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pull, setPull] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const hunts = catalogue?.hunts ?? [];
+  const visibleHunts = filterHunts(hunts, query);
   const { hunt: selected, difficulty } = resolveSelection(hunts, selectedId, pull);
 
   const enter = (): void => {
@@ -123,12 +138,23 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
           ? <p className="hunts-modal-empty">Nenhuma caçada disponível neste servidor.</p>
           : (
             <div className="hunts-modal-body">
-              <ul className="hunts-modal-list" aria-label="hunts">
-                {hunts.map((hunt) => (
-                  <HuntRow key={hunt.id} hunt={hunt} level={level} selected={hunt.id === selected?.id}
-                    onSelect={() => { setSelectedId(hunt.id); setPull(null); }} />
-                ))}
-              </ul>
+              <div className="hunts-modal-list-col">
+                <Input
+                  size="sm"
+                  className="hunts-modal-search"
+                  placeholder="⌕ Buscar uma caçada ou criatura"
+                  aria-label="Buscar uma caçada ou criatura"
+                  value={query}
+                  onChange={(event) => { setQuery(event.target.value); }}
+                />
+                <Kicker tone="muted">{`${String(visibleHunts.length)} caçadas disponíveis`}</Kicker>
+                <ul className="hunts-modal-list" aria-label="hunts">
+                  {visibleHunts.map((hunt) => (
+                    <HuntRow key={hunt.id} hunt={hunt} level={level} selected={hunt.id === selected?.id}
+                      onSelect={() => { setSelectedId(hunt.id); setPull(null); }} />
+                  ))}
+                </ul>
+              </div>
               {selected !== null && (
                 <div className="hunts-modal-detail">
                   <h2>{selected.name}</h2>
