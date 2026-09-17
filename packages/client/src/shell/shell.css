@@ -729,6 +729,14 @@ body {
 .vocation-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 @media (max-width: 520px) { .vocation-cards { grid-template-columns: 1fr; } }
 
+/* O modal de personalização de skills (RC-04, #317, kit v3 Modals.jsx:297) */
+.skills-customize-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 4px 0 12px;
+}
+.skills-customize-note {
+  margin: 0; font: 8px var(--font-mono); color: var(--text-faint); letter-spacing: .06em;
+}
+
 /* A coluna da direita (#161): set, mochila e bolsa fixos; minimizado é só o cabeçalho. */
 .windows > section.collapsed > *:not(header) { display: none; }
 

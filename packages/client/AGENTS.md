@@ -509,7 +509,7 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`CharacterPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, abaixo de `SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
   (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`; `PartyBag` na direita, só em
@@ -577,3 +577,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   nenhum `book.get` roda, então nada foi guardado antes da arte — não há entrada envenenada.
   Conferido no navegador segurando o `catalog-content.json` por 15 s: retângulos até lá,
   sprites depois, sem a câmera andar.
+- **A preferência de visibilidade de Skills vive no `localStorage`** (RC-04, #317, ADR 0030 D5).
+  `SkillsPanel` salva a lista de campos visíveis sob `'draconya:shell:skillsPanel:visible'`. É
+  preferência de tela pura (`shell/skills-preference.ts`), nunca passa pelo servidor nem pelo
+  ledger, e falhas de leitura/escrita degradam silenciosamente para a exibição de todos os
+  seis campos.
+
