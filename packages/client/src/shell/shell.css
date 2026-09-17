@@ -121,6 +121,7 @@ body {
   position: absolute; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w);
   display: flex; flex-direction: column; gap: 10px;
   padding: 10px; box-sizing: border-box; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--ash-6) var(--ash-1);
   background: var(--ash-1);
   z-index: 10;
 }
@@ -128,13 +129,25 @@ body {
 .windows-right { right: 0; border-left: 1px solid var(--ash-5); }
 /* Cada filho de .windows é um Panel (ui/Panel.tsx, DS-04) desde #305 — a pele própria (ui.css)
    já resolve fundo, borda, sombra, cabeçalho e rolagem. */
+.windows > section {
+  /* A coluna é a única rolagem no desktop. Cada seção mantém a altura do conteúdo para que
+     Bot, Personagem e Party nunca disputem a altura disponível nem escondam regras no meio —
+     o mesmo padrão do <aside> do kit (App.jsx:11): overflow:auto no contêiner, sem min-height
+     nem flex-shrink nos filhos (#289). */
+  overflow: hidden;
+  flex: 0 0 auto;
+}
 .quiet { color: var(--text-faint); margin: 8px 0; }
 
-/* O chat: janela flutuante fixa no canto inferior esquerdo (#252, ADR 0029 D5). A moldura
-   (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO por cima do mundo — sem arraste,
-   como as outras janelas (D6, "nada arrastável"). */
+/* O chat: janela flutuante fixa sobre o MUNDO, à direita da coluna esquerda (#252, ADR 0029 D5;
+   #288). A moldura (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO — sem arraste,
+   como as outras janelas (D6, "nada arrastável"). O kit não desenha chat (ADR 0030 §3: "não há
+   chat no HUD do kit"), então não há régua visual para a posição exata — só a regra de não
+   cobrir conteúdo interativo da coluna. `left` começa depois de `--sidebar-w` (232px) em vez de
+   10px: preso ao canto, o chat cobria as últimas seções de `.windows-left` (Party, e o
+   Personagem antes dela) sempre que a coluna crescia até o rodapé (#288). */
 .chat-window {
-  position: fixed; left: 10px; bottom: 10px; width: 340px; z-index: 20;
+  position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
 }
 
 .badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
