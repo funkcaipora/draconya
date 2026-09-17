@@ -20,6 +20,15 @@ const Place = z.union([
 const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
+ * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ */
+export const SkillProgress = z.object({
+  level: z.number().int().nonnegative(),
+  percentToNext: z.number().int().min(0).max(99),
+});
+export type SkillProgress = z.infer<typeof SkillProgress>;
+
+/**
  * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
  * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
  */
@@ -242,6 +251,9 @@ export const S2C_SCHEMAS = {
       level: z.number().int(), xp: z.number(),
       /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
       vocationId: z.string().nullable().default(null),
+      speed: z.number().int().nonnegative().default(0),
+      skills: z.record(z.string().min(1), SkillProgress).default({}),
+      magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -586,6 +598,9 @@ export const S2C_SCHEMAS = {
       .default({ arrow: null, bolt: null }),
     /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
     vocationId: z.string().nullable().default(null),
+    speed: z.number().int().nonnegative().default(0),
+    skills: z.record(z.string().min(1), SkillProgress).default({}),
+    magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),

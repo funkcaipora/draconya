@@ -98,7 +98,10 @@ describe('world deltas', () => {
     expect(world.ambience).toBe('cavern');
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
@@ -121,7 +124,10 @@ describe('world deltas', () => {
     applyMessage({ type: 'ground-item-appear', id: 8, position: { x: 1, y: 2, z: 8 }, appearanceId: 5964 }, 0);
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { mapId: 'rat-cellars', creatures: [], groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
@@ -172,6 +178,7 @@ describe('as cores de outfit (FUN-104)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: { groundItems: [],
         mapId: 'rat-cellars',
@@ -309,6 +316,7 @@ describe('combat transients (FUN-106)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -345,6 +353,7 @@ describe('HUD deltas', () => {
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       0,
     );
@@ -378,6 +387,7 @@ describe('session-state', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
     world: { groundItems: [],
       mapId: 'rat-cellars',
@@ -484,6 +494,7 @@ describe('o analisador (FUN-83)', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
     world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
@@ -570,7 +581,10 @@ describe('o analisador ao vivo (FUN-110)', () => {
   const attach = (): void => {
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
-      self: { creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
+        level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
@@ -623,7 +637,10 @@ describe('o analisador ao vivo (FUN-110)', () => {
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-    self: { creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
     world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],

@@ -205,6 +205,7 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 | Skill | Alimentada por | Contribuição |
 |---|---|---|
 | Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
+| Distância | cada tiro que sai | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
 
 **Magia sobe por mana gasta, e isso é mecanismo, não número.** Por lançamento, a forma ótima de
@@ -240,3 +241,12 @@ resolve com guarda de instante, resolvida aqui sem instante nenhum.
 
 Extrato **sem** skills não apaga as que já estavam lá — é o extrato de uma sessão de Cidade, ou de
 um nó antigo durante deploy em rolagem.
+
+### O que chega ao cliente (SV-04)
+
+Três campos são expostos em `player-stats` e em `session-state.self`:
+- `speed`: velocidade do personagem (`Math.round(character.speed * character.speedScale)`), calculada a partir de `startingSpeed` e `speedPerLevel`, escalada por efeitos de aceleração (haste).
+- `skills`: mapa de `skillId` para `{ level, percentToNext }`, cobrindo as três skills do jogo (`melee`, `distance`, `magic`).
+- `magicLevel`: atalho com `{ level, percentToNext }` para a skill `magic` (`skills.magic`), duplicado no topo para facilitar acesso direto nas barras de interface do HUD e manter paridade com as barras clássicas.
+
+O percentual para o próximo nível (`percentToNext`) é um número inteiro de 0 a 99 (truncado via piso `Math.floor` e limitado a 99 enquanto o nível não fecha).

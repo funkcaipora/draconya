@@ -186,7 +186,10 @@ describe('outfit colours on the creature (FUN-104)', () => {
   it('the session state carries the same creature shape, colours included', () => {
     const state: S2CMessage = {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
@@ -240,7 +243,10 @@ describe('the live analyzer (FUN-110)', () => {
 describe('the bot configuration in force rides the session state (FUN-111)', () => {
   const state: S2CMessage = {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+    self: {
+      creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
     world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
@@ -408,6 +414,104 @@ describe('vocation choice (#154)', () => {
     });
     expect(catalogue.vocations).toEqual([]);
     expect(catalogue.vocationLevel).toBe(0);
+  });
+});
+
+describe('skills, magic level and speed in player-stats and session-state (#340, SV-04)', () => {
+  const fullStats: S2CMessage = {
+    type: 'player-stats',
+    health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+    level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
+    ammo: { arrow: null, bolt: null }, vocationId: 'knight',
+    speed: 292,
+    skills: {
+      melee: { level: 15, percentToNext: 45 },
+      distance: { level: 10, percentToNext: 0 },
+      magic: { level: 2, percentToNext: 80 },
+    },
+    magicLevel: { level: 2, percentToNext: 80 },
+  };
+
+  it('round-trips player-stats with the 3 fields', () => {
+    expect(decodeS2C(encodeS2C(fullStats))).toEqual([fullStats]);
+  });
+
+  it('decodes player-stats without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
+    const rawOlderNode = {
+      type: 'player-stats',
+      health: 100, maxHealth: 100, mana: 50, maxMana: 50,
+      level: 1, xp: 0, capacity: 400, gold: 0, staminaMs: 1000,
+      ammo: { arrow: null, bolt: null }, vocationId: null,
+    };
+    const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
+    expect(decoded).toEqual([{
+      ...rawOlderNode,
+      speed: 0,
+      skills: {},
+      magicLevel: { level: 0, percentToNext: 0 },
+    }]);
+  });
+
+  const fullSessionState: S2CMessage = {
+    type: 'session-state',
+    sessionType: 'hunt',
+    elapsedMs: 12000,
+    self: {
+      creatureId: 1, characterId: 'c1',
+      health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+      level: 8, xp: 4200, vocationId: 'knight',
+      speed: 292,
+      skills: {
+        melee: { level: 15, percentToNext: 45 },
+      },
+      magicLevel: { level: 2, percentToNext: 80 },
+    },
+    world: { groundItems: [], mapId: 'arena', creatures: [] },
+    aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
+    notableEvents: [],
+  };
+
+  it('round-trips session-state.self with the 3 fields', () => {
+    expect(decodeS2C(encodeS2C(fullSessionState))).toEqual([fullSessionState]);
+  });
+
+  it('decodes session-state.self without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
+    const { speed: _s, skills: _sk, magicLevel: _m, ...selfWithoutNewFields } = fullSessionState.self;
+    const olderSessionState = {
+      ...fullSessionState,
+      self: selfWithoutNewFields,
+    };
+    const decoded = decodeS2C(encodeS2C(olderSessionState as S2CMessage));
+    expect(decoded).toEqual([{
+      ...fullSessionState,
+      self: {
+        ...selfWithoutNewFields,
+        speed: 0,
+        skills: {},
+        magicLevel: { level: 0, percentToNext: 0 },
+      },
+    }]);
+  });
+
+  it('rejects invalid speed, level or percentToNext in SkillProgress', () => {
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...fullStats, speed: -1 }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...fullStats, speed: 1.5 }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: -1, percentToNext: 0 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: 100 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: -1 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: 50.5 },
+    }).success).toBe(false);
   });
 });
 

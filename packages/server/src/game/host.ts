@@ -15,11 +15,11 @@
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
-  SessionSnapshot, SessionType,
+  SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Vocation } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
 import { containerRulesFor } from '@draconya/sim';
 import type {
   CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
@@ -138,6 +138,11 @@ export interface SessionHostOptions {
    * sessão (invariante 7): é um mapa carregado no boot, não uma consulta por criatura.
    */
   readonly monsterCatalog?: ReadonlyMap<string, Monster>;
+  /**
+   * O catálogo de skills (#340, SV-04), para progresso e magic level em player-stats.
+   * Ausente: skills vazias e magic level zerado.
+   */
+  readonly skillCatalog?: ReadonlyMap<string, Skill>;
   /**
    * O outfit de TODO personagem, enquanto ninguém escolhe o seu (FUN-103, §7.4 pendente).
    *
@@ -282,7 +287,23 @@ type PlayerStats = S2CProps<'player-stats'>;
  * porque o protocolo não tem "não sei", e zero é o único número que não promete tempo de
  * recompensa que não existe.
  */
-function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
+function skillProgressOf(
+  character: CharacterRuntime | undefined, definition: Skill | undefined,
+): SkillProgress {
+  if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
+  return character.skills.progressOf(definition);
+}
+
+function playerStatsOf(
+  character: CharacterRuntime | undefined,
+  skillCatalog?: ReadonlyMap<string, Skill>,
+): PlayerStats {
+  const skills: Record<string, SkillProgress> = {};
+  if (character !== undefined && skillCatalog !== undefined) {
+    for (const definition of skillCatalog.values()) {
+      skills[definition.id] = character.skills.progressOf(definition);
+    }
+  }
   return {
     health: character?.health ?? 0,
     maxHealth: character?.maxHealth ?? 0,
@@ -293,14 +314,29 @@ function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
-    // A munição escolhida por família (#152): `null` é a grátis.
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
       bolt: character?.ammo.get('bolt') ?? null,
     },
-    // A vocação (#154): `null` até a escolha.
     vocationId: character?.vocationId ?? null,
+    speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
+    skills,
+    magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
   };
+}
+
+function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
+  return a.level === b.level && a.percentToNext === b.percentToNext;
+}
+
+function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    const other = b[key];
+    if (other === undefined || !sameSkillProgress(a[key] as SkillProgress, other)) return false;
+  }
+  return true;
 }
 
 /**
@@ -327,7 +363,10 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.gold === b.gold
     && a.ammo.arrow === b.ammo.arrow
     && a.ammo.bolt === b.ammo.bolt
-    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
+    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
+    && a.speed === b.speed
+    && sameSkills(a.skills, b.skills)
+    && sameSkillProgress(a.magicLevel, b.magicLevel);
 }
 
 /**
@@ -1106,7 +1145,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character);
+    const stats = playerStatsOf(character, this.#options.skillCatalog);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -1159,7 +1198,7 @@ export class SessionHost {
       });
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character);
+    const stats = playerStatsOf(character, this.#options.skillCatalog);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1692,7 +1731,7 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character);
+      const stats = playerStatsOf(character, this.#options.skillCatalog);
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
@@ -1775,7 +1814,7 @@ export class SessionHost {
     if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
     viewer.send(state);
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant);
+    const stats = playerStatsOf(participant, this.#options.skillCatalog);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
     // E o Bestiário (FUN-113), pela mesma razão dos vitais: é progressão que só viaja em
@@ -2590,7 +2629,7 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(this.#participantOf(hosted, characterId));
+    const self = playerStatsOf(this.#participantOf(hosted, characterId), this.#options.skillCatalog);
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -2645,6 +2684,9 @@ export class SessionHost {
         level: self.level,
         xp: self.xp,
         vocationId: self.vocationId,
+        speed: self.speed,
+        skills: self.skills,
+        magicLevel: self.magicLevel,
       },
       world: {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.

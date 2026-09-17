@@ -145,3 +145,50 @@ describe('a contribuição no dano', () => {
     expect(powerMultiplier(magic, 30)).toBe(1);
   });
 });
+
+describe('o progresso até o próximo nível (progressOf, #340, SV-04)', () => {
+  it('skill nunca usada devolve nível inicial e percentual zero', () => {
+    const skills = new Skills();
+    expect(skills.progressOf(melee)).toEqual({ level: 10, percentToNext: 0 });
+    expect(skills.progressOf(magic)).toEqual({ level: 0, percentToNext: 0 });
+  });
+
+  it('skill parcialmente usada calcula o percentual inteiro (ex.: 50/100 -> 50%)', () => {
+    const skills = new Skills();
+    skills.gain(magic, 50); // magic level 0 precisa de 100 pontos
+    expect(skills.progressOf(magic)).toEqual({ level: 0, percentToNext: 50 });
+  });
+
+  it('arredonda para baixo via piso (ex.: 99.6% -> 99%)', () => {
+    const precisionSkill = skillSchema.parse({
+      id: 'precision', name: 'Precisão', startingLevel: 1,
+      curve: { base: 1000, factor: 1 },
+      gain: { on: 'melee-hit', points: 1 },
+    });
+    const skills = new Skills();
+    skills.gain(precisionSkill, 996); // 996 / 1000 = 99.6% -> floor 99
+    expect(skills.progressOf(precisionSkill)).toEqual({ level: 1, percentToNext: 99 });
+  });
+
+  it('limita em no máximo 99% enquanto o nível não fecha', () => {
+    const skills = new Skills();
+    skills.gain(melee, 49); // melee nível 10 precisa de 50 pontos -> 49/50 = 98%
+    expect(skills.progressOf(melee)).toEqual({ level: 10, percentToNext: 98 });
+
+    const highCostSkill = skillSchema.parse({
+      id: 'high-cost', name: 'Custo Alto', startingLevel: 1,
+      curve: { base: 1000, factor: 1 },
+      gain: { on: 'melee-hit', points: 1 },
+    });
+    const highCostSkills = new Skills();
+    highCostSkills.gain(highCostSkill, 999);
+    expect(highCostSkills.progressOf(highCostSkill)).toEqual({ level: 1, percentToNext: 99 });
+
+    // Cap em 99 se pontos >= needed
+    const directState = Skills.fromState({
+      melee: { level: 10, points: 50 },
+    });
+    expect(directState.progressOf(melee)).toEqual({ level: 10, percentToNext: 99 });
+  });
+});
+

@@ -3290,6 +3290,17 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
   };
   const ARROW = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 };
+  const TEST_MELEE_SKILL = {
+    id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
+    curve: { base: 50, factor: 1.1 },
+    gain: { on: 'melee-hit', points: 1 },
+    damagePerLevel: 0.02,
+  };
+  const TEST_MAGIC_SKILL = {
+    id: 'magic', name: 'Magia', startingLevel: 0,
+    curve: { base: 100, factor: 1 },
+    gain: { on: 'spell-cast', pointsPerMana: 1 },
+  };
   /** Um dia inteiro de stamina — o teto de `TEST_STAMINA`, e exatamente 24:00 no HUD. */
   const FULL_STAMINA_MS = 86_400_000;
   /** Stamina no MEIO de um minuto: três segundos de hunt não viram o mostrador. */
@@ -3346,6 +3357,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     regen: boolean;
     /** O herói nasce com esta arma na mão, e o conteúdo com ela e com a flecha (#152). */
     weapon: 'bow' | 'wand';
+    /** Skills do conteúdo de teste (#340, SV-04). */
+    skills: readonly unknown[];
   }> = {}) {
     const raw = rawTestContent();
     // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
@@ -3367,6 +3380,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     };
     const content = buildContent({
       ...raw,
+      ...(over.skills === undefined ? {} : { skills: over.skills }),
       ...armory,
       ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
@@ -3403,6 +3417,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       nodeId: 'n1', contentVersion: content.version, logger,
       now: () => now,
       monsterCatalog: content.monsters,
+      skillCatalog: content.skills,
       ...(over.table === false ? {} : { appearances }),
       createSession: (characterId) => {
         const session = createHuntSession({
@@ -3454,7 +3469,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     };
     return {
       host, socket, viewer, heroId, runFor, hero, heroTileAt, maxHealth: stats.maxHealth,
-      maxMana: stats.maxMana, received: () => socket.received(),
+      maxMana: stats.maxMana, received: () => socket.received(), content,
     };
   }
 
@@ -3609,6 +3624,54 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs) })
         .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs) });
     }
+  });
+
+  it('uma mudança SÓ de skill gera player-stats — a comparação olha skills e percentToNext (#340, SV-04)', () => {
+    // Regeneração desligada, stamina no meio do minuto, sem monstros: nada mexe nos vitais.
+    // O pacote inicial vem no session-attach com a skill no level inicial e percent 0.
+    // Quando a skill ganha pontos no runtime, sameStats detecta o avanço e emite um novo
+    // player-stats. Se nada mudar no ciclo seguinte, nenhum pacote a mais sai.
+    //
+    // Mutação que mata: tirar sameSkills de sameStats — o avanço de skill não dispara
+    // player-stats e o HUD congela até que outro vital mude.
+    const { runFor, received, hero, content } = hunt({
+      regen: false,
+      stamina: MID_MINUTE_STAMINA_MS,
+      monsters: false,
+      skills: [TEST_MELEE_SKILL],
+    });
+
+    const initialStats = ofType(received(), 'player-stats');
+    expect(initialStats.length).toBe(1);
+    expect(initialStats[0]?.skills.melee).toEqual({ level: 10, percentToNext: 0 });
+
+    // Um ciclo sem alterações: nenhum player-stats extra
+    runFor(100);
+    expect(ofType(received(), 'player-stats').length).toBe(1);
+
+    // Altera a skill diretamente no runtime
+    const meleeSkill = content.skills.get('melee');
+    expect(meleeSkill).toBeDefined();
+    if (!meleeSkill) return;
+
+    hero().skills.gain(meleeSkill, 10);
+    expect(hero().skills.progressOf(meleeSkill)).toEqual({ level: 10, percentToNext: 20 });
+
+    // Roda mais um ciclo: sameStats detecta a mudança e emite o novo pacote
+    runFor(100);
+    const afterStats = ofType(received(), 'player-stats');
+    expect(afterStats.length).toBe(2);
+
+    const first = afterStats[0] as (typeof afterStats)[number];
+    const second = afterStats[1] as (typeof afterStats)[number];
+    expect(second.skills.melee).toEqual({ level: 10, percentToNext: 20 });
+
+    // E todos os outros campos permaneceram idênticos
+    expect({ ...second, skills: first.skills }).toEqual(first);
+
+    // Próximo ciclo sem mudanças: nenhum player-stats adicional
+    runFor(100);
+    expect(ofType(received(), 'player-stats').length).toBe(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
