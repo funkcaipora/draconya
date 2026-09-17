@@ -18,6 +18,7 @@ import { clickIntent, dropIntent, parsePlace, serializePlace } from './drag-inte
 import type { DragPlace } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
+import { Slot } from './ui/Slot.js';
 
 const TITLE: Readonly<Record<'backpack' | 'satchel', string>> = { backpack: 'Mochila', satchel: 'Bolsa' };
 
@@ -74,11 +75,11 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                 return (
                   <li
                     key={index}
-                    className="slot slot-empty-place"
-                    aria-label="lugar vazio"
                     onDragOver={(event) => { event.preventDefault(); }}
                     onDrop={(event) => { dropOn(place, event, inventory); }}
-                  />
+                  >
+                    <Slot size={26} empty icon={<span />} ariaLabel="lugar vazio" />
+                  </li>
                 );
               }
               const definition = byId.get(item.itemId);
@@ -87,15 +88,14 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
               return (
                 <li
                   key={item.instanceId}
-                  className="slot"
                   onDragOver={(event) => { event.preventDefault(); }}
                   onDrop={(event) => { dropOn(place, event, inventory); }}
                 >
-                  <button
-                    type="button"
-                    className="slot-button"
-                    draggable
+                  <Slot
+                    size={26}
+                    kind="loot"
                     title={wearable ? `Vestir ${name}` : name}
+                    draggable
                     onDragStart={(event) => { startDrag(place, event); }}
                     // O clique veste — o caminho do celular. Quem confere se dá é o servidor.
                     onClick={() => {
@@ -103,10 +103,9 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                       const intent = clickIntent(place, inventory);
                       if (intent !== null) sendIntent(intent);
                     }}
-                  >
-                    <ItemSprite appearanceId={definition?.appearanceId} name={name} />
-                    {item.quantity > 1 && <span className="slot-count">{item.quantity}</span>}
-                  </button>
+                    icon={<ItemSprite appearanceId={definition?.appearanceId} name={name} />}
+                    count={item.quantity}
+                  />
                 </li>
               );
             })}

@@ -479,6 +479,7 @@
 }
 .ui-slot[data-kind="loot"] { border-color: var(--gold-2); }
 .ui-slot:hover { border-color: var(--gold-3); }
+.ui-slot[draggable] { cursor: grab; }
 .ui-slot:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-slot--dashed { border-style: dashed; }
 .ui-slot--empty {
@@ -507,7 +508,8 @@
   color: var(--text-faint);
   font: 5.5px var(--font-mono);
 }
-.ui-slot-count {
+.ui-slot-count,
+.slot-count {
   position: absolute; right: 3px; bottom: 2px;
   color: var(--gold-5);
   font: 500 6.5px var(--font-mono);

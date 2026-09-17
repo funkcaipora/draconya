@@ -189,3 +189,31 @@ describe('ui.css (VitalBar)', () => {
   });
 });
 
+describe('slots e set fidelidade (#307)', () => {
+  it('container-grid usa 6 colunas de 26px (RF-04)', () => {
+    expect(shellCss).toMatch(/\.container-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*26px\);/);
+  });
+
+  it('equipment usa padding de 6px (RF-07)', () => {
+    expect(shellCss).toMatch(/\.equipment\s*\{[^}]*padding:\s*6px;/);
+  });
+
+  it('capacity usa letter-spacing de 0.08em e não impõe max-width (RF-08)', () => {
+    expect(shellCss).toMatch(/\.capacity\s*\{[^}]*letter-spacing:\s*0\.08em;/);
+    expect(shellCss).not.toMatch(/\.capacity\s*\{[^}]*max-width:/);
+  });
+
+  it('ui-slot-count e slot-count usam gold-5, mono 500 6.5px, e sem text-shadow (RF-10)', () => {
+    expect(uiCss).toMatch(/\.ui-slot-count[^}]*color:\s*var\(--gold-5\);/);
+    expect(uiCss).toMatch(/\.ui-slot-count[^}]*font:\s*500 6\.5px var\(--font-mono\);/);
+    expect(uiCss).not.toMatch(/\.ui-slot-count[^}]*text-shadow:/);
+  });
+
+  it('shell.css não contém regras de moldura manual de slot', () => {
+    expect(shellCss).not.toMatch(/^\.slot\s*\{/m);
+    expect(shellCss).not.toMatch(/^\.slot-empty-place\s*\{/m);
+    expect(shellCss).not.toMatch(/^\.slot-button\s*\{/m);
+    expect(shellCss).not.toMatch(/^\.slot-count\s*\{/m);
+  });
+});
+

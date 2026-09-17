@@ -629,14 +629,18 @@ body {
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
 
-/* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). Slot de
-   26 px (#253, ADR 0029 D4) — ver `.container-grid .slot` abaixo, junto de `.equipment .slot`. */
+/* Seis colunas de EXIBIÇÃO (App.jsx do kit: `cols={6}` nas duas chamadas de `BagPanel` — R7-03).
+   Largura de exibição e passo de CRESCIMENTO do container são independentes: o container
+   continua crescendo de 5 em 5 (#160, ADR 0026 decisão 6 — mochila 20, bolsa 10, os dois
+   múltiplos de 5), só que a 6ª, 12ª... célula abre uma nova linha visual sem que a linha
+   anterior tenha enchido — "abrir uma linha = ganhar uma linha visível inteira" deixou de valer,
+   e é essa a correção do verificador sobre este achado (docs/reviews/kit-fidelity-audit-2026-09-16.md,
+   R7-03). O tamanho do slot (26 px, #253 ADR 0029 D4) vem do primitivo `ui/Slot`
+   (`size={26}`); as regras abaixo só ajustam o SPRITE ao contexto do container. */
 .container-grid {
   list-style: none; margin: 6px 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(5, 26px); gap: 3px; justify-content: center;
+  display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
-.slot-empty-place { opacity: 0.85; }
-.slot[draggable], .slot-button[draggable] { cursor: grab; }
 .capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-4); }
 /* O seletor de munição: sobreposição pequena, "Panel ancorado" ao painel do set — fio dourado
    no topo, como o resto do design (#253, §5 DS-10). */
@@ -668,7 +672,7 @@ body {
    embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. Vidro
    ferro-forjado sobre os tokens (#253), como o resto da coluna desde #251. */
 .equipment {
-  list-style: none; margin: 8px auto; padding: 8px;
+  list-style: none; margin: 8px auto; padding: 6px;
   display: grid; grid-template-columns: repeat(3, 30px); gap: 3px; justify-content: center;
   grid-template-areas:
     "neck head back"
@@ -689,52 +693,23 @@ body {
 .slot-finger { grid-area: finger; }
 .slot-ammo { grid-area: ammo; }
 
-.slot {
-  position: relative; box-sizing: border-box;
-  background: var(--surface-slot); border: 1px solid var(--ash-5);
-}
-/* Tamanho por CONTEXTO (DT-04): `.slot` não sabe se está no set ou num container — quem sabe é
-   o pai. `.item-sprite` acompanha para o sprite não vazar da moldura. */
-.equipment .slot { width: 30px; height: 30px; }
-.container-grid .slot { width: 26px; height: 26px; }
 .equipment .item-sprite, .equipment .item-sprite canvas { width: 28px; height: 28px; }
 .container-grid .item-sprite, .container-grid .item-sprite canvas { width: 24px; height: 24px; }
-.slot-button, .slot-item, .slot-empty {
-  position: absolute; inset: 0; margin: 0; padding: 0;
-  background: none; border: none; color: inherit; font: inherit;
-}
-.slot-button { cursor: pointer; }
-.slot-button:hover, .slot-button:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -1px; }
-/* O lugar vazio mostra o RÓTULO do slot (ADR 0029 D4), como o `EquipmentSet` do handoff: texto
-   pequeno, maiúsculo, cor apagada — nunca ícone quebrado, nunca dependência de pacote. */
-.slot-empty {
-  inset: 1px;
-  display: grid; place-items: center;
-  font: 500 5.5px var(--font-mono); letter-spacing: 0.01em; text-transform: uppercase;
-  color: var(--text-faint);
-  text-align: center;
-  pointer-events: none;
-}
 .item-sprite {
   position: absolute; inset: 1px; width: 32px; height: 32px;
   display: grid; place-items: center;
 }
 .item-sprite canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
 .item-initial { font-size: 13px; color: var(--text-muted); }
-/* A quantidade da pilha no canto inferior direito, com contorno, como o Tibia. */
-.slot-count {
-  position: absolute; right: 2px; bottom: 1px;
-  font-size: 10px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums;
-  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
-  pointer-events: none;
-}
 
-/* A capacidade e o gold, sob o set — moldura fina sobre os tokens (#253). */
+/* A capacidade, sob o set — moldura fina sobre os tokens (#253). Letter-spacing dobrado para
+   .08em e max-width removido (R6-02/R6-03 + "missed" do verificador: Hud.jsx:54 usa
+   `letterSpacing: '.08em'` e nenhum teto de largura). */
 .capacity {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  height: 18px; margin: 0 auto 6px; padding: 0 6px; max-width: 168px;
+  height: 18px; margin: 0 auto 6px; padding: 0 6px;
   border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
-  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase;
+  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase;
 }
 
 /* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas

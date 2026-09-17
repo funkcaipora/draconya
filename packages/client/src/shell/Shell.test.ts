@@ -5,7 +5,7 @@ import { Shell } from './Shell.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Aggregates } from '../state/hud.js';
 
-// A geografia (§5.3, ADR 0026 d.7, #161): set, mochila e bolsa FIXOS à direita, nessa ordem,
+// A geografia (§5.3, ADR 0026 d.7, #161, #307): set, bolsa e mochila FIXOS à direita, nessa ordem,
 // antes do analisador e do Bestiário. `prerender` roda a árvore inteira sem DOM e sem efeitos
 // — o viewport monta vazio, e o que se prende é a ordem das seções.
 
@@ -19,10 +19,10 @@ beforeEach(() => {
 });
 
 describe('Shell', () => {
-  it('the right column is set → backpack → satchel → analyzer, always mounted, in that order', async () => {
+  it('the right column is set → satchel → backpack → analyzer, always mounted, in that order (#307, RF-05)', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const order = ['ui-panel-title">Set', 'ui-panel-title">Mochila', 'ui-panel-title">Bolsa']
+    const order = ['ui-panel-title">Set', 'ui-panel-title">Bolsa', 'ui-panel-title">Mochila']
       .map((marker) => right.indexOf(marker));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -72,9 +72,9 @@ describe('Shell', () => {
     }));
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const satchelIndex = right.indexOf('ui-panel-title">Bolsa');
+    const backpackIndex = right.indexOf('ui-panel-title">Mochila');
     const analyzerIndex = right.indexOf('ui-panel-title">Analisador de caçada');
-    expect(satchelIndex).toBeGreaterThan(0);
-    expect(analyzerIndex).toBeGreaterThan(satchelIndex);
+    expect(backpackIndex).toBeGreaterThan(0);
+    expect(analyzerIndex).toBeGreaterThan(backpackIndex);
   });
 });
