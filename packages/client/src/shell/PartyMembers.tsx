@@ -1,5 +1,6 @@
-// Os companheiros durante a hunt (#197): nome, HP % e quem lidera. Aparece no lugar da
-// formação assim que a sessão é uma party.
+// Os companheiros durante a hunt (#197, #318): nome, HP % e quem lidera em moldura Panel dock
+// com rodapé de ação ("Sair da party") e aviso de consenso. Aparece no lugar da formação assim
+// que a sessão é uma party.
 //
 // O HP vem de dois lugares: do `party-state` (attach e mudança de composição) e, no meio, do
 // `creature-health` que o mundo já recebe de cada um — a lista de criaturas tem o nome, e é
@@ -13,7 +14,10 @@
 import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
+import { Panel } from './ui/Panel.js';
 import { VitalBar } from './ui/VitalBar.js';
+import { Button } from './ui/Button.js';
+import { partyActions } from '../party/store.js';
 
 export const HEALTH_POLL_MS = 1_000;
 
@@ -32,40 +36,73 @@ function percentFromWorld(name: string): number | null {
   return null;
 }
 
-export function PartyMembers() {
+export function PartyMembers({
+  collapsed: initialCollapsed = false,
+  onToggle,
+}: {
+  collapsed?: boolean;
+  onToggle?: () => void;
+} = {}) {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [, tick] = useState(0);
+
   useEffect(() => {
     if (partyView === null) return;
     const id = setInterval(() => { tick((n) => n + 1); }, HEALTH_POLL_MS);
     return () => { clearInterval(id); };
   }, [partyView]);
+
   if (partyView === null) return null;
 
+  const handleToggle = onToggle ?? (() => { setCollapsed((c) => !c); });
+  const handleLeave = () => { void partyActions.leave(); };
+
   return (
-    <section className="party-members-panel" aria-label="companheiros">
-      <header className="analyzer-head"><strong>Party</strong></header>
-      <p className="party-mode">{MODE_TEXT[partyView.mode]}</p>
+    <Panel
+      dock
+      title={`Party · ${String(partyView.members.length)}`}
+      collapsed={onToggle ? initialCollapsed : collapsed}
+      onToggle={handleToggle}
+      footer={
+        <>
+          <p className="party-members-note">Parar no meio da caçada exige o sim de todos.</p>
+          <p className="party-members-mode">{MODE_TEXT[partyView.mode]}</p>
+          <Button size="sm" variant="ghost" block onClick={handleLeave}>
+            Sair da party
+          </Button>
+        </>
+      }
+    >
       <ul className="party-companions">
         {partyView.members.map((member) => {
           const percent = percentFromWorld(member.name) ?? member.healthPercent;
           const isSelf = member.characterId === me;
+          const isLeader = member.characterId === partyView.leaderId;
           return (
-            <li key={member.characterId} className={`party-companion${member.alive ? '' : ' party-companion-down'}`}>
-              <span className={isSelf ? 'party-companion-self' : undefined}>
-                {`${member.characterId === partyView.leaderId ? '★ ' : ''}${isSelf ? 'você' : member.name}`}
-              </span>
-              <span className="party-hp-row">
-                <span className="party-hp" aria-label={`HP de ${member.name}`}>
-                  <VitalBar kind="hp" percent={member.alive ? percent : 0} height={4} showText={false} />
+            <li
+              key={member.characterId}
+              className={`party-companion${member.alive ? '' : ' party-companion-down'}`}
+            >
+              <div className="party-companion-header">
+                {isLeader && <span className="party-leader-star" title="Líder">★ </span>}
+                <span className={isSelf ? 'party-companion-self' : undefined}>
+                  {isSelf ? 'você' : member.name}
                 </span>
-                <span className="entry-meta">{member.alive ? `${String(percent)} %` : 'caiu'}</span>
-              </span>
+              </div>
+              <div className="party-companion-vitals">
+                <span className="party-hp-row">
+                  <span className="party-hp" aria-label={`HP de ${member.name}`}>
+                    <VitalBar kind="hp" percent={member.alive ? percent : 0} height={4} showText={false} />
+                  </span>
+                  <span className="entry-meta">{member.alive ? `${String(percent)} %` : 'caiu'}</span>
+                </span>
+              </div>
             </li>
           );
         })}
       </ul>
-    </section>
+    </Panel>
   );
 }

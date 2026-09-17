@@ -128,7 +128,8 @@ describe('PartyPanel', () => {
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
     expect(html).toContain('Compartilhado');
-    expect(html).toContain('★ Ana');
+    expect(html).toContain('party-leader-star');
+    expect(html).toContain('Ana');
     expect(html).toContain('party-companion-self');
     expect(html).toContain('você');
     expect(html).toContain('80 %');
