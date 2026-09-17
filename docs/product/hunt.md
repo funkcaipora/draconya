@@ -31,6 +31,14 @@ pedindo para não mandar seria esquecido; um campo que não existe não pode ser
 engano. Um número oficial de XP/h vira a métrica pela qual toda hunt é julgada, e a partir daí só
 existe uma hunt boa — o jogo passa a ter uma escolha, não quatro.
 
+**Monstros e loot possível chegam pelo catálogo, sem raridade** (SV-02, #338). Cada hunt leva
+`monsters: [{id, name}]` — os monstros que aparecem em QUALQUER dificuldade dela, deduplicados —
+e `loot: [{itemId, name}]` — o loot possível, também deduplicado. A raridade não vem: a mecânica
+não existe (E5). Gold nunca entra em `loot`: não é item, é campo do personagem — quem quer saber
+se a hunt solta gold já tem isso em `lootDrops`. `catalogue.monsters[]` (a lista para o
+Bestiário) ganha `health` e `experience` de cada monstro — nunca XP/h nem gold/h por hora, que
+continua fora por decisão de produto (parágrafo acima).
+
 **Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
 continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
 Esconder o botão transformaria um conselho em regra que ninguém escreveu.

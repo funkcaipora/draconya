@@ -11,7 +11,7 @@ import type { PartyView } from '../party/api.js';
 // A formação da party (#197): quatro estados, um por vez. `prerender` roda sem DOM — o que se
 // prende é a estrutura e, sobretudo, que "Iniciar" só acende com todos aprovados.
 
-const hunts: HuntListing[] = [{ id: 'arena', name: 'Arena', recommendedLevel: 1, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 1 }];
+const hunts: HuntListing[] = [{ id: 'arena', name: 'Arena', recommendedLevel: 1, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 1, monsters: [], loot: [] }];
 
 async function render(): Promise<string> {
   const { prelude } = await prerender(createElement(PartyPanel, { hunts }));

@@ -12,8 +12,8 @@ import { INITIAL_PARTY, party } from '../party/store.js';
 // aqui só se prende a ESTRUTURA e o que essas funções produzem por padrão.
 
 const hunts: HuntListing[] = [
-  { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2 },
-  { id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7 },
+  { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2, monsters: [], loot: [] },
+  { id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7, monsters: [], loot: [] },
 ];
 
 const catalogue: Catalogue = {

@@ -388,6 +388,22 @@ export const S2C_SCHEMAS = {
        * anterior manda sem.
        */
       lootDrops: z.number().int().nonnegative().default(0),
+      /**
+       * Os monstros que aparecem nesta hunt, em qualquer dificuldade dela — deduplicados e em
+       * ordem de `id` (SV-02, #338).
+       */
+      monsters: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
+      /**
+       * O loot possível desta hunt — cada item distinto uma vez, SEM raridade.
+       * Gold NUNCA entra aqui (não é item).
+       */
+      loot: z.array(z.object({
+        itemId: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
     })),
     /**
      * Os monstros que existem, para a tela do Bestiário (FUN-113) ter nome onde o contador
@@ -397,6 +413,8 @@ export const S2C_SCHEMAS = {
     monsters: z.array(z.object({
       id: z.string().min(1),
       name: z.string().min(1),
+      health: z.number().int().positive().optional(),
+      experience: z.number().int().nonnegative().optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na

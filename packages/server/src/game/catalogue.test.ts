@@ -24,7 +24,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       // `lootDrops` é uma CONTAGEM de drops distintos (FUN-123), não uma taxa: continua sem
       // XP/h nem gold/h.
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'lootDrops', 'name', 'outfitIds', 'recommendedLevel']);
+        .toEqual(['difficulties', 'id', 'loot', 'lootDrops', 'monsters', 'name', 'outfitIds', 'recommendedLevel']);
     }
   });
 
@@ -125,8 +125,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
   });
 
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
-    // O contador chega por id; sem esta lista a tela mostraria "rat: 12" em vez de "Rat". Só
-    // id e nome: vida, ataque e XP são balanceamento que o cliente não simula (invariante 4).
+    // O contador chega por id; a tela de detalhes ganha vida e XP (SV-02, #338).
     // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
@@ -137,7 +136,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
 
     const { monsters } = buildCatalogue(content);
 
-    expect(monsters).toEqual([{ id: 'bat', name: 'Bat' }, { id: 'rat', name: 'Rat' }]);
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 20, experience: 5 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+    ]);
   });
 
   it('leva os marcos e o bônus do Bestiário quando o conteúdo os tem, e a chave some quando não (FUN-113)', () => {
@@ -247,6 +249,142 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       attack: 0,
       armor: 0,
     });
+  });
+
+  it('o mesmo monstro em duas dificuldades aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    const twoTiers = {
+      ...raw,
+      monsters: [bat, rat],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.monsters).toEqual([
+      { id: 'bat', name: 'Bat' },
+      { id: 'rat', name: 'Rat' },
+    ]);
+  });
+
+  it('loot com chance 0 é excluído, e o mesmo item em múltiplos monstros aparece UMA vez, ordenado por itemId (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withItemsAndMonsters = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'bone', name: 'Bone', kind: 'other', weight: 5, value: 1, attack: 0, armor: 0 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+        { id: 'rare-gem', name: 'Rare Gem', kind: 'other', weight: 1, value: 100, attack: 0, armor: 0 },
+      ],
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 2, max: 2 },
+            items: [
+              { itemId: 'cheese', chance: 0.5 },
+              { itemId: 'rare-gem', chance: 0 },
+            ],
+          },
+        },
+        {
+          ...rat,
+          id: 'bat',
+          name: 'Bat',
+          loot: {
+            items: [
+              { itemId: 'cheese', chance: 0.8 },
+              { itemId: 'bone', chance: 0.3 },
+            ],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withItemsAndMonsters,
+      appearances: [placeholderAppearances(withItemsAndMonsters)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.loot).toEqual([
+      { itemId: 'bone', name: 'Bone' },
+      { itemId: 'cheese', name: 'Cheese' },
+    ]);
+  });
+
+  it('gold nunca entra em loot[] (SV-02, #338)', () => {
+    // Gold não é item, é campo do personagem — quem quer saber se a hunt solta gold tem lootDrops.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withGoldOnly = {
+      ...raw,
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 10, max: 50 },
+            items: [],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withGoldOnly,
+      appearances: [placeholderAppearances(withGoldOnly)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.lootDrops).toBe(1);
+    expect(arena?.loot).toEqual([]);
+  });
+
+  it('catalogue.monsters[] reflete todos os monstros de content.monsters com vida e XP (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat', health: 15, experience: 8 };
+    const skeleton = { ...rat, id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 };
+    const content = buildContent({
+      ...raw,
+      monsters: [skeleton, rat, bat],
+      appearances: [placeholderAppearances({ ...raw, monsters: [skeleton, rat, bat] })],
+    });
+    const { monsters } = buildCatalogue(content);
+    expect(monsters).toHaveLength(3);
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 15, experience: 8 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+      { id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 },
+    ]);
   });
 });
 

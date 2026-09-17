@@ -35,6 +35,8 @@ export function buildCatalogue(content: Content): Catalogue {
       difficulties: [...hunt.difficulties],
       outfitIds: monsterOutfitsOf(content, hunt.id),
       lootDrops: lootDropsOf(content, hunt.id),
+      monsters: monstersOf(content, hunt.id),
+      loot: lootOf(content, hunt.id),
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
@@ -126,11 +128,16 @@ export function buildCatalogue(content: Content): Catalogue {
       })),
     vocationLevel: content.progression.vocationLevel,
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
-    // (FUN-113). Só id e nome, em ordem de id para a mensagem ser a mesma a cada boot: a arte
-    // chega pelo `creature-appear`, e o resto — vida, ataque, XP — é balanceamento que o
+    // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
+    // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({ id: monster.id, name: monster.name }))
+      .map((monster) => ({
+        id: monster.id,
+        name: monster.name,
+        health: monster.health,
+        experience: monster.experience,
+      }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o
@@ -145,6 +152,41 @@ export function buildCatalogue(content: Content): Catalogue {
         },
       }),
   };
+}
+
+function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const found = new Map<string, string>();
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const monster = content.monsters.get(entry.monsterId);
+      if (monster !== undefined) found.set(monster.id, monster.name);
+    }
+  }
+  return [...found.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+function lootOf(content: Content, huntId: string): Array<{ itemId: string; name: string }> {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const found = new Map<string, string>();
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const loot = content.monsters.get(entry.monsterId)?.loot;
+      if (loot === undefined) continue;
+      for (const item of loot.items) {
+        if (item.chance <= 0) continue;
+        const definition = content.items.get(item.itemId);
+        if (definition !== undefined) found.set(item.itemId, definition.name);
+      }
+    }
+  }
+  return [...found.entries()]
+    .map(([itemId, name]) => ({ itemId, name }))
+    .sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
 }
 
 /**

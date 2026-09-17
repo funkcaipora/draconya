@@ -280,11 +280,30 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
       ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
-      hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({ ...hunt, lootDrops: 0 })),
+      hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
+        ...hunt, lootDrops: 0, monsters: [], loot: [],
+      })),
     }]);
-    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number }> }> | null;
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number; monsters: unknown[]; loot: unknown[] }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.lootDrops).toBe(0);
+    expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
+  });
+
+  it('round trips monsters and loot per hunt, and an older node decodes them to EMPTY lists (SV-02, #338)', () => {
+    const withDetails = catalogue({
+      monsters: [{ id: 'rat', name: 'Rat' }],
+      loot: [{ itemId: 'cheese', name: 'Cheese' }],
+    });
+    const decodedWithDetails = decodeS2C(encodeS2C(withDetails)) as Array<{ hunts: Array<{ monsters: unknown[]; loot: unknown[] }> }> | null;
+    expect(decodedWithDetails?.[0]?.hunts[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat' }]);
+    expect(decodedWithDetails?.[0]?.hunts[0]?.loot).toEqual([{ itemId: 'cheese', name: 'Cheese' }]);
+
+    const older = catalogue({});
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{ hunts: Array<{ monsters: unknown[]; loot: unknown[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
   });
 
   it('rejects an outfit id of zero: there is no appearance zero', () => {
@@ -334,6 +353,33 @@ describe('the bestiary (FUN-113, §18)', () => {
     const decoded = decodeS2C(encodeS2C(base as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
     expect(decoded?.[0]?.['monsters']).toEqual([]);
     expect(decoded?.[0]).not.toHaveProperty('bestiary');
+  });
+
+  it('round trips monster health and experience, and an older node decodes with them absent (SV-02, #338)', () => {
+    const base = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(base)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat', health: 20, experience: 5 }]);
+
+    const older = {
+      ...base,
+      monsters: [{ id: 'rat', name: 'Rat' }],
+    } as unknown as S2CMessage;
+    const decodedOlder = decodeS2C(encodeS2C(older)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
+    expect(decodedOlder?.[0]?.monsters[0]?.id).toBe('rat');
+    expect(decodedOlder?.[0]?.monsters[0]?.name).toBe('Rat');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('health');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('experience');
   });
 });
 
