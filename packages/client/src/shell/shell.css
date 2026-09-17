@@ -452,7 +452,7 @@ body {
 /* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
 .hunt-actions {
   position: absolute; left: 0; right: 0; bottom: 24px;
-  display: flex; justify-content: center; gap: 8px;
+  display: flex; justify-content: center; gap: 0;
   pointer-events: none; z-index: 15;
 }
 .hunt-pill {
@@ -466,8 +466,18 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .6), inset 0 1px rgba(255, 255, 255, .05);
 }
+/* Sem chevron ao lado, "Escolher caçada" fica com os 4 cantos arredondados. Só a pill de saída
+   (abaixo) vira a metade esquerda de um botão partido — porque só ELA tem o chevron do popover
+   de saída colado do lado direito (#309, ADR 0030, achado "pill+chevron como botão partido").
+   `.hunt-actions{gap:0}` (acima) é o que cola as duas metades sem vão: hoje só dois filhos
+   existem nessa div — a pill e `.exit-rules-anchor` (renderizado por `ExitRulesPopover`) —, e
+   zerar o gap não afeta a pill solitária de "Escolher caçada" (só ela, sozinha, na div). Uma
+   issue futura que acrescente OUTRA pill ao lado deste par (ex.: RC-12, "Detalhes da caçada")
+   precisa envolver a pill+chevron de saída no próprio wrapper para reservar espaço FORA dele —
+   não reabrir este gap. */
 .hunt-pill-danger {
   border-color: var(--blood-5);
+  border-radius: 3px 0 0 3px;
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
 }
