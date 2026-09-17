@@ -230,7 +230,7 @@ describe('slots e set fidelidade (#307)', () => {
     expect(shellCss).not.toMatch(/\.capacity\s*\{[^}]*max-width:/);
   });
 
-  it('ui-slot-count e slot-count usam gold-5, mono 500 6.5px, e sem text-shadow (RF-10)', () => {
+  it('ui-slot-count usa gold-5, mono 500 6.5px, e sem text-shadow (RF-10)', () => {
     expect(uiCss).toMatch(/\.ui-slot-count[^}]*color:\s*var\(--gold-5\);/);
     expect(uiCss).toMatch(/\.ui-slot-count[^}]*font:\s*500 6\.5px var\(--font-mono\);/);
     expect(uiCss).not.toMatch(/\.ui-slot-count[^}]*text-shadow:/);

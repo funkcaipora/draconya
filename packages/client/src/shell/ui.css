@@ -512,8 +512,7 @@
   color: var(--text-faint);
   font: 5.5px var(--font-mono);
 }
-.ui-slot-count,
-.slot-count {
+.ui-slot-count {
   position: absolute; right: 3px; bottom: 2px;
   color: var(--gold-5);
   font: 500 6.5px var(--font-mono);

@@ -4,6 +4,11 @@
 // `style` — vira variante fechada por classe, como o `Button` já faz com `size`. `md` (19px) é
 // o default do handoff; `sm` cobre o HUD mais denso quando um consumidor precisar; `lg` (36px,
 // R0-05) é o tamanho da barra de navegação do topo.
+//
+// `active` NÃO tem default (#306): o `<button>` só ganha `aria-pressed` quando o dono passa um
+// booleano — "–"/"×"/"⚙" do Panel/BotPanel, que não têm estado de pressionado, continuam sem o
+// atributo (React omite `aria-pressed={undefined}`); `TopBar` e "Ordenar" do `BattlePanel`, que
+// alternam, ganham `aria-pressed="true"/"false"`, como o `TopBar` fazia antes de migrar para cá.
 
 export interface IconButtonProps {
   children: React.ReactNode;
@@ -20,7 +25,7 @@ export function IconButton({
   children,
   size = 'md',
   title,
-  active = false,
+  active,
   disabled = false,
   onClick,
   className,
@@ -38,6 +43,7 @@ export function IconButton({
       type="button"
       title={title}
       disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
       className={classes}
       data-window={dataWindow}

@@ -26,4 +26,15 @@ describe('IconButton', () => {
     const html = await render({ size, children: '×' });
     expect(html).toContain(`ui-icon-button-${size}`);
   });
+
+  it('active exposes aria-pressed, and omitting it omits the attribute (#306)', async () => {
+    const on = await render({ active: true, children: '×' });
+    expect(on).toContain('aria-pressed="true"');
+
+    const off = await render({ active: false, children: '×' });
+    expect(off).toContain('aria-pressed="false"');
+
+    const unset = await render({ children: '×' });
+    expect(unset).not.toContain('aria-pressed');
+  });
 });

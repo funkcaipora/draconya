@@ -146,7 +146,7 @@ export function VocationChoice() {
                       <span className="vocation-role">{ROLE_SHORT[vocation.id] ?? ''}</span>
                     </span>
                   </span>
-                  <p className="vocation-desc">{DESC_FULL[vocation.id] ?? ''}</p>
+                  <span className="vocation-desc">{DESC_FULL[vocation.id] ?? ''}</span>
                   <span className="vocation-weapon">
                     <ItemSprite appearanceId={weapon?.appearanceId} name={weapon?.name} />
                     <span>{weapon?.name ?? vocation.startingWeaponItemId}</span>

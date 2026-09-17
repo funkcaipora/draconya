@@ -639,7 +639,7 @@ body {
 .vocation-card[data-vocation="paladin"] .vocation-role { color: var(--voc-paladin); }
 .vocation-card[data-vocation="druid"] .vocation-role { color: var(--voc-druid); }
 .vocation-card[data-vocation="sorcerer"] .vocation-role { color: var(--voc-sorcerer); }
-.vocation-desc { margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.vocation-desc { display: block; margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .vocation-gains { font-size: 11px; color: var(--text-muted); }
 .vocation-weapon { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .vocation-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -688,7 +688,6 @@ body {
   list-style: none; margin: 6px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
-.capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-4); }
 /* O seletor de munição: sobreposição pequena, "Panel ancorado" ao painel do set — fio dourado
    no topo, como o resto do design (#253, §5 DS-10). */
 .ammo-picker {

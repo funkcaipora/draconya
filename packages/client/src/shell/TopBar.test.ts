@@ -109,4 +109,9 @@ describe('TopBar', () => {
     expect(html).toContain('>—<');
     expect(html).toContain('>?<');
   });
+
+  it('every window icon carries aria-pressed (#306)', async () => {
+    const html = await render();
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBeGreaterThanOrEqual(6);
+  });
 });
