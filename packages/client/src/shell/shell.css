@@ -137,7 +137,7 @@ body {
   overflow: hidden;
   flex: 0 0 auto;
 }
-.quiet { color: var(--text-faint); margin: 8px 0; }
+.ui-panel-body .quiet { color: var(--text-faint); margin: 8px 0; }
 
 /* O chat: janela flutuante fixa sobre o MUNDO, à direita da coluna esquerda (#252, ADR 0029 D5;
    #288). A moldura (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO — sem arraste,

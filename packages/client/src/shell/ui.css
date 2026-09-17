@@ -400,6 +400,10 @@
 .ui-panel--collapsed,
 .ui-panel--collapsed.ui-panel--footer { grid-template-rows: 34px; }
 .ui-panel--dock { border-radius: 0; box-shadow: none; }
+/* O corpo do painel encaixado leva o padding do SidePanel do kit (Hud.jsx:34,
+   `bodyStyle={{ padding: "6px 10px 8px" }}`): antes de #305 ele vinha de
+   `.windows > section > *:not(header)` em shell.css, que saiu junto com a pele antiga. */
+.ui-panel--dock > .ui-panel-body { padding: 6px 10px 8px; }
 .ui-panel--modal { box-shadow: var(--shadow-modal); }
 
 .ui-panel-hairline {

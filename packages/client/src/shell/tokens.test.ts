@@ -110,6 +110,17 @@ describe('shell.css', () => {
   });
 });
 
+describe('padding do corpo do painel dock e escopo de .quiet (#305)', () => {
+  it('.ui-panel--dock > .ui-panel-body repõe o padding do SidePanel do kit (Hud.jsx:34)', () => {
+    expect(uiCss).toMatch(/\.ui-panel--dock > \.ui-panel-body\s*\{[^}]*padding:\s*6px 10px 8px;/);
+  });
+
+  it('.quiet só se aplica dentro de um corpo de painel, nunca global', () => {
+    expect(shellCss).not.toMatch(/^\.quiet\s*\{/m);
+    expect(shellCss).toMatch(/\.ui-panel-body \.quiet\s*\{/);
+  });
+});
+
 describe('reset (#301, R0-01)', () => {
   it('aplica box-sizing: border-box universal logo após o último @import', () => {
     const resetRule = '*, *::before, *::after { box-sizing: border-box; }';
