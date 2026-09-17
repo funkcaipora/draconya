@@ -15,6 +15,13 @@ async function render(): Promise<string> {
   return new Response(prelude).text();
 }
 
+function buttonFor(html: string, id: string): string {
+  const marker = html.indexOf(`data-window="${id}"`);
+  const start = html.lastIndexOf('<button', marker);
+  const end = html.indexOf('</button>', marker);
+  return html.slice(start, end + '</button>'.length);
+}
+
 beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD }));
 });
@@ -41,11 +48,33 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect((right.match(/Carregando/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  // RF-02 (#252): o chat nasce aberto — é onde chegam as recusas do servidor
-  // (`system-message`), e uma janela que abre fechada esconderia a primeira da sessão.
-  it('the chat is mounted from the start (DEFAULT_WINDOWS.chat)', async () => {
+  it('keeps the chat closed from the start (DEFAULT_WINDOWS.chat)', async () => {
     const html = await render();
-    expect(html).toContain('aria-label="chat"');
+    expect(html).not.toContain('aria-label="chat"');
+  });
+
+  it('shows a gold Chat badge for an unseen warning while the chat is closed', async () => {
+    hud.set((state) => ({
+      ...state,
+      systemMessages: [{ level: 'warning', text: 'warning', atMs: 5 }],
+    }));
+
+    const html = await render();
+    const chat = buttonFor(html, 'chat');
+    expect(chat).toContain('topbar-icon-button-badge-gold');
+    expect(chat).not.toContain('topbar-icon-badge-dot');
+  });
+
+  it('shows a danger dot for an unseen error while the chat is closed', async () => {
+    hud.set((state) => ({
+      ...state,
+      systemMessages: [{ level: 'error', text: 'error', atMs: 5 }],
+    }));
+
+    const html = await render();
+    const chat = buttonFor(html, 'chat');
+    expect(chat).toContain('topbar-icon-badge-dot');
+    expect(chat).not.toContain('topbar-icon-button-badge-gold');
   });
 
   // RC-04 (#317): Skills é FIXO na coluna esquerda, sem guarda de open — não há ícone próprio

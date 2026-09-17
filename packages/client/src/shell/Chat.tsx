@@ -2,9 +2,10 @@ import { useHudSlice } from '../state/useSlice.js';
 import { Panel } from './ui/Panel.js';
 
 /**
- * Chat no canto inferior esquerdo, como janela flutuante fixa (#252, ADR 0029 D5): sem arraste,
- * nasce aberta (`Shell.tsx`), fecha pelo × do `Panel` ou pelo ícone "Chat" da barra do topo — os
- * dois caminhos chamam o MESMO `onClose`. Enviar mensagem é F2; aqui só se lê.
+ * Chat no canto inferior esquerdo, como janela flutuante fixa (#252, ADR 0029 D5): nasce
+ * fechado desde #323/RC-10, ADR 0030 §3. Fecha e abre pelo × do `Panel` ou pelo ícone "Chat" da
+ * barra do topo; uma `system-message` com a janela fechada acende o ícone. Enviar mensagem é F2;
+ * aqui só se lê.
  *
  * A moldura (cabeçalho "CHAT", fio dourado, ×) é do `Panel` (DS-04, `shell/ui/Panel.tsx`); sem
  * `onToggle`, ele não desenha botão de minimizar — o chat só tem aberto/fechado, nunca

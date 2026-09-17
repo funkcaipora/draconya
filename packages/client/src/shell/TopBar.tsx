@@ -11,6 +11,7 @@ import { account } from '../account/store.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { ConnectionBadge } from './ConnectionBadge.js';
 import { IconButton } from './ui/IconButton.js';
+import type { ChatBadgeTier } from './chat-badge.js';
 
 export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
 
@@ -35,14 +36,23 @@ const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 /**
  * Um ícone de 36 px (R0-05: o uso mais visível do `IconButton` no kit), com o glifo de texto
  * como reserva se o PNG falhar ao carregar. Nenhum rótulo de texto permanente é renderizado
- * (R1-10), apenas o tooltip nativo `title`.
+ * (R1-10), apenas o tooltip nativo `title`. O selo do Chat (#323) é a única decoração extra.
  */
-function NavIcon({ id, label, icon, glyph, open, onClick }: {
-  id: WindowId; label: string; icon: string; glyph: string; open: boolean; onClick: () => void;
+function NavIcon({ id, label, icon, glyph, open, badge, onClick }: {
+  id: WindowId; label: string; icon: string; glyph: string; open: boolean;
+  badge: ChatBadgeTier | null; onClick: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const badgeClass = badge === 'gold' ? 'topbar-icon-button-badge-gold' : undefined;
   return (
-    <IconButton size="lg" title={label} active={open} onClick={onClick} data-window={id}>
+    <IconButton
+      size="lg"
+      title={label}
+      active={open}
+      onClick={onClick}
+      data-window={id}
+      {...(badgeClass === undefined ? {} : { className: badgeClass })}
+    >
       {failed
         ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
         : (
@@ -55,13 +65,16 @@ function NavIcon({ id, label, icon, glyph, open, onClick }: {
             onError={() => { setFailed(true); }}
           />
         )}
+      {/* Só `error` ganha marcador próprio; o selo dourado muda o botão inteiro. */}
+      {badge === 'danger' && <span className="topbar-icon-badge-dot" aria-hidden="true" />}
     </IconButton>
   );
 }
 
-export function TopBar({ open, toggle }: {
+export function TopBar({ open, toggle, chatBadge }: {
   open: Readonly<Record<WindowId, boolean>>;
   toggle: (id: WindowId) => void;
+  chatBadge: ChatBadgeTier | null;
 }) {
   const characterId = useHudSlice((state) => state.characterId);
   const level = useHudSlice((state) => state.level);
@@ -112,6 +125,7 @@ export function TopBar({ open, toggle }: {
               icon={window.icon}
               glyph={window.glyph}
               open={open[window.id]}
+              badge={window.id === 'chat' ? chatBadge : null}
               onClick={() => { toggle(window.id); }}
             />
           ))}
