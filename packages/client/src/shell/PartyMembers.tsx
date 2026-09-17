@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
+import { Panel } from './ui/Panel.js';
 import { VitalBar } from './ui/VitalBar.js';
 
 export const HEALTH_POLL_MS = 1_000;
@@ -44,8 +45,7 @@ export function PartyMembers() {
   if (partyView === null) return null;
 
   return (
-    <section className="party-members-panel" aria-label="companheiros">
-      <header className="analyzer-head"><strong>Party</strong></header>
+    <Panel dock title="Party" bodyClassName="party-members-panel">
       <p className="party-mode">{MODE_TEXT[partyView.mode]}</p>
       <ul className="party-companions">
         {partyView.members.map((member) => {
@@ -66,6 +66,6 @@ export function PartyMembers() {
           );
         })}
       </ul>
-    </section>
+    </Panel>
   );
 }

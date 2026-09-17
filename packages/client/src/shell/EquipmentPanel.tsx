@@ -21,6 +21,7 @@ import { AmmoPicker, ammoInUse } from './AmmoPicker.js';
 import { dropOn, startDrag } from './ContainerWindow.js';
 import { clickIntent } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
+import { Panel } from './ui/Panel.js';
 
 /** Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa. */
 const SLOT_TEXT: Record<string, string> = {
@@ -51,24 +52,13 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
   const gold = useHudSlice((state) => state.gold);
   const ammo = useHudSlice((state) => state.ammo);
   const [picker, setPicker] = useState<string | null>(null);
-
-  const header = (
-    <header className="analyzer-head">
-      <strong>Set</strong>
-      {onToggle !== undefined && (
-        <button type="button" className="entry-quiet" aria-label={collapsed ? 'expandir' : 'minimizar'} onClick={onToggle}>
-          {collapsed ? '▸' : '▾'}
-        </button>
-      )}
-    </header>
-  );
+  const panelProps = onToggle === undefined ? {} : { onToggle };
 
   if (inventory === null || catalogue === null) {
     return (
-      <section className={`inventory${collapsed ? ' collapsed' : ''}`} aria-label="set">
-        {header}
+      <Panel dock title="Set" className="inventory" collapsed={collapsed} {...panelProps}>
         <p className="quiet">Carregando…</p>
-      </section>
+      </Panel>
     );
   }
 
@@ -78,68 +68,76 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
   const ammoFamily = handDefinition?.weapon?.kind === 'distance' ? handDefinition.weapon.ammoFamily : undefined;
 
   return (
-    <section className={`inventory${collapsed ? ' collapsed' : ''}`} aria-label="set">
-      {header}
-      <ul className="equipment">
-        {ITEM_SLOTS.map((slot) => {
-          const label = SLOT_TEXT[slot] ?? slot;
-          // Com arma de distância na mão, o escudo é o seletor de munição (ADR 0026 d.3).
-          if (slot === 'shield' && ammoFamily !== undefined) {
-            const chosen = ammoFamily === 'arrow' ? ammo.arrow : ammoFamily === 'bolt' ? ammo.bolt : null;
-            const inUse = ammoInUse(catalogue.ammunition, ammoFamily, chosen);
-            const title = inUse === undefined
-              ? 'Munição'
-              : `${inUse.name} · ${inUse.price === 0 ? 'grátis' : `${String(inUse.price)} gold/tiro`}`;
+    <>
+      <Panel
+        dock
+        title="Set"
+        className="inventory"
+        bodyClassName="inventory-body"
+        collapsed={collapsed}
+        {...panelProps}
+      >
+        <ul className="equipment">
+          {ITEM_SLOTS.map((slot) => {
+            const label = SLOT_TEXT[slot] ?? slot;
+            // Com arma de distância na mão, o escudo é o seletor de munição (ADR 0026 d.3).
+            if (slot === 'shield' && ammoFamily !== undefined) {
+              const chosen = ammoFamily === 'arrow' ? ammo.arrow : ammoFamily === 'bolt' ? ammo.bolt : null;
+              const inUse = ammoInUse(catalogue.ammunition, ammoFamily, chosen);
+              const title = inUse === undefined
+                ? 'Munição'
+                : `${inUse.name} · ${inUse.price === 0 ? 'grátis' : `${String(inUse.price)} gold/tiro`}`;
+              return (
+                <li key={slot} className="slot slot-shield slot-ammo-picker">
+                  <button type="button" className="slot-button" title={title} aria-label={`munição: ${title}`} onClick={() => { setPicker(ammoFamily); }}>
+                    {inUse !== undefined && <ItemSprite appearanceId={inUse.appearanceId} name={inUse.name} />}
+                  </button>
+                </li>
+              );
+            }
+            const item = inventory.equipped[slot];
+            const definition = item === undefined ? undefined : byId.get(item.itemId);
+            const name = definition?.name ?? item?.itemId ?? 'item';
             return (
-              <li key={slot} className="slot slot-shield slot-ammo-picker">
-                <button type="button" className="slot-button" title={title} aria-label={`munição: ${title}`} onClick={() => { setPicker(ammoFamily); }}>
-                  {inUse !== undefined && <ItemSprite appearanceId={inUse.appearanceId} name={inUse.name} />}
-                </button>
+              <li
+                key={slot}
+                className={`slot slot-${slot}`}
+                onDragOver={(event) => { event.preventDefault(); }}
+                onDrop={(event) => { dropOn({ slot }, event, inventory); }}
+              >
+                {item === undefined
+                  // O rótulo do lugar, maiúsculo e cortado em 4 letras (#253, ADR 0029 D4), substitui
+                  // o ícone cinza do pacote — a mesma regra do "—" de sempre: sem dado, a tela nunca
+                  // deixa vazio quebrado. `aria-label`/`title` continuam com o nome INTEIRO; só o
+                  // texto visível é cortado, como o `EquipmentSet` do handoff faz com todo nome.
+                  ? <span className="slot-empty" aria-label={`${label} (vazio)`} title={label}>{label.slice(0, 4).toUpperCase()}</span>
+                  : (
+                    <button
+                      type="button"
+                      className="slot-button"
+                      draggable
+                      title={`Tirar ${name}`}
+                      onDragStart={(event) => { startDrag({ slot }, event); }}
+                      // INTENÇÃO (invariante 4): o cliente diz qual lugar; quem decide é o servidor.
+                      onClick={() => {
+                        const intent = clickIntent({ slot }, inventory);
+                        if (intent !== null) sendIntent(intent);
+                      }}
+                    >
+                      <SlotContent definition={definition} name={name} quantity={item.quantity} />
+                    </button>
+                  )}
               </li>
             );
-          }
-          const item = inventory.equipped[slot];
-          const definition = item === undefined ? undefined : byId.get(item.itemId);
-          const name = definition?.name ?? item?.itemId ?? 'item';
-          return (
-            <li
-              key={slot}
-              className={`slot slot-${slot}`}
-              onDragOver={(event) => { event.preventDefault(); }}
-              onDrop={(event) => { dropOn({ slot }, event, inventory); }}
-            >
-              {item === undefined
-                // O rótulo do lugar, maiúsculo e cortado em 4 letras (#253, ADR 0029 D4), substitui
-                // o ícone cinza do pacote — a mesma regra do "—" de sempre: sem dado, a tela nunca
-                // deixa vazio quebrado. `aria-label`/`title` continuam com o nome INTEIRO; só o
-                // texto visível é cortado, como o `EquipmentSet` do handoff faz com todo nome.
-                ? <span className="slot-empty" aria-label={`${label} (vazio)`} title={label}>{label.slice(0, 4).toUpperCase()}</span>
-                : (
-                  <button
-                    type="button"
-                    className="slot-button"
-                    draggable
-                    title={`Tirar ${name}`}
-                    onDragStart={(event) => { startDrag({ slot }, event); }}
-                    // INTENÇÃO (invariante 4): o cliente diz qual lugar; quem decide é o servidor.
-                    onClick={() => {
-                      const intent = clickIntent({ slot }, inventory);
-                      if (intent !== null) sendIntent(intent);
-                    }}
-                  >
-                    <SlotContent definition={definition} name={name} quantity={item.quantity} />
-                  </button>
-                )}
-            </li>
-          );
-        })}
-      </ul>
-      <div className="capacity">
-        {/* Os dois números do servidor, sem conta nenhuma no meio. */}
-        <span>{`${inventory.capacity.used.toFixed(0)} / ${inventory.capacity.total.toFixed(0)} oz`}</span>
-        <span className="capacity-gold" title="gold"><span className="topbar-coin" aria-hidden="true" />{integer.format(gold)}</span>
-      </div>
+          })}
+        </ul>
+        <div className="capacity">
+          {/* Os dois números do servidor, sem conta nenhuma no meio. */}
+          <span>{`${inventory.capacity.used.toFixed(0)} / ${inventory.capacity.total.toFixed(0)} oz`}</span>
+          <span className="capacity-gold" title="gold"><span className="topbar-coin" aria-hidden="true" />{integer.format(gold)}</span>
+        </div>
+      </Panel>
       {picker !== null && <AmmoPicker family={picker} onClose={() => { setPicker(null); }} />}
-    </section>
+    </>
   );
 }

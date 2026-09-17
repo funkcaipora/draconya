@@ -20,6 +20,7 @@ import { useState } from 'react';
 import type { BestiaryConfig, BestiaryCounts, MonsterListing } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { bonusPercent, progressOf } from './bestiary-progress.js';
+import { Panel } from './ui/Panel.js';
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const percent = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
@@ -101,12 +102,11 @@ export function Bestiary() {
   // Bestiário que aquele servidor não tem — por isso a frase, e não a lista.
   if (catalogue === null || catalogue.monsters.length === 0) {
     return (
-      <section className="bestiary" aria-label="bestiário">
-        <header className="analyzer-head">Bestiário</header>
+      <Panel dock title="Bestiário" className="bestiary">
         <p className="quiet">
           {catalogue === null ? 'Carregando…' : 'Este servidor não tem Bestiário.'}
         </p>
-      </section>
+      </Panel>
     );
   }
 
@@ -114,28 +114,25 @@ export function Bestiary() {
   // `null` é "ainda não chegou" — o intervalo entre o catálogo e o `bestiary` do attach, que
   // é da ordem de milissegundos. Zero por esse intervalo custa menos que uma terceira tela.
   const known = counts ?? {};
+  const collapsed = !open;
   const bonus = config === null
     ? null
     : bonusPercent(known, config.milestones, config.xpBonusPercentPerMilestone);
+  // Aberta, o bônus já é a primeira linha do corpo — repetir no cabeçalho diria o mesmo número
+  // duas vezes (mesmo padrão de Analyzer.tsx:201-205).
+  const meta = collapsed && bonus !== null ? `${bonusText(bonus)} XP` : undefined;
+  const metaProps = meta === undefined ? {} : { meta };
 
   return (
-    <section className={`bestiary${open ? '' : ' bestiary-minimized'}`} aria-label="bestiário">
-      <header className="analyzer-head">
-        <button
-          type="button"
-          className="analyzer-toggle"
-          aria-expanded={open}
-          onClick={() => { setOpen((value) => !value); }}
-        >
-          {open ? '▾' : '▸'} Bestiário
-        </button>
-        {/* Aberta, o bônus já é a primeira linha do corpo: repetir no cabeçalho é dizer o
-            mesmo número duas vezes na mesma janela. */}
-        <span className="analyzer-summary">
-          {!open && bonus !== null ? `${bonusText(bonus)} XP` : ''}
-        </span>
-      </header>
-      {open && <BestiaryBody monsters={catalogue.monsters} counts={known} config={config} />}
-    </section>
+    <Panel
+      dock
+      title="Bestiário"
+      className="bestiary"
+      collapsed={collapsed}
+      onToggle={() => { setOpen((v) => !v); }}
+      {...metaProps}
+    >
+      <BestiaryBody monsters={catalogue.monsters} counts={known} config={config} />
+    </Panel>
   );
 }

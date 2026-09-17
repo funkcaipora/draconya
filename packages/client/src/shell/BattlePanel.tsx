@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
+import { Panel } from './ui/Panel.js';
 
 interface BattleRow {
   readonly id: number;
@@ -72,18 +73,13 @@ export function BattlePanel() {
   const rows = battleRows(partyNames);
 
   return (
-    <section className={`battle-panel${collapsed ? ' collapsed' : ''}`} aria-label="batalha">
-      <header className="analyzer-head">
-        <strong>{`Batalha · ${String(rows.length)}`}</strong>
-        <button
-          type="button"
-          className="entry-quiet"
-          aria-label={collapsed ? 'expandir' : 'minimizar'}
-          onClick={() => { setCollapsed((current) => !current); }}
-        >
-          {collapsed ? '▸' : '▾'}
-        </button>
-      </header>
+    <Panel
+      dock
+      title={`Batalha · ${String(rows.length)}`}
+      className="battle-panel"
+      collapsed={collapsed}
+      onToggle={() => { setCollapsed((c) => !c); }}
+    >
       {rows.length === 0
         ? <p className="quiet">Nenhuma criatura à vista.</p>
         : (
@@ -99,6 +95,6 @@ export function BattlePanel() {
             ))}
           </ul>
         )}
-    </section>
+    </Panel>
   );
 }
