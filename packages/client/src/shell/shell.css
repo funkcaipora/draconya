@@ -858,10 +858,49 @@ body {
 .party-approved { color: var(--ok); }
 .party-status { margin: 0; font: 7px var(--font-mono); color: var(--text-faint); }
 
-/* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
-   de `PartyBag` e `PartyMembers` é o `Panel` `dock` (`shell/ui/Panel.tsx`). Aqui só o CONTEÚDO
-   de dentro dos dois. ----------------- */
-.party-members-panel { display: flex; flex-direction: column; gap: 6px; }
+/* --- party: companheiros na hunt (#197, #318) — dentro do `Panel` dock. A moldura, o título e
+   a estrela já existem; aqui ficam somente as linhas e o rodapé. O layout reserva o espaço para
+   dados futuros sem fingir vocação, mana, gasto, DPS/HPS ou expulsão antes dos respectivos SVs. */
+.party-companions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.party-companion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.party-companion-down { opacity: 0.55; }
+.party-companion-name {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 8px var(--font-mono);
+}
+.party-leader-star { color: var(--gold-4); font-size: 7px; }
+.party-companion-self { color: var(--gold-4); }
+.party-companion-vitals { display: grid; gap: 2px; margin: 4px 0 3px; }
+.party-hp-row { display: flex; align-items: center; gap: 6px; }
+.party-hp { flex: 1 1 auto; min-width: 0; }
+
+/* Rodapé do kit: a nota é estática; o modo continua texto enquanto não houver dois eixos de
+   rateio (SV-23). O botão é uma exceção local menor que o `sm` padrão do design system. */
+.party-footer { display: grid; gap: 6px; width: 100%; }
+.party-footer-note {
+  margin: 0;
+  font: italic 6.5px var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
 .party-mode {
   margin: 0;
   font: 7px var(--font-mono);
@@ -869,14 +908,7 @@ body {
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.party-companions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.party-companion { display: flex; flex-direction: column; gap: 2px; }
-.party-companion-down { opacity: 0.55; }
-.party-companion-self { color: var(--gold-4); }
-.party-leader-star { color: var(--gold-4); margin-right: 3px; }
-.party-hp-row { display: flex; align-items: center; gap: 6px; }
-.party-hp { flex: 1 1 auto; min-width: 0; }
-.party-leave { margin-top: 6px; }
+.party-footer-leave { height: 22px; font-size: 6.5px; }
 
 .party-bag { display: flex; flex-direction: column; gap: 6px; }
 .party-bag-grid { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 3px; }
