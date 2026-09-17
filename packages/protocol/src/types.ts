@@ -280,6 +280,13 @@ export const S2C_SCHEMAS = {
     /** A party desta sessão (#196). Ausente em solo — e em todo nó anterior. */
     party: PartyState.optional(),
     partyBag: PartyBag.optional(),
+    /**
+     * O total de jogadores online (SV-07) — o mesmo número do `player-count` mais recente,
+     * para quem reanexa não ficar sem ele até o próximo ciclo de 30 s. Ausente: nó `game`
+     * anterior a esta mudança, ou este processo ainda não completou o primeiro ciclo desde que
+     * subiu.
+     */
+    onlinePlayers: z.number().int().nonnegative().optional(),
   }),
   /**
    * A troca de cena (FUN-120): que mapa desenhar, e em que AMBIENTE (FUN-121) — `cavern`
@@ -631,6 +638,11 @@ export const S2C_SCHEMAS = {
       remainingMs: z.number().int().nonnegative(),
     })),
   }),
+  /**
+   * O total de jogadores online (SV-07). Um inteiro simples — não há por que ser mais que
+   * isso, e um campo a mais aqui é um campo a mais para versionar depois.
+   */
+  'player-count': z.object({ count: z.number().int().nonnegative() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

@@ -586,6 +586,12 @@ const CYCLE_MS = 100;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
 /**
+ * Cada quanto o total de jogadores online é agregado entre nós e mandado para quem está
+ * olhando (SV-07). Fixado em 30 s pelo desenho da issue: mais apertado não muda a sensação de
+ * "gente jogando" e custa banda à toa; mais frouxo atrasaria demais um pico real de entrada.
+ */
+const PLAYER_COUNT_INTERVAL_MS = 30_000;
+/**
  * Cada quanto a sessão é gravada.
  *
  * É exatamente o que se perde numa queda: dez segundos de XP. Aceitável para progresso,
@@ -669,6 +675,8 @@ export class SessionHost {
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
   #snapshotTimer: NodeJS.Timeout | null = null;
+  #playerCountTimer: NodeJS.Timeout | null = null;
+  #lastPlayerCount: number | undefined = undefined;
 
   constructor(options: SessionHostOptions) {
     this.#options = options;
@@ -683,6 +691,21 @@ export class SessionHost {
     let total = 0;
     for (const hosted of this.#sessions.values()) total += hosted.viewers.size;
     return total;
+  }
+
+  /**
+   * Quantos PERSONAGENS distintos este nó tem conectados agora (SV-07) — não visualizadores:
+   * duas abas do mesmo personagem contam UMA vez (invariante 8, `CLAUDE.md` de `server`: "duas
+   * abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões"). O
+   * `Set` nunca precisa decidir entre SESSÕES, só entre ABAS dentro de uma: um personagem não
+   * pode estar hospedado em duas sessões deste nó ao mesmo tempo (o mesmo invariante).
+   */
+  get connectedCharacterCount(): number {
+    const characters = new Set<string>();
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) characters.add(viewer.characterId);
+    }
+    return characters.size;
   }
 
   sessionFor(characterId: string): Session | undefined {
@@ -2432,15 +2455,18 @@ export class SessionHost {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
     this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
+    this.#playerCountTimer = setInterval(() => void this.#publishPlayerCount(), PLAYER_COUNT_INTERVAL_MS);
   }
 
   stop(): void {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
     if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
+    if (this.#playerCountTimer) clearInterval(this.#playerCountTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+    this.#playerCountTimer = null;
   }
 
   /**
@@ -2782,6 +2808,7 @@ export class SessionHost {
       ...(this.#botByCharacter.has(characterId)
         ? { botConfig: this.#botByCharacter.get(characterId) }
         : {}),
+      ...(this.#lastPlayerCount === undefined ? {} : { onlinePlayers: this.#lastPlayerCount }),
     };
   }
 
@@ -3064,6 +3091,42 @@ export class SessionHost {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.
       this.#logger.error({ error }, 'Failed to renew session leases');
+    }
+  }
+
+  /**
+   * Agrega o total de jogadores online entre todos os nós vivos do diretório e manda para
+   * todo visualizador conectado neste nó (SV-07, RF-03).
+   *
+   * Roda fora do caminho quente do tick (`setInterval` próprio de 30 s). Não filtra por estado
+   * aqui — a barra do topo aparece na Cidade e na hunt, e uma sessão sem visualizador
+   * simplesmente não tem para quem mandar (o `for` interno não itera nada).
+   *
+   * Sem `directory` (nó solo, ou teste), o total é só a contagem local — não há outro nó para
+   * somar.
+   *
+   * Falha do Redis NÃO publica um número errado. A alternativa óbvia — cair para
+   * `connectedCharacterCount` deste nó sozinho quando `aliveNodes()` falha — pareceria, para
+   * quem está vendo, uma queda repentina de milhares de jogadores para os poucos deste
+   * processo: "o Redis está lento" não pode virar "o servidor esvaziou" na tela de ninguém. O
+   * último total conhecido fica onde está, e o próximo ciclo de 30 s tenta de novo.
+   */
+  async #publishPlayerCount(): Promise<void> {
+    const directory = this.#options.directory;
+    let total = this.connectedCharacterCount;
+    if (directory !== undefined) {
+      try {
+        const nodes = await directory.aliveNodes();
+        total = nodes.reduce((sum, node) => sum + (node.players ?? 0), 0);
+      } catch (error) {
+        this.#logger.error({ error }, 'Failed to aggregate online player count');
+        return;
+      }
+    }
+    this.#lastPlayerCount = total;
+    const message: S2CMessage = { type: 'player-count', count: total };
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) viewer.send(message);
     }
   }
 

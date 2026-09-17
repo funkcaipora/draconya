@@ -343,6 +343,7 @@ export function createGame(
             .heartbeat(nodeId, {
               sessions: host?.sessionCount ?? 0,
               url: configuration.GAME_PUBLIC_URL,
+              players: host?.connectedCharacterCount ?? 0,
             })
             .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
         };

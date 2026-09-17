@@ -351,6 +351,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // Consumida pelo HUD de condições (SV-12, #342).
       return;
 
+    case 'player-count':
+      return;
+
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
       // ser silenciosamente ignorada em produção.

@@ -102,6 +102,19 @@ export const SERVER_TO_CLIENT = {
    * Sai no attach/enter e sempre que as condições ativas mudam (aplicadas ou expiradas).
    */
   'active-conditions': 27,
+  /**
+   * O total de jogadores online, agregado entre todos os nós `game` (SV-07): cada nó publica,
+   * no próprio batimento do diretório de sessões, quantos personagens distintos tem conectados
+   * agora; quem manda esta mensagem já somou os nós vivos. Mandada a cada 30 s, para TODA
+   * sessão hospedada neste nó — a barra do topo do kit (Hud.jsx:21) aparece tanto na Cidade
+   * quanto na hunt.
+   *
+   * Não é comparada como `player-stats`/`analyzer`/`bestiary` (sem `sameX`): é republicada sem
+   * checar se mudou. O próprio intervalo de 30 s já é o teto de banda que se aceita gastar com
+   * isto, e guardar "o último valor mandado por VIEWER" custaria mais memória do que o campo
+   * economiza em rede — um inteiro pequeno, a cada 30 s, para quem estiver conectado.
+   */
+  'player-count': 28,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

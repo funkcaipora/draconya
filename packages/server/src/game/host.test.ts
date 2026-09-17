@@ -4889,4 +4889,227 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     expect(cityState?.huntId).toBeUndefined();
     expect(cityState?.difficulty).toBeUndefined();
   });
+
+  describe('online players count (SV-07, #343)', () => {
+    it('counts distinct connected characters across viewers', () => {
+      const { ruleset } = countingRuleset();
+      const { host } = buildHost(ruleset);
+
+      expect(host.connectedCharacterCount).toBe(0);
+
+      // Two viewers for the same character count once (invariante 8)
+      host.attach(new FakeSocket(), 'p1');
+      expect(host.connectedCharacterCount).toBe(1);
+
+      host.attach(new FakeSocket(), 'p1');
+      expect(host.connectedCharacterCount).toBe(1);
+
+      // Viewer for another character increases the count to 2
+      host.attach(new FakeSocket(), 'p2');
+      expect(host.connectedCharacterCount).toBe(2);
+    });
+
+    it('broadcasts aggregated player count every 30 seconds', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 2, url: 'ws://n1:7171', players: 5 },
+          { nodeId: 'n2', sessions: 3, url: 'ws://n2:7171', players: 10 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket = new FakeSocket();
+      host.attach(socket, 'p1');
+      host.start();
+
+      // Before 30s, no player-count message
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(socket.received().filter((m) => m.type === 'player-count')).toHaveLength(0);
+
+      // At 30s, receives player-count message with sum (5 + 10 = 15)
+      await vi.advanceTimersByTimeAsync(15_000);
+      host.stop();
+
+      const countMessages = socket.received().filter((m) => m.type === 'player-count');
+      expect(countMessages).toHaveLength(1);
+      expect(countMessages[0]).toEqual({ type: 'player-count', count: 15 });
+    });
+
+    it('broadcasts player count to both hunt and city sessions', async () => {
+      vi.useFakeTimers();
+      const content = testContent();
+      const { ruleset: huntRuleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 2, url: 'ws://n1:7171', players: 42 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const cityFactory = createCitySessionFactory(content);
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: content.version,
+        logger,
+        directory,
+        createSession: (characterId) => {
+          if (characterId === 'city-hero') return cityFactory(characterId);
+          return new Session({
+            id: `s-${characterId}`,
+            contentVersion: content.version,
+            ruleset: huntRuleset,
+            rng: Rng.fromSeed(characterId),
+            createdAtMs: 0,
+          });
+        },
+      });
+
+      await host.prepare('hunt-hero', { level: 1, xp: 0 }, 'a1');
+      await host.prepare('city-hero', { level: 1, xp: 0 }, 'a2');
+
+      const huntSocket = new FakeSocket();
+      const citySocket = new FakeSocket();
+      host.attach(huntSocket, 'hunt-hero');
+      host.attach(citySocket, 'city-hero');
+
+      host.start();
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      const huntCountMsg = huntSocket.received().filter((m) => m.type === 'player-count');
+      const cityCountMsg = citySocket.received().filter((m) => m.type === 'player-count');
+
+      expect(huntCountMsg).toHaveLength(1);
+      expect(huntCountMsg[0]).toEqual({ type: 'player-count', count: 42 });
+
+      expect(cityCountMsg).toHaveLength(1);
+      expect(cityCountMsg[0]).toEqual({ type: 'player-count', count: 42 });
+    });
+
+    it('does not publish or update player count when aliveNodes fails', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => {
+          throw new Error('Redis connection timed out');
+        }),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      host.start();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      // No player-count message sent
+      expect(socket.received().filter((m) => m.type === 'player-count')).toHaveLength(0);
+
+      // Reattach session-state does not have onlinePlayers
+      host.handle(viewer, { type: 'session-attach' });
+      host.flush();
+
+      const sessionState = socket.received().filter((m) => m.type === 'session-state').at(-1);
+      expect(sessionState).toBeDefined();
+      expect(sessionState).not.toHaveProperty('onlinePlayers');
+    });
+
+    it('includes cached onlinePlayers in session-state on reattach', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 1, url: 'ws://n1:7171', players: 123 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket1 = new FakeSocket();
+      host.attach(socket1, 'p1');
+      host.start();
+
+      // Advance 30s so onlinePlayers is aggregated and cached
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      // Second socket connects and attaches
+      const socket2 = new FakeSocket();
+      const viewer2 = host.attach(socket2, 'p1');
+      host.handle(viewer2, { type: 'session-attach' });
+      host.flush();
+
+      const state = socket2.received().filter((m) => m.type === 'session-state').at(-1);
+      expect(state).toBeDefined();
+      expect((state as { onlinePlayers?: number })?.onlinePlayers).toBe(123);
+    });
+
+    it('broadcasts local connectedCharacterCount when directory is not configured', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const { host } = buildHost(ruleset);
+
+      const socket = new FakeSocket();
+      host.attach(socket, 'p1');
+      host.start();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      const countMessages = socket.received().filter((m) => m.type === 'player-count');
+      expect(countMessages).toHaveLength(1);
+      expect(countMessages[0]).toEqual({ type: 'player-count', count: 1 });
+    });
+  });
 });

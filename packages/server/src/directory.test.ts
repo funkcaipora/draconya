@@ -325,4 +325,18 @@ describe.runIf(available)('two active characters per account limit', () => {
     expect(await directory.node('n1')).toBeNull();
     expect(await directory.aliveNodes()).toEqual([]);
   });
+
+  it('preserves players count when present and omits when absent (SV-07)', async () => {
+    const directory = new SessionDirectory(redis);
+    await directory.heartbeat('n1', { sessions: 3, url: 'ws://n1:7171', players: 4 });
+    await directory.heartbeat('n2', { sessions: 9, url: 'ws://n2:7171' });
+
+    const nodes = await directory.aliveNodes();
+    const n1 = nodes.find((node) => node.nodeId === 'n1');
+    const n2 = nodes.find((node) => node.nodeId === 'n2');
+
+    expect(n1).toEqual({ nodeId: 'n1', sessions: 3, url: 'ws://n1:7171', players: 4 });
+    expect(n2).toEqual({ nodeId: 'n2', sessions: 9, url: 'ws://n2:7171' });
+    expect(n2).not.toHaveProperty('players');
+  });
 });

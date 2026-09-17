@@ -23,6 +23,12 @@ describe('round trip', () => {
     expect(decodeS2C(encodeS2C(step))).toEqual([step]);
   });
 
+  it('encodes and decodes player-count', () => {
+    const msg: S2CMessage = { type: 'player-count', count: 1284 };
+    const encoded = encodeS2C(msg);
+    expect(decodeS2C(encoded)).toEqual([msg]);
+  });
+
   it('accepts ArrayBuffer as well as Uint8Array', () => {
     const frame = encodeC2S(walk);
     const copy = frame.slice().buffer;
