@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TopBar } from './TopBar.js';
+import type { ChatBadgeTier } from './chat-badge.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
@@ -13,9 +14,18 @@ import { INITIAL_ACCOUNT, account } from '../account/store.js';
 const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
 
-async function render(open = OPEN): Promise<string> {
-  const { prelude } = await prerender(createElement(TopBar, { open, toggle: NOOP_TOGGLE }));
+async function render(open = OPEN, chatBadge: ChatBadgeTier | null = null): Promise<string> {
+  const { prelude } = await prerender(createElement(TopBar, {
+    open, toggle: NOOP_TOGGLE, chatBadge,
+  }));
   return new Response(prelude).text();
+}
+
+function buttonFor(html: string, id: string): string {
+  const marker = html.indexOf(`data-window="${id}"`);
+  const start = html.lastIndexOf('<button', marker);
+  const end = html.indexOf('</button>', marker);
+  return html.slice(start, end + '</button>'.length);
 }
 
 const catalogue: Catalogue = {
@@ -92,6 +102,27 @@ describe('TopBar', () => {
     for (const label of ['Personagem', 'Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
+  });
+
+  it('shows the gold badge only on Chat', async () => {
+    const html = await render(OPEN, 'gold');
+
+    expect(buttonFor(html, 'chat')).toContain('topbar-icon-button-badge-gold');
+    expect(buttonFor(html, 'bot')).not.toContain('topbar-icon-button-badge-gold');
+  });
+
+  it('shows the danger dot only on Chat', async () => {
+    const html = await render(OPEN, 'danger');
+
+    expect(buttonFor(html, 'chat')).toContain('topbar-icon-badge-dot');
+    expect(buttonFor(html, 'bot')).not.toContain('topbar-icon-badge-dot');
+  });
+
+  it('shows no badge when Chat has no unseen system message', async () => {
+    const html = await render(OPEN, null);
+
+    expect(buttonFor(html, 'chat')).not.toContain('topbar-icon-button-badge-gold');
+    expect(buttonFor(html, 'chat')).not.toContain('topbar-icon-badge-dot');
   });
 
   it('centers the "DRACONYA" wordmark without any player count', async () => {

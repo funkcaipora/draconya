@@ -43,15 +43,16 @@ import { TopBar } from './TopBar.js';
 import { WorldOverlay } from './WorldOverlay.js';
 import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
+import { chatBadgeTier } from './chat-badge.js';
 
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
  * O analisador também é FIXO desde #258 (D6): `open.analyzer` só minimiza, nunca desmonta —
  * uma janela que existe sozinha continua não aparecendo sem sessão (`Analyzer.tsx` devolve
- * `null`). Hunts e Cyclopedia são modais e nascem fechados. Chat nasce aberto (D5/DS-09,
- * #252): "é onde chegam as recusas do servidor" — uma janela que abre fechada esconderia a
- * primeira recusa da sessão.
+ * `null`). Hunts e Cyclopedia são modais e nascem fechados. Chat nasce fechado (#323, RC-10,
+ * ADR 0030 §3): o kit não o desenha, e as recusas do servidor agora justificam o ícone acender
+ * quando uma `system-message` chega com ele fechado.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   // Personagem é modal como Hunts: começa fechado e só monta depois de uma intenção do jogador.
@@ -60,13 +61,23 @@ const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   // nasce aberto empurraria uma decisão antes de a tela aparecer, e janela fixa é quem nasce
   // aberta (DT-02 de #259). A pill "Escolher caçada"/"Sair da caçada" (`HuntActions`) é quem
   // fica sempre visível, fora das colunas.
-  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true,
+  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, chat: false,
 };
 
 export function Shell() {
   const loaded = useBrowserPack();
   const [open, setOpen] = useState(DEFAULT_WINDOWS);
-  const toggle = (id: WindowId): void => { setOpen((state) => ({ ...state, [id]: !state[id] })); };
+  // A marca de visto usa `performance.now()`, o mesmo relógio monotônico de `SystemLine.atMs`.
+  // `Date.now()` faria uma mensagem da sessão parecer sempre anterior à época Unix.
+  const [chatSeenAtMs, setChatSeenAtMs] = useState(0);
+  const systemMessages = useHudSlice((state) => state.systemMessages);
+  const chatBadge = chatBadgeTier(systemMessages, open.chat, chatSeenAtMs);
+  const toggle = (id: WindowId): void => {
+    if (id === 'chat' && !open.chat) {
+      setChatSeenAtMs(systemMessages.at(-1)?.atMs ?? performance.now());
+    }
+    setOpen((state) => ({ ...state, [id]: !state[id] }));
+  };
   // As folhas dos monstros das hunts, decodificadas na Cidade (FUN-112): sem isto o rato era
   // um quadrado por seis a dez segundos na primeira entrada.
   useWarmHuntOutfits(loaded?.pack ?? null);
@@ -86,7 +97,7 @@ export function Shell() {
   return (
     <AssetPackContext.Provider value={loaded}>
       <div className="shell">
-<div className="world-stage">
+        <div className="world-stage">
           <Viewport />
           {/* Arcos e nome do próprio jogador (#328, RC-15): sempre no centro da câmera, tanto
               na Cidade quanto em hunt. Não pertence ao `Viewport`, cujo canvas é montado por
@@ -94,7 +105,7 @@ export function Shell() {
           <PlayerVitalsOverlay />
         </div>
         <WorldOverlay hunting={hunting} />
-        <TopBar open={open} toggle={toggle} />
+        <TopBar open={open} toggle={toggle} chatBadge={chatBadge} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
               montado; a barra do topo MINIMIZA, nunca remove. A edição fina abre por cima. */}
@@ -143,9 +154,9 @@ export function Shell() {
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
             da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
         {open.bestiary && <CyclopediaModal onClose={() => { toggle('bestiary'); }} />}
-        {/* O chat é janela flutuante fixa (#252, ADR 0029 D5): mesmo padrão de open/close das
-            outras (hunts, analyzer, bestiary) — a diferença é só a POSIÇÃO, dada pelo próprio
-            componente via `.chat-window`, e não por uma coluna do `windows-left`/`windows-right`. */}
+        {/* O chat permanece fixo (#252, ADR 0029 D5), mas nasce fechado desde #323/RC-10: o
+            ícone que o abre pode acender com uma `system-message`. A posição ainda é dada por
+            `.chat-window`, fora das colunas. */}
         {open.chat && <Chat onClose={() => { toggle('chat'); }} />}
       </div>
     </AssetPackContext.Provider>

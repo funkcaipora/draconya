@@ -143,6 +143,14 @@ body {
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
 .topbar-nav { display: flex; gap: 4px; }
 .topbar-icon-img { display: block; width: 32px; height: 32px; object-fit: cover; pointer-events: none; }
+/* O selo do Chat (#323): mensagens comuns brilham em ouro; erro vira um ponto de atenção. O
+   `IconButton` do topo é quem ancora o ponto (`position: relative`). */
+.topbar-nav .ui-icon-button { position: relative; }
+.topbar-icon-button-badge-gold { box-shadow: var(--glow-gold); }
+.topbar-icon-badge-dot {
+  position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); box-shadow: var(--glow-blood);
+}
 .topbar-icon-glyph {
   display: grid; place-items: center; width: 32px; height: 32px;
   color: var(--text-faint); font: 700 8px var(--font-mono); letter-spacing: 0.04em;
@@ -172,12 +180,12 @@ body {
 .ui-panel-body .quiet { color: var(--text-faint); margin: 8px 0; }
 
 /* O chat: janela flutuante fixa sobre o MUNDO, à direita da coluna esquerda (#252, ADR 0029 D5;
-   #288). A moldura (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO — sem arraste,
-   como as outras janelas (D6, "nada arrastável"). O kit não desenha chat (ADR 0030 §3: "não há
-   chat no HUD do kit"), então não há régua visual para a posição exata — só a regra de não
-   cobrir conteúdo interativo da coluna. `left` começa depois de `--sidebar-w` (232px) em vez de
-   10px: preso ao canto, o chat cobria as últimas seções de `.windows-left` (Party) sempre que
-   a coluna crescia até o rodapé (#288). */
+   #288; nasce FECHADO desde #323/RC-10, ADR 0030 §3). A moldura (cabeçalho, fio dourado, ×) é
+   do `Panel`; aqui só a POSIÇÃO — sem arraste, como as outras janelas (D6, "nada arrastável"). O
+   kit não desenha chat (ADR 0030 §3: "não há chat no HUD do kit"), então não há régua visual
+   para a posição exata — só a regra de não cobrir conteúdo interativo da coluna. `left` começa
+   depois de `--sidebar-w` (232px) em vez de 10px: preso ao canto, o chat cobria as últimas
+   seções de `.windows-left` (Party) sempre que a coluna crescia até o rodapé (#288). */
 .chat-window {
   position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
 }
