@@ -45,7 +45,7 @@ export function battleTone(percent: number): 'ok' | 'warn' | 'danger' {
  * DIRETO (ADR 0007): esta função não assina nada, e quem decide quando chamá-la de novo é o
  * `setInterval` de `BattlePanel`.
  */
-function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
+export function battleRows(partyNames: ReadonlySet<string>): BattleRow[] {
   const rows: BattleRow[] = [];
   for (const creature of world.creatures.values()) {
     if (creature.id === world.selfId) continue;
