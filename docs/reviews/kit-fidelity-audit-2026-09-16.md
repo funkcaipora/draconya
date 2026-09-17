@@ -11,6 +11,16 @@ Medieval" (Claude Design, 2026-09-15), que não é versionado (ADR 0029 D9) — 
 do projeto. Os caminhos packages/... são o cliente real na data da auditoria (pós-M14, commit
 3299eb5). As citações arquivo:linha foram conferidas linha a linha pelos verificadores.
 
+**Adendo — kit v3 (2026-09-16, depois da auditoria):** o dono entregou o `Medieval3.zip`; só o
+`ui_kits/draconya/Modals.jsx` mudou (+54 linhas, apenas adições), definindo os cinco modais que
+esta auditoria registra como "sem arquivo" (`ActionConfigModal`, `AutomationConfigModal`,
+`AddAutomationModal`, `SkillsCustomizeModal`, `AnalyzerModal`) e os helpers
+`ConditionRow`/`ConditionList`. Leia R2-05, R2-12, R5-02, R8-25 e as notas sobre "modais sem
+arquivo" com essa correção; os números de linha de `Modals.jsx` citados aqui valem para o v2 até a
+linha 251 (o v3 só acrescenta depois dela, mais um fechamento). O `NumField` CONTINUA indefinido
+no v3. As capturas 34–40 de `docs/kit-reference/` mostram os cinco modais renderizados, e o que
+eles fixam de novo está no §1 de `docs/kit-fidelity-plan.md`.
+
 ---
 
 ## Mapa de capacidade do protocolo

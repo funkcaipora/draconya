@@ -13,9 +13,10 @@ dono, 2026-09-14) — regras RG-*, casos UC-*, prioridade RP-* e cooldown compar
 refutado), sobre o cliente no commit `3299eb5`. Os ids `R0-01`…`R8-26` citados abaixo apontam
 para lá, cada um com evidência arquivo:linha dos dois lados.
 **Referência visual:** [kit-reference/](kit-reference/README.md) — o kit RENDERIZADO, capturado
-tela a tela (20 PNGs: entrada, HUD em caçada e na Cidade, popover de saída e os 14 modais com
-arquivo, incluindo as duas abas da Loja/leilão). É a régua de toda issue deste plano: quem executa
-não tem o zip — tem estas capturas, o JSX colado na spec e o achado da auditoria.
+tela a tela (27 PNGs: entrada, HUD em caçada e na Cidade, popover de saída e os 19 modais do kit
+v3, incluindo as duas abas da Loja/leilão e os três formatos do modal de automação). É a régua de
+toda issue deste plano: quem executa não tem o zip — tem estas capturas, o JSX colado na spec e o
+achado da auditoria.
 
 ---
 
@@ -54,10 +55,22 @@ M14 (§1). Contradições catalogadas pela auditoria, com o lado que vence:
 | Tokens vs tela (topo 56 vs 65, barra 104 vs 124, trilho colorido vs neutro dos vitais) | A tela (65 / 124 / trilho neutro) — regra já fixada no M14 |
 | Barra de ações a `bottom:130` pressupõe a fileira de 124 px | Os dois voltam juntos (M18) — até lá as pills ficam a 24 px do rodapé como hoje |
 
-**Cinco modais não têm arquivo** (`AnalyzerModal`, `ActionConfigModal`, `AutomationConfigModal`,
-`AddAutomationModal`, `SkillsCustomizeModal`) e o `NumField` nunca é definido — o protótipo quebra
-ao abri-los. Cada um é especificado via `/spec` na língua do kit (mesmos primitivos, mesmos
-tokens), a partir dos parâmetros de `data.js` e do [PRD de comportamento](prd-ui-behavior.md).
+**Os cinco modais que faltavam foram entregues no kit v3** (`Medieval3.zip`, 2026-09-16, ainda no
+mesmo dia): o `Modals.jsx` cresceu 54 linhas — só adições, nada existente mudou — definindo
+`ActionConfigModal`, `AutomationConfigModal`, `AddAutomationModal`, `SkillsCustomizeModal`,
+`AnalyzerModal` e os helpers `ConditionRow`/`ConditionList`. O que eles fixam de novo: as condições
+da barra são as QUATRO de hoje (HP %, Mana %, Nº de alvos, HP do alvo %) combinadas em **E**;
+atalhos F1–F12 por slot; switch "automática" por ação com o rodapé **"A ação dispara sozinha
+enquanto ligada · o atalho continua manual"** (a fase manual do E10, dita pelo próprio kit); as
+automações têm condições de entrada em **OU** e de saída em **E**, aviso de faixa morta, e
+"Renovar" declara **"Pega o próximo da mochila principal"** (pressupõe a decisão P1 do §3); o
+`AddAutomationModal` lista uma SEXTA automação, **"Comer comida"** (sem lastro no PRD de
+comportamento e sem mecânica de fome no `sim` — o dono confirma na spec); o `AnalyzerModal`
+expandido usa `analyzer.rows` (Tempo, XP, Gold, Gastos, Saldo, Mortos, Loot, Supplies, maiores
+golpes, com /h na terceira coluna) — **tudo dado que já trafega hoje**. Sobra do protótipo: o
+`NumField` CONTINUA indefinido (quebra Lure, Ring swap e a automação de arrow — a leitura do M14
+vale: `Input` pequeno numérico), e o `App.jsx` passa `{i, a}` a um `ActionConfigModal` que espera
+`{index, label}` (o título mostra "slot NaN" — bug de fiação do protótipo, não desenho).
 
 ---
 
@@ -136,9 +149,9 @@ A geografia do kit, com os dados que já trafegam. Depende de FD-01/FD-05.
 | # | Issue | Dep. | Tam. | Entrega |
 |---|---|---|---|---|
 | RC-01 | `FloatingWindow` (componente da casca) | FD-05 | M | Arrastável (implementação própria, não o hack do kit), posição inicial por janela, persistida por navegador em `localStorage`; abaixo de 720 px degrada para seção do modo página; anima `dsAppear`; faixa de arraste exclui os 60 px dos botões |
-| RC-02 | Analisador como janela flutuante | RC-01 | M | Nasce aberto na hunt em (250, 12); estrutura do kit (cabeçalho Sessão/—, caixas); abas "Dano recebido/causado" e "⤢ abrir completo" esperam dados/spec (M18/E2); "Próximo level" fica de fora (§3b); "Sessão" mostra `durationMs` |
+| RC-02 | Analisador como janela flutuante + modal expandido | RC-01 | M | Nasce aberto na hunt em (250, 12); estrutura do kit (cabeçalho Sessão/—, caixas); "⤢ abrir completo" abre o `AnalyzerModal` do kit v3 — as linhas dele são os `Aggregates` que JÁ chegam, com /h derivado no cliente; abas "Dano recebido/causado" esperam E2; "Próximo level" fica de fora (§3b) |
 | RC-03 | Party loot como janela flutuante | RC-01 | M | Título "Party loot", meta "vendido e dividido ao fim", grade fixa 6×2 com vazios (R4-23), barra de uso, nota de rateio (texto da janela renderizada); "valor est." entra com SV-01; "cap reservado" fora (§3b); abre/fecha pelo ▣ do painel da party (R3-03) |
-| RC-04 | Coluna esquerda: painel Skills | FD-05 | M | R2-01/R2-05/R2-06: título "Skills", "Experiência total", valor único de HP/Mana com `tone` vital, Stamina "41:40", ⚙ "Personalizar skills" com modal de seleção/ordem em `localStorage` (o modal sem arquivo, especificado via `/spec`); linhas ML/Sword/Shield/Speed acendem com SV-04; Soul e barra do Level ficam (§3b / futuro); `CharacterPanel` deixa a coluna (vira modal, RC-06) |
+| RC-04 | Coluna esquerda: painel Skills | FD-05 | M | R2-01/R2-05/R2-06: título "Skills", "Experiência total", valor único de HP/Mana com `tone` vital, Stamina "41:40", ⚙ "Personalizar skills" com o `SkillsCustomizeModal` do kit v3 (checkboxes em 2 colunas, meta "N de M visíveis", Padrão/Salvar, ordem = a da lista — sem arrastar), preferência em `localStorage`; linhas ML/Sword/Shield/Speed acendem com SV-04; Soul e barra do Level ficam (§3b / futuro); `CharacterPanel` deixa a coluna (vira modal, RC-06) |
 | RC-05 | Party na hunt com a estrutura do kit | FD-11 | M | Linhas do kit (nome/você, siglas de vocação COM SV-03 — sem inventar "EK/RP": a abreviação real é decidida na spec da SV-03 —, barras HP e MP com SV-03, Gasto com SV-18, DPS/HPS esperam E2); rodapé: gasto médio/sua parte (SV-18), nota "Parar no meio…", switches (SV-23), Sair da party |
 | RC-06 | Personagem como modal com abas | FD-05 | M | R8-01/R8-02: retrato clicável + ícone na nav (R1-08); aba Personagem: identidade ("Vocação · LV n"), VitalBar de HP/Mana, atributos existentes; bônus do Bestiário (dado já chega, R8-05); regen/velocidade/ML com SV-04; combate com SV-01; aba Outfit espera intenção de cor (E7); "+20 % premium" nunca (§3b) |
 | RC-07 | Party: modal "Gerenciar party" | RC-05 | M | R3-12: abas Formação / Na hunt, título "Party · N/4", status "Todos aprovaram/Aguardando"; alcançável DURANTE a hunt (fecha a barreira estrutural R3-11/R3-12); nomes na formação melhoram com SV-22 |
@@ -179,12 +192,17 @@ funcional é o [PRD de comportamento](prd-ui-behavior.md) inteiro (RG-001…007,
 
 Escopo por camada — as issues nascem via `/spec` quando o ADR do marco fechar:
 
-- **`content`** — vocabulário v2: ações em slots ordenados (prioridade = ordem, RP-002), condições
-  múltiplas em AND (RG-006), grupos de cooldown compartilhado (§23), conjuntos nomeados de slots
-  (UC-BAR-001 — os NOMES elementais "Energia/Fogo/Gelo/Sagrado" só chegam com o E2; o mecanismo de
-  conjuntos não espera por eles), automações nomeadas (renovar anel/colar por carga — exige
-  consumir `charges`/`durationMs`, hoje mortos —, munição por alvos, arma/escudo por HP, comer —
-  sem lastro no PRD, confirmar com o dono), e a decisão P1 (estoque de supply/munição).
+- **`content`** — vocabulário v2: ações em slots ordenados (prioridade = ordem, RP-002 — o
+  ActionConfig do kit v3 confirma em texto: "a ordem dos slots é a prioridade"), condições
+  múltiplas em AND (RG-006; as quatro condições atuais, como o kit v3 desenha), grupos de cooldown
+  compartilhado (§23), conjuntos nomeados de slots (UC-BAR-001 — os NOMES elementais
+  "Energia/Fogo/Gelo/Sagrado" só chegam com o E2; o mecanismo de conjuntos não espera por eles),
+  automações nomeadas com condições de entrada em OU e de saída em E (o desenho do
+  `AutomationConfigModal` v3): renovar anel/colar por carga — exige consumir
+  `charges`/`durationMs`, hoje mortos —, munição por alvos, arma/escudo por HP, e "Comer comida"
+  (sexta do `AddAutomationModal` v3; sem lastro no PRD e sem mecânica de fome — confirmar com o
+  dono), e a decisão P1 (estoque de supply/munição — que o v3 pressupõe: "Pega o próximo da
+  mochila principal").
 - **`sim`** — o motor: avaliação determinística por prioridade (RP-001…011), cooldown individual
   vs compartilhado (§28), consumo de carga/duração, exposição do "porquê bloqueada" para o tooltip
   (UC-TIP-001/002).
@@ -194,7 +212,8 @@ Escopo por camada — as issues nascem via `/spec` quando o ADR do marco fechar:
 - **`client`** — a fileira de 124 px volta; `ActionBar` 2×12 (Slot 36 com tecla/nome/contagem),
   "Salva automaticamente", CONJUNTO/ALVO, ⌖ Lure·Follow com o gate LV 50 (o modal já é SV-09);
   `ActionConfigModal`, `AutomationsPanel` + `AddAutomationModal`/`AutomationConfigModal` (os três
-  sem arquivo no kit — spec própria); Shift+clique desabilita (UC-BAR-005); as pills de caçada
+  desenhados no kit v3 — capturas 34–38); Shift+clique desabilita (UC-BAR-005; o switch
+  "automática" do v3 é a mesma alavanca); as pills de caçada
   sobem para `bottom:130`; **`BotPanel`/`RuleEditor` são aposentados SÓ quando a barra +
   Automações cobrirem 100 % do que eles fazem** — nunca antes.
 

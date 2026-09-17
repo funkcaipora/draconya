@@ -9,7 +9,10 @@ versionado (ADR 0029 D9: é `.jsx` de protótipo) e fica com o dono do projeto.
 em Chrome headless com `deviceScaleFactor: 1`, idioma PT. O jogo em **1800×1010** (a base do
 `GameScreen`; nessa janela o `Scaled` do protótipo fica em escala 1 — pixel exato) e a entrada em
 **1600×900** (o viewport que o próprio kit declara; a entrada é fluida). Estados escolhidos por
-`localStorage` (`dr.screen`) e cliques nos controles reais do protótipo.
+`localStorage` (`dr.screen`) e cliques nos controles reais do protótipo. As capturas 01–33 vêm do
+kit v2 (`Medieval2.zip`) e as 34–40 do **kit v3** (`Medieval3.zip`, mesmo dia), que acrescentou ao
+`Modals.jsx` — só por adição, nada existente mudou — os cinco modais que faltavam; as capturas
+anteriores continuam válidas.
 
 ## Onde está cada coisa
 
@@ -46,24 +49,26 @@ em Chrome headless com `deviceScaleFactor: 1`, idioma PT. O jogo em **1800×1010
 | `31-modal-settings.png` | Configurações — "Salvas na conta" exige endpoint que não existe |
 | `32-modal-shop.png` | Loja (E13) — aba "Loja" do ShopModal: destaque, categorias, packs, painel de compra |
 | `33-modal-shop-auction.png` | Casa de leilões (E13) — aba "Leilão" do mesmo modal: livro de ordens de compra e venda (o Market sem taxa da decisão de 2026-09-16), filtros, "Só leitura — negocia na cidade" |
+| `34-modal-action-config.png` | Configurar ação (kit v3, M18): Tipo/Ação/Atalho F1–F12, switch "automática", condições em E, rodapé "A ação dispara sozinha enquanto ligada · o atalho continua manual". O título mostra "SLOT NAN" — bug de fiação do protótipo (`App.jsx` passa `{i, a}`, o modal espera `{index, label}`); o desenho vale |
+| `35-modal-add-automation.png` | Adicionar automação (kit v3, M18): as seis automações, incluindo "Comer comida" — sem lastro no PRD e sem mecânica de fome; o dono confirma na spec |
+| `36-modal-automation-renew-ring.png` | Automação "Renovar anel" (kit v3, M18): item + "Renovar quando" (cargas/tempo), "Pega o próximo da mochila principal" — pressupõe a decisão P1 (estoque) |
+| `37-modal-automation-arrow.png` | Automação "Trocar arrow por alvos" (kit v3, M18) — **com shim** do `NumField` (ver abaixo) |
+| `38-modal-automation-weapon-shield.png` | Automação "Trocar arma/escudo por vida" (kit v3, M18): sets defensivo/ofensivo, condições de entrada em OU e de saída em E, aviso de faixa morta |
+| `39-modal-skills-customize.png` | Personalizar skills (kit v3, RC-04): checkboxes em duas colunas, meta "N de M visíveis", Padrão/Salvar; a ordem do painel é a da lista — sem arrastar |
+| `40-modal-analyzer-expanded.png` | Analisador expandido (kit v3, RC-02): as linhas de `analyzer.rows` com /h na terceira coluna — todo dado já trafega hoje (`Aggregates` + /h no cliente) |
 
-**Shim do `NumField` (26 e 27):** esses dois modais quebram no protótipo original — usam um
-componente `NumField` que o kit nunca define (lacuna catalogada na auditoria). Para a captura,
+**Shim do `NumField` (26, 27 e 37):** esses modais quebram no protótipo original — usam um
+componente `NumField` que o kit nunca define, nem no v3 (lacuna catalogada na auditoria). Para a captura,
 o `NumField` foi reconstruído minimamente na língua visual do kit (rótulo mono maiúsculo + campo
 escuro `--surface-slot`), a mesma leitura que o M14 já fixou (`Input` pequeno numérico, ADR 0029
 D2). **Os campos numéricos dessas duas capturas são reconstrução, não desenho original** — o
 resto do modal é o kit intacto.
 
-**O que não tem captura, e por quê:** os cinco modais sem arquivo (`AnalyzerModal`,
-`ActionConfigModal`, `AutomationConfigModal`, `AddAutomationModal`, `SkillsCustomizeModal`) — não
-existem nem no protótipo; nascem por `/spec` na língua do kit. Em particular, **clicar em
-"+ ADICIONAR" (Automações) e nas engrenagens das automações comuns quebra o próprio protótipo** —
-não há desenho a capturar; o único contrato que o kit dá para o "Adicionar automação" está em
-`App.jsx:39`: o modal devolve um nome, e a automação nasce desligada com o resumo "Nova automação ·
-configure as condições" (o resto é spec a escrever no M18, com o
-[PRD de comportamento](../prd-ui-behavior.md) §5 como fonte: UC-AUT-001…005). O
-`BotPanel`/`RuleEditorModal` do kit — código morto, nunca montado (plano §1). Estados de celular —
-o kit não desenha mobile; a regra do modo página continua a do cliente.
+**O que não tem captura, e por quê:** o `BotPanel`/`RuleEditorModal` do kit — código morto, nunca
+montado (plano §1; no v3 o `ActionConfigModal` assume o papel do editor de regra). Estados de
+celular — o kit não desenha mobile; a regra do modo página continua a do cliente. (Os cinco modais
+que faltavam no v2 foram entregues no kit v3 e estão nas capturas 34–40; o comportamento por trás
+deles é o do [PRD de comportamento](../prd-ui-behavior.md) §5, §15–§24.)
 
 ## Como regenerar
 

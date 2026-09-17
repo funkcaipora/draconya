@@ -30,9 +30,12 @@ de uma definição operacional antes de virar especificação.
    fixou), dados de mentira de `data.js`, os hacks de protótipo (`transform: scale`, drag por
    `window.__drScale`, `localStorage dr.screen`), credenciais/e-mail de demonstração, o rodapé
    "v0.1 · design system" e o realm "Ignis" (o jogo não tem mundos). Quando o kit se contradiz,
-   vence o que está desenhado na tela renderizada; os cinco modais sem arquivo
+   vence o que está desenhado na tela renderizada. Os cinco modais que faltavam na auditoria
    (`AnalyzerModal`, `ActionConfigModal`, `AutomationConfigModal`, `AddAutomationModal`,
-   `SkillsCustomizeModal`) e o `NumField` são especificados via `/spec` na língua do kit.
+   `SkillsCustomizeModal`) foram entregues pelo dono no kit v3 (`Medieval3.zip`, mesmo dia; só o
+   `Modals.jsx` mudou, por adição) e entram na régua como qualquer outra tela; o `NumField`
+   continua indefinido no protótipo e mantém a leitura do M14 (`Input` pequeno numérico,
+   ADR 0029 D2).
 2. **Reverter a decisão 5 do ADR 0029: a barra de ações entra, e a fileira inferior de 124 px
    volta com ela.** As ações da barra são a nova vista das regras do bot — clicar num slot
    CONFIGURA (intenção `bot-config`, como hoje), quem executa é o servidor (ADR 0002, invariante
@@ -100,7 +103,7 @@ O que fica mais fácil: as issues de fidelidade citam "ADR 0030" em vez de reabr
 o inventário completo (148 achados, região por região, com evidência arquivo:linha) vive em
 `docs/kit-fidelity-plan.md` e cada spec nasce de lá; o PRD de comportamento v2 entra no repositório
 e vira a especificação funcional do motor de ações; e o kit renderizado entra CAPTURADO em
-`docs/kit-reference/` (20 PNGs — a régua visual de quem executa sem ter o zip; PNG não é `.jsx`,
+`docs/kit-reference/` (27 PNGs — a régua visual de quem executa sem ter o zip; PNG não é `.jsx`,
 então o D9 do 0029 continua de pé: o zip segue fora do repositório). O que fica mais difícil: janelas flutuantes
 exigem regra própria de celular e posição persistida; o cliente convive com duas vistas do bot
 (painel interino + barra) durante a transição do motor; o topo diverge do kit até Loja/Guild/
