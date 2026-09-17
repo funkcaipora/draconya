@@ -13,6 +13,9 @@
 import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
+import { sendIntent } from '../net/current.js';
+import { leaveHunt } from './HuntActions.js';
+import { Button } from './ui/Button.js';
 import { Panel } from './ui/Panel.js';
 import { VitalBar } from './ui/VitalBar.js';
 
@@ -45,16 +48,18 @@ export function PartyMembers() {
   if (partyView === null) return null;
 
   return (
-    <Panel dock title="Party" bodyClassName="party-members-panel">
+    <Panel dock title={`Party · ${String(partyView.members.length)}`} bodyClassName="party-members-panel">
       <p className="party-mode">{MODE_TEXT[partyView.mode]}</p>
       <ul className="party-companions">
         {partyView.members.map((member) => {
           const percent = percentFromWorld(member.name) ?? member.healthPercent;
           const isSelf = member.characterId === me;
+          const isLeader = member.characterId === partyView.leaderId;
           return (
             <li key={member.characterId} className={`party-companion${member.alive ? '' : ' party-companion-down'}`}>
               <span className={isSelf ? 'party-companion-self' : undefined}>
-                {`${member.characterId === partyView.leaderId ? '★ ' : ''}${isSelf ? 'você' : member.name}`}
+                {isLeader && <span className="party-leader-star">★</span>}
+                {isSelf ? 'você' : member.name}
               </span>
               <span className="party-hp-row">
                 <span className="party-hp" aria-label={`HP de ${member.name}`}>
@@ -66,6 +71,21 @@ export function PartyMembers() {
           );
         })}
       </ul>
+      {/*
+       * NÃO chama `partyActions.leave()` — ver DT-01 (seção 9): o registro HTTP da party é
+       * apagado no `start()` do servidor, então essa chamada falha (ou nem sai) durante a hunt.
+       * `leave-hunt` (opcode 10) é o mecanismo real de sair de uma hunt em party sem encerrar
+       * para os outros — o mesmo que a pill "Sair da caçada" já usa.
+       */}
+      <Button
+        variant="danger"
+        size="sm"
+        block
+        className="party-leave"
+        onClick={() => { leaveHunt(sendIntent); }}
+      >
+        Sair da party
+      </Button>
     </Panel>
   );
 }

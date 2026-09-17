@@ -8,8 +8,8 @@ import type { HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
 import type { PartyView } from '../party/api.js';
 
-// A formação da party (#197): quatro estados, um por vez. `prerender` roda sem DOM — o que se
-// prende é a estrutura e, sobretudo, que "Iniciar" só acende com todos aprovados.
+// A formação da party (#197, #311): quatro estados, um por vez. Título "Party" sem party e
+// "Party · N" com party; estrela dourada de líder em span próprio; status de aprovação.
 
 const hunts: HuntListing[] = [{ id: 'arena', name: 'Arena', recommendedLevel: 1, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 1 }];
 
@@ -30,8 +30,10 @@ beforeEach(() => {
 });
 
 describe('PartyPanel', () => {
-  it('without a party: create, or join by id', async () => {
+  it('without a party: shows "Party" header, create, or join by id (R3-02, RF-02)', async () => {
     const html = await render();
+    expect(html).toContain('Party');
+    expect(html).not.toMatch(/Party · \d+/);
     expect(html).toContain('Criar party');
     expect(html).toContain('Procurar party');
     expect(html).toContain('aria-label="id da party"');
@@ -40,14 +42,32 @@ describe('PartyPanel', () => {
     expect(await render()).toContain('Cancelar busca');
   });
 
-  it('as a member: approve when there is a proposal, never propose or start', async () => {
+  it('with a formed party: header shows "Party · N" with member count (R3-02, RF-02)', async () => {
+    withParty({ members: [{ characterId: 'me', approved: false }, { characterId: 'b', approved: false }] });
+    const html = await render();
+    expect(html).toContain('Party · 2');
+  });
+
+  it('as a member: approve when there is a proposal, star for leader, never propose or start', async () => {
     withParty({ leaderId: 'lead', huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'lead', approved: true }, { characterId: 'me', approved: false }] });
     const html = await render();
-    expect(html).toContain('★ lead');
+    expect(html).toContain('<span class="party-leader-star">★</span>lead');
     expect(html).toContain('>Aprovar<');
     expect(html).not.toContain('>Propor<');
     expect(html).not.toContain('>Iniciar<');
     expect(html).toContain('Proposta: Arena · Ousado');
+  });
+
+  it('shows approval status: "Aguardando aprovação" when pending, "Todos aprovaram" when ready (R3-12, RF-05)', async () => {
+    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: false }] });
+    let html = await render();
+    expect(html).toContain('Aguardando aprovação');
+    expect(html).not.toContain('Todos aprovaram');
+
+    withParty({ huntId: 'arena', difficulty: 'bold', members: [{ characterId: 'me', approved: true }, { characterId: 'b', approved: true }] });
+    html = await render();
+    expect(html).toContain('Todos aprovaram');
+    expect(html).not.toContain('Aguardando aprovação');
   });
 
   it('as the leader: propose and invite, and Iniciar is disabled until everyone approved', async () => {
@@ -82,8 +102,9 @@ describe('PartyPanel', () => {
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
+    expect(html).toContain('Party · 3');
     expect(html).toContain('Compartilhado');
-    expect(html).toContain('★ Ana');
+    expect(html).toContain('<span class="party-leader-star">★</span>Ana');
     expect(html).toContain('party-companion-self');
     expect(html).toContain('você');
     expect(html).toContain('80 %');
@@ -98,5 +119,6 @@ describe('PartyPanel', () => {
     const { prelude } = await prerender(createElement(PartyMembers));
     const html = await new Response(prelude).text();
     expect(html).toContain('Dividido');
+    expect(html).toContain('Party · 1');
   });
 });
