@@ -41,10 +41,15 @@ export function suppliesFor(category: BotCategory, vocabulary: BotVocabulary): B
   return null;
 }
 
+/** Magias genéricas e da vocação atual: a tela nunca oferece o que o servidor recusará. */
+export function spellsFor(vocabulary: BotVocabulary, vocationId: string | null): BotVocabulary['spells'] {
+  return vocabulary.spells.filter((spell) => spell.vocationId === null || spell.vocationId === vocationId);
+}
+
 /** Uma regra nova para a categoria: a primeira ação do catálogo, ligada. */
-export function blankRule(category: BotCategory, vocabulary: BotVocabulary): BotRule | null {
+export function blankRule(category: BotCategory, vocabulary: BotVocabulary, vocationId: string | null = null): BotRule | null {
   const supplies = suppliesFor(category, vocabulary);
-  const first = supplies === null ? vocabulary.spells[0]?.id : supplies[0]?.id;
+  const first = supplies === null ? spellsFor(vocabulary, vocationId)[0]?.id : supplies[0]?.id;
   if (first === undefined) return null;
   return {
     enabled: true,
@@ -62,13 +67,34 @@ function withValue(condition: BotCondition, value: number): BotCondition {
   return 'percent' in condition ? { ...condition, percent: value } : { ...condition, count: value };
 }
 
-export function RuleEditor({ category, index, initial, vocabulary, level, onClose }: {
+function spellActions(
+  spells: BotVocabulary['spells'], level: number, lockedIds: ReadonlySet<string>,
+  vocationNames: ReadonlyMap<string, string>,
+): ReadonlyArray<{ readonly id: string; readonly label: string; readonly locked: boolean }> {
+  const base = (spell: BotVocabulary['spells'][number]) =>
+    `${spell.name} · ${spell.group} (${String(spell.manaCost)} mana)`;
+  const bases = spells.map(base);
+  const duplicateBases = new Set(bases.filter((label, index) => bases.indexOf(label) !== index));
+  const decorated = spells.map((spell, index) => duplicateBases.has(bases[index] ?? '')
+    ? `${bases[index]} · ${spell.vocationId === null ? 'Genérica' : vocationNames.get(spell.vocationId) ?? spell.vocationId}`
+    : bases[index] ?? spell.id);
+  const duplicateLabels = new Set(decorated.filter((label, index) => decorated.indexOf(label) !== index));
+  return spells.map((spell, index) => ({
+    id: spell.id,
+    label: duplicateLabels.has(decorated[index] ?? '') ? `${decorated[index]} · ${spell.id}` : decorated[index] ?? spell.id,
+    locked: lockedIds.has(spell.id) || level > 0 && level < spell.minLevel,
+  }));
+}
+
+export function RuleEditor({ category, index, initial, vocabulary, level, vocationId, vocationNames, onClose }: {
   category: BotCategory;
   /** `null` é regra nova: entra no fim da categoria. */
   index: number | null;
   initial: BotRule;
   vocabulary: BotVocabulary;
   level: number;
+  vocationId: string | null;
+  vocationNames: ReadonlyMap<string, string>;
   onClose: () => void;
 }) {
   const [rule, setRule] = useState<BotRule>(initial);
@@ -78,18 +104,25 @@ export function RuleEditor({ category, index, initial, vocabulary, level, onClos
 
   // Poção e runa são supply; o resto é magia. É a divisão do §13.3, e ela vem do catálogo.
   const supplies = suppliesFor(category, vocabulary);
+  const availableSpells = spellsFor(vocabulary, vocationId);
+  let legacySpell: BotVocabulary['spells'][number] | undefined;
+  if (supplies === null && rule.do.kind === 'spell') {
+    const spellId = rule.do.spellId;
+    legacySpell = vocabulary.spells.find((spell) =>
+      spell.id === spellId && !availableSpells.some((available) => available.id === spell.id));
+  }
   const actions = supplies !== null
     ? supplies.map((supply) => ({
       id: supply.id, label: `${supply.name} (${String(supply.price)} gold)`,
       // A runa (#165) tem level: a tela só mostra que ainda não dá; quem recusa é o servidor.
       locked: level > 0 && level < (supply.requires.level ?? 0),
     }))
-    : vocabulary.spells.map((spell) => ({
-      id: spell.id,
-      label: `${spell.name} · ${spell.group} (${String(spell.manaCost)} mana)`,
-      // Level e vocação são do SERVIDOR; a tela só mostra que ainda não dá.
-      locked: level > 0 && level < spell.minLevel,
-    }));
+    : spellActions(
+      legacySpell === undefined ? availableSpells : [legacySpell, ...availableSpells],
+      level,
+      legacySpell === undefined ? new Set() : new Set([legacySpell.id]),
+      vocationNames,
+    );
 
   // A meta "slot N/M" (RF-06): N é a posição 1-based (a nova entra no FIM da categoria — mesma
   // regra de sempre, §13.4); M é o teto do catálogo, igual ao "n/slots" do cabeçalho da Category.
@@ -143,6 +176,11 @@ export function RuleEditor({ category, index, initial, vocabulary, level, onClos
         />
       </div>
       <div className="rule-editor-divider"><span>→ AÇÃO</span></div>
+      {legacySpell !== undefined && legacySpell.vocationId !== null && (
+        <p className="system-warning rule-editor-warning" role="alert">
+          {`A regra usa ${legacySpell.name}, que não é da sua vocação.`}
+        </p>
+      )}
       <div className="rule-action-list">
         {actions.map((action) => (
           <button

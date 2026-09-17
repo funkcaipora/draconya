@@ -576,6 +576,7 @@ body {
 }
 .rule-action:disabled { color: var(--text-faint); cursor: not-allowed; opacity: .6; }
 .rule-action-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
+.rule-editor-warning { margin: 0 2px 6px; font: 7px var(--font-mono); line-height: 1.5; }
 .rule-editor-note { margin: 10px 2px 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
 .rule-editor-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
 .rule-editor-actions { display: flex; gap: 8px; }

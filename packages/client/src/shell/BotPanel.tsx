@@ -76,13 +76,13 @@ export function RuleRow({ rule, index, total, category, vocabulary, onEdit }: {
   );
 }
 
-function Category({ category, vocabulary, onEdit }: {
-  category: BotCategory; vocabulary: BotVocabulary; onEdit: (editing: Editing) => void;
+function Category({ category, vocabulary, vocationId, onEdit }: {
+  category: BotCategory; vocabulary: BotVocabulary; vocationId: string | null; onEdit: (editing: Editing) => void;
 }) {
   const rules = useStoreSlice(bot, (state) => state.draft.rules[category]);
   const [open, setOpen] = useState(true);
   const slots = vocabulary.slots[category] ?? 0;
-  const fresh = blankRule(category, vocabulary);
+  const fresh = blankRule(category, vocabulary, vocationId);
 
   return (
     <section className="bot-category">
@@ -129,6 +129,7 @@ function Category({ category, vocabulary, onEdit }: {
 export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
+  const vocationId = useHudSlice((state) => state.vocationId);
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -158,6 +159,7 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
     );
   }
   const vocabulary = catalogue.bot;
+  const vocationNames = new Map(catalogue.vocations.map((vocation) => [vocation.id, vocation.name]));
   const advanced = level >= vocabulary.advancedFromLevel;
 
   return (
@@ -168,7 +170,7 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
         <p className="quiet">{`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}</p>
       )}
       {BOT_CATEGORIES.map((category) => (
-        <Category key={category} category={category} vocabulary={vocabulary} onEdit={setEditing} />
+        <Category key={category} category={category} vocabulary={vocabulary} vocationId={vocationId} onEdit={setEditing} />
       ))}
       {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
           "corrija isto" — apagar justamente o que precisa ser corrigido. */}
@@ -182,6 +184,8 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
           initial={editing.initial}
           vocabulary={vocabulary}
           level={level}
+          vocationId={vocationId}
+          vocationNames={vocationNames}
           onClose={() => { setEditing(null); }}
         />
       )}
