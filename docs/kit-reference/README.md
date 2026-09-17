@@ -44,7 +44,8 @@ em Chrome headless com `deviceScaleFactor: 1`, idioma PT. O jogo em **1800×1010
 | `29-modal-social.png` | Amigos (sem épico ainda) |
 | `30-modal-prey.png` | Prey (E7) |
 | `31-modal-settings.png` | Configurações — "Salvas na conta" exige endpoint que não existe |
-| `32-modal-shop.png` | Loja + leilão (E13) |
+| `32-modal-shop.png` | Loja (E13) — aba "Loja" do ShopModal: destaque, categorias, packs, painel de compra |
+| `33-modal-shop-auction.png` | Casa de leilões (E13) — aba "Leilão" do mesmo modal: livro de ordens de compra e venda (o Market sem taxa da decisão de 2026-09-16), filtros, "Só leitura — negocia na cidade" |
 
 **Shim do `NumField` (26 e 27):** esses dois modais quebram no protótipo original — usam um
 componente `NumField` que o kit nunca define (lacuna catalogada na auditoria). Para a captura,
@@ -55,9 +56,14 @@ resto do modal é o kit intacto.
 
 **O que não tem captura, e por quê:** os cinco modais sem arquivo (`AnalyzerModal`,
 `ActionConfigModal`, `AutomationConfigModal`, `AddAutomationModal`, `SkillsCustomizeModal`) — não
-existem nem no protótipo; nascem por `/spec` na língua do kit. O `BotPanel`/`RuleEditorModal` do
-kit — código morto, nunca montado (plano §1). Estados de celular — o kit não desenha mobile; a
-regra do modo página continua a do cliente.
+existem nem no protótipo; nascem por `/spec` na língua do kit. Em particular, **clicar em
+"+ ADICIONAR" (Automações) e nas engrenagens das automações comuns quebra o próprio protótipo** —
+não há desenho a capturar; o único contrato que o kit dá para o "Adicionar automação" está em
+`App.jsx:39`: o modal devolve um nome, e a automação nasce desligada com o resumo "Nova automação ·
+configure as condições" (o resto é spec a escrever no M18, com o
+[PRD de comportamento](../prd-ui-behavior.md) §5 como fonte: UC-AUT-001…005). O
+`BotPanel`/`RuleEditorModal` do kit — código morto, nunca montado (plano §1). Estados de celular —
+o kit não desenha mobile; a regra do modo página continua a do cliente.
 
 ## Como regenerar
 

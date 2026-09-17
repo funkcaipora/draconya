@@ -13,9 +13,9 @@ dono, 2026-09-14) — regras RG-*, casos UC-*, prioridade RP-* e cooldown compar
 refutado), sobre o cliente no commit `3299eb5`. Os ids `R0-01`…`R8-26` citados abaixo apontam
 para lá, cada um com evidência arquivo:linha dos dois lados.
 **Referência visual:** [kit-reference/](kit-reference/README.md) — o kit RENDERIZADO, capturado
-tela a tela (19 PNGs: entrada, HUD em caçada e na Cidade, popover de saída e os 14 modais com
-arquivo). É a régua de toda issue deste plano: quem executa não tem o zip — tem estas capturas, o
-JSX colado na spec e o achado da auditoria.
+tela a tela (20 PNGs: entrada, HUD em caçada e na Cidade, popover de saída e os 14 modais com
+arquivo, incluindo as duas abas da Loja/leilão). É a régua de toda issue deste plano: quem executa
+não tem o zip — tem estas capturas, o JSX colado na spec e o achado da auditoria.
 
 ---
 

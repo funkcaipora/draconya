@@ -100,7 +100,7 @@ O que fica mais fácil: as issues de fidelidade citam "ADR 0030" em vez de reabr
 o inventário completo (148 achados, região por região, com evidência arquivo:linha) vive em
 `docs/kit-fidelity-plan.md` e cada spec nasce de lá; o PRD de comportamento v2 entra no repositório
 e vira a especificação funcional do motor de ações; e o kit renderizado entra CAPTURADO em
-`docs/kit-reference/` (19 PNGs — a régua visual de quem executa sem ter o zip; PNG não é `.jsx`,
+`docs/kit-reference/` (20 PNGs — a régua visual de quem executa sem ter o zip; PNG não é `.jsx`,
 então o D9 do 0029 continua de pé: o zip segue fora do repositório). O que fica mais difícil: janelas flutuantes
 exigem regra própria de celular e posição persistida; o cliente convive com duas vistas do bot
 (painel interino + barra) durante a transição do motor; o topo diverge do kit até Loja/Guild/
