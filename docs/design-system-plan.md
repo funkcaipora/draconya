@@ -1,8 +1,10 @@
 # Design system do cliente — plano de implementação (E14)
 
-**Status:** aprovado em 2026-09-16 — as decisões de arquitetura estão registradas no ADR 0029
-(#244); este documento é o desenho, e as issues do milestone M14 apontam para cá (o M15 existe só
-como milestone com a lista do §5).
+**Status:** aprovado em 2026-09-16; **parcialmente substituído no mesmo dia** — o dono decidiu
+seguir o ui_kit na risca (ADR 0030), o que derruba D5 e D6 e emenda D2/D3/D8. O plano vigente é
+[kit-fidelity-plan.md](kit-fidelity-plan.md); este documento continua sendo o registro do M14
+(executado e fechado em 2026-09-16) e a especificação-base das SV-01…SV-17 do M15, que o plano
+novo revisa e estende.
 **PRD:** §5 (plataforma e experiência do client), §8.2 (hotkeys guiadas), §13 (bot)
 **Origem:** o handoff "Design System MMORPG Medieval" gerado pelo Claude Design em 2026-09-15 —
 tokens, quinze primitivos, o fluxo de entrada, o HUD e catorze modais, em HTML/JSX de protótipo.
