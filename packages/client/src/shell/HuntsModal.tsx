@@ -16,6 +16,7 @@ import { useHudSlice } from '../state/useSlice.js';
 import type { HuntListing } from '../state/hud.js';
 import { OutfitSprite } from './OutfitSprite.js';
 import { PartyPanel } from './PartyPanel.js';
+import { setCurrentHunt } from './current-hunt.js';
 import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
 import { Kicker } from './ui/Kicker.js';
@@ -57,7 +58,9 @@ export function resolveSelection(
 }
 
 /** A intenção `enter-hunt`, ou `null` quando a seleção não chega a formar uma (RF-04). */
-export function enterHuntMessage(hunt: HuntListing | null, difficulty: string | null): C2SMessage | null {
+export function enterHuntMessage(
+  hunt: HuntListing | null, difficulty: string | null,
+): Extract<C2SMessage, { type: 'enter-hunt' }> | null {
   if (hunt === null || difficulty === null) return null;
   return { type: 'enter-hunt', huntId: hunt.id, difficulty };
 }
@@ -71,8 +74,10 @@ export function enterHuntMessage(hunt: HuntListing | null, difficulty: string | 
  */
 export function attemptEnter(
   message: C2SMessage | null, send: (message: C2SMessage) => boolean, onClose: () => void,
-): void {
-  if (message !== null && send(message)) onClose();
+): boolean {
+  const entered = message !== null && send(message);
+  if (entered) onClose();
+  return entered;
 }
 
 function HuntRow({ hunt, level, selected, onSelect }: {
@@ -112,7 +117,10 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
   const { hunt: selected, difficulty } = resolveSelection(hunts, selectedId, pull);
 
   const enter = (): void => {
-    attemptEnter(enterHuntMessage(selected, difficulty), sendIntent, onClose);
+    const message = enterHuntMessage(selected, difficulty);
+    if (attemptEnter(message, sendIntent, onClose) && message !== null) {
+      setCurrentHunt({ huntId: message.huntId, difficulty: message.difficulty });
+    }
   };
 
   return (

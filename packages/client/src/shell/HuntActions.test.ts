@@ -15,33 +15,40 @@ async function render(hunting: boolean): Promise<string> {
 }
 
 describe('HuntActions', () => {
-  it('hunting=false: shows the "⚔ Escolher caçada" pill, and only that one', async () => {
+  it('hunting=false: shows the "⚔ Escolher caçada" pill, and no details pill', async () => {
     const html = await render(false);
     expect(html).toContain('Escolher caçada');
     expect(html).not.toContain('Sair da caçada');
+    expect(html).not.toContain('Detalhes da caçada');
+    expect(html).not.toContain('hunt-pill-icon');
     expect(html).toContain('class="hunt-pill"');
     expect(html).not.toContain('hunt-pill-danger');
   });
 
-  it('hunting=true: shows the "↩ Sair da caçada »" pill, and only that one', async () => {
+  it('hunting=true: shows "Detalhes da caçada" before "Sair da caçada", and never "Despachar loot"', async () => {
     const html = await render(true);
-    expect(html).toContain('Sair da caçada');
+    const detailsIdx = html.indexOf('Detalhes da caçada');
+    const leaveIdx = html.indexOf('Sair da caçada');
+    expect(detailsIdx).toBeGreaterThan(-1);
+    expect(leaveIdx).toBeGreaterThan(-1);
+    expect(detailsIdx).toBeLessThan(leaveIdx);
     expect(html).toContain('»');
     expect(html).not.toContain('Escolher caçada');
+    expect(html).not.toContain('Despachar loot');
     expect(html).toContain('hunt-pill-danger');
   });
 
-  it('wires onChoose to the non-hunting pill, and leaveHunt(sendIntent) to the exit pill', async () => {
+  it('wires onChoose to the non-hunting pill, and leaveHunt(sendIntent) with setCurrentHunt(null) to the exit pill', async () => {
     const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
     const notHuntingIndex = source.indexOf('if (!hunting)');
     const onChooseIndex = source.indexOf('onClick={onChoose}');
     const huntingReturnIndex = source.lastIndexOf('return (');
-    const leaveHuntCallIndex = source.indexOf('leaveHunt(sendIntent)');
+    const leaveHuntCallIndex = source.indexOf('leaveHunt(sendIntent); setCurrentHunt(null);');
     expect(notHuntingIndex).toBeGreaterThan(-1);
     // `onClick={onChoose}` mora DENTRO do bloco `if (!hunting)`, antes do segundo `return`.
     expect(onChooseIndex).toBeGreaterThan(notHuntingIndex);
     expect(onChooseIndex).toBeLessThan(huntingReturnIndex);
-    // `leaveHunt(sendIntent)` mora DEPOIS do segundo `return` — o pill de saída.
+    // `leaveHunt(sendIntent); setCurrentHunt(null);` mora DEPOIS do segundo `return` — o pill de saída.
     expect(leaveHuntCallIndex).toBeGreaterThan(huntingReturnIndex);
   });
 });

@@ -480,6 +480,13 @@ body {
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
 }
+/* A pill "ⓘ Detalhes da caçada" reusa `.hunt-pill`; só o selo circular "i" é novo
+   (Hud.jsx:140, o span antes do texto). */
+.hunt-pill-icon {
+  display: grid; place-items: center; width: 12px; height: 12px;
+  border: 1px solid var(--gold-3); border-radius: 50%;
+  font: 700 7px var(--font-mono); color: var(--gold-4);
+}
 
 /* ---- O popover "Sair sozinho quando…" (#260, DS-17) --------------------------------------- */
 /* O contêiner é pointer-events: none para o clique passar ao mundo; a âncora do popover
@@ -544,6 +551,21 @@ body {
 .hunts-modal-pulls { display: flex; gap: 6px; flex-wrap: wrap; }
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
+
+/* ---- O modal "Detalhes da caçada" v1 (#325, RC-12) ---------------------------------------- */
+.hunt-details-modal-name {
+  margin: 0 0 8px; font: 600 14.5px var(--font-display); color: var(--gold-5);
+}
+/* Box "Sobre esta caçada" — ocupa o lugar da Box "Seu recorde" do kit (que nunca entra, ver a
+   spec desta issue), no mesmo estilo de caixa que `.analyzer-box` já usa em outro painel. */
+.hunt-details-modal-info {
+  border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
+  padding: 8px 10px; min-width: 0;
+}
+.hunt-details-modal-empty {
+  margin: 0; padding: 4px 0; font: 11px var(--font-body); color: var(--text-muted); line-height: 1.5;
+}
+.hunt-details-modal-close { margin-left: auto; }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,

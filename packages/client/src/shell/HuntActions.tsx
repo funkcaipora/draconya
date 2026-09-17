@@ -4,9 +4,12 @@
 // popover "Sair sozinho quando…" (`ExitRulesPopover`, #260/DS-17) é um botão à parte, autocontido
 // (RF-09/DT-04): esta issue só adiciona a linha que o renderiza.
 
+import { useEffect, useState } from 'react';
 import type { C2SMessage } from '@draconya/protocol';
 import { sendIntent } from '../net/current.js';
 import { ExitRulesPopover } from './ExitRulesPopover.js';
+import { HuntDetailsModal } from './HuntDetailsModal.js';
+import { setCurrentHunt } from './current-hunt.js';
 
 /**
  * Manda `leave-hunt` (opcode 10), exportada para teste direto — `prerender` não dispara clique
@@ -17,6 +20,12 @@ export function leaveHunt(send: (message: C2SMessage) => boolean): boolean {
 }
 
 export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose: () => void }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!hunting) setDetailsOpen(false);
+  }, [hunting]);
+
   if (!hunting) {
     return (
       <div className="hunt-actions">
@@ -27,12 +36,18 @@ export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose:
     );
   }
   return (
-    <div className="hunt-actions">
-      <button type="button" className="hunt-pill hunt-pill-danger"
-        onClick={() => { leaveHunt(sendIntent); }}>
-        <span aria-hidden="true">↩</span> Sair da caçada <span aria-hidden="true">»</span>
-      </button>
-      <ExitRulesPopover />
-    </div>
+    <>
+      <div className="hunt-actions">
+        <button type="button" className="hunt-pill" onClick={() => { setDetailsOpen(true); }}>
+          <span aria-hidden="true" className="hunt-pill-icon">i</span> Detalhes da caçada
+        </button>
+        <button type="button" className="hunt-pill hunt-pill-danger"
+          onClick={() => { leaveHunt(sendIntent); setCurrentHunt(null); }}>
+          <span aria-hidden="true">↩</span> Sair da caçada <span aria-hidden="true">»</span>
+        </button>
+        <ExitRulesPopover />
+      </div>
+      <HuntDetailsModal open={detailsOpen} onClose={() => { setDetailsOpen(false); }} />
+    </>
   );
 }
