@@ -49,7 +49,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
   const hunt = hunts.find((h) => h.id === huntId) ?? hunts[0];
 
   return (
-    <Panel dock title="Party" bodyClassName="party-panel">
+    <Panel dock title={current === null ? 'Party' : `Party · ${String(current.members.length)}`} bodyClassName="party-panel">
       {state.entering && <p className="quiet">Entrando na hunt…</p>}
       {!state.entering && current === null && (
         <div className="party-form">
@@ -79,7 +79,10 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
           <ul className="party-members">
             {current.members.map((member) => (
               <li key={member.characterId} className="party-member">
-                <span>{`${member.characterId === current.leaderId ? '★ ' : ''}${member.characterId === me ? 'você' : member.characterId}`}</span>
+                <span>
+                  {member.characterId === current.leaderId && <span className="party-leader-star">★</span>}
+                  {member.characterId === me ? 'você' : member.characterId}
+                </span>
                 <span className={member.approved ? 'party-approved' : 'entry-meta'}>{member.approved ? '✓ aprovou' : 'aguardando'}</span>
               </li>
             ))}
@@ -133,6 +136,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
               Aprovar
             </button>
           )}
+          <p className="party-status">{everyoneApproved ? 'Todos aprovaram' : 'Aguardando aprovação'}</p>
           <button type="button" className="entry-quiet" disabled={state.busy} onClick={() => { void partyActions.leave(); }}>
             sair da party
           </button>

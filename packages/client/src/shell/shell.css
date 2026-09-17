@@ -791,7 +791,8 @@ body {
 .party-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .party-member { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .party-member-down { opacity: 0.5; }
-.party-approved { color: #8fd18f; }
+.party-approved { color: var(--ok); }
+.party-status { margin: 0; font: 7px var(--font-mono); color: var(--text-faint); }
 
 /* --- party: companheiros na hunt e bolsa (DS-14, #257) — sobre os tokens do design. A moldura
    de `PartyBag` e `PartyMembers` é o `Panel` `dock` (`shell/ui/Panel.tsx`). Aqui só o CONTEÚDO
@@ -808,8 +809,10 @@ body {
 .party-companion { display: flex; flex-direction: column; gap: 2px; }
 .party-companion-down { opacity: 0.55; }
 .party-companion-self { color: var(--gold-4); }
+.party-leader-star { color: var(--gold-4); margin-right: 3px; }
 .party-hp-row { display: flex; align-items: center; gap: 6px; }
 .party-hp { flex: 1 1 auto; min-width: 0; }
+.party-leave { margin-top: 6px; }
 
 .party-bag { display: flex; flex-direction: column; gap: 6px; }
 .party-bag-grid { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 3px; }
@@ -821,3 +824,4 @@ body {
   overflow: hidden;
 }
 .party-bag-cap-fill { display: block; height: 100%; background: var(--gold-3); }
+.party-bag-note { margin: 6px 0 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.4; }

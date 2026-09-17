@@ -14,6 +14,18 @@ import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 import { Slot } from './ui/Slot.js';
 
+/**
+ * Duplicado de propósito em vez de importado de `PartyMembers.tsx`/`PartyPanel.tsx` — mesma
+ * razão que o comentário de `PartyMembers.tsx:20-24` já documenta para o próprio `MODE_TEXT`:
+ * três arquivos que mudam em issues diferentes não travam um no outro por uma constante de
+ * duas entradas.
+ */
+export const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
+
+// Cada arquivo do shell formata número com o seu próprio Intl.NumberFormat (mesmo padrão de
+// `CharacterPanel.tsx:20-25`, comentado lá como DT-01: "não há módulo compartilhado ainda").
+const count = (value: number): string => Math.round(value).toLocaleString('pt-BR');
+
 export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {
   const bag = useHudSlice((state) => state.partyBag);
   const partyView = useHudSlice((state) => state.party);
@@ -31,8 +43,8 @@ export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <Panel
       dock
-      title="Bolsa da party"
-      meta={`${String(bag.weight)}/${String(bag.capacity)} oz · ${String(bag.gold)} gold`}
+      title={`Bolsa da party · ${MODE_TEXT[partyView.mode]}`}
+      meta={`${count(bag.weight)}/${count(bag.capacity)} oz · ${count(bag.gold)} gold`}
       collapsed={collapsed}
     >
       <div className="party-bag" aria-label="bolsa da party">
@@ -69,9 +81,12 @@ export function PartyBag({ collapsed = false }: { collapsed?: boolean }) {
         <div className="party-bag-cap" aria-label="capacidade em uso">
           <span className="party-bag-cap-fill" style={{ width: `${String(capPercent)}%` }} />
         </div>
+        <p className="party-bag-note">
+          Capacidade = soma das capacidades dos presentes · vendida e dividida ao sair alguém e no fim.
+        </p>
         {settlement !== null && (
           <p className="entry-meta">
-            {`Último settlement: vendeu ${String(settlement.total)} gold${mine === undefined ? '' : ` · você levou ${String(mine)}`}`}
+            {`Último settlement: vendeu ${count(settlement.total)} gold${mine === undefined ? '' : ` · você levou ${count(mine)}`}`}
           </p>
         )}
       </div>
