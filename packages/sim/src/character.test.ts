@@ -116,3 +116,15 @@ describe('chooseVocation', () => {
     expect([...restored.inventory.items()][0]?.origin).toBeUndefined();
   });
 });
+
+describe('settleGoldDelta', () => {
+  it('keeps the available balance while turning an accepted delta into its base', () => {
+    const hero = new CharacterRuntime(state({ gold: 12_000, goldDelta: -955 }));
+
+    hero.settleGoldDelta();
+
+    expect(hero.gold).toBe(11_045);
+    expect(hero.goldDelta).toBe(0);
+    expect(hero.getState()).toMatchObject({ gold: 11_045, goldDelta: 0 });
+  });
+});

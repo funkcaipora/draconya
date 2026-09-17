@@ -2088,6 +2088,49 @@ describe('a praça compartilhada, vista pelo hospedeiro (FUN-71, ADR 0023)', () 
     expect(host.sessionCount).toBe(1);
   });
 
+  it('folds a persisted hunt balance into the City baseline before a new ticket', async () => {
+    // A Cidade recebe o mesmo runtime que acabou de caçar. Confirmar o extrato sem incorporar
+    // o delta deixava uma próxima admissão somar a variação duas vezes: na linha recém
+    // liquidada e no runtime ainda quente.
+    const content = testContent();
+    const shard = new CityShard(content, () => 0);
+    const saved: Array<{ aggregates: { goldSpent: number } }> = [];
+    const receipts = {
+      save: async (receipt: { aggregates: { goldSpent: number } }) => { saved.push(receipt); },
+    } as unknown as ReceiptStore;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+    } as unknown as SessionDirectory;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, receipts, directory,
+      createSession: createCitySessionFactory(content, () => 0, shard),
+      buildSession: createSessionBuilder(content, () => 0, shard),
+      now: () => 0,
+    });
+    await host.prepare('p1', { level: 1, xp: 0, gold: 20_000 }, 'a1');
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
+
+    const hunt = host.sessionFor('p1');
+    const hero = hunt?.participants[0];
+    if (hunt === undefined || hero === undefined) throw new Error('missing hunt hero');
+    hero.goldDelta -= 956;
+    hunt.credit('p1', 'goldSpent', 956);
+
+    await host.transition('p1', { to: 'city' });
+
+    const cityHero = host.sessionFor('p1')?.participants[0];
+    expect(saved[0]?.aggregates.goldSpent).toBe(956);
+    expect(cityHero?.gold).toBe(19_044);
+    expect(cityHero?.goldDelta).toBe(0);
+
+    // Sem ticket novo também parte da mesma base: sair e entrar na hunt não deixa custo
+    // pendente de uma sessão anterior contaminar a capacidade de compra da próxima.
+    await host.transition('p1', { to: 'hunt', huntId: 'arena', difficulty: 'cautious' });
+    const nextHero = host.sessionFor('p1')?.participants[0];
+    expect(nextHero?.gold).toBe(19_044);
+    expect(nextHero?.goldDelta).toBe(0);
+  });
+
   it('o passo de um chega ao outro como creature-move', () => {
     // p1 fica no ponto de entrada (2,2) e p2 entra no livre mais próximo A PÉ, que é o vizinho
     // ao norte, (2,1) (FUN-120). p2 anda para o oeste, que é (1,1) — dentro do mapa e livre.

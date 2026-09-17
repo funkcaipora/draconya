@@ -2443,6 +2443,15 @@ export class SessionHost {
         : { lootBox: owner.lootBox }),
     });
 
+    // O extrato agora é durável no Redis e será a fonte que o ledger aplica no Postgres.
+    // Enquanto ele está pendente, a Cidade continua com o MESMO `CharacterRuntime` da hunt;
+    // deixar o delta nele faz o ticket que acabou de liquidar o ledger reencontrar uma base
+    // antiga mais uma variação que já entrou no banco. Incorporar o delta à base aqui conserva o
+    // saldo disponível e deixa a próxima sessão começar do mesmo número que a linha durável.
+    if (owner !== undefined && owner.goldDelta !== 0) {
+      owner.settleGoldDelta();
+    }
+
     // A caixa é escrita AQUI, e não na liquidação: o relógio de 30 minutos começa no
     // encerramento (§21.6), e quem sabe que a sessão encerrou é quem a encerrou. Deixar para o
     // `jobs` faria o prazo começar até dez segundos depois, e por acaso.

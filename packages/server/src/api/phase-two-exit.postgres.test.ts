@@ -35,7 +35,7 @@ import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
 import { loadConfiguration } from '../config.js';
 import { DrizzleGameRepository } from '../db/repository.js';
-import { characters } from '../db/schema.js';
+import { characters, itemInstances } from '../db/schema.js';
 import { SessionDirectory } from '../directory.js';
 import { createGame, type GameRole } from '../game/server.js';
 import { buildCatalogue } from '../game/catalogue.js';
@@ -54,6 +54,7 @@ import { SnapshotStore } from '../snapshots.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
 import { rawTestContent } from '../testing/content.js';
+import { totalXpForLevel } from '@draconya/sim';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
 import { eq } from 'drizzle-orm';
@@ -75,6 +76,15 @@ const raw: RawContent = {
   ...base,
   items: [{
     id: 'rat-tooth', name: 'Dente de Rato', kind: 'other', weight: 1, value: 0,
+  }, {
+    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
+    twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+  }],
+  ammunition: [{
+    id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0,
+  }, {
+    id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5,
+    requires: { level: 20 },
   }],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num
@@ -171,6 +181,7 @@ async function startNode(nodeId: string): Promise<GameRole> {
     // produção. O catálogo entra pela mesma razão.
     acceptBotConfig: createBotConfigValidator(content),
     itemCatalog: content.items,
+    ammunition: content.ammunition,
     catalogue: () => buildCatalogue(content),
     now: () => clockMs,
   });
@@ -340,6 +351,9 @@ beforeAll(async () => {
     auth, repository, tickets,
     isCharacterActive: (accountId, characterId) => directory.isActive(accountId, characterId),
     locateSession: (characterId) => directory.lookup(characterId),
+    // O processo de produção passa a mochila para a emissão do ticket; sem isso, uma arma
+    // equipada no banco não chega ao `game` e o roteiro não exercita a munição escolhida.
+    listItemInstances: (characterId) => repository.listItemInstances(characterId),
     // FUN-56: emitir ticket liquida o extrato pendente antes de ler a linha. Está aqui
     // porque é assim que o `main.ts` monta a rota — e este teste existe para exercitar o
     // caminho de produção, não uma versão dele.
@@ -556,6 +570,65 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const back = inbox.last('session-state');
     expect(back?.self.health).toBe(back?.self.maxHealth);
     expect(back?.self.health).toBeGreaterThan(0);
+    inbox.close();
+  }, 120_000);
+
+  it('keeps settled gold and selected ammunition across City reattach (#241)', async () => {
+    await retireNodes();
+    const node = await startNode('phase-two-d');
+    const { cookie } = await login();
+    const created = await (await request('/api/characters', 'POST', cookie, {
+      name: `Archer ${randomUUID().slice(0, 8).replace(/[^a-z]/g, 'a')}`,
+    })).json();
+    const characterId = String(created.id);
+    const db = (database as TestDatabase).database.db;
+    await db.update(characters)
+      .set({ gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression) })
+      .where(eq(characters.id, characterId));
+    await db.insert(itemInstances).values({
+      id: `${characterId}:bow`, itemId: 'bow', ownerCharacterId: characterId,
+      quantity: 1, origin: 'admin', equippedSlot: 'hand',
+    });
+    expect((await db.select().from(itemInstances).where(eq(itemInstances.ownerCharacterId, characterId)))
+      .find((item) => item.id === `${characterId}:bow`)?.equippedSlot).toBe('hand');
+
+    let inbox = await connect(cookie, characterId);
+    inbox.send({ type: 'select-ammo', ammoId: 'sniper-arrow' });
+    expect((await inbox.waitFor('player-stats')).ammo.arrow).toBe('sniper-arrow');
+    const cityHero = node.host?.sessionFor(characterId)?.participants.find((participant) => participant.id === characterId);
+    expect(cityHero).toBeDefined();
+    expect(cityHero?.inventory.getState().equipped.hand?.itemId).toBe('bow');
+    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
+    await inbox.waitFor('session-state');
+    await advance(60_000);
+    inbox.send({ type: 'session-attach' });
+    const firstHunt = await inbox.waitForNext('session-state');
+    expect(firstHunt.aggregates.goldSpent).toBeGreaterThan(0);
+
+    inbox.send({ type: 'leave-hunt' });
+    await until(() => inbox.last('session-state')?.sessionType === 'city', 'the first return to City');
+    inbox.close();
+
+    // O ticket liquida o extrato antes de a conexão nova chegar ao mesmo host de Cidade.
+    inbox = await connect(cookie, characterId);
+    inbox.send({ type: 'session-attach' });
+    await inbox.waitForNext('session-state');
+    const [row] = await db.select({ gold: characters.gold, ammo: characters.ammo })
+      .from(characters).where(eq(characters.id, characterId));
+    const hot = node.host?.sessionFor(characterId)?.participants.find((participant) => participant.id === characterId);
+    const stats = inbox.last('player-stats');
+    expect(hot?.gold).toBe(row?.gold);
+    expect(hot?.goldDelta).toBe(0);
+    expect(stats?.gold).toBe(row?.gold);
+    expect(stats?.ammo.arrow).toBe('sniper-arrow');
+    expect(row?.ammo).toEqual({ arrow: 'sniper-arrow' });
+
+    inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
+    await inbox.waitForNext('session-state');
+    await advance(60_000);
+    inbox.send({ type: 'session-attach' });
+    const secondHunt = await inbox.waitForNext('session-state');
+    expect(secondHunt.aggregates.goldSpent).toBeGreaterThan(0);
     inbox.close();
   }, 120_000);
 });
