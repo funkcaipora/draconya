@@ -890,14 +890,18 @@ export class HuntRuleset implements Ruleset {
     const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
     if (perSecond <= 0) return;
 
+    const ring = character.inventory.ringEffect(this.#options.items);
+    const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
+    const amount = Math.round(1 * (1 + bonusPercent / 100));
+
     if (what === 'health') {
       // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
       // inteira é ruído, mas a barra precisa andar. E só quando REPÔS — de vida cheia, nada
       // mudou, e um evento por segundo para dizer isso é o que uma hunt desanexada de oito
       // horas não precisa produzir.
-      if (character.heal(1) > 0) this.#emitCharacterHealth(session, character);
+      if (character.heal(amount) > 0) this.#emitCharacterHealth(session, character);
     } else {
-      character.mana = Math.min(character.maxMana, character.mana + 1);
+      character.mana = Math.min(character.maxMana, character.mana + amount);
     }
 
     // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
@@ -2034,7 +2038,11 @@ export class HuntRuleset implements Ruleset {
       session.rng,
     );
     // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
-    const applied = character.receiveDamage(Math.round(result.damage * character.conditions.damageTakenScale()));
+    const ring = character.inventory.ringEffect(this.#options.items);
+    const applied = character.receiveDamage(
+      Math.round(result.damage * character.conditions.damageTakenScale()),
+      ring?.kind === 'energy-shield',
+    );
     recordDamage(character.contribution, subject, applied);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.

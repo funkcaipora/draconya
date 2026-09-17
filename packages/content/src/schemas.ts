@@ -257,6 +257,29 @@ export const weaponSchema = z.strictObject({
 });
 export type Weapon = z.infer<typeof weaponSchema>;
 
+/**
+ * Efeito passivo de anel (§13.9, SV-16) — ativo enquanto o item está EQUIPADO no dedo, ao
+ * contrário de `charges`/`durationMs` (adiante neste schema), que são consumo por uso/tempo e
+ * ainda não têm mecanismo nenhum (§21.3). Fechado por `kind`, como `botExitRuleSchema` e o
+ * `effect` de magia: o `sim` só executa o que conhece, e um `kind` novo sem branch aqui é
+ * recusado no boot em vez de virar um anel mudo que ninguém explica.
+ *
+ * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
+ *   que a condição `mana-shield` do utamo vita já faz em `CharacterRuntime.receiveDamage`; as
+ *   duas convergem no mesmo lugar e não se somam (ver o comentário do método).
+ * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o ponto fixo por
+ *   vencimento de `progression.regen`, sem nenhum outro bônus, porque hoje não existe nenhum.
+ *   `percent: 300` é +300% (quadruplica o ponto por vencimento).
+ */
+export const RING_EFFECT_KINDS = ['energy-shield', 'regen-boost'] as const;
+export type RingEffectKind = (typeof RING_EFFECT_KINDS)[number];
+
+export const ringEffectSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('energy-shield') }),
+  z.strictObject({ kind: z.literal('regen-boost'), percent: z.number().int().positive() }),
+]);
+export type RingEffect = z.infer<typeof ringEffectSchema>;
+
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**
  * De onde uma instância veio (§25.3). `starting-kit` e `vocation-choice` são as duas únicas
@@ -343,6 +366,8 @@ export const itemSchema = z.strictObject({
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
+  /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
+  ringEffect: ringEffectSchema.optional(),
   _open: z.string().optional(),
 });
 

@@ -774,6 +774,27 @@ describe('catálogo de itens (FUN-76)', () => {
     // Declarado e ainda não consumido por ninguém — §21.3, e a mecânica é issue própria.
     expect(content.items.get('time-ring')?.durationMs).toBe(600_000);
   });
+
+  it('anel aceita ringEffect (energy-shield e regen-boost); outros kinds rejeitam', () => {
+    const energyRing = {
+      id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
+      weight: 2, value: 100, ringEffect: { kind: 'energy-shield' },
+    };
+    const lifeRing = {
+      id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
+      weight: 2, value: 100, ringEffect: { kind: 'regen-boost', percent: 300 },
+    };
+    const espada = {
+      id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
+      weight: 10, value: 0, attack: 10, ringEffect: { kind: 'energy-shield' },
+    };
+
+    const content = buildContent(base({ items: [energyRing, lifeRing] }));
+    expect(content.items.get('energy-ring')?.ringEffect).toEqual({ kind: 'energy-shield' });
+    expect(content.items.get('life-ring')?.ringEffect).toEqual({ kind: 'regen-boost', percent: 300 });
+
+    expect(() => buildContent(base({ items: [espada] }))).toThrow(/"ringEffect" só faz sentido em anel/);
+  });
 });
 
 describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)', () => {

@@ -292,6 +292,9 @@ export function buildContent(raw: RawContent): Content {
     if (item.twoHanded && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": twoHanded só faz sentido em arma`);
     }
+    if (item.ringEffect !== undefined && item.kind !== 'ring') {
+      problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
   }
   // Toda família com munição precisa da grátis: é ela que o bow dispara quando o gold acaba
   // (decisão 3), e sem ela o bot pararia de atirar — o oposto do invariante 11.

@@ -134,6 +134,12 @@ const items = [
   {
     id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
     weight: 1, value: 0, armor: 2,
+    ringEffect: { kind: 'regen-boost', percent: 300 },
+  },
+  {
+    id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0,
+    ringEffect: { kind: 'energy-shield' },
   },
   {
     id: 'other-ring', name: 'Other Ring', kind: 'ring', slot: 'finger',
@@ -469,6 +475,40 @@ describe('regeneração (FUN-36)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const at = (hz: number): number => {
       const { session, hero } = start({ loaded: semSpawn, health: 100 });
+      run(session, 600_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('o Life Ring quadruplica a regeneração passiva (224 HP em 30s em vez de 131)', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({
+      loaded: semSpawn, health: 100,
+      inventory: {
+        backpack: [],
+        equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+      },
+    });
+
+    run(session, 30_000, 100);
+
+    // Bônus de +300% (SV-16): 1 ponto vira 4 a cada vencimento. Em 30 segundos são
+    // 31 vencimentos × 4 = 124 pontos somados aos 100 iniciais.
+    expect(hero.health).toBe(224);
+  });
+
+  it('o Life Ring rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const at = (hz: number): number => {
+      const { session, hero } = start({
+        loaded: semSpawn, health: 100,
+        inventory: {
+          backpack: [],
+          equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+        },
+      });
       run(session, 600_000, 1000 / hz);
       return hero.health;
     };
@@ -3909,6 +3949,104 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
     back.health = 710;
     resumed.advanceBy(100);
     expect(back.inventory.equippedAt('finger')?.itemId).toBe('other-ring');
+  });
+});
+
+describe('Energy Ring no combate (SV-16, #352)', () => {
+  const brawler = {
+    ...rat,
+    id: 'brawler', name: 'Brawler',
+    health: 1_000_000, experience: 0, attack: 40, armor: 0,
+    attackIntervalMs: 10_000, speed: 1500, aggroRadius: 8, attackRange: 1,
+    loot: { items: [] },
+  };
+
+  const ringCombatProgression = {
+    ...progression,
+    startingHealth: 100, startingMana: 200, startingCapacity: 1_000,
+    healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
+    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  } as Progression;
+
+  const ringCombatContent = (): Content => buildContent(raw({
+    monsters: [brawler],
+    hunts: [{
+      ...hunt,
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'brawler', weight: 1 }],
+          respawnDelayMs: 30_000,
+        },
+      },
+    }],
+    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1 }] }],
+    progression: [ringCombatProgression],
+  }));
+
+  const startRingCombat = (options: {
+    equippedRing?: string;
+    mana: number;
+    withManaShield?: boolean;
+  }) => {
+    const loaded = ringCombatContent();
+    const session = createHuntSession({
+      id: 'energy-ring-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, ringCombatProgression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: 100, maxHealth: 100,
+      mana: options.mana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+      inventory: {
+        backpack: [],
+        equipped: options.equippedRing === undefined
+          ? {}
+          : { finger: { instanceId: 'r1', itemId: options.equippedRing, quantity: 1 } },
+      },
+    });
+    if (options.withManaShield) {
+      hero.conditions.apply({
+        key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000,
+      });
+    }
+    session.enter(hero);
+    return { session, hero };
+  };
+
+  it('o Energy Ring equipado absorve o dano na mana antes da vida (mana 30 e dano 40: mana 0, vida 90)', () => {
+    const { session, hero } = startRingCombat({ equippedRing: 'energy-ring', mana: 30 });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(0);
+    expect(hero.health).toBe(90);
+  });
+
+  it('sem o anel (mesmo cenário, mana 200), o dano de 40 vai inteiro na vida', () => {
+    const { session, hero } = startRingCombat({ mana: 200 });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(200);
+    expect(hero.health).toBe(60);
+  });
+
+  it('Energy Ring + condição mana-shield ao mesmo tempo: dano de 40 absorve 40 de mana uma vez só', () => {
+    const { session, hero } = startRingCombat({
+      equippedRing: 'energy-ring', mana: 200, withManaShield: true,
+    });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(160);
+    expect(hero.health).toBe(100);
   });
 });
 
