@@ -33,6 +33,17 @@ export interface SystemLine {
   readonly atMs: number;
 }
 
+export interface SkillProgress {
+  level: number;
+  percent: number;
+}
+
+export interface PlayerSkills {
+  melee: SkillProgress;
+  distance: SkillProgress;
+  magic: SkillProgress;
+}
+
 /**
  * O que a hunt rendeu, como o servidor mandou (§16.1), e a lista curta do §16.2.
  *
@@ -125,6 +136,8 @@ export interface HudState {
   readonly capacity: number;
   readonly gold: number;
   readonly staminaMs: number;
+  readonly speed: number;
+  readonly skills: PlayerSkills;
   /** A munição escolhida por família (#152): `null` é a grátis. Chega em `player-stats`. */
   readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
@@ -193,6 +206,12 @@ export const INITIAL_HUD: HudState = {
   mana: 0, maxMana: 0,
   level: 0, xp: 0,
   capacity: 0, gold: 0, staminaMs: 0,
+  speed: 0,
+  skills: {
+    melee: { level: 0, percent: 0 },
+    distance: { level: 0, percent: 0 },
+    magic: { level: 0, percent: 0 },
+  },
   ammo: { arrow: null, bolt: null },
   vocationId: null,
   latencyMs: null,

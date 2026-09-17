@@ -363,6 +363,64 @@ describe('HUD deltas', () => {
     expect(notified).toHaveBeenCalledTimes(1);
   });
 
+  it('applies speed and skills from player-stats', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 125,
+        skills: {
+          melee: { level: 12, percentToNext: 40 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 4, percentToNext: 20 },
+        },
+        magicLevel: { level: 4, percentToNext: 20 },
+      },
+      0,
+    );
+
+    expect(hud.get().speed).toBe(125);
+    expect(hud.get().skills).toEqual({
+      melee: { level: 12, percent: 40 },
+      distance: { level: 14, percent: 75 },
+      magic: { level: 4, percent: 20 },
+    });
+  });
+
+  it('preserves speed and skills when player-stats omits them', () => {
+    hud.set((state) => ({
+      ...state,
+      speed: 130,
+      skills: {
+        melee: { level: 20, percent: 50 },
+        distance: { level: 18, percent: 40 },
+        magic: { level: 8, percent: 30 },
+      },
+    }));
+
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+      } as any,
+      0,
+    );
+
+    expect(hud.get().health).toBe(140);
+    expect(hud.get().speed).toBe(130);
+    expect(hud.get().skills).toEqual({
+      melee: { level: 20, percent: 50 },
+      distance: { level: 18, percent: 40 },
+      magic: { level: 8, percent: 30 },
+    });
+  });
+
   it('measures latency from the round trip', () => {
     applyMessage({ type: 'pong', t: 1_000 }, 1_042);
     expect(hud.get().latencyMs).toBe(42);

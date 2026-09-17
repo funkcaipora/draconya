@@ -8,19 +8,25 @@
 // "é conveniência de tela, não estado de jogo"): nunca passa pelo servidor, nunca pelo ledger,
 // nunca é lida de volta por outro personagem ou por outra aba.
 
-export const SKILL_ORDER = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'] as const;
+export const SKILL_ORDER = [
+  'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+] as const;
 
 export type SkillId = (typeof SKILL_ORDER)[number];
 
-/** Rótulos idênticos ao kit (data.js:18) — "Hit Points"/"Mana" ficam em inglês de propósito,
- *  como no kit: são os termos clássicos do gênero, não tradução esquecida. */
+/** Rótulos idênticos ao kit (data.js:18) — "Hit Points"/"Mana"/"Speed"/"Magic Level" ficam em
+ *  inglês de propósito, como no kit: são os termos clássicos do gênero, não tradução esquecida. */
 export const SKILL_LABELS: Record<SkillId, string> = {
   exp: 'Experiência total',
   level: 'Level',
   hp: 'Hit Points',
   mana: 'Mana',
   capacity: 'Capacidade',
+  speed: 'Speed',
   stamina: 'Stamina',
+  magic: 'Magic Level',
+  melee: 'Corpo a Corpo',
+  distance: 'Distância',
 };
 
 const STORAGE_KEY = 'draconya:shell:skillsPanel:visible';
@@ -35,7 +41,7 @@ function isSkillId(value: unknown): value is SkillId {
  * `jsdom`), não um caso raro de navegador. `localStorage.getItem` PODE lançar (aba anônima,
  * cota estourada, armazenamento bloqueado — a mesma classe de falha que
  * `packages/client/CLAUDE.md` já documenta para o cache de assets: "Falha do cache NUNCA é
- * falha do jogo"). Os dois casos caem no mesmo default: TODAS as seis linhas — nunca um painel
+ * falha do jogo"). Os dois casos caem no mesmo default: TODAS as dez linhas — nunca um painel
  * vazio na primeira visita.
  */
 export function loadVisibleSkills(): readonly SkillId[] {

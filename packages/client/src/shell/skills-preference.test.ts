@@ -11,6 +11,15 @@ describe('skills-preference', () => {
     vi.unstubAllGlobals();
   });
 
+  describe('SKILL_ORDER', () => {
+    it('has 10 entries in exact specified order', () => {
+      expect(SKILL_ORDER).toEqual([
+        'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+      ]);
+      expect(SKILL_ORDER).toHaveLength(10);
+    });
+  });
+
   describe('staminaClock', () => {
     it('formats stamina in HH:MM clock format without units', () => {
       // 0 ms -> '0:00'
@@ -27,6 +36,14 @@ describe('skills-preference', () => {
   });
 
   describe('loadVisibleSkills', () => {
+    it('returns 6 legacy saved ids without automatically injecting the 4 new ones', () => {
+      const legacyIds = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'];
+      vi.stubGlobal('localStorage', {
+        getItem: vi.fn().mockReturnValue(JSON.stringify(legacyIds)),
+        setItem: vi.fn(),
+      });
+      expect(loadVisibleSkills()).toEqual(legacyIds);
+    });
     it('returns SKILL_ORDER when localStorage is undefined', () => {
       vi.stubGlobal('localStorage', undefined);
       expect(loadVisibleSkills()).toEqual(SKILL_ORDER);

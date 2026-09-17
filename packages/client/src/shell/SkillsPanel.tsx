@@ -1,14 +1,14 @@
-// O painel "Skills" da coluna esquerda (RC-04, #317, ADR 0030 decisões 3/5 —
+// O painel "Skills" da coluna esquerda (RC-04, #317, SV-10, #346, ADR 0030 decisões 3/5 —
 // docs/kit-fidelity-plan.md §4 linha RC-04, achados R2-01/R2-05/R2-06 + os "missed" do
-// verificador sobre HP/Mana/Stamina/Level). Sucede `CharacterPanel.tsx` nesta coluna: os mesmos
-// seis campos que já chegam por `player-stats` (Experiência, Level, HP, Mana, Capacidade,
-// Stamina), no título e na ordem do kit (Hud.jsx:36-38, data.js:18/21), com um `IconButton` ⚙
+// verificador sobre HP/Mana/Stamina/Level). Sucede `CharacterPanel.tsx` nesta coluna: os
+// dez campos que chegam por `player-stats` (Experiência, Level, HP, Mana, Capacidade,
+// Speed, Stamina, Magic Level, Corpo a Corpo, Distância), no título e na ordem do kit, com um `IconButton` ⚙
 // que abre o modal de personalização do kit v3 (Modals.jsx:295-301).
 //
 // `CharacterPanel.tsx` NÃO é apagado por esta issue — fica como está, sem consumidor, até a
 // RC-06 (#319) reaproveitar o conteúdo dele na aba "Personagem" do modal de Personagem.
 //
-// A visibilidade das seis linhas é preferência de TELA (`localStorage`, skills-preference.ts).
+// A visibilidade das dez linhas é preferência de TELA (`localStorage`, skills-preference.ts).
 // A ORDEM não é editável (kit v3: "a ordem do painel segue a ordem desta lista", Modals.jsx:299)
 // — o checkbox liga/desliga, nunca arrasta.
 
@@ -28,8 +28,12 @@ import type { SkillId } from './skills-preference.js';
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const count = (value: number): string => integer.format(Math.round(value));
 
-/** Os únicos dois tokens de vital que este painel usa hoje — Hit Points e Mana (data.js:18). */
-const TONE_BY_ID: Partial<Record<SkillId, string>> = { hp: 'vital-hp', mana: 'vital-mp' };
+/** Tones de vital usados neste painel: Hit Points (vital-hp), Mana e Magic Level (vital-mp). */
+const TONE_BY_ID: Partial<Record<SkillId, string>> = {
+  hp: 'vital-hp',
+  mana: 'vital-mp',
+  magic: 'vital-mp',
+};
 
 export function SkillsCustomizeModal({
   open, onClose, visible, onApply,
@@ -98,6 +102,8 @@ export function SkillsPanel({
   const mana = useHudSlice((state) => state.mana, { throttleMs: 100 });
   const capacity = useHudSlice((state) => state.capacity);
   const staminaMs = useHudSlice((state) => state.staminaMs);
+  const speed = useHudSlice((state) => state.speed);
+  const skills = useHudSlice((state) => state.skills);
 
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [visible, setVisible] = useState<readonly SkillId[]>(() => loadVisibleSkills());
@@ -114,7 +120,17 @@ export function SkillsPanel({
     hp: count(health),
     mana: count(mana),
     capacity: `${count(capacity)} oz`,
+    speed: count(speed),
     stamina: staminaClock(staminaMs),
+    magic: String(skills.magic.level),
+    melee: String(skills.melee.level),
+    distance: String(skills.distance.level),
+  };
+
+  const percents: Partial<Record<SkillId, number>> = {
+    magic: skills.magic.percent,
+    melee: skills.melee.percent,
+    distance: skills.distance.percent,
   };
 
   const handleToggle = onToggle ?? (() => { setCollapsed((c) => !c); });
@@ -141,6 +157,7 @@ export function SkillsPanel({
             label={SKILL_LABELS[id]}
             value={values[id]}
             {...(TONE_BY_ID[id] !== undefined ? { tone: TONE_BY_ID[id] } : {})}
+            {...(percents[id] !== undefined ? { percent: percents[id] } : {})}
           />
         ))}
       </Panel>

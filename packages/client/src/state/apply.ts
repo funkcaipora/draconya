@@ -9,9 +9,35 @@
 // tocam o React.
 
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
-import { appendCapped, hud } from './hud.js';
+import {
+  appendCapped, hud, type PlayerSkills, type SkillProgress,
+} from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
+
+function extractSkills(skills: unknown, previous: PlayerSkills): PlayerSkills {
+  if (!skills || typeof skills !== 'object') return previous;
+  const record = skills as Record<string, unknown>;
+  if (record['melee'] === undefined && record['distance'] === undefined && record['magic'] === undefined) {
+    return previous;
+  }
+  const toProgress = (p: unknown, fallback: SkillProgress): SkillProgress => {
+    if (!p || typeof p !== 'object') return fallback;
+    const obj = p as Record<string, unknown>;
+    const level = typeof obj['level'] === 'number' ? obj['level'] : fallback.level;
+    const percent = typeof obj['percent'] === 'number'
+      ? obj['percent']
+      : typeof obj['percentToNext'] === 'number'
+        ? obj['percentToNext']
+        : fallback.percent;
+    return { level, percent };
+  };
+  return {
+    melee: toProgress(record['melee'], previous.melee),
+    distance: toProgress(record['distance'], previous.distance),
+    magic: toProgress(record['magic'], previous.magic),
+  };
+}
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
@@ -146,6 +172,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         staminaMs: message.staminaMs,
         ammo: message.ammo,
         vocationId: message.vocationId,
+        speed: (message as { speed?: number }).speed ?? state.speed,
+        skills: extractSkills((message as { skills?: unknown }).skills, state.skills),
       }));
       return;
 
@@ -314,6 +342,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
+        speed: (message.self as { speed?: number }).speed ?? state.speed,
+        skills: extractSkills((message.self as { skills?: unknown }).skills, state.skills),
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre
