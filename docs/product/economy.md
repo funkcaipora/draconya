@@ -30,7 +30,7 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
   cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
   nele (ver "Divergências" abaixo).
-- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente: é uma seleção (`packages/content/data/ammunition/`), e cada tiro da munição paga debita o preço dela.
+- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente — desde a AB-02 é item empilhável (`packages/content/data/items/*-arrow.json`), mas o `sim` v1 ainda debita o preço por tiro pelo caminho do supply até a AB-05 aposentar o fallback grátis.
 - Drop de supply por monstro credita gold, não gera pilha física.
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
 - Com a regra ativa: personagem sai da hunt quando o gold acaba.
@@ -61,11 +61,11 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 | Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
 | Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/items/health-potion.json`, campo `price` |
 | Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/items/mana-potion.json`, campo `price` |
-| Preço por tiro da munição | arrow 0 (grátis), sniper arrow 5 `[ABERTO — valor provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — valor provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/*.json`, `price` |
+| Preço por tiro da munição | arrow 0 (grátis), burst arrow 3 `[ABERTO — valor provisório: 3]`, sniper arrow 5 `[ABERTO — valor provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — valor provisório: 7, preço do NPC no Tibia]` | `packages/content/data/items/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
 
 ## Em aberto
 
-- ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a arrow é grátis e as outras debitam por tiro (ADR 0026, decisão 3); os valores 5 e 7 são provisórios, em `packages/content/data/ammunition/`.
+- ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a arrow é grátis e as outras debitam por tiro (ADR 0026, decisão 3; revisto pela AB-02, ADR 0032 d.7 — munição é item); os valores 3, 5 e 7 são provisórios, em `packages/content/data/items/*-arrow.json`.
 
 ## Supply abstrato, na prática (FUN-77)
 

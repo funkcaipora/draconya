@@ -55,8 +55,8 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.items)) {
     check(`items.${id}`, 'object', object);
   }
+  // A munição é item (ADR 0032 d.7): o ícone é conferido em `items.<id>`; aqui só o projétil.
   for (const [id, ammo] of Object.entries(appearances.ammunition)) {
-    check(`ammunition.${id}.icon`, 'object', ammo.icon);
     check(`ammunition.${id}.missile`, 'missile', ammo.missile);
   }
   for (const [id, weapon] of Object.entries(appearances.weapons)) {

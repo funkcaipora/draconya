@@ -25,19 +25,25 @@
     "health-potion": 266,
     "mana-potion": 268,
     "avalanche-rune": 3161,
-    "blessing-charge": 3155
+    "blessing-charge": 3155,
+    "arrow": 3447,
+    "burst-arrow": 3446,
+    "sniper-arrow": 7364,
+    "onyx-arrow": 7365,
+    "glacier-amulet": 815,
+    "wooden-shield": 3412
   },
   "ammunition": {
     "arrow": {
-      "icon": 3447,
       "missile": 3
     },
+    "burst-arrow": {
+      "missile": 4
+    },
     "sniper-arrow": {
-      "icon": 7364,
       "missile": 22
     },
     "onyx-arrow": {
-      "icon": 7365,
       "missile": 23
     }
   },

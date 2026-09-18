@@ -53,19 +53,14 @@ describe('packHas', () => {
 });
 
 describe('packProblems', () => {
-  it('confere a munição — ícone em objetos, projétil em missiles — aceitando o que existe e recusando o que não (#151, #152)', () => {
+  it('confere o projétil da munição — o ícone é do item — aceitando o que existe e recusando o que não (#151, #152)', () => {
     // Mutação que mata: apagar o laço de `ammunition` em `packProblems` — o resto da suíte
     // continua verde, porque o conteúdo real só tem ids válidos, e a flecha com id fora do
     // pacote subiria como o quadrado invisível que este módulo existe para impedir.
-    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 5 } } }), pack)).toEqual([]);
-    expect(packProblems(table({ ammunition: { arrow: { icon: 168, missile: 5 } } }), pack))
-      .toEqual(['appearances.ammunition.arrow.icon: object 168 não existe no pacote tibia-test']);
+    expect(packProblems(table({ ammunition: { arrow: { missile: 5 } } }), pack)).toEqual([]);
     // O projétil é conferido no registro de MISSILES: 43 é o buraco entre as faixas.
-    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 43 } } }), pack))
+    expect(packProblems(table({ ammunition: { arrow: { missile: 43 } } }), pack))
       .toEqual(['appearances.ammunition.arrow.missile: missile 43 não existe no pacote tibia-test']);
-    // E o ícone no de OBJETOS: 21 é um outfit que existe, e um objeto que não.
-    expect(packProblems(table({ ammunition: { arrow: { icon: 21, missile: 5 } } }), pack))
-      .toEqual(['appearances.ammunition.arrow.icon: object 21 não existe no pacote tibia-test']);
   });
 
   it('confere o projétil da wand e do rod no registro de missiles (#152)', () => {

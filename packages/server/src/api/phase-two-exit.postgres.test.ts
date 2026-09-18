@@ -79,12 +79,13 @@ const raw: RawContent = {
   }, {
     id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
-  }, TEST_SUPPLY],
-  ammunition: [{
-    id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0,
+  }, TEST_SUPPLY, {
+    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
+    weight: 0.7, value: 0, attack: 20, price: 0, ammunition: { family: 'arrow' },
   }, {
-    id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5,
-    requires: { level: 20 },
+    id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
+    weight: 0.8, value: 0, attack: 30, price: 5, requires: { level: 20 },
+    ammunition: { family: 'arrow' },
   }],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num

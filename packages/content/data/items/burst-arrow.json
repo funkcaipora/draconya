@@ -1,0 +1,14 @@
+{
+  "id": "burst-arrow",
+  "name": "Burst Arrow",
+  "kind": "ammo",
+  "slot": "ammo",
+  "stackable": true,
+  "weight": 0.8,
+  "value": 0,
+  "attack": 27,
+  "price": 3,
+  "restock": { "batch": 100, "min": 20 },
+  "ammunition": { "family": "arrow" },
+  "_open": "Munição como item (AB-02, ADR 0032 d.7): attack 27 e preço 3 são provisórios (TibiaWiki como ponto de partida; docs/reference/huntera-observed.md não observa munição), assim como o peso (0,8 oz), o value e o lote 100/mínimo 20. Aparência: ícone 3446 e projétil (missile 4) ainda sem PNG na biblioteca local parcial; conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
+}

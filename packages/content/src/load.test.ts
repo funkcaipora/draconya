@@ -244,21 +244,34 @@ describe('loadContent', () => {
     expect(distance?.startingLevel).toBe(10);
   });
 
-  it('carrega a munição como seleção: a arrow é grátis, as outras debitam gold por tiro (ADR 0026, decisão 3)', () => {
+  it('a munição é item empilhável, e content.ammunition é a projeção derivada (ADR 0032, decisão 7)', () => {
     const content = loadContent(DATA);
-    // Ícone (objeto) e projétil (missile), conferidos de olho: arrow 3, sniper arrow 22, onyx
-    // arrow 23 são os projéteis do pacote 13.32 (#152).
+    // A munição é item do catálogo, com peso, pilha, preço e lote de reposição (RF-01).
+    for (const id of ['arrow', 'burst-arrow', 'sniper-arrow', 'onyx-arrow']) {
+      const item = content.items.get(id);
+      expect(item?.kind, id).toBe('ammo');
+      expect(item?.slot, id).toBe('ammo');
+      expect(item?.stackable, id).toBe(true);
+      expect(item?.ammunition?.family, id).toBe('arrow');
+      expect(item?.price, id).toBeDefined();
+      expect(item?.restock, id).toBeDefined();
+    }
+    // A projeção mantém a forma que o `sim` já consome: id, família, attack, preço, ícone (o do
+    // item) e projétil. Ordem alfabética pelo id dos arquivos.
     const ammo = [...content.ammunition.values()]
       .map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId, a.missileId]);
     expect(ammo).toEqual([
       ['arrow', 'arrow', 25, 0, 3447, 3],
+      ['burst-arrow', 'arrow', 27, 3, 3446, 4],
       ['onyx-arrow', 'arrow', 38, 7, 7365, 23],
       ['sniper-arrow', 'arrow', 28, 5, 7364, 22],
     ]);
     expect(content.ammunition.get('sniper-arrow')?.requires.level).toBe(20);
     expect(content.ammunition.get('onyx-arrow')?.requires.level).toBe(40);
-    // A flecha física saiu do catálogo de itens: munição não tem peso, pilha nem instância.
-    expect(content.items.has('arrow')).toBe(false);
+    // O ícone NÃO se duplica na tabela: `appearances.ammunition` guarda só o projétil (DT-03).
+    expect(content.appearances?.ammunition['arrow']).toEqual({ missile: 3 });
+    expect(content.appearances?.ammunition['arrow']).not.toHaveProperty('icon');
+    expect(content.items.get('arrow')?.kind).toBe('ammo');
   });
 });
 

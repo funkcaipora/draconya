@@ -145,13 +145,11 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
-   * `id de munição → { icon, missile }` (ADR 0026, decisão 3; #152). `icon` é o objeto da
-   * flecha no pacote — o que o seletor mostra no slot do escudo —, `missile` é o projétil do
-   * tiro. Os dois obrigatórios e conferidos dos dois lados, como item: munição sem ícone não
-   * tem como ser escolhida, e tiro sem projétil é um monstro perdendo vida do nada.
+   * `id de item de munição → { missile }` (ADR 0032, decisão 7). O projétil do tiro; o ÍCONE é
+   * `appearances.items[id]`, como todo item — o slot de equipamento e a mochila desenham por
+   * `appearanceId`, e duplicar o ícone criaria duas verdades para o mesmo número (DT-03).
    */
   ammunition: z.record(z.string().min(1), z.object({
-    icon: appearanceId,
     missile: appearanceId,
   })).default({}),
   /**
@@ -520,11 +518,11 @@ export const itemSchema = z.strictObject({
   name: z.string().min(1),
   /**
    * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
-   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). Munição
-   * NÃO é item (decisão 3): é `ammunitionSchema`, uma seleção que debita gold por tiro.
+   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `ammo` é a
+   * munição como ITEM empilhável (ADR 0032, decisão 7), com `ammunition` obrigatório.
    */
   kind: z.enum([
-    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable',
+    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable', 'ammo',
   ]),
   slot: z.enum(ITEM_SLOTS).optional(),
   /**
@@ -552,8 +550,8 @@ export const itemSchema = z.strictObject({
    */
   value: z.number().int().nonnegative(),
   /**
-   * Empilha na mesma linha de inventário? Queijo empilha; espada não. Munição não é item
-   * (#151) — nem tem este campo.
+   * Empilha na mesma linha de inventário? Queijo empilha; espada não. Munição É item e
+   * empilha (ADR 0032, decisão 7) — `buildContent` recusa `kind: 'ammo'` sem este campo.
    */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
@@ -596,8 +594,19 @@ export const itemSchema = z.strictObject({
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   /**
-   * Preço de COMPRA (reposição por lote, ADR 0032 d.6). Só consumível; `value` é o de venda.
-   * Declarado e não executado nesta task — a AB-04 (#419) repõe pelo ledger.
+   * A MUNIÇÃO (ADR 0032, decisão 7). Obrigatório em `kind: 'ammo'` e proibido fora dela —
+   * `buildContent` confere, como faz com `weapon` e `initialSlots`. `family` é a mesma
+   * `AMMO_FAMILIES` do `weapon.ammoFamily` da arma de distância; `damageType` é o do tiro.
+   * O `attack` do tiro é o `attack` do próprio item.
+   */
+  ammunition: z.strictObject({
+    family: z.enum(AMMO_FAMILIES),
+    damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  }).optional(),
+  /**
+   * Preço de COMPRA (reposição por lote, ADR 0032 d.6). Consumível e munição — a flecha tem
+   * preço e lote como qualquer suprimento (ADR 0032 d.7); `value` é o de venda. Declarado e
+   * não executado nesta task — a AB-04 (#419) repõe pelo ledger.
    */
   price: z.number().int().nonnegative().optional(),
   /** Grupo de cooldown do conteúdo (ADR 0032 d.2). Só consumível; o motor v1 o ignora (AB-07). */
@@ -619,9 +628,15 @@ export const itemSchema = z.strictObject({
     if (item.restock === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `restock`' });
     if (item.price === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `price`' });
     if (item.effect === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `effect`' });
+  } else if (item.kind === 'ammo') {
+    // A munição também tem `price` e `restock` (ADR 0032 d.7): o que NÃO é dela é `group` e
+    // `effect`, que são do consumível.
+    if (item.group !== undefined || item.effect !== undefined) {
+      ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `group`/`effect`' });
+    }
   } else if (item.group !== undefined || item.restock !== undefined
     || item.price !== undefined || item.effect !== undefined) {
-    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `group`/`restock`/`price`/`effect`' });
+    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` ou `ammo` tem `group`/`restock`/`price`/`effect`' });
   }
 });
 
@@ -630,32 +645,20 @@ export type ItemDefinition = z.infer<typeof itemSchema>;
 
 
 /**
- * Munição (ADR 0026, decisão 3 — o modelo do Huntera). NÃO é item: não tem peso, pilha nem
- * instância. É uma SELEÇÃO por família, mostrada no slot do escudo com o bow na mão; a grátis
- * (`price: 0`) é o padrão da família, e cada tiro das outras debita `price` do gold do
- * personagem, pelo caminho do supply (§20.1). Quem atira é o `sim` (issue #152); aqui ficam
- * os números. Estrito, como o item, e pela mesma razão: `appearanceId` escrito aqui por hábito
- * iria para lugar nenhum em silêncio.
+ * A munição como o `sim` a conhece (ADR 0026, decisão 3; #152) — DERIVADA dos itens de munição
+ * (ADR 0032, decisão 7). A projeção preserva a forma que `hunt.ts`/`host.ts`/`catalogue.ts`
+ * consomem até a AB-05 (#421) aposentá-la junto com `select-ammo`. `appearanceId` é o ícone do
+ * item (`appearances.items[id]`), `missileId` o projétil (`appearances.ammunition[id].missile`),
+ * ambos resolvidos no boot.
  */
-export const ammunitionSchema = z.strictObject({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  family: z.enum(AMMO_FAMILIES),
-  /** O dano do tiro é este `attack` pela skill de distância — o bow não tem attack próprio. */
-  attack: z.number().int().nonnegative(),
-  /** O tipo de dano do tiro (CMB-03). Ausente é `physical`, o default que preserva o v1. */
-  damageType: z.enum(DAMAGE_TYPES).default('physical'),
-  /** Gold debitado por tiro. Zero é a munição grátis, e toda família precisa de uma. */
-  price: z.number().int().nonnegative(),
-  requires: z.object({
-    level: z.number().int().positive().optional(),
-  }).default(() => ({})),
-  _open: z.string().optional(),
-});
-
-export type AmmunitionDefinition = z.infer<typeof ammunitionSchema>;
-/** A munição pronta para uso: `appearanceId` é o ícone, `missileId` o projétil, ambos do boot. */
-export type Ammunition = AmmunitionDefinition & {
+export type Ammunition = {
+  readonly id: string;
+  readonly name: string;
+  readonly family: AmmoFamily;
+  readonly attack: number;
+  readonly damageType: DamageType;
+  readonly price: number;
+  readonly requires: { readonly level?: number };
   readonly appearanceId: number;
   readonly missileId: number;
 };

@@ -1,9 +1,0 @@
-{
-  "id": "onyx-arrow",
-  "name": "Onyx Arrow",
-  "family": "arrow",
-  "attack": 38,
-  "price": 7,
-  "requires": { "level": 40 },
-  "_open": "Preço por tiro provisório: o preço de compra no NPC do Tibia (TibiaWiki) — conferir; attack 38 e level 40 são do TibiaWiki. Aparência: projétil (missile 23) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
-}

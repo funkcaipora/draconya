@@ -431,7 +431,10 @@ O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bo
   dano é o `attack` da munição pela skill `distance` (nova, sobe por tiro). Cada tiro da
   munição paga debita `price` do gold do personagem e do agregado da sessão, como o supply
   (§20.1); sem gold para ela, o tiro sai com a grátis e o jogador é avisado uma vez por sessão
-  (`ammo-fallback`) — o bot nunca para de atirar (invariante 11).
+  (`ammo-fallback`) — o bot nunca para de atirar (invariante 11). **A munição é item empilhável**
+  desde a AB-02 (ADR 0032 d.7): o seletor por família e o fallback grátis são aposentados na
+  AB-05, que passa a consumir a pilha do slot `ammo` e a puxar a próxima da mochila; até lá
+  `content.ammunition` é a projeção derivada dos itens de munição.
 - **`wand`** — wand e rod gastam `manaPerHit` por golpe, causam dano **mágico** por faixa fixa
   (`damage.min..max`, uma rolagem do `Rng` da sessão por golpe, como o loot) e rendem magia
   pela mana gasta, como uma magia. Sem mana, o golpe não sai: fica para o intervalo seguinte.
@@ -447,7 +450,7 @@ resistência e imunidade do monstro.
 | Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
-| Munição — attack e preço por tiro | arrow 25 / 0; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/*.json` |
+| Munição — attack e preço | arrow 25 / 0; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/items/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (itens desde a AB-02; o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)

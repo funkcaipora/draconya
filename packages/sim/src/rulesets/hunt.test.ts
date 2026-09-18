@@ -200,6 +200,12 @@ const items = [
   },
 ];
 
+// A flecha é item empilhável (ADR 0032, decisão 7): a munição que o bow dispara nos testes.
+const arrowItem = {
+  id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
+  weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
+};
+
 // A aparência é DERIVADA (FUN-94). Estes testes falam de combate, rota, loot e bot; a arte não
 // muda nenhum resultado, e escrevê-la à mão obrigaria toda fixture nova de monstro a inventar
 // um número que ninguém lê.
@@ -5245,7 +5251,6 @@ describe('raio livre do spawn (#236)', () => {
 // --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
 
 describe('famílias de arma e proficiências (CMB-05, #333)', () => {
-  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
   const weapon = (id: string, family: string, kind: string, extra: Record<string, unknown> = {}) => ({
     id, name: id, kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 40,
     weapon: { kind, family, range: kind === 'distance' ? 6 : kind === 'wand' ? 3 : 1, ...extra },
@@ -5261,7 +5266,7 @@ describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   const armed = (itemId: string): InventoryState => ({
     backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
   });
-  const loaded = (): Content => content({ items: [...items, ...armory], ammunition: [arrow] });
+  const loaded = (): Content => content({ items: [...items, ...armory, arrowItem] });
 
   /** A skill subiu OU acumulou pontos: o golpe de fato praticou. */
   const practiced = (hero: CharacterRuntime, id: string, startingLevel: number): boolean => {
@@ -5335,7 +5340,7 @@ describe('famílias de arma e proficiências (CMB-05, #333)', () => {
     // mesmo. Contar prática só com dano positivo faria a skill parar contra alvo imune.
     const immune = content({
       monsters: [{ ...rat, mitigation: { immunities: ['physical'] } }],
-      items: [...items, ...armory], ammunition: [arrow],
+      items: [...items, ...armory, arrowItem],
     });
     const { session, hero, ruleset } = start({ loaded: immune, inventory: armed('sword-i') });
     session.advanceBy(50);
@@ -5377,12 +5382,11 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
   it('bow: basic-attack/físico pelo caminho da munição', () => {
     // Sem arma de corpo a corpo, o único produtor possível é o tiro — se ele calculasse dano
     // por fora, `passed` seria falso mesmo com o herói batendo a hunt inteira.
-    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
     const bow = {
       id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0,
       twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
     };
-    const loaded = content({ items: [bow], ammunition: [arrow] });
+    const loaded = content({ items: [bow, arrowItem] });
     const inventory: InventoryState = {
       backpack: [], equipped: { hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 } },
     };

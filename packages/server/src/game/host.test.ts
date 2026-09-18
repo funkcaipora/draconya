@@ -3284,8 +3284,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     },
     supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41 } },
     hits: { melee: 1 },
-    // O projétil do tiro (#152): o da flecha é da MUNIÇÃO, o da wand é da ARMA.
-    ammunition: { arrow: { icon: 3447, missile: 3 } },
+    // O projétil do tiro (#152): o da flecha é do ITEM de munição (ADR 0032 d.7), o da wand é
+    // da ARMA. O ícone da flecha é `appearances.items['arrow']`, como todo item.
+    ammunition: { arrow: { missile: 3 } },
     weapons: { wand: { missile: 5 } },
     // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
     // que ela vira id de arte.
@@ -3300,7 +3301,10 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
   };
-  const ARROW = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 };
+  const ARROW = {
+    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
+    weight: 0.7, value: 0, attack: 20, price: 0, ammunition: { family: 'arrow' },
+  };
   const TEST_MELEE_SKILL = {
     id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
     curve: { base: 50, factor: 1.1 },
@@ -3374,11 +3378,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const raw = rawTestContent();
     // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
     // refeita com eles, e a de teste (`TABLE`) entra por cima só no host. A runa agora é item
-    // consumível (AB-01), então entra pela mesma porta que as armas.
-    const extraItems = over.weapon === undefined ? [RUNE] : [RUNE, BOW, WAND];
+    // consumível (AB-01) e a flecha é item de munição (AB-02), então entram pela mesma porta
+    // que as armas.
+    const extraItems = over.weapon === undefined ? [RUNE] : [RUNE, BOW, WAND, ARROW];
     const armory = {
       items: [...(raw.items ?? []), ...extraItems],
-      ...(over.weapon === undefined ? {} : { ammunition: [ARROW] }),
     };
     const armed = over.weapon === undefined
       ? {}

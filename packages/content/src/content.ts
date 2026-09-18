@@ -15,11 +15,11 @@ import {
   attackRange,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
-  ammunitionSchema, bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
+  bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
   tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
+  Ammunition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
   DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility,
   MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
   Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
@@ -76,8 +76,10 @@ export interface Content {
    */
   readonly unarmed: WeaponProfile;
   /**
-   * Catálogo de munição (ADR 0026, decisão 3): a seleção por família que o bow dispara, com
-   * a grátis e as que debitam gold por tiro. Vazio é um jogo sem arma de distância.
+   * A munição como o `sim` a conhece (#152) — DERIVADA dos itens de munição (ADR 0032, decisão
+   * 7). A AB-05 (#421) aposenta esta projeção junto com `select-ammo`; até lá ela preserva a
+   * forma de `Ammunition` para `hunt.ts`/`host.ts`/`catalogue.ts` não mudarem. Vazio é um jogo
+   * sem arma de distância.
    */
   readonly ammunition: ReadonlyMap<string, Ammunition>;
   readonly maps: ReadonlyMap<string, Tilemap>;
@@ -124,7 +126,6 @@ export interface RawContent {
   readonly items?: readonly unknown[];
   /** As famílias de arma (CMB-05), `weapon-families/*.json`. */
   readonly weaponFamilies?: readonly unknown[];
-  readonly ammunition?: readonly unknown[];
   readonly appearances?: readonly unknown[];
   /** Inventários de pacote (FUN-21), `packs/<pack>.json`. Só o conteúdo real os tem. */
   readonly packs?: readonly unknown[];
@@ -604,7 +605,10 @@ export function buildContent(raw: RawContent): Content {
   // `kind` (CMB-03) é resolvido em `compileItems`: corpo a corpo e distância são `physical`,
   // wand e rod são `arcane` — o `kind: magic` do v1. O default NÃO mora no schema, porque o
   // schema de um campo opcional não sabe do `kind`.
-  const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema, problems);
+  //
+  // A munição é ITEM (ADR 0032, decisão 7): `content.ammunition` é derivada depois, dos itens
+  // de `kind: 'ammo'`. O catálogo `ammunition/` deixou de existir.
+  //
   // A forma do item que o schema sozinho não fecha (ADR 0026): a mochila é o único item que
   // se veste nas costas, e o que se veste nas costas é a mochila; e só arma ocupa as duas
   // mãos. Um `back` numa espada equiparia a espada nas costas sem nada acusar.
@@ -617,6 +621,18 @@ export function buildContent(raw: RawContent): Content {
     // capacete com alcance; arma sem `weapon` seria uma arma que o motor não sabe usar.
     if (item.kind !== 'weapon' && item.weapon !== undefined) {
       problems.push(`item "${item.id}": "weapon" só faz sentido em arma`);
+    }
+    // A munição (ADR 0032, decisão 7): o `kind` diz que é munição, o `slot` onde ela vive e o
+    // `ammunition` a família e o tipo do tiro. Os três andam juntos, e o schema de um campo
+    // opcional não sabe do `kind` — a conferência é aqui, como a da arma e a da mochila.
+    if (item.kind === 'ammo' && (item.slot !== 'ammo' || item.ammunition === undefined)) {
+      problems.push(`item "${item.id}": munição precisa de slot "ammo" e de "ammunition"`);
+    }
+    if (item.kind !== 'ammo' && item.ammunition !== undefined) {
+      problems.push(`item "${item.id}": "ammunition" só faz sentido em munição`);
+    }
+    if (item.kind === 'ammo' && !item.stackable) {
+      problems.push(`item "${item.id}": munição é empilhável`);
     }
     const weapon = item.weapon;
     if (weapon !== undefined) {
@@ -639,7 +655,9 @@ export function buildContent(raw: RawContent): Content {
         problems.push(`item "${item.id}": arma de distância precisa de "ammoFamily"`);
       }
       if (weapon.kind === 'distance' && weapon.ammoFamily !== undefined
-        && ![...ammunitionDefinitions.values()].some((ammo) => ammo.family === weapon.ammoFamily)) {
+        && ![...rawItems.values()].some(
+          (i) => i.kind === 'ammo' && i.ammunition?.family === weapon.ammoFamily,
+        )) {
         problems.push(`item "${item.id}": a família "${weapon.ammoFamily}" não tem munição no catálogo`);
       }
       if (weapon.kind === 'wand' && (weapon.manaPerHit === undefined || weapon.damage === undefined)) {
@@ -679,10 +697,16 @@ export function buildContent(raw: RawContent): Content {
     }
   }
   // Toda família com munição precisa da grátis: é ela que o bow dispara quando o gold acaba
-  // (decisão 3), e sem ela o bot pararia de atirar — o oposto do invariante 11.
-  for (const family of new Set([...ammunitionDefinitions.values()].map((ammo) => ammo.family))) {
-    const free = [...ammunitionDefinitions.values()]
-      .some((ammo) => ammo.family === family && ammo.price === 0);
+  // (decisão 3), e sem ela o bot pararia de atirar — o oposto do invariante 11. A munição é
+  // item (ADR 0032 d.7), e a família vem de `ammunition.family`.
+  const ammoFamilies = new Set<string>();
+  for (const item of rawItems.values()) {
+    if (item.kind === 'ammo' && item.ammunition !== undefined) ammoFamilies.add(item.ammunition.family);
+  }
+  for (const family of ammoFamilies) {
+    const free = [...rawItems.values()].some(
+      (ammo) => ammo.kind === 'ammo' && ammo.ammunition?.family === family && (ammo.price ?? 0) === 0,
+    );
     if (!free) problems.push(`munição: a família "${family}" não tem munição grátis (price 0)`);
   }
   // O kit de nascimento (#153): item que existe, no slot dele, sem exigir nada — o personagem
@@ -763,7 +787,7 @@ export function buildContent(raw: RawContent): Content {
     problems);
   const appearances = appearanceTables.get('baseline');
   if (appearances === undefined
-    && (monsterDefinitions.size > 0 || itemDefinitions.size > 0 || ammunitionDefinitions.size > 0)) {
+    && (monsterDefinitions.size > 0 || itemDefinitions.size > 0)) {
     problems.push(
       'appearances/baseline.json ausente: sem ele monstro e item não têm aparência, e trocar de '
         + 'pacote de assets voltaria a ser reescrever conteúdo (ADR 0008)',
@@ -830,8 +854,8 @@ export function buildContent(raw: RawContent): Content {
   appearances?.corpses, problems);
   const items: ReadonlyMap<string, Item> = resolveAppearance(
     'item', 'items', itemDefinitions, appearances?.items, 'appearanceId', problems);
-  const ammunition: ReadonlyMap<string, Ammunition> = resolveAmmunition(
-    ammunitionDefinitions, appearances?.ammunition, problems);
+  const ammunition: ReadonlyMap<string, Ammunition> = ammunitionFromItems(
+    items, appearances?.ammunition, problems);
 
   const maps = new Map<string, Tilemap>();
   for (const data of mapData.values()) {
@@ -1007,7 +1031,6 @@ export function buildContent(raw: RawContent): Content {
     ...openOf('spell', spells),
     ...openOf('skill', skills),
     ...openOf('item', items),
-    ...openOf('munição', ammunition),
     ...openOf('weaponFamily', weaponFamilyDefinitions),
   ];
 
@@ -1083,13 +1106,20 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
         : `#${index}`,
       index + 1,
     ]));
+  const items = sequential(raw.items);
+  // A munição é item (ADR 0032 d.7): o ícone é `items[id]`, e aqui só o projétil é derivado.
+  const ammunition: Record<string, { missile: number }> = {};
+  for (const [index, entry] of (raw.items ?? []).entries()) {
+    if (typeof entry !== 'object' || entry === null || !('id' in entry)) continue;
+    if (!('kind' in entry) || (entry as { kind: unknown }).kind !== 'ammo') continue;
+    ammunition[String((entry as { id: unknown }).id)] = { missile: index + 1 };
+  }
   return {
     id: 'baseline',
     pack: 'placeholder',
     monsters: sequential(raw.monsters),
-    items: sequential(raw.items),
-    ammunition: Object.fromEntries(Object.entries(sequential(raw.ammunition))
-      .map(([id, n]) => [id, { icon: n, missile: n }])),
+    items,
+    ammunition,
     weapons: {},
     // Sem cadáver: fixture não fala de arte, e monstro sem linha aqui é válido (FUN-123).
     corpses: {},
@@ -1156,28 +1186,49 @@ function resolveAppearance<D extends { id: string }, K extends 'appearanceId' | 
 }
 
 /**
- * A munição com ícone e projétil (#152), pela tabela, e dos DOIS lados como o item: a flecha
- * sem linha não tem como ser escolhida na tela, e a linha órfã é o defeito que a tabela
- * introduz. Não cabe em `resolveAppearance` porque a linha tem dois números.
+ * A munição como o `sim` a conhece hoje (#152) — DERIVADA dos itens de munição (ADR 0032,
+ * decisão 7). A AB-05 (#421) aposenta esta projeção junto com `select-ammo`; até lá ela preserva
+ * a forma de `Ammunition` para `hunt.ts`/`host.ts`/`catalogue.ts` não mudarem.
+ *
+ * O ícone é `appearances.items[id]` (resolvido no item, como todo item) e o projétil é
+ * `appearances.ammunition[id].missile`. A linha órfã continua sendo recusada — é o defeito que a
+ * tabela introduz —, e a munição sem projétil derruba o boot: tiro sem projétil é vida sumindo
+ * do nada.
  */
-function resolveAmmunition(
-  definitions: ReadonlyMap<string, AmmunitionDefinition>,
-  table: Readonly<Record<string, { readonly icon: number; readonly missile: number }>> | undefined,
+function ammunitionFromItems(
+  items: ReadonlyMap<string, Item>,
+  table: Appearances['ammunition'] | undefined,
   problems: string[],
 ): Map<string, Ammunition> {
   const resolved = new Map<string, Ammunition>();
-  if (table === undefined) return resolved;
-  for (const [id, definition] of definitions) {
-    const look = table[id];
-    if (look === undefined) {
-      problems.push(`munição "${id}" não tem aparência: falta a linha "${id}" em appearances.ammunition`);
+  for (const item of items.values()) {
+    if (item.kind !== 'ammo') continue;
+    const ammo = item.ammunition;
+    // Item de munição sem `ammunition` já foi reportado no laço de forma; sem ele não há
+    // família nem tipo, e a projeção não tem o que montar.
+    if (ammo === undefined) continue;
+    const missile = table?.[item.id]?.missile;
+    if (missile === undefined) {
+      problems.push(`munição "${item.id}" não tem projétil: falta a linha "${item.id}" em appearances.ammunition`);
       continue;
     }
-    resolved.set(id, { ...definition, appearanceId: look.icon, missileId: look.missile });
+    resolved.set(item.id, {
+      id: item.id,
+      name: item.name,
+      family: ammo.family,
+      attack: item.attack,
+      damageType: ammo.damageType,
+      price: item.price ?? 0,
+      // `Ammunition.requires` só conhece `level` (a projeção do `sim` v1); vocação e magic
+      // level do item ficam de fora, como no `Supply`.
+      requires: item.requires.level === undefined ? {} : { level: item.requires.level },
+      appearanceId: item.appearanceId,
+      missileId: missile,
+    });
   }
-  for (const id of Object.keys(table)) {
-    if (definitions.has(id)) continue;
-    problems.push(`appearances.ammunition mapeia munição "${id}", que não existe no conteúdo`);
+  for (const id of Object.keys(table ?? {})) {
+    if (resolved.has(id)) continue;
+    problems.push(`appearances.ammunition mapeia "${id}", que não é um item de munição`);
   }
   return resolved;
 }

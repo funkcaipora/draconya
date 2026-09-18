@@ -86,10 +86,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
         ...(raw.items ?? []),
         { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
         { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
-      ],
-      ammunition: [
-        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 },
-        { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, requires: { level: 20 } },
+        { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' } },
+        { id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 28, price: 5, requires: { level: 20 }, ammunition: { family: 'arrow' } },
       ],
     };
     const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
@@ -99,8 +97,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const wand = items.find((item) => item.id === 'wand');
     expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
     expect(ammunition).toEqual([
-      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 1, requires: {} },
-      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 2, requires: { level: 20 } },
+      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 4, requires: {} },
+      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 5, requires: { level: 20 } },
     ]);
   });
 

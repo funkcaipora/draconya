@@ -298,19 +298,29 @@ recusado. O projétil da wand e do rod mora em `appearances.weapons[itemId].miss
 como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a segura
 até o level 8: o personagem nasce sem vocação.
 
-## Munição (#151, ADR 0026)
+## Munição (#151, AB-02, ADR 0032 decisão 7)
 
-`ammunition/*.json` é um catálogo à parte, e **munição não é item**: não tem peso, pilha nem
-instância. É uma seleção por família (`arrow` para bow, `bolt` para crossbow), o modelo do
-Huntera (`ammo-selection { arrow, bolt }`, `docs/reference/huntera-observed.md` §20): a de
-`price: 0` é a grátis e o padrão da família, e cada tiro das outras debita `price` do gold do
-personagem, pelo caminho do supply (§20.1). `buildContent` exige uma grátis por família — é
-ela que o bow dispara quando o gold acaba, e sem ela o bot pararia de atirar (invariante 11).
-A aparência vive em `appearances.ammunition[id] = { icon, missile }`, conferida dos dois
-lados como a do item: `icon` é o objeto que o seletor mostra, `missile` o projétil do tiro —
-os dois obrigatórios (arrow 3, sniper arrow 22, onyx arrow 23 no 13.32, conferidos de olho). Hoje: arrow (3447, attack 25, grátis), sniper arrow (7364, 28,
-level 20) e onyx arrow (7365, 38, level 40); os preços por tiro são `_open` até serem
-conferidos no TibiaWiki. Quem atira é o `sim` (#152).
+**Munição é item** (ADR 0032, decisão 7 — a decisão 3 do ADR 0026 está revogada): flecha e
+virote são itens empilháveis de `kind: 'ammo'`, `slot: 'ammo'`, com `ammunition.family`
+(`arrow`/`bolt`), `attack`, `weight`, `value`, `price` e `restock`. O `attack` do tiro é o do
+item, e o `ammunition.damageType` (default `physical`) é o do tiro. `buildContent` recusa
+munição sem `ammunition` ou fora do slot `ammo`, `ammunition` em item que não é munição, e arma
+de distância cuja `ammoFamily` não tem item de munição no catálogo. O catálogo
+`ammunition/*.json` deixou de existir.
+
+A aparência: o **ícone** é `appearances.items[id]`, como todo item; `appearances.ammunition[id]`
+guarda só o **projétil** (`missile`). Não duplicar o ícone — duas verdades para o mesmo número
+(DT-03). Os projéteis do pacote 13.32: arrow 3, burst arrow 4, sniper arrow 22, onyx arrow 23.
+
+`content.ammunition` continua existindo como **projeção derivada** dos itens de munição — mesma
+forma (`id, name, family, attack, damageType, price, requires, appearanceId, missileId`) e
+mesmos consumidores (`sim`/`server`/`client`) —, e é **temporária**: a AB-05 (#421) a aposenta
+junto com `select-ammo`, o fallback grátis e `characters.ammo`. Toda família ainda precisa de
+uma munição `price: 0` (a `arrow`), porque o fallback do `sim` v1 depende dela (DT-02); o preço
+> 0 da `arrow` também é da AB-05. O primeiro colar (`glacier-amulet`, `kind: 'amulet'`,
+`slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real (`wooden-shield`,
+`kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da carga é a AB-06
+(#421).
 
 ## Como testar
 

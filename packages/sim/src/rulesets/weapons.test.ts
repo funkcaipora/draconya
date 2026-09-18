@@ -83,15 +83,16 @@ const items = [
   { id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 1, value: 0 },
 ];
 const ammunition = [
-  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 },
-  { id: 'onyx-arrow', name: 'Onyx Arrow', family: 'arrow', attack: 40, price: 7, requires: { level: 1 } },
-  { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5, requires: { level: 20 } },
+  { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 20, price: 0, ammunition: { family: 'arrow' } },
+  { id: 'onyx-arrow', name: 'Onyx Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 40, price: 7, requires: { level: 1 }, ammunition: { family: 'arrow' } },
+  { id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 30, price: 5, requires: { level: 20 }, ammunition: { family: 'arrow' } },
 ];
 
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells: [], skills, weaponFamilies, items, ammunition,
+    stamina: [stamina], party: [party], spells: [], skills, weaponFamilies,
+    items: [...items, ...ammunition],
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [map], routes: [route], ...over,
