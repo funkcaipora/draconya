@@ -24,21 +24,20 @@ Fechar um marco é evento notável, como o level up: aparece na lista curta do a
 (§16.2) como "Bestiário: Rato · marco 1 (+1 % XP)". O abate comum não aparece, pela regra de
 sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 
-**O que a tela mostra.** A janela do Bestiário mora na coluna da direita, abaixo do analisador —
-uma seção com cabeçalho próprio que abre e fecha; a barra do topo decide se ela existe
-(`open.bestiary`), não só se está minimizada. Diferente do analisador, que virou um `Panel dock`
-fixo desde #258, o Bestiário ainda não migrou para essa forma. Cada monstro do catálogo tem uma
-linha: nome, abates,
-"próximo marco" (ou "—" depois do último) e "marcos n/5"; a primeira linha do corpo é "Bônus de
-XP PvE: +n %", e minimizada o bônus fica no cabeçalho. Num servidor sem monstros no catálogo a
-janela diz "Este servidor não tem Bestiário" em vez de uma lista vazia com "+0 %".
-Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre que um muda); os
-marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7). O cliente
-não conta nada — o que ele calcula é "que marco vem depois", e se divergisse do `sim` a conta
-do `sim` é a verdadeira. Desde a SV-20, `catalogue.monsters[]` também carrega `class` quando o
-conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`, hoje só `mammal`); é o dado que a
-`SideList` de categorias da Cyclopedia (RC-08) usa para agrupar — a tela em si ainda não lê o
-campo.
+**O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com a aba Bestiary, não uma
+seção fixa na coluna. O modal traz busca por nome, ordenação por progresso/nome/abates e alternância
+entre grade e lista; cada monstro mostra o placeholder de sprite, abates, estrelas pelos marcos
+alcançados e a barra até o próximo marco (ou cheia e verde depois do último). A caixa "Progresso
+no Bestiário" soma os marcos reais dos monstros presentes no catálogo e mostra o bônus global de
+XP; ela não aparece quando o servidor não trouxe configuração de marcos. Itens, Bosstiary,
+categorias e sprite real permanecem ausentes até os respectivos sistemas transportarem esses dados.
+Num servidor sem monstros no catálogo, o modal diz "Este servidor não tem Bestiário" em vez de uma
+lista vazia com "+0 %". Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre
+que um muda); os marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7).
+O cliente não conta nada — o que ele calcula é apresentação do próximo marco e do progresso; se
+divergisse do `sim`, a conta do `sim` é a verdadeira. Desde a SV-20, `catalogue.monsters[]` também
+carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`, hoje só
+`mammal`); é o dado que a `SideList` de categorias da Cyclopedia usa para agrupar.
 
 ## Regras
 

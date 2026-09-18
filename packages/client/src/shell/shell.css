@@ -219,13 +219,11 @@ body {
 .chat-system-warning { color: var(--warn); }
 .chat-system-error { color: var(--danger); }
 
-/* O analisador (FUN-83). `.analyzer-head`/`.analyzer-toggle`/`.analyzer-summary`/
-   `.analyzer-body`/`.analyzer-row`/`.analyzer-label`/`.analyzer-value` são o "Panel" informal
-   de antes do design system, e continuam aqui porque outras sete telas ainda os usam
-   (`ContainerWindow`, `Bestiary`, `PartyMembers`, `EquipmentPanel`, `AmmoPicker`, `PartyBag`,
-   `PartyPanel`) — cada uma migra para `Panel` na própria issue (DS-10 a DS-17, #258 não mexe
-   nelas). O próprio `Analyzer.tsx` não usa mais nenhuma delas desde #258: ele é `Panel dock`
-   (`ui.css`), e o bloco abaixo é a moldura NOVA. */
+/* O analisador (FUN-83) usa `.analyzer-body`/`.analyzer-row`/`.analyzer-label`/
+   `.analyzer-value`/`.analyzer-events` para as LINHAS de dentro do corpo do Panel, não para o
+   cabeçalho — a moldura é ui/Panel.tsx (DS-04) desde #258, e as sete seções que ainda usavam
+   .analyzer-head/-toggle/-summary migraram em #305 (as três classes saíram por não terem mais
+   consumidor). O Bestiário deixou a coluna em #321 e virou o `CyclopediaModal`. */
 .analyzer { font-variant-numeric: tabular-nums; }
 .analyzer-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -265,18 +263,6 @@ body {
 .analyzer-line b { font-weight: 500; color: var(--parchment-1); font-variant-numeric: tabular-nums; }
 /* "Mortes": cor de perigo, inspirada no `color(c)` do handoff (`Hud.jsx:184`, `c === "red"`). */
 .analyzer-line-danger b { color: var(--blood-7); }
-
-/* O Bestiário (FUN-113): a mesma janela do analisador — cabeçalho, linha, valor —, com o que
-   só ele tem. Duas linhas por monstro, porque nome, abates, próximo marco e marcos não cabem
-   numa só nos 200px da coluna sem cortar o nome. */
-.bestiary { font-variant-numeric: tabular-nums; }
-.bestiary-bonus { color: var(--text); margin-bottom: 6px; }
-.bestiary-monsters { margin: 0; padding: 0; list-style: none; }
-.bestiary-monster { border-top: 1px solid var(--separator); padding: 4px 0; }
-.bestiary-meta {
-  display: flex; justify-content: space-between; gap: 8px;
-  color: var(--text-faint); font-size: 11px;
-}
 
 /* A entrada (#248, ADR 0029 D7/D8). Tela cheia, sem nenhuma janela do jogo: por isso as
    classes daqui não usam os tokens `--hud-*` (aqueles são do HUD pós-login, DS-08) — a
@@ -588,6 +574,84 @@ body {
   font: 8.5px var(--font-mono); color: var(--parchment-1);
 }
 .hunt-details-loot-sprite { position: relative; width: 22px; height: 22px; }
+
+/* ---- O modal Cyclopedia, aba Bestiary (#321, RC-08) --------------------------------------- */
+.cyclopedia-modal-body {
+  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; height: 470px;
+}
+.cyclopedia-modal-sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.cyclopedia-modal-progress {
+  margin-top: auto; border: 1px solid var(--ash-5); border-radius: 4px;
+  background: var(--ash-1); padding: 6px 9px 8px;
+}
+.cyclopedia-modal-progress-head {
+  display: flex; justify-content: space-between; font: 500 9.5px var(--font-mono);
+  color: var(--parchment-1);
+}
+.cyclopedia-modal-progress-pct { color: var(--gold-5); }
+.cyclopedia-modal-progress-track {
+  display: block; height: 5px; margin: 5px 0; background: var(--ash-3);
+  border-radius: 1px; overflow: hidden;
+}
+.cyclopedia-modal-progress-fill { display: block; height: 100%; background: var(--gold-4); }
+.cyclopedia-modal-progress-note {
+  display: block; font: 7.5px var(--font-mono); color: var(--text-faint); line-height: 1.5;
+}
+.cyclopedia-modal-progress-note b { color: var(--ok); font-weight: 500; }
+
+.cyclopedia-modal-main { display: flex; flex-direction: column; min-height: 0; }
+.cyclopedia-modal-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cyclopedia-modal-toolbar-title { flex: 1; margin-bottom: 0; }
+.cyclopedia-modal-toolbar-label { font: 7.5px var(--font-mono); color: var(--text-faint); }
+.cyclopedia-modal-sort { width: 130px; flex: 0 0 auto; }
+.cyclopedia-modal-highlight { height: 23px; font-size: 7px; }
+.cyclopedia-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
+
+.cyclopedia-modal-grid {
+  overflow: auto; min-height: 0; scrollbar-width: thin;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; align-content: start;
+}
+.cyclopedia-modal-grid.cyclopedia-modal-grid-list { grid-template-columns: 1fr; }
+.cyclopedia-modal-card {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 6px;
+  border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
+}
+.cyclopedia-modal-card-name {
+  font: 600 8.5px var(--font-mono); color: var(--parchment-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.cyclopedia-modal-card-sprite-wrap { position: relative; width: 44px; height: 44px; }
+.cyclopedia-modal-card-sprite {
+  position: absolute; inset: 0; border: 1px dashed var(--ash-6); border-radius: 3px;
+  background: var(--surface-slot);
+}
+.cyclopedia-modal-card-star {
+  position: absolute; right: -6px; bottom: -6px; height: 14px; font-size: 6.5px; padding: 0 4px;
+}
+.cyclopedia-modal-card-count { font: 500 8px var(--font-mono); color: var(--parchment-2); }
+.cyclopedia-modal-count-done { color: var(--ok); }
+.cyclopedia-modal-card-track {
+  display: block; width: 100%; height: 4px; background: var(--ash-3);
+  border-radius: 1px; overflow: hidden;
+}
+.cyclopedia-modal-card-fill, .cyclopedia-modal-row-fill {
+  display: block; height: 100%; background: var(--vital-mp);
+}
+.cyclopedia-modal-fill-done { background: var(--ok); }
+.cyclopedia-modal-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) 120px 90px; align-items: center;
+  gap: 10px; height: 30px; padding: 0 8px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); font: 8.5px var(--font-mono); color: var(--parchment-1);
+}
+.cyclopedia-modal-row-sprite {
+  width: 20px; height: 20px; border: 1px dashed var(--ash-6); border-radius: 2px;
+}
+.cyclopedia-modal-row-track {
+  display: block; height: 4px; background: var(--ash-3); border-radius: 1px; overflow: hidden;
+}
+.cyclopedia-modal-row span:last-child { text-align: right; color: var(--parchment-2); }
+.cyclopedia-modal-row span:last-child.cyclopedia-modal-count-done { color: var(--ok); }
+.cyclopedia-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
@@ -983,7 +1047,6 @@ body {
   .windows-left > .bot-panel { order: 4; }
   .windows-left > section { order: 5; }
   .windows-right > .analyzer { order: 6; }
-  .windows-right > .bestiary { order: 7; }
   .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   /* O chat vira seção da página como as outras (#252): sai do `position: fixed` sobre o mundo —
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque

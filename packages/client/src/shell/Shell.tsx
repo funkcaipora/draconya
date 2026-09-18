@@ -27,7 +27,7 @@ import { BuffBar } from './BuffBar.js';
 import { BattlePanel } from './BattlePanel.js';
 import { Chat } from './Chat.js';
 import { Analyzer } from './Analyzer.js';
-import { Bestiary } from './Bestiary.js';
+import { CyclopediaModal } from './CyclopediaModal.js';
 import { HuntsModal } from './HuntsModal.js';
 import { HuntActions } from './HuntActions.js';
 import { PartyMembers } from './PartyMembers.js';
@@ -46,8 +46,9 @@ import type { WindowId } from './TopBar.js';
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
  * O analisador também é FIXO desde #258 (D6): `open.analyzer` só minimiza, nunca desmonta —
  * uma janela que existe sozinha continua não aparecendo sem sessão (`Analyzer.tsx` devolve
- * `null`). Chat nasce aberto (D5/DS-09, #252): "é onde chegam as recusas do servidor" — uma
- * janela que abre fechada esconderia a primeira recusa da sessão.
+ * `null`). Hunts e Cyclopedia são modais e nascem fechados. Chat nasce aberto (D5/DS-09,
+ * #252): "é onde chegam as recusas do servidor" — uma janela que abre fechada esconderia a
+ * primeira recusa da sessão.
  */
 const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   // 'hunts' agora é um MODAL, não uma seção fixa (#259, ADR 0029 D6): nasce FECHADO — modal que
@@ -102,8 +103,8 @@ export function Shell() {
           {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
               não desenha HP/mana no design (#251). */}
           <Vitals />
-          {/* A coluna do OTClient (#161): set, mochila e bolsa FIXOS — um botão da barra
-              minimiza os três juntos —, e abaixo deles o analisador e o Bestiário. */}
+          {/* A coluna do OTClient (#161): set, bolsa e mochila FIXOS — um botão da barra
+              minimiza os três juntos —, e abaixo deles o analisador. */}
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
           <ContainerWindow container="backpack" collapsed={!open.inventory} />
           <ContainerWindow container="satchel" collapsed={!open.inventory} />
@@ -115,7 +116,6 @@ export function Shell() {
           {/* O analisador é FIXO (#258, D6): sempre montado; a barra do topo MINIMIZA, nunca
               desmonta — o mesmo padrão de `BotPanel`/`EquipmentPanel` acima. */}
           <Analyzer collapsed={!open.analyzer} onToggle={() => { toggle('analyzer'); }} />
-          {open.bestiary && <Bestiary />}
         </div>
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}
@@ -128,6 +128,9 @@ export function Shell() {
             pill aciona, ou pelo ícone "Hunts" do topo — os dois só alternam a mesma fatia. */}
         <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
         {open.hunts && <HuntsModal hunting={hunting} onClose={() => { toggle('hunts'); }} />}
+        {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
+            da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
+        {open.bestiary && <CyclopediaModal onClose={() => { toggle('bestiary'); }} />}
         {/* O chat é janela flutuante fixa (#252, ADR 0029 D5): mesmo padrão de open/close das
             outras (hunts, analyzer, bestiary) — a diferença é só a POSIÇÃO, dada pelo próprio
             componente via `.chat-window`, e não por uma coluna do `windows-left`/`windows-right`. */}
