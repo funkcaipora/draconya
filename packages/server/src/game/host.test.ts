@@ -3792,7 +3792,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(golpes.length % 2).toBe(0);
     expect(usos).toHaveLength(9 * (golpes.length / 2));
     expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
-    expect(hero().goldDelta).toBe(-3 * (golpes.length / 2));
+    // A runa é item (AB-04): o gold sai na REPOSIÇÃO do lote (20 × 3 = 60), não a cada uso.
+    expect(hero().goldDelta).toBe(-60);
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {
@@ -4017,11 +4018,14 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
 
   it('a poção vira effect com supplies.<id>.effect, cura em verde, e o gold do player-stats é o SALDO', () => {
     // Três coisas de uma poção só: o brilho (14) no tile de quem bebeu, o "+80" em verde, e
-    // o gold do HUD caindo 45 — que é `gold + goldDelta`, o saldo, e não o que entrou com o
+    // o gold do HUD caindo — que é `gold + goldDelta`, o saldo, e não o que entrou com o
     // ticket nem o que a sessão movimentou.
     //
+    // A poção é item (AB-04): o gold sai na reposição de entrada (2 × 45 = 90, o que o saldo
+    // de 100 paga), e o uso consome a pilha.
+    //
     // Mutação que mata: `gold: character.gold` em `playerStatsOf` — o HUD fica em 100 depois
-    // de pagar 45. Ler o supply na tabela de `spells` em vez de `supplies` mata pelo brilho
+    // de pagar o lote. Ler o supply na tabela de `spells` em vez de `supplies` mata pelo brilho
     // 14, que deixa de existir.
     const { runFor, received, heroId, heroTileAt } = hunt({
       monsters: false, health: 100, gold: 100,
@@ -4040,7 +4044,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(cura).toMatchObject({ id: heroId, amount: 80 });
     const stats = ofType(all, 'player-stats');
     expect(stats[0]?.gold).toBe(100);
-    expect(stats.at(-1)?.gold).toBe(55);
+    expect(stats.at(-1)?.gold).toBe(10);
   });
 
   it('o tiro do bow vira missile com o projétil da FLECHA, entre o herói e o rato (#152)', () => {

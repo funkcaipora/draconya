@@ -127,6 +127,16 @@ export function groupCooldownKey(group: string): string {
   return `group:${group}`;
 }
 
+/**
+ * A chave do cooldown individual de um consumível (AB-07, ADR 0032 d.2).
+ *
+ * O item de grupo usa `group:<g>`; o item SEM grupo declarado cai no livro próprio, para não
+ * inventar prioridade compartilhada que o conteúdo não declarou (DT-06).
+ */
+export function itemCooldownKey(itemId: string): string {
+  return `item:${itemId}`;
+}
+
 export function secondaryCooldownKey(name: string): string {
   return `secondary:${name}`;
 }

@@ -1243,11 +1243,14 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 // --- as cinco categorias do bot (FUN-84) -----------------------------------------------------
 
-import type { BotAction, BotConfig } from '@draconya/content';
+import type { BotAction, BotConfig, BotConfigV2, BotSlot } from '@draconya/content';
 import {
-  BOT_VOCABULARY_VERSION_V1, botConfigSchema, botExitRuleSchema, botRingSwapSchema,
-  botTargetingSchema,
+  BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
+  botConfigV2Schema, botExitRuleSchema, botRingSwapSchema, botSlotSchema, botTargetingSchema,
 } from '@draconya/content';
+
+/** O tipo de config que o ruleset aceita: v1 (migrada) ou v2 (o alvo). */
+type BotConfigInput = BotConfig | BotConfigV2;
 
 const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
   // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
@@ -1256,6 +1259,26 @@ const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
   botConfigSchema.parse({
     version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
+    ...over,
+  });
+
+/** Um conjunto v2: 24 posições, as dadas na frente e o resto vazio. */
+const v2Set = (given: readonly (Partial<BotSlot> | null)[]) => {
+  const slots = given.map((slot) => (slot === null ? null : botSlotSchema.parse(slot)));
+  while (slots.length < BOT_SLOTS_PER_SET) slots.push(null);
+  return { slots };
+};
+const emptyV2Set = () => v2Set([]);
+
+/** A config v2 com os slots no conjunto ATIVO, na ordem dada (a prioridade é a ordem). */
+const botConfigV2 = (
+  active: readonly (Partial<BotSlot> | null)[],
+  over: Partial<BotConfigV2> = {},
+): BotConfigV2 =>
+  botConfigV2Schema.parse({
+    version: BOT_VOCABULARY_VERSION,
+    activeSet: 0,
+    sets: [v2Set(active), emptyV2Set(), emptyV2Set(), emptyV2Set()],
     ...over,
   });
 
@@ -1268,7 +1291,7 @@ const recorder = (executes = true) => {
   };
 };
 
-const withBot = (config: BotConfig, actuator?: { perform(a: BotAction): boolean }) => {
+const withBot = (config: BotConfigInput, actuator?: { perform(a: BotAction): boolean }) => {
   const loaded = content();
   const session = createHuntSession({
     id: 'bot-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
@@ -1293,26 +1316,26 @@ describe('cadência das cinco categorias (FUN-84)', () => {
     expect(scheduled(session)).toEqual([]);
   });
 
-  it('categoria VAZIA não entra na fila, mesmo com bot configurado', () => {
-    // Só `heal` tem regra. As outras quatro não custam evento nenhum — e o recusador mantém a
-    // categoria engatilhada, então o que se vê é exatamente quem foi agendado.
+  it('grupo VAZIO não entra na fila, mesmo com bot configurado', () => {
+    // Só um slot tem regra, e a magia não está no conteúdo: o grupo é o sintético `spell:x`.
+    // O recusador mantém o grupo engatilhado, então o que se vê é exatamente quem foi agendado.
     const { session } = withBot(botConfig({
       heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } }],
     }), recorder());
-    expect(scheduled(session)).toEqual(['heal']);
+    expect(scheduled(session)).toEqual(['spell:x']);
   });
 
-  it('o estado de "agendada" sobrevive ao snapshot — senão é ação DOBRADA', () => {
-    // O evento pendente da categoria está na fila serializada. Restaurar como engatilhada
-    // faria o próximo `#armBot` agendar um segundo, e a categoria agiria duas vezes por
-    // cooldown. É a mesma invariante do golpe do personagem, e ela já quebrou uma vez lá.
+  it('o estado de "agendado" sobrevive ao snapshot — senão é ação DOBRADA', () => {
+    // O evento pendente do grupo está na fila serializada. Restaurar como engatilhado faria o
+    // próximo `#armBot` agendar um segundo, e o grupo agiria duas vezes por cooldown. É a mesma
+    // invariante do golpe do personagem, e ela já quebrou uma vez lá.
     const { session } = withBot(botConfig({
       heal: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } }],
     }), recorder());
 
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as { ruleset: unknown };
     expect((snapshot.ruleset as { botScheduled: readonly string[] }).botScheduled)
-      .toEqual(['heal']);
+      .toEqual(['spell:x']);
   });
 
   it('uma cura que executa NÃO atrasa o ataque: as categorias são independentes', () => {
@@ -1330,19 +1353,21 @@ describe('cadência das cinco categorias (FUN-84)', () => {
       .toEqual(expect.arrayContaining(['cure', 'bolt']));
   });
 
-  it('duas regras válidas na mesma categoria executam SÓ a primeira', () => {
+  it('duas regras elegíveis no MESMO grupo executam SÓ a primeira (RP-001/RP-002)', () => {
+    // As duas apontam a MESMA magia, então caem no mesmo grupo sintético `spell:x`: a de menor
+    // índice dispara e a segunda não roda neste ciclo. A prioridade por ordem com ações
+    // DIFERENTES é o que os testes de RP cobrem com conteúdo de grupo real.
     const actuator = recorder();
     const { session } = withBot(botConfig({
       heal: [
-        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'forte' } },
-        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'fraca' } },
+        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } },
+        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'x' } },
       ],
     }), actuator);
 
     session.advanceBy(50);
 
     expect(actuator.done).toHaveLength(1);
-    expect(actuator.done[0]).toEqual({ kind: 'spell', spellId: 'forte' });
   });
 
   it('o cooldown de categoria conta a partir da AÇÃO, e vem do conteúdo', () => {
@@ -1393,6 +1418,116 @@ describe('cadência das cinco categorias (FUN-84)', () => {
     };
 
     expect(run(1_000)).toBe(run(100));
+  });
+});
+
+// --- o motor de grupos do bot (AB-07, RP-001…RP-004) ------------------------------------------
+
+describe('o motor de grupos do bot (AB-07, RP-001…RP-004)', () => {
+  // Duas magias do MESMO grupo `healing` (a segunda barata), um ataque e um haste de grupos
+  // distintos. Números redondos: dá para conferir a olho quem executou.
+  const grupo = [
+    {
+      id: 'cura-forte', name: 'Cura Forte', manaCost: 500, cooldownMs: 1_000,
+      group: 'healing', groupCooldownMs: 1_000, effect: { kind: 'heal', amount: 200 },
+    },
+    {
+      id: 'cura-fraca', name: 'Cura Fraca', manaCost: 10, cooldownMs: 1_000,
+      group: 'healing', groupCooldownMs: 1_000, effect: { kind: 'heal', amount: 20 },
+    },
+    {
+      id: 'golpe', name: 'Golpe', manaCost: 5, cooldownMs: 1_000,
+      group: 'attack', groupCooldownMs: 1_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
+    },
+    {
+      id: 'acelera', name: 'Acelera', manaCost: 30, cooldownMs: 1_000,
+      group: 'support', groupCooldownMs: 1_000,
+      effect: { kind: 'haste', durationMs: 2_000, speedPercent: 50 },
+    },
+  ];
+  const catalogo = () => [...spells, ...grupo];
+  const cura = (spellId: string) => ({
+    when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+    do: { kind: 'spell' as const, spellId },
+  });
+
+  it('RP-004: o slot de cima SEM MANA é pulado e o de baixo do MESMO grupo dispara no ciclo', () => {
+    const { session, hero } = withSpells(botConfig({
+      heal: [cura('cura-forte'), cura('cura-fraca')],
+    }), { health: 1_000, mana: 50, spells: catalogo(), monsters: false });
+
+    session.advanceBy(50);
+
+    // `cura-forte` custa 500 (recusa por mana) e é PULADA; `cura-fraca` sai no mesmo vencimento.
+    expect(hero.mana).toBe(40);
+    expect(hero.health).toBe(1_020);
+  });
+
+  it('RP-001/RP-002: dois slots elegíveis no mesmo grupo — só o PRIMEIRO executa', () => {
+    const { session, hero } = withSpells(botConfig({
+      heal: [cura('cura-forte'), cura('cura-fraca')],
+    }), { health: 1_000, mana: 1_000, spells: catalogo(), monsters: false });
+
+    session.advanceBy(50);
+
+    // Só `cura-forte` (o de maior prioridade) executou; `cura-fraca` não roda neste ciclo.
+    expect(hero.mana).toBe(500);
+    expect(hero.health).toBe(1_200);
+  });
+
+  it('os grupos são INDEPENDENTES: a cura em cooldown não bloqueia o ataque', () => {
+    const { session } = withSpells(botConfig({
+      heal: [cura('cura-fraca')],
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'golpe' },
+      }],
+    }), { health: 5_000, mana: 1_000, spells: catalogo() }, 'bold');
+
+    run(session, 2_000, 100);
+
+    // Cada grupo vence no próprio evento: a cura sai E o golpe sai, sem um atrasar o outro.
+    const lancadas = session.drainEvents()
+      .filter((e) => e.kind === 'spell-cast')
+      .map((e) => (e.kind === 'spell-cast' ? e.spellId : ''));
+    expect(lancadas).toContain('cura-fraca');
+    expect(lancadas).toContain('golpe');
+  });
+
+  it('`condition` present:false: a magia de haste só sai SEM haste ativo', () => {
+    const { session, hero } = withSpells(botConfigV2([
+      {
+        when: [{ kind: 'condition', conditionId: 'haste', present: false }],
+        do: { kind: 'spell', spellId: 'acelera' },
+      },
+    ]), { health: 1_000, mana: 1_000, spells: catalogo(), monsters: false });
+
+    run(session, 1_500, 100);
+
+    // Saiu UMA vez; com o efeito ativo o predicado é falso e o slot não repete.
+    expect(hero.mana).toBe(970);
+    expect(hero.conditions.get('haste')).not.toBeNull();
+  });
+
+  it('o bot a 1 Hz e a 10 Hz produz a MESMA sequência de ações', () => {
+    const config = botConfig({
+      heal: [cura('cura-fraca')],
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'golpe' },
+      }],
+    });
+    const at = (stepMs: number) => {
+      const { session } = withSpells(config, {
+        health: 5_000, mana: 100_000, spells: catalogo(),
+      }, 'bold');
+      for (let t = stepMs; t <= 30_000; t += stepMs) session.advanceBy(stepMs);
+      return session.drainEvents()
+        .filter((e) => e.kind === 'spell-cast')
+        .map((e) => (e.kind === 'spell-cast' ? e.spellId : ''));
+    };
+    expect(at(1_000)).toEqual(at(100));
   });
 });
 
@@ -1461,7 +1596,7 @@ describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desa
  * acima. Um conteúdo próprio custa quatro linhas e não move nada de lugar.
  */
 const withSpells = (
-  config: BotConfig,
+  config: BotConfigInput,
   over: {
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; items?: readonly unknown[]; monsters?: boolean;
@@ -1592,48 +1727,48 @@ describe('magia (FUN-74)', () => {
   });
 });
 
-describe('supply (FUN-77)', () => {
-  const potionRule = (supplyId: string, percent: number) => ({
-    when: { kind: 'hp' as const, op: '<=' as const, percent },
-    do: { kind: 'supply' as const, supplyId },
-  });
-
-  it('a poção repõe vida, debita gold do saldo e entra no goldSpent do extrato', () => {
-    // §20.1: poção não é item físico — usar debita gold direto. O extrato leva o gasto ao
-    // ledger junto com o ganho (invariante 10), e é por isso que o agregado existe.
-    const { session, hero } = withSpells(
-      botConfig({ potion: [potionRule('health-potion', 50)] }),
-      { health: 1_000, gold: 100, monsters: false },
+describe('consumível item: falta, aviso e saldo (FUN-77, AB-04)', () => {
+  it('a poção em pilha repõe vida e NÃO debita gold no uso', () => {
+    // AB-04: a pilha é a fonte do consumo; o gold só sai na COMPRA do lote. Debitar no uso
+    // faria o saldo cair duas vezes pelo mesmo consumível.
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({ potion: [itemRule('health-potion', 50)] }),
+      { health: 1_000, gold: 100, items: [potionNoRestock], monsters: false },
     );
+    seedStack(hero, loaded, 'health-potion', 5);
 
     session.advanceBy(50);
 
     expect(hero.health).toBe(1_080);
-    expect(hero.goldDelta).toBe(-45);
-    expect(session.aggregates.goldSpent).toBe(45);
+    expect(hero.inventory.quantityOf('health-potion')).toBe(4);
+    expect(session.aggregates.suppliesUsed).toBe(1);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
   });
 
-  it('a poção de mana repõe MANA, e sai da mesma categoria', () => {
-    const { session, hero } = withSpells(
+  it('a poção de mana repõe MANA da pilha', () => {
+    const manaPotion = { ...consumables[1], restock: { batch: 5, min: 0 } };
+    const { session, hero, content: loaded } = withSpells(
       botConfig({ potion: [{
         when: { kind: 'mana', op: '<=', percent: 50 },
-        do: { kind: 'supply', supplyId: 'mana-potion' },
+        do: { kind: 'item', itemId: 'mana-potion' },
       }] }),
-      { mana: 20, gold: 500, monsters: false },
+      { mana: 20, gold: 500, items: [manaPotion], monsters: false },
     );
+    seedStack(hero, loaded, 'mana-potion', 5);
 
     session.advanceBy(50);
 
     expect(hero.mana).toBe(120);
-    expect(session.aggregates.goldSpent).toBe(50);
+    expect(session.aggregates.suppliesUsed).toBe(1);
   });
 
-  it('sem gold, a poção é recusada e o saldo NUNCA fica negativo', () => {
+  it('sem pilha e sem gold para repor, a poção não sai e o saldo NUNCA fica negativo', () => {
     // A garantia é a ordem: o débito é recusado antes, não corrigido depois. Um delta negativo
     // aqui viraria uma linha de ledger que tira gold que o personagem não tem.
     const { session, hero } = withSpells(
-      botConfig({ potion: [potionRule('health-potion', 100)] }),
-      { health: 1_000, gold: 44, monsters: false },
+      botConfig({ potion: [itemRule('health-potion', 100)] }),
+      { health: 1_000, gold: 44, items: [potionNoRestock], monsters: false },
     );
 
     run(session, 5_000, 100);
@@ -1643,14 +1778,14 @@ describe('supply (FUN-77)', () => {
     expect(hero.health).toBe(1_000);
   });
 
-  it('o gold que acabou vira UMA linha no extrato, e não uma por tentativa', () => {
+  it('o consumível que falta vira UMA linha no extrato, e não uma por tentativa', () => {
     // §20.3 sem a regra de saída: a hunt continua, sem poção, e o personagem pode morrer. Isso
     // é comportamento, não erro — mas quem estava ausente precisa encontrar o motivo na tela
     // de retorno. Uma linha por tentativa encheria a lista curta até ela deixar de ser lista,
     // que é a mesma razão pela qual o aviso de stamina sai uma vez só.
     const { session } = withSpells(
-      botConfig({ potion: [potionRule('health-potion', 100)] }),
-      { health: 1_000, gold: 0, monsters: false },
+      botConfig({ potion: [itemRule('health-potion', 100)] }),
+      { health: 1_000, gold: 0, items: [potionNoRestock], monsters: false },
     );
 
     run(session, 10_000, 100);
@@ -1662,38 +1797,13 @@ describe('supply (FUN-77)', () => {
 
   it('o aviso sobrevive ao snapshot: retomar não repete a notícia', () => {
     const { session } = withSpells(
-      botConfig({ potion: [potionRule('health-potion', 100)] }),
-      { health: 1_000, gold: 0, monsters: false },
+      botConfig({ potion: [itemRule('health-potion', 100)] }),
+      { health: 1_000, gold: 0, items: [potionNoRestock], monsters: false },
     );
     session.advanceBy(100);
 
     const state = session.ruleset.getState?.() as { warnedNoGold?: boolean };
     expect(state.warnedNoGold).toBe(true);
-  });
-
-  it('o gold ganho na hunt já dá para gastar na hunt, sem passar pelo banco', () => {
-    // Idle-first: exigir que o loot passasse pelo banco antes de virar poção faria a poção só
-    // chegar depois de encerrar a sessão. O saldo é o de entrada MAIS o delta, e é por isso
-    // que `balanceOf` soma os dois em vez de olhar só o que veio da tabela.
-    //
-    // O personagem entra com ZERO e a poção custa exatamente o loot de um rato: a primeira
-    // tentativa é recusada, e a que vem depois do primeiro abate passa. Se o saldo ignorasse o
-    // delta, nenhuma passaria nunca.
-    const barata = [{ ...consumables[0], price: 3 }, consumables[1]];
-    const { session, hero } = withSpells(botConfig({
-      attack: [{
-        when: { kind: 'targets', op: '>=', count: 1 },
-        do: { kind: 'spell', spellId: 'strike' },
-      }],
-      potion: [potionRule('health-potion', 100)],
-    }), { health: 1_000, gold: 0, items: barata });
-
-    run(session, 20_000, 100);
-
-    expect(session.aggregates.kills).toBeGreaterThan(0);
-    expect(session.aggregates.goldSpent).toBeGreaterThan(0);
-    // Nunca gastou mais do que ganhou: o saldo não fica negativo em nenhum instante.
-    expect(hero.gold + hero.goldDelta).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -2108,17 +2218,16 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
   });
 
   it('a poção emite supply-used e creature-healed com source supply; a de mana só supply-used', () => {
-    // Mutação que mata: `source: 'spell'` no `#useSupply` — o `toMatchObject` reprova. Apagar o
-    // `emit` de `supply-used` mata pela contagem, nas duas poções.
-    const potionRule = (supplyId: string, kind: 'hp' | 'mana', percent: number) => ({
-      when: { kind, op: '<=' as const, percent },
-      do: { kind: 'supply' as const, supplyId },
-    });
-
+    // Mutação que mata: `source: 'spell'` no `#useConsumableItem` — o `toMatchObject` reprova.
+    // Apagar o `emit` de `supply-used` mata pela contagem, nas duas poções.
     const vida = withSpells(
-      botConfig({ potion: [potionRule('health-potion', 'hp', 50)] }),
-      { health: 1_000, gold: 100, monsters: false },
+      botConfig({ potion: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'item', itemId: 'health-potion' },
+      }] }),
+      { health: 1_000, gold: 100, items: [potionNoRestock], monsters: false },
     );
+    seedStack(vida.hero, vida.content, 'health-potion', 5);
     vida.session.advanceBy(50);
     const events = vida.session.drainEvents();
 
@@ -2135,9 +2244,16 @@ describe('o combate chega ao cliente como evento (FUN-109)', () => {
     expect(ofKind(events, 'creature-health-changed').at(-1)?.health).toBe(1_080);
 
     const mana = withSpells(
-      botConfig({ potion: [potionRule('mana-potion', 'mana', 50)] }),
-      { mana: 20, gold: 500, monsters: false },
+      botConfig({ potion: [{
+        when: { kind: 'mana', op: '<=', percent: 50 },
+        do: { kind: 'item', itemId: 'mana-potion' },
+      }] }),
+      {
+        mana: 20, gold: 500, monsters: false,
+        items: [{ ...consumables[1], restock: { batch: 5, min: 0 } }],
+      },
     );
+    seedStack(mana.hero, mana.content, 'mana-potion', 5);
     mana.session.advanceBy(50);
     const soUso = mana.session.drainEvents();
     expect(mana.hero.mana).toBe(120);
@@ -3927,22 +4043,22 @@ describe('o analisador conta onde o fato acontece (FUN-78, §16.1)', () => {
       .toBe([...hero.inventory.items()].length + hero.lootBox.length);
   });
 
-  it('supply conta em QUANTIDADE além de contar em gold', () => {
+  it('consumível conta em QUANTIDADE, e o gold só sai na reposição', () => {
     // "Gastei 4.000 de gold" e "bebi 80 poções" contam coisas diferentes sobre a mesma hunt, e
-    // o §16.1 pede as duas.
-    const { session, hero } = withSpells(botConfig({
+    // o §16.1 pede as duas. Com item em pilha o gold NÃO sai no uso (AB-04): sai na compra.
+    const { session, hero, content: loaded } = withSpells(botConfig({
       potion: [{
         when: { kind: 'hp', op: '<=', percent: 100 },
-        do: { kind: 'supply', supplyId: 'health-potion' },
+        do: { kind: 'item', itemId: 'health-potion' },
       }],
-    }), { health: 1_000, gold: 10_000, monsters: false });
+    }), { health: 1_000, gold: 10_000, items: [potionNoRestock], monsters: false });
+    seedStack(hero, loaded, 'health-potion', 5);
 
     run(session, 10_000, 100);
 
     expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
-    // 45 de gold por poção: as duas contas descrevem a mesma coisa e têm de bater.
-    expect(session.aggregates.goldSpent).toBe(session.aggregates.suppliesUsed * 45);
-    expect(hero.goldDelta).toBe(-session.aggregates.goldSpent);
+    expect(session.aggregates.goldSpent).toBe(0);
+    expect(hero.goldDelta).toBe(0);
   });
 
   it('o extrato leva os MESMOS números que o analisador mostra', () => {
@@ -4605,29 +4721,29 @@ describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
 describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () => {
   const rune = {
     id: 'avalanche-rune', name: 'Avalanche Rune', kind: 'consumable', stackable: true,
-    weight: 1.2, value: 0, price: 14, group: 'attack', restock: { batch: 20, min: 5 },
+    weight: 1.2, value: 0, price: 14, group: 'attack', restock: { batch: 20, min: 0 },
     requires: { level: 30, magicLevel: 0 },
     effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
   };
-  const withRune = (level: number, gold: number, hz = 10) => {
-    const { session, hero } = withSpells(botConfig({
-      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+  const withRune = (level: number, gold: number, hz = 10, seed = 100) => {
+    const { session, hero, content: loaded } = withSpells(botConfig({
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'item', itemId: 'avalanche-rune' } }],
     }), { gold, items: [...items, ...consumables, rune], health: 5_000 }, 'bold');
     hero.level = level;
     hero.xp = totalXpForLevel(level, progression as Progression);
+    if (seed > 0) seedStack(hero, loaded, 'avalanche-rune', seed);
     run(session, 60_000, 1000 / hz);
     return { session, hero };
   };
 
-  it('hits the rats around the target, charges 14 per use, and the receipt counts the uses', () => {
+  it('hits the rats around the target, consumes the stack, and the receipt counts the uses', () => {
     const { session, hero } = withRune(30, 1_000);
     const uses = session.aggregates.suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    expect(session.aggregates.goldSpent).toBe(uses * 14);
-    // `goldDelta` é gasto MENOS o loot dos ratos: o que se prende é a diferença.
-    expect(session.aggregates.goldGained - session.aggregates.goldSpent).toBe(hero.goldDelta);
+    // Item em pilha: o gold não sai no uso (AB-04); com `min: 0` não há reposição.
+    expect(session.aggregates.goldSpent).toBe(0);
     expect(session.aggregates.kills).toBeGreaterThan(0);
-    // Uma runa por vencimento da categoria: nunca mais de 60 usos em 60 s a 1 s de cooldown.
+    // Uma runa por vencimento do grupo: nunca mais de 61 usos em 60 s a 1 s de fallback.
     expect(uses).toBeLessThanOrEqual(61);
     const used = session.drainEvents().filter((e) => e.kind === 'supply-used');
     expect(used.length).toBe(uses);
@@ -4638,9 +4754,9 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
     const young = withRune(29, 1_000);
     expect(young.session.aggregates.suppliesUsed).toBe(0);
     expect(young.session.aggregates.goldSpent).toBe(0);
-    // A recusa é de LEVEL, não de gold (#217): o personagem tem 1.000 de saldo, e o
-    // `BotPanel` já tranca a runa fora de alcance na configuração. O aviso único de gold não
-    // pode queimar por uma recusa que nunca foi sobre gold.
+    // A recusa é de LEVEL, não de estoque: o personagem tem a pilha, e o `BotPanel` já tranca a
+    // runa fora de alcance na configuração. O aviso único de falta não pode queimar por uma
+    // recusa que nunca foi sobre o consumível.
     expect(young.session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(0);
     const state = young.session.ruleset.getState?.() as { warnedNoGold?: boolean };
     expect(state.warnedNoGold).toBe(false);
@@ -4651,10 +4767,10 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
     expect(at(1)).toEqual(at(10));
   });
 
-  it('depois, com o level da runa mas sem gold de verdade, o aviso sai — e só ele (#217)', () => {
-    // Mesma runa; agora o level deixou de ser o problema e o gold é. O flag continua livre
+  it('depois, com o level da runa mas sem pilha, o aviso sai — e só ele (#217)', () => {
+    // Mesma runa; agora o level deixou de ser o problema e o estoque é. O flag continua livre
     // para queimar aqui, porque cada `withRune` cria uma sessão nova.
-    const { session } = withRune(30, 0);
+    const { session } = withRune(30, 0, 10, 0);
     const avisos = session.notableEvents.filter((e) => e.type === 'supply-unaffordable');
     expect(avisos).toHaveLength(1);
     expect(avisos[0]?.detail).toBe('avalanche-rune');
@@ -4663,14 +4779,15 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
   });
 
   it('sem monstro a runa recusa por no-target repetidamente, e nenhuma linha sai (#217)', () => {
-    // O "when" é da vida do personagem, não dos alvos: a categoria tenta lançar a cada
-    // vencimento mesmo sem ninguém para mirar, e cada tentativa recusa por `no-target` — a
-    // mesma recusa que `castSpell` já deixa muda para a magia.
-    const { session, hero } = withSpells(botConfig({
-      rune: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    // O "when" é da vida do personagem, não dos alvos: o grupo tenta lançar a cada vencimento
+    // mesmo sem ninguém para mirar, e cada tentativa recusa por `no-target` — a mesma recusa
+    // que `castSpell` já deixa muda para a magia.
+    const { session, hero, content: loaded } = withSpells(botConfig({
+      rune: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'item', itemId: 'avalanche-rune' } }],
     }), { gold: 10_000, items: [...items, ...consumables, rune], monsters: false });
     hero.level = 30;
     hero.xp = totalXpForLevel(30, progression as Progression);
+    seedStack(hero, loaded, 'avalanche-rune', 100);
 
     run(session, 10_000, 100);
 
@@ -4961,8 +5078,9 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
   const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
   const noMonsters = () => loaded({ routes: [{ ...route, spawnPoints: [] }] });
 
-  it('a 14-gold potion with four present costs 3 from each and 5 from the user (3 + the remainder)', () => {
-    // Mutação que mata: `splitEqually` (resto nas primeiras cotas) em vez de "resto do usuário".
+  it('a poção vem da reposição por PERSONAGEM, e o custo não é rateado', () => {
+    // AB-04: o consumível é item e a reposição é por personagem. Só quem configurou o bot
+    // compra; o `shareCosts` da party não rateia a compra de lote.
     const { session } = shared(
       [member('u', 100, 1_000, 10), member('a', 100), member('b', 100), member('c', 100)],
       { content: noMonsters(), botConfigs: { u: drinkAlways } },
@@ -4970,22 +5088,20 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     run(session, 1_500, 100);
     const uses = session.aggregatesOf('u').suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    expect(spent(session, 'u')).toBe(uses * 5);
-    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(uses * 3);
-    expect(session.aggregates.goldSpent).toBe(uses * 14);
-    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0)).toBe(-uses * 14);
+    expect(spent(session, 'u')).toBeGreaterThan(0);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(spent(session, 'u'));
+    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0)).toBe(-spent(session, 'u'));
   });
 
-  it('a member with 1 gold pays 1 and the user covers the rest; a user who cannot cover is refused for everyone', () => {
+  it('a reposição é limitada pelo saldo; sem saldo, o aviso sai uma vez para quem tentou', () => {
     const { session } = shared(
       [member('u', 100, 1_000, 10), member('poor', 1), member('b', 100), member('c', 100)],
       { content: noMonsters(), botConfigs: { u: drinkAlways } },
     );
     run(session, 500, 100);
-    const uses = session.aggregatesOf('u').suppliesUsed;
-    expect(uses).toBeGreaterThan(0);
-    expect(spent(session, 'poor')).toBe(1);
-    expect(spent(session, 'u')).toBe(uses * 5 + 2 * (uses - 1) + 2 + 0);
+    expect(spent(session, 'u')).toBeGreaterThan(0);
+    expect(spent(session, 'poor')).toBe(0);
     // …e ninguém fica negativo.
     for (const p of session.participants) expect(p.gold + p.goldDelta).toBeGreaterThanOrEqual(0);
 
@@ -5155,7 +5271,7 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
   const drinkAlways = botConfig({ potion: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'health-potion' } }] });
   const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
 
-  it('combination C (shareCosts: true, splitLoot: false): shares supply costs in real-time, no party bag, loot goes to drawn member', () => {
+  it('combination C (shareCosts: true, splitLoot: false): no party bag, loot goes to drawn member', () => {
     const session = createHuntSession({
       id: 'comb-c', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
       partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
@@ -5172,9 +5288,9 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
     run(session, 1_500, 100);
     const uses = session.aggregatesOf('u').suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    expect(spent(session, 'u')).toBe(uses * 5);
-    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(uses * 3);
-    expect(session.aggregates.goldSpent).toBe(uses * 14);
+    // A reposição é por personagem (AB-04); `shareCosts` não a rateia.
+    expect(spent(session, 'u')).toBeGreaterThan(0);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(0);
 
     expect(ruleset.getState().partyBag).toBeUndefined();
     expect(session.aggregates.kills).toBeGreaterThan(0);
@@ -5199,7 +5315,7 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
     run(session, 1_500, 100);
     const uses = session.aggregatesOf('u').suppliesUsed;
     expect(uses).toBeGreaterThan(0);
-    expect(spent(session, 'u')).toBe(uses * 14);
+    expect(spent(session, 'u')).toBeGreaterThan(0);
     for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(0);
 
     const bag = ruleset.getState().partyBag;

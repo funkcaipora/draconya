@@ -16,16 +16,22 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BASIC_ABILITY_ID, BOT_CATEGORIES, ITEM_SLOTS, isBlocked } from '@draconya/content';
+import {
+  BASIC_ABILITY_ID, BOT_VOCABULARY_VERSION, ITEM_SLOTS, isBlocked, migrateBotConfigV1,
+} from '@draconya/content';
 import type {
-  AmmoFamily, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
-  Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot, Monster, MonsterAbility, PartyConfig, Progression,
+  AmmoFamily, BotAction, BotConfig, BotConfigV2, BotExitRule, Combat,
+  CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
+  Monster, MonsterAbility, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
   WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
-import { NOT_IN_CATALOG, applyConsumableEffect, balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
+import {
+  NOT_IN_CATALOG, applyConsumableEffect, balanceOf, castSpell, groupCooldownKey,
+  itemCooldownKey, ownPurse, spellCooldownKey, useSupply,
+} from '../casting.js';
 import type { CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
@@ -51,7 +57,7 @@ import type { CarriedItem, ContainerRules, EquipmentObserver } from '../inventor
 import { MAX_STACK } from '../inventory.js';
 import { planRestock } from '../restock.js';
 import { compileBot } from '../bot.js';
-import type { BotActuator, BotView, CompiledBot } from '../bot.js';
+import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
 import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
 } from '../monster/monster.js';
@@ -145,16 +151,23 @@ const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
 const EXPIRE_PRIORITY = EventPriority.Housekeeping;
 const TICK_PRIORITY = EventPriority.Housekeeping + 1;
 /**
- * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
- * cura que executa não atrasa o ataque, porque são vencimentos independentes na mesma fila.
+ * Um evento POR GRUPO de cooldown do conteúdo (AB-07, ADR 0032 d.2). Não existe prioridade
+ * global entre grupos: uma cura que executa não atrasa o ataque, porque são vencimentos
+ * independentes na mesma fila. Dentro de um grupo, a prioridade é a ordem do slot (RP-002).
  */
-const BOT_EVENT: Readonly<Record<BotCategory, string>> = {
-  heal: 'bot-heal',
-  potion: 'bot-potion',
-  attack: 'bot-attack',
-  rune: 'bot-rune',
-  support: 'bot-support',
-};
+const botEvent = (group: string): string => `bot:${group}`;
+
+/** O prefixo que separa o evento de grupo do resto dos eventos do ruleset. */
+const BOT_GROUP_PREFIX = 'bot:';
+
+/**
+ * O tipo de entrada da configuração do bot (DT-02): v1 ou v2.
+ *
+ * A v2 é o vocabulário alvo; a v1 continua aceita porque o carregamento só liga a migração no
+ * AB-09 (#424) — até lá, `server`/`tools` entregam a config que o jogador salvou, e
+ * `migrateBotConfigV1` a normaliza no boundary. A união some no AB-09.
+ */
+type BotConfigInput = BotConfigV2 | BotConfig;
 
 /**
  * De quanto em quanto tempo as regras de saída são avaliadas.
@@ -187,9 +200,17 @@ function targetingOf(runner: Runner | undefined): Targeting {
 }
 
 function runnerState(runner: Runner): RunnerState {
+  // Só os grupos do CONTEÚDO que estão AGENDADOS entram no snapshot. As chaves são strings, e o
+  // motor v2 ignora categorias v1 que um snapshot antigo traga (seção 7 do AB-07).
+  const botScheduled: string[] = [];
+  if (runner.bot !== undefined) {
+    for (const group of runner.bot.groups.keys()) {
+      if (runner.botReady[group] === false) botScheduled.push(group);
+    }
+  }
   return {
     route: runner.walker.getState(),
-    botScheduled: BOT_CATEGORIES.filter((category) => !runner.botReady[category]),
+    botScheduled,
     luring: runner.running,
     ringReplaced: runner.ringReplaced,
     playerAttackReady: runner.playerAttackReady,
@@ -357,10 +378,10 @@ export interface HuntRulesetOptions {
    * as regras de saída, porque elas são compostas a partir da configuração crua. Compilar aqui
    * dentro torna a divergência impossível de escrever.
    *
-   * **Sem configuração não há evento nenhum agendado** — o custo de cinco eventos por segundo
-   * por hunt só existe para quem configurou.
+   * **Sem configuração não há evento nenhum agendado** — o custo de um evento por grupo só
+   * existe para quem configurou.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
   /**
    * Substitui o atuador embutido (FUN-74/FUN-77).
    *
@@ -373,10 +394,10 @@ export interface HuntRulesetOptions {
    * A configuração do bot de CADA participante, por id (#203, ADR 0027). `botConfig` continua
    * sendo a do primeiro a entrar — o caminho solo; quem entra com id aqui usa a sua.
    */
-  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191, ADR 0027). Ausente é solo. */
   readonly partyOptions?: PartyOptions;
-  /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
+  /** Cooldown de FALLBACK de um grupo sem livro próprio (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
    * Até onde o bot ENXERGA ao decidir para onde andar (FUN-85), do conteúdo. Não é o alcance
@@ -440,16 +461,16 @@ export interface HuntRulesetState {
   /** Ver `HuntRuleset.#onPlayerAttack`. Ausente é `true`: engatilhado. */
   readonly playerAttackReady?: boolean;
   /**
-   * Quais categorias do bot estão AGENDADAS (FUN-84).
+   * Quais GRUPOS do bot estão AGENDADOS (AB-07).
    *
-   * Precisa entrar no snapshot pela mesma razão que `playerAttackReady`: o evento pendente da
-   * categoria está na fila serializada, e restaurar como "engatilhada" faria o próximo
-   * `#armBot` agendar um segundo — ação dobrada, que é a invariante que este par protege.
+   * Precisa entrar no snapshot pela mesma razão que `playerAttackReady`: o evento pendente do
+   * grupo está na fila serializada, e restaurar como "engatilhado" faria o próximo `#armBot`
+   * agendar um segundo — ação dobrada, que é a invariante que este par protege.
    *
-   * Ausente é "nenhuma agendada", que é o estado de um snapshot anterior a esta issue: lá não
-   * havia evento de bot na fila para conflitar.
+   * As chaves são os grupos do CONTEÚDO (ou as categorias v1 de um snapshot anterior, que o
+   * motor v2 ignora). Ausente é "nenhum agendado".
    */
-  readonly botScheduled?: readonly BotCategory[];
+  readonly botScheduled?: readonly string[];
   /** Ver `HuntRuleset.#running`. Ausente é `true`: o lure começa juntando (FUN-87). */
   readonly luring?: boolean;
   /** Ver `HuntRuleset.#ringReplaced`. Ausente é `null`: o dedo estava vazio. */
@@ -482,8 +503,11 @@ export interface HuntRulesetState {
    *
    * Opcional: snapshot gravado antes desta issue não tem a chave, e ausente é "sem bot" — que
    * é exatamente o que aquelas sessões tinham.
+   *
+   * O motor normaliza para v2 ao recompilar (DT-02): a v1 legível no snapshot não perde
+   * configuração.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigV2;
 }
 
 /**
@@ -495,12 +519,12 @@ interface Runner {
   walker: RouteWalker;
   /** O bot vigente, MUTÁVEL: o jogador troca no meio da hunt e vale na hora (FUN-81). */
   bot: CompiledBot | undefined;
-  /** A configuração crua correspondente, para o snapshot. Anda junto com `bot`, sempre. */
-  botConfig: BotConfig | undefined;
+  /** A configuração v2 correspondente, para o snapshot. Anda junto com `bot`, sempre. */
+  botConfig: BotConfigV2 | undefined;
   exitRules: readonly HuntExitRule[];
   pendingExit: ExitReason | null;
-  /** Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada. */
-  readonly botReady: Record<BotCategory, boolean>;
+  /** Por GRUPO: `true` = ENGATILHADO (nenhum evento pendente), `false` = agendado. */
+  readonly botReady: Record<string, boolean>;
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
   playerAttackReady: boolean;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
@@ -515,14 +539,14 @@ interface Runner {
 /** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
 export interface RunnerState {
   readonly route: RouteState;
-  readonly botScheduled: readonly BotCategory[];
+  readonly botScheduled: readonly string[];
   readonly luring: boolean;
   readonly ringReplaced: string | null;
   readonly playerAttackReady: boolean;
   readonly warnedExhausted: boolean;
   readonly warnedFullBackpack: boolean;
   readonly warnedNoGold: boolean;
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
 }
 
@@ -608,6 +632,29 @@ export class HuntRuleset implements Ruleset {
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
     self: null as unknown as CharacterRuntime, targetCount: 0, target: null,
+  };
+
+  /**
+   * Resolve grupo e chave de cooldown de uma ação do CONTEÚDO, uma vez por slot, na compilação
+   * (DT-01). Puro: só lê os catálogos fixados na sessão, nunca o disco (invariante 7).
+   *
+   * Magia de grupo tranca `group:<g>` (o `castSpell` já o aplica); ação sem grupo declarado cai
+   * no livro individual `spell:<id>`/`item:<id>`, para não inventar prioridade compartilhada
+   * (DT-06).
+   */
+  readonly #cooldownOf: CooldownOfAction = (action) => {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      const group = spell?.group;
+      return group === undefined
+        ? { group: `spell:${action.spellId}`, cooldownKey: spellCooldownKey(action.spellId) }
+        : { group, cooldownKey: groupCooldownKey(group) };
+    }
+    const item = this.#options.items.get(action.itemId);
+    const group = item?.group;
+    return group === undefined
+      ? { group: `item:${action.itemId}`, cooldownKey: itemCooldownKey(action.itemId) }
+      : { group, cooldownKey: groupCooldownKey(group) };
   };
 
   /**
@@ -838,20 +885,22 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Housekeeping,
       });
     }
-    // Só categoria COM regra entra na fila (FUN-84). Um personagem sem bot configurado — que
-    // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
-    // orça só existem para quem de fato configurou.
-    this.#armBot(session, character.id);
     // O legado `ammo` por família vira o item no slot `ammo` (AB-05): a escolha sobrevive se a
-    // pilha existe. Depois do `#armBot`, porque a migração só mexe no inventário.
+    // pilha existe. Antes do `#armBot`, para o inventário já estar no estado final.
     this.#migrateLegacyAmmo(character);
     // Entrar na hunt dispara a PRIMEIRA compra pela mesma regra do uso (#419): sem isto, a
-    // hunt idle-first de 18 h ficaria sem poção assim que a pilha inicial acabasse.
+    // hunt idle-first de 18 h ficaria sem poção assim que a pilha inicial acabasse. É agendada
+    // ANTES da primeira avaliação do bot: senão o bot tenta o consumível sem pilha, engatilha,
+    // e a compra que vem logo depois não o acorda — a poção só sairia no próximo evento de
+    // mundo, que numa hunt sem dano pode nunca existir.
     if (this.#configuredConsumables(runner).length > 0) {
       session.scheduleIn(RESTOCK, 0, {
         priority: EventPriority.Housekeeping, subject: character.id,
       });
     }
+    // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
+    // nada, e os eventos por grupo só existem para quem de fato configurou.
+    this.#armBot(session, character.id);
   }
 
   /**
@@ -914,14 +963,18 @@ export class HuntRuleset implements Ruleset {
     this.#beginExit(session, characterId, 'manual-exit');
   }
 
-  #newRunner(config: BotConfig | undefined, state?: RunnerState): Runner {
+  #newRunner(config: BotConfigInput | undefined, state?: RunnerState): Runner {
+    // A v1 é normalizada no boundary (DT-02): a config que o jogador salvou continua valendo, e
+    // o motor v2 só vê o vocabulário v2. Idempotente — um snapshot v2 volta só parseado.
+    const normalized = config === undefined ? undefined : migrateBotConfigV1(config);
+    const bot = normalized === undefined ? undefined : compileBot(normalized, this.#cooldownOf);
     const runner: Runner = {
       walker: new RouteWalker(this.#options.route, state?.route),
-      bot: config === undefined ? undefined : compileBot(config),
-      botConfig: config,
-      exitRules: this.#composeExitRules(config),
+      bot,
+      botConfig: normalized,
+      exitRules: this.#composeExitRules(normalized),
       pendingExit: state?.pendingExit ?? null,
-      botReady: { heal: true, potion: true, attack: true, rune: true, support: true },
+      botReady: {},
       playerAttackReady: state?.playerAttackReady ?? true,
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
@@ -929,7 +982,18 @@ export class HuntRuleset implements Ruleset {
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
     };
-    for (const category of state?.botScheduled ?? []) runner.botReady[category] = false;
+    if (bot !== undefined) {
+      // Todo grupo começa ENGATILHADO. Só um snapshot v2 carrega chaves de grupo em
+      // `botScheduled`; as categorias v1 (`potion`, `attack`, `support`) colidiriam com nomes
+      // de grupo, e o motor v2 as re-engatilha — a fila restaurada de um snapshot v1 traz
+      // `bot-<categoria>`, que o motor v2 ignora.
+      for (const group of bot.groups.keys()) runner.botReady[group] = true;
+      if (state?.botConfig?.version === BOT_VOCABULARY_VERSION) {
+        for (const group of state.botScheduled) {
+          if (runner.botReady[group] !== undefined) runner.botReady[group] = false;
+        }
+      }
+    }
     return runner;
   }
 
@@ -970,14 +1034,14 @@ export class HuntRuleset implements Ruleset {
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
-      case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
-      case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
-      case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
-      case BOT_EVENT.rune: return this.#onBot(session, 'rune', event.subject);
-      case BOT_EVENT.support: return this.#onBot(session, 'support', event.subject);
-      // Evento de um tipo que este ruleset não conhece. Acontece com snapshot gravado por uma
-      // versão que agendava algo que não existe mais; ignorar é a degradação certa.
-      default: return;
+      default:
+        // Um grupo do bot venceu (AB-07): `bot:<group>`. Um evento de tipo que este ruleset não
+        // conhece — inclusive `bot-<categoria>` de um snapshot v1 — é ignorado, que é a
+        // degradação certa.
+        if (event.kind.startsWith(BOT_GROUP_PREFIX)) {
+          return this.#onBot(session, event.kind.slice(BOT_GROUP_PREFIX.length), event.subject);
+        }
+        return;
     }
   }
 
@@ -1204,6 +1268,9 @@ export class HuntRuleset implements Ruleset {
       // o que some é a cura, e o jogador descobre pelo personagem morto. As regras de SAÍDA
       // vêm junto, pela mesma razão.
       this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined));
+      // O mundo mudou enquanto a sessão estava parada: o que estava ENGATILHADO reavalia agora.
+      // O que estava AGENDADO tem evento na fila restaurada e `#armBot` o pula — nunca os dois.
+      if (character.alive) this.#armBot(session, character.id);
     }
   }
 
@@ -1509,19 +1576,28 @@ export class HuntRuleset implements Ruleset {
    * recompiladas junto: elas vêm da mesma configuração, e deixar as antigas valendo faria a
    * hunt encerrar por uma regra que o jogador acabou de apagar.
    */
-  configureBot(session: Session, config: BotConfig, characterId?: string): void {
+  configureBot(session: Session, config: BotConfigInput, characterId?: string): void {
     // De QUEM (#203): por id, ou o primeiro participante — o caminho solo de sempre.
     const character = characterId === undefined
       ? session.participants[0]
       : findById(session.participants, characterId) ?? undefined;
     if (character === undefined) return;
     const runner = this.#runnerOf(character.id);
-    runner.botConfig = config;
-    runner.bot = compileBot(config);
-    runner.exitRules = this.#composeExitRules(config);
-    // Categoria que ganhou regra agora precisa acordar. `#armBot` só toca as ENGATILHADAS, e
-    // as que já tinham evento pendente seguem com ele — a invariante "engatilhada ou agendada"
-    // continua valendo do outro lado de uma troca de configuração.
+    // v1 no boundary vira v2 (DT-02); a config guardada é a v2, para o snapshot já sair no
+    // vocabulário novo.
+    const normalized = migrateBotConfigV1(config);
+    runner.botConfig = normalized;
+    runner.bot = compileBot(normalized, this.#cooldownOf);
+    // Grupo NOVO (a config antiga não o tinha) nasce ENGATILHADO: `#armBot` só toca os
+    // engatilhados, e sem esta linha a regra recém-configurada nunca acordaria.
+    for (const group of runner.bot.groups.keys()) {
+      if (runner.botReady[group] === undefined) runner.botReady[group] = true;
+    }
+    runner.exitRules = this.#composeExitRules(normalized);
+    // Grupo que ganhou regra agora precisa acordar. `#armBot` só toca os ENGATILHADOS, e os
+    // que já tinham evento pendente seguem com ele — a invariante "engatilhado ou agendado"
+    // continua valendo do outro lado de uma troca de configuração. Um grupo que SAIU da config
+    // tem `botReady` órfão, e o evento pendente dele vence sem achar slots: não faz nada.
     if (character.alive) this.#armBot(session, character.id);
   }
 
@@ -1610,60 +1686,66 @@ export class HuntRuleset implements Ruleset {
    * monstro por passo, e o custo por instância é o número que a FUN-46 cobra.
    */
   /**
-   * Uma categoria venceu: avalia os slots de cima para baixo e executa a primeira válida
-   * (§13.4). As demais daquela categoria não rodam neste ciclo.
+   * Um grupo do bot venceu: percorre os slots na ORDEM da barra (RP-002) e executa o primeiro
+   * ELEGÍVEL (RP-001). O inelegível é PULADO no MESMO ciclo (RP-003/RP-004).
    *
    * O reagendamento depende do que aconteceu, e a distinção importa:
    *
-   * - **executou** → volta no cooldown da categoria. É o rate limit do §13.5, e ele conta a
-   *   partir da AÇÃO, não do relógio de parede;
-   * - **nenhuma regra valeu, ou o atuador recusou** → ENGATILHA. Não custa evento nenhum até
-   *   o mundo mudar. Uma categoria que reagenda no vazio é cinco eventos por segundo por
-   *   personagem gastos para descobrir que não há nada a fazer.
+   * - **executou** → volta no cooldown do GRUPO (do conteúdo), não num 1 s fixo. É o rate limit
+   *   do ADR 0032 d.2, e ele conta a partir da AÇÃO, não do relógio de parede;
+   * - **nenhum slot elegível** → ENGATILHA, exceto a recusa por COOLDOWN, que volta no
+   *   vencimento do livro que trancou. Um grupo que reagenda no vazio é um evento por segundo
+   *   por personagem gasto para descobrir que não há nada a fazer.
    *
-   * Atuador que recusa (sem mana, sem supply) NÃO consome o cooldown: seria o bot parando um
-   * segundo por ter tentado curar sem ter com quê.
+   * Atuador que recusa (sem mana, sem item, sem alvo) NÃO consome o cooldown: o próximo slot do
+   * MESMO grupo tenta agora (RP-004). Sem mana não melhora com o tempo passar, então a recusa
+   * por falta ENGATILHA ao fim do laço.
    */
-  #onBot(session: Session, category: BotCategory, characterId: string): void {
+  #onBot(session: Session, group: string, characterId: string): void {
     const character = findById(session.participants, characterId);
     if (character === null) return;
     const runner = this.#runnerOf(characterId);
-    runner.botReady[category] = true;
+    runner.botReady[group] = true;
     const bot = runner.bot;
     if (bot === undefined || !character.alive) return;
 
-    const action = bot.select(category, this.#botViewOf(character));
-    if (action === null) return;
-
+    const slots = bot.groups.get(group);
+    if (slots === undefined) return;
+    // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
+    // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
+    const view = this.#botViewOf(character);
     const external = this.#options.actuator;
-    if (external !== undefined) {
-      if (!external.perform(action, this.#botView)) return;
-      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
-      return;
-    }
 
-    const result = this.#perform(session, character, action);
-    if (result.ok) {
-      this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
-      // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
-      // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
-      // para usar a mana que acabou de repor.
-      this.#armBot(session, characterId);
-      // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
-      // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
-      this.#applyRingSwap(session, character);
-      return;
+    let retryInMs = 0;
+    for (let i = 0; i < slots.length; i += 1) {
+      const slot = slots[i] as CompiledSlot;
+      if (!slot.when(view)) continue;                    // condição falsa → PULA (RP-003)
+      if (external !== undefined) {
+        if (!external.perform(slot.act, view)) continue; // recusou → próximo no mesmo ciclo
+        this.#scheduleBot(session, group, characterId, this.#botCooldownMs());
+        return;
+      }
+      const result = this.#perform(session, character, slot.act);
+      if (result.ok) {
+        // O grupo trancou: o próximo vencimento é o cooldown DELE (do conteúdo), não um 1 s
+        // fixo. A magia já iniciou `group:<g>` no `castSpell`; o item sem livro cai no fallback.
+        const wait = character.cooldowns.remainingMs(slot.cooldownKey, session.nowMs);
+        this.#scheduleBot(session, group, characterId, wait > 0 ? wait : this.#botCooldownMs());
+        // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
+        // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
+        // para usar a mana que acabou de repor.
+        this.#armBot(session, characterId);
+        // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
+        // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
+        this.#applyRingSwap(session, character);
+        return;
+      }
+      // Recusa: o próximo slot do MESMO grupo tenta agora. Só a recusa por COOLDOWN carrega
+      // prazo; ela é lembrada para o reagendamento caso nenhum outro slot execute.
+      if (result.retryInMs > retryInMs) retryInMs = result.retryInMs;
     }
-    // Recusa por COOLDOWN volta no vencimento dele; as outras engatilham.
-    //
-    // A distinção não é detalhe. Uma categoria engatilhada só acorda quando o mundo muda, e
-    // "o mundo mudar" pode simplesmente não acontecer: o personagem com a cura em cooldown,
-    // parado, sem levar dano, ficaria sem curar até alguém bater nele de novo. As outras
-    // recusas são o oposto — sem mana e sem gold não melhoram com o tempo passar, e reagendar
-    // por elas seria um evento por segundo para redescobrir a mesma falta.
-    if (result.retryInMs > 0) {
-      this.#scheduleBot(session, category, characterId, result.retryInMs);
-    }
+    // Nenhum elegível: recusa por cooldown volta no vencimento; as outras ENGATILHAM.
+    if (retryInMs > 0) this.#scheduleBot(session, group, characterId, retryInMs);
   }
 
   /**
@@ -2206,7 +2288,7 @@ export class HuntRuleset implements Ruleset {
   /**
    * Os consumíveis que o bot configurou (#419), deduplicados por item e resolvidos no
    * catálogo. É o ÚNICO ponto que lê o `restock` — o override por slot do vocabulário v2
-   * (AB-07) entra aqui quando existir, sem tocar no resto.
+   * (AB-07) entra aqui, sem tocar no resto.
    *
    * A munição entra aqui também (ADR 0032 d.7): `kind: 'ammo'` tem `price` e `restock` como o
    * consumível, e sem reposição o paladino ficaria sem tiro para sempre. Item sem `price` ou
@@ -2215,22 +2297,23 @@ export class HuntRuleset implements Ruleset {
   #configuredConsumables(runner: Runner): readonly ConfiguredConsumable[] {
     const config = runner.botConfig;
     if (config === undefined) return [];
+    const active = config.sets[config.activeSet];
+    if (active === undefined) return [];
     const out: ConfiguredConsumable[] = [];
     const seen = new Set<string>();
-    for (const category of BOT_CATEGORIES) {
-      for (const rule of config[category]) {
-        if (rule.enabled === false || rule.do.kind !== 'item') continue;
-        const itemId = rule.do.itemId;
-        if (seen.has(itemId)) continue;
-        const item = this.#options.items.get(itemId);
-        if (item?.kind !== 'consumable' && item?.kind !== 'ammo') continue;
-        if (item.price === undefined || item.restock === undefined) continue;
-        seen.add(itemId);
-        out.push({
-          itemId, price: item.price, weight: item.weight,
-          batch: item.restock.batch, min: item.restock.min,
-        });
-      }
+    for (const slot of active.slots) {
+      if (slot === null || slot.enabled === false || slot.do.kind !== 'item') continue;
+      const itemId = slot.do.itemId;
+      if (seen.has(itemId)) continue;
+      const item = this.#options.items.get(itemId);
+      if (item?.kind !== 'consumable' && item?.kind !== 'ammo') continue;
+      const restock = slot.restock ?? item.restock;
+      if (item.price === undefined || restock === undefined) continue;
+      seen.add(itemId);
+      out.push({
+        itemId, price: item.price, weight: item.weight,
+        batch: restock.batch, min: restock.min,
+      });
     }
     return out;
   }
@@ -2246,7 +2329,17 @@ export class HuntRuleset implements Ruleset {
     const definition = this.#options.items.get(itemId);
     if (definition?.kind !== 'consumable') return NOT_IN_CATALOG;
     const stack = character.inventory.findStack(itemId);
-    if (stack === null) return { ok: false, reason: 'not-enough-gold', retryInMs: 0 };
+    if (stack === null) {
+      // Sem pilha o item não sai — e a notícia é a mesma do supply v1 (`not-enough-gold`): uma
+      // linha só, para quem estava ausente encontrar o motivo na tela de retorno. O aviso é do
+      // runner e sobrevive ao snapshot.
+      const runner = this.#runnerOf(character.id);
+      if (!runner.warnedNoGold) {
+        runner.warnedNoGold = true;
+        session.record('supply-unaffordable', itemId);
+      }
+      return { ok: false, reason: 'not-enough-gold', retryInMs: 0 };
+    }
 
     const effect = definition.effect;
     const aim = effect?.kind === 'damage'
@@ -2335,32 +2428,31 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Reavalia agora o que está engatilhado (FUN-84).
+   * Reavalia agora o que está engatilhado (FUN-84, AB-07).
    *
    * O mundo mudou de um jeito que pode tornar uma regra válida — o personagem levou dano, um
    * alvo entrou no alcance. Esperar o próximo múltiplo de um relógio para curar quem está
    * caindo é a mesma perda que o golpe engatilhado da FUN-68 corrigiu do outro lado.
    *
-   * Só toca categoria ENGATILHADA: quem tem evento pendente já vai vencer, e agendar de novo
+   * Só toca grupo ENGATILHADO: quem tem evento pendente já vai vencer, e agendar de novo
    * seria a ação dobrada.
    */
   #armBot(session: Session, characterId: string): void {
     const runner = this.#runnerOf(characterId);
     const bot = runner.bot;
     if (bot === undefined) return;
-    for (const category of BOT_CATEGORIES) {
-      if (!runner.botReady[category]) continue;
-      if ((bot.categories.get(category)?.length ?? 0) === 0) continue;
-      this.#scheduleBot(session, category, characterId, 0);
+    for (const group of bot.groups.keys()) {
+      if (!runner.botReady[group]) continue;
+      this.#scheduleBot(session, group, characterId, 0);
     }
   }
 
-  /** O ÚNICO lugar que agenda categoria. É o que torna "engatilhada ou agendada" verdade. */
+  /** O ÚNICO lugar que agenda grupo. É o que torna "engatilhado ou agendado" verdade. */
   #scheduleBot(
-    session: Session, category: BotCategory, characterId: string, delayMs: number,
+    session: Session, group: string, characterId: string, delayMs: number,
   ): void {
-    this.#runnerOf(characterId).botReady[category] = false;
-    session.scheduleIn(BOT_EVENT[category], delayMs, {
+    this.#runnerOf(characterId).botReady[group] = false;
+    session.scheduleIn(botEvent(group), delayMs, {
       // Depois do movimento e do ataque: o bot decide sobre o mundo já resolvido do instante.
       priority: EventPriority.Housekeeping, subject: characterId,
     });
@@ -2373,7 +2465,7 @@ export class HuntRuleset implements Ruleset {
    * jogador é a que ele consegue explicar — `exitRules` é costura de teste e do dia em que a
    * hunt tiver regra própria.
    */
-  #composeExitRules(config: BotConfig | undefined): readonly HuntExitRule[] {
+  #composeExitRules(config: BotConfigV2 | undefined): readonly HuntExitRule[] {
     if (config === undefined) return this.#injectedExitRules;
     return [...compileExitRules(config.exit, this.#options.items), ...this.#injectedExitRules];
   }
@@ -3827,9 +3919,9 @@ export interface HuntSessionOptions {
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
-  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
   readonly partyOptions?: PartyOptions;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
@@ -3853,9 +3945,9 @@ export interface HuntRulesetExtras {
   readonly exitRules?: readonly HuntExitRule[];
   readonly premium?: boolean;
   /** A configuração do bot, crua. Ver `HuntRulesetOptions.botConfig`. */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigInput;
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
-  readonly botConfigs?: Readonly<Record<string, BotConfig>>;
+  readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
   readonly partyOptions?: PartyOptions;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
@@ -3910,7 +4002,8 @@ export function createHuntRuleset(
     ...(botConfigs === undefined ? {} : { botConfigs }),
     ...(partyOptions === undefined ? {} : { partyOptions }),
     ...(actuator === undefined ? {} : { actuator }),
-    // O cooldown de categoria vem do CONTEÚDO (§13.5), como todo parâmetro de balanceamento.
+    // O cooldown de FALLBACK do grupo vem do CONTEÚDO (§13.5), como todo parâmetro de
+    // balanceamento; o livro do conteúdo (`group:<g>`) tem precedência.
     botCooldownMs: content.bot.categoryCooldownMs,
   });
 }
