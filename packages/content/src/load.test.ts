@@ -1,5 +1,5 @@
 import {
-  cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
+import { BOT_CATEGORIES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -293,10 +294,10 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('carrega a Avalanche Rune como supply de ATAQUE, com gate e área (#165)', () => {
-    // A runa é supply (debita gold, sem item físico) e não magia: mora em `supplies/`, tem
-    // `requires` — o servidor recusa abaixo de level 30 / magic level 4 — e a forma é o
-    // círculo de raio 3 no alvo. O gate dela é o primeiro `requires` em supply do repositório.
+  it('carrega a Avalanche Rune como consumível de ATAQUE, com gate e área (#165, AB-01)', () => {
+    // A runa é item consumível (ADR 0032 d.6) e aparece na projeção v1 como supply de dano:
+    // tem `requires` — o servidor recusa abaixo de level 30 / magic level 4 — e a forma é o
+    // círculo de raio 3 no alvo. O gate dela é o primeiro `requires` de consumível do repositório.
     // Mutação que mata: apagar `requires` do arquivo — o default `{}` liberaria a runa no level 1.
     const content = loadContent(DATA);
     const rune = content.supplies.get('avalanche-rune');
@@ -306,6 +307,63 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
     expect(content.supplies.get('health-potion')?.requires).toEqual({});
+  });
+
+  it('os quatro consumíveis são itens empilháveis com price/group/restock/effect (AB-01)', () => {
+    const content = loadContent(DATA);
+    for (const id of ['health-potion', 'mana-potion', 'avalanche-rune', 'blessing-charge']) {
+      const item = content.items.get(id);
+      expect(item, `item "${id}"`).toBeDefined();
+      expect(item?.kind, id).toBe('consumable');
+      expect(item?.stackable, id).toBe(true);
+      expect(item?.price, id).toBeGreaterThanOrEqual(0);
+      expect(item?.group, id).toBeDefined();
+      expect(item?.restock, id).toBeDefined();
+      expect(item?.effect, id).toBeDefined();
+      expect(item?.weight, id).toBeGreaterThan(0);
+    }
+  });
+
+  it('content.supplies é a projeção derivada dos itens, e exclui a bênção (AB-01, compat v1)', () => {
+    const content = loadContent(DATA);
+    expect(content.supplies.get('health-potion')).toEqual({
+      id: 'health-potion', name: 'Poção de Vida', price: 45,
+      effect: { kind: 'heal', amount: 80 }, requires: {},
+    });
+    // `blessing` fica de fora: o `sim` v1 não a executa, então não é referenciável pela config v1.
+    expect(content.supplies.has('blessing-charge')).toBe(false);
+    for (const supply of content.supplies.values()) {
+      expect(content.items.get(supply.id)?.kind, supply.id).toBe('consumable');
+    }
+  });
+
+  it('appearances.supplies É conferido contra a projeção, de um lado só (AB-01)', () => {
+    // A linha órfã continua sendo recusada, mas consumível sem efeito é mudo e válido — por
+    // isso a conferência é da tabela para a projeção, e não o contrário (FUN-109).
+    const content = loadContent(DATA);
+    expect(content.appearances?.supplies['health-potion']).toEqual({ effect: 14 });
+    for (const id of Object.keys(content.appearances?.supplies ?? {})) {
+      expect(content.supplies.has(id), id).toBe(true);
+    }
+  });
+
+  it('todo supplyId da baseline de bot resolve e é item consumível (AB-01)', () => {
+    // A config v1 salva continua válida: o id aponta para a projeção, que sai do catálogo de
+    // itens. A remoção do token é a AB-03 (#418), dona da migração v1 → v2.
+    const content = loadContent(DATA);
+    const config = content.bot.defaultConfig;
+    const usados = BOT_CATEGORIES.flatMap((category) => config?.[category] ?? [])
+      .flatMap((rule) => (rule.do.kind === 'supply' ? [rule.do.supplyId] : []));
+    // A baseline TEM ao menos um supplyId; sem isso o laço abaixo passaria vazio.
+    expect(usados.length).toBeGreaterThan(0);
+    for (const id of usados) {
+      expect(content.supplies.has(id), id).toBe(true);
+      expect(content.items.get(id)?.kind, id).toBe('consumable');
+    }
+  });
+
+  it('data/supplies deixou de existir: o catálogo é items/ (AB-01)', () => {
+    expect(existsSync(join(DATA, 'supplies'))).toBe(false);
   });
 
   it('o pacote que a tabela cita tem inventário em packs/, e a tabela passa por ele (FUN-21)', () => {

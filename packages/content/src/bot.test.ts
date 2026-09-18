@@ -31,7 +31,7 @@ const content = buildContent({
   // Aparência derivada (FUN-94): este arquivo valida regra de bot, não arte.
   appearances: [{
     id: 'baseline', pack: 'placeholder',
-    monsters: { rat: 1, wolf: 2 }, items: { 'spike-sword': 3, 'life-ring': 4 },
+    monsters: { rat: 1, wolf: 2 }, items: { 'spike-sword': 3, 'life-ring': 4, 'health-potion': 5 },
   }],
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
@@ -59,11 +59,12 @@ const content = buildContent({
     id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
     effect: { kind: 'heal', amount: 60 },
   }],
-  supplies: [{
-    id: 'health-potion', name: 'Poção de Vida', price: 45,
-    effect: { kind: 'heal', amount: 80 },
-  }],
   items: [
+    {
+      id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
+      stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
+      restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
+    },
     {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
       slot: 'hand', weight: 50, value: 0, attack: 24,

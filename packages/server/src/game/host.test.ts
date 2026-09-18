@@ -3272,7 +3272,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
    * usa, e o que este arquivo prova é o desenho, não o gate.
    */
   const RUNE = {
-    id: 'rune', name: 'Runa', price: 3,
+    id: 'rune', name: 'Runa', kind: 'consumable',
+    stackable: true, weight: 1, value: 0, price: 3, group: 'attack',
+    restock: { batch: 20, min: 5 },
     effect: { kind: 'damage', basePower: 40, range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
   };
   /** A tabela de aparências do teste. Números do contrato, para o teste ler igual ao real. */
@@ -3371,10 +3373,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
   }> = {}) {
     const raw = rawTestContent();
     // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
-    // refeita com eles, e a de teste (`TABLE`) entra por cima só no host.
-    const armory = over.weapon === undefined
-      ? {}
-      : { items: [BOW, WAND], ammunition: [ARROW] };
+    // refeita com eles, e a de teste (`TABLE`) entra por cima só no host. A runa agora é item
+    // consumível (AB-01), então entra pela mesma porta que as armas.
+    const extraItems = over.weapon === undefined ? [RUNE] : [RUNE, BOW, WAND];
+    const armory = {
+      items: [...(raw.items ?? []), ...extraItems],
+      ...(over.weapon === undefined ? {} : { ammunition: [ARROW] }),
+    };
     const armed = over.weapon === undefined
       ? {}
       : {
@@ -3397,9 +3402,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
           (over.skills as readonly { id: string }[]).some((skill) => skill.id === family.skillId)),
       }),
       ...armory,
-      ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
+      appearances: [placeholderAppearances({ ...raw, ...armory })],
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
-      supplies: [...(raw.supplies ?? []), RUNE],
       progression: [{
         ...TEST_PROGRESSION, startingMana: 200,
         ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),

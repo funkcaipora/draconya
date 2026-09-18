@@ -31,7 +31,6 @@ export function loadContent(dir: string): Content {
     bestiary: readJsonDir(join(dir, 'bestiary')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
-    supplies: readJsonDir(join(dir, 'supplies')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
     // As famílias de arma (CMB-05): alcance, tipo, recurso, fórmula e a skill que as escala —

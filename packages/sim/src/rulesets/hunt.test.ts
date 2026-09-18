@@ -118,9 +118,17 @@ const spells = [
     effect: { kind: 'damage', power: 80, range: 3, area: { shape: 'circle', radius: 2, centered: 'target' } },
   },
 ];
-const supplies = [
-  { id: 'health-potion', name: 'Poção de Vida', price: 45, effect: { kind: 'heal', amount: 80 } },
-  { id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: { kind: 'mana', amount: 100 } },
+const consumables = [
+  {
+    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable', stackable: true,
+    weight: 2.7, value: 0, price: 45, group: 'potion', restock: { batch: 50, min: 10 },
+    effect: { kind: 'heal', amount: 80 },
+  },
+  {
+    id: 'mana-potion', name: 'Poção de Mana', kind: 'consumable', stackable: true,
+    weight: 2.7, value: 0, price: 50, group: 'potion', restock: { batch: 50, min: 10 },
+    effect: { kind: 'mana', amount: 100 },
+  },
 ];
 
 // Skills de teste (FUN-75). Curva curta de propósito: com base 2 dá para contar os golpes na
@@ -198,7 +206,8 @@ const items = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells, supplies, skills, weaponFamilies, items,
+    stamina: [stamina], party: [party], spells, skills, weaponFamilies,
+    items: [...items, ...consumables],
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -1435,7 +1444,7 @@ const withSpells = (
   config: BotConfig,
   over: {
     health?: number; mana?: number; gold?: number;
-    spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
+    spells?: readonly unknown[]; items?: readonly unknown[]; monsters?: boolean;
     combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
@@ -1450,7 +1459,7 @@ const withSpells = (
     }],
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
-    ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
+    ...(over.items === undefined ? {} : { items: over.items }),
     ...(over.combat === undefined ? {} : { combat: over.combat }),
     ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
   }));
@@ -1650,14 +1659,14 @@ describe('supply (FUN-77)', () => {
     // O personagem entra com ZERO e a poção custa exatamente o loot de um rato: a primeira
     // tentativa é recusada, e a que vem depois do primeiro abate passa. Se o saldo ignorasse o
     // delta, nenhuma passaria nunca.
-    const barata = [{ ...supplies[0], price: 3 }, supplies[1]];
+    const barata = [{ ...consumables[0], price: 3 }, consumables[1]];
     const { session, hero } = withSpells(botConfig({
       attack: [{
         when: { kind: 'targets', op: '>=', count: 1 },
         do: { kind: 'spell', spellId: 'strike' },
       }],
       potion: [potionRule('health-potion', 100)],
-    }), { health: 1_000, gold: 0, supplies: barata });
+    }), { health: 1_000, gold: 0, items: barata });
 
     run(session, 20_000, 100);
 
@@ -4410,14 +4419,15 @@ describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
 
 describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () => {
   const rune = {
-    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+    id: 'avalanche-rune', name: 'Avalanche Rune', kind: 'consumable', stackable: true,
+    weight: 1.2, value: 0, price: 14, group: 'attack', restock: { batch: 20, min: 5 },
     requires: { level: 30, magicLevel: 0 },
     effect: { kind: 'damage', basePower: 400, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
   };
   const withRune = (level: number, gold: number, hz = 10) => {
     const { session, hero } = withSpells(botConfig({
       rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
-    }), { gold, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    }), { gold, items: [...items, ...consumables, rune], health: 5_000 }, 'bold');
     hero.level = level;
     hero.xp = totalXpForLevel(level, progression as Progression);
     run(session, 60_000, 1000 / hz);
@@ -4473,7 +4483,7 @@ describe('a runa Avalanche na categoria rune (#165, ADR 0026 decisão 8)', () =>
     // mesma recusa que `castSpell` já deixa muda para a magia.
     const { session, hero } = withSpells(botConfig({
       rune: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
-    }), { gold: 10_000, supplies: [...supplies, rune], monsters: false });
+    }), { gold: 10_000, items: [...items, ...consumables, rune], monsters: false });
     hero.level = 30;
     hero.xp = totalXpForLevel(30, progression as Progression);
 
@@ -4733,9 +4743,13 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     ...rat, health: 30, experience: 0,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }, { itemId: 'loot-cheese', chance: 1, min: 1, max: 1 }] },
   };
-  const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
+  const potion = {
+    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable', stackable: true,
+    weight: 2.7, value: 0, price: 14, group: 'potion', restock: { batch: 50, min: 10 },
+    effect: { kind: 'heal', amount: 80 },
+  };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
-    monsters: [rich], items: [...items, sword, cheese], supplies: [potion],
+    monsters: [rich], items: [...items, sword, cheese, potion],
     progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
     ...over,
   }));
@@ -4933,9 +4947,13 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
     ...rat, health: 30, experience: 0,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
   };
-  const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
+  const potion = {
+    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable', stackable: true,
+    weight: 2.7, value: 0, price: 14, group: 'potion', restock: { batch: 50, min: 10 },
+    effect: { kind: 'heal', amount: 80 },
+  };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
-    monsters: [rich], items: [...items, sword], supplies: [potion],
+    monsters: [rich], items: [...items, sword, potion],
     progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
     ...over,
   }));
@@ -5403,7 +5421,8 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
 
   it('runa: rune/arcano', () => {
     const rune = {
-      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+      id: 'avalanche-rune', name: 'Avalanche Rune', kind: 'consumable', stackable: true,
+      weight: 1.2, value: 0, price: 14, group: 'attack', restock: { batch: 20, min: 5 },
       requires: { level: 1, magicLevel: 0 },
       effect: {
         kind: 'damage', basePower: 400, range: 4,
@@ -5415,7 +5434,7 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
         when: { kind: 'targets', op: '>=', count: 1 },
         do: { kind: 'supply', supplyId: 'avalanche-rune' },
       }],
-    }), { gold: 10_000, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    }), { gold: 10_000, items: [...items, ...consumables, rune], health: 5_000 }, 'bold');
     run(session, 20_000, 100);
     expect(passed('rune', 'arcane')).toBe(true);
   });

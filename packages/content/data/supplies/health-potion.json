@@ -1,7 +1,0 @@
-{
-  "id": "health-potion",
-  "name": "Poção de Vida",
-  "price": 45,
-  "effect": { "kind": "heal", "amount": 80 },
-  "_open": "Preço de referência do §20.2 (preços do Tibia como ponto de partida). Não é valor final."
-}

@@ -53,7 +53,7 @@ import { ReceiptStore } from '../receipts.js';
 import { SnapshotStore } from '../snapshots.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
-import { rawTestContent } from '../testing/content.js';
+import { rawTestContent, TEST_SUPPLY } from '../testing/content.js';
 import { totalXpForLevel } from '@draconya/sim';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
@@ -79,7 +79,7 @@ const raw: RawContent = {
   }, {
     id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
-  }],
+  }, TEST_SUPPLY],
   ammunition: [{
     id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0,
   }, {

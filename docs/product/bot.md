@@ -66,7 +66,7 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 | `kind` | Campo | Catálogo |
 |---|---|---|
 | `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
-| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77; a runa de ataque, #165, é supply e vai na categoria `rune`) |
+| `supply` | `supplyId` | projeção v1 `content.supplies`, derivada de `packages/content/data/items/*.json` (AB-01; a runa de ataque, #165, é item consumível e vai na categoria `rune`). O token `supplyId` sai na AB-03 (#418) |
 | `item` | `itemId` | `packages/content/data/items/*.json` (FUN-76) — a regra é **sempre** recusada: o catálogo existe, mas falta o atuador que usa item (#160 deu o inventário, não o atuador) |
 
 Toda regra pode carregar `enabled: false` (#162): fica no slot, sai da avaliação. Ausente é ligada.
@@ -172,7 +172,7 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 | Slots — Potions | 4 (2 vida + 2 mana) | caminho previsto: `packages/content/bot` |
 | Slots — Magias de ataque | 10 | caminho previsto: `packages/content/bot` |
 | Slots — Runas e itens | 10 | caminho previsto: `packages/content/bot` |
-| Avalanche Rune — preço por uso / requisitos | 14 gold; level 30, magic level 4 (provisórios) | `packages/content/data/supplies/avalanche-rune.json` |
+| Avalanche Rune — preço por uso / requisitos | 14 gold; level 30, magic level 4 (provisórios) | `packages/content/data/items/avalanche-rune.json`, campos `price` e `requires` |
 | Slots — Magias de suporte | 10 | caminho previsto: `packages/content/bot` |
 | Cooldown por categoria | 1s | caminho previsto: `packages/content/bot` |
 | Teto de ações por segundo por personagem | 5 (derivado: 5 categorias × 1 cooldown cada — não é número do PRD, é consequência calculada em `docs/technical-architecture.md` §5) | caminho previsto: `packages/content/bot` |

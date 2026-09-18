@@ -212,10 +212,14 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withRune = {
       ...raw,
-      supplies: [
-        ...(raw.supplies ?? []),
-        { id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, requires: { level: 30, magicLevel: 4 },
-          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } } },
+      items: [
+        ...(raw.items ?? []),
+        {
+          id: 'avalanche-rune', name: 'Avalanche Rune', kind: 'consumable',
+          stackable: true, weight: 1.2, value: 0, price: 14, group: 'attack',
+          restock: { batch: 20, min: 5 }, requires: { level: 30, magicLevel: 4 },
+          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } },
+        },
       ],
     };
     const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));

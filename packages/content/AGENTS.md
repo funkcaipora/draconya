@@ -217,20 +217,23 @@ por isso tem lugar próprio, em vez de um `itemId: "gold-coin"` que o código te
 pelo nome. `items` só aceita lista vazia enquanto não houver catálogo de itens; `buildContent`
 recusa o resto, porque creditar um item fantasma no primeiro abate é pior que não subir.
 
-## Magia e supply (FUN-74, FUN-77)
+## Magia e consumível (FUN-74, FUN-77, AB-01)
 
-`spells/*.json` e `supplies/*.json` são catálogos como os outros: **a engine é dona do
-mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura e
-quanto custa em gold — nada disso mora em `sim`.
+`spells/*.json` e os consumíveis de `items/*.json` são catálogos como os outros: **a engine é
+dona do mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura
+e quanto custa em gold — nada disso mora em `sim`.
 
 O `effect` é uma união discriminada por `kind`, fechada como o vocabulário do bot e pela mesma
 razão: o `sim` só executa o que conhece, e uma magia com efeito desconhecido é recusada no boot
 em vez de virar um slot morto que ninguém explica.
 
-**Supply não é item** (§20.1). Ele tem `price` e não tem peso, slot nem instância — usar debita
-gold direto. É por isso que ele tem pasta própria em vez de esperar o catálogo de itens, que é
-M8. `validateBotConfig` cruza `spellId` e `supplyId` contra estes dois catálogos; `itemId` é
-sempre recusado, pela mesma razão que `loot.items` só aceita lista vazia.
+**Consumível É item** (AB-01, ADR 0032 decisão 6). Poção, runa e carga de bênção vivem em
+`items/*.json` com `kind: 'consumable'`, `stackable`, peso, `value`, `price` de COMPRA, `group` e
+`restock { batch, min }`; a pasta `data/supplies/` deixou de existir. `content.supplies` sobrevive
+como **projeção de compatibilidade v1**, derivada dos itens de `heal`/`mana`/`damage` (a bênção
+fica de fora: o `sim` v1 não a executa), e é temporária — sai na AB-03 (#418), dona do vocabulário
+v2 e da migração que aposenta o token `supplyId`. Até lá `validateBotConfig` cruza `supplyId`
+contra a projeção; `itemId` continua recusado por falta de atuador.
 
 ## Skills (FUN-75)
 

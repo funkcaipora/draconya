@@ -888,8 +888,9 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     effect: { kind: 'heal', amount: 60 },
   };
   const potion = {
-    id: 'health-potion', name: 'Poção de Vida', price: 45,
-    effect: { kind: 'heal', amount: 80 },
+    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
+    stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
+    restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
   };
   // Uma magia de DANO, porque é ela que tem projétil: o teste de `missile` precisa de uma
   // magia que exista no catálogo, senão a linha órfã é recusada antes de o tipo do campo
@@ -901,10 +902,11 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
   // A base já traz o placeholder com as três seções vazias; aqui a tabela é EXPLÍCITA, como
   // no bloco da FUN-94, porque é dela que o teste fala.
   const tabela = (over: Record<string, unknown> = {}) => [{
-    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {}, ...over,
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 },
+    items: { 'health-potion': 266 }, ...over,
   }];
   const withCatalogue = (over: Partial<RawContent> = {}): RawContent =>
-    base({ spells: [heal], supplies: [potion], ...over });
+    base({ spells: [heal], items: [potion], ...over });
 
   it('exposes effect and missile by spell id, and the effect by supply id', () => {
     // Só ids (invariante 6): quem sabe que 13 é "magic blue" é o pacote, nunca este arquivo.
@@ -954,7 +956,7 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     // É o que deixa toda fixture que fala de magia continuar montando sem escrever tabela à
     // mão — e o que garante que `appearances.spells` nunca é `undefined` para quem consome.
     // Mutação que mata: apagar `spells: {}` de `placeholderAppearances`.
-    const placeholder = placeholderAppearances({ spells: [heal], supplies: [potion] });
+    const placeholder = placeholderAppearances({ spells: [heal], items: [potion] });
     expect(placeholder.spells).toEqual({});
     expect(placeholder.supplies).toEqual({});
     expect(placeholder.hits).toEqual({});

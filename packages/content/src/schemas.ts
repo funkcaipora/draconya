@@ -471,6 +471,35 @@ export const ITEM_ORIGINS = [
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 /**
+ * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v1 ainda não os lê (AB-07):
+ * aqui o grupo é DECLARADO pelo conteúdo, não executado.
+ */
+export const CONSUMABLE_GROUPS = ['potion', 'attack', 'healing', 'support'] as const;
+export type ConsumableGroup = (typeof CONSUMABLE_GROUPS)[number];
+
+/**
+ * O efeito do consumível. `blessing` entra agora (a TP-03 a consome em M22); o `sim` v1 a
+ * recusa até lá — a projeção `Supply` a deixa de fora justamente por isso.
+ */
+export const consumableEffectSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+  z.object({
+    kind: z.literal('damage'),
+    basePower: z.number().int().positive(),
+    range: z.number().int().positive(),
+    area: z.object({
+      shape: z.literal('circle'),
+      radius: z.number().int().positive(),
+      centered: z.literal('target').default('target'),
+    }),
+    damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+  }),
+  z.object({ kind: z.literal('blessing') }),
+]);
+export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
+
+/**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
  * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
@@ -494,7 +523,9 @@ export const itemSchema = z.strictObject({
    * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). Munição
    * NÃO é item (decisão 3): é `ammunitionSchema`, uma seleção que debita gold por tiro.
    */
-  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other']),
+  kind: z.enum([
+    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable',
+  ]),
   slot: z.enum(ITEM_SLOTS).optional(),
   /**
    * Ocupa as duas mãos (o bow): equipar recusa escudo, e vice-versa — a regra é do `sim`
@@ -544,6 +575,8 @@ export const itemSchema = z.strictObject({
   requires: z.object({
     level: z.number().int().positive().optional(),
     vocationId: z.string().min(1).optional(),
+    /** O `magicLevel` da runa (#165). Só consumível de dano o usa. */
+    magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
   /**
    * Cargas e duração (§21.3). **Declarados, e ainda não consumidos por ninguém.**
@@ -562,7 +595,34 @@ export const itemSchema = z.strictObject({
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
+  /**
+   * Preço de COMPRA (reposição por lote, ADR 0032 d.6). Só consumível; `value` é o de venda.
+   * Declarado e não executado nesta task — a AB-04 (#419) repõe pelo ledger.
+   */
+  price: z.number().int().nonnegative().optional(),
+  /** Grupo de cooldown do conteúdo (ADR 0032 d.2). Só consumível; o motor v1 o ignora (AB-07). */
+  group: z.enum(CONSUMABLE_GROUPS).optional(),
+  /** Lote e mínimo da reposição idle-first (ADR 0032 d.6). Declarado; a AB-04 o executa. */
+  restock: z.object({
+    batch: z.number().int().positive(),
+    min: z.number().int().nonnegative(),
+  }).optional(),
+  /** O efeito do consumível (ADR 0032 d.6). Só em `kind: 'consumable'`. */
+  effect: consumableEffectSchema.optional(),
   _open: z.string().optional(),
+}).superRefine((item, ctx) => {
+  // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
+  // outro. Zod descartaria um `restock` num anel em silêncio se o schema fosse aberto.
+  if (item.kind === 'consumable') {
+    if (!item.stackable) ctx.addIssue({ code: 'custom', message: 'consumível precisa de `stackable: true`' });
+    if (item.group === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `group`' });
+    if (item.restock === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `restock`' });
+    if (item.price === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `price`' });
+    if (item.effect === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `effect`' });
+  } else if (item.group !== undefined || item.restock !== undefined
+    || item.price !== undefined || item.effect !== undefined) {
+    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `group`/`restock`/`price`/`effect`' });
+  }
 });
 
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
@@ -1819,51 +1879,19 @@ export const spellSchema = z.object({
 });
 
 /**
- * Um supply (FUN-77, §20.1 **[DECIDIDO]**).
- *
- * Poção e runa **não são itens físicos**: usar debita gold direto. Por isso supply tem preço e
- * não tem peso, slot nem instância — e por isso ele mora aqui, e não no catálogo de itens que
- * ainda não existe.
+ * A projeção do item consumível para o atuador v1 (FUN-77), DEPRECIADA. Existe só para a
+ * config v1 salva continuar válida até a AB-03 (#418) migrá-la. `blessing` fica de fora: o
+ * `sim` v1 não a executa. Sai junto com o token `supplyId` na AB-03.
  */
-export const supplySchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
-  price: z.number().int().nonnegative(),
-  effect: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
-    z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
-    /**
-     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
-     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
-     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
-     */
-    z.object({
-      kind: z.literal('damage'),
-      basePower: z.number().int().positive(),
-      range: z.number().int().positive(),
-      area: z.object({
-        shape: z.literal('circle'),
-        radius: z.number().int().positive(),
-        centered: z.literal('target').default('target'),
-      }),
-      /**
-       * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
-       * Avalanche é gelo, e o arquivo declara.
-       */
-      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
-    }),
-  ]),
-  /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
-  requires: z.object({
-    level: z.number().int().positive().optional(),
-    magicLevel: z.number().int().nonnegative().optional(),
-  }).default(() => ({})),
-  _open: z.string().optional(),
-});
+export type Supply = {
+  readonly id: string;
+  readonly name: string;
+  readonly price: number;
+  readonly effect: Extract<ConsumableEffect, { kind: 'heal' | 'mana' | 'damage' }>;
+  readonly requires: { readonly level?: number; readonly magicLevel?: number };
+};
 
 export type Spell = z.infer<typeof spellSchema>;
-export type Supply = z.infer<typeof supplySchema>;
 
 /** O monstro como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type MonsterDefinition = z.infer<typeof monsterSchema>;

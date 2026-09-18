@@ -16,7 +16,7 @@ import {
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   ammunitionSchema, bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
-  supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
+  tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
@@ -54,7 +54,11 @@ export interface Content {
   readonly bot: BotLimits;
   /** Catálogo de magias (§4.1). Custo, cooldown e efeito são conteúdo, nunca motor. */
   readonly spells: ReadonlyMap<string, Spell>;
-  /** Catálogo de supplies (§20.1). Poção e runa debitam gold; não são itens físicos. */
+  /**
+   * A projeção de compatibilidade v1 (FUN-77), derivada dos itens consumíveis — o catálogo
+   * `supplies/` deixou de existir (ADR 0032 d.6). DEPRECIADA: fica até a AB-03 (#418) migrar a
+   * config v1 para o vocabulário v2 e aposentar o token `supplyId`.
+   */
   readonly supplies: ReadonlyMap<string, Supply>;
   /** Skills que sobem por uso (§9.4). Vazio é um jogo em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
@@ -116,7 +120,6 @@ export interface RawContent {
   readonly bestiary?: readonly unknown[];
   readonly bot?: readonly unknown[];
   readonly spells?: readonly unknown[];
-  readonly supplies?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
   /** As famílias de arma (CMB-05), `weapon-families/*.json`. */
@@ -473,7 +476,6 @@ export function buildContent(raw: RawContent): Content {
     );
   }
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
-  const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   // As famílias de arma (CMB-05) são compiladas com as skills: o `damagePerLevel` da skill
   // apontada vira o `skillFactor` da família, e rebalanceá-la rebalanceia todas as famílias.
@@ -485,6 +487,25 @@ export function buildContent(raw: RawContent): Content {
   // o `ammoFamily` do arquivo); o compilado é o que o `sim` lê.
   const rawItems = parseAll('item', raw.items ?? [], itemSchema, problems);
   const itemDefinitions = compileItems(rawItems, weaponFamilies, skills);
+
+  // A projeção v1 (FUN-77) sai dos ITENS: o catálogo `supplies/` deixou de existir (ADR 0032
+  // d.6). Fica até a AB-03 (#418) migrar a config v1 para o vocabulário v2 e aposentar o token
+  // `supplyId`. `blessing` fica de fora: o `sim` v1 não a executa (TP-03).
+  const supplies = new Map<string, Supply>();
+  for (const item of itemDefinitions.values()) {
+    if (item.kind !== 'consumable' || item.effect === undefined || item.price === undefined) continue;
+    if (item.effect.kind === 'blessing') continue;
+    supplies.set(item.id, {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      effect: item.effect,
+      requires: {
+        ...(item.requires.level === undefined ? {} : { level: item.requires.level }),
+        ...(item.requires.magicLevel === undefined ? {} : { magicLevel: item.requires.magicLevel }),
+      },
+    });
+  }
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -984,7 +1005,6 @@ export function buildContent(raw: RawContent): Content {
     ...(party?._open === undefined ? [] : [`party/${party.id}: ${party._open}`]),
     ...(bestiary?._open === undefined ? [] : [`bestiary/${bestiary.id}: ${bestiary._open}`]),
     ...openOf('spell', spells),
-    ...openOf('supply', supplies),
     ...openOf('skill', skills),
     ...openOf('item', items),
     ...openOf('munição', ammunition),

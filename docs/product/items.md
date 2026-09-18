@@ -78,6 +78,29 @@ motivo certo: não falta catálogo, falta inventário.
 `charges` e `durationMs` estão declarados no schema e **ninguém os consome** (§21.3). A forma
 entra agora para o catálogo não mudar quando a mecânica existir.
 
+### Consumíveis no catálogo (AB-01, ADR 0032 decisão 6)
+
+Poção, runa e carga de bênção deixaram de ser um catálogo abstrato e passaram a ser **itens do
+catálogo `items/`**: empilháveis, com peso, `value`, `price` (preço de COMPRA, para a reposição
+por lote), `group` (grupo de cooldown) e `restock { batch, min }`. O catálogo
+`packages/content/data/supplies/` deixou de existir. Usar ainda debita gold por uso — o consumo
+da pilha e a reposição por lote são a AB-04 (#419), e o motor por grupo é a AB-07 (#422); aqui
+`group` e `restock` são **declarados**, não executados.
+
+| Item | Efeito | `group` | `restock` (lote/mínimo) | `price` | Arquivo |
+|---|---|---|---|---|---|
+| `health-potion` | `heal` 80 | `potion` | 50 / 10 | 45 | `data/items/health-potion.json` |
+| `mana-potion` | `mana` 100 | `potion` | 50 / 10 | 50 | `data/items/mana-potion.json` |
+| `avalanche-rune` | `damage` gelo, BP 45, raio 3, `requires { level: 30, magicLevel: 4 }` | `attack` | 20 / 5 | 14 | `data/items/avalanche-rune.json` |
+| `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `support` | 1 / 0 | 0 | `data/items/blessing-charge.json` |
+
+`content.supplies` continua existindo como **projeção de compatibilidade v1**, derivada dos itens
+consumíveis de `heal`/`mana`/`damage` — a carga de bênção fica de fora porque o `sim` v1 não a
+executa. É temporária: sai quando a AB-03 (#418) migrar a config v1 para o vocabulário v2 e
+aposentar o token `supplyId`. A aparência de EFEITO continua em
+`data/appearances/baseline.json` (seção `supplies`), conferida de um lado só (FUN-109); o ÍCONE
+do item vive na seção `items` da mesma tabela.
+
 ## Inventário e equipamento (FUN-82)
 
 **Capacidade é peso**, no paradigma do Tibia (§21.5): a mochila cabe o que o personagem aguenta,
@@ -279,6 +302,7 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
+| Consumíveis — peso / `value` / `price` / `group` / `restock` | poção de vida 2,7 oz / 0 / 45 / `potion` / 50-10 `[ABERTO — preço e lote provisórios]`; poção de mana 2,7 oz / 0 / 50 / `potion` / 50-10 `[ABERTO — idem]`; avalanche rune 1,2 oz / 0 / 14 / `attack` / 20-5 `[ABERTO — idem]`; carga de bênção 1 oz / 0 / 0 / `support` / 1-0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/{health-potion,mana-potion,avalanche-rune,blessing-charge}.json` |
 
 ## Em aberto
 
@@ -305,8 +329,10 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
   do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
   peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o
   que não cabe no peso. Sem bolsa dentro de mochila. Issues #160, #161.
-- **Runa é supply de ataque** (decisão 8): a Avalanche é a primeira, com `requires { level,
-  magicLevel }` e preço por uso; a categoria `rune` do bot a lança. Issue #165.
+- **Runa é consumível de ataque** (decisão 8, revista pela AB-01): a Avalanche é a primeira, com
+  `requires { level, magicLevel }` e `price` de compra; a categoria `rune` do bot a lança. Desde a
+  AB-01 ela é item empilhável de `data/items/avalanche-rune.json`, e a projeção v1 a expõe como
+  supply de dano até a AB-03 (#418). Issue #165.
 
 ## A tela (FUN-90)
 

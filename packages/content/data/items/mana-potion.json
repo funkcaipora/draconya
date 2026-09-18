@@ -1,0 +1,13 @@
+{
+  "id": "mana-potion",
+  "name": "Poção de Mana",
+  "kind": "consumable",
+  "stackable": true,
+  "weight": 2.7,
+  "value": 0,
+  "price": 50,
+  "group": "potion",
+  "restock": { "batch": 50, "min": 10 },
+  "effect": { "kind": "mana", "amount": 100 },
+  "_open": "Consumível da AB-01 (ADR 0032 d.6): preço de referência do §20.2, peso 2,7 oz e o lote 50/mínimo 10 da reposição são provisórios. Aparência 268 (objeto do pacote 1332) conferida de olho no PNG do primeiro sprite."
+}

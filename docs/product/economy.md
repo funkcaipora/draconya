@@ -59,8 +59,8 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
 | Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
-| Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json` |
-| Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json` |
+| Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/items/health-potion.json`, campo `price` |
+| Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/items/mana-potion.json`, campo `price` |
 | Preço por tiro da munição | arrow 0 (grátis), sniper arrow 5 `[ABERTO — valor provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — valor provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/*.json`, `price` |
 
 ## Em aberto
@@ -69,9 +69,12 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 
 ## Supply abstrato, na prática (FUN-77)
 
-§20.1 **[DECIDIDO]**: poção e runa não existem fisicamente — usar debita gold direto. Por isso um
-supply tem `price` e não tem peso, slot nem instância, e por isso ele mora em
-`packages/content/data/supplies/` e não no catálogo de itens.
+§20.1 **[REVOGADO em parte]**: desde a AB-01 (ADR 0032 decisão 6) poção e runa **são itens**
+empilháveis do catálogo `data/items/`, com peso, `price` de compra e `restock`. O catálogo
+`data/supplies/` deixou de existir. O que sobrevive desta seção é a **projeção de compatibilidade
+v1** (`content.supplies`), derivada dos itens consumíveis, que mantém a config de bot v1 salva
+válida enquanto ela ainda debita gold por uso; ela sai quando a AB-03 (#418) migrar o vocabulário
+para v2 e a AB-04 (#419) trocar o débito por uso pela pilha + reposição por lote.
 
 O saldo que a sessão enxerga é o **gold de entrada mais o delta da sessão**. Duas consequências:
 

@@ -21,7 +21,11 @@
     "spike-sword": 3271,
     "cheese": 3607,
     "energy-ring": 3051,
-    "life-ring": 3052
+    "life-ring": 3052,
+    "health-potion": 266,
+    "mana-potion": 268,
+    "avalanche-rune": 3161,
+    "blessing-charge": 3155
   },
   "ammunition": {
     "arrow": {

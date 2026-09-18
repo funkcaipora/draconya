@@ -85,14 +85,15 @@ const TEST_RAT = {
   loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
 
-/** Uma magia e um supply, para as regras de bot destes testes apontarem para algo que existe. */
+/** Uma magia e um consumível, para as regras de bot destes testes apontarem para algo que existe. */
 export const TEST_SPELL = {
   id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000,
   effect: { kind: 'heal', amount: 60 },
 };
 export const TEST_SUPPLY = {
-  id: 'health-potion', name: 'Poção de Vida', price: 45,
-  effect: { kind: 'heal', amount: 80 },
+  id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
+  stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
+  restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
 };
 
 /**
@@ -117,7 +118,7 @@ export function rawTestContent(): RawContent {
   const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
-    spells: [TEST_SPELL], supplies: [TEST_SUPPLY], weaponFamilies: TEST_WEAPON_FAMILIES,
+    spells: [TEST_SPELL], items: [TEST_SUPPLY], weaponFamilies: TEST_WEAPON_FAMILIES,
  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
  bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
