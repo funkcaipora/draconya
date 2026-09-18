@@ -8,8 +8,10 @@ import { INITIAL_HUD, hud } from '../state/hud.js';
 // Companheiros durante a hunt (#197, #318): título e estrela já são da #311; aqui protegemos a
 // estrutura das linhas e o rodapé sem apresentar dados que a sessão não transmite.
 
-async function render(): Promise<string> {
-  const { prelude } = await prerender(createElement(PartyMembers));
+async function render(partyLootOpen = true): Promise<string> {
+  const { prelude } = await prerender(createElement(PartyMembers, {
+    partyLootOpen, onToggleLoot: () => {},
+  }));
   return new Response(prelude).text();
 }
 
@@ -83,6 +85,22 @@ describe('PartyMembers', () => {
     html = await render();
     expect(html).toContain('<span class="party-leader-star">★</span><b class="party-companion-self">você</b>');
     expect(html).not.toContain('<span class="party-leader-star">★</span><b>Ana</b>');
+  });
+
+  it('header has the "Party loot" toggle reflecting its state (R3-03, #316)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
+      ],
+    } }));
+
+    const open = await render(true);
+    expect(open).toContain('title="Party loot"');
+    expect(open).toMatch(/title="Party loot"[^>]*ui-icon-button-active/);
+
+    const closed = await render(false);
+    expect(closed).toContain('title="Party loot"');
+    expect(closed).not.toMatch(/title="Party loot"[^>]*ui-icon-button-active/);
   });
 
   it('puts the note, mode, and leave button in the footer in that order', async () => {

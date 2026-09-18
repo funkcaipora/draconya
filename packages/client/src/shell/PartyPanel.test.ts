@@ -100,7 +100,9 @@ describe('PartyPanel', () => {
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55 },
       { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0 },
     ] } }));
-    const { prelude } = await prerender(createElement(PartyMembers));
+    const { prelude } = await prerender(createElement(PartyMembers, {
+      partyLootOpen: true, onToggleLoot: () => {},
+    }));
     const html = await new Response(prelude).text();
     expect(html).toContain('Party · 3');
     expect(html).toContain('Compartilhado');
@@ -116,7 +118,9 @@ describe('PartyPanel', () => {
     hud.set((state) => ({ ...state, party: { leaderId: 'me', mode: 'split', members: [
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
     ] } }));
-    const { prelude } = await prerender(createElement(PartyMembers));
+    const { prelude } = await prerender(createElement(PartyMembers, {
+      partyLootOpen: true, onToggleLoot: () => {},
+    }));
     const html = await new Response(prelude).text();
     expect(html).toContain('Dividido');
     expect(html).toContain('Party · 1');

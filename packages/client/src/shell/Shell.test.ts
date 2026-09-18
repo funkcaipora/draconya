@@ -126,4 +126,20 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(source).toContain('<Analyzer open={open.analyzer}');
     expect(source).not.toContain('<Analyzer collapsed=');
   });
+
+  // #316: "Party loot" é janela flutuante fora das colunas e só existe durante a hunt.
+  it('mounts the Party loot floating window during a hunt, never in the city', async () => {
+    hud.set((state) => ({
+      ...state,
+      analyzer: { ...state.analyzer, sessionType: 'hunt' },
+      party: { leaderId: 'me', mode: 'shared', members: [] },
+      partyBag: { gold: 1, items: [], weight: 0, capacity: 10 },
+    }));
+    const hunt = await render();
+    expect(hunt).toContain('vendido e dividido ao fim');
+    expect(hunt).toContain('party-loot-grid');
+
+    hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'city' } }));
+    expect(await render()).not.toContain('vendido e dividido ao fim');
+  });
 });
