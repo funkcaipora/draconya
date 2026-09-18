@@ -1,0 +1,11 @@
+{
+  "id": "fist",
+  "name": "Fist",
+  "kind": "melee",
+  "skillId": "melee",
+  "range": 1,
+  "damageType": "physical",
+  "resource": "none",
+  "formula": { "levelFactor": 0, "spread": 0 },
+  "_open": "A família desarmada (CMB-05): não existe como arma, é o fallback de quem não tem item. O `attack`, o alcance e o tipo vêm de `combat.player` (attackPower 25, attackRange 1, damageType physical), preservando o v1 bit a bit. A fórmula é provisória: `levelFactor` e `spread` são 0 e a contribuição por nível vem do `damagePerLevel` da skill `melee`."
+}

@@ -8,6 +8,7 @@
   "_open": "A arma inicial do Druid (ADR 0026, decisão 3): alcance 3, 1 de mana por golpe, dano 8–18 (TibiaWiki, terra declarada no `weapon.damageType` desde o CMB-03).",
   "weapon": {
     "kind": "wand",
+    "family": "rod",
     "range": 3,
     "damageType": "earth",
     "manaPerHit": 1,

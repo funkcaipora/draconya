@@ -38,6 +38,28 @@ const combat = {
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
 
+// As famílias de arma e as skills que elas escalam (CMB-05). O conteúdo real vive em
+// `data/weapon-families/` e `data/skills/`; aqui é o mínimo que faz uma arma montar. A fórmula
+// é identidade (`levelFactor`/`spread` zero) e a contribuição por nível vem da skill.
+const skills = [
+  { id: 'melee', name: 'Melee', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0 },
+  { id: 'distance', name: 'Distance', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 }, damagePerLevel: 0 },
+  { id: 'magic', name: 'Magic', startingLevel: 0, curve: { base: 4, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 }, damagePerLevel: 0 },
+];
+const family = (id: string, kind: string, skillId: string, range: number) => ({
+  id, name: id, kind, skillId, range, damageType: 'physical', resource: 'none',
+  formula: { levelFactor: 0, spread: 0 },
+});
+const weaponFamilies = [
+  family('fist', 'melee', 'melee', 1),
+  family('sword', 'melee', 'melee', 1),
+  family('axe', 'melee', 'melee', 1),
+  family('club', 'melee', 'melee', 1),
+  family('distance', 'distance', 'distance', 6),
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+];
+
 // A aparência é DERIVADA aqui (FUN-94): estes testes falam de loot, rota e referência cruzada,
 // e escrever a tabela à mão em cada um faria trinta fixtures carregarem um dado que nenhuma
 // delas usa. Quem exercita a tabela em si passa uma explícita — ver o bloco da FUN-94.
@@ -45,6 +67,7 @@ const base = (over: Partial<RawContent> = {}): RawContent => {
   const raw: RawContent = {
     monsters: [rat], hunts: [cellars], vocations: [knight],
     progression: [baseline], combat: [combat], stamina: [stamina], party: [party],
+    skills, weaponFamilies,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -348,7 +371,7 @@ describe('a defesa dos itens e do perfil (CMB-04)', () => {
 
   it('aceita a skill de shielding, e blockTypes vazio vira `physical`', () => {
     const content = buildContent(base({
-      vocations: [], skills: [shielding],
+      vocations: [], skills: [...skills, shielding],
       combat: [{ ...combat, defense: { skillId: 'shielding', blockChance: 0.5 } }],
     }));
     expect(content.combat.defense?.skillId).toBe('shielding');
@@ -992,7 +1015,10 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
 
   it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
     // Sem `weapon`, uma arma é corpo a corpo de alcance 1 — o que toda arma era.
-    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({
+      kind: 'melee', family: 'sword', range: 1, damageType: 'physical',
+      power: { base: 10, levelFactor: 0, skillFactor: 0, skillStartingLevel: 10, spread: 0 },
+    });
     const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
     const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
@@ -1031,6 +1057,87 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   it('a aparência NÃO mora na munição: escrevê-la ali é recusado', () => {
     const comAparencia = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447 };
     expect(() => buildContent(base({ ammunition: [comAparencia] }))).toThrow(ContentError);
+  });
+});
+
+describe('famílias de arma e proficiências (CMB-05, #333)', () => {
+  const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
+  const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+
+  it('a arma SEM família recebe o default do `kind`: melee→sword, distance→distance, wand→wand', () => {
+    // A normalização preserva o conteúdo anterior ao CMB-05 e a fixture (DT-03). O real declara.
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon?.family).toBe('sword');
+    const bow = buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon;
+    expect(bow?.family).toBe('distance');
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.family).toBe('wand');
+  });
+
+  it('recusa família que não existe no catálogo', () => {
+    const orfa = { ...espada, weapon: { kind: 'melee', family: 'club', range: 1 } };
+    const semClub = weaponFamilies.filter((family) => family.id !== 'club');
+    expect(() => buildContent(base({ items: [orfa], weaponFamilies: semClub })))
+      .toThrow(/a família "club" não existe em weapon-families/);
+  });
+
+  it('recusa família incoerente com o `kind` da arma', () => {
+    // Uma `sword` de distância é a família certa para a fórmula errada.
+    const incoerente = { ...arco, weapon: { kind: 'distance', family: 'sword', range: 6, ammoFamily: 'arrow' } };
+    expect(() => buildContent(base({ items: [incoerente], ammunition: [flecha] })))
+      .toThrow(/família "sword" é "melee", e a arma é "distance"/);
+  });
+
+  it('recusa `fist` como arma: ela é o fallback desarmado, não um item', () => {
+    const punho = { ...espada, weapon: { kind: 'melee', family: 'fist', range: 1 } };
+    expect(() => buildContent(base({ items: [punho] }))).toThrow(/"fist" é o fallback desarmado/);
+  });
+
+  it('recusa família de melee sem fórmula, e wand/rod com fórmula', () => {
+    const semFormula = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, formula: undefined } : family);
+    expect(() => buildContent(base({ weaponFamilies: semFormula })))
+      .toThrow(/família "melee" precisa de fórmula/);
+    const wandComFormula = weaponFamilies.map((family) =>
+      family.id === 'wand' ? { ...family, formula: { levelFactor: 0, spread: 0 } } : family);
+    expect(() => buildContent(base({ weaponFamilies: wandComFormula })))
+      .toThrow(/wand\/rod usam a faixa fixa da arma, não fórmula/);
+  });
+
+  it('recusa família de melee que gasta recurso, e wand/rod sem mana', () => {
+    const meleeComMana = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, resource: 'mana' } : family);
+    expect(() => buildContent(base({ weaponFamilies: meleeComMana })))
+      .toThrow(/família "melee" não gasta recurso/);
+    const wandSemMana = weaponFamilies.map((family) =>
+      family.id === 'wand' ? { ...family, resource: 'none' } : family);
+    expect(() => buildContent(base({ weaponFamilies: wandSemMana })))
+      .toThrow(/wand\/rod gastam mana/);
+  });
+
+  it('recusa família que aponta skill inexistente — quando há skills', () => {
+    const orfa = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, skillId: 'swordmanship' } : family);
+    expect(() => buildContent(base({ weaponFamilies: orfa })))
+      .toThrow(/weaponFamily\/sword: skillId "swordmanship" não existe/);
+  });
+
+  it('recusa o catálogo sem `fist`: o desarmado perderia a escala de skill', () => {
+    const semFist = weaponFamilies.filter((family) => family.id !== 'fist');
+    expect(() => buildContent(base({ weaponFamilies: semFist })))
+      .toThrow(/falta a família "fist"/);
+  });
+
+  it('a fórmula compilada carrega a contribuição da skill apontada', () => {
+    const comEscala = [{ ...skills[0], damagePerLevel: 0.25 }, skills[1], skills[2]];
+    const content = buildContent(base({ skills: comEscala }));
+    expect(content.weaponFamilies.get('sword')).toMatchObject({
+      skillId: 'melee', skillFactor: 0.25, skillStartingLevel: 10,
+    });
+    // O desarmado é a família `fist` com o `attack` do bloco `player` e a escala da `melee`.
+    expect(content.unarmed.power).toMatchObject({
+      base: 25, levelFactor: 0, skillFactor: 0.25, skillStartingLevel: 10, spread: 0,
+    });
   });
 });
 

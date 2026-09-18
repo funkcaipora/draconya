@@ -136,6 +136,25 @@ const skills = [
     curve: { base: 100, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 },
     damagePerLevel: 0,
   },
+  // A skill de distância existe para o bow da fixture montar (CMB-05): a família `distance`
+  // aponta para ela, e a contribuição por nível é 0 para o dano ser o `attack` da munição.
+  {
+    id: 'distance', name: 'Distância', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 },
+    damagePerLevel: 0,
+  },
+];
+
+// As famílias de arma (CMB-05). A `melee` contribui 0,5 por nível — é o que faz o teste do
+// desarmado/espada medir a escala da skill, e não só o `attack`.
+const weaponFamilies = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
 ];
 
 // Uma arma que bate MUITO mais que o desarmado (25): com ela o rato de 50 cai num golpe, e o
@@ -173,7 +192,7 @@ const items = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells, supplies, skills, items,
+    stamina: [stamina], party: [party], spells, supplies, skills, weaponFamilies, items,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -4684,6 +4703,109 @@ describe('raio livre do spawn (#236)', () => {
 });
 
 // --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
+
+describe('famílias de arma e proficiências (CMB-05, #333)', () => {
+  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const weapon = (id: string, family: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    id, name: id, kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 40,
+    weapon: { kind, family, range: kind === 'distance' ? 6 : kind === 'wand' ? 3 : 1, ...extra },
+  });
+  const armory = [
+    weapon('sword-i', 'sword', 'melee'),
+    weapon('axe-i', 'axe', 'melee'),
+    weapon('club-i', 'club', 'melee'),
+    weapon('bow-i', 'distance', 'distance', { ammoFamily: 'arrow' }),
+    weapon('wand-i', 'wand', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+    weapon('rod-i', 'rod', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+  ];
+  const armed = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
+  });
+  const loaded = (): Content => content({ items: [...items, ...armory], ammunition: [arrow] });
+
+  /** A skill subiu OU acumulou pontos: o golpe de fato praticou. */
+  const practiced = (hero: CharacterRuntime, id: string, startingLevel: number): boolean => {
+    const state = hero.skills.getState()[id];
+    return state !== undefined && (state.level > startingLevel || state.points > 0);
+  };
+
+  const strike = (itemId?: string, mana = 0, durationMs = 8_000) => {
+    const { session, hero, ruleset } = start({
+      loaded: loaded(),
+      ...(itemId === undefined ? {} : { inventory: armed(itemId) }),
+    });
+    hero.mana = mana;
+    hero.maxMana = mana;
+    session.advanceBy(50);
+    // Um alvo colado, para o golpe sair já no primeiro vencimento.
+    const rat = ruleset.monsters[0];
+    if (rat !== undefined) rat.position = { ...hero.position, y: hero.position.y + 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    return { session, hero, events };
+  };
+
+  it('fist é o fallback sem item: bate corpo a corpo, pratica melee e não atira', () => {
+    const { hero, events } = strike();
+    expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee')).toBe(true);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+
+  it('sword, axe e club batem pela família corpo a corpo e praticam a melee', () => {
+    for (const id of ['sword-i', 'axe-i', 'club-i']) {
+      const { hero, events } = strike(id);
+      expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee'), id).toBe(true);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(false);
+      expect(practiced(hero, 'melee', 10), id).toBe(true);
+    }
+  });
+
+  it('bow atira a munição e pratica a distância, não a melee', () => {
+    const { hero, events } = strike('bow-i');
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    expect(practiced(hero, 'distance', 10)).toBe(true);
+    expect(hero.skills.getState()['melee']).toBeUndefined();
+  });
+
+  it('wand e rod atiram, gastam mana e praticam magia — sem multiplicador de weapon skill', () => {
+    for (const id of ['wand-i', 'rod-i']) {
+      const { hero, events } = strike(id, 200);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(true);
+      // A prática é `spell-cast` por mana: só existe se a mana foi debitada antes da rolagem.
+      expect(practiced(hero, 'magic', 0), id).toBe(true);
+      // E NÃO pratica arma: wand/rod não recebem multiplicador de weapon skill (DT-02).
+      expect(hero.skills.getState()['melee'], id).toBeUndefined();
+      expect(hero.skills.getState()['distance'], id).toBeUndefined();
+    }
+  });
+
+  it('wand sem mana não atira nem pratica (CMB-05)', () => {
+    // Um segundo é curto demais para a regeneração (1/s) pagar um golpe de 2 de mana.
+    const { hero, events } = strike('wand-i', 0, 1_000);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(hero.skills.getState()['magic']).toBeUndefined();
+  });
+
+  it('imune ao tipo do golpe ainda pratica UMA vez: a prática não depende do dano final (CMB-05)', () => {
+    // O rato imune a físico: o golpe ocorre, o dano resolvido é zero, e a prática sai assim
+    // mesmo. Contar prática só com dano positivo faria a skill parar contra alvo imune.
+    const immune = content({
+      monsters: [{ ...rat, mitigation: { immunities: ['physical'] } }],
+      items: [...items, ...armory], ammunition: [arrow],
+    });
+    const { session, hero, ruleset } = start({ loaded: immune, inventory: armed('sword-i') });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    for (let t = 0; t < 4_000 && session.ended === null; t += 100) session.advanceBy(100);
+    // A vida não caiu — imunidade zera o dano —, e a melee praticou.
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+});
 
 describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
   const resolver = vi.mocked(resolveDamage);

@@ -1,6 +1,7 @@
 # Progressão, vocações e level
 
-**Status:** stats por level/vocação, curva de XP e level up implementados; skills, passivas e promoção não
+**Status:** stats por level/vocação, curva de XP, level up e skills por uso implementados; famílias
+de arma e proficiências (CMB-05) implementadas; passivas e promoção não
 **PRD:** §4.1, §9, §43.1
 **Épico:** E2 (stats por vocação/level, skills por uso); E7 (árvore de passivas, promoção de vocação por quest)
 
@@ -155,7 +156,9 @@ já está provado. Ver [`combat.md`](./combat.md) e [`bot.md`](./bot.md).
 ## Em aberto
 
 - ~~[ABERTO] HP/Mana por level do Druida (§9.3)~~ → **Resolvido:** +5 / +30 / +10, o do Tibia (ADR 0026, decisão 5), em `packages/content/data/vocations/druid.json`.
-- Skills separadas por tipo de arma (sword/axe/club), como no Tibia: continua uma skill corpo a corpo só, mais `distance` (ADR 0026, decisão 4).
+- Skills separadas por tipo de arma (sword/axe/club), como no Tibia: a taxonomia de **família**
+  existe desde o CMB-05, mas as três corpo a corpo ainda compartilham a skill `melee` — separá-las
+  é rebalanceamento, não motor (ADR 0026, decisão 4).
 - Base de progressão (HP/mana/capacidade iniciais e crescimento dos níveis 1–7) não está no
   PRD: o §9.3 define só o incremento **por vocação**. Os valores em
   `progression/baseline.json` são provisórios e estão marcados como tal no próprio arquivo.
@@ -216,6 +219,26 @@ bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda tr
 ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
 tick). A fórmula e a posição do sorteio estão em
 [`combat.md`](./combat.md) e na emenda do ADR 0031.
+
+### Famílias de arma e proficiência (CMB-05, #333)
+
+A skill que uma arma alimenta e escala não está escrita no ruleset: cada **família de arma** é
+dado em `packages/content/data/weapon-families/` e aponta para uma skill e para uma fórmula. As
+famílias são `fist` (desarmado), `sword`, `axe`, `club`, `distance`, `wand` e `rod`; o item de
+arma declara a sua, e `buildContent` recusa família incoerente com o `kind` ou que não exista.
+
+- `sword`/`axe`/`club`/`fist` apontam para a skill `melee` — **as três ainda compartilham uma
+  skill só** (a separação por tipo de arma é trabalho de balanceamento, não de motor).
+- `distance` aponta para a skill `distance`; o `base` da fórmula é o `attack` da **munição**.
+- `wand`/`rod` apontam para a skill `magic` e **não** têm fórmula: usam a faixa fixa e o
+  `manaPerHit` da arma, e praticam por **mana gasta**. Elas não recebem multiplicador de weapon
+  skill por engano (DT-02).
+- `fist` é o fallback sem item: o `attack`, o alcance e o tipo vêm de `combat.player`, e a
+  fórmula é a da família. Ela não existe como arma no catálogo.
+
+A contribuição por nível de skill de uma família é o `damagePerLevel` da skill apontada — editar
+a skill rebalanceia todas as famílias que a usam. A fórmula da família (os fatores
+`levelFactor` e `spread`) é provisória e está marcada em `_open` no arquivo.
 
 **Magia sobe por mana gasta, e isso é mecanismo, não número.** Por lançamento, a forma ótima de
 subir magia seria lançar mil vezes a magia mais barata, e o jogo viraria macro de spam. É a razão

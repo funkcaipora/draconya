@@ -13,12 +13,13 @@ import {
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   ammunitionSchema, bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
-  supplySchema, tilemapSchema, vocationSchema,
+  supplySchema, tilemapSchema, vocationSchema, weaponFamilySchema,
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
   DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterDefinition, Pack,
   PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply, Vocation, Weapon,
+  WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -56,6 +57,17 @@ export interface Content {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (§21.2). Atributos base fixos: item melhor é item diferente. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * As famílias de arma (CMB-05, #333): alcance, tipo, recurso, fórmula e a skill que as
+   * escala. É o que o `sim` lê para saber como uma arma bate sem conhecer nome de item nem
+   * vocação. Indexadas por id no boot.
+   */
+  readonly weaponFamilies: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>;
+  /**
+   * O perfil do golpe DESARMADO (CMB-05): a família `fist` com o `attack`, o alcance e o tipo
+   * de `combat.player`. É o fallback de quem não tem arma — o jogo tem hunt antes de ter item.
+   */
+  readonly unarmed: WeaponProfile;
   /**
    * Catálogo de munição (ADR 0026, decisão 3): a seleção por família que o bow dispara, com
    * a grátis e as que debitam gold por tiro. Vazio é um jogo sem arma de distância.
@@ -104,6 +116,8 @@ export interface RawContent {
   readonly supplies?: readonly unknown[];
   readonly skills?: readonly unknown[];
   readonly items?: readonly unknown[];
+  /** As famílias de arma (CMB-05), `weapon-families/*.json`. */
+  readonly weaponFamilies?: readonly unknown[];
   readonly ammunition?: readonly unknown[];
   readonly appearances?: readonly unknown[];
   /** Inventários de pacote (FUN-21), `packs/<pack>.json`. Só o conteúdo real os tem. */
@@ -143,6 +157,18 @@ export type CompiledMonster = Omit<Monster, 'outfitId' | 'corpseAppearanceId'>;
 export type CompiledItem = Omit<Item, 'appearanceId'>;
 
 /**
+ * A família de arma COMPILADA (CMB-05): a definição do arquivo mais a contribuição por nível
+ * da skill apontada. É o que o boot entrega ao `sim` — a fórmula de uma arma se monta a partir
+ * dela, e rebalancear a skill rebalanceia todas as famílias que a usam.
+ */
+export interface CompiledWeaponFamily extends WeaponFamilyDefinition {
+  /** `damagePerLevel` da skill apontada; zero sem skill (conteúdo de teste). */
+  readonly skillFactor: number;
+  /** Nível inicial da skill apontada — a contribuição conta a partir dele. */
+  readonly skillStartingLevel: number;
+}
+
+/**
  * Compila um `MitigationProfile` para a forma do caminho quente (CMB-03): a tabela completa por
  * tipo — zero onde não há resistência, que é a identidade — e um `Set` de imunidades. O boot
  * paga a compilação uma vez; cada golpe faz só um lookup e um `has`.
@@ -175,22 +201,106 @@ function compileMonsters(
 }
 
 /**
- * Resolve o tipo de dano default de cada arma e compila a mitigação de cada item (CMB-03).
+ * A família default de um `kind` (CMB-05). É a MESMA normalização que o boot já fazia com
+ * `{ kind: 'melee', range: 1 }`: conteúdo anterior ao CMB-05 (e fixture) continua montando e
+ * produzindo os mesmos números. O conteúdo real declara a família — `load.test.ts` prende.
  *
- * O default preserva o v1: `physical` em corpo a corpo e distância, `arcane` (o antigo
+ * `fist` nunca é default: ela é o fallback SEM item, e um item que a declare é recusado.
+ */
+export function defaultFamilyForKind(kind: WeaponKind): WeaponFamily {
+  if (kind === 'distance') return 'distance';
+  if (kind === 'wand') return 'wand';
+  return 'sword';
+}
+
+/**
+ * Compila as famílias (CMB-05): a definição do arquivo mais o `damagePerLevel` e o
+ * `startingLevel` da skill apontada. Skill ausente é contribuição zero — o conteúdo de teste
+ * que não fala de skill continua montando, e a arma bate o `attack` puro.
+ */
+export function compileWeaponFamilies(
+  definitions: ReadonlyMap<string, WeaponFamilyDefinition>,
+  skills: ReadonlyMap<string, Skill>,
+): Map<WeaponFamily, CompiledWeaponFamily> {
+  const compiled = new Map<WeaponFamily, CompiledWeaponFamily>();
+  for (const definition of definitions.values()) {
+    const skill = skills.get(definition.skillId);
+    compiled.set(definition.id, {
+      ...definition,
+      skillFactor: skill?.damagePerLevel ?? 0,
+      skillStartingLevel: skill?.startingLevel ?? 0,
+    });
+  }
+  return compiled;
+}
+
+/**
+ * A fórmula de uma arma escalada (CMB-05): `base` é o `attack` do item (zero na distância, que
+ * usa o `attack` da munição resolvido no golpe) e os fatores vêm da família compilada.
+ */
+function powerOf(
+  base: number, family: CompiledWeaponFamily | undefined,
+): WeaponPowerFormula | undefined {
+  const formula = family?.formula;
+  if (formula === undefined) return undefined;
+  return {
+    base,
+    levelFactor: formula.levelFactor,
+    skillFactor: family?.skillFactor ?? 0,
+    skillStartingLevel: family?.skillStartingLevel ?? 0,
+    spread: formula.spread,
+  };
+}
+
+/**
+ * Resolve o tipo de dano, o alcance, a família e a fórmula de cada arma, e compila a mitigação
+ * de cada item (CMB-03/CMB-05).
+ *
+ * O default de tipo preserva o v1: `physical` em corpo a corpo e distância, `arcane` (o antigo
  * `magic`) em wand e rod. Onde o conteúdo conhece o elemento — a wand de energia, o rod de
  * terra —, o arquivo declara e o default não entra.
+ *
+ * As famílias são opcionais só para o chamador que compila um item solto (fixture de
+ * inventário, que não fala de dano): sem elas, a arma fica sem fórmula e bate o `attack` puro.
  */
-export function compileItem(item: ItemDefinition): CompiledItem {
+export function compileItem(
+  item: ItemDefinition,
+  families: ReadonlyMap<WeaponFamily, CompiledWeaponFamily> = new Map(),
+  skills: ReadonlyMap<string, Skill> = new Map(),
+): CompiledItem {
   // O cast cobre item NÃO-arma com um `weapon` escrito por engano: a validação de forma em
   // `buildContent` reprova esse caso, então o valor nunca chega ao `sim`.
-  let weapon = item.weapon as ResolvedWeapon | undefined;
+  let weapon: ResolvedWeapon | undefined;
   if (item.kind === 'weapon') {
-    const base: Weapon = weapon ?? { kind: 'melee', range: 1 };
-    weapon = {
-      ...base,
-      damageType: base.damageType ?? (base.kind === 'wand' ? 'arcane' : 'physical'),
-    };
+    const raw = (item.weapon ?? { kind: 'melee' }) as Weapon;
+    const familyId = raw.family ?? defaultFamilyForKind(raw.kind);
+    const family = families.get(familyId);
+    // `raw.range` da arma vence o da família; ausente nos dois é corpo a corpo.
+    const range = raw.range ?? family?.range ?? 1;
+    const damageType = raw.damageType ?? family?.damageType
+      ?? (raw.kind === 'wand' ? 'arcane' : 'physical');
+    if (raw.kind === 'wand') {
+      weapon = {
+        kind: raw.kind,
+        family: familyId,
+        damageType,
+        range,
+        ...(raw.manaPerHit === undefined ? {} : { manaPerHit: raw.manaPerHit }),
+        ...(raw.damage === undefined ? {} : { fixedDamage: raw.damage }),
+      };
+    } else {
+      const power = powerOf(raw.kind === 'distance' ? 0 : item.attack, family);
+      weapon = {
+        kind: raw.kind,
+        family: familyId,
+        damageType,
+        range,
+        ...(power === undefined ? {} : { power }),
+        ...(raw.kind === 'distance' && raw.ammoFamily !== undefined
+          ? { ammoFamily: raw.ammoFamily }
+          : {}),
+      };
+    }
   }
   const { weapon: _rawWeapon, mitigation: _rawMitigation, ...rest } = item;
   return {
@@ -200,10 +310,42 @@ export function compileItem(item: ItemDefinition): CompiledItem {
   };
 }
 
-function compileItems(definitions: ReadonlyMap<string, ItemDefinition>): Map<string, CompiledItem> {
+function compileItems(
+  definitions: ReadonlyMap<string, ItemDefinition>,
+  families: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>,
+  skills: ReadonlyMap<string, Skill>,
+): Map<string, CompiledItem> {
   const compiled = new Map<string, CompiledItem>();
-  for (const [id, item] of definitions) compiled.set(id, compileItem(item));
+  for (const [id, item] of definitions) compiled.set(id, compileItem(item, families, skills));
   return compiled;
+}
+
+/**
+ * O perfil do golpe desarmado (CMB-05): a família `fist` com o `attack`, o alcance e o tipo
+ * que `combat.player` já declarava. Os números continuam vindo do conteúdo — a família dá a
+ * skill e a fórmula, o bloco `player` dá o valor base —, e o v1 é preservado bit a bit.
+ *
+ * A fórmula é sempre montada, mesmo sem a família `fist` no catálogo (conteúdo de teste que
+ * não fala de arma): sem ela o desarmado teria poder zero, e "sem arma" é como todo personagem
+ * começa. A identidade (`levelFactor`/`spread` zero, skill zero) devolve o `attackPower` puro.
+ */
+export function compileUnarmed(
+  combat: Combat, families: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>,
+): WeaponProfile {
+  const family = families.get('fist');
+  const formula = family?.formula ?? { levelFactor: 0, spread: 0 };
+  return {
+    family: 'fist',
+    damageType: combat.player.damageType,
+    range: combat.player.attackRange,
+    power: {
+      base: combat.player.attackPower,
+      levelFactor: formula.levelFactor,
+      skillFactor: family?.skillFactor ?? 0,
+      skillStartingLevel: family?.skillStartingLevel ?? 0,
+      spread: formula.spread,
+    },
+  };
 }
 
 /**
@@ -277,7 +419,16 @@ export function buildContent(raw: RawContent): Content {
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
-  const itemDefinitions = compileItems(parseAll('item', raw.items ?? [], itemSchema, problems));
+  // As famílias de arma (CMB-05) são compiladas com as skills: o `damagePerLevel` da skill
+  // apontada vira o `skillFactor` da família, e rebalanceá-la rebalanceia todas as famílias.
+  const weaponFamilyDefinitions = parseAll(
+    'weaponFamily', raw.weaponFamilies ?? [], weaponFamilySchema, problems,
+  );
+  const weaponFamilies = compileWeaponFamilies(weaponFamilyDefinitions, skills);
+  // Os itens crus ficam à mão para a validação de FORMA da arma (o `damage`, o `manaPerHit` e
+  // o `ammoFamily` do arquivo); o compilado é o que o `sim` lê.
+  const rawItems = parseAll('item', raw.items ?? [], itemSchema, problems);
+  const itemDefinitions = compileItems(rawItems, weaponFamilies, skills);
 
   // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
   // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
@@ -343,6 +494,35 @@ export function buildContent(raw: RawContent): Content {
       }
     }
   }
+  // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa
+  // existir, e a combinatória de `kind`/`resource`/`formula` é regra de domínio, não de forma.
+  // `fist` é o fallback sem item: sem ela, o desarmado perderia a escala de skill.
+  for (const family of weaponFamilyDefinitions.values()) {
+    const where = `weaponFamily/${family.id}`;
+    // A skill precisa existir — quando há skills. O conteúdo de teste sem skill nenhuma não
+    // tem como conferir, e a arma bate o `attack` puro (a mesma tolerância da `spellSkill`).
+    if (skills.size > 0 && !skills.has(family.skillId)) {
+      problems.push(`${where}: skillId "${family.skillId}" não existe`);
+    }
+    if (family.kind === 'wand') {
+      if (family.formula !== undefined) {
+        problems.push(`${where}: wand/rod usam a faixa fixa da arma, não fórmula`);
+      }
+      if (family.resource !== 'mana') {
+        problems.push(`${where}: wand/rod gastam mana`);
+      }
+    } else {
+      if (family.formula === undefined) {
+        problems.push(`${where}: família "${family.kind}" precisa de fórmula`);
+      }
+      if (family.resource !== 'none') {
+        problems.push(`${where}: família "${family.kind}" não gasta recurso`);
+      }
+    }
+  }
+  if (weaponFamilies.size > 0 && !weaponFamilies.has('fist')) {
+    problems.push('weaponFamilies: falta a família "fist" — é o fallback do golpe desarmado');
+  }
   // Arma sem `weapon` é corpo a corpo de alcance 1 (#152), e o tipo de dano default de cada
   // `kind` (CMB-03) é resolvido em `compileItems`: corpo a corpo e distância são `physical`,
   // wand e rod são `arcane` — o `kind: magic` do v1. O default NÃO mora no schema, porque o
@@ -351,7 +531,11 @@ export function buildContent(raw: RawContent): Content {
   // A forma do item que o schema sozinho não fecha (ADR 0026): a mochila é o único item que
   // se veste nas costas, e o que se veste nas costas é a mochila; e só arma ocupa as duas
   // mãos. Um `back` numa espada equiparia a espada nas costas sem nada acusar.
-  for (const item of itemDefinitions.values()) {
+  //
+  // A validação olha o item CRU: `damage`, `manaPerHit` e `ammoFamily` só existem no arquivo —
+  // o compilado já virou `fixedDamage`/perfil. A família resolvida (declarada ou default do
+  // `kind`) é conferida contra o catálogo.
+  for (const item of rawItems.values()) {
     // Como a arma bate é da arma, e só dela (#152): `weapon` sem `kind: 'weapon'` é um
     // capacete com alcance; arma sem `weapon` seria uma arma que o motor não sabe usar.
     if (item.kind !== 'weapon' && item.weapon !== undefined) {
@@ -359,6 +543,21 @@ export function buildContent(raw: RawContent): Content {
     }
     const weapon = item.weapon;
     if (weapon !== undefined) {
+      // A família é DADO (DT-01): ela precisa existir e ser coerente com o `kind` da arma. E
+      // `fist` não é arma — é o fallback de quem está desarmado.
+      const familyId = weapon.family ?? defaultFamilyForKind(weapon.kind);
+      if (familyId === 'fist') {
+        problems.push(`item "${item.id}": "fist" é o fallback desarmado e não existe como arma`);
+      } else {
+        const family = weaponFamilies.get(familyId);
+        if (family === undefined) {
+          problems.push(`item "${item.id}": a família "${familyId}" não existe em weapon-families/`);
+        } else if (family.kind !== weapon.kind) {
+          problems.push(
+            `item "${item.id}": família "${familyId}" é "${family.kind}", e a arma é "${weapon.kind}"`,
+          );
+        }
+      }
       if (weapon.kind === 'distance' && weapon.ammoFamily === undefined) {
         problems.push(`item "${item.id}": arma de distância precisa de "ammoFamily"`);
       }
@@ -698,7 +897,15 @@ export function buildContent(raw: RawContent): Content {
     ...openOf('skill', skills),
     ...openOf('item', items),
     ...openOf('munição', ammunition),
+    ...openOf('weaponFamily', weaponFamilyDefinitions),
   ];
+
+  // O perfil desarmado (CMB-05) sai da família `fist` com o bloco `player`. Se o combate
+  // faltar, os problemas acima já derrubam o boot antes de alguém ler este valor — o objeto
+  // neutro só evita um `undefined` no meio da montagem.
+  const unarmed: WeaponProfile = combat === undefined
+    ? { family: 'fist', damageType: 'physical', range: 1 }
+    : compileUnarmed(combat, weaponFamilies);
 
   const content: Content = {
     version: computeVersion(raw),
@@ -707,6 +914,8 @@ export function buildContent(raw: RawContent): Content {
     supplies,
     skills,
     items,
+    weaponFamilies,
+    unarmed,
     ammunition,
     monsters,
     hunts,
@@ -885,8 +1094,8 @@ function withCorpses(
 }
 
 /** Os `_open` de um catálogo inteiro, prefixados pelo tipo. Ver `openValues`. */
-function openOf(
-  kind: string, catalog: ReadonlyMap<string, { readonly _open?: string | undefined }>,
+function openOf<K extends string>(
+  kind: string, catalog: ReadonlyMap<K, { readonly _open?: string | undefined }>,
 ): string[] {
   const open: string[] = [];
   for (const [id, entry] of catalog) {

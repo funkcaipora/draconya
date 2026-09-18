@@ -65,6 +65,16 @@ const skills = [
   { id: 'distance', name: 'Distance', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 }, damagePerLevel: 0 },
   { id: 'magic', name: 'Magic', startingLevel: 0, curve: { base: 4, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 }, damagePerLevel: 0 },
 ];
+// As famílias de arma (CMB-05): a arma declara a sua, e a família aponta a skill e a prática.
+const weaponFamilies = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+];
 const items = [
   { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 30 },
   { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
@@ -81,7 +91,7 @@ const ammunition = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells: [], supplies: [], skills, items, ammunition,
+    stamina: [stamina], party: [party], spells: [], supplies: [], skills, weaponFamilies, items, ammunition,
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [map], routes: [route], ...over,

@@ -1,4 +1,4 @@
-import { compileMitigation } from '@draconya/content';
+import { compileMitigation, skillSchema } from '@draconya/content';
 import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
@@ -528,5 +528,42 @@ describe('mitigação e conteúdo congelado (CMB-03)', () => {
       vulnerable.advanceBy(1000);
     }
     expect(vulnerable.aggregates.xpGained).toBeGreaterThan(resistant.aggregates.xpGained);
+  });
+});
+
+describe('skill é estado de personagem e sobrevive ao snapshot (CMB-05, #333)', () => {
+  const melee = skillSchema.parse({
+    id: 'melee', name: 'Melee', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0.5,
+  });
+
+  it('o nível ganho durante a sessão volta no restore, e o resultado segue idêntico', () => {
+    const session = new Session({
+      id: 'skills', contentVersion: 'v1', ruleset: testRuleset(),
+      rng: Rng.fromSeed('skills'), createdAtMs: 0,
+    });
+    const hero = character();
+    session.enter(hero);
+    for (let i = 0; i < 5; i++) session.advanceBy(1000);
+    // Uso é evento: dois golpes praticados fecham um nível (curva base 2, um ponto por golpe).
+    hero.skills.gain(melee, 2);
+    const levelBefore = hero.skills.levelOf(melee);
+    expect(levelBefore).toBeGreaterThan(10);
+
+    const snap = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
+    const restored = resumed.participants[0] as CharacterRuntime;
+    // O nível e os pontos voltam, sem bump de formato: `skills` é opcional no estado.
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
+    expect(restored.skills.levelOf(melee)).toBe(levelBefore);
+
+    // E o resultado segue a mesma sequência: mesma semente, mesmos agregados e mesma skill.
+    for (let i = 0; i < 5; i++) {
+      session.advanceBy(1000);
+      resumed.advanceBy(1000);
+    }
+    expect(resumed.aggregates.xpGained).toBe(session.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(session.getRngState());
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
   });
 });
