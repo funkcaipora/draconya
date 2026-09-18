@@ -32,6 +32,7 @@ import { HuntsModal } from './HuntsModal.js';
 import { HuntActions } from './HuntActions.js';
 import { PartyMembers } from './PartyMembers.js';
 import { PartyLootWindow } from './PartyBag.js';
+import { PartyModal } from './PartyModal.js';
 import { BotPanel } from './BotPanel.js';
 import { SkillsPanel } from './SkillsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
@@ -71,6 +72,10 @@ export function Shell() {
   // Party loot (#316): independente de `open.*` — o ▣ do painel da party controla isto, não a
   // barra do topo. Nasce `true`: a janela existe assim que `hunting` também for verdade.
   const [partyLootOpen, setPartyLootOpen] = useState(true);
+  // "Gerenciar party" (#320): aberto pela engrenagem de PartyMembers, não pela TopBar — por
+  // isso é um estado à parte de `open`/`WindowId`, no mesmo espírito do `open === "party"`
+  // local do App.jsx do kit (não é um dos ícones do topo).
+  const [partyModalOpen, setPartyModalOpen] = useState(false);
   // A marca de visto usa `performance.now()`, o mesmo relógio monotônico de `SystemLine.atMs`.
   // `Date.now()` faria uma mensagem da sessão parecer sempre anterior à época Unix.
   const [chatSeenAtMs, setChatSeenAtMs] = useState(0);
@@ -126,6 +131,7 @@ export function Shell() {
           <PartyMembers
             partyLootOpen={partyLootOpen}
             onToggleLoot={() => { setPartyLootOpen((value) => !value); }}
+            onManage={() => { setPartyModalOpen(true); }}
           />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
@@ -155,6 +161,11 @@ export function Shell() {
             `PartyLootWindow`, não aqui. */}
         {hunting && partyLootOpen && (
           <PartyLootWindow onClose={() => { setPartyLootOpen(false); }} />
+        )}
+        {/* "Gerenciar party" (#320): aberto pela engrenagem do painel da party, fora de
+            `open`/`WindowId` — o kit não desenha um ícone de party na TopBar. */}
+        {partyModalOpen && (
+          <PartyModal hunting={hunting} onClose={() => { setPartyModalOpen(false); }} />
         )}
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}

@@ -10,7 +10,7 @@ import { INITIAL_HUD, hud } from '../state/hud.js';
 
 async function render(partyLootOpen = true): Promise<string> {
   const { prelude } = await prerender(createElement(PartyMembers, {
-    partyLootOpen, onToggleLoot: () => {},
+    partyLootOpen, onToggleLoot: () => {}, onManage: () => {},
   }));
   return new Response(prelude).text();
 }
@@ -101,6 +101,16 @@ describe('PartyMembers', () => {
     const closed = await render(false);
     expect(closed).toContain('title="Party loot"');
     expect(closed).not.toMatch(/title="Party loot"[^>]*ui-icon-button-active/);
+  });
+
+  it('header has the "Gerenciar party" gear (R3-12, #320)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
+      ],
+    } }));
+    const html = await render();
+    expect(html).toContain('title="Gerenciar party"');
   });
 
   it('puts the note, mode, and leave button in the footer in that order', async () => {

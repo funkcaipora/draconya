@@ -16,9 +16,9 @@
 
 import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
-import { world } from '../state/world.js';
 import { sendIntent } from '../net/current.js';
 import { leaveHunt } from './HuntActions.js';
+import { percentFromWorld } from './party-member-view.js';
 import { Button } from './ui/Button.js';
 import { IconButton } from './ui/IconButton.js';
 import { Panel } from './ui/Panel.js';
@@ -33,17 +33,10 @@ export const HEALTH_POLL_MS = 1_000;
  */
 const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
 
-function percentFromWorld(name: string): number | null {
-  for (const creature of world.creatures.values()) {
-    if (creature.name !== name || creature.maxHealth <= 0) continue;
-    return Math.max(0, Math.min(100, Math.round((creature.health / creature.maxHealth) * 100)));
-  }
-  return null;
-}
-
-export function PartyMembers({ partyLootOpen, onToggleLoot }: {
+export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   partyLootOpen: boolean;
   onToggleLoot: () => void;
+  onManage: () => void;
 }) {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
@@ -77,9 +70,14 @@ export function PartyMembers({ partyLootOpen, onToggleLoot }: {
       title={`Party · ${String(partyView.members.length)}`}
       footer={footer}
       actions={(
-        <IconButton size="sm" title="Party loot" active={partyLootOpen} onClick={onToggleLoot}>
-          ▣
-        </IconButton>
+        <>
+          <IconButton size="sm" title="Party loot" active={partyLootOpen} onClick={onToggleLoot}>
+            ▣
+          </IconButton>
+          {/* Abre o modal "Gerenciar party" (#320, R3-11/R3-12) — a formação e as ações de
+              party voltam a existir DURANTE a hunt, sem duplicar PartyPanel.tsx. */}
+          <IconButton size="sm" title="Gerenciar party" onClick={onManage}>⚙</IconButton>
+        </>
       )}
     >
       <ul className="party-companions" aria-label="companheiros">
