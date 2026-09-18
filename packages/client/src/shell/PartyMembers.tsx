@@ -20,6 +20,7 @@ import { world } from '../state/world.js';
 import { sendIntent } from '../net/current.js';
 import { leaveHunt } from './HuntActions.js';
 import { Button } from './ui/Button.js';
+import { IconButton } from './ui/IconButton.js';
 import { Panel } from './ui/Panel.js';
 import { VitalBar } from './ui/VitalBar.js';
 
@@ -40,7 +41,10 @@ function percentFromWorld(name: string): number | null {
   return null;
 }
 
-export function PartyMembers() {
+export function PartyMembers({ partyLootOpen, onToggleLoot }: {
+  partyLootOpen: boolean;
+  onToggleLoot: () => void;
+}) {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
   const [, tick] = useState(0);
@@ -68,7 +72,16 @@ export function PartyMembers() {
   );
 
   return (
-    <Panel dock title={`Party · ${String(partyView.members.length)}`} footer={footer}>
+    <Panel
+      dock
+      title={`Party · ${String(partyView.members.length)}`}
+      footer={footer}
+      actions={(
+        <IconButton size="sm" title="Party loot" active={partyLootOpen} onClick={onToggleLoot}>
+          ▣
+        </IconButton>
+      )}
+    >
       <ul className="party-companions" aria-label="companheiros">
         {partyView.members.map((member) => {
           const percent = percentFromWorld(member.name) ?? member.healthPercent;

@@ -1114,14 +1114,19 @@ body {
 }
 .party-footer-leave { height: 22px; font-size: 6.5px; }
 
-.party-bag { display: flex; flex-direction: column; gap: 6px; }
-.party-bag-grid { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 3px; }
-.party-bag-cap {
-  position: relative;
-  height: 5px;
-  background: var(--ash-3);
-  border-radius: 1px;
-  overflow: hidden;
+/* --- party loot: janela flutuante da bolsa compartilhada (#316, RC-03, ADR 0030 decisão 3).
+   Vive FORA das colunas, dentro de um `FloatingWindow` (#314) — aqui só o CONTEÚDO de dentro.
+   Sucede o `.party-bag*` de DS-14/#257: grade FIXA 6×2 (R4-23) no lugar de `auto-fill`, sem
+   linha/marcador de "cap reservado" (R4-21). ---------------------------------------------- */
+.party-loot { display: flex; flex-direction: column; gap: 6px; }
+.party-loot-grid { display: grid; grid-template-columns: repeat(6, 30px); gap: 3px; justify-content: center; }
+.party-loot-totals { display: grid; gap: 3px; font: 8px var(--font-mono); color: var(--text-muted); }
+.party-loot-row { display: flex; justify-content: space-between; gap: 8px; }
+.party-loot-row b { color: var(--parchment-1); font-weight: 500; }
+.party-loot-row-faint { font-size: 7px; color: var(--text-faint); }
+.party-loot-bar { position: relative; height: 5px; background: var(--ash-3); border-radius: 1px; overflow: hidden; }
+.party-loot-bar-fill { display: block; height: 100%; background: var(--gold-3); }
+.party-loot-note {
+  margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--ash-5);
+  font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
 }
-.party-bag-cap-fill { display: block; height: 100%; background: var(--gold-3); }
-.party-bag-note { margin: 6px 0 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.4; }

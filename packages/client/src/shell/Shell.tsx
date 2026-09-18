@@ -31,7 +31,7 @@ import { CyclopediaModal } from './CyclopediaModal.js';
 import { HuntsModal } from './HuntsModal.js';
 import { HuntActions } from './HuntActions.js';
 import { PartyMembers } from './PartyMembers.js';
-import { PartyBag } from './PartyBag.js';
+import { PartyLootWindow } from './PartyBag.js';
 import { BotPanel } from './BotPanel.js';
 import { SkillsPanel } from './SkillsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
@@ -68,6 +68,9 @@ const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
 export function Shell() {
   const loaded = useBrowserPack();
   const [open, setOpen] = useState(DEFAULT_WINDOWS);
+  // Party loot (#316): independente de `open.*` — o ▣ do painel da party controla isto, não a
+  // barra do topo. Nasce `true`: a janela existe assim que `hunting` também for verdade.
+  const [partyLootOpen, setPartyLootOpen] = useState(true);
   // A marca de visto usa `performance.now()`, o mesmo relógio monotônico de `SystemLine.atMs`.
   // `Date.now()` faria uma mensagem da sessão parecer sempre anterior à época Unix.
   const [chatSeenAtMs, setChatSeenAtMs] = useState(0);
@@ -120,7 +123,10 @@ export function Shell() {
               menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
               que sobra aqui são os COMPANHEIROS durante a hunt — `PartyMembers` já se esconde
               sozinho fora de party (`state.party === null`), então não há `open.*` para ele. */}
-          <PartyMembers />
+          <PartyMembers
+            partyLootOpen={partyLootOpen}
+            onToggleLoot={() => { setPartyLootOpen((value) => !value); }}
+          />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
           {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
@@ -136,8 +142,6 @@ export function Shell() {
           {/* A batalha (#254, DS-11): quem está na tela, fora o próprio personagem e a party —
               esses já têm painel próprio. Minimiza sozinha (DT-02). */}
           <BattlePanel />
-          {/* A bolsa da party (#197): só no modo compartilhado; minimiza com o inventário. */}
-          <PartyBag collapsed={!open.inventory} />
         </div>
         {/* O Analisador é janela FLUTUANTE fora das colunas desde #315 (R4-14, ADR 0030 decisão 3):
             abre e fecha pelo ícone "Analisador" do topo — nunca mais minimiza, porque uma janela
@@ -145,6 +149,13 @@ export function Shell() {
             decide, por dentro, se há o que desenhar (sem sessão, na Cidade, ou fechada) — é assim
             que o `forceOpen` ao encerrar a hunt continua funcionando mesmo com a janela fechada. */}
         <Analyzer open={open.analyzer} onToggle={() => { toggle('analyzer'); }} />
+        {/* Party loot (#316): fora das colunas, como o Analisador — a mesma sobreposição sobre o
+            mundo inteiro. Só existe durante a hunt (ADR 0030 decisão 3: "nascem abertas na
+            hunt"); o CONTEÚDO (party em `shared` com bolsa) é decidido dentro de
+            `PartyLootWindow`, não aqui. */}
+        {hunting && partyLootOpen && (
+          <PartyLootWindow onClose={() => { setPartyLootOpen(false); }} />
+        )}
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
