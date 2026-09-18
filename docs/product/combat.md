@@ -571,12 +571,18 @@ interface FieldSpec {                     // declarado em content
   valem no golpe. A atribuição vai para quem aplicou (`sourceId`); num campo, para o id do campo.
 - **Política de fusão declarada (DT-02).** `refresh` é o de sempre (relançar reinicia);
   `replace` substitui; `strongest` mantém o de maior magnitude. Relançar cancela o evento antigo
-  antes do novo — e, quando o intervalo do tique é o mesmo, REAPROVEITA o evento pendente, senão
-  a cadência coincidente empurraria o tique para sempre e o DOT nunca aconteceria.
+  antes do novo — e, quando o intervalo do tique é o mesmo E HÁ de fato um tique pendente,
+  REAPROVEITA esse evento em vez de cancelar e reagendar, senão a cadência coincidente empurraria
+  o tique para sempre e o DOT nunca aconteceria. O segundo requisito é o que o #334 corrigiu: um
+  `nextTickAtMs` guardado sem evento correspondente na fila (o tique que só caberia depois do
+  vencimento, e por isso não foi agendado) não é reaproveitável — reaproveitá-lo era o fantasma
+  que silenciava o DOT para sempre a partir do relançamento seguinte. Sem tique pendente,
+  `nextTickAtMs` fica AUSENTE do estado, nunca com um valor sem evento.
 - **O campo vive no ruleset, não no `Tilemap` (DT-01).** Índice por chave NUMÉRICA de tile,
   leitura O(1); sobreposição no mesmo tile fica com o mais recente. A ENTRADA é observada só
   depois de um passo ACEITO (DT-03): `movement` devolve resultado e nunca infringe dano, e um
-  tile recusado não aplica o campo.
+  tile recusado não aplica o campo. O campo também carrega `nextTickAtMs` opcional (#334, mesmo
+  papel do `ConditionState`) para o relançamento do mesmo id decidir se reaproveita o tique.
 - **Tique x vencimento.** No instante em que o tique do campo cai no vencimento, o VENCIMENTO
   vence (é agendado primeiro) e o tique encontra o campo removido. É a única ordem, e é testada.
   Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.

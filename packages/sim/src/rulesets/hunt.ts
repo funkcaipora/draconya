@@ -1817,13 +1817,21 @@ export class HuntRuleset implements Ruleset {
     const subject = conditionSubject(this.#subjectOf(target), condition.key);
     const previous = target.conditions.get(condition.key);
     const tick = tickOf(condition);
-    const keepTick = previous !== null && sameTick(previous, condition);
+    // Só reaproveita o tique quando HÁ de fato um evento pendente na mesma cadência: um
+    // `nextTickAtMs` ausente (nenhum tique agendado — o último já rodou) ou vencido não é
+    // reaproveitável. Sem este segundo requisito, o relançamento herdaria o fantasma do #334 —
+    // um `nextTickAtMs` sem evento correspondente na fila — e a condição relançada nunca mais
+    // tiquetaria enquanto fosse renovada.
+    const keepTick = previous !== null
+      && sameTick(previous, condition)
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs;
     // O `nextTickAtMs` é atualizado aqui para o snapshot; quando o tique é REAPROVEITADO, a
     // cadência antiga continua valendo — é o que impede a inanição do relançamento no mesmo ritmo.
     const nextTickAtMs = tick === null
       ? undefined
-      : keepTick && previous?.nextTickAtMs !== undefined
-        ? previous.nextTickAtMs
+      : keepTick
+        ? previous!.nextTickAtMs
         : session.nowMs + tick.intervalMs;
     const effective: ConditionState = nextTickAtMs === undefined
       ? condition
@@ -1861,13 +1869,18 @@ export class HuntRuleset implements Ruleset {
     // e reagendar aqui a ressuscitaria no mapa. Morto não tiqueta.
     if (!target.alive || target.conditions.get(condition.key) === null) return;
     // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece. O
-    // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência.
+    // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência — mas só
+    // quando HÁ de fato um evento pendente (#334): sem tique agendado, a chave fica AUSENTE do
+    // estado, nunca com um valor fantasma que não corresponde a nenhum evento na fila.
     const nextTickAtMs = session.nowMs + tick.intervalMs;
-    target.conditions.replace({ ...condition, nextTickAtMs });
     if (nextTickAtMs <= condition.expiresAtMs) {
+      target.conditions.replace({ ...condition, nextTickAtMs });
       session.scheduleIn(CONDITION_TICK, tick.intervalMs, {
         priority: TICK_PRIORITY, subject,
       });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+      target.conditions.replace(withoutTick);
     }
   }
 
@@ -1970,20 +1983,30 @@ export class HuntRuleset implements Ruleset {
    * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
    */
   applyField(session: Session, spec: FieldSpec, at: WorldPoint): TileFieldState {
-    const field: TileFieldState = {
-      id: spec.id,
-      tiles: areaTiles(spec.shape, at, 'south', at),
-      expiresAtMs: session.nowMs + spec.durationMs,
-      condition: spec.condition,
-    };
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
     const interval = specTickIntervalMs(spec.condition);
     // Relançar no MESMO ritmo reaproveita o tique pendente: cancelar e reagendar a cada
     // relançamento empurraria o tique para sempre quando a cadência do campo coincide com a da
     // ability — o mesmo defeito de inanição que o DOT tem. Só o vencimento é sempre reagendado.
+    // Mas só reaproveita quando HÁ de fato um evento pendente (#334): um `nextTickAtMs` ausente
+    // ou vencido é o fantasma que não corresponde a nenhum evento na fila.
     const keepTick = previous !== null
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs
       && specTickIntervalMs(previous.condition) === interval;
+    const nextTickAtMs = interval === null
+      ? undefined
+      : keepTick
+        ? previous!.nextTickAtMs
+        : session.nowMs + interval;
+    const field: TileFieldState = {
+      id: spec.id,
+      tiles: areaTiles(spec.shape, at, 'south', at),
+      expiresAtMs: session.nowMs + spec.durationMs,
+      condition: spec.condition,
+      ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
+    };
     if (previous !== null) {
       session.cancelEvent(FIELD_EXPIRE, subject);
       if (!keepTick) session.cancelEvent(FIELD_TICK, subject);
@@ -1994,8 +2017,8 @@ export class HuntRuleset implements Ruleset {
     session.scheduleIn(FIELD_EXPIRE, spec.durationMs, {
       priority: EXPIRE_PRIORITY, subject,
     });
-    if (!keepTick && interval !== null) {
-      session.scheduleIn(FIELD_TICK, interval, {
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(FIELD_TICK, nextTickAtMs - session.nowMs, {
         priority: TICK_PRIORITY, subject,
       });
     }
@@ -2016,10 +2039,17 @@ export class HuntRuleset implements Ruleset {
       const tick = tickOf(condition);
       if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
     }
-    if (session.nowMs + interval <= field.expiresAtMs) {
+    // Reagenda até o prazo, e guarda o `nextTickAtMs` (#334) pelo mesmo motivo do tique de
+    // condição: sem tique agendado, a chave fica AUSENTE, nunca com um valor fantasma.
+    const nextTickAtMs = session.nowMs + interval;
+    if (nextTickAtMs <= field.expiresAtMs) {
+      this.#fields.replace({ ...field, nextTickAtMs });
       session.scheduleIn(FIELD_TICK, interval, {
         priority: TICK_PRIORITY, subject,
       });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = field;
+      this.#fields.replace(withoutTick);
     }
   }
 

@@ -22,6 +22,15 @@ export interface TileFieldState {
   readonly tiles: readonly WorldPoint[];
   readonly expiresAtMs: number;
   readonly condition: ConditionSpec;
+  /**
+   * Próximo tique, para auditoria e para o relançamento decidir se reaproveita a cadência
+   * (`HuntRuleset#applyField`, #334) — o mesmo papel de `ConditionState.nextTickAtMs`. Ausente
+   * é "nenhum tique agendado" (campo sem tique, ou o último já rodou); nunca um valor fantasma
+   * sem evento correspondente na fila. Opcional: um snapshot anterior ao #334 não tinha este
+   * campo, e ausência já significava "sem tique pendente conhecido" — compatível sem bump de
+   * `SNAPSHOT_FORMAT_VERSION`.
+   */
+  readonly nextTickAtMs?: number;
 }
 
 /**
@@ -63,6 +72,16 @@ export class Fields {
       else ids.add(field.id);
     }
     return previous;
+  }
+
+  /**
+   * Substitui sem reindexar tiles — usado para atualizar `nextTickAtMs` (o mesmo papel de
+   * `Conditions.replace`). Reaplicar via `apply` moveria o id para o topo da ordem de
+   * sobreposição de cada tile mesmo sem o campo ter se movido, mudando qual campo "vence" numa
+   * leitura de `at()` com sobreposição — `replace` não mexe no índice.
+   */
+  replace(field: TileFieldState): void {
+    this.#byId.set(field.id, field);
   }
 
   remove(id: string): TileFieldState | null {

@@ -5541,13 +5541,50 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     run(session, 2_000, 100);
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('sem monstro');
-    const subject = `m:${monster.id}/poison`;
+    // A chave da condição é a do TIQUE (`damage-over-time`, ver `casting.ts`), não o id da
+    // magia (`poison`). Filtrar por `/poison` (a versão original desta issue) nunca encontra o
+    // subject certo — as asserções abaixo passariam vazias mesmo com o bug do #334 presente.
+    const subject = `m:${monster.id}/damage-over-time`;
     const eventsOf = (): number =>
       session.snapshot().schedule.events.filter((e) => e.subject === subject).length;
     // UMA cadeia por condição, não uma por relançamento.
     expect(eventsOf()).toBeLessThanOrEqual(2);
+    // E o relançamento deixa exatamente UM tique pendente — nunca zero, o fantasma do #334 em
+    // que `nextTickAtMs` é guardado sem o evento correspondente na fila, silenciando o DOT para
+    // sempre a partir do próximo relançamento.
+    expect(session.snapshot().schedule.events.filter(
+      (e) => e.subject === subject && e.kind === 'condition-tick',
+    )).toHaveLength(1);
     run(session, 30_000, 100);
     expect(session.snapshot().schedule.events.filter((e) => e.subject === subject)).toHaveLength(0);
+  });
+
+  it('DOT sobrevive ao relançamento depois do último tique (duração não múltipla do intervalo, #334)', () => {
+    // A reprodução exata da issue: intervalo 500 ms, duração 1 300 ms (não múltipla — o
+    // último tique cabe em +1 000, e +1 500 já passa do vencimento) e cooldown 1 100 ms, que
+    // recasta bem DEPOIS do último tique e ANTES do vencimento — a janela fantasma. Sem a
+    // correção, só os dois tiques do PRIMEIRO lançamento acontecem (40 de dano) e todo
+    // relançamento seguinte fica mudo para sempre.
+    const flakyDot = {
+      id: 'flaky-dot', name: 'Flaky DOT', manaCost: 5, cooldownMs: 1_100,
+      effect: {
+        kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 1_300,
+        range: 3, damageType: 'earth',
+      },
+    };
+    const flakyConfig = botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'flaky-dot' } }],
+    });
+    const { session, ruleset } = withSpells(flakyConfig, {
+      mana: 1_000_000, health: 1_000_000, spells: [flakyDot], combat: [pacifist],
+      monstersRaw: [{ ...rat, health: 100_000, attack: 0 }],
+    });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    // Bem mais que os 40 de dano de um único lançamento: só é possível se o DOT continuou
+    // tiquetando através de vários relançamentos.
+    expect(monster.health).toBeLessThan(100_000 - 100);
   });
 
   it('entra no campo só depois do passo aceito, permanece, sai e REENTRA', () => {
@@ -5603,6 +5640,31 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
     run(session, 21_000, 100);
     expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('campo relançado depois do último tique continua tiquetando (#334)', () => {
+    // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3): o herói está sempre em cima
+    // do campo, andando ou parado, e o teste mede só o tique — não a entrada no tile.
+    const wideField: FieldSpec = {
+      id: 'wide-fire', durationMs: 1_300,
+      shape: { shape: 'circle', radius: 5, centered: 'caster' },
+      condition: {
+        key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
+        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      },
+    };
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    // Dois tiques (+500 e +1000); +1500 já passa do vencimento (+1300) e não é agendado — o
+    // fantasma do #334, se `nextTickAtMs` for guardado mesmo sem evento correspondente.
+    run(session, 1_100, 100);
+    const beforeRelaunch = hero.health;
+    // Relança o MESMO id, na MESMA cadência, DEPOIS do último tique e ANTES do vencimento —
+    // exatamente a janela em que o relançamento herdaria o fantasma. Sem a correção, o campo
+    // fica mudo pelo resto da vida nova inteira.
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    run(session, 5_000, 100);
+    expect(hero.health).toBeLessThan(beforeRelaunch);
   });
 
   it('DOT e campo rendem o MESMO a 10 Hz e a 1 Hz', () => {
