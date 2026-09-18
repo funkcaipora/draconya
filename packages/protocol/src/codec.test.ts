@@ -23,6 +23,32 @@ describe('round trip', () => {
     expect(decodeS2C(encodeS2C(step))).toEqual([step]);
   });
 
+  it('encodes and decodes player-count', () => {
+    const msg: S2CMessage = { type: 'player-count', count: 1284 };
+    const encoded = encodeS2C(msg);
+    expect(decodeS2C(encoded)).toEqual([msg]);
+  });
+
+  it('encodes and decodes party-spending with and without estimatedShare', () => {
+    const withEstimated: S2CMessage = {
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 250, estimatedShare: 100 },
+        { characterId: 'b', goldSpent: 12.5, estimatedShare: 100 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(withEstimated))).toEqual([withEstimated]);
+
+    const withoutEstimated: S2CMessage = {
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 0 },
+        { characterId: 'b', goldSpent: 50 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(withoutEstimated))).toEqual([withoutEstimated]);
+  });
+
   it('accepts ArrayBuffer as well as Uint8Array', () => {
     const frame = encodeC2S(walk);
     const copy = frame.slice().buffer;
@@ -136,3 +162,87 @@ describe('positional inventory (#160)', () => {
     expect(decodeC2S(encodeC2S(move))).toEqual([move]);
   });
 });
+
+describe('catalogue item stats (#337)', () => {
+  it('round-trips catalogue items with value, attack, and armor', () => {
+    // O codec preserva os novos atributos base de item enviados no catálogo.
+    const message: S2CMessage = {
+      type: 'catalogue',
+      hunts: [],
+      monsters: [],
+      ammunition: [],
+      vocations: [],
+      vocationLevel: 0,
+      bot: {
+        vocabularyVersion: 1,
+        advancedFromLevel: 50,
+        slots: {},
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [],
+        supplies: [],
+      },
+      items: [
+        {
+          id: 'spike-sword',
+          name: 'Spike Sword',
+          appearanceId: 10,
+          weight: 50,
+          slot: 'hand',
+          twoHanded: false,
+          value: 240,
+          attack: 24,
+          armor: 0,
+        },
+        {
+          id: 'leather-armor',
+          name: 'Leather Armor',
+          appearanceId: 20,
+          weight: 60,
+          slot: 'chest',
+          twoHanded: false,
+          value: 12,
+          attack: 0,
+          armor: 4,
+        },
+      ],
+    };
+
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
+  it('decodes older catalogue items without value, attack, or armor leaving them absent', () => {
+    // Deploy em rolagem: cliente novo recebendo catálogo de nó antigo decodifica sem
+    // os campos opcionais (ficam ausentes / undefined, sem default injetado).
+    const olderMessage = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1,
+        advancedFromLevel: 50,
+        slots: {},
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [],
+        supplies: [],
+      },
+      items: [
+        {
+          id: 'cheese',
+          name: 'Cheese',
+          appearanceId: 5,
+          weight: 4,
+          slot: null,
+          twoHanded: false,
+        },
+      ],
+    };
+
+    const decoded = decodeS2C(encodeS2C(olderMessage as unknown as S2CMessage));
+    expect(decoded).not.toBeNull();
+    const item = (decoded as Array<{ items: Array<Record<string, unknown>> }>)[0]?.items[0];
+    expect(item).toBeDefined();
+    expect(item).not.toHaveProperty('value');
+    expect(item).not.toHaveProperty('attack');
+    expect(item).not.toHaveProperty('armor');
+  });
+});
+

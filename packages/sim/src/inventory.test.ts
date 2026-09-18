@@ -31,6 +31,8 @@ const catalog = new Map<string, Item>([
     id: 'druid-staff', kind: 'weapon', slot: 'hand', weight: 30, value: 0, attack: 12,
     requires: { vocationId: 'druid' },
   })],
+  ['energy-ring', define({ id: 'energy-ring', kind: 'ring', slot: 'finger', weight: 2, ringEffect: { kind: 'energy-shield' } })],
+  ['plain-ring', define({ id: 'plain-ring', kind: 'ring', slot: 'finger', weight: 2 })],
 ]);
 
 const carried = (itemId: string, instanceId = itemId, quantity = 1): CarriedItem =>
@@ -249,6 +251,27 @@ describe('o que o combate lê', () => {
     inventory.equip('armor', wearer(), catalog);
     inventory.equip('helmet', wearer(), catalog);
     expect(inventory.armor(catalog)).toBe(6);
+  });
+
+  it('ringEffect lê o efeito do anel no dedo pelo catálogo', () => {
+    const inventory = new Inventory();
+    // null sem anel equipado
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // null com item equipado em slot diferente de dedo
+    inventory.add(carried('armor'), catalog, wearer(), rules);
+    inventory.equip('armor', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // null com anel no dedo que não possui ringEffect
+    inventory.add(carried('plain-ring'), catalog, wearer(), rules);
+    inventory.equip('plain-ring', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // Devolve o efeito com anel equipado no dedo
+    inventory.add(carried('energy-ring'), catalog, wearer(), rules);
+    inventory.equip('energy-ring', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toEqual({ kind: 'energy-shield' });
   });
 });
 

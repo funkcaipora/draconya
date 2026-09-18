@@ -61,6 +61,8 @@ export interface GameDependencies {
   readonly lootBoxes?: SessionHostOptions['lootBoxes'];
   /** O catálogo do que existe: hunts e vocabulário do bot (FUN-79, FUN-89). */
   readonly catalogue?: SessionHostOptions['catalogue'];
+  /** O catálogo de skills (#340, SV-04). */
+  readonly skillCatalog?: SessionHostOptions['skillCatalog'];
 }
 
 /**
@@ -153,6 +155,9 @@ export function createGame(
       ...(dependencies.lootBoxes === undefined
         ? {}
         : { lootBoxes: dependencies.lootBoxes }),
+      ...(dependencies.skillCatalog === undefined
+        ? {}
+        : { skillCatalog: dependencies.skillCatalog }),
       metrics,
     });
 
@@ -338,6 +343,7 @@ export function createGame(
             .heartbeat(nodeId, {
               sessions: host?.sessionCount ?? 0,
               url: configuration.GAME_PUBLIC_URL,
+              players: host?.connectedCharacterCount ?? 0,
             })
             .catch((error: unknown) => logger.error({ error }, 'Heartbeat failed'));
         };

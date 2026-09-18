@@ -104,6 +104,7 @@ describe('loadContent', () => {
     expect(hunt?.ambience).toBe('cavern');
     expect(hunt?.corpseTtlMs).toBeGreaterThan(0);
     const rat = content.monsters.get('rat');
+    expect(rat?.class).toBe('mammal');
     expect(rat?.attack).toEqual({ min: 0, max: 8 });
     expect(rat?.speed).toBe(172);
     expect(rat?.corpseAppearanceId).toBe(5964);

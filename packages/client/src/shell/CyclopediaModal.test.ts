@@ -3,12 +3,16 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CyclopediaModal,
+  categoryOf,
   entryOf,
   filterEntries,
+  filterItems,
+  itemsFooterNote,
   sortEntries,
 } from './CyclopediaModal.js';
+import type { CyclopediaTab } from './CyclopediaModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { BestiaryConfig, Catalogue, MonsterListing } from '../state/hud.js';
+import type { BestiaryConfig, Catalogue, ItemDefinition, MonsterListing } from '../state/hud.js';
 
 const config: BestiaryConfig = {
   milestones: [10_000, 25_000, 50_000, 100_000, 200_000],
@@ -20,6 +24,24 @@ const bat: MonsterListing = { id: 'bat', name: 'Bat' };
 const mite: MonsterListing = { id: 'mite', name: 'Ácaro' };
 const monsters: MonsterListing[] = [rat, bat, mite];
 
+const sword: ItemDefinition = {
+  id: 'sword', name: 'Espada Longa', appearanceId: 101, weight: 35,
+  slot: 'hand', twoHanded: false, attack: 24, armor: 0,
+};
+const shield: ItemDefinition = {
+  id: 'shield', name: 'Escudo de Madeira', appearanceId: 102, weight: 40,
+  slot: 'shield', twoHanded: false, attack: 0, armor: 4,
+};
+const cheese: ItemDefinition = {
+  id: 'cheese', name: 'Queijo', appearanceId: 103, weight: 4,
+  slot: null, twoHanded: false, attack: 0, armor: 0,
+};
+const machete: ItemDefinition = {
+  id: 'machete', name: 'Machete', appearanceId: 104, weight: 16.5,
+  slot: 'hand', twoHanded: false, attack: 12, armor: 0,
+};
+const items: ItemDefinition[] = [sword, shield, cheese, machete];
+
 function catalogue(over: Partial<Catalogue> = {}): Catalogue {
   return {
     hunts: [], monsters, ammunition: [], vocations: [], vocationLevel: 8,
@@ -27,13 +49,13 @@ function catalogue(over: Partial<Catalogue> = {}): Catalogue {
       vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
       advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [],
     },
-    items: [], bestiary: config,
+    items, bestiary: config,
     ...over,
   };
 }
 
-async function render(): Promise<string> {
-  const { prelude } = await prerender(createElement(CyclopediaModal, { onClose: () => {} }));
+async function render(props?: { initialTab?: CyclopediaTab }): Promise<string> {
+  const { prelude } = await prerender(createElement(CyclopediaModal, { onClose: () => {}, ...props }));
   return new Response(prelude).text();
 }
 
@@ -76,6 +98,36 @@ describe('Cyclopedia entries (#321, RC-08)', () => {
     const samePercent = { milestones: [10, 20, 40], xpBonusPercentPerMilestone: 1 };
     const tied = [entryOf(rat, 10, samePercent), entryOf(bat, 20, samePercent)];
     expect(sortEntries(tied, 'progress').map((entry) => entry.monster.id)).toEqual(['bat', 'rat']);
+  });
+});
+
+describe('Cyclopedia items pure functions (#344, SV-08)', () => {
+  it('categoryOf maps known slots, falls back to the slot id, or returns Outros when null', () => {
+    expect(categoryOf(sword)).toBe('Mão');
+    expect(categoryOf(shield)).toBe('Escudo');
+    expect(categoryOf(cheese)).toBe('Outros');
+    expect(categoryOf({ ...sword, slot: 'head' })).toBe('Cabeça');
+    expect(categoryOf({ ...sword, slot: 'neck' })).toBe('Pescoço');
+    expect(categoryOf({ ...sword, slot: 'chest' })).toBe('Peito');
+    expect(categoryOf({ ...sword, slot: 'legs' })).toBe('Pernas');
+    expect(categoryOf({ ...sword, slot: 'feet' })).toBe('Pés');
+    expect(categoryOf({ ...sword, slot: 'finger' })).toBe('Dedo');
+    expect(categoryOf({ ...sword, slot: 'ammo' })).toBe('Munição');
+    expect(categoryOf({ ...sword, slot: 'back' })).toBe('Mochila');
+    expect(categoryOf({ ...sword, slot: 'custom_slot' })).toBe('custom_slot');
+  });
+
+  it('filterItems filters by a case-insensitive name substring without reordering a blank query', () => {
+    expect(filterItems(items, 'eSPaDa').map((item) => item.id)).toEqual(['sword']);
+    expect(filterItems(items, 'e').map((item) => item.id)).toEqual(['sword', 'shield', 'cheese', 'machete']);
+    expect(filterItems(items, '').map((item) => item.id)).toEqual(['sword', 'shield', 'cheese', 'machete']);
+    expect(filterItems(items, 'inexistente')).toEqual([]);
+  });
+
+  it('itemsFooterNote formats the total count, or the filtered count out of the total', () => {
+    expect(itemsFooterNote(items, '')).toBe('4 itens no catálogo');
+    expect(itemsFooterNote(items, 'espada')).toBe('1 de 4 itens');
+    expect(itemsFooterNote(items, 'inexistente')).toBe('0 de 4 itens');
   });
 });
 
@@ -126,10 +178,78 @@ describe('CyclopediaModal', () => {
     expect(text).not.toContain('NaN');
   });
 
-  it('renders no single-item tab bar or decorative pager', async () => {
+  it('renders a tablist with exactly Itens and Bestiary, Bestiary selected by default', async () => {
     hud.set((state) => ({ ...state, catalogue: catalogue() }));
     const html = await render();
-    expect(html).not.toContain('role="tablist"');
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tab" aria-selected="false" class="ui-tab">Itens</button>');
+    expect(html).toContain('role="tab" aria-selected="true" class="ui-tab ui-tab-active">Bestiary</button>');
+    expect(html).not.toContain('Bosstiary');
     expect(html).not.toMatch(/página|pagin/i);
+    expect(html).toContain('Todas as entradas do Bestiário');
+    expect(html).not.toContain('cyclopedia-modal-items-list');
+  });
+
+  it('renders the Items tab when initialTab is Itens, with a row per catalogued item', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('role="tab" aria-selected="true" class="ui-tab ui-tab-active">Itens</button>');
+    expect(html).toContain('role="tab" aria-selected="false" class="ui-tab">Bestiary</button>');
+    expect(html).toContain('cyclopedia-modal-items-list');
+    expect(html).not.toContain('Todas as entradas do Bestiário');
+
+    expect(html).toContain('cyclopedia-modal-item-row');
+    expect(html).toContain('cyclopedia-modal-item-sprite');
+    for (const item of items) expect(html).toContain(item.name);
+    expect(html).toContain('cyclopedia-modal-item-category">Mão<');
+    expect(html).toContain('cyclopedia-modal-item-category">Escudo<');
+    expect(html).toContain('cyclopedia-modal-item-category">Outros<');
+  });
+
+  it('renders the attack badge only when attack is greater than zero', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('⚔ Atq 24');
+    expect(html).toContain('⚔ Atq 12');
+    expect(html).not.toContain('⚔ Atq 0');
+  });
+
+  it('renders the armor badge only when armor is greater than zero', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('⛨ Def 4');
+    expect(html).not.toContain('⛨ Def 0');
+  });
+
+  it('formats weight in pt-BR with up to two decimal digits', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('⚖ 16,5 oz');
+    expect(html).toContain('⚖ 35 oz');
+  });
+
+  it('renders a single shared search input above the tabs for both tabs', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const bestiaryHtml = await render({ initialTab: 'Bestiary' });
+    expect(bestiaryHtml).toContain('class="ui-input ui-input-sm cyclopedia-modal-search"');
+    expect(bestiaryHtml).toContain('placeholder="Digite para buscar…"');
+
+    const itemsHtml = await render({ initialTab: 'Itens' });
+    expect(itemsHtml).toContain('class="ui-input ui-input-sm cyclopedia-modal-search"');
+    expect(itemsHtml).toContain('placeholder="Digite para buscar…"');
+  });
+
+  it('shows the empty message when the item catalogue is empty', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue({ items: [] }) }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('Nenhum item encontrado.');
+  });
+
+  it('shows itemsFooterNote on the Itens tab, never the Bestiary note or kit mock pagination', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue() }));
+    const html = await render({ initialTab: 'Itens' });
+    expect(html).toContain('4 itens no catálogo');
+    expect(html).not.toContain('Bônus do Bestiário');
+    expect(html).not.toMatch(/1 – 8 de 867/);
   });
 });

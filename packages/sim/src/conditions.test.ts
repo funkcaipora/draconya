@@ -176,4 +176,23 @@ describe('the mana shield on the character', () => {
     expect(restored.conditions.hasManaShield()).toBe(true);
     expect(restored.speedScale).toBe(1);
   });
+
+  it('absorbs from mana via extraManaShield without mana-shield condition, and does not double-absorb when both are active', () => {
+    // extraManaShield = true (e.g. Energy Ring) sem a condição mana-shield: o estágio é o de
+    // `applyDamageOutcome` (CMB-08), o mesmo da condição.
+    const hero = new CharacterRuntime(state(false));
+    const ring = applyDamageOutcome(hero, damage(50), null, 1, true);
+    expect(ring.healthDamage).toBe(20);
+    expect(ring.absorbedByMana).toBe(30);
+    expect(hero.mana).toBe(0);
+    expect(hero.health).toBe(80);
+
+    // Condição mana-shield E extraManaShield ao mesmo tempo: absorve uma vez só, não debita duas vezes
+    const both = new CharacterRuntime(state(true));
+    const twice = applyDamageOutcome(both, damage(20), null, 1, true);
+    expect(twice.healthDamage).toBe(0);
+    expect(twice.absorbedByMana).toBe(20);
+    expect(both.mana).toBe(10);
+    expect(both.health).toBe(100);
+  });
 });

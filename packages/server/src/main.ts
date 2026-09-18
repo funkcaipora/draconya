@@ -190,6 +190,7 @@ async function main(): Promise<void> {
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,
+      skillCatalog: content.skills,
       // Nome e outfit de quem nasce na hunt (FUN-103). Mesmo raciocínio do catálogo de itens:
       // o host recebe o mapa, não o `Content` — e o mapa é do conteúdo fixado no boot.
       monsterCatalog: content.monsters,

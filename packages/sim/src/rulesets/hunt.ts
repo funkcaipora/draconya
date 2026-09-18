@@ -44,7 +44,7 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import { settleBag, xpShare } from '../party.js';
+import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
@@ -100,6 +100,9 @@ const SPAWN = 'spawn';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
+const EXIT_COUNTDOWN = 'exit-countdown';
+
+type ExitReason = 'manual-exit' | 'exit-rule';
 /**
  * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
  * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
@@ -176,6 +179,7 @@ function runnerState(runner: Runner): RunnerState {
     warnedFullBackpack: runner.warnedFullBackpack,
     warnedNoGold: runner.warnedNoGold,
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
+    ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
 }
 
@@ -234,7 +238,10 @@ export interface HuntExitRule {
  * isso `hp-below` carrega o percentual no id: duas regras de HP com limites diferentes
  * precisam ser distinguíveis na tela de retorno.
  */
-export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntExitRule[] {
+export function compileExitRules(
+  rules: readonly BotExitRule[],
+  items: ReadonlyMap<string, Item>,
+): readonly HuntExitRule[] {
   return rules.map((rule) => {
     switch (rule.kind) {
       case 'hp-below': {
@@ -271,6 +278,16 @@ export function compileExitRules(rules: readonly BotExitRule[]): readonly HuntEx
           // de cada runner leva só ele, então aqui não há o que olhar; e numa hunt de um não
           // há de quem sair, por construção.
           when: () => false,
+        };
+      case 'out-of-capacity':
+        return {
+          id: 'out-of-capacity',
+          when(view) {
+            const self = view.participants[0];
+            if (self === undefined || !self.alive) return false;
+            if (self.capacity <= 0) return false;
+            return self.inventory.weight(items) >= self.capacity;
+          },
         };
     }
   });
@@ -377,6 +394,8 @@ export type PartyMode = 'split' | 'shared';
 export interface PartyOptions {
   readonly leaderId: string;
   readonly mode: PartyMode;
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
 }
 
 export interface HuntRulesetState {
@@ -465,6 +484,7 @@ interface Runner {
   /** A configuração crua correspondente, para o snapshot. Anda junto com `bot`, sempre. */
   botConfig: BotConfig | undefined;
   exitRules: readonly HuntExitRule[];
+  pendingExit: ExitReason | null;
   /** Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada. */
   readonly botReady: Record<BotCategory, boolean>;
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
@@ -489,6 +509,7 @@ export interface RunnerState {
   readonly warnedFullBackpack: boolean;
   readonly warnedNoGold: boolean;
   readonly botConfig?: BotConfig;
+  readonly pendingExit?: ExitReason;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -611,7 +632,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#options = options;
     this.#party = options.partyOptions;
-    if (this.#party?.mode === 'shared') this.#bag = { gold: 0, items: [], capacity: 0 };
+    if (this.#party !== undefined && splitLootOf(this.#party)) this.#bag = { gold: 0, items: [], capacity: 0 };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -646,6 +667,18 @@ export class HuntRuleset implements Ruleset {
     return this.#world.map.id;
   }
 
+  get huntId(): string {
+    return this.#options.hunt.id;
+  }
+
+  get difficulty(): string {
+    return this.#options.difficulty;
+  }
+
+  attackTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    return this.#attackTarget(character);
+  }
+
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
   get groundItems(): readonly CorpseState[] {
     return this.#corpses;
@@ -673,6 +706,18 @@ export class HuntRuleset implements Ruleset {
   /** A party desta instância (#191), ou `undefined` em solo. */
   get party(): PartyOptions | undefined {
     return this.#party;
+  }
+
+  /**
+   * Prévia pura do rateio da bolsa compartilhada (#354, SV-18): quanto cada presente receberia se a bolsa
+   * fosse liquidada AGORA — a MESMA conta de `#settle` (linha 2578), chamada como LEITURA, sem
+   * gravar nada e sem esvaziar a bolsa. `undefined` fora do modo `shared` (não há bolsa a ratear)
+   * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
+   */
+  partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
+    if (this.#party === undefined || !splitLootOf(this.#party) || this.#bag === null) return undefined;
+    const presentIds = session.participants.map((p) => p.id);
+    return settleBag(this.#bag, presentIds, this.#options.items).shares;
   }
 
   /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
@@ -829,12 +874,17 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
+  requestExit(session: Session, characterId: string): void {
+    this.#beginExit(session, characterId, 'manual-exit');
+  }
+
   #newRunner(config: BotConfig | undefined, state?: RunnerState): Runner {
     const runner: Runner = {
       walker: new RouteWalker(this.#options.route, state?.route),
       bot: config === undefined ? undefined : compileBot(config),
       botConfig: config,
       exitRules: this.#composeExitRules(config),
+      pendingExit: state?.pendingExit ?? null,
       botReady: { heal: true, potion: true, attack: true, rune: true, support: true },
       playerAttackReady: state?.playerAttackReady ?? true,
       running: state?.luring ?? true,
@@ -877,6 +927,7 @@ export class HuntRuleset implements Ruleset {
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
+      case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
@@ -936,14 +987,18 @@ export class HuntRuleset implements Ruleset {
     const perSecond = what === 'health' ? healthPerSecond : manaPerSecond;
     if (perSecond <= 0) return;
 
+    const ring = character.inventory.ringEffect(this.#options.items);
+    const bonusPercent = ring?.kind === 'regen-boost' ? ring.percent : 0;
+    const amount = Math.round(1 * (1 + bonusPercent / 100));
+
     if (what === 'health') {
       // Só a barra, sem `creature-healed` (FUN-109): um "+1" flutuando por segundo a hunt
       // inteira é ruído, mas a barra precisa andar. E só quando REPÔS — de vida cheia, nada
       // mudou, e um evento por segundo para dizer isso é o que uma hunt desanexada de oito
       // horas não precisa produzir.
-      if (character.heal(1) > 0) this.#emitCharacterHealth(session, character);
+      if (character.heal(amount) > 0) this.#emitCharacterHealth(session, character);
     } else {
-      character.mana = Math.min(character.maxMana, character.mana + 1);
+      character.mana = Math.min(character.maxMana, character.mana + amount);
     }
 
     // `r` por segundo é um evento a cada `1000 / r` ms. Escrever assim, em vez de somar
@@ -1007,7 +1062,7 @@ export class HuntRuleset implements Ruleset {
    * extrato dele, e o hospedeiro recebe `member-left` com o extrato e o personagem, porque não
    * foi ele quem chamou. O último a sair encerra a sessão com o motivo dele.
    */
-  #depart(session: Session, characterId: string, reason: 'death' | 'exit-rule'): void {
+  #depart(session: Session, characterId: string, reason: 'death' | ExitReason): void {
     const departure = session.leave(characterId, reason);
     if (departure === null) return;
     session.emit({ kind: 'member-left', characterId, reason, departure });
@@ -1145,7 +1200,7 @@ export class HuntRuleset implements Ruleset {
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
     this.#party = restored.partyOptions;
     this.#bag = restored.partyBag === undefined
-      ? (this.#party?.mode === 'shared' ? { gold: 0, items: [], capacity: 0 } : null)
+      ? (this.#party !== undefined && splitLootOf(this.#party) ? { gold: 0, items: [], capacity: 0 } : null)
       : { gold: restored.partyBag.gold, items: [...restored.partyBag.items], capacity: restored.partyBag.capacity };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
@@ -1852,6 +1907,7 @@ export class HuntRuleset implements Ruleset {
       // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
       const applied = applyDamageOutcome(
         target, outcome, null, target.conditions.damageTakenScale(),
+        this.#hasEnergyShield(target),
       );
       recordDamage(target.contribution, attacker, applied.healthDamage);
       session.emit({
@@ -2024,7 +2080,7 @@ export class HuntRuleset implements Ruleset {
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
-    const shared = this.#bag !== null && session.participants.length > 1;
+    const shared = this.#party !== undefined && shareCostsOf(this.#party) && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
@@ -2110,7 +2166,7 @@ export class HuntRuleset implements Ruleset {
    */
   #composeExitRules(config: BotConfig | undefined): readonly HuntExitRule[] {
     if (config === undefined) return this.#injectedExitRules;
-    return [...compileExitRules(config.exit), ...this.#injectedExitRules];
+    return [...compileExitRules(config.exit, this.#options.items), ...this.#injectedExitRules];
   }
 
   #botCooldownMs(): number {
@@ -2448,9 +2504,11 @@ export class HuntRuleset implements Ruleset {
   ): void {
     // O CMB-08: o mana shield do personagem vira estágio explícito, e o hit/atribuição usam o
     // HP APLICADO. A postura (#155) escala o dano TOMADO antes do escudo; o atacante é `null`
-    // porque monstro não faz leech — o outcome informa a mana absorvida sem matar ninguém.
+    // porque monstro não faz leech — o outcome informa a mana absorvida sem matar ninguém. O
+    // Energy Ring (SV-16) é a segunda fonte de escudo, resolvida por quem tem o catálogo.
     const applied = applyDamageOutcome(
       character, outcome, null, character.conditions.damageTakenScale(),
+      this.#hasEnergyShield(character),
     );
     recordDamage(character.contribution, subject, applied.healthDamage);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
@@ -2594,7 +2652,7 @@ export class HuntRuleset implements Ruleset {
     // sessão: em solo, encerrar; em party, sair (#193).
     for (const character of session.participants) {
       const runner = this.#runners.get(character.id);
-      if (runner === undefined) continue;
+      if (runner === undefined || runner.pendingExit !== null) continue;
       const view: HuntView = {
         elapsedMs: session.aggregates.durationMs,
         aggregates: session.aggregatesOf(character.id),
@@ -2606,15 +2664,37 @@ export class HuntRuleset implements Ruleset {
         // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
         // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
         session.record('exit-rule', rule.id);
-        // Solo: encerra. Party (#193): SAI, e os outros ficam — a regra é dele.
-        if (session.participants.length <= 1) {
-          session.end('exit-rule');
-          return;
-        }
-        this.#depart(session, character.id, 'exit-rule');
+        this.#beginExit(session, character.id, 'exit-rule');
         break;
       }
     }
+  }
+
+  #beginExit(session: Session, characterId: string, reason: ExitReason): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.pendingExit !== null) return;
+    runner.pendingExit = reason;
+    const delayMs = this.#options.hunt.exitDelayMs;
+    if (delayMs === undefined) { this.#finishExit(session, characterId); return; }
+    session.scheduleIn(EXIT_COUNTDOWN, delayMs, {
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
+  }
+
+  #onExitCountdown(session: Session, characterId: string): void {
+    this.#finishExit(session, characterId);
+  }
+
+  #finishExit(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    const reason = runner?.pendingExit ?? null;
+    if (runner === undefined || reason === null) return;
+    runner.pendingExit = null;
+    if (session.participants.length <= 1) {
+      if (session.ended === null) session.end(reason);
+      return;
+    }
+    this.#depart(session, characterId, reason);
   }
 
   // --- combate ------------------------------------------------------------------------------
@@ -3163,7 +3243,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#party === undefined || session.participants.length < 2) {
       return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
     }
-    if (this.#party.mode === 'shared') return null;
+    if (splitLootOf(this.#party)) return null;
     if (eligible.length === 0) return null;
     return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
   }
@@ -3250,6 +3330,15 @@ export class HuntRuleset implements Ruleset {
       // skill de shielding, que é do ruleset porque vive no personagem.
       defense: this.#defenseSourceOf(character),
     };
+  }
+
+  /**
+   * O Energy Ring no dedo (§13.9, SV-16): a segunda fonte de mana shield, resolvida pelo
+   * catálogo — `CharacterRuntime` não conhece conteúdo. Entra em `applyDamageOutcome` como a
+   * mesma leitura OU-lógica da condição `mana-shield`, e nunca soma com ela.
+   */
+  #hasEnergyShield(character: CharacterRuntime): boolean {
+    return character.inventory.ringEffect(this.#options.items)?.kind === 'energy-shield';
   }
 
   /**

@@ -124,6 +124,7 @@ body {
 }
 .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .topbar-portrait {
+  position: relative;
   display: grid; place-items: center; flex: none; width: 34px; height: 34px;
   border: 1px solid var(--gold-3);
   background:
@@ -132,6 +133,9 @@ body {
   color: var(--gold-4); font: 600 12.5px var(--font-display);
   box-shadow: inset 0 0 0 2px var(--ash-1), inset 0 0 0 3px rgba(208, 163, 75, 0.25), 0 1px 4px #000;
   padding: 0; cursor: pointer;
+}
+.topbar-portrait .item-initial {
+  color: var(--gold-4); font: 600 12.5px var(--font-display);
 }
 .topbar-identity { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .topbar-name {
@@ -158,6 +162,11 @@ body {
 .topbar-wordmark b {
   font: 700 12px var(--font-display); letter-spacing: 0.18em; color: var(--gold-5);
   text-shadow: 0 1px #000, 0 0 18px rgba(201, 162, 77, 0.25);
+}
+.topbar-online {
+  display: block; margin-top: 3px;
+  font: 7.5px var(--font-mono); letter-spacing: 0.12em; color: var(--text-muted);
+  text-transform: uppercase;
 }
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
 .topbar-nav { display: flex; gap: 4px; }
@@ -564,6 +573,13 @@ body {
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
 }
+/* A pill "ⓘ Detalhes da caçada" reusa `.hunt-pill`; só o selo circular "i" é novo
+   (Hud.jsx:140, o span antes do texto). */
+.hunt-pill-icon {
+  display: grid; place-items: center; width: 12px; height: 12px;
+  border: 1px solid var(--gold-3); border-radius: 50%;
+  font: 700 7px var(--font-mono); color: var(--gold-4);
+}
 
 /* ---- O popover "Sair sozinho quando…" (#260, DS-17) --------------------------------------- */
 /* O contêiner é pointer-events: none para o clique passar ao mundo; a âncora do popover
@@ -600,6 +616,9 @@ body {
   position: absolute; right: 0; bottom: 32px; white-space: nowrap; padding: 3px 7px;
   border: 1px solid var(--ash-5); border-radius: 2px; background: rgba(13, 9, 8, .92);
   font: 6.5px var(--font-mono); color: var(--text-muted);
+}
+.exit-rules-note {
+  margin: 8px 0 0; font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
 }
 
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
@@ -677,6 +696,42 @@ body {
   letter-spacing: .04em; text-transform: uppercase;
 }
 .character-modal-vitals { display: flex; flex-direction: column; gap: 6px; }
+
+/* ---- HuntDetailsModal: monstros, loot e descrição (#349, SV-13) ------------------------- */
+.hunt-details-modal-grid { display: grid; grid-template-columns: 250px 1fr; gap: 14px; }
+.hunt-details-col-left { min-width: 0; }
+.hunt-details-col-right { min-width: 0; }
+.hunt-details-kicker { display: block; margin: 10px 0 4px; }
+.hunt-details-pulls {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px;
+  font: 8px var(--font-mono); color: var(--text-muted);
+}
+.hunt-details-pull { white-space: nowrap; }
+.hunt-details-monsters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+.hunt-details-monster {
+  display: flex; flex-direction: column; align-items: center; width: 60px; gap: 2px;
+  font: 6.5px var(--font-mono); color: var(--text-muted); text-align: center;
+}
+.hunt-details-monster strong { font: 600 7px var(--font-mono); color: var(--parchment-1); }
+/* Sem outfit no catálogo de monstros (`MonsterListing` só tem id/nome), o quadrado fica
+   tracejado — o mesmo placeholder que a Cyclopedia usa para o mesmo caso (`.cyclopedia-modal
+   -card-sprite`), nunca um `OutfitSprite` com um id inventado. */
+.hunt-details-monster-sprite {
+  position: relative; width: 46px; height: 46px;
+  border: 1px dashed var(--ash-6); border-radius: 3px; background: var(--surface-slot);
+}
+.hunt-details-desc { margin: 0; font: 11px var(--font-body); color: var(--text-muted); line-height: 1.5; }
+.hunt-details-loot { display: grid; gap: 4px; max-height: 330px; overflow: auto; scrollbar-width: thin; }
+.hunt-details-loot-item {
+  display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 6px; height: 32px;
+  padding: 0 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+  font: 8.5px var(--font-mono); color: var(--parchment-1);
+}
+.hunt-details-loot-sprite { position: relative; width: 22px; height: 22px; }
+
+/* ---- Cyclopedia: abas + busca compartilhada (#344, SV-08) --------------------------------- */
+.cyclopedia-modal-tabs { margin-bottom: 8px; }
+.cyclopedia-modal-search { margin-bottom: 8px; }
 
 /* ---- O modal Cyclopedia, aba Bestiary (#321, RC-08) --------------------------------------- */
 .cyclopedia-modal-body {
@@ -756,6 +811,26 @@ body {
 .cyclopedia-modal-row span:last-child.cyclopedia-modal-count-done { color: var(--ok); }
 .cyclopedia-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
+/* ---- Cyclopedia: aba Itens (#344, SV-08) -------------------------------------------------- */
+.cyclopedia-modal-items-list {
+  display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;
+  max-height: 424px; scrollbar-width: thin;
+}
+.cyclopedia-modal-item-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px;
+  align-items: center; padding: 7px 10px; border: 1px solid var(--ash-5); border-radius: 4px;
+  background: var(--ash-1);
+}
+.cyclopedia-modal-item-sprite { position: relative; width: 34px; height: 34px; }
+.cyclopedia-modal-item-info { min-width: 0; display: grid; gap: 2px; }
+.cyclopedia-modal-item-name {
+  font: 600 9.5px var(--font-mono); color: var(--parchment-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cyclopedia-modal-item-category { font: 7.5px var(--font-mono); color: var(--gold-4); }
+.cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
+.cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
+
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
    texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
@@ -779,6 +854,28 @@ body {
   background: none; border: none; color: var(--text-muted); font: 7px/1 var(--font-mono); cursor: pointer;
 }
 .bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
+
+/* Configurações avançadas do bot (#353, SV-17) */
+.bot-advanced { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
+.bot-advanced-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.bot-advanced-head strong { flex: 1 1 auto; font: 500 8px var(--font-mono); color: var(--parchment-1); }
+.bot-advanced-level { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.bot-advanced-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 4px 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.bot-advanced-row-locked { opacity: 0.55; }
+.bot-advanced-row-text {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+}
+.bot-advanced-row-text b {
+  font: 600 8px var(--font-mono); color: var(--parchment-1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bot-advanced-row-text small {
+  font: 7px var(--font-mono); color: var(--text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
    CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
@@ -804,6 +901,74 @@ body {
 
 @media (max-width: 520px) {
   .rule-editor-row { grid-template-columns: 1fr; }
+}
+
+/* O modal Ring swap (#353, SV-17; ADR 0030, captura 27-modal-swap-ring.png) */
+.ring-swap-locked { margin: 0 0 8px; font: 7px var(--font-mono); line-height: 1.5; }
+.ring-swap-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ring-swap-header > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ring-swap-name { font: 600 11px var(--font-display); color: var(--gold-5); }
+.ring-swap-note { font: 7.5px var(--font-mono); color: var(--text-faint); }
+.ring-swap-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.ring-swap-box {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.ring-swap-aside { margin: 2px 0 0; font: 7px var(--font-mono); color: var(--text-faint); }
+.ring-swap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.ring-swap-diagram {
+  display: flex; align-items: center; justify-content: space-around; padding: 8px 12px;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-2);
+  text-align: center; margin-top: 4px;
+}
+.ring-swap-diagram span {
+  display: flex; flex-direction: column; align-items: center;
+  font: 8px var(--font-mono); color: var(--parchment-2);
+}
+.ring-swap-diagram small { font: 7px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
+.ring-swap-diagram-arrow { font-size: 14px; color: var(--gold-4); flex: 0 0 auto; }
+.ring-swap-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; flex: 1 1 auto; }
+.ring-swap-actions { display: flex; gap: 8px; }
+
+@media (max-width: 520px) {
+  .ring-swap-columns, .ring-swap-row { grid-template-columns: 1fr; }
+}
+
+/* O modal "Lure e alvo" do bot avançado (SV-09, #345) */
+.lure-locked {
+  margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 3px;
+  background: rgba(217, 164, 65, .08); font: 8px var(--font-mono); color: var(--warn);
+}
+.lure-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 11px; }
+.lure-box {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px;
+  border: 1px solid var(--ash-5); border-radius: 8px;
+  background: linear-gradient(145deg, rgba(38, 27, 25, .85), rgba(20, 14, 13, .9));
+}
+.lure-hysteresis {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px;
+  margin-top: 4px; padding: 6px 8px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); font: 7px var(--font-mono); color: var(--text-muted); text-align: center;
+}
+.lure-hysteresis-arrow { color: var(--gold-4); font-size: 11px; }
+.lure-hint { margin: 4px 0 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
+.lure-badge-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.lure-badge-remove {
+  margin-left: 4px; padding: 0; background: none; border: none; color: inherit;
+  font: inherit; cursor: pointer;
+}
+.lure-posture-list { display: grid; gap: 4px; }
+.lure-posture-option {
+  text-align: left; padding: 6px 10px; border: 1px solid var(--ash-5); border-radius: 3px;
+  background: var(--ash-1); color: var(--parchment-2); font: 8.5px var(--font-mono); cursor: pointer;
+}
+.lure-posture-option small { display: block; font-size: 7px; color: var(--text-faint); margin-top: 2px; }
+.lure-posture-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
+.lure-footer-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
+.lure-footer-actions { display: flex; gap: 8px; }
+
+@media (max-width: 620px) {
+  .lure-columns { grid-template-columns: 1fr; }
 }
 
 /* A personalização de Skills (#317) só organiza os controles; Modal, Checkbox e botões são os
@@ -892,6 +1057,11 @@ body {
 .battle-bar-ok .battle-bar-fill { background: var(--ok); }
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
+.battle-row-selected {
+  border: 1px solid var(--blood-5); border-radius: 3px; background: var(--surface-selected);
+  margin: -2px -4px; padding: 2px 4px;
+}
+.battle-row-selected .battle-name { color: var(--blood-7); }
 
 /* Seis colunas de EXIBIÇÃO (App.jsx do kit: `cols={6}` nas duas chamadas de `BagPanel` — R7-03).
    Largura de exibição e passo de CRESCIMENTO do container são independentes: o container
@@ -1060,6 +1230,12 @@ body {
 .party-member { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .party-member-down { opacity: 0.5; }
 .party-approved { color: var(--ok); }
+.party-kick {
+  width: 14px; height: 14px; padding: 0; border: 0; background: none;
+  color: var(--text-faint); font: 10px/1 var(--font-mono); cursor: pointer;
+}
+.party-kick:hover { color: var(--danger); }
+.party-kick:disabled { opacity: 0.5; cursor: default; }
 .party-status { margin: 0; font: 7px var(--font-mono); color: var(--text-faint); }
 
 /* --- party: companheiros na hunt (#197, #318) — dentro do `Panel` dock. A moldura, o título e
@@ -1114,6 +1290,27 @@ body {
 }
 .party-footer-leave { height: 22px; font-size: 6.5px; }
 
+/* Vocação e level de cada companheiro (#347, SV-11): a abreviação leva a cor da vocação. */
+.party-companion-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+.party-companion-voc {
+  font: 700 8.5px var(--font-mono);
+  letter-spacing: .04em;
+}
+.party-companion-voc-knight { color: var(--voc-knight); }
+.party-companion-voc-paladin { color: var(--voc-paladin); }
+.party-companion-voc-druid { color: var(--voc-druid); }
+.party-companion-voc-sorcerer { color: var(--voc-sorcerer); }
+
+.party-companion-level {
+  font: 8px var(--font-mono);
+  color: var(--text-muted);
+}
+
 /* --- party: modal "Gerenciar party" (#320, ADR 0030 decisão 3, R3-11/R3-12). A aba Formação usa
    PartyPanel.tsx sem CSS próprio aqui (herda o dele); as classes abaixo são só da aba Na hunt e
    do rodapé de status, que são NOVOS nesta issue. */
@@ -1154,4 +1351,22 @@ body {
 .party-loot-note {
   margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--ash-5);
   font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
+}
+
+/* --- A barra de condições ativas sobre o mundo (#348, SV-12) ------------------------------ */
+.buff-bar {
+  position: absolute; left: 12px; bottom: calc(24px + 34px);
+  z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .shell > .buff-bar { order: 1; position: static; padding: 4px 10px 0; z-index: auto; }
+}
+
+/* ---- Overlay: área da hunt (#348, SV-12) ------------------------------------------------- */
+.world-overlay-area {
+  color: var(--gold-4);
+  text-transform: uppercase;
 }

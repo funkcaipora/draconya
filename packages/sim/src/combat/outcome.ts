@@ -46,6 +46,11 @@ export interface AppliedDamageOutcome extends DamageOutcome {
  * escudo, como o ruleset já fazia: o golpe chega ao alvo já escalado, e o outcome preserva o
  * `resolvedDamage` puro para a auditoria.
  *
+ * `extraManaShield` é o Energy Ring (§13.9, SV-16): a condição `mana-shield` OU o anel — uma
+ * leitura só, nunca dois absorvedores em fila. Debitar a mana duas vezes pelo mesmo golpe não
+ * faz sentido, e o personagem com as duas ativas absorve uma vez, como se tivesse só uma. Quem
+ * resolve o anel é o ruleset, via `Inventory.ringEffect`, porque só ele tem o catálogo.
+ *
  * O crítico já veio decidido do resolver; aqui não há RNG nenhum, e o custo por golpe é O(1),
  * sem alocação por string nem objeto de debug.
  */
@@ -54,12 +59,14 @@ export function applyDamageOutcome(
   outcome: DamageOutcome,
   attacker: CharacterRuntime | null,
   damageTakenScale = 1,
+  extraManaShield = false,
 ): AppliedDamageOutcome {
   let remaining = Math.max(0, Math.round(outcome.resolvedDamage * damageTakenScale));
   let absorbedByMana = 0;
   // A mana shield só existe em personagem. Ela absorve até onde a mana alcança; o resto segue
   // para a vida. O escudo NÃO some ao esvaziar a mana — ele vence no prazo, como sempre.
-  if (target instanceof CharacterRuntime && target.conditions.hasManaShield()) {
+  if (target instanceof CharacterRuntime
+    && (target.conditions.hasManaShield() || extraManaShield)) {
     absorbedByMana = Math.min(remaining, target.mana);
     target.mana -= absorbedByMana;
     remaining -= absorbedByMana;

@@ -13,7 +13,6 @@ import type { C2SMessage } from '@draconya/protocol';
 import { sendIntent } from '../net/current.js';
 import { ExitRulesPopover } from './ExitRulesPopover.js';
 import { HuntDetailsModal } from './HuntDetailsModal.js';
-import { setCurrentHunt } from './current-hunt.js';
 
 /**
  * Manda `leave-hunt` (opcode 10), exportada para teste direto — `prerender` não dispara clique
@@ -27,8 +26,8 @@ export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose:
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Sair por qualquer motivo não deve fazer o modal reaparecer na próxima hunt com estado de
-  // apresentação velho. A identidade local só é limpa pelo clique bem-sucedido abaixo: um
-  // envio sem conexão não mudou a hunt real e ainda precisa conservar seus detalhes.
+  // apresentação velho — `detailsOpen` é só isto, se o painel está expandido; a identidade da
+  // hunt em si (SV-05) é do servidor, em `hud.huntId`, e não precisa de limpeza daqui.
   useEffect(() => {
     if (!hunting) setDetailsOpen(false);
   }, [hunting]);
@@ -50,9 +49,7 @@ export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose:
         </button>
         <div className="hunt-exit-actions">
           <button type="button" className="hunt-pill hunt-pill-danger"
-            onClick={() => {
-              if (leaveHunt(sendIntent)) setCurrentHunt(null);
-            }}>
+            onClick={() => { leaveHunt(sendIntent); }}>
             <span aria-hidden="true">↩</span> Sair da caçada
           </button>
           <ExitRulesPopover />

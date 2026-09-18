@@ -1,6 +1,7 @@
 {
   "id": "rat",
   "name": "Rat",
+  "class": "mammal",
   "recommendedLevel": 1,
   "health": 20,
   "experience": 5,

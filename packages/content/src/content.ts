@@ -653,6 +653,9 @@ export function buildContent(raw: RawContent): Content {
         `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
       );
     }
+    if (item.ringEffect !== undefined && item.kind !== 'ring') {
+      problems.push(`item "${item.id}": "ringEffect" só faz sentido em anel`);
+    }
   }
   // Toda família com munição precisa da grátis: é ela que o bow dispara quando o gold acaba
   // (decisão 3), e sem ela o bot pararia de atirar — o oposto do invariante 11.

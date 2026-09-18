@@ -22,7 +22,9 @@
 // deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
 
 import { DAMAGE_TYPES } from '@draconya/content';
-import type { CompiledMitigation, DamageType, Item, ItemSlot, Progression } from '@draconya/content';
+import type {
+  CompiledMitigation, DamageType, Item, ItemSlot, Progression, RingEffect,
+} from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 
@@ -528,6 +530,17 @@ export class Inventory {
       for (const type of item.mitigation.immunities) immunities.add(type);
     }
     return { resistances, immunities };
+  }
+
+  /**
+   * O efeito do anel no dedo, pelo catálogo — `null` sem anel equipado, ou com um item sem
+   * `ringEffect` (§13.9, SV-16). Molde de `armor()`: `Inventory` não conhece conteúdo, então quem
+   * chama (o ruleset) é quem tem o catálogo.
+   */
+  ringEffect(catalog: ReadonlyMap<string, Item>): RingEffect | null {
+    const ring = this.equippedAt('finger');
+    if (ring === null) return null;
+    return catalog.get(ring.itemId)?.ringEffect ?? null;
   }
 }
 

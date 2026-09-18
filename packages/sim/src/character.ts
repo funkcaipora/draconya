@@ -335,8 +335,10 @@ export class CharacterRuntime {
    *
    * Desde o CMB-08 a mana shield NÃO mora mais aqui: ela é um estágio explícito de
    * `applyDamageOutcome` (`combat/outcome.ts`), que descreve quanto absorveu antes de chamar
-   * este método. O personagem guarda só a parte de vida, como o monstro — a divisão de recurso
-   * é de quem aplica, e é o que permite testar absorção total e parcial.
+   * este método — e é lá que a condição `mana-shield` e o Energy Ring (SV-16) convergem numa
+   * leitura OU-lógica só, sem debitar a mana duas vezes. O personagem guarda só a parte de vida,
+   * como o monstro — a divisão de recurso é de quem aplica, e é o que permite testar absorção
+   * total e parcial.
    */
   receiveDamage(amount: number): number {
     const applied = Math.min(amount, this.health);

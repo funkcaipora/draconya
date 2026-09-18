@@ -1,12 +1,12 @@
 import {
-  CharacterRuntime, Rng, Session, createHuntSession, statsForLevel,
+  CharacterRuntime, HuntRuleset, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, compileItem, itemSchema, placeholderAppearances,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, RawContent } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -19,7 +19,8 @@ import { FakeSocket } from './testing.js';
 import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, rawTestContent, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
+  testContent,
 } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
@@ -645,10 +646,10 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Três: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
-    // e stamina só viajam na segunda — e o Bestiário (`bestiary`, FUN-113), que só viaja na
-    // terceira. Os três na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(3);
+    // Quatro: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // e stamina só viajam na segunda —, as condições ativas (`active-conditions`, #341) e o
+    // Bestiário (`bestiary`, FUN-113), que só viaja na quarta. Os quatro na FILA, nenhum no fio.
+    expect(viewer.queued).toBe(4);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -2790,7 +2791,10 @@ describe('o monstro chega ao cliente (FUN-103)', () => {
 
     const received = socket.received();
     const enter = received.findIndex((m) => m.type === 'instance-enter');
-    expect(received[enter]).toEqual({ type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena' });
+    expect(received[enter]).toEqual({
+      type: 'instance-enter', instanceId: 'hunt-hero', map: 'arena',
+      huntId: 'arena', difficulty: 'cautious',
+    });
     expect(received[enter + 1]).toMatchObject({ type: 'session-state', world: { mapId: 'arena' } });
   });
 
@@ -3295,6 +3299,17 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
   };
   const ARROW = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 };
+  const TEST_MELEE_SKILL = {
+    id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
+    curve: { base: 50, factor: 1.1 },
+    gain: { on: 'melee-hit', points: 1 },
+    damagePerLevel: 0.02,
+  };
+  const TEST_MAGIC_SKILL = {
+    id: 'magic', name: 'Magia', startingLevel: 0,
+    curve: { base: 100, factor: 1 },
+    gain: { on: 'spell-cast', pointsPerMana: 1 },
+  };
   /** Um dia inteiro de stamina — o teto de `TEST_STAMINA`, e exatamente 24:00 no HUD. */
   const FULL_STAMINA_MS = 86_400_000;
   /** Stamina no MEIO de um minuto: três segundos de hunt não viram o mostrador. */
@@ -3351,6 +3366,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     regen: boolean;
     /** O herói nasce com esta arma na mão, e o conteúdo com ela e com a flecha (#152). */
     weapon: 'bow' | 'wand';
+    /** Skills do conteúdo de teste (#340, SV-04). */
+    skills: readonly unknown[];
   }> = {}) {
     const raw = rawTestContent();
     // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
@@ -3372,6 +3389,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     };
     const content = buildContent({
       ...raw,
+      // Skills trocadas (#340): as famílias de arma apontam skill (CMB-05), e o boot recusa a
+      // referência ausente — só ficam as famílias cuja skill o teste declarou.
+      ...(over.skills === undefined ? {} : {
+        skills: over.skills,
+        weaponFamilies: TEST_WEAPON_FAMILIES.filter((family) =>
+          (over.skills as readonly { id: string }[]).some((skill) => skill.id === family.skillId)),
+      }),
       ...armory,
       ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
@@ -3408,6 +3432,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       nodeId: 'n1', contentVersion: content.version, logger,
       now: () => now,
       monsterCatalog: content.monsters,
+      skillCatalog: content.skills,
       ...(over.table === false ? {} : { appearances }),
       createSession: (characterId) => {
         const session = createHuntSession({
@@ -3459,7 +3484,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     };
     return {
       host, socket, viewer, heroId, runFor, hero, heroTileAt, maxHealth: stats.maxHealth,
-      maxMana: stats.maxMana, received: () => socket.received(),
+      maxMana: stats.maxMana, received: () => socket.received(), content,
     };
   }
 
@@ -3609,11 +3634,59 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(hero().xp).toBeGreaterThan(0);
     expect(stats.at(-1)?.xp).toBe(hero().xp);
     expect(stats.length).toBeGreaterThan(1);
-    // E foi SÓ a XP: os outros oito campos são os do `session-attach`, em todos.
+    // E foi SÓ a XP (e o alvo do combate enquanto o monstro esteve vivo): os outros campos são os do `session-attach`.
     for (const s of stats) {
-      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs) })
-        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs) });
+      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs), targetId: null })
+        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs), targetId: null });
     }
+  });
+
+  it('uma mudança SÓ de skill gera player-stats — a comparação olha skills e percentToNext (#340, SV-04)', () => {
+    // Regeneração desligada, stamina no meio do minuto, sem monstros: nada mexe nos vitais.
+    // O pacote inicial vem no session-attach com a skill no level inicial e percent 0.
+    // Quando a skill ganha pontos no runtime, sameStats detecta o avanço e emite um novo
+    // player-stats. Se nada mudar no ciclo seguinte, nenhum pacote a mais sai.
+    //
+    // Mutação que mata: tirar sameSkills de sameStats — o avanço de skill não dispara
+    // player-stats e o HUD congela até que outro vital mude.
+    const { runFor, received, hero, content } = hunt({
+      regen: false,
+      stamina: MID_MINUTE_STAMINA_MS,
+      monsters: false,
+      skills: [TEST_MELEE_SKILL],
+    });
+
+    const initialStats = ofType(received(), 'player-stats');
+    expect(initialStats.length).toBe(1);
+    expect(initialStats[0]?.skills.melee).toEqual({ level: 10, percentToNext: 0 });
+
+    // Um ciclo sem alterações: nenhum player-stats extra
+    runFor(100);
+    expect(ofType(received(), 'player-stats').length).toBe(1);
+
+    // Altera a skill diretamente no runtime
+    const meleeSkill = content.skills.get('melee');
+    expect(meleeSkill).toBeDefined();
+    if (!meleeSkill) return;
+
+    hero().skills.gain(meleeSkill, 10);
+    expect(hero().skills.progressOf(meleeSkill)).toEqual({ level: 10, percentToNext: 20 });
+
+    // Roda mais um ciclo: sameStats detecta a mudança e emite o novo pacote
+    runFor(100);
+    const afterStats = ofType(received(), 'player-stats');
+    expect(afterStats.length).toBe(2);
+
+    const first = afterStats[0] as (typeof afterStats)[number];
+    const second = afterStats[1] as (typeof afterStats)[number];
+    expect(second.skills.melee).toEqual({ level: 10, percentToNext: 20 });
+
+    // E todos os outros campos permaneceram idênticos
+    expect({ ...second, skills: first.skills }).toEqual(first);
+
+    // Próximo ciclo sem mudanças: nenhum player-stats adicional
+    runFor(100);
+    expect(ofType(received(), 'player-stats').length).toBe(2);
   });
 
   it('a magia com tabela vira missile do conjurador ao alvo e effect NO alvo, com os ids da tabela', () => {
@@ -4495,7 +4568,8 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
   };
-  function partyHunt() {
+  function partyHunt(options?: { mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean }) {
+    const mode = options?.mode ?? 'shared';
     const raw = rawTestContent();
     const content = buildContent({
       ...raw,
@@ -4518,7 +4592,12 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
         if (shared === null) {
           shared = createHuntSession({
             id: 'party-hunt', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
-            partyOptions: { leaderId: 'lead', mode: 'shared' },
+            partyOptions: {
+              leaderId: 'lead',
+              mode,
+              ...(options?.shareCosts !== undefined ? { shareCosts: options.shareCosts } : {}),
+              ...(options?.splitLoot !== undefined ? { splitLoot: options.splitLoot } : {}),
+            },
           });
           shared.enter(member('lead'));
           shared.enter(member('b'));
@@ -4548,8 +4627,11 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const stateOf = (socket: FakeSocket) => socket.received().find((m) => m.type === 'session-state');
     const leadState = stateOf(lead.socket);
     if (leadState?.type !== 'session-state') throw new Error('sem session-state');
-    expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared' });
-    expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent])).toEqual([['lead', true, 100], ['b', true, 100]]);
+    expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared', shareCosts: true, splitLoot: true });
+    expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent, m.vocationId, m.level, m.manaPercent])).toEqual([
+      ['lead', true, 100, null, 1, 0],
+      ['b', true, 100, null, 1, 0],
+    ]);
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
     expect(leadState.partyBag).toEqual({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
@@ -4589,7 +4671,665 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(settlement.shares.map((s) => s.characterId).sort()).toEqual(['b', 'lead']);
     const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
     if (state?.type !== 'party-state') throw new Error('sem party-state');
-    expect(state.members.map((m) => m.characterId)).toEqual(['lead']);
+    expect(state.members.map((m) => [m.characterId, m.vocationId, m.level, m.manaPercent])).toEqual([
+      ['lead', null, 2, 100],
+    ]);
     expect(session()?.participants.map((p) => p.id)).toEqual(['lead']);
+  });
+
+  it('party-state refreshes live when vocation, level or mana change — not only on composition (#339, SV-03)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+
+    const partyStatesOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-state');
+    // Attach inicial leva party embutida no session-state; nenhum party-state isolado foi enviado
+    expect(partyStatesOf(lead.socket).length).toBe(0);
+
+    const s = session();
+    if (!s) throw new Error('sem session');
+    const memberB = s.participants.find((p) => p.id === 'b');
+    if (!memberB) throw new Error('sem member b');
+
+    // 1. Modificar mana dispara 1 party-state
+    memberB.maxMana = 100;
+    memberB.mana = 100;
+    runFor(100);
+    let states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(1);
+    expect(states[0]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', manaPercent: 100 }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(1);
+
+    // 2. Modificar level dispara mais 1 party-state
+    memberB.level = 2;
+    memberB.xp = totalXpForLevel(2, TEST_PROGRESSION as Progression);
+    runFor(100);
+    states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(2);
+    expect(states[1]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', level: 2 }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(2);
+
+    // 3. Modificar vocação dispara mais 1 party-state
+    memberB.vocationId = 'knight';
+    runFor(100);
+    states = partyStatesOf(lead.socket);
+    expect(states.length).toBe(3);
+    expect(states[2]).toMatchObject({
+      type: 'party-state',
+      members: expect.arrayContaining([
+        expect.objectContaining({ characterId: 'b', vocationId: 'knight' }),
+      ]),
+    });
+
+    // Ciclos seguintes sem mudança não duplicam envio
+    runFor(300);
+    expect(partyStatesOf(lead.socket).length).toBe(3);
+  });
+
+  it('#partyBlock populates shareCosts and splitLoot with defaults and explicit overrides (#359)', () => {
+    // 1. Default split -> shareCosts: false, splitLoot: false
+    const splitHunt = partyHunt({ mode: 'split' });
+    const splitLead = attach(splitHunt.host, 'lead');
+    const splitState = splitLead.socket.received().find((m) => m.type === 'session-state');
+    if (splitState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(splitState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: false });
+
+    // 2. Combination C -> shareCosts: true, splitLoot: false
+    const combC = partyHunt({ mode: 'split', shareCosts: true, splitLoot: false });
+    const combCLead = attach(combC.host, 'lead');
+    const combCState = combCLead.socket.received().find((m) => m.type === 'session-state');
+    if (combCState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(combCState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: true, splitLoot: false });
+
+    // 3. Combination D -> shareCosts: false, splitLoot: true
+    const combD = partyHunt({ mode: 'split', shareCosts: false, splitLoot: true });
+    const combDLead = attach(combD.host, 'lead');
+    const combDState = combDLead.socket.received().find((m) => m.type === 'session-state');
+    if (combDState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(combDState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: true });
+  });
+
+  it('broadcasts party-spending to all viewers on spending or bag change, and previews settlement in shared mode', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+
+    // Attach inicial já enviou session-state com partySpending; nenhum party-spending avulso
+    const spendingOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-spending');
+    expect(spendingOf(lead.socket).length).toBe(0);
+    expect(spendingOf(b.socket).length).toBe(0);
+
+    // 1. Creditar goldSpent para o líder: ambos recebem party-spending com shares de lead e b
+    session()?.credit('lead', 'goldSpent', 50);
+    runFor(100);
+    const leadSpendings = spendingOf(lead.socket);
+    const bSpendings = spendingOf(b.socket);
+    expect(leadSpendings.length).toBe(1);
+    expect(bSpendings.length).toBe(1);
+    expect(leadSpendings[0]).toEqual({
+      type: 'party-spending',
+      shares: [
+        { characterId: 'lead', goldSpent: 50, estimatedShare: 2 },
+        { characterId: 'b', goldSpent: 0, estimatedShare: 1 },
+      ],
+    });
+    expect(bSpendings[0]).toEqual(leadSpendings[0]);
+
+    // Avançar o tempo sem alterações NÃO duplica envio de party-spending
+    runFor(300);
+    expect(spendingOf(lead.socket).length).toBe(1);
+    expect(spendingOf(b.socket).length).toBe(1);
+
+    // 2. Loot na bolsa: soma dos estimatedShares bate com bag.gold
+    runFor(20_000);
+    const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
+    expect(bag?.gold).toBeGreaterThan(0);
+    const lastSpending = spendingOf(lead.socket).at(-1);
+    if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
+    const sumEstimated = lastSpending.shares.reduce((sum, s) => sum + (s.estimatedShare ?? 0), 0);
+    expect(sumEstimated).toBe(bag?.gold);
+
+    // Avançar tempo após settle ou sem mudanças não duplica
+    const countAfterLoot = spendingOf(lead.socket).length;
+    runFor(100);
+    expect(spendingOf(lead.socket).length).toBe(countAfterLoot);
+  });
+
+  it('split mode: estimatedShare is undefined on all shares in session-state and party-spending', () => {
+    const { host, runFor, session } = partyHunt({ mode: 'split' });
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+
+    const stateOf = (socket: FakeSocket) => socket.received().find((m) => m.type === 'session-state');
+    const leadState = stateOf(lead.socket);
+    if (leadState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(leadState.partySpending?.shares).toBeDefined();
+    for (const share of leadState.partySpending!.shares) {
+      expect(share.estimatedShare).toBeUndefined();
+    }
+
+    session()?.credit('lead', 'goldSpent', 30);
+    runFor(100);
+    const lastSpending = lead.socket.received().filter((m) => m.type === 'party-spending').at(-1);
+    if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
+    for (const share of lastSpending.shares) {
+      expect(share.estimatedShare).toBeUndefined();
+    }
+  });
+
+  it('solo hunt: session-state.partySpending is undefined and no party-spending is sent', () => {
+    const raw = rawTestContent();
+    const content = buildContent(raw);
+    let now = 0;
+    const soloHost = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      createSession: (characterId) => {
+        const s = createHuntSession({
+          id: `solo-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        s.enter(new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+          level: 1, xp: 0, gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        return s;
+      },
+    });
+    const soloSocket = new FakeSocket();
+    const viewer = soloHost.attach(soloSocket, 'solo-char');
+    soloHost.handle(viewer, { type: 'session-attach' });
+    soloHost.flush();
+
+    const soloState = soloSocket.received().find((m) => m.type === 'session-state');
+    if (soloState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(soloState.partySpending).toBeUndefined();
+
+    for (let t = 0; t < 300; t += 100) { now += 100; soloHost.cycle(); }
+    soloHost.flush();
+
+    const spendingMessages = soloSocket.received().filter((m) => m.type === 'party-spending');
+    expect(spendingMessages).toHaveLength(0);
+  });
+});
+
+describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
+  const ofType = <T extends S2CMessage['type']>(messages: readonly S2CMessage[], type: T) =>
+    messages.filter((m): m is Extract<S2CMessage, { type: T }> => m.type === type);
+
+  function createHuntFixture(over: {
+    tanky?: boolean;
+    monsters?: boolean;
+    regen?: boolean;
+    ratAttack?: number;
+  } = {}) {
+    const raw = rawTestContent();
+    const ratOverride = {
+      ...(over.tanky ? { health: 100_000 } : {}),
+      ...(over.ratAttack !== undefined ? { attack: over.ratAttack } : {}),
+    };
+    const content = buildContent({
+      ...raw,
+      progression: [{
+        ...TEST_PROGRESSION,
+        startingMana: 200,
+        ...(over.regen === false ? { regen: { healthPerSecond: 0, manaPerSecond: 0 } } : {}),
+      }],
+      ...(over.monsters === false ? { routes: [{ ...TEST_ROUTE, spawnPoints: [] }] } : {}),
+      ...(Object.keys(ratOverride).length > 0
+        ? {
+          monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+            m['id'] === 'rat' ? { ...m, ...ratOverride } : m),
+        }
+        : {}),
+    });
+    let now = 0;
+    const stats = statsForLevel(1, null, content.progression);
+    const host = new SessionHost({
+      nodeId: 'n1',
+      contentVersion: content.version,
+      logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`,
+          content,
+          huntId: 'arena',
+          difficulty: 'cautious',
+          createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId,
+          position: { x: 1, y: 1, z: 7 },
+          health: stats.maxHealth,
+          maxHealth: stats.maxHealth,
+          mana: stats.maxMana,
+          maxMana: stats.maxMana,
+          level: 1,
+          xp: 0,
+          gold: 0,
+          goldDelta: 0,
+          alive: true,
+          cooldowns: {},
+          staminaMs: 86_400_000 - 30_000,
+          staminaUpdatedAtMs: 0,
+        }));
+        return session;
+      },
+    });
+    const runFor = (ms: number, step = 100) => {
+      for (let t = 0; t < ms; t += step) {
+        now += step;
+        host.cycle();
+      }
+      host.flush();
+    };
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+
+    const hero = () => host.sessionFor('hero')?.participants[0] as CharacterRuntime;
+    return {
+      host,
+      socket,
+      viewer,
+      runFor,
+      hero,
+      content,
+      received: () => socket.received(),
+      now: () => now,
+    };
+  }
+
+  it('targetId in player-stats reflects targeted monster creatureId, null when no target', () => {
+    const { runFor, received, host, hero } = createHuntFixture({ tanky: true });
+    // On attach at t=0, no monster has spawned yet; targetId is null
+    const initialStats = ofType(received(), 'player-stats').at(-1);
+    expect(initialStats).toBeDefined();
+    expect(initialStats?.targetId).toBeNull();
+
+    // Advance so the monster spawns and is targeted by the hero
+    runFor(200);
+
+    const statsWithTarget = ofType(received(), 'player-stats').find((s) => s.targetId !== null);
+    expect(statsWithTarget).toBeDefined();
+    expect(typeof statsWithTarget?.targetId).toBe('number');
+    expect(statsWithTarget!.targetId!).toBeGreaterThan(0);
+
+    // Verify creatureId matches the monster creatureId
+    const session = host.sessionFor('hero');
+    const huntRuleset = session?.ruleset as unknown as { attackTargetOf: (c: CharacterRuntime) => { subject: string; health: number } | null };
+    const targetMonster = huntRuleset.attackTargetOf(hero());
+    expect(targetMonster).not.toBeNull();
+
+    // Now kill the monster so target is cleared
+    targetMonster!.health = 0;
+    runFor(100);
+
+    const finalStats = ofType(received(), 'player-stats').at(-1);
+    expect(finalStats?.targetId).toBeNull();
+  });
+
+  it('sameStats correctly sends player-stats when ONLY targetId changes', () => {
+    // Disable regen and set rat attack to 0, ensuring health and mana do not change
+    const { runFor, received } = createHuntFixture({ tanky: true, regen: false, ratAttack: 0 });
+    const initialStats = ofType(received(), 'player-stats').at(-1);
+    expect(initialStats).toBeDefined();
+    expect(initialStats?.targetId).toBeNull();
+
+    // Advance until target is acquired
+    runFor(200);
+
+    const statsList = ofType(received(), 'player-stats');
+    expect(statsList.length).toBeGreaterThanOrEqual(2);
+    const updatedStats = statsList.at(-1)!;
+    expect(updatedStats.targetId).not.toBeNull();
+
+    // All other stats remain identical — ONLY targetId changed!
+    expect(updatedStats.health).toBe(initialStats!.health);
+    expect(updatedStats.maxHealth).toBe(initialStats!.maxHealth);
+    expect(updatedStats.mana).toBe(initialStats!.mana);
+    expect(updatedStats.maxMana).toBe(initialStats!.maxMana);
+    expect(updatedStats.level).toBe(initialStats!.level);
+    expect(updatedStats.xp).toBe(initialStats!.xp);
+    expect(updatedStats.gold).toBe(initialStats!.gold);
+    expect(updatedStats.speed).toBe(initialStats!.speed);
+  });
+
+  it('active-conditions is sent when condition applied, when expired, and not sent when no change', () => {
+    const { host, hero, runFor, received } = createHuntFixture({ monsters: false, regen: false });
+
+    // 1. Initial attach sends active-conditions with empty conditions
+    const initialConditions = ofType(received(), 'active-conditions');
+    expect(initialConditions).toHaveLength(1);
+    expect(initialConditions[0]?.conditions).toEqual([]);
+
+    // 2. Idle cycles without conditions do NOT send duplicate active-conditions
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(1);
+
+    // 3. Applying a condition triggers active-conditions
+    hero().conditions.apply({
+      key: 'haste',
+      spellId: 'haste',
+      expiresAtMs: 30_000,
+      speedPercent: 30,
+    });
+    runFor(100);
+
+    const afterApply = ofType(received(), 'active-conditions');
+    expect(afterApply).toHaveLength(2);
+    expect(afterApply[1]?.conditions).toHaveLength(1);
+    expect(afterApply[1]?.conditions[0]).toMatchObject({
+      kind: 'haste',
+      remainingMs: expect.any(Number),
+    });
+    expect(afterApply[1]?.conditions[0]?.remainingMs).toBeGreaterThan(0);
+
+    // 4. Idle cycles while condition is active do NOT send duplicate active-conditions
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(2);
+
+    // 5. Reattaching client receives active-conditions snapshot
+    const socket2 = new FakeSocket();
+    const viewer2 = host.attach(socket2, 'hero');
+    host.handle(viewer2, { type: 'session-attach' });
+    host.flush();
+
+    const socket2Conditions = ofType(socket2.received(), 'active-conditions');
+    expect(socket2Conditions).toHaveLength(1);
+    expect(socket2Conditions[0]?.conditions).toHaveLength(1);
+    expect(socket2Conditions[0]?.conditions[0]?.kind).toBe('haste');
+
+    // 6. Expiring (removing) the condition sends active-conditions with empty conditions
+    hero().conditions.remove('haste');
+    runFor(100);
+
+    const afterExpire = ofType(received(), 'active-conditions');
+    expect(afterExpire).toHaveLength(3);
+    expect(afterExpire[2]?.conditions).toEqual([]);
+
+    // 7. Idle cycles after expiry do NOT duplicate
+    runFor(500);
+    expect(ofType(received(), 'active-conditions')).toHaveLength(3);
+  });
+
+  it('instance-enter and session-state carry huntId and difficulty when in a hunt, but not in City', () => {
+    // 1. In hunt:
+    const { received: huntReceived } = createHuntFixture();
+    const huntEnter = ofType(huntReceived(), 'instance-enter').at(-1);
+    expect(huntEnter).toBeDefined();
+    expect(huntEnter?.huntId).toBe('arena');
+    expect(huntEnter?.difficulty).toBe('cautious');
+
+    const huntState = ofType(huntReceived(), 'session-state').at(-1);
+    expect(huntState).toBeDefined();
+    expect(huntState?.huntId).toBe('arena');
+    expect(huntState?.difficulty).toBe('cautious');
+
+    // 2. In City:
+    const content = testContent();
+    const cityHost = new SessionHost({
+      nodeId: 'n1',
+      contentVersion: content.version,
+      logger,
+      now: () => 0,
+      createSession: createCitySessionFactory(content),
+    });
+    const citySocket = new FakeSocket();
+    const cityViewer = cityHost.attach(citySocket, 'city-hero');
+    cityHost.handle(cityViewer, { type: 'session-attach' });
+    cityHost.flush();
+
+    const cityReceived = citySocket.received();
+    const cityEnter = ofType(cityReceived, 'instance-enter').at(-1);
+    expect(cityEnter).toBeDefined();
+    expect(cityEnter?.huntId).toBeUndefined();
+    expect(cityEnter?.difficulty).toBeUndefined();
+
+    const cityState = ofType(cityReceived, 'session-state').at(-1);
+    expect(cityState).toBeDefined();
+    expect(cityState?.huntId).toBeUndefined();
+    expect(cityState?.difficulty).toBeUndefined();
+  });
+
+  describe('online players count (SV-07, #343)', () => {
+    it('counts distinct connected characters across viewers', () => {
+      const { ruleset } = countingRuleset();
+      const { host } = buildHost(ruleset);
+
+      expect(host.connectedCharacterCount).toBe(0);
+
+      // Two viewers for the same character count once (invariante 8)
+      host.attach(new FakeSocket(), 'p1');
+      expect(host.connectedCharacterCount).toBe(1);
+
+      host.attach(new FakeSocket(), 'p1');
+      expect(host.connectedCharacterCount).toBe(1);
+
+      // Viewer for another character increases the count to 2
+      host.attach(new FakeSocket(), 'p2');
+      expect(host.connectedCharacterCount).toBe(2);
+    });
+
+    it('broadcasts aggregated player count every 30 seconds', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 2, url: 'ws://n1:7171', players: 5 },
+          { nodeId: 'n2', sessions: 3, url: 'ws://n2:7171', players: 10 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket = new FakeSocket();
+      host.attach(socket, 'p1');
+      host.start();
+
+      // Before 30s, no player-count message
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(socket.received().filter((m) => m.type === 'player-count')).toHaveLength(0);
+
+      // At 30s, receives player-count message with sum (5 + 10 = 15)
+      await vi.advanceTimersByTimeAsync(15_000);
+      host.stop();
+
+      const countMessages = socket.received().filter((m) => m.type === 'player-count');
+      expect(countMessages).toHaveLength(1);
+      expect(countMessages[0]).toEqual({ type: 'player-count', count: 15 });
+    });
+
+    it('broadcasts player count to both hunt and city sessions', async () => {
+      vi.useFakeTimers();
+      const content = testContent();
+      const { ruleset: huntRuleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 2, url: 'ws://n1:7171', players: 42 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const cityFactory = createCitySessionFactory(content);
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: content.version,
+        logger,
+        directory,
+        createSession: (characterId) => {
+          if (characterId === 'city-hero') return cityFactory(characterId);
+          return new Session({
+            id: `s-${characterId}`,
+            contentVersion: content.version,
+            ruleset: huntRuleset,
+            rng: Rng.fromSeed(characterId),
+            createdAtMs: 0,
+          });
+        },
+      });
+
+      await host.prepare('hunt-hero', { level: 1, xp: 0 }, 'a1');
+      await host.prepare('city-hero', { level: 1, xp: 0 }, 'a2');
+
+      const huntSocket = new FakeSocket();
+      const citySocket = new FakeSocket();
+      host.attach(huntSocket, 'hunt-hero');
+      host.attach(citySocket, 'city-hero');
+
+      host.start();
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      const huntCountMsg = huntSocket.received().filter((m) => m.type === 'player-count');
+      const cityCountMsg = citySocket.received().filter((m) => m.type === 'player-count');
+
+      expect(huntCountMsg).toHaveLength(1);
+      expect(huntCountMsg[0]).toEqual({ type: 'player-count', count: 42 });
+
+      expect(cityCountMsg).toHaveLength(1);
+      expect(cityCountMsg[0]).toEqual({ type: 'player-count', count: 42 });
+    });
+
+    it('does not publish or update player count when aliveNodes fails', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => {
+          throw new Error('Redis connection timed out');
+        }),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      host.start();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      // No player-count message sent
+      expect(socket.received().filter((m) => m.type === 'player-count')).toHaveLength(0);
+
+      // Reattach session-state does not have onlinePlayers
+      host.handle(viewer, { type: 'session-attach' });
+      host.flush();
+
+      const sessionState = socket.received().filter((m) => m.type === 'session-state').at(-1);
+      expect(sessionState).toBeDefined();
+      expect(sessionState).not.toHaveProperty('onlinePlayers');
+    });
+
+    it('includes cached onlinePlayers in session-state on reattach', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const directory = {
+        aliveNodes: vi.fn(async () => [
+          { nodeId: 'n1', sessions: 1, url: 'ws://n1:7171', players: 123 },
+        ]),
+        register: async () => true,
+        renew: async () => undefined,
+      } as unknown as SessionDirectory;
+
+      const host = new SessionHost({
+        nodeId: 'n1',
+        contentVersion: 'v-test',
+        logger,
+        directory,
+        createSession: (characterId) => new Session({
+          id: `s-${characterId}`,
+          contentVersion: 'v-test',
+          ruleset,
+          rng: Rng.fromSeed(characterId),
+          createdAtMs: 0,
+        }),
+      });
+      await host.prepare('p1', { level: 1, xp: 0 }, 'a1');
+
+      const socket1 = new FakeSocket();
+      host.attach(socket1, 'p1');
+      host.start();
+
+      // Advance 30s so onlinePlayers is aggregated and cached
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      // Second socket connects and attaches
+      const socket2 = new FakeSocket();
+      const viewer2 = host.attach(socket2, 'p1');
+      host.handle(viewer2, { type: 'session-attach' });
+      host.flush();
+
+      const state = socket2.received().filter((m) => m.type === 'session-state').at(-1);
+      expect(state).toBeDefined();
+      expect((state as { onlinePlayers?: number })?.onlinePlayers).toBe(123);
+    });
+
+    it('broadcasts local connectedCharacterCount when directory is not configured', async () => {
+      vi.useFakeTimers();
+      const { ruleset } = countingRuleset();
+      const { host } = buildHost(ruleset);
+
+      const socket = new FakeSocket();
+      host.attach(socket, 'p1');
+      host.start();
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      host.stop();
+
+      const countMessages = socket.received().filter((m) => m.type === 'player-count');
+      expect(countMessages).toHaveLength(1);
+      expect(countMessages[0]).toEqual({ type: 'player-count', count: 1 });
+    });
   });
 });

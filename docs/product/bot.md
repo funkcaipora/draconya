@@ -21,7 +21,7 @@ O bot também administra targeting: mirar no alvo mais próximo, no de menor ou 
 
 O bot avançado (level 50+) adiciona duas máquinas de estado sobre o mesmo motor. A primeira é o lure dinâmico: o jogador define um intervalo mínimo/máximo de monstros — por exemplo, mínimo 4 e máximo 8 — e o personagem alterna entre percorrer a rota acumulando inimigos (quando a contagem está abaixo do mínimo) e parar para limpar o grupo (quando atinge o máximo), retomando o percurso quando a contagem volta a cair abaixo do mínimo. A segunda é o ring swap: uma máquina de estados para Energy Ring e anéis semelhantes, com limiares de entrada e saída propositalmente diferentes para evitar troca repetitiva perto do mesmo percentual (por exemplo: equipar com HP < 50%, retirar com HP >= 60%, ou retirar por Mana < 10%). Ao retirar, o jogador escolhe entre restaurar o anel anteriormente equipado ou deixar o slot vazio.
 
-Por fim, o jogador pode configurar duas regras automáticas de saída da hunt: sair se algum membro da party sair ou morrer, e sair se o próprio gold acabar. Se a segunda regra não estiver ativa e o gold acabar, o personagem permanece na hunt, incapaz de pagar supplies, e pode morrer.
+Por fim, o jogador pode configurar quatro regras automáticas de saída da hunt: sair se o HP cair abaixo de um percentual, sair se algum membro da party sair ou morrer, sair se o próprio gold acabar, e sair se o peso carregado alcançar ou ultrapassar a capacidade total. Se a regra de gold não estiver ativa e o gold acabar, o personagem permanece na hunt, incapaz de pagar supplies, e pode morrer.
 
 ## Regras
 
@@ -34,7 +34,7 @@ Por fim, o jogador pode configurar duas regras automáticas de saída da hunt: s
 - Targeting suportado: mais próximo, menor HP, maior HP, priorizar específicas, ignorar específicas, seguir alvo, permanecer parado, manter distância configurada.
 - Lure dinâmico: intervalo mínimo/máximo de monstros configurável; abaixo do mínimo percorre a rota acumulando, no máximo para e limpa, retoma quando cai abaixo do mínimo de novo.
 - Ring swap: limiares de entrada e saída distintos (histerese); ao retirar, jogador escolhe restaurar o anel anterior ou deixar o slot vazio.
-- Regras de saída configuráveis: (1) sair se membro da party sair/morrer; (2) sair se o próprio gold acabar. Sem a regra (2) ativa, gold zerado não tira o personagem da hunt.
+- Regras de saída configuráveis: (1) sair se o HP cair abaixo de um percentual; (2) sair se membro da party sair/morrer; (3) sair se o próprio gold acabar; (4) sair se o peso carregado alcançar ou ultrapassar a capacidade total. Sem a regra (3) ativa, gold zerado não tira o personagem da hunt.
 
 ## O vocabulário, por inteiro (FUN-73)
 
@@ -312,8 +312,9 @@ mil regras salvas.
 | `hp-below` | o HP do personagem cai **abaixo** de `percent` | vale |
 | `out-of-gold` | o saldo (entrada + delta) chega a zero | vale |
 | `party-member-lost` | um companheiro saiu ou morreu | vale (#193): dispara no `onLeave` do outro, em cascata; quem sai leva o próprio extrato |
+| `out-of-capacity` | o peso carregado (containers + equipado) alcança ou ultrapassa a capacidade total | vale (SV-06); sem faixa morta — ao contrário do ring swap, não há "entrar" de novo depois de sair |
 
-Quatro coisas que não podem mudar sem pensar duas vezes:
+Cinco coisas que não podem mudar sem pensar duas vezes:
 
 - **A comparação de HP é estrita.** Com `<=`, quem configurasse "sair abaixo de 100%" veria a
   hunt encerrar no instante em que entrasse, de vida cheia, sem ter tomado um golpe.
@@ -326,6 +327,7 @@ Quatro coisas que não podem mudar sem pensar duas vezes:
   morte, regra ou pedido), em cascata e na ordem de entrada, e quem a tem SAI — `exit-rule` no
   extrato dele; os outros ficam. Em party, sair e morrer são `leave`, não `end`: o último a
   sair encerra a sessão, com o motivo dele.
+- **`out-of-capacity` não tem faixa morta, e é intencional.** `out-of-gold` também não tem: as duas são binárias, ligou-desligou, sem número editável. Inventar uma margem aqui seria um parâmetro que nem o kit nem o PRD pedem — se o dono decidir por histerese depois, é ADR novo, porque muda o contrato do schema (que hoje não tem parâmetro nenhum neste `kind`).
 - **Encerra por `exit-rule`, nunca por `manual-exit`.** O jogador não pediu para sair; a regra
   dele decidiu. Trocar os dois é o extrato mentindo sobre quem encerrou.
 
@@ -396,8 +398,9 @@ ticket ou a última aceita —, e a tela do bot abre com ela. Até aí a tela na
 carregamento, e um "Salvar" dali apagava as regras que a hunt estava executando. A tela só a
 adota quando o rascunho local está intocado ou salvo: um rascunho tocado e não salvo — editado,
 pendente ou recusado, mesmo que apagado até ficar igual ao vazio — sobrevive à reconexão, pela
-mesma razão que sobrevive a uma recusa. `lure` e `ringSwap`, que nenhuma tela edita, passam
-opacos pelo rascunho: um "Salvar" de quem só mexeu na cura não apaga o anel.
+mesma razão que sobrevive a uma recusa. `lure` (SV-09, #345) e `ringSwap` (SV-17, #353) agora
+possuem interfaces dedicadas no cliente (modais "Lure e alvo" e "Ring swap"), salvando como
+campos de primeira classe no rascunho.
 
 ### O gate de level (§13.2)
 
@@ -552,5 +555,27 @@ descobrir o limite montando uma configuração inteira e levando um não é pior
 checkboxes — HP abaixo de N % (o percentual é editável só com a regra ligada), acabar o gold,
 alguém do grupo sair — que gravam a mesma lista `exit` do rascunho e salvam sozinhos, com o
 mesmo debounce do interruptor de regra. Fechado, um resumo ("Saindo sozinho: …") substitui o
-popover quando alguma regra está ligada. `out-of-capacity` não aparece: o schema não a tem
-ainda (M15).
+popover quando alguma regra está ligada. `out-of-capacity` ainda não aparece: o schema e o
+`sim` já a conhecem (SV-06, #342), mas a quarta linha do popover é a issue de cliente que a #342
+deixou fora do escopo (FD-09, #309).
+
+### Ring swap (SV-17, #353)
+
+A seção "Configurações avançadas" do painel só aparece quando o catálogo de itens possui ao menos um
+item com `slot: "finger"` (Energy Ring e Life Ring criados em SV-16) — sem dado real, sem tela (D8).
+A linha exibe o resumo da regra configurada (`‹nome do anel› · HP < X % → ≥ Y %` ou "Nenhum anel
+configurado") e o botão de engrenagem `[⚙]`.
+
+O clique abre o `RingSwapModal` (520 px de largura, captura `27-modal-swap-ring.png`), permitindo:
+- Selecionar qual anel do catálogo equipar;
+- Configurar os limiares de HP para equipar (`equipBelow`) e retirar (`removeAbove`);
+- Configurar o piso de mana (`manaFloor`), que impede o anel de drenar a mana necessária para cura;
+- Escolher a ação ao retirar: restaurar o anel equipado anteriormente ou deixar o slot de dedo vazio;
+- Visualizar o diagrama de transição de estado com a histerese entre entrada e saída.
+
+O modal valida que `removeAbove > equipBelow` (evitando troca contínua a cada golpe por ausência de
+faixa morta). Quando o level do personagem é inferior ao do bot avançado (`advancedFromLevel`, padrão 50),
+o painel esmaece a linha e o modal exibe aviso explicativo em destaque — a configuração fica salva localmente,
+mas o servidor recusa a ativação até o level requerido ser atingido. Salvar no modal dispara o envio
+imediato ao servidor (`setRingSwap` com `flushSave`), fechando o modal.
+

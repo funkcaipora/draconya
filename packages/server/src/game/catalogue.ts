@@ -33,8 +33,12 @@ export function buildCatalogue(content: Content): Catalogue {
       // Cópia mutável: `HuntListing` traz a união fechada e `readonly`, e a mensagem leva
       // `string` — quem define quais dificuldades existem é o conteúdo, não o protocolo.
       difficulties: [...hunt.difficulties],
+      ...(hunt.description === undefined ? {} : { description: hunt.description }),
+      difficultyDetails: difficultyDetailsOf(content, hunt.id),
       outfitIds: monsterOutfitsOf(content, hunt.id),
       lootDrops: lootDropsOf(content, hunt.id),
+      monsters: monstersOf(content, hunt.id),
+      loot: lootOf(content, hunt.id),
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
@@ -85,6 +89,10 @@ export function buildCatalogue(content: Content): Catalogue {
       // a confundiria com "o servidor não disse".
       slot: item.slot ?? null,
       twoHanded: item.twoHanded,
+      // Valor de venda ao NPC, ataque e armadura (#337).
+      value: item.value,
+      attack: item.attack,
+      armor: item.armor,
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip e o seletor. Mana
       // por golpe e faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
@@ -121,12 +129,23 @@ export function buildCatalogue(content: Content): Catalogue {
         startingWeaponItemId: vocation.startingWeaponItemId as string,
       })),
     vocationLevel: content.progression.vocationLevel,
+    progression: {
+      startingSpeed: content.progression.startingSpeed,
+      speedPerLevel: content.progression.speedPerLevel,
+      regen: { ...content.progression.regen },
+    },
     // Os monstros que existem, para a tela do Bestiário ter nome onde o contador tem id
-    // (FUN-113). Só id e nome, em ordem de id para a mensagem ser a mesma a cada boot: a arte
-    // chega pelo `creature-appear`, e o resto — vida, ataque, XP — é balanceamento que o
+    // (FUN-113). Vida e XP para o detalhe (SV-02, #338). Em ordem de id para a mensagem ser a
+    // mesma a cada boot: a arte chega pelo `creature-appear`, e o resto é balanceamento que o
     // cliente não simula (invariante 4).
     monsters: [...content.monsters.values()]
-      .map((monster) => ({ id: monster.id, name: monster.name }))
+      .map((monster) => ({
+        id: monster.id,
+        name: monster.name,
+        ...(monster.class !== undefined ? { class: monster.class } : {}),
+        health: monster.health,
+        experience: monster.experience,
+      }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     // Os marcos e o bônus por marco, do conteúdo fixado na sessão (invariante 7). A chave só
     // existe quando o conteúdo tem Bestiário: ausente, a tela mostra só a contagem — e é o
@@ -141,6 +160,41 @@ export function buildCatalogue(content: Content): Catalogue {
         },
       }),
   };
+}
+
+function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const found = new Map<string, string>();
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const monster = content.monsters.get(entry.monsterId);
+      if (monster !== undefined) found.set(monster.id, monster.name);
+    }
+  }
+  return [...found.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+function lootOf(content: Content, huntId: string): Array<{ itemId: string; name: string }> {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const found = new Map<string, string>();
+  for (const difficulty of Object.values(hunt.difficulties)) {
+    for (const entry of difficulty.composition) {
+      const loot = content.monsters.get(entry.monsterId)?.loot;
+      if (loot === undefined) continue;
+      for (const item of loot.items) {
+        if (item.chance <= 0) continue;
+        const definition = content.items.get(item.itemId);
+        if (definition !== undefined) found.set(item.itemId, definition.name);
+      }
+    }
+  }
+  return [...found.entries()]
+    .map(([itemId, name]) => ({ itemId, name }))
+    .sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
 }
 
 /**
@@ -183,3 +237,23 @@ function monsterOutfitsOf(content: Content, huntId: string): number[] {
   }
   return [...outfits].sort((a, b) => a - b);
 }
+
+/**
+ * Quantos monstros cada dificuldade desta hunt mantém vivos, NO TOTAL (FUN-123,
+ * `huntDifficultySchema.monsterCount`) — o "Ousado · 4" que o Huntera mostra ao lado do nome
+ * da dificuldade. Mesma ORDEM de `Object.keys(hunt.difficulties)`, que é a MESMA fonte que
+ * `huntListings` usa para `difficulties` (`packages/sim/src/hunt/catalogue.ts:40`) — os dois
+ * lêem o mesmo objeto, então a ordem entre os dois campos é garantida sem precisar reordenar
+ * nada aqui.
+ */
+function difficultyDetailsOf(content: Content, huntId: string): { id: string; monsterCount: number }[] {
+  const hunt = content.hunts.get(huntId);
+  if (hunt === undefined) return [];
+  const details: { id: string; monsterCount: number }[] = [];
+  for (const [id, difficulty] of Object.entries(hunt.difficulties)) {
+    if (difficulty === undefined) continue;
+    details.push({ id, monsterCount: difficulty.monsterCount });
+  }
+  return details;
+}
+

@@ -1,22 +1,35 @@
 // A barra do topo, na casca do design (#251 — D3, D8, D9 de docs/design-system-plan.md;
 // reordenada em #322/RC-09 sob o ADR 0030).
 //
-// Retrato-inicial (a cor de vocação chega com o sprite do outfit, SV-14), nome em Cinzel,
-// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro (sem contagem de jogadores — SV-15
-// não existe ainda) e os CINCO ícones PNG de 36 px que abrem as janelas, na MESMA ordem do kit
-// (`Hud.jsx:2`): Personagem, Hunts, Analisador, Cyclopedia, Chat. Nenhum ícone para sistema
-// inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca mostra o que o
-// servidor não disse que existe.
+// Retrato do PRÓPRIO personagem (SV-14, #350): o sprite do outfit dele, pintado com as cores
+// que o protocolo carregou (`paintOf`), assim que `world.selfId` e a criatura correspondente
+// existem — e a inicial do nome enquanto isso não acontece (cidade recém-entrada, ou a corrida
+// entre o `welcome` e o primeiro `session-state`/`creature-appear`). Nome em Cinzel,
+// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro com a contagem de jogadores online
+// (SV-15, #351 — "—" até o primeiro `player-count` ou `session-state.onlinePlayers`) e os CINCO
+// ícones PNG de 36 px que abrem as janelas, na MESMA ordem do kit (`Hud.jsx:2`): Personagem,
+// Hunts, Analisador, Cyclopedia, Chat. Nenhum ícone para sistema inexistente (Loja, Guild,
+// Amigos, Prey, Configurações) — D8: o cliente nunca mostra o que o servidor não disse que
+// existe.
 //
 // Bot e Inventário SAÍRAM daqui (R1-09, RC-09/#322 — revoga DS-08 de docs/design-system-plan.md):
 // quem minimiza esses painéis agora é só o próprio cabeçalho de cada um (`BotPanel` já usava
 // `Panel`+`onToggle`; `EquipmentPanel` já tinha o próprio botão ▸/▾ — nenhum dos dois precisou de
 // código novo, só perderam o segundo gatilho que a TopBar oferecia).
+//
+// `world` não tem `subscribe` (ADR 0007): um `creature-appear` não pode causar render de React,
+// então o retrato amostra por INTERVALO — o mesmo `HEALTH_POLL_MS` que `BattlePanel` e
+// `PartyMembers` já usam para o mesmo mundo mutável.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { account } from '../account/store.js';
+import type { OutfitColors } from '../assets/outfit.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
+import { world } from '../state/world.js';
+import { paintOf } from '../world/outfit-colors.js';
 import { IconButton } from './ui/IconButton.js';
+import { OutfitSprite } from './OutfitSprite.js';
+import { HEALTH_POLL_MS } from './PartyMembers.js';
 import type { ChatBadgeTier } from './chat-badge.js';
 
 export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
@@ -40,6 +53,19 @@ const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph:
 ];
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+
+/**
+ * O outfit do PRÓPRIO personagem, se ele já existe no mundo (SV-14). `null` enquanto
+ * `world.selfId` não chegou ou a criatura correspondente ainda não apareceu — a corrida entre o
+ * `welcome` (que traz o `characterId`) e o `session-state`/`creature-appear` (que traz a
+ * criatura). O retrato cai para a inicial nesse meio-tempo, nunca para um sprite inventado.
+ */
+function selfOutfit(): { appearanceId: number; colors: OutfitColors } | null {
+  if (world.selfId === null) return null;
+  const self = world.creatures.get(world.selfId);
+  if (self === undefined) return null;
+  return { appearanceId: self.appearanceId, colors: paintOf(self) };
+}
 
 /**
  * Um ícone de 36 px (R0-05: o uso mais visível do `IconButton` no kit), com o glifo de texto
@@ -91,9 +117,20 @@ export function TopBar({ open, toggle, chatBadge }: {
   const vocationId = useHudSlice((state) => state.vocationId);
   const vocationName = useHudSlice((state) =>
     state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
+  // "—" até o primeiro `player-count`/`session-state.onlinePlayers` (SV-15): nunca `0` inventado.
+  const onlinePlayers = useHudSlice((state) => state.onlinePlayers);
   const characters = useStoreSlice(account, (state) => state.characters);
   const name = characters.find((character) => character.id === characterId)?.name ?? null;
   const initial = (name ?? characterId ?? '?').slice(0, 1).toUpperCase();
+
+  // `world` não avisa ninguém (ADR 0007): o retrato amostra por intervalo, como
+  // `BattlePanel`/`PartyMembers` já fazem.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => { tick((n) => n + 1); }, HEALTH_POLL_MS);
+    return () => { clearInterval(id); };
+  }, []);
+  const outfit = selfOutfit();
 
   return (
     <header className="topbar" aria-label="barra do topo">
@@ -106,7 +143,9 @@ export function TopBar({ open, toggle, chatBadge }: {
           data-window="character"
           onClick={() => { toggle('character'); }}
         >
-          {initial}
+          {outfit === null
+            ? initial
+            : <OutfitSprite outfitId={outfit.appearanceId} name={name ?? characterId ?? undefined} colors={outfit.colors} />}
         </button>
         <div className="topbar-identity">
           <span className="topbar-name">{name ?? characterId ?? '—'}</span>
@@ -122,6 +161,9 @@ export function TopBar({ open, toggle, chatBadge }: {
       </div>
       <div className="topbar-wordmark">
         <b>DRACONYA</b>
+        <span className="topbar-online">
+          {onlinePlayers === null ? '—' : `${integer.format(onlinePlayers)} players online`}
+        </span>
       </div>
       <div className="topbar-right">
         <nav className="topbar-nav" aria-label="janelas">

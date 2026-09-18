@@ -91,6 +91,43 @@ describe('buildContent', () => {
   });
 });
 
+describe('classe do monstro (SV-20, #356)', () => {
+  it('monstro com class: mammal é aceito e propagado para content.monsters', () => {
+    const comClasse = { ...rat, class: 'mammal' as const };
+    const content = buildContent(base({ monsters: [comClasse] }));
+    expect(content.monsters.get('rat')?.class).toBe('mammal');
+  });
+
+  it('monstro com classe fora do vocabulário fechado é rejeitado', () => {
+    const classeInvalida = { ...rat, class: 'reptile' };
+    expect(() => buildContent(base({ monsters: [classeInvalida] }))).toThrow(ContentError);
+  });
+});
+
+describe('texto de apresentação da hunt (SV-21, #357)', () => {
+  it('aceita descrição válida e propaga para content.hunts', () => {
+    const comDescricao = {
+      ...cellars,
+      description: 'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia.',
+    };
+    const content = buildContent(base({ hunts: [comDescricao] }));
+    expect(content.hunts.get('rat-cellars')?.description).toBe(
+      'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia.',
+    );
+  });
+
+  it('aceita quando omitido e deixa description como undefined', () => {
+    const semDescricao = { ...cellars, description: undefined };
+    const content = buildContent(base({ hunts: [semDescricao] }));
+    expect(content.hunts.get('rat-cellars')?.description).toBeUndefined();
+  });
+
+  it('rejeita string vazia como descrição', () => {
+    const descricaoVazia = { ...cellars, description: '' };
+    expect(() => buildContent(base({ hunts: [descricaoVazia] }))).toThrow(ContentError);
+  });
+});
+
 describe('a tabela de loot (FUN-63)', () => {
   it('separa moeda de item: gold tem lugar próprio, e items é a lista', () => {
     const loot = buildContent(base()).monsters.get('rat')?.loot;
@@ -1074,6 +1111,27 @@ describe('catálogo de itens (FUN-76)', () => {
     expect(content.items.get('cheese')?.stackable).toBe(true);
     // Declarado e ainda não consumido por ninguém — §21.3, e a mecânica é issue própria.
     expect(content.items.get('time-ring')?.durationMs).toBe(600_000);
+  });
+
+  it('anel aceita ringEffect (energy-shield e regen-boost); outros kinds rejeitam', () => {
+    const energyRing = {
+      id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
+      weight: 2, value: 100, ringEffect: { kind: 'energy-shield' },
+    };
+    const lifeRing = {
+      id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
+      weight: 2, value: 100, ringEffect: { kind: 'regen-boost', percent: 300 },
+    };
+    const espada = {
+      id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
+      weight: 10, value: 0, attack: 10, ringEffect: { kind: 'energy-shield' },
+    };
+
+    const content = buildContent(base({ items: [energyRing, lifeRing] }));
+    expect(content.items.get('energy-ring')?.ringEffect).toEqual({ kind: 'energy-shield' });
+    expect(content.items.get('life-ring')?.ringEffect).toEqual({ kind: 'regen-boost', percent: 300 });
+
+    expect(() => buildContent(base({ items: [espada] }))).toThrow(/"ringEffect" só faz sentido em anel/);
   });
 });
 

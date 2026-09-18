@@ -8,7 +8,7 @@
 // inteira de digitação, e o HP mexendo no meio não pode redesenhar um campo de texto.
 
 import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
-import type { BotCategory, BotConfig, BotRule } from '@draconya/content';
+import type { BotCategory, BotConfig, BotPosture, BotRule, BotTargetPolicy } from '@draconya/content';
 import { createStore } from '../state/hud.js';
 import { DEFAULT_HP_BELOW_PERCENT, setHpBelowPercent, toggleExitRule } from './exit-rules.js';
 import type { ExitRuleKind } from './exit-rules.js';
@@ -26,12 +26,11 @@ export interface BotDraft {
   readonly exit: BotConfig['exit'];
   readonly targeting: BotConfig['targeting'];
   /**
-   * O bot AVANÇADO (§13.2, FUN-87): `lure` e `ringSwap`, que nenhuma tela edita ainda. Passam
-   * OPACOS pelo rascunho — do servidor (`loadConfig`) de volta ao servidor (`toConfig`) — para
-   * um "Salvar" de quem só mexeu na cura não apagar o anel que a hunt está trocando. Sem isto,
-   * a tela carregava uma cópia com perda e a chamava de "salvo".
+   * O lure dinâmico (SV-09, §13.8): agora EDITÁVEL — histerese min/max. `undefined` até o
+   * jogador tocar (é assim que o bot básico continua sem lure algum).
    */
-  readonly advanced: Pick<BotConfig, 'lure' | 'ringSwap'>;
+  readonly lure?: BotConfig['lure'];
+  readonly ringSwap?: BotConfig['ringSwap'];
 }
 
 export interface BotState {
@@ -62,7 +61,7 @@ export function emptyDraft(): BotDraft {
       ignore: [],
       posture: { kind: 'stand' },
     },
-    advanced: {},
+    lure: undefined,
   };
 }
 
@@ -83,7 +82,8 @@ export function toConfig(draft: BotDraft): BotConfig {
     version: BOT_VOCABULARY_VERSION,
     targeting: draft.targeting,
     exit: draft.exit,
-    ...draft.advanced,
+    ...(draft.lure === undefined ? {} : { lure: draft.lure }),
+    ...(draft.ringSwap === undefined ? {} : { ringSwap: draft.ringSwap }),
     ...Object.fromEntries(
       BOT_CATEGORIES.map((category) => [category, draft.rules[category]]),
     ),
@@ -218,11 +218,45 @@ export function draftFrom(config: BotConfig): BotDraft {
     rules,
     exit: config.exit,
     targeting: config.targeting,
-    advanced: {
-      ...(config.lure === undefined ? {} : { lure: config.lure }),
-      ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
-    },
+    ...(config.lure === undefined ? {} : { lure: config.lure }),
+    ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
   };
+}
+
+/** Salva a configuração de ring swap (#353, SV-17) e manda na hora (é o "Salvar" do modal). */
+export function setRingSwap(ringSwap: BotConfig['ringSwap']): void {
+  edit((draft) => ({ ...draft, ringSwap }));
+  flushSave();
+}
+
+/** Edita o lure dinâmico (SV-09, §13.8) e salva com debounce. `undefined` volta o bot a não usar lure. */
+export function setLure(lure: BotConfig['lure']): void {
+  edit((draft) => ({ ...draft, lure }));
+  scheduleSave();
+}
+
+/** Troca a política de escolha de alvo (§13.6) e salva com debounce. */
+export function setTargetingPolicy(policy: BotTargetPolicy): void {
+  edit((draft) => ({ ...draft, targeting: { ...draft.targeting, policy } }));
+  scheduleSave();
+}
+
+/** Reescreve a lista de monstros priorizados (§13.6) e salva com debounce. */
+export function setPrioritize(prioritize: readonly string[]): void {
+  edit((draft) => ({ ...draft, targeting: { ...draft.targeting, prioritize: [...prioritize] } }));
+  scheduleSave();
+}
+
+/** Reescreve a lista de monstros ignorados (§13.6) e salva com debounce. */
+export function setIgnore(ignore: readonly string[]): void {
+  edit((draft) => ({ ...draft, targeting: { ...draft.targeting, ignore: [...ignore] } }));
+  scheduleSave();
+}
+
+/** Troca a postura (§13.6) — parado, seguir, ou manter distância (com `tiles`) — e salva com debounce. */
+export function setPosture(posture: BotPosture): void {
+  edit((draft) => ({ ...draft, targeting: { ...draft.targeting, posture } }));
+  scheduleSave();
 }
 
 /**

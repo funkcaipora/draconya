@@ -1,0 +1,10 @@
+{
+  "id": "energy-ring",
+  "name": "Energy Ring",
+  "kind": "ring",
+  "slot": "finger",
+  "weight": 2,
+  "value": 100,
+  "ringEffect": { "kind": "energy-shield" },
+  "_open": "Peso e preço provisórios — o PRD (§21) não fixa número de anel, e docs/reference/huntera-observed.md não observa nenhum. A MECÂNICA (SV-16) é definitiva: o dano sofrido debita da mana antes da vida, como o mana-shield do utamo vita. appearanceId resolvido via /assets, conferido de olho a 32 px."
+}

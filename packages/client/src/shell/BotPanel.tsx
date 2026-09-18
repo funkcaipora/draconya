@@ -21,11 +21,14 @@
 
 import { useEffect, useState } from 'react';
 import { BOT_CATEGORIES } from '@draconya/content';
-import type { BotCategory, BotRule } from '@draconya/content';
+import type { BotCategory, BotConfig, BotRule } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { sendIntent } from '../net/current.js';
 import { bot, moveRule, removeRule, setConfigSender, toggleRule } from '../bot/store.js';
-import type { BotVocabulary } from '../state/hud.js';
+import type { BotVocabulary, ItemDefinition } from '../state/hud.js';
+import { defaultRingSwap, ringSwapSummary } from '../bot/ring-swap.js';
+import { RingSwapModal } from './RingSwapModal.js';
+import { LureTargetingModal } from './LureTargetingModal.js';
 import { RuleEditor, blankRule } from './RuleEditor.js';
 import { ruleText } from './rule-text.js';
 import { Panel } from './ui/Panel.js';
@@ -121,6 +124,29 @@ function Category({ category, vocabulary, vocationId, onEdit }: {
   );
 }
 
+function AdvancedSection({ ringSwap, items, advanced, onEditRingSwap }: {
+  ringSwap: BotConfig['ringSwap'] | undefined;
+  items: readonly ItemDefinition[];
+  advanced: boolean;
+  onEditRingSwap: () => void;
+}) {
+  return (
+    <section className="bot-advanced">
+      <header className="bot-advanced-head">
+        <strong>Configurações avançadas</strong>
+        <span className="bot-advanced-level">LV 50+</span>
+      </header>
+      <div className={`bot-advanced-row${advanced ? '' : ' bot-advanced-row-locked'}`}>
+        <span className="bot-advanced-row-text">
+          <b>Ring swap</b>
+          <small>{ringSwapSummary(ringSwap, items)}</small>
+        </span>
+        <IconButton title="Configurar" onClick={onEditRingSwap}>⚙</IconButton>
+      </div>
+    </section>
+  );
+}
+
 /**
  * Uma seção FIXA da coluna da esquerda (#162): sempre montada, minimizável pelo próprio
  * cabeçalho do `Panel` (RC-09/#322 — não há mais ícone "Bot" na barra do topo; `collapsed`
@@ -134,6 +160,9 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [ringSwapOpen, setRingSwapOpen] = useState(false);
+  const [lureOpen, setLureOpen] = useState(false);
+  const draftRingSwap = useStoreSlice(bot, (state) => state.draft.ringSwap);
 
   // A store não importa `net/` (ADR 0007: o socket fica fora do render); o painel liga o
   // remetente ao montar. Intenção (invariante 4): o cliente manda a configuração, e quem
@@ -162,22 +191,49 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
   const vocabulary = catalogue.bot;
   const vocationNames = new Map(catalogue.vocations.map((vocation) => [vocation.id, vocation.name]));
   const advanced = level >= vocabulary.advancedFromLevel;
+  const fingerItems = catalogue.items.filter((item) => item.slot === 'finger');
 
   return (
-    <Panel dock title="Bot" collapsed={collapsed} className="bot-panel" {...panelProps}>
-      {!advanced && (
-        // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
-        // que o jogador descubra montando uma configuração inteira e levando um não.
-        <p className="quiet">{`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}</p>
+    <>
+      <Panel dock title="Bot" collapsed={collapsed} className="bot-panel" {...panelProps}>
+        {!advanced && (
+          // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
+          // que o jogador descubra montando uma configuração inteira e levando um não.
+          <p className="quiet">{`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}</p>
+        )}
+        <Button variant="secondary" size="sm" block onClick={() => { setLureOpen(true); }}>
+          ⌖ Lure e alvo
+        </Button>
+        {BOT_CATEGORIES.map((category) => (
+          <Category key={category} category={category} vocabulary={vocabulary} vocationId={vocationId} onEdit={setEditing} />
+        ))}
+        {fingerItems.length > 0 && (
+          <AdvancedSection
+            ringSwap={draftRingSwap}
+            items={fingerItems}
+            advanced={advanced}
+            onEditRingSwap={() => { setRingSwapOpen(true); }}
+          />
+        )}
+        {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
+            "corrija isto" — apagar justamente o que precisa ser corrigido. */}
+        {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
+      </Panel>
+      {/* Os modais são IRMÃOS do Panel, nunca filhos: o `backdrop-filter` da pele dock
+          (ui.css, `.ui-panel--dock`) cria bloco de contenção para `position: fixed` no Chrome,
+          e um Modal aninhado ficava preso dentro da coluna, com 209 px de largura — o que a
+          nota antiga de DT-02 ("backdrop-filter não cria bloco de contenção") negava e o
+          navegador desmentiu. É o mesmo lugar em que `SkillsPanel` monta o seu. */}
+      {ringSwapOpen && (
+        <RingSwapModal
+          initial={draftRingSwap ?? defaultRingSwap(fingerItems) ?? undefined}
+          items={fingerItems}
+          level={level}
+          advancedFromLevel={vocabulary.advancedFromLevel}
+          onClose={() => { setRingSwapOpen(false); }}
+        />
       )}
-      {BOT_CATEGORIES.map((category) => (
-        <Category key={category} category={category} vocabulary={vocabulary} vocationId={vocationId} onEdit={setEditing} />
-      ))}
-      {/* A recusa fica na tela, e o rascunho FICA junto: descartar seria a pior resposta a
-          "corrija isto" — apagar justamente o que precisa ser corrigido. */}
-      {save === 'refused' && reason !== null && <p className="system-error">{reason}</p>}
-      {/* Aninhar o Modal aqui é seguro (DT-02: backdrop-filter não cria bloco de contenção para
-          position: fixed) e é o menor diff em relação ao código de antes. */}
+      {lureOpen && <LureTargetingModal onClose={() => { setLureOpen(false); }} />}
       {editing !== null && (
         <RuleEditor
           category={editing.category}
@@ -190,6 +246,6 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
           onClose={() => { setEditing(null); }}
         />
       )}
-    </Panel>
+    </>
   );
 }

@@ -188,6 +188,8 @@ export function zeroAggregates(): Aggregates {
  */
 export interface Ruleset {
   readonly type: SessionType;
+  readonly huntId?: string;
+  readonly difficulty?: string;
 
   /**
    * Esta sessão é um SHARD — uma cópia compartilhada por muitos personagens (FUN-71)?

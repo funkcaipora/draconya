@@ -26,8 +26,14 @@ import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 import { Slot } from './ui/Slot.js';
 
-/** Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa. */
-const SLOT_TEXT: Record<string, string> = {
+/**
+ * Os dez lugares do §21.3 e do ADR 0026, em português e na ordem em que o corpo os usa.
+ *
+ * Exportado desde a #344 (SV-08): é a mesma "categoria derivada do slot" que a aba Itens do
+ * Cyclopedia usa — reaproveitar em vez de duplicar evita que os dois rótulos divirjam (ex.:
+ * um chamando `finger` de "Dedo" e o outro de "Anel").
+ */
+export const SLOT_TEXT: Record<string, string> = {
   head: 'Cabeça', neck: 'Pescoço', chest: 'Peito', legs: 'Pernas', feet: 'Pés',
   hand: 'Mão', shield: 'Escudo', finger: 'Dedo', ammo: 'Munição', back: 'Mochila',
 };

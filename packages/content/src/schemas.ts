@@ -437,6 +437,29 @@ export type ResolvedWeapon = WeaponProfile & {
   readonly ammoFamily?: AmmoFamily;
 };
 
+/**
+ * Efeito passivo de anel (§13.9, SV-16) — ativo enquanto o item está EQUIPADO no dedo, ao
+ * contrário de `charges`/`durationMs` (adiante neste schema), que são consumo por uso/tempo e
+ * ainda não têm mecanismo nenhum (§21.3). Fechado por `kind`, como `botExitRuleSchema` e o
+ * `effect` de magia: o `sim` só executa o que conhece, e um `kind` novo sem branch aqui é
+ * recusado no boot em vez de virar um anel mudo que ninguém explica.
+ *
+ * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
+ *   que a condição `mana-shield` do utamo vita já faz em `applyDamageOutcome`
+ *   (`sim/combat/outcome.ts`, CMB-08); as duas convergem no mesmo estágio e não se somam.
+ * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o ponto fixo por
+ *   vencimento de `progression.regen`, sem nenhum outro bônus, porque hoje não existe nenhum.
+ *   `percent: 300` é +300% (quadruplica o ponto por vencimento).
+ */
+export const RING_EFFECT_KINDS = ['energy-shield', 'regen-boost'] as const;
+export type RingEffectKind = (typeof RING_EFFECT_KINDS)[number];
+
+export const ringEffectSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('energy-shield') }),
+  z.strictObject({ kind: z.literal('regen-boost'), percent: z.number().int().positive() }),
+]);
+export type RingEffect = z.infer<typeof ringEffectSchema>;
+
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**
  * De onde uma instância veio (§25.3). `starting-kit` e `vocation-choice` são as duas únicas
@@ -537,6 +560,8 @@ export const itemSchema = z.strictObject({
    * defensor (ver `Inventory.mitigation`).
    */
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
+  /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
+  ringEffect: ringEffectSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -777,9 +802,33 @@ export interface MonsterAbility {
   readonly field?: FieldSpec;
 }
 
+/**
+ * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
+ * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO e
+ * crescido por monstro real: hoje só `rat` existe em `packages/content/data/monsters/`, e ele é
+ * um roedor — por isso o vocabulário nasce com UM valor. Uma classe nova entra na mesma PR que
+ * cria o primeiro monstro dela, nunca antes (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
+ * mentira vira constante — pré-popular as onze categorias do `data.js` do kit sem nenhum
+ * monstro real de oito delas seria exatamente isso).
+ *
+ * Identificador em inglês, valor de exibição em português fica para quem desenhar a `SideList`
+ * (RC-08/#321) — o mesmo desenho de `HUNT_DIFFICULTY_NAMES`/`cautious` (traduzido para
+ * "Cauteloso" só no cliente, `packages/client/src/shell/HuntsModal.tsx:25`) e de
+ * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
+ * Ver Decisão técnica DT-02.
+ */
+export const MONSTER_CLASSES = ['mammal'] as const;
+export type MonsterClass = (typeof MONSTER_CLASSES)[number];
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * A classe do monstro, para a Cyclopedia agrupar por categoria (SV-20). Vocabulário fechado
+   * em `MONSTER_CLASSES` — ver o comentário dela. Ausente: o monstro só aparece em "Todas as
+   * entradas" na tela (nenhuma categoria própria ainda).
+   */
+  class: z.enum(MONSTER_CLASSES).optional(),
   recommendedLevel: z.number().int().positive(),
   health: z.number().int().positive(),
   experience: z.number().int().nonnegative(),
@@ -890,12 +939,23 @@ export const huntSchema = z.object({
    */
   corpseTtlMs: z.number().int().positive().optional(),
   /**
+   * Contagem regressiva de saída da hunt em milissegundos (#360).
+   * Ausente é saída imediata.
+   */
+  exitDelayMs: z.number().int().positive().optional(),
+  /**
    * A menos de quantos tiles (Chebyshev) de um participante VIVO o monstro NÃO nasce (#236).
    * O lugar não é perdido — o spawn espera e tenta de novo (`SPAWN_RETRY_MS` do ruleset); a
    * densidade continua sendo a da dificuldade. `0` desliga, e é o default: o conteúdo de
    * teste que cabe numa sala de 4×3 continua nascendo em cima de quem está lá.
    */
   spawnClearRadius: z.number().int().nonnegative().default(0),
+  /**
+   * O texto de apresentação da hunt (R8-13), mostrado no modal de detalhes do kit quando
+   * #349/RC-12 o construir. Opcional: hunt sem o campo é hunt cujo parágrafo ainda não foi
+   * escrito. Só apresentação; a simulação não lê isto.
+   */
+  description: z.string().min(1).optional(),
 });
 
 export const vocationSchema = z.object({
@@ -1462,6 +1522,10 @@ export const botExitRuleSchema = z.discriminatedUnion('kind', [
    * configuração salva não mudar de forma quando party existir.
    */
   z.object({ kind: z.literal('party-member-lost') }),
+  /**
+   * SV-06: encerra quando o peso carregado alcança ou ultrapassa a capacidade total.
+   */
+  z.object({ kind: z.literal('out-of-capacity') }),
 ]);
 
 /**

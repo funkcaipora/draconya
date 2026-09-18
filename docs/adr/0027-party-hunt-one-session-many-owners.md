@@ -1,6 +1,6 @@
 # 0027 — Party de hunt: uma sessão com N donos, XP por vocação única e dois modos de loot e custo
 
-**Status:** aceito
+**Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes)
 **Data:** 2026-09-15
 **Contexto técnico:** `packages/sim` (session, hunt ruleset, novo `party.ts`), `packages/content`
 (`party/`, `item.value`), `packages/protocol` (party no ticket e no `session-state`),
@@ -111,3 +111,32 @@ muitos. O 9 continua: os N `CharacterRuntime` são escritos só pela sessão da 
 continua: a party caça com zero sockets abertos e o membro que nunca abriu o navegador recebe a
 mesma cota. O 4 continua: o cliente cria, convida, aprova, inicia e sai — nunca XP, loot, cota ou
 valor de venda.
+
+## Emenda — 2026-09-17 (#359): custo e loot como dois eixos independentes
+
+A decisão 5 original fixava `party.mode` como um único campo (`split`/`shared`) que decidia ao
+mesmo tempo se o custo do supply é rateado e se o loot vai para a bolsa dividida. O kit
+renderizado (ADR 0030) desenha os dois como switches independentes ("Rateio de custos" e
+"Dividir loot", `Hud.jsx:161`) e o próprio dado de exemplo do handoff usa uma combinação
+(`shareCosts: true, splitLoot: false`) que o campo único não representa.
+
+`PartyOptions` (sim) e `PartyState` (protocolo) ganham `shareCosts`/`splitLoot`, opcionais,
+com fallback para `mode` quando ausentes (`shareCostsOf`/`splitLootOf` em `packages/sim/src/party.ts`)
+— toda sessão criada pelo caminho de formação existente continua produzindo exatamente o `split`
+ou o `shared` de sempre, byte a byte. `mode` **não é removido**: é o campo que toda formação
+(`party-store.ts`, `tickets.ts`, `api/party.ts`) e todo cliente hoje leem, e substituí-lo
+quebraria os dois. As quatro combinações resultantes:
+
+- `shareCosts: false, splitLoot: false` — o `split` de sempre.
+- `shareCosts: true, splitLoot: true` — o `shared` de sempre.
+- `shareCosts: true, splitLoot: false` (nova) — custo rateado em tempo real, loot para um
+  elegível sorteado (sem bolsa).
+- `shareCosts: false, splitLoot: true` (nova) — cada um paga o próprio supply, loot para a
+  bolsa da party, vendido e dividido no settlement.
+
+**Quem edita os dois eixos, e quando, fica DEFERIDO**: a formação (`POST /api/party/:id/propose`)
+continua aceitando só `mode`, e não há hoje nenhuma tela nem rota que produza uma combinação
+mista fora de teste. Os switches do kit acendem no painel da hunt (M17) como LEITURA do que a
+sessão já decidiu, não como controle editável, até uma issue de produto separada decidir "quem
+edita e quando" — a proposta default, registrada aqui, é que a edição continue acontecendo na
+proposta do líder (como o `mode` faz hoje), não durante a hunt.
