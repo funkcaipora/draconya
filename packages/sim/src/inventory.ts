@@ -21,7 +21,7 @@
 // container, sem item largado — o §26 do documento de referência lista isso como rejeição
 // deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
 
-import type { Item, ItemSlot, Progression } from '@draconya/content';
+import type { Item, ItemSlot, Progression, RingEffect } from '@draconya/content';
 
 /** Teto de empilhamento (§21.5). Munição empilha; espada não empilha por não ser `stackable`. */
 export const MAX_STACK = 100;
@@ -452,6 +452,17 @@ export class Inventory {
     let total = 0;
     for (const item of this.#equipped.values()) total += catalog.get(item.itemId)?.armor ?? 0;
     return total;
+  }
+
+  /**
+   * O efeito do anel no dedo, pelo catálogo — `null` sem anel equipado, ou com um item sem
+   * `ringEffect` (§13.9, SV-16). Molde de `armor()`: `Inventory` não conhece conteúdo, então quem
+   * chama (o ruleset) é quem tem o catálogo.
+   */
+  ringEffect(catalog: ReadonlyMap<string, Item>): RingEffect | null {
+    const ring = this.equippedAt('finger');
+    if (ring === null) return null;
+    return catalog.get(ring.itemId)?.ringEffect ?? null;
   }
 }
 

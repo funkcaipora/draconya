@@ -14,7 +14,7 @@ async function render(hunting: boolean): Promise<string> {
   return new Response(prelude).text();
 }
 
-function partyView(members: ReadonlyArray<{ characterId: string; name: string; alive: boolean; healthPercent: number }>): void {
+function partyView(members: ReadonlyArray<{ characterId: string; name: string; alive: boolean; healthPercent: number; vocationId: string | null }>): void {
   hud.set((state) => ({
     ...state,
     characterId: 'me',
@@ -30,9 +30,9 @@ beforeEach(() => {
 describe('PartyModal (#320)', () => {
   it('title counts the hud party-state, not the formation store', async () => {
     partyView([
-      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
-      { characterId: 'b', name: 'Ana', alive: true, healthPercent: 80 },
-      { characterId: 'c', name: 'Cid', alive: true, healthPercent: 70 },
+      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+      { characterId: 'b', name: 'Ana', alive: true, healthPercent: 80, vocationId: null },
+      { characterId: 'c', name: 'Cid', alive: true, healthPercent: 70, vocationId: null },
     ]);
     expect(await render(true)).toContain('Party · 3');
   });
@@ -50,9 +50,9 @@ describe('PartyModal (#320)', () => {
 
   it('lists companions in the Na hunt tab, with the leader star always golden and "caiu" for the fallen', async () => {
     partyView([
-      { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80 },
-      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55 },
-      { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0 },
+      { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80, vocationId: null },
+      { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55, vocationId: null },
+      { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0, vocationId: null },
     ]);
     const html = await render(true);
 
@@ -68,8 +68,8 @@ describe('PartyModal (#320)', () => {
       ...INITIAL_PARTY,
       characterId: 'me',
       party: { id: 'p', leaderId: 'me', huntId: null, difficulty: null, mode: 'split', members: [
-        { characterId: 'me', approved: true },
-        { characterId: 'b', approved: false },
+        { characterId: 'me', name: 'Eu', approved: true },
+        { characterId: 'b', name: 'Bob', approved: false },
       ] },
     }));
 
@@ -82,8 +82,8 @@ describe('PartyModal (#320)', () => {
       ...INITIAL_PARTY,
       characterId: 'me',
       party: { id: 'p', leaderId: 'me', huntId: null, difficulty: null, mode: 'split', members: [
-        { characterId: 'me', approved: true },
-        { characterId: 'b', approved: true },
+        { characterId: 'me', name: 'Eu', approved: true },
+        { characterId: 'b', name: 'Bob', approved: true },
       ] },
     }));
 

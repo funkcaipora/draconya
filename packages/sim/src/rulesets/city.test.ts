@@ -1,4 +1,5 @@
 import { buildTilemap } from '@draconya/content';
+import type { Progression } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { Rng } from '../rng.js';
@@ -70,6 +71,37 @@ describe('chegar na Cidade (FUN-120)', () => {
     person.position = { x: 2, y: 2, z: 7 };
     session.enter(person);
     expect(person.position).toEqual({ x: 2, y: 2, z: 7 });
+  });
+
+  it('repõe a velocidade da tabela em quem chega com zero (SV-04, #340)', () => {
+    // A Cidade anda em passo fixo e não usa `speed` para andar — mas `player-stats` a mostra,
+    // e um personagem que nunca caçou chega com zero, que a tabela nunca produziu.
+    const progression: Progression = {
+      id: 'baseline',
+      startingHealth: 150, startingMana: 0, startingCapacity: 400,
+      healthPerLevel: 5, manaPerLevel: 5, capacityPerLevel: 10,
+      vocationLevel: 8, startingKit: [], satchelInitialSlots: 10, containerRow: 5,
+      startingSpeed: 300, speedPerLevel: 2,
+      regen: { healthPerSecond: 1, manaPerSecond: 1 },
+      xp: { base: 20, exponent: 2 },
+      deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
+    };
+    const session = new Session({
+      id: 'thais', contentVersion: 'v1',
+      ruleset: createCityRuleset({
+        map: temple, stepDurationMs: 150, containers: { items: new Map(), progression },
+      }),
+      rng: Rng.fromSeed('c'), createdAtMs: 0,
+    });
+    const newcomer = citizen('p0');
+    expect(newcomer.speed).toBe(0);
+    session.enter(newcomer);
+    expect(newcomer.speed).toBe(300);
+    // Quem já traz a velocidade (um snapshot de hunt, com haste ou level maior) não é rebaixado.
+    const veteran = citizen('p1');
+    veteran.speed = 320;
+    session.enter(veteran);
+    expect(veteran.speed).toBe(320);
   });
 
   it('a Cidade diz qual mapa desenhar', () => {

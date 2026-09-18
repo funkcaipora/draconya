@@ -20,6 +20,15 @@ const Place = z.union([
 const PaletteIndex = z.number().int().min(0).max(132);
 
 /**
+ * Progresso até o próximo nível de uma skill (#340, SV-04): nível atual e percentual acumulado.
+ */
+export const SkillProgress = z.object({
+  level: z.number().int().nonnegative(),
+  percentToNext: z.number().int().min(0).max(99),
+});
+export type SkillProgress = z.infer<typeof SkillProgress>;
+
+/**
  * As cores com que um outfit de duas camadas é pintado (FUN-104): cabeça, corpo, pernas e
  * pés, cada um um índice da paleta. Do personagem, não do monstro — o rato é uma camada só.
  */
@@ -169,12 +178,28 @@ export const C2S_SCHEMAS = {
 export const PartyState = z.object({
   leaderId: z.string().min(1),
   mode: z.enum(['split', 'shared']),
+  shareCosts: z.boolean().optional(),
+  splitLoot: z.boolean().optional(),
   members: z.array(z.object({
     characterId: z.string().min(1),
     name: z.string().min(1),
     alive: z.boolean(),
     /** HP em percentual inteiro (0–100), para o painel — o absoluto é balanceamento. */
     healthPercent: z.number().int().min(0).max(100),
+    /**
+     * A vocação de cada membro (#339, SV-03).
+     * `null` é "ainda não escolheu" (level < 8, ADR 0026 decisão 1).
+     * `default(null)`: um nó game anterior manda sem.
+     */
+    vocationId: z.string().nullable().default(null),
+    /**
+     * O level de cada membro (#339, SV-03). Opcional.
+     */
+    level: z.number().int().positive().optional(),
+    /**
+     * Mana em percentual inteiro (0–100, #339, SV-03). Opcional.
+     */
+    manaPercent: z.number().int().min(0).max(100).optional(),
   })),
 });
 
@@ -194,6 +219,21 @@ export const PartyBag = z.object({
 export const PartySettlement = z.object({
   total: z.number().int().nonnegative(),
   shares: z.array(z.object({ characterId: z.string().min(1), gold: z.number().int().nonnegative() })),
+});
+
+/**
+ * O gasto de cada membro e a prévia de rateio da party (#354, SV-18). `estimatedShare` é a
+ * MESMA conta do `party-settlement` real, chamada como leitura — por isso é `.optional()`, e
+ * não `.nullable()`: ausente é "não se aplica" (modo `split`, ou nó `game` anterior a esta
+ * issue), nunca um zero fabricado (D8).
+ */
+export const PartySpending = z.object({
+  shares: z.array(z.object({
+    characterId: z.string().min(1),
+    /** O MESMO número de `Aggregates.goldSpent` — não int-constrained, como lá (types.ts:56). */
+    goldSpent: z.number(),
+    estimatedShare: z.number().int().nonnegative().optional(),
+  })),
 });
 
 export const S2C_SCHEMAS = {
@@ -219,6 +259,8 @@ export const S2C_SCHEMAS = {
      */
     sessionType: z.string(),
     elapsedMs: z.number(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
     /** Quem é o jogador nesta instância — sem isto a câmera não tem em quem centrar. */
     self: z.object({
       creatureId: z.number().int(),
@@ -228,6 +270,9 @@ export const S2C_SCHEMAS = {
       level: z.number().int(), xp: z.number(),
       /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
       vocationId: z.string().nullable().default(null),
+      speed: z.number().int().nonnegative().default(0),
+      skills: z.record(z.string().min(1), SkillProgress).default({}),
+      magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
     }),
     world: z.object({
       mapId: z.string().nullable(),
@@ -252,6 +297,14 @@ export const S2C_SCHEMAS = {
     /** A party desta sessão (#196). Ausente em solo — e em todo nó anterior. */
     party: PartyState.optional(),
     partyBag: PartyBag.optional(),
+    partySpending: PartySpending.optional(),
+    /**
+     * O total de jogadores online (SV-07) — o mesmo número do `player-count` mais recente,
+     * para quem reanexa não ficar sem ele até o próximo ciclo de 30 s. Ausente: nó `game`
+     * anterior a esta mudança, ou este processo ainda não completou o primeiro ciclo desde que
+     * subiu.
+     */
+    onlinePlayers: z.number().int().nonnegative().optional(),
   }),
   /**
    * A troca de cena (FUN-120): que mapa desenhar, e em que AMBIENTE (FUN-121) — `cavern`
@@ -261,6 +314,8 @@ export const S2C_SCHEMAS = {
   'instance-enter': z.object({
     instanceId: z.string(),
     map: z.string(),
+    huntId: z.string().optional(),
+    difficulty: z.string().optional(),
     ambience: z.enum(['surface', 'cavern']).optional(),
   }),
   'creature-appear': CreatureState,
@@ -286,6 +341,7 @@ export const S2C_SCHEMAS = {
   'party-state': PartyState,
   'party-bag': PartyBag,
   'party-settlement': PartySettlement,
+  'party-spending': PartySpending,
   /**
    * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
    * mudam — abate, loot, gasto, level, morte. `durationMs` vem junto mas não é o gatilho: o
@@ -376,6 +432,19 @@ export const S2C_SCHEMAS = {
       recommendedLevel: z.number().int().positive(),
       difficulties: z.array(z.string().min(1)),
       /**
+       * O texto de apresentação da hunt (R8-13, SV-21). Opcional: hunt sem o campo ainda não
+       * teve o parágrafo escrito. Sem .default('') — ausência e string vazia são coisas diferentes.
+       */
+      description: z.string().min(1).optional(),
+      /**
+       * A contagem de monstros por dificuldade (SV-19, #355) — "Ousado · 4" do Huntera.
+       * Mesma ordem de `difficulties`. `default([])`: nó game anterior manda sem.
+       */
+      difficultyDetails: z.array(z.object({
+        id: z.string().min(1),
+        monsterCount: z.number().int().positive(),
+      })).default([]),
+      /**
        * Os outfits dos monstros desta hunt (FUN-112), para o cliente AQUECER as folhas deles
        * na Cidade, antes de o primeiro aparecer — sem isto o rato era um quadrado por seis a
        * dez segundos na primeira entrada. Só ids (invariante 6), resolvidos pelo servidor do
@@ -388,6 +457,22 @@ export const S2C_SCHEMAS = {
        * anterior manda sem.
        */
       lootDrops: z.number().int().nonnegative().default(0),
+      /**
+       * Os monstros que aparecem nesta hunt, em qualquer dificuldade dela — deduplicados e em
+       * ordem de `id` (SV-02, #338).
+       */
+      monsters: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
+      /**
+       * O loot possível desta hunt — cada item distinto uma vez, SEM raridade.
+       * Gold NUNCA entra aqui (não é item).
+       */
+      loot: z.array(z.object({
+        itemId: z.string().min(1),
+        name: z.string().min(1),
+      })).default([]),
     })),
     /**
      * Os monstros que existem, para a tela do Bestiário (FUN-113) ter nome onde o contador
@@ -397,6 +482,9 @@ export const S2C_SCHEMAS = {
     monsters: z.array(z.object({
       id: z.string().min(1),
       name: z.string().min(1),
+      class: z.string().optional(),
+      health: z.number().int().positive().optional(),
+      experience: z.number().int().nonnegative().optional(),
     })).default([]),
     /**
      * Os marcos do Bestiário e o bônus de XP por marco (§18, FUN-113), do conteúdo fixado na
@@ -466,6 +554,13 @@ export const S2C_SCHEMAS = {
       /** Ocupa as duas mãos (#152). `default`: nó anterior manda sem. */
       twoHanded: z.boolean().default(false),
       /**
+       * Preço de venda ao NPC, ataque e armadura (#337). Opcionais sem default:
+       * um nó anterior manda sem, e o cliente novo não pode recusar a mensagem.
+       */
+      value: z.number().int().nonnegative().optional(),
+      attack: z.number().int().nonnegative().optional(),
+      armor: z.number().int().nonnegative().optional(),
+      /**
        * Como a arma bate (#152): o tipo e o alcance, para o tooltip e para o seletor de munição
        * saber a família. Mana por golpe e faixa de dano ficam de fora — são balanceamento que o
        * cliente não simula (invariante 4).
@@ -505,6 +600,29 @@ export const S2C_SCHEMAS = {
     })).default([]),
     /** O level da escolha (#154): a tela não pode ter o 8 em código. `default(0)`: nó anterior — sem diálogo. */
     vocationLevel: z.number().int().nonnegative().default(0),
+    /**
+     * A tabela ESTÁTICA de velocidade e regeneração passiva (FUN-119/FUN-36/FUN-68, #361):
+     * quanto todo personagem tem ao nascer e quanto ganha por level, na fórmula
+     * `startingSpeed + (level - 1) * speedPerLevel` que `packages/sim/src/progression.ts`
+     * já usa — e o quanto ele regenera de HP/mana por segundo, que NÃO varia por level.
+     *
+     * Vocação-independente: hoje nenhuma vocação do conteúdo altera velocidade ou
+     * regeneração, então o campo vive UMA vez aqui, e não dentro de cada `vocations[]` — o
+     * mesmo motivo de `vocationLevel` já ser irmão de `vocations`, e não campo de cada uma.
+     *
+     * O valor AO VIVO (afetado por haste, level atual do personagem) é outro campo, em
+     * `player-stats` — SV-04 (#340), fora desta mensagem. `.optional()`, sem `.default()`,
+     * como `bestiary`: um nó `game` anterior a este deploy manda `catalogue` sem a chave, e o
+     * cliente trata ausência como "—", nunca como zero (a convenção de `Aggregates` opcionais).
+     */
+    progression: z.object({
+      startingSpeed: z.number().int().positive(),
+      speedPerLevel: z.number().int().nonnegative(),
+      regen: z.object({
+        healthPerSecond: z.number().nonnegative(),
+        manaPerSecond: z.number().nonnegative(),
+      }),
+    }).optional(),
   }),
   'creature-health': z.object({ id: z.number().int(), health: z.number(), maxHealth: z.number() }),
   /**
@@ -539,6 +657,7 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
+    targetId: z.number().int().nonnegative().nullable().default(null),
     /**
      * A munição escolhida por família (#152), a forma do Huntera (`ammo-selection`): `null` é
      * "a grátis". `default`: um nó `game` anterior manda sem, e o cliente mostra a grátis.
@@ -547,6 +666,9 @@ export const S2C_SCHEMAS = {
       .default({ arrow: null, bolt: null }),
     /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
     vocationId: z.string().nullable().default(null),
+    speed: z.number().int().nonnegative().default(0),
+    skills: z.record(z.string().min(1), SkillProgress).default({}),
+    magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),
@@ -563,6 +685,20 @@ export const S2C_SCHEMAS = {
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
   }),
+  /**
+   * Condições ativas do jogador (#341, SV-05): tempo restante de cada condição temporária.
+   */
+  'active-conditions': z.object({
+    conditions: z.array(z.object({
+      kind: z.enum(['haste', 'buff', 'mana-shield', 'heal-over-time']),
+      remainingMs: z.number().int().nonnegative(),
+    })),
+  }),
+  /**
+   * O total de jogadores online (SV-07). Um inteiro simples — não há por que ser mais que
+   * isso, e um campo a mais aqui é um campo a mais para versionar depois.
+   */
+  'player-count': z.object({ count: z.number().int().nonnegative() }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

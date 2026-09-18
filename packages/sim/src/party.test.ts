@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Item, PartyConfig } from '@draconya/content';
-import { settleBag, splitEqually, uniqueVocations, xpPool, xpShare } from './party.js';
+import { settleBag, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpPool, xpShare } from './party.js';
 import type { PartyMember } from './party.js';
 
 // As contas da party (#189, ADR 0027), por tabela. O que se prende aqui é a fórmula do
@@ -106,3 +106,32 @@ describe('settleBag', () => {
     expect(settleBag(bag, [], catalog).shares.size).toBe(0);
   });
 });
+
+describe('shareCostsOf and splitLootOf (#359)', () => {
+  it('falls back to mode when axes are omitted', () => {
+    expect(shareCostsOf({ mode: 'split' })).toBe(false);
+    expect(splitLootOf({ mode: 'split' })).toBe(false);
+
+    expect(shareCostsOf({ mode: 'shared' })).toBe(true);
+    expect(splitLootOf({ mode: 'shared' })).toBe(true);
+  });
+
+  it('respects explicit overrides over mode fallback', () => {
+    // Combination C: shareCosts: true, splitLoot: false
+    expect(shareCostsOf({ mode: 'split', shareCosts: true, splitLoot: false })).toBe(true);
+    expect(splitLootOf({ mode: 'split', shareCosts: true, splitLoot: false })).toBe(false);
+
+    // Combination D: shareCosts: false, splitLoot: true
+    expect(shareCostsOf({ mode: 'split', shareCosts: false, splitLoot: true })).toBe(false);
+    expect(splitLootOf({ mode: 'split', shareCosts: false, splitLoot: true })).toBe(true);
+
+    // Explicit false overrides shared mode
+    expect(shareCostsOf({ mode: 'shared', shareCosts: false })).toBe(false);
+    expect(splitLootOf({ mode: 'shared', splitLoot: false })).toBe(false);
+
+    // Explicit true overrides split mode
+    expect(shareCostsOf({ mode: 'split', shareCosts: true })).toBe(true);
+    expect(splitLootOf({ mode: 'split', splitLoot: true })).toBe(true);
+  });
+});
+

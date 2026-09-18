@@ -684,8 +684,7 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   que algum visualizador recebeu — no `session-attach` e no ciclo com visualizador. Sem
   ninguém olhando não se compara nada: a comparação é apresentação, e o `sim` muda o que tem
   de mudar de qualquer jeito (invariante 3). Escrever `sentStats` num ciclo sem visualizador
-  faria quem reanexa perder a primeira mudança depois do estado. E a comparação é dos NOVE
-  campos: comparar só a vida deixa a mana gasta numa magia fora do HUD, e o teste de mana em
+  faria quem reanexa perder a primeira mudança depois do estado. E a comparação é campo a campo, hoje doze — a lista muda com qualquer SV-nn que acrescente algo a player-stats: comparar só a vida deixa a mana gasta numa magia fora do HUD, e o teste de mana em
   `host.test.ts` é quem pega. **A stamina é comparada no MINUTO**, não no milissegundo: o
   `sim` a queima a cada evento que vence (as regras de saída, a cada 250 ms), então
   `staminaMs` muda em TODO ciclo anexado, e a comparação exata mandava um `player-stats` por

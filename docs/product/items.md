@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) e dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) — implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -235,6 +235,25 @@ sessão encerrada encheria o Redis com cinco mil chaves dizendo "não sobrou ite
 (`draconya_loot_boxes_pending`) — uma pilha que só cresce é jogador ganhando item que não
 consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o número.
 
+## Anéis com efeito passivo (SV-16, #352)
+
+Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
+está equipado no dedo (`slot: 'finger'`), sem carga e sem duração — `charges`/`durationMs`
+continuam declarados no schema e mortos (§21.3); a durabilidade de anéis é E7, issue própria.
+
+**Energy Ring** — o dano sofrido debita da MANA antes da vida, e só o excedente vai para a vida.
+É a MESMA leitura que a condição `mana-shield` do utamo vita (Magic Shield) já faz — as duas
+convergem no mesmo lugar (`CharacterRuntime.receiveDamage`) e NÃO se somam: com o anel vestido E
+a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma vez só.
+
+**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o ponto fixo por
+vencimento de `progression.regen` (§10.2), sem nenhum outro bônus — hoje não existe nenhum outro
+modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
+
+O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
+dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
+descrito aqui, lido do catálogo no momento do dano/regeneração, que dá sentido a essa troca.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
@@ -245,6 +264,9 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 | Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
+| Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
 
 ## Em aberto
 

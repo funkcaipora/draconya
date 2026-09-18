@@ -42,6 +42,9 @@ export interface PartyRouteDependencies {
 
 /** `inviteeId`, e não `characterId`: este é o personagem de QUEM convida, no mesmo corpo. */
 const Invite = z.object({ inviteeId: z.string().min(1).max(128) });
+/** `targetId`, e não `characterId`: este é o personagem de QUEM FALA (o líder); o alvo vai
+ * separado, como `inviteeId` já faz em `Invite`. */
+const Kick = z.object({ targetId: z.string().min(1).max(128) });
 const Propose = z.object({
   huntId: z.string().min(1).max(128),
   difficulty: z.string().min(1).max(64),
@@ -55,16 +58,24 @@ const STATUS: Record<IssueFailure, number> = {
   'session-node-unavailable': 503,
 };
 
-function view(party: PartyRecord) {
+async function view(
+  party: PartyRecord,
+  getCharacter: PartyRouteDependencies['getCharacter'],
+): Promise<{
+  id: string; leaderId: string; mode: PartyRecord['mode']; huntId: string | null;
+  difficulty: string | null;
+  members: Array<{ characterId: string; name: string; approved: boolean }>;
+}> {
+  const members = await Promise.all(party.members.map(async (characterId) => {
+    const accountId = party.accounts[characterId];
+    // Entrada corrompida (conta divergente, personagem apagado) vira AUSENTE, nunca resposta
+    // recusada — a mesma régua de outfit/bestiary/bot-config (ver CLAUDE.md de `server`).
+    const character = accountId === undefined ? null : await getCharacter(accountId, characterId);
+    return { characterId, name: character?.name ?? characterId, approved: party.approved.includes(characterId) };
+  }));
   return {
-    id: party.id,
-    leaderId: party.leaderId,
-    mode: party.mode,
-    huntId: party.huntId,
-    difficulty: party.difficulty,
-    members: party.members.map((characterId) => ({
-      characterId, approved: party.approved.includes(characterId),
-    })),
+    id: party.id, leaderId: party.leaderId, mode: party.mode, huntId: party.huntId,
+    difficulty: party.difficulty, members,
   };
 }
 
@@ -103,7 +114,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (me === null) return;
     const party = await deps.party.create(me.characterId, me.accountId);
     if (party === null) return reply.code(409).send({ error: 'already-in-party' });
-    return reply.send(view(party));
+    return reply.send(await view(party, deps.getCharacter));
   });
 
   app.get('/api/party/mine', async (request, reply) => {
@@ -119,7 +130,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const ticket = await deps.party.takeTicket(query.data.characterId);
     if (ticket !== null) return reply.send({ party: null, ticket });
     const party = await deps.party.of(query.data.characterId);
-    return reply.send({ party: party === null ? null : view(party), ticket: null });
+    return reply.send({ party: party === null ? null : await view(party, deps.getCharacter), ticket: null });
   });
 
   // O matchmaking (#199, §15.2): FORMA a party, não a inicia. Quem entra na fila ou casa na
@@ -137,7 +148,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
       deps.matchmakingLevelRange ?? 0, deps.limits.maxMembers,
     );
     if (result === 'in-party') return reply.code(409).send({ error: 'already-in-party' });
-    return reply.send({ party: result === null ? null : view(result) });
+    return reply.send({ party: result === null ? null : await view(result, deps.getCharacter) });
   });
 
   app.post('/api/matchmaking/leave', async (request, reply) => {
@@ -168,14 +179,29 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (result === 'not-found') return reply.code(404).send({ error: 'party-not-found' });
     if (result !== 'joined') return reply.code(409).send({ error: result });
     const party = await deps.party.get((request.params as { id: string }).id);
-    return reply.send(party === null ? { ok: true } : view(party));
+    return reply.send(party === null ? { ok: true } : await view(party, deps.getCharacter));
   });
 
   app.post('/api/party/:id/leave', async (request, reply) => {
     const me = await who(request, reply);
     if (me === null) return;
     const party = await deps.party.leave((request.params as { id: string }).id, me.characterId);
-    return reply.send({ party: party === null ? null : view(party) });
+    return reply.send({ party: party === null ? null : await view(party, deps.getCharacter) });
+  });
+
+  app.post('/api/party/:id/kick', async (request, reply) => {
+    const me = await who(request, reply);
+    if (me === null) return;
+    const kick = Kick.safeParse(request.body);
+    if (!kick.success) return reply.code(400).send({ error: 'invalid-body' });
+    const result = await deps.party.kick(
+      (request.params as { id: string }).id, me.characterId, kick.data.targetId,
+    );
+    if (result === 'not-found') return reply.code(404).send({ error: 'party-not-found' });
+    if (result === 'not-leader') return reply.code(403).send({ error: 'not-leader' });
+    if (result === 'cannot-kick-self') return reply.code(409).send({ error: 'cannot-kick-self' });
+    if (result === 'target-not-a-member') return reply.code(409).send({ error: 'target-not-a-member' });
+    return reply.send(await view(result, deps.getCharacter));
   });
 
   app.post('/api/party/:id/propose', async (request, reply) => {
@@ -193,7 +219,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (!difficulties.includes(proposal.data.difficulty)) return reply.code(400).send({ error: 'unknown-difficulty' });
     await deps.party.propose(party.id, proposal.data, me.characterId);
     const updated = await deps.party.get(party.id);
-    return reply.send(updated === null ? { ok: true } : view(updated));
+    return reply.send(updated === null ? { ok: true } : await view(updated, deps.getCharacter));
   });
 
   app.post('/api/party/:id/approve', async (request, reply) => {
@@ -205,7 +231,7 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (party.huntId === null) return reply.code(409).send({ error: 'nothing-proposed' });
     await deps.party.approve(party.id, me.characterId);
     const updated = await deps.party.get(party.id);
-    return reply.send(updated === null ? { ok: true } : view(updated));
+    return reply.send(updated === null ? { ok: true } : await view(updated, deps.getCharacter));
   });
 
   /**

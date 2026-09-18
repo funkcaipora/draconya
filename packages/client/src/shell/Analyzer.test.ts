@@ -30,7 +30,7 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
 }
 
 const catalogue: Catalogue = {
-  hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], outfitIds: [], lootDrops: 0 }],
+  hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], difficultyDetails: [], outfitIds: [], lootDrops: 0, monsters: [], loot: [] }],
   monsters: [{ id: 'rat', name: 'Rato' }],
   ammunition: [], vocations: [], vocationLevel: 8,
   bot: {

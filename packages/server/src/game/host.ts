@@ -15,14 +15,14 @@
 import { performance } from 'node:perf_hooks';
 import type {
   Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
-  SessionSnapshot, SessionType,
+  SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Vocation } from '@draconya/content';
-import { containerRulesFor } from '@draconya/sim';
+import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
+import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
+  CarriedItem, CharacterRuntime, ConditionKind, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
   InventoryState, Place, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
@@ -138,6 +138,11 @@ export interface SessionHostOptions {
    * sessão (invariante 7): é um mapa carregado no boot, não uma consulta por criatura.
    */
   readonly monsterCatalog?: ReadonlyMap<string, Monster>;
+  /**
+   * O catálogo de skills (#340, SV-04), para progresso e magic level em player-stats.
+   * Ausente: skills vazias e magic level zerado.
+   */
+  readonly skillCatalog?: ReadonlyMap<string, Skill>;
   /**
    * O outfit de TODO personagem, enquanto ninguém escolhe o seu (FUN-103, §7.4 pendente).
    *
@@ -282,7 +287,24 @@ type PlayerStats = S2CProps<'player-stats'>;
  * porque o protocolo não tem "não sei", e zero é o único número que não promete tempo de
  * recompensa que não existe.
  */
-function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
+function skillProgressOf(
+  character: CharacterRuntime | undefined, definition: Skill | undefined,
+): SkillProgress {
+  if (character === undefined || definition === undefined) return { level: 0, percentToNext: 0 };
+  return character.skills.progressOf(definition);
+}
+
+function playerStatsOf(
+  character: CharacterRuntime | undefined,
+  skillCatalog?: ReadonlyMap<string, Skill>,
+  targetId: number | null = null,
+): PlayerStats {
+  const skills: Record<string, SkillProgress> = {};
+  if (character !== undefined && skillCatalog !== undefined) {
+    for (const definition of skillCatalog.values()) {
+      skills[definition.id] = character.skills.progressOf(definition);
+    }
+  }
   return {
     health: character?.health ?? 0,
     maxHealth: character?.maxHealth ?? 0,
@@ -293,14 +315,30 @@ function playerStatsOf(character: CharacterRuntime | undefined): PlayerStats {
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
-    // A munição escolhida por família (#152): `null` é a grátis.
+    targetId,
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
       bolt: character?.ammo.get('bolt') ?? null,
     },
-    // A vocação (#154): `null` até a escolha.
     vocationId: character?.vocationId ?? null,
+    speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
+    skills,
+    magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
   };
+}
+
+function sameSkillProgress(a: SkillProgress, b: SkillProgress): boolean {
+  return a.level === b.level && a.percentToNext === b.percentToNext;
+}
+
+function sameSkills(a: Record<string, SkillProgress>, b: Record<string, SkillProgress>): boolean {
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    const other = b[key];
+    if (other === undefined || !sameSkillProgress(a[key] as SkillProgress, other)) return false;
+  }
+  return true;
 }
 
 /**
@@ -325,9 +363,13 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.xp === b.xp
     && a.capacity === b.capacity
     && a.gold === b.gold
+    && a.targetId === b.targetId
     && a.ammo.arrow === b.ammo.arrow
     && a.ammo.bolt === b.ammo.bolt
-    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs);
+    && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
+    && a.speed === b.speed
+    && sameSkills(a.skills, b.skills)
+    && sameSkillProgress(a.magicLevel, b.magicLevel);
 }
 
 /**
@@ -363,6 +405,39 @@ function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: nu
     && a.bestSpellHit === aggregates.bestSpellHit;
 }
 
+/** Um share de `party-spending` (#354, SV-18): o gasto do membro, e a prévia dele se pedir agora. */
+type PartySpendingShare = S2CProps<'party-spending'>['shares'][number];
+
+/**
+ * Os shares de `party-spending` (#354, SV-18) — o gasto de CADA participante, sempre (a MESMA
+ * leitura de `Aggregates.goldSpent` que `#presentAnalyzer` já usa por personagem), mais a
+ * prévia do settlement (`estimatedShare`), só em modo `shared`, reaproveitando
+ * `HuntRuleset.partySpendingPreview` — a MESMA conta do `party-settlement` real. `undefined`
+ * sem party: D8, nada a mandar.
+ */
+function partySpendingSharesOf(hosted: HostedSession): PartySpendingShare[] | undefined {
+  const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+  if (ruleset.party === undefined) return undefined;
+  const estimated = ruleset.partySpendingPreview?.(hosted.session);
+  return hosted.session.participants.map((member) => ({
+    characterId: member.id,
+    goldSpent: hosted.session.aggregatesOf(member.id).goldSpent,
+    ...(estimated?.has(member.id) ? { estimatedShare: estimated.get(member.id) } : {}),
+  }));
+}
+
+/** Compara os shares ENTREGUES por último com os de agora, campo a campo — como `sameAnalyzer`. */
+function sameSpending(a: readonly PartySpendingShare[], b: readonly PartySpendingShare[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (x === undefined || y === undefined) return false;
+    if (x.characterId !== y.characterId || x.goldSpent !== y.goldSpent || x.estimatedShare !== y.estimatedShare) return false;
+  }
+  return true;
+}
+
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
@@ -378,6 +453,53 @@ function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   let total = 0;
   for (const kills of Object.values(counts)) total += kills;
   return total;
+}
+
+function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): boolean {
+  if (a.leaderId !== b.leaderId || a.mode !== b.mode || a.members.length !== b.members.length) {
+    return false;
+  }
+  for (let i = 0; i < a.members.length; i++) {
+    const x = a.members[i];
+    const y = b.members[i];
+    if (
+      !x || !y
+      || x.characterId !== y.characterId || x.name !== y.name || x.alive !== y.alive
+      || x.healthPercent !== y.healthPercent || x.vocationId !== y.vocationId
+      || x.level !== y.level || x.manaPercent !== y.manaPercent
+    ) return false;
+  }
+  return true;
+}
+
+type ConditionsSnapshot = ReadonlyMap<ConditionKind, number>;
+
+function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
+  const snapshot = new Map<ConditionKind, number>();
+  for (const condition of character.conditions.getState()) {
+    snapshot.set(condition.key, condition.expiresAtMs);
+  }
+  return snapshot;
+}
+
+function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, expiresAtMs] of a) {
+    if (b.get(key) !== expiresAtMs) return false;
+  }
+  return true;
+}
+
+function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
+  const conditions: { kind: ConditionKind; remainingMs: number }[] = [];
+  for (const [kind, expiresAtMs] of snapshot) {
+    conditions.push({
+      kind,
+      remainingMs: Math.max(0, Math.round(expiresAtMs - nowMs)),
+    });
+  }
+  conditions.sort((a, b) => a.kind.localeCompare(b.kind));
+  return { conditions };
 }
 
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
@@ -455,6 +577,17 @@ interface HostedSession {
    * e no ciclo com visualizador, pela razão registrada em `sentStats`.
    */
   readonly sentBestiary: Map<string, number>;
+  /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
+  sentParty: S2CProps<'party-state'> | null;
+  /**
+   * Os shares de `party-spending` ENTREGUES por último (#354, SV-18) — por SESSÃO, como
+   * `party-bag`, não por personagem: a mensagem é UMA SÓ, para todos os visualizadores. `null`
+   * é "ninguém recebeu ainda" ou "sessão sem party" (D8); o primeiro ciclo com visualizador, ou
+   * o `session-attach`, escreve o real.
+   */
+  sentSpending: readonly PartySpendingShare[] | null;
+  /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
+  readonly sentConditions: Map<string, ConditionsSnapshot>;
   /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
@@ -492,6 +625,12 @@ export interface PrepareResult {
 const CYCLE_MS = 100;
 /** Um terço do lease do diretório, pela mesma razão do batimento. */
 const RENEW_INTERVAL_MS = 10_000;
+/**
+ * Cada quanto o total de jogadores online é agregado entre nós e mandado para quem está
+ * olhando (SV-07). Fixado em 30 s pelo desenho da issue: mais apertado não muda a sensação de
+ * "gente jogando" e custa banda à toa; mais frouxo atrasaria demais um pico real de entrada.
+ */
+const PLAYER_COUNT_INTERVAL_MS = 30_000;
 /**
  * Cada quanto a sessão é gravada.
  *
@@ -576,6 +715,8 @@ export class SessionHost {
   #cycleTimer: NodeJS.Timeout | null = null;
   #renewTimer: NodeJS.Timeout | null = null;
   #snapshotTimer: NodeJS.Timeout | null = null;
+  #playerCountTimer: NodeJS.Timeout | null = null;
+  #lastPlayerCount: number | undefined = undefined;
 
   constructor(options: SessionHostOptions) {
     this.#options = options;
@@ -590,6 +731,21 @@ export class SessionHost {
     let total = 0;
     for (const hosted of this.#sessions.values()) total += hosted.viewers.size;
     return total;
+  }
+
+  /**
+   * Quantos PERSONAGENS distintos este nó tem conectados agora (SV-07) — não visualizadores:
+   * duas abas do mesmo personagem contam UMA vez (invariante 8, `CLAUDE.md` de `server`: "duas
+   * abas do mesmo personagem são dois visualizadores da MESMA sessão, nunca duas sessões"). O
+   * `Set` nunca precisa decidir entre SESSÕES, só entre ABAS dentro de uma: um personagem não
+   * pode estar hospedado em duas sessões deste nó ao mesmo tempo (o mesmo invariante).
+   */
+  get connectedCharacterCount(): number {
+    const characters = new Set<string>();
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) characters.add(viewer.characterId);
+    }
+    return characters.size;
   }
 
   sessionFor(characterId: string): Session | undefined {
@@ -1087,7 +1243,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -1140,7 +1296,7 @@ export class SessionHost {
       });
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1365,12 +1521,15 @@ export class SessionHost {
       // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
       // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
       this.#presentStats(hosted);
+      this.#presentConditions(hosted);
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
       this.#presentAnalyzer(hosted);
+      this.#presentSpending(hosted);
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
       if (hosted.session.aggregates.itemsLooted !== hosted.sentItemsLooted) {
@@ -1672,11 +1831,26 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character);
+      const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
       this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    }
+  }
+
+  #presentConditions(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const snapshot = conditionsSnapshotOf(character);
+      const last = hosted.sentConditions.get(character.id);
+      if (last !== undefined && sameConditions(last, snapshot)) continue;
+      hosted.sentConditions.set(character.id, snapshot);
+      this.#sendToViewersOf(hosted, character.id, {
+        type: 'active-conditions',
+        ...activeConditionsOf(snapshot, hosted.session.nowMs),
+      });
     }
   }
 
@@ -1744,18 +1918,29 @@ export class SessionHost {
     // limpa o que tinha e busca o mapa —, e o `session-state` é o que povoa a cena nova. Na
     // ordem inversa o estado chegaria e seria apagado pela troca. Sai no attach e em toda
     // transição, porque os dois passam por aqui; a instância é a própria sessão.
-    const { mapId, ambience } = hosted.session.ruleset;
+    const { mapId, ambience, huntId, difficulty } = hosted.session.ruleset;
     if (mapId !== undefined) {
       viewer.send({
         type: 'instance-enter', instanceId: hosted.session.id, map: mapId,
+        ...(huntId === undefined ? {} : { huntId }),
+        ...(difficulty === undefined ? {} : { difficulty }),
         ...(ambience === undefined ? {} : { ambience }),
       });
     }
-    viewer.send(this.#sessionState(hosted, characterId));
+    const state = this.#sessionState(hosted, characterId);
+    if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
+    viewer.send(state);
+    hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant);
+    const stats = playerStatsOf(participant, this.#options.skillCatalog, this.#targetIdOf(hosted, participant));
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    const snapshot = participant === undefined ? new Map() : conditionsSnapshotOf(participant);
+    hosted.sentConditions.set(characterId, snapshot);
+    viewer.send({
+      type: 'active-conditions',
+      ...activeConditionsOf(snapshot, hosted.session.nowMs),
+    });
     // E o Bestiário (FUN-113), pela mesma razão dos vitais: é progressão que só viaja em
     // mensagem própria, e sem ela quem reconecta veria a contagem em zero até o próximo abate
     // — na Cidade, que não tem ciclo, para sempre. `sentBestiary` é escrito aqui porque o que
@@ -1782,6 +1967,7 @@ export class SessionHost {
       case 'party-state': {
         const block = this.#partyBlock(hosted);
         if (block.party === undefined) return;
+        hosted.sentParty = block.party;
         message = { type: 'party-state', ...block.party };
         break;
       }
@@ -1800,6 +1986,35 @@ export class SessionHost {
     for (const viewer of hosted.viewers) viewer.send(message);
   }
 
+  #presentPartyLive(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const party = this.#partyBlock(hosted).party;
+    if (party === undefined) return;
+    if (hosted.sentParty !== null && sameParty(hosted.sentParty, party)) return;
+    hosted.sentParty = party;
+    for (const viewer of hosted.viewers) viewer.send({ type: 'party-state', ...party });
+  }
+
+  /**
+   * O gasto de cada membro e a prévia de rateio, a TODOS os visualizadores da sessão (#354,
+   * SV-18) — broadcast, como `#presentParty`, e não por personagem: o AVISO 4 do Mapa de
+   * Capacidade (docs/reviews/kit-fidelity-audit-2026-09-16.md) registra que `analyzer`, que TEM
+   * `goldSpent` por participante, só vai a quem olha aquele personagem — "gasto de todos visível
+   * a todos" não é ligar um campo, é agregar e distribuir, o modelo que `party-bag` já segue.
+   *
+   * Gateado por comparação (`sameSpending`), como `sameStats`/`sameAnalyzer` — mas por SESSÃO
+   * (`hosted.sentSpending`), não por personagem: a mensagem é uma só para todo mundo.
+   */
+  #presentSpending(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    const shares = partySpendingSharesOf(hosted);
+    if (shares === undefined) return; // sem party (D8): nada a mandar
+    if (hosted.sentSpending !== null && sameSpending(hosted.sentSpending, shares)) return;
+    hosted.sentSpending = shares;
+    const message: S2CMessage = { type: 'party-spending', shares: shares.map((s) => ({ ...s })) };
+    for (const viewer of hosted.viewers) viewer.send(message);
+  }
+
   /** O bloco `party`/`partyBag` do `session-state` (#196), do estado do ruleset. Vazio em solo. */
   #partyBlock(hosted: HostedSession): { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
@@ -1813,11 +2028,16 @@ export class SessionHost {
       party: {
         leaderId,
         mode: party.mode,
+        shareCosts: shareCostsOf(party),
+        splitLoot: splitLootOf(party),
         members: hosted.session.participants.map((member) => ({
           characterId: member.id,
           name: this.#nameByCharacter.get(member.id) ?? member.id,
           alive: member.alive,
           healthPercent: member.maxHealth > 0 ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100))) : 0,
+          vocationId: member.vocationId,
+          level: member.level,
+          manaPercent: member.maxMana > 0 ? Math.max(0, Math.min(100, Math.round((member.mana / member.maxMana) * 100))) : 0,
         })),
       },
     };
@@ -2157,6 +2377,9 @@ export class SessionHost {
       sentStats: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentParty: null,
+      sentConditions: new Map(),
+      sentSpending: null,
     };
     this.#sessions.set(next.id, successor);
     this.#sessionIdByCharacter.set(characterId, next.id);
@@ -2297,15 +2520,18 @@ export class SessionHost {
     this.#cycleTimer = setInterval(() => this.cycle(), CYCLE_MS);
     this.#renewTimer = setInterval(() => void this.#renewLeases(), RENEW_INTERVAL_MS);
     this.#snapshotTimer = setInterval(() => void this.saveAll(), SNAPSHOT_INTERVAL_MS);
+    this.#playerCountTimer = setInterval(() => void this.#publishPlayerCount(), PLAYER_COUNT_INTERVAL_MS);
   }
 
   stop(): void {
     if (this.#cycleTimer) clearInterval(this.#cycleTimer);
     if (this.#renewTimer) clearInterval(this.#renewTimer);
     if (this.#snapshotTimer) clearInterval(this.#snapshotTimer);
+    if (this.#playerCountTimer) clearInterval(this.#playerCountTimer);
     this.#cycleTimer = null;
     this.#renewTimer = null;
     this.#snapshotTimer = null;
+    this.#playerCountTimer = null;
   }
 
   /**
@@ -2542,6 +2768,13 @@ export class SessionHost {
     return assigned;
   }
 
+  #targetIdOf(hosted: HostedSession, character: CharacterRuntime | undefined): number | null {
+    if (character === undefined) return null;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    const target = ruleset.attackTargetOf?.(character) ?? null;
+    return target === null ? null : (hosted.creatureIds.get(target.subject) ?? null);
+  }
+
   /**
    * O estado ATUAL, montado do zero a cada pedido.
    *
@@ -2554,7 +2787,11 @@ export class SessionHost {
     const { session } = hosted;
     // A MESMA montagem do `player-stats` ao vivo (FUN-109): o que a reanexação mostra e o que
     // o ciclo atualiza precisam concordar, e duas montagens divergem na primeira regra nova.
-    const self = playerStatsOf(this.#participantOf(hosted, characterId));
+    const self = playerStatsOf(
+      this.#participantOf(hosted, characterId),
+      this.#options.skillCatalog,
+      this.#targetIdOf(hosted, this.#participantOf(hosted, characterId)),
+    );
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
     // `session-state` completo seria o pior pacote do jogo — e mandaria para a tela gente que
@@ -2595,10 +2832,13 @@ export class SessionHost {
       });
     }
 
+    const spendingShares = partySpendingSharesOf(hosted);
     return {
       type: 'session-state',
       sessionType: session.ruleset.type,
       elapsedMs: session.aggregates.durationMs,
+      ...(session.ruleset.huntId === undefined ? {} : { huntId: session.ruleset.huntId }),
+      ...(session.ruleset.difficulty === undefined ? {} : { difficulty: session.ruleset.difficulty }),
       self: {
         creatureId: this.#creatureId(hosted, characterId),
         characterId,
@@ -2609,6 +2849,9 @@ export class SessionHost {
         level: self.level,
         xp: self.xp,
         vocationId: self.vocationId,
+        speed: self.speed,
+        skills: self.skills,
+        magicLevel: self.magicLevel,
       },
       world: {
         // O mapa da sessão (FUN-120): o cliente busca a geometria e a pilha por este id.
@@ -2625,12 +2868,14 @@ export class SessionHost {
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
       // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
       ...this.#partyBlock(hosted),
+      ...(spendingShares === undefined ? {} : { partySpending: { shares: spendingShares } }),
       // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
       // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
       // "Salvar" dali apagava as regras que a hunt estava executando.
       ...(this.#botByCharacter.has(characterId)
         ? { botConfig: this.#botByCharacter.get(characterId) }
         : {}),
+      ...(this.#lastPlayerCount === undefined ? {} : { onlinePlayers: this.#lastPlayerCount }),
     };
   }
 
@@ -2835,6 +3080,9 @@ export class SessionHost {
       sentStats: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
+      sentParty: null,
+      sentConditions: new Map(),
+      sentSpending: null,
     };
     this.#sessions.set(session.id, hosted);
     this.#sessionIdByCharacter.set(characterId, session.id);
@@ -2911,6 +3159,42 @@ export class SessionHost {
       // Lease não renovado vira sessão órfã para a FUN-28. Registrar alto: é o sintoma que
       // antecede uma sessão sendo retomada em outro nó sem necessidade.
       this.#logger.error({ error }, 'Failed to renew session leases');
+    }
+  }
+
+  /**
+   * Agrega o total de jogadores online entre todos os nós vivos do diretório e manda para
+   * todo visualizador conectado neste nó (SV-07, RF-03).
+   *
+   * Roda fora do caminho quente do tick (`setInterval` próprio de 30 s). Não filtra por estado
+   * aqui — a barra do topo aparece na Cidade e na hunt, e uma sessão sem visualizador
+   * simplesmente não tem para quem mandar (o `for` interno não itera nada).
+   *
+   * Sem `directory` (nó solo, ou teste), o total é só a contagem local — não há outro nó para
+   * somar.
+   *
+   * Falha do Redis NÃO publica um número errado. A alternativa óbvia — cair para
+   * `connectedCharacterCount` deste nó sozinho quando `aliveNodes()` falha — pareceria, para
+   * quem está vendo, uma queda repentina de milhares de jogadores para os poucos deste
+   * processo: "o Redis está lento" não pode virar "o servidor esvaziou" na tela de ninguém. O
+   * último total conhecido fica onde está, e o próximo ciclo de 30 s tenta de novo.
+   */
+  async #publishPlayerCount(): Promise<void> {
+    const directory = this.#options.directory;
+    let total = this.connectedCharacterCount;
+    if (directory !== undefined) {
+      try {
+        const nodes = await directory.aliveNodes();
+        total = nodes.reduce((sum, node) => sum + (node.players ?? 0), 0);
+      } catch (error) {
+        this.#logger.error({ error }, 'Failed to aggregate online player count');
+        return;
+      }
+    }
+    this.#lastPlayerCount = total;
+    const message: S2CMessage = { type: 'player-count', count: total };
+    for (const hosted of this.#sessions.values()) {
+      for (const viewer of hosted.viewers) viewer.send(message);
     }
   }
 

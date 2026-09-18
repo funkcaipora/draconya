@@ -89,13 +89,42 @@ export const SERVER_TO_CLIENT = {
   'ground-item-disappear': 23,
   /**
    * A party (#196, ADR 0027). Três mensagens só S2C: quem está nela (`party-state` — sai no
-   * attach e quando a composição ou a liderança mudam), o que há na bolsa compartilhada
+   * attach, quando a composição ou liderança mudam, e quando vocação, level ou mana de qualquer
+   * membro mudam via sameParty no host, #339), o que há na bolsa compartilhada
    * (`party-bag` — a cada mudança) e o que o settlement pagou (`party-settlement` — ao sair
    * alguém e no fim). Não há C2S: formar party é HTTP, e sair é `leave-hunt` (10).
    */
   'party-state': 24,
   'party-bag': 25,
   'party-settlement': 26,
+  /**
+   * Condições ativas do jogador (haste, buff, magic shield, cura ao longo do tempo).
+   * Sai no attach/enter e sempre que as condições ativas mudam (aplicadas ou expiradas).
+   */
+  'active-conditions': 27,
+  /**
+   * O total de jogadores online, agregado entre todos os nós `game` (SV-07): cada nó publica,
+   * no próprio batimento do diretório de sessões, quantos personagens distintos tem conectados
+   * agora; quem manda esta mensagem já somou os nós vivos. Mandada a cada 30 s, para TODA
+   * sessão hospedada neste nó — a barra do topo do kit (Hud.jsx:21) aparece tanto na Cidade
+   * quanto na hunt.
+   *
+   * Não é comparada como `player-stats`/`analyzer`/`bestiary` (sem `sameX`): é republicada sem
+   * checar se mudou. O próprio intervalo de 30 s já é o teto de banda que se aceita gastar com
+   * isto, e guardar "o último valor mandado por VIEWER" custaria mais memória do que o campo
+   * economiza em rede — um inteiro pequeno, a cada 30 s, para quem estiver conectado.
+   */
+  'player-count': 28,
+  /**
+   * O gasto de cada membro da party e a prévia do rateio do settlement (#354, SV-18): quanto
+   * cada um já gastou em supply nesta sessão, e — em modo `shared` — quanto receberia se a
+   * bolsa fosse liquidada AGORA. Broadcast, como `party-bag`: o Mapa de Capacidade do protocolo
+   * (docs/reviews/kit-fidelity-audit-2026-09-16.md, AVISO 4) registra que `analyzer` — que TEM
+   * `goldSpent` por participante — só vai a quem olha aquele personagem; "gasto de cada membro
+   * visível a todos" não é ligar um campo, é agregar e mandar a TODOS os visualizadores, o que
+   * só `party-bag`/`party-state`/`party-settlement` fazem hoje.
+   */
+  'party-spending': 29,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

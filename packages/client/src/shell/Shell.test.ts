@@ -149,4 +149,20 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(source).toContain('onManage={() => { setPartyModalOpen(true); }}');
     expect(source).toContain('{partyModalOpen && (');
   });
+
+  // #348, SV-12: a BuffBar mostra as condições ativas sobre o mundo, logo depois do WorldOverlay.
+  it('mounts the BuffBar with the active conditions, after the world overlay and before the top bar', async () => {
+    hud.set((state) => ({
+      ...state,
+      conditions: [{ kind: 'haste', remainingMs: 60_000 }],
+      conditionsReceivedAtMs: performance.now(),
+    }));
+    const html = await render();
+    const overlayIndex = html.indexOf('class="world-overlay"');
+    const buffBarIndex = html.indexOf('class="buff-bar"');
+    const topbarIndex = html.indexOf('class="topbar"');
+    expect(buffBarIndex).toBeGreaterThan(overlayIndex);
+    expect(topbarIndex).toBeGreaterThan(buffBarIndex);
+    expect(html).toContain('Haste');
+  });
 });

@@ -186,7 +186,10 @@ describe('outfit colours on the creature (FUN-104)', () => {
   it('the session state carries the same creature shape, colours included', () => {
     const state: S2CMessage = {
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 7, characterId: 'c1', health: 150, maxHealth: 150, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'city', creatures: [{ ...appear, colors }].map(({ type: _type, ...rest }) => rest) },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
       notableEvents: [],
@@ -240,7 +243,10 @@ describe('the live analyzer (FUN-110)', () => {
 describe('the bot configuration in force rides the session state (FUN-111)', () => {
   const state: S2CMessage = {
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-    self: { creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+    self: {
+      creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
     world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
@@ -280,11 +286,62 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
       ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
-      hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({ ...hunt, lootDrops: 0 })),
+      hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
+        ...hunt, difficultyDetails: [], lootDrops: 0, monsters: [], loot: [],
+      })),
     }]);
-    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number }> }> | null;
+    const decoded = decodeS2C(encodeS2C(catalogue({}))) as Array<{ hunts: Array<{ outfitIds: number[]; lootDrops: number; difficultyDetails: unknown[]; monsters: unknown[]; loot: unknown[] }> }> | null;
     expect(decoded?.[0]?.hunts[0]?.outfitIds).toEqual([]);
     expect(decoded?.[0]?.hunts[0]?.lootDrops).toBe(0);
+    expect(decoded?.[0]?.hunts[0]?.difficultyDetails).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
+  });
+
+  it('round trips monsters and loot per hunt, and an older node decodes them to EMPTY lists (SV-02, #338)', () => {
+    const withDetails = catalogue({
+      monsters: [{ id: 'rat', name: 'Rat' }],
+      loot: [{ itemId: 'cheese', name: 'Cheese' }],
+    });
+    const decodedWithDetails = decodeS2C(encodeS2C(withDetails)) as Array<{ hunts: Array<{ monsters: unknown[]; loot: unknown[] }> }> | null;
+    expect(decodedWithDetails?.[0]?.hunts[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat' }]);
+    expect(decodedWithDetails?.[0]?.hunts[0]?.loot).toEqual([{ itemId: 'cheese', name: 'Cheese' }]);
+
+    const older = catalogue({});
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{ hunts: Array<{ monsters: unknown[]; loot: unknown[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.monsters).toEqual([]);
+    expect(decoded?.[0]?.hunts[0]?.loot).toEqual([]);
+  });
+
+  it('round trips difficultyDetails per hunt, and an older node decodes them to an EMPTY list (SV-19, #355)', () => {
+    const withDetails = catalogue({
+      difficultyDetails: [
+        { id: 'cautious', monsterCount: 2 },
+        { id: 'bold', monsterCount: 4 },
+      ],
+    });
+    const decodedWithDetails = decodeS2C(encodeS2C(withDetails)) as Array<{ hunts: Array<{ difficultyDetails: Array<{ id: string; monsterCount: number }> }> }> | null;
+    expect(decodedWithDetails?.[0]?.hunts[0]?.difficultyDetails).toEqual([
+      { id: 'cautious', monsterCount: 2 },
+      { id: 'bold', monsterCount: 4 },
+    ]);
+
+    const older = catalogue({});
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{ hunts: Array<{ difficultyDetails: unknown[] }> }> | null;
+    expect(decoded?.[0]?.hunts[0]?.difficultyDetails).toEqual([]);
+  });
+
+  it('round trips hunt description when present, preserves absence when omitted, and rejects empty string (SV-21, #357)', () => {
+    const withDesc = catalogue({ description: 'Os porões de pedra sob Rookgaard' });
+    const decodedWithDesc = decodeS2C(encodeS2C(withDesc)) as Array<{ hunts: Array<{ description?: string }> }> | null;
+    expect(decodedWithDesc?.[0]?.hunts[0]?.description).toBe('Os porões de pedra sob Rookgaard');
+
+    const withoutDesc = catalogue({});
+    const decodedWithoutDesc = decodeS2C(encodeS2C(withoutDesc)) as Array<{ hunts: Array<{ description?: string }> }> | null;
+    expect(decodedWithoutDesc?.[0]?.hunts[0]?.description).toBeUndefined();
+    expect('description' in (decodedWithoutDesc?.[0]?.hunts[0] ?? {})).toBe(false);
+
+    expect(decodeS2C(encodeS2C(catalogue({ description: '' })))).toBeNull();
   });
 
   it('rejects an outfit id of zero: there is no appearance zero', () => {
@@ -335,6 +392,120 @@ describe('the bestiary (FUN-113, §18)', () => {
     expect(decoded?.[0]?.['monsters']).toEqual([]);
     expect(decoded?.[0]).not.toHaveProperty('bestiary');
   });
+
+  it('round trips monster health and experience, and an older node decodes with them absent (SV-02, #338)', () => {
+    const base = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(base)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat', health: 20, experience: 5 }]);
+
+    const older = {
+      ...base,
+      monsters: [{ id: 'rat', name: 'Rat' }],
+    } as unknown as S2CMessage;
+    const decodedOlder = decodeS2C(encodeS2C(older)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
+    expect(decodedOlder?.[0]?.monsters[0]?.id).toBe('rat');
+    expect(decodedOlder?.[0]?.monsters[0]?.name).toBe('Rat');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('health');
+    expect(decodedOlder?.[0]?.monsters[0]).not.toHaveProperty('experience');
+  });
+
+  it('round trips monster class, and an older node decodes with it absent (SV-20, #356)', () => {
+    const withClass = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(withClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
+    expect(decoded?.[0]?.monsters).toEqual([{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }]);
+
+    const withoutClass = {
+      ...withClass,
+      monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
+    } as unknown as S2CMessage;
+    const decodedWithout = decodeS2C(encodeS2C(withoutClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
+    expect(decodedWithout?.[0]?.monsters[0]?.id).toBe('rat');
+    expect(decodedWithout?.[0]?.monsters[0]?.name).toBe('Rat');
+    expect(decodedWithout?.[0]?.monsters[0]).not.toHaveProperty('class');
+  });
+
+  describe('vocation statics in the catalogue — speed and regen (#361, SV-25)', () => {
+    const baseCatalogue = {
+      type: 'catalogue',
+      hunts: [],
+      bot: {
+        vocabularyVersion: 1, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+        spells: [], supplies: [],
+      },
+      items: [],
+      monsters: [],
+      ammunition: [],
+      vocations: [],
+      vocationLevel: 8,
+    };
+
+    it('round-trips with progression present in catalogue', () => {
+      const withProgression = {
+        ...baseCatalogue,
+        progression: {
+          startingSpeed: 278,
+          speedPerLevel: 2,
+          regen: {
+            healthPerSecond: 1,
+            manaPerSecond: 1,
+          },
+        },
+      } as unknown as S2CMessage;
+      const decoded = decodeS2C(encodeS2C(withProgression));
+      expect(decoded).toEqual([withProgression]);
+    });
+
+    it('round-trips without progression in catalogue: decoded message has progression: undefined (key not present)', () => {
+      const withoutProgression = {
+        ...baseCatalogue,
+      } as unknown as S2CMessage;
+      const decoded = decodeS2C(encodeS2C(withoutProgression)) as Array<Record<string, unknown>> | null;
+      expect(decoded).not.toBeNull();
+      expect(decoded?.[0]?.['progression']).toBeUndefined();
+      expect(decoded?.[0]).not.toHaveProperty('progression');
+    });
+
+    it('rejects invalid progression values (non-positive speed, negative regen)', () => {
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 0, speedPerLevel: 2, regen: { healthPerSecond: 1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 278, speedPerLevel: -1, regen: { healthPerSecond: 1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+
+      expect(S2C_SCHEMAS.catalogue.safeParse({
+        ...baseCatalogue,
+        progression: { startingSpeed: 278, speedPerLevel: 2, regen: { healthPerSecond: -1, manaPerSecond: 1 } },
+      }).success).toBe(false);
+    });
+  });
 });
 
 describe('vocation choice (#154)', () => {
@@ -365,6 +536,106 @@ describe('vocation choice (#154)', () => {
   });
 });
 
+describe('skills, magic level and speed in player-stats and session-state (#340, SV-04)', () => {
+  const fullStats: S2CMessage = {
+    type: 'player-stats',
+    health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+    level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
+    targetId: null,
+    ammo: { arrow: null, bolt: null }, vocationId: 'knight',
+    speed: 292,
+    skills: {
+      melee: { level: 15, percentToNext: 45 },
+      distance: { level: 10, percentToNext: 0 },
+      magic: { level: 2, percentToNext: 80 },
+    },
+    magicLevel: { level: 2, percentToNext: 80 },
+  };
+
+  it('round-trips player-stats with the 3 fields', () => {
+    expect(decodeS2C(encodeS2C(fullStats))).toEqual([fullStats]);
+  });
+
+  it('decodes player-stats without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
+    const rawOlderNode = {
+      type: 'player-stats',
+      health: 100, maxHealth: 100, mana: 50, maxMana: 50,
+      level: 1, xp: 0, capacity: 400, gold: 0, staminaMs: 1000,
+      ammo: { arrow: null, bolt: null }, vocationId: null,
+    };
+    const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
+    expect(decoded).toEqual([{
+      ...rawOlderNode,
+      targetId: null,
+      speed: 0,
+      skills: {},
+      magicLevel: { level: 0, percentToNext: 0 },
+    }]);
+  });
+
+  const fullSessionState: S2CMessage = {
+    type: 'session-state',
+    sessionType: 'hunt',
+    elapsedMs: 12000,
+    self: {
+      creatureId: 1, characterId: 'c1',
+      health: 150, maxHealth: 150, mana: 20, maxMana: 20,
+      level: 8, xp: 4200, vocationId: 'knight',
+      speed: 292,
+      skills: {
+        melee: { level: 15, percentToNext: 45 },
+      },
+      magicLevel: { level: 2, percentToNext: 80 },
+    },
+    world: { groundItems: [], mapId: 'arena', creatures: [] },
+    aggregates: { durationMs: 12000, xpGained: 500, goldGained: 100, goldSpent: 0, kills: 5, deaths: 0 },
+    notableEvents: [],
+  };
+
+  it('round-trips session-state.self with the 3 fields', () => {
+    expect(decodeS2C(encodeS2C(fullSessionState))).toEqual([fullSessionState]);
+  });
+
+  it('decodes session-state.self without the 3 fields using defaults (compatibilidade com nó anterior)', () => {
+    const { speed: _s, skills: _sk, magicLevel: _m, ...selfWithoutNewFields } = fullSessionState.self;
+    const olderSessionState = {
+      ...fullSessionState,
+      self: selfWithoutNewFields,
+    };
+    const decoded = decodeS2C(encodeS2C(olderSessionState as S2CMessage));
+    expect(decoded).toEqual([{
+      ...fullSessionState,
+      self: {
+        ...selfWithoutNewFields,
+        speed: 0,
+        skills: {},
+        magicLevel: { level: 0, percentToNext: 0 },
+      },
+    }]);
+  });
+
+  it('rejects invalid speed, level or percentToNext in SkillProgress', () => {
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...fullStats, speed: -1 }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({ ...fullStats, speed: 1.5 }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: -1, percentToNext: 0 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: 100 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: -1 },
+    }).success).toBe(false);
+    expect(S2C_SCHEMAS['player-stats'].safeParse({
+      ...fullStats,
+      magicLevel: { level: 1, percentToNext: 50.5 },
+    }).success).toBe(false);
+  });
+});
+
 describe('move-item (#160)', () => {
   it('is intention only — two places — and the opcode is 16', () => {
     expect(CLIENT_TO_SERVER['move-item']).toBe(16);
@@ -376,3 +647,245 @@ describe('move-item (#160)', () => {
     expect(schema.safeParse({ from: { container: 'backpack', index: -1 }, to: { slot: 'hand' } }).success).toBe(false);
   });
 });
+
+describe('party presentation messages (#196, #339, SV-03)', () => {
+  it('round trips party-state with vocationId, level and manaPercent', () => {
+    const message: S2CMessage = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'shared',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'knight',
+          level: 20,
+          manaPercent: 80,
+        },
+        {
+          characterId: 'p2',
+          name: 'Bob',
+          alive: false,
+          healthPercent: 0,
+          vocationId: null,
+          level: 5,
+          manaPercent: 0,
+        },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
+  it('round trips party-state with shareCosts and splitLoot (#359)', () => {
+    const message: S2CMessage = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'split',
+      shareCosts: true,
+      splitLoot: false,
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'knight',
+        },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
+  it('decodes older party-state without vocationId, level, or manaPercent as vocationId: null, level: undefined, manaPercent: undefined', () => {
+    const older = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'split',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+        },
+      ],
+    } as unknown as S2CMessage;
+
+    const decoded = decodeS2C(encodeS2C(older)) as Array<{
+      type: 'party-state';
+      members: Array<{
+        characterId: string;
+        vocationId: string | null;
+        level?: number;
+        manaPercent?: number;
+      }>;
+    }> | null;
+    const member = decoded?.[0]?.members[0];
+    expect(member?.vocationId).toBeNull();
+    expect(member?.level).toBeUndefined();
+    expect(member?.manaPercent).toBeUndefined();
+    expect(member).not.toHaveProperty('level');
+    expect(member).not.toHaveProperty('manaPercent');
+  });
+
+  it('rejects manaPercent greater than 100, fractional, or negative', () => {
+    const base = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'shared',
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'sorcerer',
+          level: 25,
+          manaPercent: 50,
+        },
+      ],
+    } as unknown as S2CMessage;
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: 101 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: 50.5 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      ...base,
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100, manaPercent: -1 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+});
+
+describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
+  it('round trips active-conditions (opcode 27)', () => {
+    expect(SERVER_TO_CLIENT['active-conditions']).toBe(27);
+    const msg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [
+        { kind: 'haste', remainingMs: 30000 },
+        { kind: 'buff', remainingMs: 10000 },
+        { kind: 'mana-shield', remainingMs: 5000 },
+        { kind: 'heal-over-time', remainingMs: 60000 },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(msg))).toEqual([msg]);
+  });
+
+  it('round trips active-conditions with empty list', () => {
+    const emptyMsg: S2CMessage = {
+      type: 'active-conditions',
+      conditions: [],
+    };
+    expect(decodeS2C(encodeS2C(emptyMsg))).toEqual([emptyMsg]);
+  });
+
+  it('rejects active-conditions with invalid remainingMs or unknown kind', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'haste', remainingMs: -1 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'haste', remainingMs: 12.5 }],
+    } as unknown as S2CMessage))).toBeNull();
+
+    expect(decodeS2C(encodeS2C({
+      type: 'active-conditions',
+      conditions: [{ kind: 'poison', remainingMs: 1000 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+
+  it('round trips instance-enter with and without huntId and difficulty', () => {
+    const withHunt: S2CMessage = {
+      type: 'instance-enter',
+      instanceId: 'inst-1',
+      map: 'rats-cave',
+      huntId: 'rats',
+      difficulty: 'easy',
+      ambience: 'cavern',
+    };
+    expect(decodeS2C(encodeS2C(withHunt))).toEqual([withHunt]);
+
+    const withoutHunt: S2CMessage = {
+      type: 'instance-enter',
+      instanceId: 'inst-2',
+      map: 'city-square',
+    };
+    expect(decodeS2C(encodeS2C(withoutHunt))).toEqual([withoutHunt]);
+  });
+
+  it('round trips session-state with and without huntId and difficulty', () => {
+    const baseSession: S2CMessage = {
+      type: 'session-state',
+      sessionType: 'hunt',
+      elapsedMs: 5000,
+      huntId: 'rats',
+      difficulty: 'hard',
+      self: {
+        creatureId: 1,
+        characterId: 'c1',
+        health: 100,
+        maxHealth: 100,
+        mana: 50,
+        maxMana: 50,
+        level: 1,
+        xp: 0,
+        vocationId: null,
+        speed: 200,
+        skills: {},
+        magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { mapId: 'rats-cave', creatures: [], groundItems: [] },
+      aggregates: { durationMs: 5000, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(baseSession))).toEqual([baseSession]);
+
+    const { huntId: _h, difficulty: _d, ...citySession } = baseSession;
+    expect(decodeS2C(encodeS2C(citySession as S2CMessage))).toEqual([citySession]);
+  });
+
+  it('round trips player-stats with targetId (number and null)', () => {
+    const statsWithTarget: S2CMessage = {
+      type: 'player-stats',
+      health: 100,
+      maxHealth: 100,
+      mana: 50,
+      maxMana: 50,
+      level: 5,
+      xp: 1000,
+      capacity: 300,
+      gold: 50,
+      staminaMs: 50000,
+      targetId: 42,
+      ammo: { arrow: null, bolt: null },
+      vocationId: 'knight',
+      speed: 250,
+      skills: {},
+      magicLevel: { level: 0, percentToNext: 0 },
+    };
+    expect(decodeS2C(encodeS2C(statsWithTarget))).toEqual([statsWithTarget]);
+
+    const statsNullTarget: S2CMessage = {
+      ...statsWithTarget,
+      targetId: null,
+    };
+    expect(decodeS2C(encodeS2C(statsNullTarget))).toEqual([statsNullTarget]);
+
+    // An older node sending player-stats without targetId decodes to targetId: null
+    const { targetId: _t, ...olderStats } = statsWithTarget;
+    expect(decodeS2C(encodeS2C(olderStats as S2CMessage))).toEqual([statsNullTarget]);
+  });
+});
+
+

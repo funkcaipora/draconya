@@ -1,7 +1,9 @@
 // A preferência do painel Skills é exclusivamente de tela: não representa estado do personagem
 // nem passa pelo servidor. Falhar ao ler ou gravar armazenamento nunca pode esconder o painel.
 
-export const SKILL_ORDER = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'] as const;
+export const SKILL_ORDER = [
+  'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+] as const;
 
 export type SkillId = (typeof SKILL_ORDER)[number];
 
@@ -11,7 +13,11 @@ export const SKILL_LABELS: Record<SkillId, string> = {
   hp: 'Hit Points',
   mana: 'Mana',
   capacity: 'Capacidade',
+  speed: 'Speed',
   stamina: 'Stamina',
+  magic: 'Magic Level',
+  melee: 'Corpo a Corpo',
+  distance: 'Distância',
 };
 
 const STORAGE_KEY = 'draconya:shell:skillsPanel:visible';

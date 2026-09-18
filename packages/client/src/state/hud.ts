@@ -9,6 +9,8 @@
 
 import type { S2CProps } from '@draconya/protocol';
 
+export type ActiveCondition = S2CProps<'active-conditions'>['conditions'][number];
+
 export type ConnectionStatus =
   | 'idle'
   | 'connecting'
@@ -31,6 +33,17 @@ export interface SystemLine {
   readonly level: 'info' | 'warning' | 'error';
   readonly text: string;
   readonly atMs: number;
+}
+
+export interface SkillProgress {
+  level: number;
+  percent: number;
+}
+
+export interface PlayerSkills {
+  melee: SkillProgress;
+  distance: SkillProgress;
+  magic: SkillProgress;
 }
 
 /**
@@ -125,6 +138,8 @@ export interface HudState {
   readonly capacity: number;
   readonly gold: number;
   readonly staminaMs: number;
+  readonly speed: number;
+  readonly skills: PlayerSkills;
   /** A munição escolhida por família (#152): `null` é a grátis. Chega em `player-stats`. */
   readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
@@ -140,6 +155,13 @@ export interface HudState {
    * tem como saber se a hunt está rendendo ou se o socket caiu há dez minutos.
    */
   readonly connection: ConnectionStatus;
+
+  /**
+   * O total de jogadores online (SV-07/SV-15). `null` até o primeiro `player-count` ou
+   * `session-state.onlinePlayers` chegar — nunca `0`: zero seria uma afirmação que o servidor
+   * ainda não fez (invariante 4/D8). A TopBar mostra "—" enquanto for `null`.
+   */
+  readonly onlinePlayers: number | null;
 
   readonly chat: readonly ChatLine[];
   readonly systemMessages: readonly SystemLine[];
@@ -177,6 +199,12 @@ export interface HudState {
   readonly party: PartyView | null;
   readonly partyBag: PartyBagView | null;
   readonly lastSettlement: PartySettlementView | null;
+
+  readonly targetId: number | null;
+  readonly conditions: readonly ActiveCondition[];
+  readonly conditionsReceivedAtMs: number;
+  readonly huntId: string | null;
+  readonly difficulty: string | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -186,10 +214,17 @@ export const INITIAL_HUD: HudState = {
   mana: 0, maxMana: 0,
   level: 0, xp: 0,
   capacity: 0, gold: 0, staminaMs: 0,
+  speed: 0,
+  skills: {
+    melee: { level: 0, percent: 0 },
+    distance: { level: 0, percent: 0 },
+    magic: { level: 0, percent: 0 },
+  },
   ammo: { arrow: null, bolt: null },
   vocationId: null,
   latencyMs: null,
   connection: 'idle',
+  onlinePlayers: null,
   chat: [],
   systemMessages: [],
   analyzer: INITIAL_ANALYZER,
@@ -199,6 +234,11 @@ export const INITIAL_HUD: HudState = {
   party: null,
   partyBag: null,
   lastSettlement: null,
+  targetId: null,
+  conditions: [],
+  conditionsReceivedAtMs: 0,
+  huntId: null,
+  difficulty: null,
 };
 
 /**
