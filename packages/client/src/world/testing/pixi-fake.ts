@@ -9,8 +9,18 @@
 // O critério de cada classe é "o que `viewport.ts` e `textures.ts` chamam", não "o que o Pixi
 // tem" — ver a issue #381, seção "Estado atual do código".
 
+/**
+ * Ordem de CRIAÇÃO dos containers — nunca muda com `addChild`/`setChildIndex`. Só o harness lê
+ * `Container.seq` (issue #381, achado 2): `reorder` (`viewport.ts`) reordena `creatures.children`
+ * por posição de tela no MESMO quadro em que uma criatura nasce, então a posição de um sprite
+ * no array de filhos não é mais "a ordem em que nasceu" — e é essa ordem que
+ * `syncCreatureSprites` (`harness.ts`) precisa para casar sprite novo com id novo.
+ */
+let nextSeq = 0;
+
 export class Container {
   readonly children: Container[] = [];
+  readonly seq = nextSeq++;
   parent: Container | null = null;
   x = 0;
   y = 0;
@@ -45,9 +55,24 @@ export class Container {
     }
   }
 
+  /**
+   * Como o Pixi real (`childrenHelperMixin`): valida o índice contra o tamanho ATUAL, e então
+   * exige que `child` já seja filho deste container — lança, e não adota, quando não é. Sem
+   * isso um sprite de OUTRO container seria puxado para cá em silêncio (`removeChild` é no-op
+   * fora daqui) e ficaria em dois `children` ao mesmo tempo — o defeito que a issue #381
+   * (achado 1) achou: `reorder` (`viewport.ts`) chamando `setChildIndex` num sprite errado não
+   * acusaria nada.
+   */
   setChildIndex(child: Container, index: number): void {
-    this.removeChild(child);
-    child.parent = this;
+    if (index < 0 || index >= this.children.length) {
+      throw new Error(`setChildIndex: índice ${index} fora dos limites (${this.children.length})`);
+    }
+    const at = this.children.indexOf(child);
+    if (at < 0) {
+      throw new Error('setChildIndex: o filho precisa pertencer a este container');
+    }
+    if (at === index) return;
+    this.children.splice(at, 1);
     this.children.splice(index, 0, child);
   }
 

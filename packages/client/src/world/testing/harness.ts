@@ -143,14 +143,20 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
 
   /**
    * Casa sprite com id SEM tocar no viewport: `paintCreatures` cria os sprites que faltam na
-   * ordem de `world.creatures` (Map, ordem de inserção) e os põe em `creatures`
-   * (`viewport.ts`). Os filhos novos desde o último tick são, na mesma ordem, as criaturas
-   * ainda sem sprite.
+   * ordem de `world.creatures` (Map, ordem de inserção), os põe em `creatures` (`viewport.ts`)
+   * e SÓ DEPOIS chama `reorder`, que reordena `creatures.children` por posição de TELA — no
+   * mesmo quadro em que a criatura nasceu. Casar pela posição do filho no array (a ordem depois
+   * do `reorder`) casa errado sempre que duas criaturas nascem no mesmo quadro em posições que
+   * não empatam com a ordem de `world.creatures` (issue #381, achado 2 — reproduzido: duas
+   * criaturas na mesma janela saem com o sprite trocado, sem lançar). `Container.seq`
+   * (`pixi-fake.ts`) é a ordem de CRIAÇÃO, que `reorder` não toca — casar por ela é o que
+   * sobrevive ao reorder do próprio quadro.
    */
   const syncCreatureSprites = (): void => {
     for (const [id, sprite] of known) if (sprite.destroyed) known.delete(id);
     const seen = new Set(known.values());
-    const fresh = layers().creatures.children.filter((child) => !seen.has(child as Sprite)) as Sprite[];
+    const fresh = (layers().creatures.children.filter((child) => !seen.has(child as Sprite)) as Sprite[])
+      .sort((a, b) => a.seq - b.seq);
     const newIds = [...world.creatures.keys()].filter((id) => !known.has(id));
     if (fresh.length !== newIds.length) {
       throw new Error(`harness: ${fresh.length} sprites novos para ${newIds.length} criaturas novas`);

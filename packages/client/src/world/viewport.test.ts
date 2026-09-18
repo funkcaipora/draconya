@@ -1,6 +1,9 @@
 // O harness de teste do viewport (issue #381): prende os SEIS comportamentos de hoje, mais
 // `drawOrder`, para que as issues seguintes do M16 (que reescrevem camadas, ordem de desenho,
-// prefetch e andares) provem que mudaram só o que disseram que mudariam.
+// prefetch e andares) provem que mudaram só o que disseram que mudariam. Os testes (8) e (9)
+// são a rede de segurança da rodada 1 de revisão desta issue: (8) prende que o harness casa
+// sprite↔id certo mesmo quando `reorder` embaralha `creatures.children` no mesmo quadro do
+// nascimento (achado 2), e (9) cobre a entrega com latência da arte sintética (achado 5).
 //
 // O mock abaixo troca todo `import` do pacote real de renderização, no gráfico de módulos
 // inteiro — inclusive dentro de `viewport.ts` e `world/textures.ts` —, pelo falso em
@@ -10,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 
-import { Container, drawOrder, Texture } from './testing/pixi-fake.js';
+import { Container, drawOrder, Graphics, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
 import { visibleTiles, viewFor } from './camera.js';
@@ -21,6 +24,7 @@ const WALL = 102;
 const ARCH = 106;
 const CRATE = 103;
 const RAT = 21;
+const DOG = 22;
 
 const CATALOG: SyntheticCatalog = {
   [GRASS]: { kind: 'object' },
@@ -28,21 +32,28 @@ const CATALOG: SyntheticCatalog = {
   [ARCH]: { kind: 'object', flags: { top: true } },
   [CRATE]: { kind: 'object', flags: { elevation: 8 } },
   [RAT]: { kind: 'outfit' },
+  [DOG]: { kind: 'outfit' },
 };
 
 beforeEach(resetWorld);
 
 describe('viewport (issue #381)', () => {
-  it('(1) monta os cinco containers de hoje e um único callback de quadro', async () => {
+  it('(1) monta os cinco containers de hoje, na ordem terrain/creatures/above/effects/overlay, e um único callback de quadro', async () => {
     const scene = sceneOf({ width: 4, height: 4, floors: [7] });
     const viewport = await mountTestViewport({ scene });
 
     expect(viewport.app.ticker.callbacks.length).toBe(1);
     expect(viewport.stage.children.length).toBe(5);
+    // `layers()` (harness.ts) destrutura `stage.children` NESSA ordem — comparar com ela mesma
+    // é tautológico (achado 3 da issue #381) e passaria com os cinco containers em qualquer
+    // posição. A asserção estrutural que distingue de fato `terrain` dos outros quatro:
+    // `groundFallback` (viewport.ts) é o PRIMEIRO filho SÓ de `terrain`.
+    const [terrain, creatures, above, effects, overlay] = viewport.stage.children;
+    expect(terrain?.children[0]).toBeInstanceOf(Graphics);
+    for (const layer of [creatures, above, effects, overlay]) expect(layer?.children).toHaveLength(0);
     const layers = viewport.layers();
-    expect(viewport.stage.children).toEqual([
-      layers.terrain, layers.creatures, layers.above, layers.effects, layers.overlay,
-    ]);
+    expect(layers.terrain).toBe(terrain);
+    expect(layers.overlay).toBe(overlay);
   });
 
   it('(2) a criatura vira sprite em `creatures`, com a textura do pacote', async () => {
@@ -139,13 +150,15 @@ describe('viewport (issue #381)', () => {
     await viewport.tick(0); // repinta e preenche `elevations`
 
     viewport.step(1, { x: 10, y: 10, z: 7 }, { x: 11, y: 10, z: 7 }, 1000, 400);
-    // O passo muda o facing de `south` para `east` (início) e volta a `south` quando o passo
-    // vence (`t = 1`, `elapsed >= durationMs` já é "parado" em `walkFrame`): cada uma dessas
-    // duas bordas pede uma chave de textura NOVA, e o primeiro quadro que a pede desenha o
-    // retângulo enquanto ela não chega (regra de sempre). Tickar duas vezes no MESMO instante
-    // deixa a textura chegar sem mexer no `lift` (`t` é o mesmo nas duas), para cada leitura
-    // usar a MESMA fórmula — senão a transição retângulo→textura, e não a elevação, explicaria
-    // a diferença.
+    // O passo muda o facing de `south` para `east` no início — e CONTINUA `east` depois que o
+    // passo vence: `facingOf` (facing.ts) lê só a direção do ÚLTIMO passo, inclusive parada, e
+    // nunca volta a `south` sozinho. O que muda em `t = 1` (`elapsed >= durationMs`, já "parado"
+    // em `walkFrame`) é `moving`: a chave de textura vai de `outfit:21:east:w:0` para
+    // `outfit:21:east:s:0` — uma chave NOVA, e o primeiro quadro que a pede desenha o retângulo
+    // enquanto ela não chega (regra de sempre). Tickar duas vezes no MESMO instante deixa a
+    // textura chegar sem mexer no `lift` (`t` é o mesmo nas duas), para cada leitura usar a
+    // MESMA fórmula — senão a transição retângulo→textura, e não a elevação, explicaria a
+    // diferença.
     const render = async (atMs: number): Promise<void> => {
       await viewport.tick(atMs);
       await viewport.tick(atMs);
@@ -177,5 +190,62 @@ describe('viewport (issue #381)', () => {
 
     container.sortableChildren = true;
     expect(drawOrder(container)).toEqual([b, c, d, a]); // por zIndex; c antes de d — estável no empate
+  });
+
+  it('(8) duas criaturas nascem no mesmo quadro em posições que o `reorder` inverte: cada sprite fica com o id certo', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = sceneOf({
+      width: 20, height: 20, floors: [7], fill: { 7: { ground: GRASS, items: [] } },
+    });
+    const viewport = await mountTestViewport({ scene, art, clock });
+
+    // id 1 nasce PRIMEIRO (ordem de `world.creatures`) mas fica mais ao SUL (y maior); id 2
+    // nasce DEPOIS mas fica mais ao NORTE. `paintCreatures` cria os sprites na ordem de
+    // nascimento e só DEPOIS chama `reorder` (viewport.ts), que ordena `creatures.children`
+    // por posição de tela (`compareDrawOrder`: y, depois x) — no MESMO quadro. Isso põe o
+    // sprite de id 2 ANTES do de id 1 em `creatures.children`, o oposto da ordem de criação
+    // (issue #381, achado 2: casar pela posição no array, e não pela ordem de criação, casava
+    // o sprite errado com cada id, sem lançar).
+    viewport.spawnSelf(1, { x: 10, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 10, y: 10, z: 7 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const layers = viewport.layers();
+    const one = viewport.creatureSprite(1);
+    const two = viewport.creatureSprite(2);
+    expect(one).toBeDefined();
+    expect(two).toBeDefined();
+    expect(one).not.toBe(two);
+    // A prova de que `reorder` de fato inverteu a ordem: id 2 está ANTES de id 1 no array.
+    expect(layers.creatures.children.indexOf(two as Container))
+      .toBeLessThan(layers.creatures.children.indexOf(one as Container));
+    expect(one?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
+    expect(two?.texture.source.resource).toBe(art.bitmapOf('outfit:22:south:s:0'));
+  });
+
+  it('(9) arte com latência: retângulo até o prazo, textura no primeiro quadro que o atinge', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now, latencyMs: 100 });
+    const scene = sceneOf({
+      width: 20, height: 20, floors: [7], fill: { 7: { ground: GRASS, items: [] } },
+    });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+
+    await viewport.tick(0); // o pedido sai NESTE quadro — `art.requests` já tem a chave
+    expect(art.requests.some((r) => r.key === 'outfit:21:south:s:0' && r.at === 0)).toBe(true);
+    expect(viewport.creatureSprite(1)?.texture).toBe(Texture.WHITE);
+
+    await viewport.tick(50);
+    expect(viewport.creatureSprite(1)?.texture).toBe(Texture.WHITE);
+
+    await viewport.tick(99);
+    expect(viewport.creatureSprite(1)?.texture).toBe(Texture.WHITE);
+
+    // `at (0) + latencyMs (100) <= nowMs`: o PRIMEIRO quadro que atinge o prazo, não "mais um".
+    await viewport.tick(100);
+    expect(viewport.creatureSprite(1)?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
   });
 });

@@ -214,7 +214,7 @@ export interface ViewportOptions {
 `AssetPack` satisfaz `WorldArt` por estrutura; `shell/Viewport.tsx` não muda.
 
 Arquivos do harness (sem `vitest` dentro — o `tsconfig` do cliente os checa com tipos de
-navegador; o mock do pacote de renderização fica em cada arquivo de teste):
+navegador; `vi.mock('pixi.js', ...)` fica em cada arquivo de teste):
 
 - `packages/client/src/world/testing/pixi-fake.ts` — `Application` (`init` resolve; `screen`;
   `renderer.on('resize')`; `stage`; `ticker.add`; `canvas`; `destroy`), `Container` (`children`,

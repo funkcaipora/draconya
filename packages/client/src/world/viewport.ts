@@ -4,10 +4,11 @@
 // quadro; nenhum estado de mundo entra por prop. Se um dia precisar de um `useEffect` para
 // saber onde uma criatura está, o desenho está errado.
 //
-// SPRITES, com retângulo como degradação. O pacote de arte entra por `AssetPack` e cada quadro
-// vira `Texture` pelo `TextureBook`; enquanto um quadro não chega — ou quando o pacote não tem
-// aquele id — o lugar dele é um retângulo, e a tela nunca fica preta por causa de arte. A parte
-// difícil continua a mesma de antes: câmera, camadas, ordem de desenho, pool e interpolação.
+// SPRITES, com retângulo como degradação. O pacote de arte entra por `WorldArt` (a interface que
+// o pacote real de assets satisfaz por estrutura — issue #381) e cada quadro vira `Texture` pelo
+// `TextureBook`; enquanto um quadro não chega — ou quando o pacote não tem aquele id — o lugar
+// dele é um retângulo, e a tela nunca fica preta por causa de arte. A parte difícil continua a
+// mesma de antes: câmera, camadas, ordem de desenho, pool e interpolação.
 //
 // A barra de vida e o nome NÃO dependem de arte: existem no modo sem pacote também. São
 // `Graphics` e `Text` na camada `overlay`, um par por criatura, no mesmo pool por id que os
