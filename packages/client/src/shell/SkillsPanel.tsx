@@ -1,5 +1,10 @@
 // O painel Skills é a leitura compacta do personagem, fixa na coluna esquerda. As escolhas de
 // linhas são preferência local de tela; os números continuam vindo integralmente do servidor.
+//
+// SV-10 (#346) acrescenta speed e as três skills de combate às seis linhas que já existiam.
+// `state.speed` e `state.skills` chegam prontos de `player-stats`/`session-state`
+// (`state/apply.ts`); o painel só formata — magic/melee/distance mostram o nível e passam
+// `percent` ao `StatRow`, que desenha a barra de progresso até o próximo nível.
 
 import { useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
@@ -27,6 +32,7 @@ function count(value: number): string {
 const TONE_BY_ID: Partial<Record<SkillId, string>> = {
   hp: 'vital-hp',
   mana: 'vital-mp',
+  magic: 'vital-mp',
 };
 
 interface SkillsCustomizeModalProps {
@@ -77,6 +83,8 @@ export function SkillsPanel() {
   const mana = useHudSlice((state) => state.mana, { throttleMs: 100 });
   const capacity = useHudSlice((state) => state.capacity);
   const staminaMs = useHudSlice((state) => state.staminaMs);
+  const speed = useHudSlice((state) => state.speed);
+  const skills = useHudSlice((state) => state.skills);
 
   const [collapsed, setCollapsed] = useState(false);
   const [visible, setVisible] = useState<readonly SkillId[]>(() => loadVisibleSkills());
@@ -93,7 +101,18 @@ export function SkillsPanel() {
     hp: count(health),
     mana: count(mana),
     capacity: count(capacity) + ' oz',
+    speed: count(speed),
     stamina: staminaClock(staminaMs),
+    magic: String(skills.magic.level),
+    melee: String(skills.melee.level),
+    distance: String(skills.distance.level),
+  };
+
+  // Só as três skills de combate desenham a barra — as demais linhas não têm "próximo nível".
+  const percents: Partial<Record<SkillId, number>> = {
+    magic: skills.magic.percent,
+    melee: skills.melee.percent,
+    distance: skills.distance.percent,
   };
 
   return (
@@ -107,12 +126,14 @@ export function SkillsPanel() {
       >
         {SKILL_ORDER.filter((id) => visible.includes(id)).map((id) => {
           const tone = TONE_BY_ID[id];
+          const percent = percents[id];
           return (
             <StatRow
               key={id}
               label={SKILL_LABELS[id]}
               value={values[id]}
               {...(tone !== undefined ? { tone } : {})}
+              {...(percent !== undefined ? { percent } : {})}
             />
           );
         })}
