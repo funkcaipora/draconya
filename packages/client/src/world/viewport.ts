@@ -49,6 +49,15 @@ import { drawTile, type ObjectInfo } from './tile-stack.js';
 
 export type { MapTiles } from './scene.js';
 
+/**
+ * O que o viewport pede à arte. É uma INTERFACE, e não a classe, para o teste entregar uma
+ * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
+ * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
+ */
+export type WorldArt = Pick<AssetPack,
+  'object' | 'objectPattern' | 'objectFlags' | 'outfit' | 'framesOf'
+  | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'>;
+
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
 const COLOR_GRID = 0x3a3a45;
@@ -103,7 +112,7 @@ interface EffectEntry {
 
 export interface ViewportOptions {
   /** O pacote de arte. `null` desenha só retângulos — é o modo sem assets, e continua válido. */
-  readonly pack?: AssetPack | null;
+  readonly pack?: WorldArt | null;
   /** O livro de texturas, criado por quem criou o pacote: é ele que recebe o `onEvict`. */
   readonly book?: TextureBook;
   /**
@@ -112,6 +121,8 @@ export interface ViewportOptions {
    * (ADR 0007). `null` é mapa que não há: a tela mostra a grade lisa de reserva.
    */
   readonly loadScene?: (mapId: string) => Promise<Scene | null>;
+  /** O relógio do quadro. `performance.now` por padrão; o teste injeta o dele (issue #381). */
+  readonly now?: () => number;
 }
 
 export interface ViewportHandle {
@@ -124,7 +135,7 @@ export interface ViewportHandle {
    * catálogo leva o que a rede levar, e a tela não espera por ele. O caminho normal é UMA
    * chamada, de `null` para o pacote, quando ele carrega.
    */
-  setPack(pack: AssetPack | null): void;
+  setPack(pack: WorldArt | null): void;
   /**
    * FPS médio dos últimos quadros, arredondado. É só leitura: o overlay consulta no próprio
    * ritmo, sem o laço do Pixi disparar renderização React.
@@ -152,6 +163,8 @@ export async function mountViewport(
   /** O pacote de agora. `let` porque ele pode chegar depois do Pixi (`setPack`). */
   let pack = options.pack ?? null;
   const book = options.book ?? new TextureBook();
+  /** O relógio do quadro — injetável para o teste dirigir o laço sem `performance` (issue #381). */
+  const now = options.now ?? (() => performance.now());
   /**
    * O zoom inteiro e a vista em tiles, DA TELA DE AGORA. O stage é escalado pelo zoom, então
    * todo o resto continua em pixels de tile (32) e só o resultado é ampliado — é o que mantém
@@ -233,7 +246,7 @@ export async function mountViewport(
 
   function target(): { x: number; y: number; z: number } {
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
-    if (self !== undefined) return interpolate(self, performance.now());
+    if (self !== undefined) return interpolate(self, now());
     // Sem `selfId` ainda (FUN-32), a câmera fica no centro do mapa: é melhor mostrar o mapa
     // do que mostrar o canto (0,0), que num mapa cercado por parede é só parede.
     if (scene !== null) return { x: (scene.width - 1) / 2, y: (scene.height - 1) / 2, z: scene.defaultZ };
@@ -837,7 +850,7 @@ export async function mountViewport(
 
   app.ticker.add(() => {
     fps.record(app.ticker.deltaMS);
-    const nowMs = performance.now();
+    const nowMs = now();
     // A troca de cena é notada AQUI (FUN-121): o `instance-enter` põe o `mapId` no `world`, o
     // `world` não avisa ninguém (ADR 0007), e o laço de quadro é quem olha. A resposta que
     // chegar depois de outro pedido é de outro mapa, e é descartada.
