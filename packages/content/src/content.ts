@@ -279,6 +279,25 @@ export function buildContent(raw: RawContent): Content {
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
   const itemDefinitions = compileItems(parseAll('item', raw.items ?? [], itemSchema, problems));
 
+  // A skill de defesa (CMB-04) precisa existir E subir por bloqueio. Uma referência a skill
+  // inexistente deixaria o escudo sem treinar nada; uma que sobe por outra fonte escalaria a
+  // defesa e nunca subiria com o bloqueio — as duas divergências que o boot recusa.
+  const defenseSkillId = combat?.defense?.skillId;
+  if (defenseSkillId !== undefined) {
+    const skill = skills.get(defenseSkillId);
+    if (skill === undefined) {
+      problems.push(
+        `combat/${combat?.id ?? 'baseline'}: defense.skillId "${defenseSkillId}" não existe `
+          + 'no catálogo de skills',
+      );
+    } else if (skill.gain.on !== 'shield-block') {
+      problems.push(
+        `combat/${combat?.id ?? 'baseline'}: defense.skillId "${defenseSkillId}" não sobe por `
+          + `bloqueio (gain.on "${skill.gain.on}")`,
+      );
+    }
+  }
+
   // O catálogo de magias do Tibia (#155, ADR 0026 decisão 5): o schema fecha a forma de cada
   // campo; o que UM campo não sabe do OUTRO é conferido aqui. Cada regra é um defeito que, sem
   // ela, subiria mudo e apareceria no meio de uma hunt como magia que não bate.
@@ -368,6 +387,16 @@ export function buildContent(raw: RawContent): Content {
     }
     if (item.twoHanded && item.kind !== 'weapon') {
       problems.push(`item "${item.id}": twoHanded só faz sentido em arma`);
+    }
+    // Defesa (CMB-04) só nas combinações aprovadas: escudo, ou arma corpo a corpo de UMA mão.
+    // Bow/twoHanded e wand/rod não têm defesa residual, e a arma de duas mãos não deixa escudo
+    // de sobra — o `Inventory` já recusa as duas juntas, e aqui a recusa é sobre o dado.
+    const meleeOneHanded = item.kind === 'weapon' && !item.twoHanded
+      && (item.weapon?.kind ?? 'melee') === 'melee';
+    if (item.defense > 0 && item.kind !== 'shield' && !meleeOneHanded) {
+      problems.push(
+        `item "${item.id}": defense só vale em escudo ou arma corpo a corpo de uma mão`,
+      );
     }
   }
   // Toda família com munição precisa da grátis: é ela que o bow dispara quando o gold acaba

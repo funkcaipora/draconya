@@ -142,6 +142,13 @@ e rod 3 gastando mana, corpo a corpo 1. A munição não é item: é uma seleç�
 (`select-ammo`), com a grátis por padrão e as pagas debitando gold por tiro; ver `combat.md`
 ("Como cada arma bate"). Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
 
+Desde o CMB-04 o combate lê também a **defesa** (`defense`) da peça: escudo ou arma corpo a corpo
+de uma mão bloqueia parte do golpe físico. A escolha da fonte é do inventário (`defenseSource`),
+que já conhece os slots e a incompatibilidade bow+escudo; a fórmula e a posição do sorteio estão
+em `combat.md` e no ADR 0031. Bow/twoHanded e wand/rod não têm defesa residual — declarar
+`defense` neles é recusado no boot. Não existe item de escudo no catálogo real ainda; a defesa
+entra pelas armas de uma mão (machete 9, steel axe 10, spike sword 10, provisório).
+
 ### Como o item vai e volta do banco
 
 | | quando | forma |
@@ -240,6 +247,7 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Stack máximo por item | 100 | caminho previsto: `packages/content/items` |
+| Defesa (blocking físico) da arma de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` (CMB-04) | `packages/content/data/items/*.json`, `defense` |
 | Expiração da Caixa de Loot da Sessão | 30 minutos após o fim da sessão | caminho previsto: `packages/content/items` |
 | Autovenda — tipos configuráveis (Free) | 5 | caminho previsto: `packages/content/economia` (premium) |
 | Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |

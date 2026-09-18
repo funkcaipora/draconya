@@ -23,6 +23,8 @@
 
 import { DAMAGE_TYPES } from '@draconya/content';
 import type { CompiledMitigation, DamageType, Item, ItemSlot, Progression } from '@draconya/content';
+import { NO_DEFENSE } from './combat/defense.js';
+import type { DefenseSource } from './combat/defense.js';
 
 /** Teto de empilhamento (§21.5). Munição empilha; espada não empilha por não ser `stackable`. */
 export const MAX_STACK = 100;
@@ -436,16 +438,52 @@ export class Inventory {
     if (carried === undefined) return null;
     const definition = catalog.get(carried.itemId);
     if (definition === undefined) return null;
+    if (!this.#meets(definition, wearer)) return null;
+    return definition;
+  }
+
+  /**
+   * A fonte de DEFESA do que está vestido (CMB-04, DT-01): escudo primeiro, depois a arma de
+   * uma mão, e `none` quando não há nenhuma das duas.
+   *
+   * A escolha mora AQUI, e não no ruleset, porque é a mesma regra que já decide slots e
+   * compatibilidades: o escudo só existe no slot `shield`, e a incompatibilidade bow/escudo é
+   * recusada por `equip` — o ruleset não tem por que repetir nenhuma das duas.
+   *
+   * Escudo precede a arma (DT-02): somar as duas mãos seria stacking implícito, e o que o
+   * jogador vê na mão é uma fonte só. Arma de duas mãos (bow) e wand/rod não dão defesa
+   * residual — a primeira porque ocupa as duas mãos, a segunda porque não bloqueia.
+   *
+   * A peça que exige level ou vocação que o portador não tem conta como ausente, pela mesma
+   * razão que `weapon()` a lê como mão vazia: um snapshot pode trazer o item sem `equip`.
+   */
+  defenseSource(catalog: ReadonlyMap<string, Item>, wearer: Requirements): DefenseSource {
+    const shield = this.#equipped.get('shield');
+    if (shield !== undefined) {
+      const definition = catalog.get(shield.itemId);
+      if (definition?.kind === 'shield' && this.#meets(definition, wearer)) {
+        return { kind: 'shield', defense: definition.defense };
+      }
+    }
+    const weapon = this.weapon(catalog, wearer);
+    if (weapon !== null && !weapon.twoHanded && weapon.weapon?.kind === 'melee') {
+      return { kind: 'weapon', defense: weapon.defense };
+    }
+    return NO_DEFENSE;
+  }
+
+  /** O level e a vocação que `requires` pede, conferidos numa regra só (arma e escudo). */
+  #meets(definition: Item, wearer: Requirements): boolean {
     if (definition.requires.level !== undefined && wearer.level < definition.requires.level) {
-      return null;
+      return false;
     }
     if (
       definition.requires.vocationId !== undefined
       && wearer.vocationId !== definition.requires.vocationId
     ) {
-      return null;
+      return false;
     }
-    return definition;
+    return true;
   }
 
   /** A armadura somada do que está vestido. Zero é ninguém vestido, e é um número honesto. */

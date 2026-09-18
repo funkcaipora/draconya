@@ -16,6 +16,8 @@
 
 import { COMBAT_PROFILES } from '@draconya/content';
 import type { Combat, CompiledMitigation, DamageType } from '@draconya/content';
+import { resolveDefense } from './defense.js';
+import type { DefenseSource } from './defense.js';
 import type { Rng } from '../rng.js';
 
 /**
@@ -35,6 +37,11 @@ export interface Defender {
    * é o defensor neutro — a identidade que preserva o v1.
    */
   readonly mitigation?: CompiledMitigation | undefined;
+  /**
+   * A fonte de defesa do defensor (CMB-04): escudo, arma de uma mão, ou nenhuma. Ausente é
+   * `none`, e é o que preserva o v1 — o estágio é identidade e não consome sorteio.
+   */
+  readonly defense?: DefenseSource | undefined;
 }
 
 /**
@@ -104,7 +111,7 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
  * resultado entregue quando não há mitigação, e a ordem é a do contrato:
  *
  *   1. uma única rolagem de Dodge, SEMPRE consumida, primeiro ato;
- *   2. defesa/escudo (identidade em v1, CMB-04);
+ *   2. defesa/escudo (CMB-04) — só rola quando há fonte elegível e o tipo é aprovado;
  *   3. armadura por tipo, sem RNG;
  *   4. piso (`minimumDamageFraction`) — DEPOIS da armadura e ANTES da resistência;
  *   5. resistência/vulnerabilidade por tipo (identidade sem dado);
@@ -113,8 +120,9 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
  *   8. arredondamento só no fim, com piso em zero.
  *
  * A ordem difere da do Tibia (defesa antes de tudo) porque a POSIÇÃO DO SORTEIO é do Draconya:
- * a rolagem é o primeiro ato para que nenhum estágio novo a desloque. Um estágio que precise
- * de sorteio próprio muda a ordem de RNG e exige perfil novo.
+ * a rolagem é o primeiro ato para que nenhum estágio novo a desloque. Um estágio que mude a
+ * sequência do conteúdo JÁ entregue exige perfil novo; o bloqueio do CMB-04 só rola quando o
+ * conteúdo declara defesa, então o v1 sem defesa continua consumindo exatamente um sorteio.
  */
 function resolveCombatV1(
   intent: DamageIntent,
@@ -130,14 +138,20 @@ function resolveCombatV1(
   // que ninguém ligaria à causa. Consumo uniforme é o que mantém a sequência auditável.
   const dodged = rng.chance(effectiveDodge(defender, context));
 
-  // Defesa/escudo é identidade em v1: o estágio existe para o CMB-04 encaixar sem reordenar.
-  const afterDefense = intent.rawDamage;
+  // Defesa/escudo (CMB-04): o estágio real, e o SEGUNDO sorteio do golpe quando há fonte
+  // elegível e o tipo está aprovado. Sem fonte, é identidade e não consome nada — é o que
+  // mantém o v1 bit a bit. A rolagem de Dodge acima continua sendo o primeiro ato.
+  const afterDefense = resolveDefense(intent, defender.defense, combat, rng).afterDefense;
 
   const armorReduction = defender.armor * combat.armorEffectiveness[intent.damageType];
   const afterArmor = afterDefense - armorReduction;
   // Piso: nem a armadura mais alta zera um golpe. Dano zero contra um alvo pesado transforma
   // a luta em impasse silencioso, sem nada na tela dizendo o motivo.
-  const minimumDamage = afterDefense * combat.minimumDamageFraction;
+  //
+  // A base do piso é o PODER BRUTO, não o pós-defesa: sem defesa os dois são o mesmo número (e
+  // o v1 segue bit a bit), e com defesa é o que impede o escudo de zerar o golpe — o bloqueio
+  // é limitado ao poder, e o piso sobrevive a ele.
+  const minimumDamage = intent.rawDamage * combat.minimumDamageFraction;
   const afterFloor = Math.max(minimumDamage, afterArmor);
 
   // Resistência positiva reduz; negativa é vulnerabilidade e amplifica. Ausente é zero, e zero

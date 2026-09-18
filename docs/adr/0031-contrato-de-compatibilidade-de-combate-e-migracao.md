@@ -339,3 +339,73 @@ elemento é editar JSON, nunca lógica (§12.1).
 - O `DamageOutcome` ganha `damageType`, `afterDefense`, `afterArmor`, `afterResistance` e
   `immune`, e mantém os campos do CMB-02. Continua efêmero: nunca vai ao cliente nem ao
   snapshot.
+
+## Emenda — 2026-09-18: defesa e escudo (CMB-04)
+
+Esta emenda fixa o estágio de defesa que o CMB-03 deixou como identidade. O que ela NÃO muda: o
+perfil `combat-v1` continua aditivo, a rolagem de Dodge continua o primeiro ato e o
+arredondamento continua só no fim. Onde esta emenda e o texto acima divergirem, vale a emenda.
+
+### Escopo e fonte
+
+- **Blocking vale só para os tipos em `combat.defense.blockTypes`**, e no `combat-v1` a lista é
+  `['physical']`. Ataque elemental atravessa intacto e **não** treina shielding.
+- A fonte é escolhida pelo `Inventory.defenseSource` (DT-01): o escudo no slot `shield`
+  (exigências satisfeitas) precede a arma corpo a corpo de uma mão; sem nenhuma das duas, `none`.
+  Bow/twoHanded e wand/rod não deixam defesa residual. A incompatibilidade bow+escudo continua
+  sendo a de `equip` (`hands-full`) — a regra não é reescrita no ruleset.
+- A fórmula é **original do Draconya**. Nenhuma fórmula de TFS/Canary é copiada, traduzida ou
+  aproximada (ADR 0019).
+
+### Fórmula, chance e arredondamento
+
+Com `rawDamage` = poder bruto, `defense` = valor da peça (já escalado pela skill de shielding) e
+`blockChance` do conteúdo:
+
+```text
+sem fonte, ou tipo fora de blockTypes:
+  blocked = 0; afterDefense = rawDamage           (e NENHUM sorteio é consumido)
+
+com fonte e tipo aprovado:
+  blocks = rng.chance(blockChance)                 (UMA rolagem)
+  blocked = blocks ? min(defense, rawDamage) : 0
+  afterDefense = rawDamage − blocked
+```
+
+- `blockChance` é conteúdo (`combat.defense.blockChance`, em `[0,1]`) e provisório (0,6 no
+  `baseline`), marcado `_open`.
+- O piso (`minimumDamageFraction`) passa a ser calculado sobre o **poder bruto**, não sobre
+  `afterDefense`. Para o v1 sem defesa os dois são o mesmo número, então a mudança é bit a bit;
+  com defesa, é o que garante que o bloqueio nunca zere o golpe — `blocked` é limitado ao poder,
+  e o piso sobrevive.
+- Nenhum estágio intermediário arredonda. `blocked` e `afterDefense` são inteiros; o `Math.round`
+  final não muda.
+
+### Posição do RNG
+
+A rolagem de bloqueio é o **segundo** sorteio do golpe, logo depois do Dodge e antes da armadura.
+Ela é consumida **uma vez por golpe elegível** — há fonte E o tipo está aprovado —, mesmo com
+`defense` 0, para a sequência não depender do VALOR da peça. Sem fonte, ou com tipo não aprovado,
+**nenhum sorteio é consumido**.
+
+Consequência: todo conteúdo que não declara `defense` consome exatamente os sorteios do v1 (um
+Dodge por golpe), e o resultado entregue é idêntico. É por isso que o CMB-04 **não exige perfil
+novo**: a regra de evolução fala de mudar a sequência do conteúdo JÁ entregue, e aqui a sequência
+só muda para conteúdo que declara defesa — que é conteúdo novo, com `Content.version` novo.
+
+### Shielding
+
+`combat.defense.skillId` referencia uma skill que sobe por `shield-block`; `buildContent` recusa a
+referência inexistente ou a uma skill que sobe por outra fonte. A skill multiplica a defesa da
+peça (`powerMultiplier`, como a skill de arma multiplica o ataque), arredondada a inteiro antes de
+entrar no resolver.
+
+A prática é **uma vez por ataque físico elegível recebido** — fonte de defesa presente e tipo
+aprovado. Não é por tick, não é condicionada ao HP perdido (um bloqueio total ainda treina) e não
+acontece em ataque elemental. A skill viaja no `CharacterState.skills` que já existia; o
+`SNAPSHOT_FORMAT_VERSION` não sobe, e ausente é o nível inicial.
+
+### Fora do escopo
+
+Fight mode, stance, PvP, parry, reflect, cargas e UI de bloqueio ficam de fora, sem protocolo,
+opcode ou seletor nesta entrega (DT-03).

@@ -298,6 +298,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `shot` ANTES do `creature-hit`; o projétil é da tabela, resolvido no hospedeiro (invariante
   6). `CharacterState.ammo` (família → id) é opcional e viaja no snapshot; `selectAmmo` só
   confere o level. `hands-full`: bow com escudo, ou escudo com bow, é recusado — nunca trocado.
+- **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
+  `Inventory.defenseSource` escolhe escudo → arma corpo a corpo de uma mão → nenhuma (DT-01/02),
+  reusando a mesma verdade de slot que já recusa bow com escudo; o ruleset não repete a regra.
+  `resolveDefense` (`combat/defense.ts`) é o estágio entre o Dodge e a armadura: sem fonte, ou
+  com tipo fora de `blockTypes`, é IDENTIDADE e **não consome sorteio** — é o que mantém o v1 bit
+  a bit. Com fonte e físico, é o SEGUNDO sorteio (o Dodge continua o primeiro), e ele é
+  consumido mesmo com `defense` 0, para a sequência não depender do valor da peça. O piso é
+  calculado sobre o poder BRUTO: o bloqueio nunca zera o golpe. Shielding sobe uma vez por
+  ataque físico elegível RECEBIDO (`#onMonsterAttack`), nunca por tick, nunca por HP perdido e
+  nunca em elemental. Não há fight mode, opcode nem UI (DT-03).
 - **Condição é evento, não acumulador; a direção é do `#step`; cooldown tem três livros** (#155).
   Haste, postura, magic shield e cura ao longo do tempo são `ConditionState` no personagem
   (`conditions.ts`, uma por tipo, relançar substitui) com `expiresAtMs` LÓGICO, e o vencimento

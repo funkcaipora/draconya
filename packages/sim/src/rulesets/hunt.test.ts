@@ -2706,6 +2706,105 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
   });
 });
 
+describe('defesa, escudo e prática de shielding (CMB-04)', () => {
+  const shieldItem = {
+    id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield',
+    weight: 40, value: 0, defense: 30,
+  };
+  const shielding = {
+    id: 'shielding', name: 'Escudo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'shield-block', points: 1 },
+    damagePerLevel: 0.5,
+  };
+  const defense = { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] };
+
+  /** O conteúdo do CMB-04: o escudo no catálogo, a skill de bloqueio e o perfil com defesa. */
+  const defenseContent = (over: Partial<RawContent> = {}): Content => content({
+    items: [...items, shieldItem],
+    skills: [...skills, shielding],
+    combat: [{ ...combat, defense }],
+    ...over,
+  });
+
+  const comEscudo: InventoryState = {
+    backpack: [],
+    equipped: { shield: { instanceId: 's1', itemId: 'shield', quantity: 1 } },
+  };
+  const shieldingOf = (hero: CharacterRuntime) => hero.skills.getState()['shielding'] ?? null;
+
+  it('shielding sobe por ataque físico elegível recebido', () => {
+    const { session, hero } = start({
+      loaded: defenseContent(), difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  it('sem fonte de defesa NÃO sobe: desarmado não treina shielding', () => {
+    const { session, hero } = start({ loaded: defenseContent(), difficulty: 'bold', health: 5_000 });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('ataque elemental NÃO treina shielding por acidente', () => {
+    // O perfil aprova só `physical`: um rato de fogo atravessa a defesa sem rolar bloqueio.
+    const fireRat = { ...rat, damageType: 'fire' };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [fireRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é por TICK: sem ser atacado, a skill fica parada', () => {
+    // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
+    const pacificRat = { ...rat, aggroRadius: 0 };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [pacificRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 60_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é condicionada ao HP perdido: bloqueio total ainda treina', () => {
+    // Piso zero e defesa acima do ataque do rato: ele não tira vida, e a skill sobe do mesmo
+    // jeito — a prática é do evento elegível, não do dano aplicado. Regeneração desligada e
+    // dificuldade `cautious` para a vida não subir sozinha e não haver level up.
+    const semRegen = { ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } };
+    const { session, hero } = start({
+      loaded: defenseContent({
+        progression: [semRegen],
+        combat: [{ ...combat, defense, minimumDamageFraction: 0 }],
+      }),
+      difficulty: 'cautious', health: 5_000, inventory: comEscudo,
+    });
+    const antes = hero.health;
+    run(session, 30_000, 100);
+    expect(hero.health).toBe(antes);
+    expect(shieldingOf(hero)?.points).toBeGreaterThan(0);
+  });
+
+  it('a skill de shielding atravessa o snapshot', () => {
+    const loaded = defenseContent();
+    const { session } = start({
+      loaded, difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.skills.getState()['shielding'])
+      .toEqual(session.participants[0]?.skills.getState()['shielding']);
+  });
+});
+
 describe('Bestiário: abates por monstro, marcos e bônus de XP (FUN-113)', () => {
   // Marcos curtos e bônus alto de propósito: com [3, 5] e 20 % dá para contar os abates na mão,
   // e um rato de 5 XP passa a render 6 no primeiro marco e 7 no segundo — números que se

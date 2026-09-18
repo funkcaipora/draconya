@@ -143,6 +143,7 @@ foi escrito; sem pendência o custo é um `SMEMBERS` por personagem e nenhuma co
 | Referência de catálogo de magias | Tibia até o level 80 no M12 (ADR 0026), ~120 depois (referência funcional; números por Base Power do TibiaWiki) | `packages/content/data/spells/` |
 | Corpo a Corpo — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/melee.json` |
 | Magia — início, curva, dano por nível | 0 / 400×1,1 / +3% `[ABERTO — valores provisórios]` | `packages/content/data/skills/magic.json` |
+| Escudo — início, curva, defesa por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` (CMB-04) | `packages/content/data/skills/shielding.json` |
 | Cura — mana, cooldown, quanto cura | 20 / 1 000 ms / 60 `[ABERTO — valor provisório]` | `packages/content/data/spells/heal.json` |
 | Golpe Arcano — mana, cooldown, dano, alcance | 15 / 2 000 ms / 40 / 3 tiles `[ABERTO — valor provisório]` | `packages/content/data/spells/strike.json` |
 
@@ -205,7 +206,16 @@ todos **conteúdo**, em `packages/content/data/skills/`.
 | Skill | Alimentada por | Contribuição |
 |---|---|---|
 | Corpo a Corpo | cada golpe que sai | multiplica o poder do golpe |
+| Distância | cada tiro de arma de distância (#152) | multiplica o poder do tiro |
 | Magia | **mana gasta**, não lançamentos | multiplica o poder da magia |
+| Escudo | cada ataque físico elegível recebido (CMB-04) | multiplica a defesa do escudo ou da arma de uma mão |
+
+**Shielding sobe por bloqueio, não por ser atacado.** A prática é do evento elegível — o
+defensor tem escudo ou arma de uma mão e o ataque é de um tipo aprovado —, e não depende de o
+bloqueio ter acontecido nem de quanto HP foi perdido: um bloqueio total ainda treina, e um
+ataque elemental não treina. O rato parado, sem atacar, também não move a skill (não é por
+tick). A fórmula e a posição do sorteio estão em
+[`combat.md`](./combat.md) e na emenda do ADR 0031.
 
 **Magia sobe por mana gasta, e isso é mecanismo, não número.** Por lançamento, a forma ótima de
 subir magia seria lançar mil vezes a magia mais barata, e o jogo viraria macro de spam. É a razão

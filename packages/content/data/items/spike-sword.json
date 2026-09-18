@@ -6,7 +6,8 @@
   "weight": 50,
   "value": 240,
   "attack": 24,
-  "_open": "Atributos e requisito de referência (§21.2 decide que o atributo base é fixo, não os números). A aparência não mora aqui: vive em appearances/baseline.json, que é a única ligação com arte e o único arquivo a editar numa troca de pacote (ADR 0008, FUN-94).",
+  "defense": 10,
+  "_open": "Atributos e requisito de referência (§21.2 decide que o atributo base é fixo, não os números). Attack 24 e level 15 são os do TibiaWiki; defense 10 é provisório (CMB-04, emenda do ADR 0031) e a defesa é lida pelo blocking físico. A aparência não mora aqui: vive em appearances/baseline.json, que é a única ligação com arte e o único arquivo a editar numa troca de pacote (ADR 0008, FUN-94).",
   "weapon": {
     "kind": "melee",
     "range": 1

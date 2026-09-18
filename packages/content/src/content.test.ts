@@ -275,6 +275,89 @@ describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
   });
 });
 
+describe('a defesa dos itens e do perfil (CMB-04)', () => {
+  const sword = {
+    id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 0,
+    attack: 10, defense: 5,
+  };
+  const shield = {
+    id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 12,
+  };
+  const helmet = {
+    id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 10, value: 0, defense: 5,
+  };
+  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const bow = {
+    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 30, value: 0,
+    twoHanded: true, defense: 5, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+  };
+  const wand = {
+    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 10, value: 0, defense: 5,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 1, damage: { min: 1, max: 2 } },
+  };
+  const shielding = {
+    id: 'shielding', name: 'Escudo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'shield-block', points: 1 },
+  };
+
+  it('aceita defense no escudo e na arma corpo a corpo de uma mão', () => {
+    const content = buildContent(base({ items: [sword, shield] }));
+    expect(content.items.get('sword')?.defense).toBe(5);
+    expect(content.items.get('shield')?.defense).toBe(12);
+  });
+
+  it('recusa defense em armadura, arma de duas mãos e wand', () => {
+    // Bow/twoHanded não deixa defesa residual, e wand/rod não bloqueia: os dois são conteúdo
+    // quebrado, e o boot é o lugar de descobrir.
+    expect(() => buildContent(base({ items: [helmet] }))).toThrow(/defense só vale/);
+    expect(() => buildContent(base({ items: [bow], ammunition: [arrow] })))
+      .toThrow(/defense só vale/);
+    expect(() => buildContent(base({ items: [wand] }))).toThrow(/defense só vale/);
+  });
+
+  it('defense 0 — o default — é aceito em qualquer item: é a ausência', () => {
+    const plainHelmet = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 10, value: 0 };
+    expect(buildContent(base({ items: [plainHelmet] })).items.get('helmet')?.defense).toBe(0);
+  });
+
+  it('recusa blockTypes vazio e com tipo duplicado', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { blockChance: 0.5, blockTypes: [] } }],
+    }))).toThrow(/blockTypes/);
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { blockChance: 0.5, blockTypes: ['physical', 'physical'] } }],
+    }))).toThrow(/duplicado/);
+  });
+
+  it('recusa defense.skillId que não existe no catálogo', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { skillId: 'shielding', blockChance: 0.5 } }],
+    }))).toThrow(/defense\.skillId "shielding" não existe/);
+  });
+
+  it('recusa defense.skillId que não sobe por bloqueio', () => {
+    const melee = {
+      id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
+      curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 },
+    };
+    expect(() => buildContent(base({
+      vocations: [], skills: [melee],
+      combat: [{ ...combat, defense: { skillId: 'melee', blockChance: 0.5 } }],
+    }))).toThrow(/não sobe por bloqueio/);
+  });
+
+  it('aceita a skill de shielding, e blockTypes vazio vira `physical`', () => {
+    const content = buildContent(base({
+      vocations: [], skills: [shielding],
+      combat: [{ ...combat, defense: { skillId: 'shielding', blockChance: 0.5 } }],
+    }));
+    expect(content.combat.defense?.skillId).toBe('shielding');
+    expect(content.combat.defense?.blockTypes).toEqual(['physical']);
+    // Ausente é o estágio identidade — o conteúdo legado não declara defesa e continua montando.
+    expect(buildContent(base()).combat.defense).toBeUndefined();
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.

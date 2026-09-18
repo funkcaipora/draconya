@@ -1,0 +1,15 @@
+{
+  "id": "shielding",
+  "name": "Escudo",
+  "startingLevel": 10,
+  "curve": {
+    "base": 50,
+    "factor": 1.1
+  },
+  "gain": {
+    "on": "shield-block",
+    "points": 1
+  },
+  "damagePerLevel": 0.02,
+  "_open": "Curva e contribuição provisórias, copiadas do corpo a corpo (CMB-04): o §9.4 decide que skill sobe por uso, e o balanceamento real depende de quanto uma hunt com escudo rende, que ainda não foi medido. `damagePerLevel` escala a DEFESA da peça (escudo ou arma de uma mão), não o ataque; a chance de bloqueio é `combat.defense.blockChance`."
+}

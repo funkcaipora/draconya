@@ -30,6 +30,7 @@ import type { ConditionKind, ConditionState } from '../conditions.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
+import type { DefenseSource } from '../combat/defense.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -560,6 +561,7 @@ export class HuntRuleset implements Ruleset {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
       'distance-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'distance-hit'),
       'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
+      'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     // A munição grátis de cada família, UMA vez: é o tiro de quem não escolheu e de quem
     // ficou sem gold. Por ordem de id, para dois nós com o mesmo conteúdo escolherem a mesma.
@@ -2005,13 +2007,14 @@ export class HuntRuleset implements Ruleset {
     // A faixa de ataque sorteada com o `Rng` da sessão (FUN-123): o rato bate de 0 a 8, e a
     // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
     const { min, max } = attackRange(definition.attack);
+    const defender = this.#playerDefender(character);
     const result = resolveDamage(
       {
         rawDamage: session.rng.integer(min, max),
         source: 'monster-attack',
         damageType: definition.damageType,
       },
-      this.#playerDefender(character),
+      defender,
       'pve',
       this.#options.combat,
       session.rng,
@@ -2028,6 +2031,14 @@ export class HuntRuleset implements Ruleset {
       amount: applied, source: 'melee', position: this.#at(character),
     });
     this.#emitCharacterHealth(session, character);
+    // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
+    // de defesa e o tipo está aprovado. Nunca por tick, nunca por dano aplicado: um bloqueio
+    // total (ou um golpe de 0) ainda é um bloqueio praticado. Ataque elemental não entra.
+    if (this.#options.combat.defense !== undefined
+      && defender.defense !== undefined && defender.defense.kind !== 'none'
+      && this.#options.combat.defense.blockTypes.includes(definition.damageType)) {
+      this.#gainSkills(session, character, 'shield-block', 1);
+    }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
@@ -2734,6 +2745,31 @@ export class HuntRuleset implements Ruleset {
       // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
       // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
       mitigation: character.inventory.mitigation(this.#options.items),
+      // A fonte de defesa (CMB-04): escolhida pelo `Inventory` (DT-01) e escalada aqui pela
+      // skill de shielding, que é do ruleset porque vive no personagem.
+      defense: this.#defenseSourceOf(character),
+    };
+  }
+
+  /**
+   * A fonte de defesa do personagem (CMB-04), já escalada pela skill de shielding.
+   *
+   * A ESCOLHA é do `Inventory` (DT-01): escudo, arma de uma mão, nenhuma — uma regra só, a
+   * mesma que já recusa bow com escudo. Aqui entra o que é do ruleset: a skill que o conteúdo
+   * apontou em `combat.defense.skillId` multiplica a defesa da peça, como a skill de arma
+   * multiplica o ataque. Sem skill (conteúdo de teste, ou referência ausente), a peça vale o
+   * que ela diz.
+   */
+  #defenseSourceOf(character: CharacterRuntime): DefenseSource {
+    const source = character.inventory.defenseSource(this.#options.items, character);
+    if (source.kind === 'none') return source;
+    const skillId = this.#options.combat.defense?.skillId;
+    if (skillId === undefined) return source;
+    const skill = this.#options.skills.get(skillId);
+    if (skill === undefined) return source;
+    return {
+      kind: source.kind,
+      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
     };
   }
 

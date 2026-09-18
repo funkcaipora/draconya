@@ -1,8 +1,9 @@
 # Combate
 
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
-de dano e mitigação (CMB-03), motor de magias com alvo único, área e requisito de vocação (FUN-74,
-FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
+de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), motor de magias com alvo
+único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de
+compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -42,7 +43,6 @@ Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Gu
 Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
 correspondente:
 
-- defesa e escudo (CMB-04);
 - famílias de arma e proficiências (CMB-05);
 - abilities de monstro além da faixa de ataque (CMB-06);
 - condições generalizadas e dano contínuo (CMB-07);
@@ -61,12 +61,14 @@ está em "Resistência, vulnerabilidade e imunidade"):
 1. **Rola o dodge — sempre**, mesmo contra alvo com chance zero. Pular a rolagem faria a
    sequência do gerador depender de um atributo do alvo, e aí dar dodge a um monstro
    deslocaria todo o loot que vem depois, num efeito que ninguém ligaria à causa.
-2. Subtrai a armadura, com efetividade **por tipo de dano**.
-3. Aplica o **piso**: nem a armadura mais alta zera um golpe. Dano zero contra alvo pesado
+2. **Defesa/escudo** (CMB-04): com fonte elegível e tipo aprovado, uma segunda rolagem decide o
+   bloqueio; sem fonte, o estágio é identidade e não consome sorteio.
+3. Subtrai a armadura, com efetividade **por tipo de dano**.
+4. Aplica o **piso**: nem a armadura mais alta zera um golpe. Dano zero contra alvo pesado
    vira impasse silencioso, sem nada na tela dizendo o motivo.
-4. Aplica a resistência/vulnerabilidade e depois a imunidade explícita, que zera.
-5. Se esquivou, corta pela metade.
-6. **Arredonda só no fim.** Arredondar antes do dodge faria 50% de 3 virar 2, e o jogador
+5. Aplica a resistência/vulnerabilidade e depois a imunidade explícita, que zera.
+6. Se esquivou, corta pela metade.
+7. **Arredonda só no fim.** Arredondar antes do dodge faria 50% de 3 virar 2, e o jogador
    veria uma esquiva que reduziu um terço.
 
 O bônus de Bestiário é **PvE-only por construção**: `resolveDamage` recebe o contexto, e o
@@ -95,7 +97,7 @@ interface DamageOutcome {
   readonly profile: string;          // 'combat-v1' — o perfil que resolveu
   readonly intent: DamageIntent;     // a entrada, preservada
   readonly damageType: DamageType;
-  readonly afterDefense: number;     // depois da defesa/escudo (identidade em v1)
+  readonly afterDefense: number;     // depois da defesa/escudo (CMB-04)
   readonly afterArmor: number;       // depois da armadura, ainda ANTES do piso
   readonly armorReduction: number;   // quanto a armadura subtraiu
   readonly minimumDamage: number;    // o piso que valeu
@@ -156,7 +158,7 @@ uma tabela completa por tipo (lookup O(1)) e um `Set` de imunidade.
 A ordem de mitigação, congelada na emenda do ADR 0031:
 
 1. **uma rolagem de Dodge, sempre consumida, primeiro ato** (posição do RNG é contrato);
-2. defesa/escudo — identidade em v1 (CMB-04);
+2. defesa/escudo (CMB-04) — uma segunda rolagem, e só com fonte elegível e tipo aprovado;
 3. armadura por tipo;
 4. **piso de armadura** (`minimumDamageFraction`), DEPOIS da armadura e ANTES da resistência;
 5. resistência/vulnerabilidade por tipo;
@@ -169,6 +171,34 @@ estágios novos são identidade e o resultado é **bit a bit** o do v1. `damage.
 matriz determinística — físico, elemental, vulnerável, resistente e imune — e um caso que
 reprova se o piso trocar de lugar com a resistência.
 
+### Defesa, escudo e blocking físico (CMB-04)
+
+O estágio de defesa é o que o **escudo** ou a **arma corpo a corpo de uma mão** acrescentam ao
+defensor. Ele não é a armadura: a armadura é do corpo e vale por tipo de dano; a defesa é da
+peça e vale só contra os tipos aprovados — `physical` no `combat-v1`. A fórmula e a posição do
+RNG estão congeladas na emenda do
+[ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md).
+
+- **Fonte** (`Inventory.defenseSource`, DT-01): escudo precede a arma de uma mão (DT-02), e a
+  ausência das duas é `none`. Bow/twoHanded e wand/rod não dão defesa residual. A escolha mora
+  no inventário porque é a mesma regra que já recusa bow com escudo (`hands-full`); o ruleset
+  não repete a regra de slot.
+- **Bloqueio**: com fonte e tipo aprovado, uma rolagem (`combat.defense.blockChance`) decide se
+  a peça bloqueia; o quanto bloqueia é `min(defense, poder bruto)`. Sem fonte, ou em ataque
+  elemental, o estágio é identidade e **não consome sorteio**.
+- **O bloqueio nunca zera o golpe.** O piso (`minimumDamageFraction`) é calculado sobre o poder
+  bruto, então a defesa reduz o dano mas o piso sobrevive.
+- **Shielding sobe por USO** (§9.4): uma vez por ataque físico elegível recebido — nunca por
+  tick, nunca condicionada ao HP perdido, nunca em ataque elemental. A skill multiplica a
+  defesa da peça, e é a `skillId` de `combat.defense`.
+- **Fight mode fica de fora** (DT-03). Não há seletor de postura, opcode, C2S nem UI de bloqueio
+  nesta entrega; o mecanismo é autoritativo e uma intenção futura pode escolhê-lo, mas escolher
+  a fonte é do equipamento, não do cliente.
+
+O conteúdo real declara defesa nas armas corpo a corpo de uma mão (machete, steel axe, spike
+sword) e no perfil; não existe item de escudo no catálogo ainda — o mecanismo do escudo é
+exercitado por fixture, e um escudo real entra quando houver arte conferida (invariante 6).
+
 ### Perfil, boot e retomada
 
 O perfil mora no conteúdo (`combat.compatibilityProfile`, default `combat-v1` para legado e
@@ -179,10 +209,10 @@ Um perfil novo exige ADR e uma nova entrada em `COMBAT_PROFILES`.
 
 ### Limites do v1
 
-O perfil é ADITIVO e preserva bit a bit o resultado entregue. Ficam **fora** do v1, por decisão,
-e entram sob perfil novo nas tarefas seguintes: defesa e escudo (CMB-04), chance de acerto
-ofensivo, crítico, leech, mana shield (CMB-08) e qualquer tela de detalhamento do dano. O
-cliente não vê o outcome.
+O perfil é ADITIVO e preserva bit a bit o resultado entregue quando o conteúdo não declara o
+estágio. Ficam **fora** do v1, por decisão, e entram sob perfil novo nas tarefas seguintes:
+chance de acerto ofensivo, crítico, leech, mana shield (CMB-08) e qualquer tela de detalhamento
+do dano. O cliente não vê o outcome.
 
 ## Ação por tempo decorrido, nunca por contagem de tick
 
@@ -229,6 +259,10 @@ reequilibrar quando existirem.
 - Dodge, quando ativa no defensor, reduz o dano recebido em 50%.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de boss.
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
+- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe **físico**; o bloqueio nunca
+  zera o golpe, e ataque elemental não é bloqueado nem treina shielding (CMB-04).
+- Shielding sobe uma vez por ataque físico elegível recebido, nunca por tick e nunca pelo HP
+  perdido (CMB-04).
 
 ## Parâmetros de balanceamento
 
@@ -241,6 +275,10 @@ reequilibrar quando existirem.
 | Regeneração de vida | 1 HP/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.healthPerSecond` |
 | Regeneração de mana | 1 mana/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.manaPerSecond` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
+| Chance de bloqueio (`blockChance`) | 0,6 `[ABERTO — valor provisório: 0,6]` | `packages/content/data/combat/baseline.json`, `defense.blockChance` |
+| Tipos que o blocking mitiga | `["physical"]` (v1) | `packages/content/data/combat/baseline.json`, `defense.blockTypes` |
+| Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
+| Shielding — início, curva, defesa por nível | 10 / 50×1,1 / +2 % `[ABERTO — valores provisórios]` | `packages/content/data/skills/shielding.json` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
 perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
@@ -528,6 +566,8 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 
 ## Em aberto
 
+- `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
+  do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
 - `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
   provisórios até a leitura da infobox do TibiaWiki. O elemento é `ice` desde o CMB-03.

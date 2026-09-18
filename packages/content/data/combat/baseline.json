@@ -25,5 +25,10 @@
     "skillFactor": 0.15,
     "spread": 0.15
   },
-  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque e piso de dano são provisórios, com o Tibia como referência funcional. O bloco `player` é o personagem desarmado no level 1 e não vem do PRD: são os números que fazem a hunt de Rat Cellars render sem virar impasse, e saem daqui no dia em que existir equipamento. `spellPower` (#155, ADR 0026 decisão 5) é a conversão do Base Power das magias do Tibia, nossa e provisória: calibrada para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal` genérico cura hoje; `distance` começa em 10 e `magic` em 0, então o Paladin nasce com magia de ataque mais forte até alguém recalibrar."
+  "defense": {
+    "skillId": "shielding",
+    "blockChance": 0.6,
+    "blockTypes": ["physical"]
+  },
+  "_open": "§12.1 — só o dodge de 50% está decidido (§12.2). Efetividade de armadura por tipo de ataque, piso de dano e a `blockChance` de 0,6 do escudo (CMB-04) são provisórios, com o Tibia como referência funcional. O bloco `player` é o personagem desarmado no level 1 e não vem do PRD: são os números que fazem a hunt de Rat Cellars render sem virar impasse, e saem daqui no dia em que existir equipamento. `spellPower` (#155, ADR 0026 decisão 5) é a conversão do Base Power das magias do Tibia, nossa e provisória: calibrada para Light Healing (BP 40) render ~59 no level 8 com magic 0, o que o `heal` genérico cura hoje; `distance` começa em 10 e `magic` em 0, então o Paladin nasce com magia de ataque mais forte até alguém recalibrar. `defense` (CMB-04, emenda do ADR 0031) declara o bloqueio físico: escudo ou arma de uma mão, uma rolagem depois do Dodge, escalada pela skill `shielding`."
 }

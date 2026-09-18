@@ -414,6 +414,14 @@ export const itemSchema = z.strictObject({
   attack: z.number().int().nonnegative().default(0),
   armor: z.number().int().nonnegative().default(0),
   /**
+   * A DEFESA da peça (CMB-04, emenda do ADR 0031): o que ela bloqueia, e não o que ela aguenta.
+   * Diferente da armadura, a defesa vale só contra os tipos aprovados no perfil (`physical` no
+   * v1) e só na combinação aprovada — escudo, ou arma corpo a corpo de uma mão. Bow/twoHanded e
+   * wand/rod não têm defesa residual, e `buildContent` recusa `defense` fora dessas combinações.
+   * `0` é item sem defesa, o default que preserva o v1: nenhum golpe muda por causa dele.
+   */
+  defense: z.number().int().nonnegative().default(0),
+  /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *
    * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
@@ -796,6 +804,32 @@ export const combatSchema = z.object({
     damageType: z.enum(DAMAGE_TYPES).default('physical'),
   }),
   /**
+   * Defesa e escudo (CMB-04, emenda do ADR 0031). É o estágio entre a rolagem de Dodge e a
+   * armadura: o escudo ou a arma de uma mão bloqueia parte do golpe físico.
+   *
+   * **Ausente é o estágio IDENTIDADE**, e é o que preserva o v1: sem `defense` nenhum golpe
+   * consome sorteio de bloqueio, e o resultado é bit a bit o entregue. O conteúdo real declara.
+   *
+   * `blockChance` é a chance do bloqueio acontecer, uma rolagem por golpe ELEGÍVEL — logo
+   * depois do Dodge, que continua o primeiro sorteio. `blockTypes` são os tipos aprovados
+   * (`physical` no v1): ataque elemental passa intacto e NÃO treina shielding por acidente.
+   * `skillId` é a skill que escala a defesa e sobe por bloqueio; `buildContent` recusa uma que
+   * não exista ou que não suba por `shield-block`.
+   */
+  defense: z.object({
+    skillId: z.string().min(1).optional(),
+    blockChance: z.number().min(0).max(1),
+    blockTypes: z.array(z.enum(DAMAGE_TYPES)).min(1).default(['physical']),
+  }).superRefine((defense, context) => {
+    const seen = new Set<DamageType>();
+    for (const type of defense.blockTypes) {
+      if (seen.has(type)) {
+        context.addIssue({ code: 'custom', message: `blockTypes tem "${type}" duplicado` });
+      }
+      seen.add(type);
+    }
+  }).optional(),
+  /**
    * A conversão do Base Power (#155, ADR 0026 decisão 5) — UMA para todas as magias, e nossa:
    * o TibiaWiki não publica a fórmula, e a do TFS é GPL (ADR 0019). `mid = basePower × (1 +
    * level × levelFactor + skillLevel × skillFactor)`; `min = ⌊mid × (1 − spread)⌋`,
@@ -963,6 +997,12 @@ export const skillSchema = z.object({
     /** Um tiro de arma de distância (#152). Como o golpe: rende por uso, acerte ou não. */
     z.object({ on: z.literal('distance-hit'), points: z.number().positive() }),
     z.object({ on: z.literal('spell-cast'), pointsPerMana: z.number().positive() }),
+    /**
+     * Um bloqueio físico ELEGÍVEL (CMB-04): o defensor tinha escudo ou arma de uma mão e o
+     * ataque era de um tipo aprovado. Rende uma vez por ataque recebido, nunca por tick e
+     * nunca condicionado ao HP perdido.
+     */
+    z.object({ on: z.literal('shield-block'), points: z.number().positive() }),
   ]),
   /** Fração acrescentada ao poder por nível ACIMA do inicial. `0` é skill que não bate. */
   damagePerLevel: z.number().nonnegative().default(0),

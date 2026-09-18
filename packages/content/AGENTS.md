@@ -241,6 +241,13 @@ porque catálogo não existia; agora o que decide é a referência existir.
 `charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
 para o catálogo não mudar quando a mecânica existir.
 
+**`defense` é da peça e só nas combinações aprovadas** (CMB-04, emenda do ADR 0031): escudo, ou
+arma corpo a corpo de uma mão. Bow/twoHanded e wand/rod não têm defesa residual, e `buildContent`
+recusa `defense > 0` fora daí. O perfil declara `combat.defense` (`blockChance`, `blockTypes`,
+`skillId`); ausente é o estágio identidade, que preserva o v1. A `skillId` precisa existir no
+catálogo de skills E subir por `shield-block` — as duas coisas são conferidas no boot, porque uma
+referência torta deixaria o escudo sem treinar ou uma skill que nunca sobe.
+
 **O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
 que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
 biblioteca (`things/<versão>/library/appearances/object.jsonl`) não tem nome, e um id errado
