@@ -52,16 +52,17 @@ Esconder o botão transformaria um conselho em regra que ninguém escreveu.
 **Não existe "trocar de dificuldade".** Existe sair e existe entrar: trocar encerra a instância e
 cria outra (§14.7), então a tela oferece as duas ações que de fato acontecem.
 
-**Detalhes da caçada, durante a hunt (#325).** A pill "ⓘ Detalhes da caçada" abre um modal com o
-nome, o nível recomendado e as dificuldades da hunt ativa — a mesma regra de "level recomendado é
-conselho" vale aqui. A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por
-este `HuntsModal`, nesta aba do navegador: uma hunt sobrevive ao navegador fechado (idle-first),
-mas o servidor ainda não diz, depois que a instância já começou, qual `catalogue.hunts[]` é essa
-— reabrir o jogo no meio de uma caçada existente não traz o nome de volta, e o modal diz isso em
-vez de inventar. Monstros, loot possível e descrição aparecem no kit e ainda não têm dado no
-servidor (M15: SV-02, SV-19, SV-21); a pill "Despachar loot" do kit espera o épico E5. "Seu
-recorde" (XP/h, gp/h) nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita
-acima.
+**Detalhes da caçada, durante a hunt (#325, #349, SV-13).** A pill "ⓘ Detalhes da caçada" abre um modal
+com duas colunas apresentando os detalhes da caçada ativa: nome, nível recomendado, dificuldades,
+contagens de monstros por tamanho de pull ("Cauteloso · 2", "Ousado · 5", "Agressivo · 8"), grade de
+criaturas da caçada com sprite (`OutfitSprite`), nome, vida e experiência, descrição textual da hunt se
+existir em conteúdo, e a lista de loot possível com sprite (`ItemSprite`) e nome de cada item (sem ouro,
+sem caixas de seleção como PEGAR/VENDER e sem raridade). A pill "Despachar loot" do kit espera o épico E5.
+A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por este `HuntsModal`, nesta aba
+do navegador: uma hunt sobrevive ao navegador fechado (idle-first), mas o servidor ainda não diz, depois
+que a instância já começou, qual `catalogue.hunts[]` é essa — reabrir o jogo no meio de uma caçada
+existente não traz o nome de volta, e o modal diz isso em vez de inventar. "Seu recorde" (XP/h, gp/h)
+nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita acima.
 
 O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
 fixada na sessão (invariante 7), então ele não muda enquanto ela vive.

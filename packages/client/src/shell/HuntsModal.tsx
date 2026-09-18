@@ -22,7 +22,7 @@ import { Button } from './ui/Button.js';
 import { Kicker } from './ui/Kicker.js';
 
 /** Os três tamanhos de pull do Huntera (FUN-123), em palavras — os mesmos de `event-text.ts`. */
-const DIFFICULTY_TEXT: Record<string, string> = {
+export const DIFFICULTY_TEXT: Record<string, string> = {
   cautious: 'Cauteloso',
   bold: 'Ousado',
   reckless: 'Agressivo',
