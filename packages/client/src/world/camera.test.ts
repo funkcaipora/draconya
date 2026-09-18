@@ -51,11 +51,23 @@ describe('o mundo na tela inteira (FUN-115)', () => {
     expect(zoomFor(3000, 500)).toBe(1);
   });
 
-  it('a vista é o que cabe na tela, fracionária, com teto no raio de interesse', () => {
+  it('a vista é o que cabe na tela, fracionária, sem teto de câmera (#415)', () => {
     expect(viewFor(1024, 768, 2)).toEqual({ widthTiles: 16, heightTiles: 12 });
     expect(viewFor(1000, 700, 2).widthTiles).toBeCloseTo(15.625);
-    // 4K a 3×: 4096/96 = 42 tiles caberiam, mas só chegam criaturas em 18×14.
-    expect(viewFor(4096, 2160, 3)).toEqual({ widthTiles: VIEW_WIDTH, heightTiles: VIEW_HEIGHT });
+    // 4K a 3×: 4096/96 = 42,66… tiles de largura. A câmera desenha o canvas inteiro; o teto
+    // de 18×14 é só do raio de interesse da rede.
+    const wide = viewFor(4096, 2160, 3);
+    expect(wide.widthTiles).toBeCloseTo(4096 / 96);
+    expect(wide.heightTiles).toBeCloseTo(2160 / 96);
+    expect(wide.widthTiles).toBeGreaterThan(VIEW_WIDTH);
+    expect(wide.heightTiles).toBeGreaterThan(VIEW_HEIGHT);
+  });
+
+  it('o raio de interesse da rede continua 18×14, mesmo com a câmera maior (#415)', () => {
+    // Mutação que mata: apagar `VIEW_WIDTH`/`VIEW_HEIGHT` junto com o teto da câmera, ou
+    // fazer `viewFor` voltar a limitar por eles.
+    expect(VIEW_WIDTH).toBe(18);
+    expect(VIEW_HEIGHT).toBe(14);
   });
 
   it('com a vista fracionária a câmera continua centrada no alvo', () => {
@@ -67,5 +79,17 @@ describe('o mundo na tela inteira (FUN-115)', () => {
     const screen = toScreen({ x: 10, y: 10 }, { x: 10, y: 10, z: 7 }, view);
     expect((screen.x + TILE / 2) * 2).toBeCloseTo(1000 / 2);
     expect((screen.y + TILE / 2) * 2).toBeCloseTo(700 / 2);
+  });
+
+  it('numa tela larga o alvo cai no centro real do canvas, não no centro do raio de interesse (#415)', () => {
+    // 1920×1080 a 2× é o caso do bug: a vista antiga era limitada a 18×14, e o alvo ficava em
+    // ~576 px enquanto o overlay DOM de vitais ficava em 960 px. Mutação que mata: voltar o
+    // `Math.min` de `viewFor`.
+    const view = viewFor(1920, 1080, 2);
+    expect(view.widthTiles).toBeCloseTo(30);
+    expect(view.heightTiles).toBeCloseTo(16.875);
+    const screen = toScreen(at(10, 10), at(10, 10), view);
+    expect((screen.x + TILE / 2) * 2).toBeCloseTo(1920 / 2);
+    expect((screen.y + TILE / 2) * 2).toBeCloseTo(1080 / 2);
   });
 });

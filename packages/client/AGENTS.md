@@ -2,7 +2,8 @@
 
 ## Propósito
 
-O cliente web: React + PixiJS v8 + Vite. HUD em DOM, mundo em canvas, câmera de ~18×14 tiles.
+O cliente web: React + PixiJS v8 + Vite. HUD em DOM, mundo em canvas, câmera do tamanho do
+canvas (o raio de interesse da rede é 18×14).
 Pipeline de assets (parser de aparências, decoder LZMA em Worker, cache persistente).
 
 ## Fronteiras
@@ -253,8 +254,8 @@ pnpm tsx scripts/make-sheet-fixture.ts
   para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
   escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
   sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera de 18×14,
-  camadas, ordem de desenho por `y`, pool e interpolação.
+  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  do canvas, camadas, ordem de desenho por `y`, pool e interpolação.
 - **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
   (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
   hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que
@@ -537,8 +538,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir
   de 560 px no lado menor, 3× a partir de 1400 — inteiro porque pixel art a 1,5× é borrão), e
-  a vista em tiles é o que couber (`viewFor`), com teto em 18×14, que continua sendo o campo de
-  visão da rede. **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
+  a vista em tiles é o que couber no canvas (`viewFor`, sem teto desde #415), e o teto de 18×14
+  é do raio de interesse da rede, não da câmera — o alvo fica no centro real do canvas.
+  **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
   são escalados por `1 / zoom`, senão um nome de dez pixels a 3× vira letreiro. A barra do topo
   tem nome, level, gold e os botões que abrem e fecham cada janela — as vitais (HP/mana) saíram
   do topo desde #253 e ficam no alto da coluna direita (`Vitals`, primeiro filho de
