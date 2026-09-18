@@ -2,7 +2,8 @@
 
 **Status:** parcial — os agregados existem, atravessam snapshot e extrato, saem em
 `session-state` (FUN-32, FUN-78) e ao vivo em `analyzer` quando mudam (FUN-110); a **janela no
-cliente** existe, minimizável, com "por hora" derivado local (FUN-83); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
+cliente** existe como janela flutuante e arrastável, com "por hora" derivado local (FUN-83) e um
+modal expandido com a lista completa de métricas da sessão (#315); falta o maior hit por skill (M7 já existe, mas o agregado é por tipo) e
 qualquer notificação fora do jogo
 **PRD:** §16, §43.10
 **Épico:** E6

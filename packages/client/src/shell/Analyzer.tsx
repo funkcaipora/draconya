@@ -11,35 +11,24 @@
 // e a janela lê a store; pedir em laço para atualizar um número seria tráfego de volta gerado
 // por tráfego de entrada — o mesmo erro que o `walk` recusado em silêncio evita do outro lado.
 //
-// **A moldura é o design system (#258, DS-15).** A janela deixou de ser uma seção que a barra
-// monta e desmonta e virou um `Panel dock` FIXO na coluna da direita, como `BotPanel`/
-// `EquipmentPanel` já são desde #161/#162 (D6 — "Fixo... nunca removido"). Os números, que eram
-// uma lista solta de linhas, viraram duas caixas — "Sessão" e "Por hora" — sobre `Box`/`Line`,
-// inspiradas em `Sec`/`Rows` do handoff (`Hud.jsx`, `AnalyzerWindow`). A matemática (`perHour`,
-// o "—" do campo opcional, o relógio local) não mudou uma linha.
+// **A moldura é a janela flutuante (#315, RC-02).** O Analisador deixou de ser `Panel dock` da
+// coluna direita e virou uma `FloatingWindow` sobre o mundo (ADR 0030 decisão 3), aberta e
+// fechada pelo ícone "Analisador" do topo — o × FECHA de verdade (desmonta), porque janela
+// flutuante não minimiza. Os números continuam nas duas caixas — "Sessão" e "Por hora" — sobre
+// `Box`/`Line`, e o botão "⤢ Abrir completo" abre o `AnalyzerModal` com as dez linhas do kit.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { perHour } from '../state/hud.js';
 import type { Aggregates, NotableEvent } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { describeEvent } from './event-text.js';
 import type { EventNames } from './event-text.js';
-import { Panel } from './ui/Panel.js';
+import { FloatingWindow } from './FloatingWindow.js';
+import { IconButton } from './ui/IconButton.js';
 import { Kicker } from './ui/Kicker.js';
-
-const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
-
-/** `1.234` — número inteiro com separador, que é como um jogador lê gold e XP. */
-const count = (value: number): string => integer.format(Math.round(value));
-
-/** `2 h 13 min`. Segundos só aparecem no primeiro minuto, senão a linha pisca sem informar. */
-function duration(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60_000);
-  if (totalMinutes < 1) return `${Math.floor(ms / 1_000)} s`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
-}
+import { AnalyzerModal } from './AnalyzerModal.js';
+import {
+  count, duration, formatClock, gold, goldRate, optionalCount, rate as ratePerHour,
+} from './analyzer-format.js';
 
 /**
  * O relógio local que faz o tempo de hunt andar entre duas entregas — `session-state` ou
@@ -92,11 +81,6 @@ function Line({ label, value, danger }: { label: string; value: string; danger?:
 
 function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
   const balance = aggregates.goldGained - aggregates.goldSpent;
-  // "—" e não zero para o que o servidor NÃO mandou (FUN-78): zero é uma afirmação, e um nó
-  // antigo em deploy em rolagem simplesmente não afirmou nada sobre estes campos.
-  const optional = (value: number | undefined): string => (value === undefined ? '—' : count(value));
-  // "gp" é a unidade de gold do handoff inteiro (data.js:72, analyzerLive.sess — R4-18).
-  const gold = (value: number): string => `${count(value)} gp`;
   return (
     <Box title="Sessão">
       <Line label="Tempo" value={duration(elapsedMs)} />
@@ -105,10 +89,10 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
       <Line label="Gastos" value={gold(aggregates.goldSpent)} />
       <Line label="Saldo" value={gold(balance)} />
       <Line label="Mortos" value={count(aggregates.kills)} />
-      <Line label="Loot" value={optional(aggregates.itemsLooted)} />
-      <Line label="Supplies" value={optional(aggregates.suppliesUsed)} />
-      <Line label="Maior golpe" value={optional(aggregates.bestBasicHit)} />
-      <Line label="Maior magia" value={optional(aggregates.bestSpellHit)} />
+      <Line label="Loot" value={optionalCount(aggregates.itemsLooted)} />
+      <Line label="Supplies" value={optionalCount(aggregates.suppliesUsed)} />
+      <Line label="Maior golpe" value={optionalCount(aggregates.bestBasicHit)} />
+      <Line label="Maior magia" value={optionalCount(aggregates.bestSpellHit)} />
       {/* Só aparece com morte — "Mortes: 0" afirmaria o que ninguém disse. `danger`: inspirado
           no `color(c)` do handoff (`Hud.jsx`, `c === "red"`). */}
       {aggregates.deaths > 0 && <Line label="Mortes" value={count(aggregates.deaths)} danger />}
@@ -118,19 +102,15 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
 
 function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs: number }) {
   const balance = aggregates.goldGained - aggregates.goldSpent;
-  const rate = (value: number): string => `${count(perHour(value, elapsedMs))}/h`;
-  // Mesma unidade "gp" da caixa "Sessão" (R4-18); o "/h" continua depois dela, como no kit
-  // ("Gold/h", "1.133.402 gp" — data.js:72, hour): a unidade vem antes da taxa, nunca depois.
-  const goldRate = (value: number): string => `${count(perHour(value, elapsedMs))} gp/h`;
-  // Só as cinco que já tinham taxa antes desta task. Loot, Supplies, Maior golpe, Maior magia e
-  // Mortes nunca tiveram `rate()`, e continuam sem.
+  // Só as cinco que já tinham taxa. Loot, Supplies, Maior golpe, Maior magia e Mortes nunca
+  // tiveram `rate()`, e continuam sem.
   return (
     <Box title="Por hora">
-      <Line label="XP" value={rate(aggregates.xpGained)} />
-      <Line label="Gold" value={goldRate(aggregates.goldGained)} />
-      <Line label="Gastos" value={goldRate(aggregates.goldSpent)} />
-      <Line label="Saldo" value={goldRate(balance)} />
-      <Line label="Mortos" value={rate(aggregates.kills)} />
+      <Line label="XP" value={ratePerHour(aggregates.xpGained, elapsedMs)} />
+      <Line label="Gold" value={goldRate(aggregates.goldGained, elapsedMs)} />
+      <Line label="Gastos" value={goldRate(aggregates.goldSpent, elapsedMs)} />
+      <Line label="Saldo" value={goldRate(balance, elapsedMs)} />
+      <Line label="Mortos" value={ratePerHour(aggregates.kills, elapsedMs)} />
     </Box>
   );
 }
@@ -170,57 +150,66 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
 }
 
 /**
- * O painel do analisador (#258). `collapsed`/`onToggle` como `BotPanel`/`EquipmentPanel`
- * (#161/#162): a barra do topo MINIMIZA, nunca desmonta (D6 — "Fixo... nunca removido").
+ * A janela flutuante do Analisador (#315, R4-14 — ADR 0030 decisão 3 reabre D6 do ADR 0029 só
+ * para esta janela e a Party loot). `open` deixou de ser "não colapsado": agora é "montado". O
+ * × FECHA de verdade (desmonta), porque uma janela flutuante que fecha não deixa cabeçalho para
+ * trás — ao contrário do `Panel dock` de antes, que minimizava e mantinha a barra.
  *
- * A exceção que continua: sem sessão, ou na Cidade, a função retorna `null` — não é "removido
- * pelo jogador" (o que D6 proíbe), é "não há sessão para analisar" (`analyzer.md`, "Ela não
- * aparece na Cidade: a praça não credita nada"). Mudar essa regra está fora do escopo (§12 da
- * spec da #258).
+ * `forceOpen` sobrevive da versão anterior: ao terminar a hunt (`analyzer.ended`), a janela
+ * reabre sozinha mesmo se o jogador a tinha fechado.
+ *
+ * Sem sessão, ou na Cidade, a função retorna `null` — não é "removido pelo jogador", é "não há
+ * sessão para analisar" (`analyzer.md`, "Ela não aparece na Cidade: a praça não credita nada").
  */
-export function Analyzer({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
+export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?: () => void }) {
   const analyzer = useHudSlice((state) => state.analyzer);
 
-  // "Reabre sozinho ao encerrar" (comportamento de antes desta task) preservado como override
-  // LOCAL por cima do `collapsed` externo: no instante em que `ended` vira `true`, força aberto
-  // uma vez; depois disso quem manda de novo é a barra do topo de novo.
   const [forceOpen, setForceOpen] = useState(false);
   useEffect(() => {
     if (analyzer.ended) setForceOpen(true);
   }, [analyzer.ended]);
-  const effectiveCollapsed = forceOpen ? false : collapsed;
-  const handleToggle = (): void => {
+  const isOpen = forceOpen || open;
+  const handleClose = (): void => {
     setForceOpen(false);
     onToggle?.();
   };
+
+  const [expandedOpen, setExpandedOpen] = useState(false);
 
   const { aggregates } = analyzer;
   const elapsedMs = useElapsedMs(
     aggregates?.durationMs ?? 0, analyzer.receivedAtMs, !analyzer.ended && aggregates !== null,
   );
 
-  // Sem sessão não há o que analisar. A Cidade também não: ela não credita nada (§37), e uma
-  // janela de "0 XP, 0 gold" na praça é ruído com aparência de informação.
-  if (aggregates === null || analyzer.sessionType === 'city') return null;
-
-  // Aberta, o tempo já está na primeira linha da caixa "Sessão": repetir no cabeçalho é dizer o
-  // mesmo número duas vezes na mesma janela. `exactOptionalPropertyTypes` não deixa passar
-  // `undefined` explícito onde `meta` é opcional (mesmo padrão de `BotPanel.tsx`).
-  const meta = analyzer.ended ? 'encerrada' : (effectiveCollapsed ? duration(elapsedMs) : undefined);
-  const metaProps = meta === undefined ? {} : { meta };
+  // Sem sessão, na Cidade, ou fechada: nada para desenhar. A ordem importa — testar `isOpen`
+  // ANTES do `aggregates` trocaria "sem sessão" por "fechada" no teste de HTML vazio.
+  if (aggregates === null || analyzer.sessionType === 'city' || !isOpen) return null;
 
   return (
-    <Panel
-      dock
+    <FloatingWindow
+      name="analyzer"
+      className="ui-floating-window--analyzer"
       title="Analisador de caçada"
-      className="analyzer"
-      collapsed={effectiveCollapsed}
-      onToggle={handleToggle}
-      {...metaProps}
+      // "Sessão" + relógio hh:mm:ss no cabeçalho (kit: Hud.jsx:190) — a segunda coluna do kit
+      // ("Próximo level") fica de fora (RF-05): a curva de XP não trafega.
+      meta={`Sessão ${formatClock(elapsedMs)}`}
+      // (250, 12) é a coordenada do kit RELATIVA AO MUNDO, que no kit começa abaixo do topo de
+      // 65px. No nosso Shell, `.shell` é tela cheia (inclusive por trás do topo), então a MESMA
+      // posição visual exige somar a altura do topo: 12 + 65 = 77 (DT-02).
+      initial={{ x: 250, y: 77 }}
+      width={380}
+      onClose={handleClose}
+      actions={<IconButton title="Abrir completo" onClick={() => { setExpandedOpen(true); }}>⤢</IconButton>}
     >
       <SessionBox aggregates={aggregates} elapsedMs={elapsedMs} />
       <HourBox aggregates={aggregates} elapsedMs={elapsedMs} />
       <Events events={analyzer.notableEvents} />
-    </Panel>
+      <AnalyzerModal
+        open={expandedOpen}
+        onClose={() => { setExpandedOpen(false); }}
+        aggregates={aggregates}
+        elapsedMs={elapsedMs}
+      />
+    </FloatingWindow>
   );
 }
