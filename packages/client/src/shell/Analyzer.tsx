@@ -63,7 +63,7 @@ export function useElapsedMs(base: number, since: number, running: boolean): num
     const timer = setInterval(() => { setNow(performance.now()); }, 1_000);
     return () => { clearInterval(timer); };
   }, [running]);
-  if (!running) return base;
+  if (!running || since <= 0) return base;
   return base + Math.max(0, now - since);
 }
 
