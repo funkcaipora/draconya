@@ -111,7 +111,7 @@ não há "não se aplica".
 
 ### Estoque, munição e cargas
 
-6. **P1 = SIM: suprimento é item.** Poção, runa, comida e carga de bênção são itens empilháveis
+6. **P1 = SIM: suprimento é item.** Poção, runa e carga de bênção são itens empilháveis
    (`kind: consumable`, peso, `value`, pilha de 100) na mochila; usar consome um; a barra e a
    Mochila mostram a contagem real (`inventory.backpack[].quantity`, que o protocolo já leva).
    O catálogo `supplies/` e o débito de gold por uso (ADR 0026 d.8, `economy.md` §20.1) são
@@ -133,18 +133,17 @@ não há "não se aplica".
 
 ### Automações
 
-9. **Automações são um catálogo fechado de seis modelos** (ADR 0002 continua: vocabulário, nunca
+9. **Automações são um catálogo fechado de cinco modelos** (ADR 0002 continua: vocabulário, nunca
    script): `renew-ring`, `renew-amulet` ("quando acabar", decisão 8), `swap-ammo-by-targets`
    (≥ N alvos → munição A, senão B), `swap-weapon-shield-by-hp` (HP < x % → uma mão + escudo;
-   HP > y % → duas mãos), `swap-ring` (o ring swap atual, com o segundo gatilho "≥ N alvos" em
-   OU) e `eat-food` ("Comer comida"). Cada uma tem `enabled`, parâmetros, condições de **entrada
-   em OU** e de **saída em E** (o desenho do `AutomationConfigModal` v3), e o painel lista toggle
-   · nome · resumo gerado dos parâmetros · ⚙ · ×, com "+ Adicionar" abrindo o catálogo. A
-   baseline por vocação liga as que fazem sentido (paladino: munição por alvos; cavaleiro:
-   arma/escudo por vida; todos: comer). Comida é item e **a regeneração natural passa a exigir
-   estar alimentado**, com a tabela por vocação da referência (ADR 0019) no lugar do
-   `regen.healthPerSecond` provisório `[ABERTO]` — a migração dá comida a todo personagem e liga
-   "Comer comida" por default, para ninguém morrer de fome na virada.
+   HP > y % → duas mãos) e `swap-ring` (o ring swap atual, com o segundo gatilho "≥ N alvos" em
+   OU). Cada uma tem `enabled`, parâmetros, condições de **entrada em OU** e de **saída em E** (o
+   desenho do `AutomationConfigModal` v3), e o painel lista toggle · nome · resumo gerado dos
+   parâmetros · ⚙ · ×, com "+ Adicionar" abrindo o catálogo. A baseline por vocação liga as que
+   fazem sentido (paladino: munição por alvos; cavaleiro: arma/escudo por vida). **Comida e
+   "Comer comida" ficam fora deste plano** (diretriz do dono, 2026-09-18): todo personagem tem
+   uma regeneração base por vocação, que é assunto de um plano próprio — o slot COMIDA da imagem
+   e a sexta automação do kit v3 entram com ele, não aqui.
 
 ### A coluna direita
 
@@ -207,14 +206,14 @@ não há "não se aplica".
 
 Tela de entrada, modais e celular seguem o ADR 0030 (P5 continua NÃO; o toggle PT/EN espera i18n;
 o "+20 % de premium" do modal Personagem continua fora). Os números de balanceamento (preço e lote
-de cada consumível, fatores de postura, tabela de regeneração, fator da bênção, janela de DPS) são
+de cada consumível, fatores de postura, fator da bênção, janela de DPS) são
 do conteúdo e podem mudar sem ADR — o que este ADR fixa é a **forma**.
 
 ## Alternativas
 
 - **Manter o 0030 e só "terminar o M18"** — descartado: o M18 como estava (barra como
-  configuração, manual na fase 2, postura inerte, P1/P4 esperando confirmação, "Comer comida" de
-  fora) produz um HUD que ainda não é a imagem; o dono pediu a imagem.
+  configuração, manual na fase 2, postura inerte, P1/P4 esperando confirmação, sem estoque)
+  produz um HUD que ainda não é a imagem; o dono pediu a imagem.
 - **Contagens, postura e bolsa como decoração** — descartado pelas razões do 0030: inventa
   mecânica; e agora a alternativa honesta (construir a fonte) tem plano e marco.
 - **Estoque sem reposição automática (o jogador compra na Cidade, como no Tibia)** — descartado:
@@ -247,7 +246,7 @@ postura, moedas e soul. O que fica mais difícil: a economia muda de débito por
 lote (balanceamento em `content`, testes de ledger novos, e a capacidade passa a limitar o
 estoque — um cavaleiro leva 160 poções, um mago não); o perfil de combate vira `combat-v2` (postura
 muda números — conformidade nova, ADR 0031); há uma migração de dados de personagem (bot v1 → v2,
-`melee` → três famílias, comida inicial) que precisa ser idempotente e testada; e a coluna
+`melee` → três famílias) que precisa ser idempotente e testada; e a coluna
 `account.coins` deixa de ser inerte, o que puxa o E13 para dentro do plano antes do previsto. O
 que precisa mudar: ADR 0026 recebe "d.3, d.4 e d.8 substituídas pelo 0032"; ADR 0030 recebe
 "emendado pelo 0032 (decisões 2, 4, 5, 6 e 7)"; ADR 0031 ganha a nota de que fight mode entra com

@@ -124,7 +124,7 @@ catálogo `supplies/` e o débito de gold por uso; a skill `melee` única.
 | 6 | P1 = SIM: suprimento é item empilhável; reposição por lote pelo ledger | ADR 0026 d.8, economy §20.1 |
 | 7 | P4 = SIM: munição é item no slot `ammo`; `arrow` tem preço | ADR 0026 d.3 |
 | 8 | Anel gasta por tempo, colar por carga; o `sim` consome e destrói | campos mortos `charges`/`durationMs` |
-| 9 | Seis automações de catálogo, entrada OU / saída E; comida alimenta a regeneração | ADR 0030/#362 ("Comer comida" de fora) |
+| 9 | Cinco automações de catálogo, entrada OU / saída E; comida e "Comer comida" ficam para o plano de regeneração | ADR 0030/#362 |
 | 10 | Postura = fight mode do TFS, perfil `combat-v2`, default Balanceada | ADR 0030 d.4, ADR 0031 (adiamento) |
 | 11 | Bolsa = moedas físicas (1/100/10 000); topo = saldo no ledger | ADR 0030 d.6 |
 | 12 | Loot cai na mochila; Despachar loot vende pelo ledger; cheio despacha sozinho | Caixa de Loot (FUN-88) |
@@ -137,9 +137,11 @@ catálogo `supplies/` e o débito de gold por uso; a skill `melee` única.
 
 ## 3. Milestones
 
-Os ids abaixo (AB-, CO-, PT-, TP-) viram issues via `/spec`, uma por linha, com a spec completa no
-corpo (o executor não tem este documento nem o kit: a spec cola o JSX e o "antes"); os números do
-GitHub entram na tabela do §4 quando forem criadas. Cada issue cita "ADR 0032 decisão n".
+Os ids abaixo (AB-, CO-, PT-, TP-) têm objetivo e critério de aceite em
+[hud-contract-tasks.md](hud-contract-tasks.md) — é de lá que o `/spec` parte, uma issue por tarefa,
+com a spec completa no corpo (o executor não tem este documento nem o kit: a spec cola o JSX e o
+"antes"); os números do GitHub entram na tabela do §4 quando forem criadas. Cada issue cita
+"ADR 0032 decisão n".
 
 ### M18 · Barra de ações, estoque e automações (milestone [8](https://github.com/funkcaipora/draconya/milestone/8), redesenhado)
 
@@ -149,20 +151,20 @@ empilhada; a onda 1 é cliente e parte do fim da onda 0.
 
 | Id | Issue | Camadas | Depende de | Notas |
 |---|---|---|---|---|
-| AB-01 | Consumíveis como itens: poção, runa, comida, carga de bênção viram `items/` (`kind: consumable`, peso, `value`, pilha 100, `group` de cooldown, `restock { batch, min }` default); `supplies/` sai; baseline por vocação | content | — | Decisão 6. Os números (preço, lote, peso) vêm da referência (ADR 0019) e ficam em `content` |
+| AB-01 | Consumíveis como itens: poção, runa, carga de bênção viram `items/` (`kind: consumable`, peso, `value`, pilha 100, `group` de cooldown, `restock { batch, min }` default); `supplies/` sai; baseline por vocação | content | — | Decisão 6. Os números (preço, lote, peso) vêm da referência (ADR 0019) e ficam em `content` |
 | AB-02 | Munição, colar e escudo como itens: `arrow`/`burst-arrow`/`sniper-arrow`/`onyx-arrow` com `slot: ammo`, família, ataque, preço; o primeiro colar por carga; o primeiro escudo real; `ammunition/` sai | content | AB-01 | Decisões 7 e 8 |
 | AB-03 | Vocabulário v2 do bot: `sets[4]` × `slots[24]` (`do`, `when[]` em E, `hotkey`, `auto`, `restock`), `activeSet`, `automations[]` (seis modelos, `enter[]` OU, `exit[]` E, parâmetros), `stance`, `BOT_VOCABULARY_VERSION = 2`; `advancedFromLevel`/`advancedOnly` saem (sem trava de level em nada); função pura `migrateBotConfigV1` (categorias → conjunto 1, ordem cura→poções→ataque→runas→suporte, teclas em sequência) | content | AB-01, AB-02 | Decisões 1, 2, 4, 5, 9. A migração é testada com toda baseline v1 do repositório |
 | AB-04 | Estoque e reposição: usar consome da pilha; `restock` por lote quando a pilha < `min`, pelo ledger (`purchase`), limitado pela capacidade livre; primeira compra ao entrar; "acabar o gold" continua a regra de saída; agregados de gasto passam a somar as compras | sim, server | AB-01, AB-03 | Decisão 6. Invariante 10: uma linha por lote; retry idempotente |
 | AB-05 | Munição no slot: cada tiro consome 1 da pilha equipada; sem pilha, puxa a próxima da mochila; sem munição, o tiro não sai (o bot pula o slot); `select-ammo` (opcode 14) e o fallback para `arrow` grátis saem | sim, protocol, server | AB-02, AB-04 | Decisão 7 |
 | AB-06 | Cargas e duração: anel vence por tempo equipado (evento na fila), colar por carga consumida no bloqueio elemental; item destruído ao esgotar; evento S2C de inventário como hoje | sim | AB-02 | Decisão 8 |
 | AB-07 | Motor de slots v2: avaliação por grupo de cooldown do conteúdo, ordem do slot, condições em E, pula o inelegível no mesmo ciclo, condição `condition` (efeito ativo/ausente); motivo de bloqueio por slot exposto; o motor v1 por categoria sai | sim | AB-03, AB-04 | Decisão 2. Substitui `select()`/`#onBot` por categoria |
-| AB-08 | Automações v2: os seis modelos com entrada OU / saída E; atuadores de equipar/desequipar/trocar munição no `sim` (o bot não usa os opcodes do jogador); `swap-ring` absorve o `ringSwap` atual; comida cria a condição `fed` e a regeneração natural passa a exigi-la (tabela por vocação da referência) | sim, content | AB-05, AB-06, AB-07 | Decisão 9. A migração dá comida à mochila e liga "Comer comida" |
+| AB-08 | Automações v2: os cinco modelos com entrada OU / saída E; atuadores de equipar/desequipar/trocar munição no `sim` (o bot não usa os opcodes do jogador); `swap-ring` absorve o `ringSwap` atual | sim, content | AB-05, AB-06, AB-07 | Decisão 9. Comida e "Comer comida" ficam para o plano de regeneração |
 | AB-09 | Protocolo e servidor: C2S `use-slot { set, slot }` e `select-target { creatureId }`; S2C `slot-state` (por slot: pronto/cooldown restante/bloqueado por quê; contagem vem do `inventory`), `slot-result` (recusa com motivo); `catalogue` v2 (itens consumíveis, grupos, teclas válidas, modelos de automação); gate de versão + migração v1 → v2 ao carregar (caminho do ADR 0028) | protocol, server | AB-03, AB-07 | Decisões 3 e 5. Campos novos opcionais com default |
 | AB-10 | `ActionBar`: a fileira de 124 px volta (`grid-template-rows: minmax(0,1fr) 124px`), 2 × 12 `Slot` de 36 px com rótulo/tecla/elemento/contagem/cooldown, "AÇÕES" · "Salva automaticamente", CONJUNTO e ALVO (`Select inline`), ⌖ Lure·Follow com a legenda (sem trava de level: o estado "LV 50+" do kit não existe); montada na Cidade e na caçada; teclado → `use-slot`; Shift+clique → `auto: false`; as pills de caçada sobem para `bottom:130` e a legenda de saída fica acima, centralizada | client | AB-09 | Decisões 1–5. Régua: captura 10; JSX de `ActionBar` em `Hud.jsx:71-84` |
 | AB-11 | `ActionConfigModal` (captura 34): ação por catálogo, condições em E (`ConditionList`), tecla, chave automática, "Levar/Repor" (`restock`) | client | AB-10 | Decisão 3, 6. `NumField` = `Input` numérico pequeno (ADR 0029 D2) |
 | AB-12 | `AutomationsPanel` + `AddAutomationModal` + `AutomationConfigModal` (capturas 35–38): lista toggle · nome · resumo · ⚙ · ×, "+ Adicionar" com o catálogo, entrada OU / saída E, montado na Cidade e na caçada; aposenta `BotPanel`, `RuleEditor`, o botão "Lure e alvo" e "Configurações avançadas" | client | AB-10 | Decisão 9. Régua: JSX `AutomationsPanel` em `Hud.jsx:39-47` |
 | AB-13 | Coluna direita e alvo: slot de munição com pilha no set (o seletor sobre o Escudo sai), Mochila com rótulo curto + contagem quando o item tem `shortLabel` (o `Slot` já suporta `label`/`count`), clique na Batalha e no mundo → `select-target`, moldura vermelha no alvo sobre a criatura | client | AB-09 | Decisões 7, 15 |
-| AB-14 | `docs/product` em dia: `bot.md` (v2 inteiro), `items.md` (consumível, munição, cargas), `economy.md` (§20.1 revertido, reposição por lote), `hunt.md`, `combat.md` (regeneração por comida); `packages/*/AGENTS.md` onde a fronteira mudou | docs | AB-13 | Fecha o marco |
+| AB-14 | `docs/product` em dia: `bot.md` (v2 inteiro), `items.md` (consumível, munição, cargas), `economy.md` (§20.1 revertido, reposição por lote), `hunt.md`; `packages/*/AGENTS.md` onde a fronteira mudou | docs | AB-13 | Fecha o marco |
 
 **Pronto quando:** um cavaleiro vê a barra com as contagens reais, aperta a tecla e a magia sai,
 muda de conjunto, liga "Trocar arma/escudo por vida" e o servidor troca; a poção acaba, o bot repõe
@@ -229,7 +231,7 @@ M22 (a partir da AB-08 e do M21):  TP-01 → TP-02 → TP-03 ‖ TP-04 ; TP-05 �
 - Nada do M21/M22 abre antes da AB-09: tudo depende do vocabulário v2 e dos itens consumíveis.
 - CO-05 (skills por família) e TP-05/TP-07 não dependem de nada e servem para ocupar a fila
   enquanto a onda 0 do M18 roda.
-- As migrações de dado (bot v1 → v2, `melee` → famílias, comida inicial, loot da Caixa em Redis
+- As migrações de dado (bot v1 → v2, `melee` → famílias, loot da Caixa em Redis
   descartado com aviso no log) são idempotentes e testadas com as baselines do repositório;
   rodam ao carregar o personagem, nunca em job separado.
 - Toda issue segue o padrão de execução do M14–M17: subagente em worktree própria, spec completa
@@ -254,8 +256,8 @@ M22 (a partir da AB-08 e do M21):  TP-01 → TP-02 → TP-03 ‖ TP-04 ; TP-05 �
   `reviews/hud-parity-audit-2026-09-18.md` §0) e comparada lado a lado com
   `kit-reference/10-hud-hunt.png` — revisão humana do orquestrador, nunca do executor.
 - **Do plano:** o "pronto quando" de cada marco, com um personagem de cada vocação numa hunt com
-  o navegador fechado por uma hora: o estoque cai e repõe, o ledger tem os lotes, ninguém morreu
-  de fome, a configuração v1 de antes da virada continua funcionando.
+  o navegador fechado por uma hora: o estoque cai e repõe, o ledger tem os lotes, a configuração
+  v1 de antes da virada continua funcionando.
 
 ## 6. Riscos
 
@@ -263,9 +265,6 @@ M22 (a partir da AB-08 e do M21):  TP-01 → TP-02 → TP-03 ‖ TP-04 ; TP-05 �
   hunt (o lote paga adiantado, a capacidade limita o estoque, a `arrow` deixa de ser grátis). Os
   números são do conteúdo e podem ser recalibrados sem ADR, mas a primeira semana vai precisar de
   `huntera-observed.md` §4–§5 e do analisador para achar o ponto.
-- **Regeneração por comida** é a mudança mais sentida por quem já joga: sem comida não regenera.
-  A migração e a baseline ("Comer comida" ligada, comida no primeiro lote) existem para isso; se
-  a referência do Tibia for dura demais para o idle-first, o número muda no conteúdo, não a forma.
 - **Duas migrações de personagem no mesmo marco** (bot v1 → v2 e `melee` → famílias). Ambas
   puras, idempotentes e cobertas por teste — mas o dia da virada precisa de backup (#224) antes.
 - **Perfil `combat-v2`** reabre a conformidade do M19: qualquer diferença de arredondamento na
