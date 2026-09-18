@@ -3,10 +3,10 @@
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
 de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), famílias de arma e
 proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), condições
-generalizadas, dano contínuo e campos de tile (CMB-07), auditoria de apresentação de combate
-(CMB-09, bloqueada pela biblioteca parcial), motor de magias com alvo único, área e
-requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de
-combate (ADR 0031) implementados
+generalizadas, dano contínuo e campos de tile (CMB-07), outcomes avançados de crítico, leech e
+mana shield (CMB-08), auditoria de apresentação de combate (CMB-09, bloqueada pela biblioteca
+parcial), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92), skills
+por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -46,7 +46,6 @@ Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Gu
 Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
 correspondente:
 
-- outcomes: crítico, leech e mana shield (CMB-08);
 - PvP e Guild War, fora do M19.
 
 ## O que já existe
@@ -104,6 +103,7 @@ interface DamageOutcome {
   readonly afterResistance: number;  // depois do piso e da resistência, ANTES da imunidade
   readonly immune: boolean;          // imunidade explícita ao tipo
   readonly dodged: boolean;
+  readonly critical: boolean;        // crítico rolou e ativou (CMB-08)
   readonly resolvedDamage: number;   // o que o ruleset aplica
 }
 ```
@@ -279,6 +279,7 @@ reequilibrar quando existirem.
 | Tipos que o blocking mitiga | `["physical"]` (v1) | `packages/content/data/combat/baseline.json`, `defense.blockTypes` |
 | Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
 | Shielding — início, curva, defesa por nível | 10 / 50×1,1 / +2 % `[ABERTO — valores provisórios]` | `packages/content/data/skills/shielding.json` |
+| Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
 
 As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
 perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
@@ -586,6 +587,85 @@ interface FieldSpec {                     // declarado em content
 **Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
 e a UI detalhada de buff.
 
+## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
+
+O CMB-02 devolvia um outcome; o CMB-04 tornou a defesa um estágio; o CMB-08 completa o resultado
+com os modificadores aprovados e torna a **absorção de mana** um estágio visível. Nada disso
+recalcula dano fora do resolver canônico, e nada entra no snapshot nem no S2C (DT-03).
+
+### A ordem, congelada na emenda do ADR 0031
+
+```text
+raw power
+  -> Dodge (1º sorteio, sempre)
+  -> defesa/escudo (2º sorteio, só com fonte elegível e tipo aprovado)
+  -> crítico (3º sorteio, só quando `modifiers.critical` é declarado)
+  -> armadura -> piso -> resistência -> imunidade
+  -> corte do Dodge -> multiplicador do crítico -> arredondamento
+```
+
+As três posições de sorteio são contrato. O crítico é o **último**: um estágio novo que precise
+de sorteio próprio entra depois dele, e mover qualquer posição exige perfil novo.
+
+### Defaults neutros: a ausência preserva o v1
+
+`combat.modifiers` é **opcional**, e a ausência é o default neutro:
+
+- **sem `modifiers`, nenhum sorteio novo é consumido** e o resultado é bit a bit o do
+  CMB-02/03/04 — a sequência de RNG inclusive. Todo conteúdo que não declara modificador segue
+  idêntico, e é o que o `damage.test.ts`/`conformance.test.ts` prendem;
+- **`critical` declarado consome UMA rolagem mesmo com `chance: 0`**, como o bloqueio do CMB-04:
+  a sequência não depende do VALOR;
+- `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
+
+### Leech: base, clamp e evento
+
+- A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
+  leech, e dano absorvido pela mana não rende leech nenhum.
+- `lifeLeechApplied`/`manaLeechApplied` são o que de fato entrou — a vida limitada ao teto, a
+  mana ao espaço livre. Atacante cheio informa zero, e o `creature-healed` de leech **não sai**:
+  o número verde não mente.
+- A fração é truncada (`floor`), nunca arredondada para cima.
+
+### Mana shield como estágio visível (DT-02)
+
+A absorção de mana saiu de `CharacterRuntime.receiveDamage` e virou um estágio de
+`applyDamageOutcome`, com `absorbedByMana` no outcome. A semântica é a de sempre: o escudo
+absorve até onde a mana alcança e **continua ativo até vencer mesmo com mana zero**. Absorção
+total dá `healthDamage` 0 — sem morte, sem contribuição de HP e sem `creature-hit` positivo.
+
+```ts
+interface AppliedDamageOutcome extends DamageOutcome {
+  readonly absorbedByMana: number;   // quanto a mana shield absorveu
+  readonly healthDamage: number;     // o que saiu da VIDA (hit e contribuição)
+  readonly lifeLeechApplied: number; // vida de fato reposta no atacante
+  readonly manaLeechApplied: number; // mana de fato reposta no atacante
+}
+```
+
+O `critical` vive no `DamageOutcome` base, porque é o resolver quem o decide. O
+`AppliedDamageOutcome` é **efêmero**: não vai ao cliente nem ao snapshot, e existe para o host e
+o extrato conseguirem auditar o golpe sem recalcular (DT-01).
+
+### Telemetria e apresentação
+
+- `creature-hit` carrega o **APLICADO** (`healthDamage`), nunca o raw nem o overkill; a
+  contribuição e o `recordDamage` usam a mesma base, então mana absorvida **não** conta como
+  dano.
+- `bestBasicHit`/`bestSpellHit` continuam guardando o **RESOLVIDO** — um golpe de 300 num rato de
+  10 foi um golpe de 300.
+- O life leech repõe vida do atacante e sai como `creature-healed` (`source: 'leech'`), que o
+  hospedeiro desenha como qualquer cura. Mana leech não tem evento enquanto não houver UI.
+- **Nenhum cliente calcula ou modifica o outcome** (DT-03): não há campo novo no protocolo nem
+  janela de breakdown. O detalhamento é CMB-10.
+
+### Escopo
+
+Os modificadores entram pelo `DamageIntent` e o CMB-08 os liga aos **ataques básicos** (corpo a
+corpo, distância e wand/rod), onde a fonte é `combat.modifiers`. Magia, runa, ability de monstro
+e DOT seguem sem modificadores — declará-los é conteúdo novo sob o mesmo contrato. Reflect,
+imbuements não aprovados, PvP e a janela de breakdown ficam fora.
+
 ## O que o jogador vê (FUN-106, FUN-109)
 
 O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe
@@ -714,6 +794,9 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 - `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
   do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
+- `[ABERTO]` Os modificadores avançados (`combat.modifiers`: chance/multiplicador do crítico e as
+  frações de life/mana leech) não estão declarados no conteúdo real: **ausente é neutro**, e
+  ligá-los é conteúdo novo com `Content.version` novo. Os valores só entram quando medidos.
 - `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
   zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
   muda o consumo de RNG e exige perfil novo (ADR 0031).

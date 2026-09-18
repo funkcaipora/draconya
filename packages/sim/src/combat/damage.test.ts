@@ -111,6 +111,7 @@ describe('o outcome v1 é auditável (CMB-02, ADR 0031)', () => {
       afterResistance: 80,
       immune: false,
       dodged: false,
+      critical: false,
       resolvedDamage: 80,
     });
   });
@@ -235,6 +236,97 @@ describe('mitigação por tipo: resistência, vulnerabilidade e imunidade (CMB-0
       swing, { armor: 20, dodgeChance: 0, mitigation: mitigation({}) }, 'pve', combat, rigged(false),
     );
     expect(empty).toEqual(plain);
+  });
+});
+
+describe('outcomes avançados: crítico e leech (CMB-08)', () => {
+  /** Sorteios na ORDEM do golpe: Dodge, bloqueio, crítico. */
+  const rolls = (...values: boolean[]): Rng => {
+    let index = 0;
+    return { chance: () => values[index++] ?? false } as unknown as Rng;
+  };
+  const combatWithDefense: Combat = {
+    ...combat,
+    defense: { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] },
+  };
+  const crit = (chance: number, multiplier: number) => ({ critical: { chance, multiplier } });
+
+  it('sem modificador NÃO consome sorteio novo e é sempre não-crítico', () => {
+    // É a âncora do perfil aditivo: o conteúdo que não declara modificador reproduz o v1,
+    // inclusive a sequência do gerador.
+    const withModifiers = Rng.fromSeed('x');
+    const plain = Rng.fromSeed('x');
+    const a = resolveDamage(swing, plate, 'pve', combat, withModifiers);
+    const b = resolveDamage(swing, plate, 'pve', combat, plain);
+    expect(a.critical).toBe(false);
+    expect(a.resolvedDamage).toBe(b.resolvedDamage);
+    expect(withModifiers.getState()).toEqual(plain.getState());
+  });
+
+  it('crítico declarado com chance 0 AINDA consome a rolagem', () => {
+    // Mesma regra do bloqueio do CMB-04: a sequência não pode depender do valor.
+    const zero = Rng.fromSeed('x');
+    const none = Rng.fromSeed('x');
+    resolveDamage({ ...swing, modifiers: crit(0, 2) }, plate, 'pve', combat, zero);
+    resolveDamage(swing, plate, 'pve', combat, none);
+    expect(zero.getState()).not.toEqual(none.getState());
+  });
+
+  it('o crítico multiplica o dano mitigado, e o arredondamento continua no fim', () => {
+    const result = resolveDamage(
+      { ...swing, modifiers: crit(1, 2) }, plate, 'pve', combat, rolls(false, true),
+    );
+    // 100 − armadura 20 = 80 → crítico ×2 = 160.
+    expect(result.critical).toBe(true);
+    expect(result.resolvedDamage).toBe(160);
+    // O piso e a resistência informados NÃO incluem o crítico — ele é o último estágio.
+    expect(result.afterResistance).toBe(80);
+  });
+
+  it('a rolagem do crítico é a TERCEIRA: depois do Dodge e da defesa', () => {
+    // `rolls(dodge, bloqueio, crítico)`: o crítico só ativa com o terceiro valor.
+    const shield = { kind: 'shield' as const, defense: 0 };
+    const noCrit = resolveDamage(
+      { ...swing, modifiers: crit(1, 2) },
+      { armor: 0, dodgeChance: 0, defense: shield }, 'pve', combatWithDefense,
+      rolls(false, false, false),
+    );
+    expect(noCrit.critical).toBe(false);
+    const critHit = resolveDamage(
+      { ...swing, modifiers: crit(1, 2) },
+      { armor: 0, dodgeChance: 0, defense: shield }, 'pve', combatWithDefense,
+      rolls(false, false, true),
+    );
+    expect(critHit.critical).toBe(true);
+    expect(critHit.resolvedDamage).toBe(200);
+    // Se a rolagem fosse a primeira, o `true` de dodge ativaria o crítico — e não ativa.
+    const dodgeFirst = resolveDamage(
+      { ...swing, modifiers: crit(1, 2) },
+      { armor: 0, dodgeChance: 1, defense: shield }, 'pve', combatWithDefense,
+      rolls(true, false, false),
+    );
+    expect(dodgeFirst.critical).toBe(false);
+    expect(dodgeFirst.dodged).toBe(true);
+  });
+
+  it('o crítico é consumido uma vez por golpe, mesmo com imunidade', () => {
+    // Dano zero por imunidade ainda passa pela mesma rolagem — a sequência é do golpe.
+    const immune = resolveDamage(
+      { ...swing, modifiers: crit(1, 2) },
+      { armor: 0, dodgeChance: 0, mitigation: compileMitigation({ resistances: {}, immunities: ['physical'] }) },
+      'pve', combat, rolls(false, true),
+    );
+    expect(immune.immune).toBe(true);
+    expect(immune.critical).toBe(true);
+    expect(immune.resolvedDamage).toBe(0);
+  });
+
+  it('leech NÃO consome sorteio: a sequência é a de um golpe sem modificador', () => {
+    const withLeech = Rng.fromSeed('x');
+    const plain = Rng.fromSeed('x');
+    resolveDamage({ ...swing, modifiers: { lifeLeech: 0.5, manaLeech: 0.5 } }, plate, 'pve', combat, withLeech);
+    resolveDamage(swing, plate, 'pve', combat, plain);
+    expect(withLeech.getState()).toEqual(plain.getState());
   });
 });
 

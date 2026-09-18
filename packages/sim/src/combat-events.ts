@@ -46,7 +46,11 @@ export interface CreatureHealed {
   readonly kind: 'creature-healed';
   readonly creatureId: string | number;
   readonly amount: number;
-  readonly source: 'spell' | 'supply';
+  /**
+   * `leech` é o CMB-08: a vida que o life leech repôs no ATACANTE. O hospedeiro o desenha como
+   * cura, como os outros — a apresentação não distingue, e não precisa enquanto não há UI.
+   */
+  readonly source: 'spell' | 'supply' | 'leech';
   readonly position: WorldPoint;
 }
 

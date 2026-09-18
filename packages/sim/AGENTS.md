@@ -348,3 +348,17 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   de uma vez, e de vida cheia a regeneração não anuncia nada — o level up que não anuncia
   fica com o máximo velho na barra até a reanexação. `targets` do `spell-cast` é vetor NOVO de
   propósito: `#spellHits` é reaproveitado, e o evento é drenado depois.
+- **Outcome avançado é etapa explícita, e a ausência de modificador preserva o v1** (CMB-08,
+  emenda do ADR 0031). `resolveDamage` continua PURO e decide o resolvido e o crítico;
+  `applyDamageOutcome` (`combat/outcome.ts`) é a ÚNICA etapa que escreve recurso — mana shield,
+  HP efetivamente removido e leech —, e opera só os runtimes da sessão dona. O mana shield saiu
+  de `CharacterRuntime.receiveDamage`, que voltou a ser só vida; o escudo absorve até onde a
+  mana alcança e segue ativo até vencer mesmo com mana zero. A ordem do RNG é contrato: Dodge
+  (1º, sempre), defesa (2º, se elegível), crítico (3º, **só quando `intent.modifiers.critical`
+  é declarado** — declarado com chance 0 ainda consome). `combat.modifiers` ausente NÃO consome
+  sorteio nenhum, e é o que mantém bit a bit o CMB-02/03/04; por isso o conteúdo real não o
+  declara ainda. O leech usa o HP APLICADO (`healthDamage`), nunca o resolvido — overkill e
+  absorção total não rendem leech — e o que de fato repõe é clampado no teto do atacante. O
+  `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
+  com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
+  há campo de protocolo nem UI de breakdown (DT-03).

@@ -513,3 +513,86 @@ resolver canônico continua o ponto público único.
 
 Campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de buff ficam
 para CMB-08 e seguintes, como a matriz já previa.
+
+## Emenda — 2026-09-18: outcomes avançados — crítico, leech e mana shield (CMB-08)
+
+Esta emenda implementa a linha "Outcomes (crítico, leech, mana shield)" da matriz. O que ela NÃO
+muda: o perfil `combat-v1` continua aditivo, a rolagem de Dodge continua o PRIMEIRO ato, o
+arredondamento continua só no fim e o resolver canônico continua o ponto público único. Onde
+esta emenda e o texto acima divergirem, vale a emenda.
+
+### Ordem canônica e posição do RNG
+
+A ordem do perfil passa a ser, nesta ordem exata:
+
+1. **uma única rolagem de Dodge, sempre consumida, primeiro ato** (inalterado);
+2. **defesa/escudo** (CMB-04) — só rola com fonte elegível e tipo aprovado (inalterado);
+3. **crítico** — rola **apenas quando o intent declara `modifiers.critical`**;
+4. **armadura por tipo**, sem RNG;
+5. **piso** (`minimumDamageFraction`), depois da armadura e antes da resistência;
+6. **resistência/vulnerabilidade por tipo**;
+7. **imunidade explícita**, que zera sem o piso revogar;
+8. **corte do Dodge**, se a rolagem ativou;
+9. **multiplicador do crítico**, se ativou (multiplicativo e comutativo com o Dodge);
+10. **arredondamento** só no fim, com piso em zero.
+
+As posições de sorteio são contrato: **Dodge é o primeiro**, a defesa é o segundo (quando
+elegível), e o crítico é o **terceiro e último**, depois da defesa. Um modificador novo que
+precise de sorteio próprio entra depois do crítico e exige perfil novo; um estágio que precise
+mover qualquer uma das três posições também.
+
+### Defaults neutros: a ausência é o contrato
+
+A regra é a mesma da defesa do CMB-04, e é o que preserva o v1 bit a bit:
+
+- **`modifiers` ausente é neutro**: nenhum sorteio novo é consumido, e o resultado e a sequência
+  de RNG são exatamente os do CMB-02/03/04. Todo conteúdo que não declara modificador segue
+  idêntico — inclusive as fixtures.
+- **`modifiers.critical` declarado consome UMA rolagem mesmo com `chance: 0`**, para a sequência
+  não depender do VALOR (o mesmo argumento do `blockChance`). `lifeLeech`/`manaLeech` são fração
+  e **não consomem RNG**.
+- `combat.modifiers` é conteúdo versionado (invariante 7). Declará-lo é conteúdo NOVO, com
+  `Content.version` novo; não reinterpreta sessão nenhuma.
+
+### Leech: base aprovada e clamp
+
+- A base do leech é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill
+  não rende leech, e dano integralmente absorvido pela mana não rende leech nenhum. É a mesma
+  base da contribuição e do `creature-hit`.
+- `lifeLeechApplied`/`manaLeechApplied` são o que **de fato** entrou: a vida é limitada ao teto
+  (`heal` devolve o reposto) e a mana ao espaço livre. Atacante cheio informa zero, e o evento
+  não mente. A fração é truncada (`floor`), nunca arredondada para cima.
+- Não há sorteio de leech.
+
+### Mana shield como estágio visível (DT-02)
+
+A absorção de mana deixa de ser opaca dentro de `CharacterRuntime.receiveDamage` e passa a ser um
+estágio de `applyDamageOutcome`, com `absorbedByMana` no outcome. A semântica existente é
+mantida: o escudo absorve até onde a mana alcança, **continua ativo até vencer mesmo com mana
+zero**, e o que sobra vai na vida. Dano integralmente absorvido produz `healthDamage` 0 — sem
+morte, sem atribuição de HP e sem `creature-hit` positivo.
+
+### Contrato e efemeridade
+
+O `resolveDamage` continua PURO e é o único ponto de decisão do resolvido e do crítico.
+`applyDamageOutcome` é a etapa seguinte e a única que escreve recurso; opera apenas os runtimes
+da sessão dona (invariante 9). O `AppliedDamageOutcome` estende o `DamageOutcome` com
+`absorbedByMana`, `healthDamage`, `lifeLeechApplied` e `manaLeechApplied` (o `critical` vive no
+`DamageOutcome` base, porque é o resolver quem o decide).
+
+O objeto é **efêmero**: não entra no snapshot e não vai ao S2C (DT-03). O `creature-hit` continua
+mostrando o APLICADO (`healthDamage`), nunca o raw nem o overkill, e o `bestBasicHit`/`bestSpellHit`
+continua guardando o RESOLVIDO. A contribuição usa `healthDamage`, nunca a mana absorvida.
+
+### Escopo desta emenda
+
+Os modificadores são do ATACANTE e entram pelo `DamageIntent`. O CMB-08 os liga aos **ataques
+básicos** (corpo a corpo, distância e wand/rod), onde a fonte é o perfil `combat.modifiers`.
+Magia, runa, ability de monstro e DOT continuam sem modificadores — declará-los é conteúdo novo
+sob o mesmo contrato, e não muda o v1. Não há reflect, imbuement, PvP, opcode nem UI de
+breakdown nesta entrega.
+
+### Fora do escopo
+
+Reflect, imbuements não aprovados, PvP, a janela de breakdown e a otimização/benchmark global
+(CMB-10) ficam de fora, como a matriz já previa.

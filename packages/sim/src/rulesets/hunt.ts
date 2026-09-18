@@ -34,7 +34,8 @@ import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import type { Defender } from '../combat/damage.js';
+import type { DamageOutcome, Defender } from '../combat/damage.js';
+import { applyDamageOutcome } from '../combat/outcome.js';
 import type { DefenseSource } from '../combat/defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
@@ -1847,13 +1848,15 @@ export class HuntRuleset implements Ruleset {
       const outcome = resolveDamage(
         intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
       );
-      const applied = target.receiveDamage(
-        Math.round(outcome.resolvedDamage * target.conditions.damageTakenScale()),
+      // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
+      // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
+      const applied = applyDamageOutcome(
+        target, outcome, null, target.conditions.damageTakenScale(),
       );
-      recordDamage(target.contribution, attacker, applied);
+      recordDamage(target.contribution, attacker, applied.healthDamage);
       session.emit({
         kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
-        amount: applied, source: 'spell', position: this.#at(target),
+        amount: applied.healthDamage, source: 'spell', position: this.#at(target),
       });
       this.#emitCharacterHealth(session, target);
       if (target.health <= 0) session.kill(target);
@@ -1865,11 +1868,11 @@ export class HuntRuleset implements Ruleset {
       { armor: definition?.armor ?? 0, dodgeChance: 0, mitigation: definition?.mitigation },
       'pve', this.#options.combat, session.rng,
     );
-    const applied = target.receiveDamage(outcome.resolvedDamage);
-    recordDamage(target.contribution, attacker, applied);
+    const applied = applyDamageOutcome(target, outcome, null);
+    recordDamage(target.contribution, attacker, applied.healthDamage);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
-      amount: applied, source: 'spell', position: this.#at(target),
+      amount: applied.healthDamage, source: 'spell', position: this.#at(target),
     });
     this.#emitHealth(session, target);
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -2419,7 +2422,7 @@ export class HuntRuleset implements Ruleset {
         this.#options.combat,
         session.rng,
       );
-      this.#applyMonsterHit(session, subject, character, ability, defender, result.resolvedDamage, source);
+      this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
       // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
       // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
       if (ability.condition !== undefined && character.alive) {
@@ -2441,18 +2444,20 @@ export class HuntRuleset implements Ruleset {
    */
   #applyMonsterHit(
     session: Session, subject: string, character: CharacterRuntime, ability: MonsterAbility,
-    defender: Defender, resolved: number, source: 'melee' | 'spell',
+    defender: Defender, outcome: DamageOutcome, source: 'melee' | 'spell',
   ): void {
-    // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
-    const applied = character.receiveDamage(
-      Math.round(resolved * character.conditions.damageTakenScale()),
+    // O CMB-08: o mana shield do personagem vira estágio explícito, e o hit/atribuição usam o
+    // HP APLICADO. A postura (#155) escala o dano TOMADO antes do escudo; o atacante é `null`
+    // porque monstro não faz leech — o outcome informa a mana absorvida sem matar ninguém.
+    const applied = applyDamageOutcome(
+      character, outcome, null, character.conditions.damageTakenScale(),
     );
-    recordDamage(character.contribution, subject, applied);
+    recordDamage(character.contribution, subject, applied.healthDamage);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
-      amount: applied, source, position: this.#at(character),
+      amount: applied.healthDamage, source, position: this.#at(character),
     });
     this.#emitCharacterHealth(session, character);
     // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
@@ -2664,10 +2669,11 @@ export class HuntRuleset implements Ruleset {
           rawDamage: this.#weaponPower(session, character, profile),
           source: 'basic-attack',
           damageType: profile.damageType,
+          modifiers: this.#options.combat.modifiers,
         },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.resolvedDamage, 'melee');
+      this.#land(session, character, monster, result, 'melee');
       this.#practice(session, character, profile.family, 1);
       return;
     }
@@ -2690,10 +2696,11 @@ export class HuntRuleset implements Ruleset {
           rawDamage: this.#weaponPower(session, character, how),
           source: 'basic-attack',
           damageType: how.damageType,
+          modifiers: this.#options.combat.modifiers,
         },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.resolvedDamage, 'spell');
+      this.#land(session, character, monster, result, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
       this.#practice(session, character, how.family, manaPerHit);
       return;
@@ -2707,10 +2714,11 @@ export class HuntRuleset implements Ruleset {
         rawDamage: this.#weaponPower(session, character, profile),
         source: 'basic-attack',
         damageType: profile.damageType,
+        modifiers: this.#options.combat.modifiers,
       },
       defender, 'pve', this.#options.combat, session.rng,
     );
-    this.#land(session, character, monster, result.resolvedDamage, 'melee');
+    this.#land(session, character, monster, result, 'melee');
     // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
     // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
     this.#practice(session, character, profile.family, 1);
@@ -2758,22 +2766,29 @@ export class HuntRuleset implements Ruleset {
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    resolved: number, source: 'melee' | 'spell',
+    outcome: DamageOutcome, source: 'melee' | 'spell',
   ): void {
-    const applied = monster.receiveDamage(resolved);
-    recordDamage(monster.contribution, character.id, applied);
+    // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
+    // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
+    // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
+    const applied = applyDamageOutcome(monster, outcome, character);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-      amount: applied, source, position: this.#at(monster),
+      amount: applied.healthDamage, source, position: this.#at(monster),
     });
     this.#emitHealth(session, monster);
+    // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
+    // ou alvo integralmente absorvido pela mana, informa zero e não emite evento — o número
+    // verde não mente.
+    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech');
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
-    session.credit(character.id, 'bestBasicHit', resolved);
+    session.credit(character.id, 'bestBasicHit', outcome.resolvedDamage);
   }
 
   /**

@@ -1039,6 +1039,23 @@ export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
   new Map([[COMBAT_V1.id, COMBAT_V1]]);
 
 /**
+ * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
+ *
+ * É o lado do ATACANTE, o irmão de `mitigation` (defensor) e de `defense` (peça). A ausência de
+ * um campo é o default NEUTRO e não consome sorteio nenhum — é o que preserva o `combat-v1` bit
+ * a bit para todo conteúdo que não declara modificador. Declarar `critical` consome a rolagem
+ * do crítico mesmo com `chance: 0`, pela mesma regra aditiva da defesa do CMB-04 (ADR 0031).
+ *
+ * `lifeLeech`/`manaLeech` são a fração do HP EFETIVAMENTE removido que volta como vida/mana; não
+ * consomem RNG, e o quanto de fato repõe é limitado pelo teto do atacante (`applyDamageOutcome`).
+ */
+export interface DamageModifiers {
+  readonly critical?: { readonly chance: number; readonly multiplier: number } | undefined;
+  readonly lifeLeech?: number | undefined;
+  readonly manaLeech?: number | undefined;
+}
+
+/**
  * Coeficientes de combate. O §12.1 é explícito: fórmula e parâmetro são CONTEÚDO, não código.
  *
  * O que o PRD decide (§12.2) e o que ele não decide estão separados de propósito — o que não
@@ -1114,6 +1131,24 @@ export const combatSchema = z.object({
       }
       seen.add(type);
     }
+  }).optional(),
+  /**
+   * Os modificadores avançados do ATACANTE (CMB-08, emenda do ADR 0031): crítico, life leech e
+   * mana leech. **Ausente é o default NEUTRO**, e é o que preserva o v1: sem `modifiers` nenhum
+   * sorteio novo é consumido, e o resultado é bit a bit o do CMB-02/03/04.
+   *
+   * `critical` declarado consome UMA rolagem a mais, DEPOIS do Dodge e da defesa — mesmo com
+   * `chance: 0`, para a sequência não depender do valor. `lifeLeech`/`manaLeech` não consomem
+   * RNG: são fração do HP aplicado, e o `applyDamageOutcome` limita o que repõe ao teto do
+   * atacante. Os números são provisórios (`_open`).
+   */
+  modifiers: z.object({
+    critical: z.object({
+      chance: z.number().min(0).max(1),
+      multiplier: z.number().min(1),
+    }).optional(),
+    lifeLeech: z.number().min(0).max(1).optional(),
+    manaLeech: z.number().min(0).max(1).optional(),
   }).optional(),
   /**
    * A conversão do Base Power (#155, ADR 0026 decisão 5) — UMA para todas as magias, e nossa:

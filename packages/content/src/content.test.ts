@@ -489,6 +489,26 @@ describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  i
     expect(computeVersion(base({ combat: [withProfile] })))
       .not.toBe(computeVersion(base({ combat: [withoutProfile] })));
   });
+
+  it('modifiers ausente é o default NEUTRO — o conteúdo existente segue v1', () => {
+    // É a ausência que preserva o resultado e a sequência de RNG: nenhum sorteio novo.
+    expect(buildContent(base()).combat.modifiers).toBeUndefined();
+  });
+
+  it('modifiers declarado parseia, e a chance fora de [0,1] derruba o boot', () => {
+    const comMods = {
+      ...combat,
+      modifiers: { critical: { chance: 0.25, multiplier: 2 }, lifeLeech: 0.1, manaLeech: 0.05 },
+    };
+    expect(buildContent(base({ combat: [comMods] })).combat.modifiers).toEqual({
+      critical: { chance: 0.25, multiplier: 2 }, lifeLeech: 0.1, manaLeech: 0.05,
+    });
+    const chanceInvalida = {
+      ...combat,
+      modifiers: { critical: { chance: 1.5, multiplier: 2 } },
+    };
+    expect(() => buildContent(base({ combat: [chanceInvalida] }))).toThrow(/combat/);
+  });
 });
 
 describe('a rota da hunt é apontada, não inferida', () => {

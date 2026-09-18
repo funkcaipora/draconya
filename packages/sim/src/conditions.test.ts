@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
+import { applyDamageOutcome } from './combat/outcome.js';
+import type { DamageOutcome } from './combat/damage.js';
 import { Conditions, conditionFromSpec, tickOf } from './conditions.js';
 import type { ConditionState } from './conditions.js';
 import { MonsterRuntime } from './monster/monster.js';
@@ -132,20 +134,37 @@ describe('the mana shield on the character', () => {
     ...(shielded ? { conditions: [{ key: 'mana-shield' as const, spellId: 'magic-shield', expiresAtMs: 180_000 }] } : {}),
   });
 
-  it('takes the damage from mana first, and returns only what left the health', () => {
-    // Mutação que mata: descontar da vida antes da mana, ou devolver o total.
+  // O CMB-08 tirou o escudo de `receiveDamage`: ele agora é um estágio de `applyDamageOutcome`,
+  // e é lá que o teste mede o que absorveu.
+  const damage = (resolvedDamage: number): DamageOutcome => ({
+    profile: 'combat-v1',
+    intent: { rawDamage: resolvedDamage, source: 'monster-attack', damageType: 'physical' },
+    damageType: 'physical',
+    afterDefense: resolvedDamage, afterArmor: resolvedDamage, armorReduction: 0,
+    minimumDamage: 0, afterResistance: resolvedDamage, immune: false, dodged: false,
+    critical: false, resolvedDamage,
+  });
+
+  it('takes the damage from mana first, and reports what left the health', () => {
+    // Mutação que mata: descontar da vida antes da mana, ou informar o total.
     const hero = new CharacterRuntime(state());
-    expect(hero.receiveDamage(50)).toBe(20);
+    const first = applyDamageOutcome(hero, damage(50), null);
+    expect(first.healthDamage).toBe(20);
+    expect(first.absorbedByMana).toBe(30);
     expect(hero.mana).toBe(0);
     expect(hero.health).toBe(80);
     // Mana zerada: o escudo continua "ativo", e tudo vai na vida — como no Tibia.
-    expect(hero.receiveDamage(10)).toBe(10);
+    const second = applyDamageOutcome(hero, damage(10), null);
+    expect(second.healthDamage).toBe(10);
+    expect(second.absorbedByMana).toBe(0);
     expect(hero.health).toBe(70);
   });
 
   it('is not there without the condition, and the character serializes direction and conditions', () => {
     const plain = new CharacterRuntime(state(false));
-    expect(plain.receiveDamage(50)).toBe(50);
+    const hit = applyDamageOutcome(plain, damage(50), null);
+    expect(hit.healthDamage).toBe(50);
+    expect(hit.absorbedByMana).toBe(0);
     expect(plain.mana).toBe(30);
     expect(plain.direction).toBe('south');
     expect(plain.getState()).not.toHaveProperty('conditions');

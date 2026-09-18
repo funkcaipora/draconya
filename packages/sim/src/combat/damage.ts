@@ -15,7 +15,7 @@
 // gold — continua sendo do chamador; o resolver só faz a conta.
 
 import { COMBAT_PROFILES } from '@draconya/content';
-import type { Combat, CompiledMitigation, DamageType } from '@draconya/content';
+import type { Combat, CompiledMitigation, DamageModifiers, DamageType } from '@draconya/content';
 import { resolveDefense } from './defense.js';
 import type { DefenseSource } from './defense.js';
 import type { Rng } from '../rng.js';
@@ -67,6 +67,11 @@ export interface DamageIntent {
   readonly rawDamage: number;
   readonly source: DamageSource;
   readonly damageType: DamageType;
+  /**
+   * Os modificadores avançados do atacante (CMB-08): crítico, life leech e mana leech. Ausente é
+   * o default NEUTRO — nenhum sorteio novo é consumido e o resultado é bit a bit o do v1.
+   */
+  readonly modifiers?: DamageModifiers | undefined;
 }
 
 /**
@@ -96,6 +101,12 @@ export interface DamageOutcome {
   /** Imunidade EXPLÍCITA ao tipo (DT-02): zera, e o piso não a revoga. */
   readonly immune: boolean;
   readonly dodged: boolean;
+  /**
+   * O crítico rolou e ativou (CMB-08). A rolagem é o TERCEIRO sorteio do golpe, DEPOIS do Dodge
+   * e da defesa, e só existe quando o intent declara `modifiers.critical`. Ausente o modificador,
+   * é sempre `false` e nenhum sorteio é consumido — é o que preserva o v1.
+   */
+  readonly critical: boolean;
   /** O que sobrou depois de tudo, arredondado só no fim. É o que o ruleset aplica. */
   readonly resolvedDamage: number;
 }
@@ -112,12 +123,14 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
  *
  *   1. uma única rolagem de Dodge, SEMPRE consumida, primeiro ato;
  *   2. defesa/escudo (CMB-04) — só rola quando há fonte elegível e o tipo é aprovado;
- *   3. armadura por tipo, sem RNG;
- *   4. piso (`minimumDamageFraction`) — DEPOIS da armadura e ANTES da resistência;
- *   5. resistência/vulnerabilidade por tipo (identidade sem dado);
- *   6. imunidade explícita, que zera sem o piso revogar;
- *   7. corte do Dodge, se a rolagem ativou;
- *   8. arredondamento só no fim, com piso em zero.
+ *   3. crítico (CMB-08) — só rola quando o intent declara `modifiers.critical`;
+ *   4. armadura por tipo, sem RNG;
+ *   5. piso (`minimumDamageFraction`) — DEPOIS da armadura e ANTES da resistência;
+ *   6. resistência/vulnerabilidade por tipo (identidade sem dado);
+ *   7. imunidade explícita, que zera sem o piso revogar;
+ *   8. corte do Dodge, se a rolagem ativou;
+ *   9. multiplicador do crítico, se ativou;
+ *  10. arredondamento só no fim, com piso em zero.
  *
  * A ordem difere da do Tibia (defesa antes de tudo) porque a POSIÇÃO DO SORTEIO é do Draconya:
  * a rolagem é o primeiro ato para que nenhum estágio novo a desloque. Um estágio que mude a
@@ -143,6 +156,12 @@ function resolveCombatV1(
   // mantém o v1 bit a bit. A rolagem de Dodge acima continua sendo o primeiro ato.
   const afterDefense = resolveDefense(intent, defender.defense, combat, rng).afterDefense;
 
+  // Crítico (CMB-08): o TERCEIRO sorteio, e SÓ quando o intent declara o modificador. Declarado
+  // com `chance: 0`, ele ainda é consumido — a sequência não pode depender do VALOR, como no
+  // bloqueio. Ausente o modificador, nenhum sorteio novo e o resultado é bit a bit o do v1.
+  const criticalModifier = intent.modifiers?.critical;
+  const critical = criticalModifier !== undefined && rng.chance(criticalModifier.chance);
+
   const armorReduction = defender.armor * combat.armorEffectiveness[intent.damageType];
   const afterArmor = afterDefense - armorReduction;
   // Piso: nem a armadura mais alta zera um golpe. Dano zero contra um alvo pesado transforma
@@ -164,7 +183,11 @@ function resolveCombatV1(
   const immune = defender.mitigation?.immunities.has(intent.damageType) ?? false;
   const afterImmunity = immune ? 0 : afterResistance;
 
-  const damage = dodged ? afterImmunity * combat.dodgeMultiplier : afterImmunity;
+  // O crítico multiplica o dano já mitigado, antes do corte do Dodge. Os dois são
+  // multiplicativos e comutativos; o arredondamento continua só no fim, e a ordem fica
+  // documentada (ADR 0031, emenda CMB-08). A imunidade zera e nenhum crítico a revoga.
+  const afterCrit = critical ? afterImmunity * (criticalModifier?.multiplier ?? 1) : afterImmunity;
+  const damage = dodged ? afterCrit * combat.dodgeMultiplier : afterCrit;
   // Arredonda no FIM: arredondar antes do dodge faria 50% de 3 virar 2, e o jogador veria
   // uma esquiva que reduziu um terço.
   return {
@@ -178,6 +201,7 @@ function resolveCombatV1(
     afterResistance,
     immune,
     dodged,
+    critical,
     resolvedDamage: Math.max(0, Math.round(damage)),
   };
 }

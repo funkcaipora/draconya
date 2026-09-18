@@ -5123,3 +5123,65 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
     expect(resumedHero.health).toBeLessThan(before);
   });
 });
+
+describe('outcomes avançados na hunt (CMB-08)', () => {
+  // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
+  // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.
+  const critCombat = {
+    ...combat,
+    modifiers: { critical: { chance: 1, multiplier: 2 }, lifeLeech: 0.5 },
+  };
+
+  it('o crítico multiplica o resolvido e o leech repõe no atacante, com evento', () => {
+    // Desarmado 25 ×2 = 50, que é a vida do rato: um golpe, e o leech de 50 % repõe 25.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, combat: [critCombat],
+      monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    const before = hero.health;
+    run(session, 5_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // O recorde é o RESOLVIDO (50), não o aplicado — o rato tinha exatamente 50.
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(50);
+    expect(hero.health).toBe(before + 25);
+    const healed = ofKind(session.drainEvents(), 'creature-healed')
+      .filter((e) => e.source === 'leech');
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed[0]).toMatchObject({ creatureId: 'hero', amount: 25 });
+  });
+
+  it('dano integralmente absorvido pela mana NÃO mata nem conta atribuição de HP', () => {
+    // Sem o escudo, um golpe de 50 mataria o herói de 1. Com mana de sobra, o HP aplicado é zero,
+    // o `creature-hit` carrega zero e nenhum dano entra na contribuição dele.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 1, mana: 1_000,
+      monstersRaw: [{ ...rat, health: 100_000, attack: 50 }],
+    });
+    hero.conditions.apply({
+      key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 1_000_000,
+    });
+    run(session, 20_000, 100);
+
+    expect(hero.alive).toBe(true);
+    expect(session.ended).toBeNull();
+    expect(hero.health).toBe(1);
+    expect(hero.mana).toBeLessThan(1_000);
+    expect(hero.contribution.actorCount).toBe(0);
+
+    const hits = ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.creatureId === 'hero');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.amount === 0)).toBe(true);
+  });
+
+  it('sem modificadores a hunt é a de sempre: nenhum evento de leech', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 100, monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
+      .toBe(false);
+  });
+});

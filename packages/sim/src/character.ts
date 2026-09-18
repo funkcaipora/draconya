@@ -331,20 +331,15 @@ export class CharacterRuntime {
   }
 
   /**
-   * Aplica dano e devolve quanto saiu da VIDA. Morrer é decisão do ruleset.
+   * Aplica dano à VIDA e devolve quanto saiu. Morrer é decisão do ruleset.
    *
-   * Com magic shield (#155) o dano sai da mana primeiro, e só o resto vai na vida — o escudo
-   * continua "ativo" até vencer mesmo com a mana em zero, como no Tibia. O devolvido é o que
-   * a barra de vida e a atribuição de morte usam.
+   * Desde o CMB-08 a mana shield NÃO mora mais aqui: ela é um estágio explícito de
+   * `applyDamageOutcome` (`combat/outcome.ts`), que descreve quanto absorveu antes de chamar
+   * este método. O personagem guarda só a parte de vida, como o monstro — a divisão de recurso
+   * é de quem aplica, e é o que permite testar absorção total e parcial.
    */
   receiveDamage(amount: number): number {
-    let remaining = amount;
-    if (this.conditions.hasManaShield()) {
-      const absorbed = Math.min(remaining, this.mana);
-      this.mana -= absorbed;
-      remaining -= absorbed;
-    }
-    const applied = Math.min(remaining, this.health);
+    const applied = Math.min(amount, this.health);
     this.health -= applied;
     if (this.health <= 0) {
       this.health = 0;
