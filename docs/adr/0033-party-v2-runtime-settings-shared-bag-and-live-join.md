@@ -81,7 +81,7 @@ ADR 0032 (decisão 14) põe no M20 o DPS/HPS por membro e o "sim de todos" para 
 13. **Do ADR 0032, decisão 14, no M20:** DPS/HPS por membro (acumulador por evento, janela de
     60 s aparada na leitura, nada por tick) em `party-state.members[]` e no analisador; e
     **encerrar para todos exige o sim de todos** — proposta do líder, aprovação por membro em
-    60 s, encerramento com settlement; sair sozinho continua livre. Duas issues (PT-01, PT-02)
+    60 s, encerramento com settlement; sair sozinho continua livre. Duas issues (#431 PT-01, #432 PT-02)
     entram no milestone depois das 18 do plano.
 
 ## Alternativas

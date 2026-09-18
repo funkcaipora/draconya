@@ -379,8 +379,8 @@ por membro e Σ delta = Σ gold que caiu + vendas − supplies. `pnpm load --par
 | 16 · [#406](https://github.com/funkcaipora/draconya/issues/406) | client | bot: Follow e alvo da cura | #401 |
 | 17 · [#407](https://github.com/funkcaipora/draconya/issues/407) | server/tools | critério de saída do M20 (`party-v2-exit.postgres.test.ts`, db 16) + `pnpm load --party 8` | #404, #405, #406 |
 | 18 · [#408](https://github.com/funkcaipora/draconya/issues/408) | docs | `docs/product/{party,bot,analyzer,monetization,items,economy,chat}.md` sincronizados; ADR 0027 e 0026 com a nota de emenda | #407 |
-| 19 · PT-01 | sim/protocol/server/client | DPS/HPS por membro (ADR 0032 d.14): acumulador por evento de dano causado e cura feita com carimbo lógico, janela de 60 s aparada na leitura, totais da sessão; em `party-state.members[]` e no analisador; linha "DPS · HPS" do painel | #400, M19 (eventos de dano) |
-| 20 · PT-02 | sim/protocol/server/client | Encerrar para todos exige o sim de todos (ADR 0032 d.14): proposta do líder, aprovação por membro em 60 s, encerramento com settlement; sair sozinho continua livre | #394 |
+| 19 · [#431](https://github.com/funkcaipora/draconya/issues/431) (PT-01) | sim/protocol/server/client | DPS/HPS por membro (ADR 0032 d.14): acumulador por evento de dano causado e cura feita com carimbo lógico, janela de 60 s aparada na leitura, totais da sessão; em `party-state.members[]` e no analisador; linha "DPS · HPS" do painel | #400, M19 (eventos de dano) |
+| 20 · [#432](https://github.com/funkcaipora/draconya/issues/432) (PT-02) | sim/protocol/server/client | Encerrar para todos exige o sim de todos (ADR 0032 d.14): proposta do líder, aprovação por membro em 60 s, encerramento com settlement; sair sozinho continua livre | #394 |
 
 **Pronto quando:** ver a descrição do milestone. As linhas 19 e 20 vêm do ADR 0032 (decisão 14)
 e entram no M20 como issues próprias, depois das 18 deste plano.
