@@ -46,6 +46,7 @@ function cityRulesetFor(content: Content, entryTiles?: number) {
     ...(entryTiles === undefined ? {} : { entryTiles }),
     // Os containers ganham os tamanhos iniciais na entrada (#160), como na hunt.
     containers: { items: content.items, progression: content.progression },
+    vocations: content.vocations,
   });
 }
 
