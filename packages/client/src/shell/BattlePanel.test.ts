@@ -146,8 +146,8 @@ describe('o painel Batalha (#254)', () => {
     expect(html).toContain('battle-row battle-row-selected');
     const selectedMatches = html.match(/battle-row-selected/g);
     expect(selectedMatches).toHaveLength(1);
-    expect(html).toMatch(/class="battle-row"[^>]*><span class="battle-name">Rat<\/span>/);
-    expect(html).toMatch(/class="battle-row battle-row-selected"[^>]*><span class="battle-name">Bat<\/span>/);
+    expect(html).toMatch(/class="battle-row"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Rat<\/span>/);
+    expect(html).toMatch(/class="battle-row battle-row-selected"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Bat<\/span>/);
   });
 
   it('targetId 999 não seleciona nenhuma linha', async () => {

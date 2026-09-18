@@ -117,13 +117,8 @@ export function BattlePanel() {
                 key={row.id}
                 className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
               >
-                {/* `battle-name` antes de `battle-icon` no DOM (#348, SV-12; era o contrário
-                    antes do #308): a linha usa `grid-template-areas`, então a ORDEM de origem
-                    não decide a posição visual — os dois continuam onde estavam. Trocar a
-                    ordem aqui não move nada na tela, e nenhum seletor depende dela
-                    (confira `.battle-row`/`.battle-icon`/`.battle-name` em shell.css). */}
-                <span className="battle-name">{row.name}</span>
                 <span className="battle-icon" aria-hidden="true" />
+                <span className="battle-name">{row.name}</span>
                 <span className="battle-percent">{`${String(row.percent)}%`}</span>
                 <span className={`battle-bar battle-bar-${battleTone(row.percent)}`} aria-label={`HP de ${row.name}`}>
                   <span className="battle-bar-fill" style={{ width: `${String(row.percent)}%` }} />
