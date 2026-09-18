@@ -12,6 +12,15 @@
 @import './fonts.css';
 @import './ui.css';
 
+/* Reset universal do kit (#301, ADR 0030, R0-01): o mesmo `*{box-sizing:border-box}` de
+   tmp-design-kit/handoff/ui_kits/draconya/index.html:4. Precisa vir DEPOIS dos três @import
+   acima — a especificação de CSS só aceita @import como as PRIMEIRAS regras de uma folha (fora
+   @charset); uma regra antes deles faz o navegador ignorar esse @import e os seguintes.
+   Sem isto, todo elemento com borda e largura/altura fixas (Slot, IconButton, Checkbox, o
+   ícone do topo) renderiza maior que o valor exato que a variante declara — a diferença é
+   2×(largura da borda + padding) em cada eixo. */
+*, *::before, *::after { box-sizing: border-box; }
+
 :root {
   color-scheme: dark;
   /* Texto sobre pedra (brilho ~70) precisa de mais contraste que sobre o fundo quase preto.
@@ -39,43 +48,90 @@ body {
 .shell {
   position: fixed; inset: 0;
   overflow: hidden;
-  /* --window-bg/--window-line/--window-head/--accent seguem aqui: a moldura de CADA seção
-     (`.windows > section`, o cabeçalho, o ammo picker) ainda lê essas variáveis — "uma seção
-     velha ao lado de uma nova é aceitável entre PRs" (plano §6). Só a CASCA (barra do topo e
-     as colunas) veste o design nesta task. */
-  --window-bg: rgba(13, 15, 24, 0.9);
-  --window-line: rgba(140, 150, 180, 0.28);
-  --window-head: rgba(24, 28, 42, 0.95);
   --accent: #e2b84a;
   --topbar-h: 65px;
   --sidebar-w: 232px;
 }
 
-/* O mundo: o canvas acompanha o elemento, e o elemento é a tela. */
+/* O palco do mundo agrupa o canvas e os overlays DOM absolutos sobre ele. No celular ele fica
+   como referência própria: sem isso cada overlay duplicaria a faixa de 40vh do mundo. */
+.world-stage { position: absolute; inset: 0; }
 .viewport { position: absolute; inset: 0; line-height: 0; overflow: hidden; background: #000; }
 .viewport canvas { display: block; }
+
+/* ---- Arcos de HP/Mana do próprio jogador (#328, RC-15) ----------------------------------- */
+/* A câmera centraliza o personagem em `.world-stage`; o ponto sem tamanho mantém os SVGs e o
+   nome presos a esse centro, em vez de a um tile ou ao tamanho do mapa. */
+.player-vitals, .player-vitals * {
+  pointer-events: none;
+}
+.player-vitals {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 0; height: 0;
+  z-index: 5;
+}
+.vital-arc {
+  position: absolute; left: 50%; top: 50%; width: 200px; height: 200px;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 4px #000);
+}
+.vital-arc-flip { transform: translate(-50%, -50%) scaleX(-1); }
+.vital-arc-track { fill: none; stroke: rgba(0, 0, 0, .55); stroke-width: 9; stroke-linecap: butt; }
+.vital-arc-fill { fill: none; stroke-width: 7; }
+/* Cores literais da composição renderizada do kit, diferentes das barras laterais. */
+.vital-arc-fill-hp { stroke: #3fbf4a; }
+.vital-arc-fill-mp { stroke: #3d5ec8; }
+.player-vitals-name {
+  position: absolute; left: 0; top: -54px; transform: translateX(-50%);
+  font: 700 9px var(--font-mono); color: #8be26f;
+  text-shadow: 0 1px #000, 1px 0 #000, -1px 0 #000, 0 -1px #000;
+  white-space: nowrap;
+}
+
+/* Latência e FPS sobre o mundo (RC-13, ADR 0030). O mundo ocupa a tela inteira neste cliente,
+   enquanto a coluna direita flutua sobre ele; no desktop o offset pula essa coluna para manter a
+   posição visual da régua. No celular, sem coluna sobre o mundo, a regra volta ao offset literal. */
+.world-status {
+  position: absolute; right: calc(var(--sidebar-w) + 12px); bottom: 8px; z-index: 1;
+  display: flex; align-items: center; gap: 10px;
+  font: 7.5px var(--font-mono); letter-spacing: .08em; color: var(--text-faint);
+  text-transform: uppercase; pointer-events: none;
+}
+.world-status-connection { display: inline-flex; align-items: center; }
+.world-status-dot {
+  display: inline-block; width: 5px; height: 5px; margin-right: 5px;
+  border-radius: 50%; background: var(--text-faint);
+}
+.world-status-dot-connected { background: var(--online); }
+.world-status-dot-connecting, .world-status-dot-reconnecting { background: var(--warn); }
+.world-status-dot-failed { background: var(--danger); }
+.world-status-dot-idle { background: var(--text-faint); }
 
 /* ---- A barra do topo (#251, ADR 0029 D3/D8/D9) ------------------------------------------- */
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; height: var(--topbar-h);
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   gap: 14px; padding: 6px 13px; box-sizing: border-box;
-  border-bottom: 1px solid var(--gold-3);
-  background: linear-gradient(180deg, var(--ash-2) 0%, var(--ash-1) 74%, var(--ash-0) 100%);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7);
+  border: 1px solid var(--gold-1);
+  border-top-color: var(--ash-3);
+  border-bottom-color: var(--gold-3);
+  background:
+    linear-gradient(90deg, rgba(38, 27, 25, 0.6), transparent 28%, transparent 72%, rgba(38, 27, 25, 0.6)),
+    linear-gradient(180deg, var(--ash-2) 0%, var(--ash-1) 74%, var(--ash-0) 100%);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), inset 0 -1px rgba(201, 162, 77, 0.1);
   font-family: var(--font-mono);
   z-index: 20;
 }
 .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .topbar-portrait {
-  position: relative;
   display: grid; place-items: center; flex: none; width: 34px; height: 34px;
   border: 1px solid var(--gold-3);
-  background: linear-gradient(145deg, var(--ash-4), var(--ash-1));
+  background:
+    radial-gradient(circle at 50% 42%, #3a301c 0 18%, transparent 19%),
+    linear-gradient(145deg, var(--ash-4), var(--ash-1));
   color: var(--gold-4); font: 600 12.5px var(--font-display);
-}
-.topbar-portrait .item-initial {
-  color: var(--gold-4); font: 600 12.5px var(--font-display);
+  box-shadow: inset 0 0 0 2px var(--ash-1), inset 0 0 0 3px rgba(208, 163, 75, 0.25), 0 1px 4px #000;
+  padding: 0; cursor: pointer;
 }
 .topbar-identity { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .topbar-name {
@@ -88,92 +144,92 @@ body {
 }
 .topbar-gold {
   display: flex; align-items: center; gap: 6px; height: 28px; min-width: 108px;
-  padding: 0 9px; border: 1px solid var(--ash-5); border-radius: 18px;
+  padding: 0 6px 0 9px; border: 1px solid var(--ash-5); border-radius: 18px;
   background: linear-gradient(180deg, var(--ash-4), var(--ash-2));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 1px 2px #000;
   color: var(--gold-5); font: 700 9.5px var(--font-mono); font-variant-numeric: tabular-nums;
 }
 .topbar-coin {
-  width: 11px; height: 11px; flex: none; border-radius: 50%;
+  width: 11px; height: 11px; flex: none; border: 1px solid #ffd66b; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #f4ce5a, #b67606 72%);
+  box-shadow: 0 0 7px rgba(215, 164, 38, 0.4);
 }
 .topbar-wordmark { justify-self: center; text-align: center; white-space: nowrap; }
 .topbar-wordmark b {
   font: 700 12px var(--font-display); letter-spacing: 0.18em; color: var(--gold-5);
-  text-shadow: 0 1px #000;
-}
-.topbar-online {
-  display: block; margin-top: 3px;
-  font: 7.5px var(--font-mono); letter-spacing: 0.12em; color: var(--text-muted);
-  text-transform: uppercase;
+  text-shadow: 0 1px #000, 0 0 18px rgba(201, 162, 77, 0.25);
 }
 .topbar-right { display: flex; align-items: center; gap: 12px; justify-self: end; min-width: 0; }
 .topbar-nav { display: flex; gap: 4px; }
-.topbar-icon-button {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
-  width: 36px; padding: 1px; border: 1px solid var(--gold-1);
-  background: var(--ash-1); color: var(--text-muted); cursor: pointer;
+.topbar-icon-img { display: block; width: 32px; height: 32px; object-fit: cover; pointer-events: none; }
+/* O selo do Chat (#323): mensagens comuns brilham em ouro; erro vira um ponto de atenção. O
+   `IconButton` do topo é quem ancora o ponto (`position: relative`). */
+.topbar-nav .ui-icon-button { position: relative; }
+.topbar-icon-button-badge-gold { box-shadow: var(--glow-gold); }
+.topbar-icon-badge-dot {
+  position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); box-shadow: var(--glow-blood);
 }
-.topbar-icon-button-open { border-color: var(--gold-4); filter: brightness(1.16); }
-.topbar-icon-img { display: block; width: 36px; height: 36px; object-fit: cover; pointer-events: none; }
 .topbar-icon-glyph {
-  display: grid; place-items: center; width: 36px; height: 36px;
+  display: grid; place-items: center; width: 32px; height: 32px;
   color: var(--text-faint); font: 700 8px var(--font-mono); letter-spacing: 0.04em;
 }
-.topbar-icon-label { font-size: 6.5px; letter-spacing: 0.02em; color: inherit; }
 
 /* ---- As janelas (#251): colunas opacas de --sidebar-w, do topo até o rodapé -------------- */
 .windows {
   position: absolute; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w);
   display: flex; flex-direction: column; gap: 10px;
   padding: 10px; box-sizing: border-box; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--ash-6) var(--ash-1);
   background: var(--ash-1);
   z-index: 10;
 }
 .windows-left { left: 0; border-right: 1px solid var(--ash-5); }
 .windows-right { right: 0; border-left: 1px solid var(--ash-5); }
+/* Cada filho de .windows é um Panel (ui/Panel.tsx, DS-04) desde #305 — a pele própria (ui.css)
+   já resolve fundo, borda, sombra, cabeçalho e rolagem. */
 .windows > section {
-  pointer-events: auto;
-  background: var(--window-bg);
-  border: 1px solid var(--window-line);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(6px);
   /* A coluna é a única rolagem no desktop. Cada seção mantém a altura do conteúdo para que
-     Bot, Personagem e Party nunca disputem a altura disponível nem escondam regras no meio. */
+     Bot e Party nunca disputem a altura disponível nem escondam regras no meio —
+     o mesmo padrão do <aside> do kit (App.jsx:11): overflow:auto no contêiner, sem min-height
+     nem flex-shrink nos filhos (#289). */
   overflow: hidden;
-  display: flex; flex-direction: column; flex: 0 0 auto;
+  flex: 0 0 auto;
 }
-/* O cabeçalho de cada seção é a barra de título da janela. */
-.windows > section > header {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 5px 10px;
-  background: var(--window-head);
-  border-bottom: 1px solid var(--window-line);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: #fff;
-  position: sticky; top: 0;
-}
-.windows > section > *:not(header) { padding-left: 10px; padding-right: 10px; }
-.windows > section > *:last-child:not(header) { padding-bottom: 8px; }
-/* O inset horizontal já vem da regra de cima; aqui só o vertical. */
-.windows > section > .quiet { color: var(--text-faint); margin: 8px 0; }
+.ui-panel-body .quiet { color: var(--text-faint); margin: 8px 0; }
 
-/* O chat: janela flutuante fixa no canto inferior esquerdo (#252, ADR 0029 D5). A moldura
-   (cabeçalho, fio dourado, ×) é do `Panel`; aqui só a POSIÇÃO por cima do mundo — sem arraste,
-   como as outras janelas (D6, "nada arrastável"). */
+/* O chat: janela flutuante fixa sobre o MUNDO, à direita da coluna esquerda (#252, ADR 0029 D5;
+   #288; nasce FECHADO desde #323/RC-10, ADR 0030 §3). A moldura (cabeçalho, fio dourado, ×) é
+   do `Panel`; aqui só a POSIÇÃO — sem arraste, como as outras janelas (D6, "nada arrastável"). O
+   kit não desenha chat (ADR 0030 §3: "não há chat no HUD do kit"), então não há régua visual
+   para a posição exata — só a regra de não cobrir conteúdo interativo da coluna. `left` começa
+   depois de `--sidebar-w` (232px) em vez de 10px: preso ao canto, o chat cobria as últimas
+   seções de `.windows-left` (Party) sempre que a coluna crescia até o rodapé (#288). */
 .chat-window {
-  position: fixed; left: 10px; bottom: 10px; width: 340px; z-index: 20;
+  position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
 }
 
-.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); }
-.badge-connected { color: #6fc28a; border-color: #2f5a3c; }
-.badge-connecting, .badge-reconnecting { color: #c2a54a; border-color: #5a4f2f; }
-.badge-failed { color: #c25b4a; border-color: #5a3430; }
-.badge-idle { color: #7a7a88; }
-
+/* Janela reutilizável para dados de HUD que o kit põe sobre o mundo (#314). A posição é da
+   moldura inteira; Panel continua responsável por cabelo dourado, título, corpo e botões. */
+.floating-window {
+  position: fixed;
+  z-index: 20;
+  animation: ui-appear .2s var(--ease-out) both;
+}
+.floating-window-drag {
+  position: absolute; left: 0; top: 0; height: var(--panel-title-h);
+  z-index: 1; cursor: move; touch-action: none;
+}
+/* A faixa cobre o título, nunca as ações do Panel. O valor de 60px fica também inline no
+   componente para o contrato de testes e para não depender da largura atual dos glifos. */
+.floating-window .ui-panel-actions { position: relative; z-index: 2; }
 /* HP e mana (FUN-108): duas barras de 14 px no alto da coluna direita (#253, ADR 0029 D3/D4).
    O preenchimento tem a LARGURA da fração, ancorado à esquerda — a barra cheia cortada na
-   fração, ponta esquerda fica, direita some. Vidro ferro-forjado sobre os tokens do design,
-   como o resto da coluna desde #251. */
+   fração, ponta esquerda fica, direita some. Gradiente de dois tons por kind e bisel, iguais
+   ao kit (R0-08/R6-10); o TRILHO é sempre o gradiente neutro, nunca um tom por kind — o kit
+   também nunca usa --vital-hp-track/--vital-mp-track na tela renderizada (docs/kit-fidelity-
+   plan.md §1). Vidro ferro-forjado sobre os tokens do design, como o resto da coluna desde
+   #251. */
 .windows-right > .vitals {
   display: flex; flex-direction: column; gap: 4px; order: 0;
   padding: 8px 10px; margin: 0;
@@ -183,15 +239,15 @@ body {
 .bar {
   position: relative; height: 14px; overflow: hidden; border-radius: 2px;
   border: 1px solid #080505;
+  background: var(--grad-vital-track);
 }
-.bar-hp { background: var(--vital-hp-track); }
-.bar-mana { background: var(--vital-mp-track); }
 .bar-fill {
   position: absolute; top: 0; bottom: 0; left: 0;
+  box-shadow: inset 0 1px rgba(255,255,255,.18), inset 0 -1px rgba(0,0,0,.3);
   transition: width 120ms linear;
 }
-.bar-hp .bar-fill { background: var(--vital-hp); }
-.bar-mana .bar-fill { background: var(--vital-mp); }
+.bar-hp .bar-fill { background: var(--grad-vital-hp); }
+.bar-mana .bar-fill { background: var(--grad-vital-mp); }
 .bar-label {
   position: absolute; inset: 0; display: grid; place-items: center;
   font: 500 7.5px var(--font-mono); color: var(--parchment-1); letter-spacing: 0.02em;
@@ -225,15 +281,6 @@ body {
    .analyzer-head/-toggle/-summary migraram em #305 (as três classes saíram por não terem mais
    consumidor). O Bestiário deixou a coluna em #321 e virou o `CyclopediaModal`. */
 .analyzer { font-variant-numeric: tabular-nums; }
-.analyzer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 4px 6px;
-}
-.analyzer-toggle {
-  background: none; border: none; padding: 0;
-  color: inherit; font: inherit; cursor: pointer;
-}
-.analyzer-summary { color: var(--text-muted); }
 .analyzer-body { padding: 4px 0 0; }
 .analyzer-row { display: flex; gap: 8px; align-items: baseline; }
 /* O rótulo QUEBRA em vez de ser cortado. Reticências escondem informação — "Maior ma…" e
@@ -263,6 +310,21 @@ body {
 .analyzer-line b { font-weight: 500; color: var(--parchment-1); font-variant-numeric: tabular-nums; }
 /* "Mortes": cor de perigo, inspirada no `color(c)` do handoff (`Hud.jsx:184`, `c === "red"`). */
 .analyzer-line-danger b { color: var(--blood-7); }
+
+/* O modal expandido do Analisador (#315, R8-25): as dez linhas de `DR.analyzer.rows` do kit
+   (data.js:68), com os números reais de `Aggregates`. Prefixo próprio para não mexer nas classes
+   `.analyzer-*` que a janela já usa. */
+.analyzer-modal-box { display: flex; flex-direction: column; }
+.analyzer-modal-row {
+  display: grid; grid-template-columns: 1fr auto 92px; align-items: center; gap: 8px;
+  height: 21px; font: 9.5px var(--font-mono); color: var(--text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.analyzer-modal-row b { font-weight: 500; color: var(--parchment-1); font-variant-numeric: tabular-nums; }
+.analyzer-modal-row .analyzer-modal-value-ok { color: var(--ok); }
+.analyzer-modal-row i {
+  font-style: normal; text-align: right; color: var(--text-faint); font-size: 8.5px;
+}
 
 /* A entrada (#248, ADR 0029 D7/D8). Tela cheia, sem nenhuma janela do jogo: por isso as
    classes daqui não usam os tokens `--hud-*` (aqueles são do HUD pós-login, DS-08) — a
@@ -314,6 +376,11 @@ body {
   font-size: 13.5px;
 }
 .entry-tagline { font-size: 9px; letter-spacing: 0.22em; color: var(--text-faint); white-space: nowrap; }
+.entry-ready { display: flex; align-items: center; gap: 9px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.entry-ready-dot { width: 5px; height: 5px; border-radius: 50%; }
+.entry-ready-dot-ok { background: var(--ok); }
+.entry-ready-dot-warn { background: var(--warn); }
+.entry-ready-dot-danger { background: var(--danger); }
 .entry-main {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 30px;
   padding: 56px 24px 36px;
@@ -385,7 +452,7 @@ body {
 .entry-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 
 .entry-character-card {
-  display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 16px;
+  display: grid; grid-template-columns: 58px minmax(0, 1fr) 18px; align-items: center; gap: 16px;
   text-align: left; width: 100%; min-height: 108px; padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 9px;
@@ -393,9 +460,20 @@ body {
   color: var(--text-primary); font-family: var(--font-body);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
 }
-.entry-character-card:hover:not(:disabled) { border-color: rgba(201, 162, 77, 0.35); }
+.entry-character-card:hover:not(:disabled) { border-color: rgba(201, 162, 77, 0.35); transform: translateY(-1px); }
 .entry-character-card:disabled { opacity: 0.5; cursor: default; }
+.entry-character-card--selected,
+.entry-character-card--selected:hover:not(:disabled) {
+  border-color: rgba(201, 162, 77, 0.65);
+  background: linear-gradient(145deg, rgba(58, 42, 15, 0.55), rgba(20, 14, 13, 0.92));
+}
+.entry-character-indicator { color: var(--gold-4); font-size: 12.5px; justify-self: center; }
+
+.entry-select-footer { display: flex; align-items: center; justify-content: flex-end; gap: 22px; margin-top: 26px; }
+.entry-select-hint { margin: 0; color: var(--text-muted); font-size: 11px; }
+.entry-enter-button { min-width: 250px; }
 .entry-avatar {
   width: 58px; height: 66px; display: grid; place-items: center;
   background: rgba(201, 162, 77, 0.04);
@@ -444,6 +522,20 @@ body {
    é a única classe da antiga seleção de hunt fixa que sobrevive à troca para modal. */
 .hunt-warn { color: #e0c25a; }
 
+/* ---- O overlay de área e criaturas, sobre o mundo (#327, RC-14) --------------------------- */
+/* No cliente as colunas flutuam sobre o mundo inteiro; os offsets deixam o texto no mesmo canto
+   visível que o kit, sem passar por baixo da barra ou da coluna direita. */
+.world-overlay {
+  position: absolute; top: calc(var(--topbar-h) + 10px); right: calc(var(--sidebar-w) + 12px);
+  z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  pointer-events: none;
+}
+.world-overlay-line {
+  text-align: right; font: 7px var(--font-mono); color: var(--text-faint);
+  letter-spacing: .1em; text-transform: uppercase; line-height: 1.6;
+}
+
 /* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
 .hunt-actions {
   position: absolute; left: 0; right: 0; bottom: 24px;
@@ -461,17 +553,16 @@ body {
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, .6), inset 0 1px rgba(255, 255, 255, .05);
 }
+/* Sem chevron ao lado, "Escolher caçada" fica com os 4 cantos arredondados. A saída vira a
+   metade esquerda de um botão partido — só ela tem o chevron de regras colado ao lado (#309).
+   `hunt-exit-actions` fecha o vão INTERNO; o gap da faixa separa este par da pill de detalhes
+   quando ela existe (#325). */
+.hunt-exit-actions { display: inline-flex; gap: 0; }
 .hunt-pill-danger {
   border-color: var(--blood-5);
+  border-radius: 3px 0 0 3px;
   background: linear-gradient(180deg, #3d1315, #24090b);
   color: var(--blood-7);
-}
-/* A pill "ⓘ Detalhes da caçada" reusa `.hunt-pill`; só o selo circular "i" é novo
-   (Hud.jsx:140, o span antes do texto). */
-.hunt-pill-icon {
-  display: grid; place-items: center; width: 12px; height: 12px;
-  border: 1px solid var(--gold-3); border-radius: 50%;
-  font: 700 7px var(--font-mono); color: var(--gold-4);
 }
 
 /* ---- O popover "Sair sozinho quando…" (#260, DS-17) --------------------------------------- */
@@ -510,16 +601,17 @@ body {
   border: 1px solid var(--ash-5); border-radius: 2px; background: rgba(13, 9, 8, .92);
   font: 6.5px var(--font-mono); color: var(--text-muted);
 }
-.exit-rules-note {
-  margin: 8px 0 0; font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
-}
 
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
 .hunts-modal-body {
   display: grid; grid-template-columns: 230px minmax(0, 1fr) 230px; gap: 12px; height: 430px;
 }
+/* Busca, contador e lista compartilham a coluna de 230 px; a lista ocupa só o espaço restante. */
+.hunts-modal-list-col { display: flex; flex-direction: column; min-height: 0; }
+/* `Input` traz 18 px por padrão; nesta lista densa a distância do kit é 6 px. */
+.hunts-modal-search { margin-bottom: 6px; }
 .hunts-modal-list { list-style: none; margin: 0; display: flex; flex-direction: column; gap: 5px;
-  overflow: auto; min-height: 0; padding: 0 2px 0 0; }
+  overflow: auto; min-height: 0; flex: 1 1 auto; padding: 0 2px 0 0; }
 .hunts-modal-row button {
   display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: center;
   width: 100%; padding: 6px; text-align: left; cursor: pointer;
@@ -541,12 +633,18 @@ body {
 .hunts-modal-empty { color: var(--text-faint); margin: 8px 0; font: 11px var(--font-mono); }
 .hunts-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
-/* ---- O modal "Detalhes da caçada" v1 (#325, RC-12) ---------------------------------------- */
+/* ---- "Detalhes da caçada" v1 (#325, RC-12) ---------------------------------------------- */
+/* A pill reusa `.hunt-pill`; só o selo de informação é específico desta ação. */
+.hunt-pill-icon {
+  display: grid; place-items: center; width: 12px; height: 12px;
+  border: 1px solid var(--gold-3); border-radius: 50%;
+  font: 700 7px var(--font-mono); color: var(--gold-4);
+}
 .hunt-details-modal-name {
   margin: 0 0 8px; font: 600 14.5px var(--font-display); color: var(--gold-5);
 }
-/* Box "Sobre esta caçada" — ocupa o lugar da Box "Seu recorde" do kit (que nunca entra, ver a
-   spec desta issue), no mesmo estilo de caixa que `.analyzer-box` já usa em outro painel. */
+/* Substitui a Box "Seu recorde", que não é uma métrica oficial: só dados verdadeiros da hunt
+   ocupam este espaço até os blocos de monstro, loot e descrição terem suporte no servidor. */
 .hunt-details-modal-info {
   border: 1px solid var(--ash-5); border-radius: 4px; background: var(--ash-1);
   padding: 8px 10px; min-width: 0;
@@ -556,35 +654,33 @@ body {
 }
 .hunt-details-modal-close { margin-left: auto; }
 
-/* ---- HuntDetailsModal: monstros, loot e descrição (#349, SV-13) ------------------------- */
-.hunt-details-modal-grid { display: grid; grid-template-columns: 250px 1fr; gap: 14px; }
-.hunt-details-col-left { min-width: 0; }
-.hunt-details-col-right { min-width: 0; }
-.hunt-details-kicker { display: block; margin: 10px 0 4px; }
-.hunt-details-pulls { margin: 0 0 10px; font: 8px var(--font-mono); color: var(--text-muted); }
-.hunt-details-monsters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
-.hunt-details-monster {
-  display: flex; flex-direction: column; align-items: center; width: 60px; gap: 2px;
-  font: 6.5px var(--font-mono); color: var(--text-muted); text-align: center;
+/* ---- O modal Personagem (#319, RC-06, ADR 0030 §3) --------------------------------------- */
+.character-modal-tabs { margin-bottom: 11px; }
+.character-modal-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 11px;
 }
-.hunt-details-monster strong { font: 600 7px var(--font-mono); color: var(--parchment-1); }
-.hunt-details-monster-sprite { position: relative; width: 46px; height: 46px; }
-.hunt-details-desc { margin: 0; font: 11px var(--font-body); color: var(--text-muted); line-height: 1.5; }
-.hunt-details-loot { display: grid; gap: 4px; max-height: 330px; overflow: auto; scrollbar-width: thin; }
-.hunt-details-loot-item {
-  display: grid; grid-template-columns: 24px 1fr; align-items: center; gap: 6px; height: 32px;
-  padding: 0 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
-  font: 8.5px var(--font-mono); color: var(--parchment-1);
+.character-modal-identity {
+  display: grid; grid-template-columns: 74px 1fr; gap: 11px; align-items: start;
 }
-.hunt-details-loot-sprite { position: relative; width: 22px; height: 22px; }
-
-/* ---- Cyclopedia: abas + busca compartilhada (#344, SV-08) --------------------------------- */
-.cyclopedia-modal-tabs { margin-bottom: 8px; }
-.cyclopedia-modal-search { margin-bottom: 8px; }
+.character-modal-portrait {
+  display: grid; place-items: center; width: 72px; height: 74px;
+  border: 1px dashed var(--ash-7); border-radius: 4px;
+  background: var(--surface-slot); color: var(--text-faint);
+  font: 5.5px var(--font-mono); letter-spacing: .08em;
+}
+.character-modal-name {
+  margin: 0 0 2px; color: var(--parchment-1);
+  font: 700 12.5px var(--font-display); letter-spacing: .03em;
+}
+.character-modal-vocation {
+  margin: 0 0 8px; color: var(--text-muted); font: 6.5px var(--font-mono);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.character-modal-vitals { display: flex; flex-direction: column; gap: 6px; }
 
 /* ---- O modal Cyclopedia, aba Bestiary (#321, RC-08) --------------------------------------- */
 .cyclopedia-modal-body {
-  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; height: 424px;
+  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; height: 470px;
 }
 .cyclopedia-modal-sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .cyclopedia-modal-progress {
@@ -660,26 +756,6 @@ body {
 .cyclopedia-modal-row span:last-child.cyclopedia-modal-count-done { color: var(--ok); }
 .cyclopedia-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
 
-/* ---- Cyclopedia: aba Itens (#344, SV-08) -------------------------------------------------- */
-.cyclopedia-modal-items-list {
-  display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;
-  max-height: 424px; scrollbar-width: thin;
-}
-.cyclopedia-modal-item-row {
-  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px;
-  align-items: center; padding: 7px 10px; border: 1px solid var(--ash-5); border-radius: 4px;
-  background: var(--ash-1);
-}
-.cyclopedia-modal-item-sprite { position: relative; width: 34px; height: 34px; }
-.cyclopedia-modal-item-info { min-width: 0; display: grid; gap: 2px; }
-.cyclopedia-modal-item-name {
-  font: 600 9.5px var(--font-mono); color: var(--parchment-1);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.cyclopedia-modal-item-category { font: 7.5px var(--font-mono); color: var(--gold-4); }
-.cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
-.cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
-
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
    texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
@@ -703,28 +779,6 @@ body {
   background: none; border: none; color: var(--text-muted); font: 7px/1 var(--font-mono); cursor: pointer;
 }
 .bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
-
-/* Configurações avançadas do bot (#353, SV-17) */
-.bot-advanced { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
-.bot-advanced-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.bot-advanced-head strong { flex: 1 1 auto; font: 500 8px var(--font-mono); color: var(--parchment-1); }
-.bot-advanced-level { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
-.bot-advanced-row {
-  display: flex; align-items: center; gap: 6px; min-width: 0;
-  padding: 4px 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
-}
-.bot-advanced-row-locked { opacity: 0.55; }
-.bot-advanced-row-text {
-  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
-}
-.bot-advanced-row-text b {
-  font: 600 8px var(--font-mono); color: var(--parchment-1);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.bot-advanced-row-text small {
-  font: 7px var(--font-mono); color: var(--text-faint);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 
 /* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
    CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
@@ -752,78 +806,21 @@ body {
   .rule-editor-row { grid-template-columns: 1fr; }
 }
 
-/* O modal Ring swap (#353, SV-17; ADR 0030, captura 27-modal-swap-ring.png) */
-.ring-swap-locked { margin: 0 0 8px; font: 7px var(--font-mono); line-height: 1.5; }
-.ring-swap-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.ring-swap-header > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.ring-swap-name { font: 600 11px var(--font-display); color: var(--gold-5); }
-.ring-swap-note { font: 7.5px var(--font-mono); color: var(--text-faint); }
-.ring-swap-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.ring-swap-box {
-  display: flex; flex-direction: column; gap: 6px; padding: 8px;
-  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
-}
-.ring-swap-aside { margin: 2px 0 0; font: 7px var(--font-mono); color: var(--text-faint); }
-.ring-swap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.ring-swap-diagram {
-  display: flex; align-items: center; justify-content: space-around; padding: 8px 12px;
-  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-2);
-  text-align: center; margin-top: 4px;
-}
-.ring-swap-diagram span {
-  display: flex; flex-direction: column; align-items: center;
-  font: 8px var(--font-mono); color: var(--parchment-2);
-}
-.ring-swap-diagram small { font: 7px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
-.ring-swap-diagram-arrow { font-size: 14px; color: var(--gold-4); flex: 0 0 auto; }
-.ring-swap-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; flex: 1 1 auto; }
-.ring-swap-actions { display: flex; gap: 8px; }
-
-@media (max-width: 520px) {
-  .ring-swap-columns, .ring-swap-row { grid-template-columns: 1fr; }
-}
-
-/* O modal "Lure e alvo" do bot avançado (SV-09, #345) */
-.lure-locked {
-  margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 3px;
-  background: rgba(217, 164, 65, .08); font: 8px var(--font-mono); color: var(--warn);
-}
-.lure-columns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 11px; }
-.lure-box {
-  display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px;
-  border: 1px solid var(--ash-5); border-radius: 8px;
-  background: linear-gradient(145deg, rgba(38, 27, 25, .85), rgba(20, 14, 13, .9));
-}
-.lure-hysteresis {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px;
-  margin-top: 4px; padding: 6px 8px; border: 1px solid var(--ash-5); border-radius: 3px;
-  background: var(--ash-1); font: 7px var(--font-mono); color: var(--text-muted); text-align: center;
-}
-.lure-hysteresis-arrow { color: var(--gold-4); font-size: 11px; }
-.lure-hint { margin: 4px 0 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
-.lure-badge-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-.lure-badge-remove {
-  margin-left: 4px; padding: 0; background: none; border: none; color: inherit;
-  font: inherit; cursor: pointer;
-}
-.lure-posture-list { display: grid; gap: 4px; }
-.lure-posture-option {
-  text-align: left; padding: 6px 10px; border: 1px solid var(--ash-5); border-radius: 3px;
-  background: var(--ash-1); color: var(--parchment-2); font: 8.5px var(--font-mono); cursor: pointer;
-}
-.lure-posture-option small { display: block; font-size: 7px; color: var(--text-faint); margin-top: 2px; }
-.lure-posture-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
-.lure-footer-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
-.lure-footer-actions { display: flex; gap: 8px; }
-
-@media (max-width: 620px) {
-  .lure-columns { grid-template-columns: 1fr; }
+/* A personalização de Skills (#317) só organiza os controles; Modal, Checkbox e botões são os
+   primitivos do design system. Duas colunas mantêm as seis escolhas compactas. */
+.skills-customize-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+.skills-customize-note {
+  margin: 10px 2px 0;
+  font: 7.5px var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.5;
 }
 
 /* A escolha de vocação (#154, #249) com os cards do design system (ADR 0029 D2/D7).
    A sobreposição própria de antes some: scrim, painel e fio dourado passam a ser do `Modal`
    (shell/ui.css, #247). Este bloco cuida só da grade, do cartão e da cor por vocação — por
    seletor de atributo, nunca por `style` (ADR 0029 D2; ver DT-03 de #249). */
+.vocation-subtitle { margin: 0 0 14px; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
 .vocation-cards {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -859,66 +856,59 @@ body {
 .vocation-card[data-vocation="paladin"] .vocation-role { color: var(--voc-paladin); }
 .vocation-card[data-vocation="druid"] .vocation-role { color: var(--voc-druid); }
 .vocation-card[data-vocation="sorcerer"] .vocation-role { color: var(--voc-sorcerer); }
+.vocation-desc { display: block; margin: 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .vocation-gains { font-size: 11px; color: var(--text-muted); }
 .vocation-weapon { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .vocation-footer { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 @media (max-width: 520px) { .vocation-cards { grid-template-columns: 1fr; } }
 
-/* O modal de personalização de skills (RC-04, #317, kit v3 Modals.jsx:297) */
-.skills-customize-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 4px 0 12px;
-}
-.skills-customize-note {
-  margin: 0; font: 8px var(--font-mono); color: var(--text-faint); letter-spacing: .06em;
-}
+/* Panel já não desenha o corpo quando collapsed é true (decisão de render, não de CSS). */
 
-/* A coluna da direita (#161): set, mochila e bolsa fixos; minimizado é só o cabeçalho. */
-.windows > section.collapsed > *:not(header) { display: none; }
-
-/* A batalha (#254, DS-11, ADR 0029 D3/D4/D6): quem está na tela agora, fora o próprio
-   personagem e a party. Mesma linguagem do analisador (cabeçalho que abre e fecha), corpo com
-   lista. DÍVIDA CONHECIDA: quando o primitivo `Panel` de DS-04 chegar a esta seção,
-   `.battle-panel`/`.battle-list` são substituídos por ele, como as outras seções vão ser. */
-.battle-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+/* A batalha (#254, DS-11, #308/FD-08; ADR 0029 D3/D4; ADR 0030): quem está na tela agora, fora o
+   próprio personagem e a party. A moldura (Panel) vem de #305/FD-05; aqui só o conteúdo da
+   lista. Coluna de 16 px com o quadrado tracejado do kit antes do nome (Hud.jsx:62 — placeholder,
+   sprite real fica de fora por ora, R7-06); linhas com `margin: 1px 0` (não `gap`, R7 — achado do
+   verificador) e "%" sem espaço (Hud.jsx:63). */
+.battle-list { list-style: none; margin: 4px 0 0; padding: 0; }
 .battle-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; row-gap: 2px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-areas: "icon name percent" "icon bar bar";
+  column-gap: 6px; row-gap: 2px;
   align-items: center;
+  margin: 1px 0;
 }
-.battle-name { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.battle-percent { grid-column: 2; color: var(--text-faint); font-size: 11px; }
+.battle-icon {
+  grid-area: icon; width: 16px; height: 16px;
+  border: 1px dashed var(--ash-6); border-radius: 2px; background: var(--surface-slot);
+}
+.battle-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battle-percent { grid-area: percent; color: var(--text-faint); font-size: 11px; }
 .battle-bar {
-  grid-column: 1 / -1; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
+  grid-area: bar; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
   overflow: hidden;
 }
 .battle-bar-fill { display: block; height: 100%; }
 .battle-bar-ok .battle-bar-fill { background: var(--ok); }
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
-.battle-row-selected {
-  border: 1px solid var(--blood-5); border-radius: 3px; background: var(--surface-selected);
-  margin: -2px -4px; padding: 2px 4px;
-}
-.battle-row-selected .battle-name { color: var(--blood-7); }
 
-.container-head { display: flex; align-items: center; gap: 6px; }
-.container-head strong { flex: 1 1 auto; }
-.container-icon { display: inline-flex; width: 20px; height: 20px; overflow: hidden; }
-.container-icon canvas { width: 20px; height: 20px; }
-/* Cinco por linha: uma linha da tela é uma linha do container (#160 cresce de 5 em 5). Slot de
-   26 px (#253, ADR 0029 D4) — ver `.container-grid .slot` abaixo, junto de `.equipment .slot`. */
+/* Seis colunas de EXIBIÇÃO (App.jsx do kit: `cols={6}` nas duas chamadas de `BagPanel` — R7-03).
+   Largura de exibição e passo de CRESCIMENTO do container são independentes: o container
+   continua crescendo de 5 em 5 (#160, ADR 0026 decisão 6 — mochila 20, bolsa 10, os dois
+   múltiplos de 5), só que a 6ª, 12ª... célula abre uma nova linha visual sem que a linha
+   anterior tenha enchido — "abrir uma linha = ganhar uma linha visível inteira" deixou de valer,
+   e é essa a correção do verificador sobre este achado (docs/reviews/kit-fidelity-audit-2026-09-16.md,
+   R7-03). O tamanho do slot (26 px, #253 ADR 0029 D4) vem do primitivo `ui/Slot`
+   (`size={26}`); as regras abaixo só ajustam o SPRITE ao contexto do container. */
 .container-grid {
   list-style: none; margin: 6px 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(5, 26px); gap: 3px; justify-content: center;
+  display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
-.slot-empty-place { opacity: 0.85; }
-.slot[draggable], .slot-button[draggable] { cursor: grab; }
-.capacity-gold { display: inline-flex; align-items: center; gap: 4px; color: var(--gold-4); }
 /* O seletor de munição: sobreposição pequena, "Panel ancorado" ao painel do set — fio dourado
    no topo, como o resto do design (#253, §5 DS-10). */
 .ammo-picker {
   position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 260px;
-  background: var(--grad-panel); border: 1px solid var(--gold-2); border-top: 2px solid var(--gold-4);
-  border-radius: 4px; box-shadow: var(--shadow-panel); padding: 0 0 8px;
 }
 .ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
 .ammo-option {
@@ -935,15 +925,17 @@ body {
    mochila e na bolsa (#253, ADR 0029 D4/DT-04) — o tamanho vem do CONTEXTO (`.equipment .slot`,
    `.container-grid .slot`), não de uma classe por tamanho. O lugar vazio mostra o RÓTULO
    (`.slot-empty`), nunca um ícone de pacote; o sprite do item entra por `.item-sprite`. */
-.inventory { display: flex; flex-direction: column; gap: 6px; }
-.inventory > .equipment { margin-top: 6px; }
-.inventory .quiet { color: var(--text-faint); }
+/* .inventory continua como MARCADOR na raiz do Panel (EquipmentPanel.tsx), só para o
+   .windows-right > .inventory do @media — o layout do corpo é .inventory-body (bodyClassName),
+   porque display:flex no MESMO elemento que .ui-panel (display:grid) quebraria a grade do
+   Panel (mesma especificidade, ordem no arquivo decide, .inventory venceria por engano). */
+.inventory-body { display: flex; flex-direction: column; gap: 6px; }
 
 /* O equipamento no desenho de corpo do Tibia: cabeça em cima, mãos ao lado do peito, pés
    embaixo. A ordem no DOM continua a de `ITEM_SLOTS`; a posição é da área, não da ordem. Vidro
    ferro-forjado sobre os tokens (#253), como o resto da coluna desde #251. */
 .equipment {
-  list-style: none; margin: 8px auto; padding: 8px;
+  list-style: none; margin: 8px auto; padding: 6px;
   display: grid; grid-template-columns: repeat(3, 30px); gap: 3px; justify-content: center;
   grid-template-areas:
     "neck head back"
@@ -964,52 +956,23 @@ body {
 .slot-finger { grid-area: finger; }
 .slot-ammo { grid-area: ammo; }
 
-.slot {
-  position: relative; box-sizing: border-box;
-  background: var(--surface-slot); border: 1px solid var(--ash-5);
-}
-/* Tamanho por CONTEXTO (DT-04): `.slot` não sabe se está no set ou num container — quem sabe é
-   o pai. `.item-sprite` acompanha para o sprite não vazar da moldura. */
-.equipment .slot { width: 30px; height: 30px; }
-.container-grid .slot { width: 26px; height: 26px; }
 .equipment .item-sprite, .equipment .item-sprite canvas { width: 28px; height: 28px; }
 .container-grid .item-sprite, .container-grid .item-sprite canvas { width: 24px; height: 24px; }
-.slot-button, .slot-item, .slot-empty {
-  position: absolute; inset: 0; margin: 0; padding: 0;
-  background: none; border: none; color: inherit; font: inherit;
-}
-.slot-button { cursor: pointer; }
-.slot-button:hover, .slot-button:focus-visible { outline: 1px solid var(--text-muted); outline-offset: -1px; }
-/* O lugar vazio mostra o RÓTULO do slot (ADR 0029 D4), como o `EquipmentSet` do handoff: texto
-   pequeno, maiúsculo, cor apagada — nunca ícone quebrado, nunca dependência de pacote. */
-.slot-empty {
-  inset: 1px;
-  display: grid; place-items: center;
-  font: 500 5.5px var(--font-mono); letter-spacing: 0.01em; text-transform: uppercase;
-  color: var(--text-faint);
-  text-align: center;
-  pointer-events: none;
-}
 .item-sprite {
   position: absolute; inset: 1px; width: 32px; height: 32px;
   display: grid; place-items: center;
 }
 .item-sprite canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; }
 .item-initial { font-size: 13px; color: var(--text-muted); }
-/* A quantidade da pilha no canto inferior direito, com contorno, como o Tibia. */
-.slot-count {
-  position: absolute; right: 2px; bottom: 1px;
-  font-size: 10px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums;
-  text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000;
-  pointer-events: none;
-}
 
-/* A capacidade e o gold, sob o set — moldura fina sobre os tokens (#253). */
+/* A capacidade, sob o set — moldura fina sobre os tokens (#253). Letter-spacing dobrado para
+   .08em e max-width removido (R6-02/R6-03 + "missed" do verificador: Hud.jsx:54 usa
+   `letterSpacing: '.08em'` e nenhum teto de largura). */
 .capacity {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
-  height: 18px; margin: 0 auto 6px; padding: 0 6px; max-width: 168px;
+  height: 18px; margin: 0 auto 6px; padding: 0 6px;
   border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
-  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase;
+  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase;
 }
 
 /* No celular a tela vira PÁGINA (§5.1): o mundo em cima, numa faixa, e as janelas empilhadas
@@ -1025,7 +988,8 @@ body {
      coluna esquerda → coluna direita → chat. Os filhos sem regra ficam em `order: 0`, ou seja,
      junto do mundo — por isso o topo e as colunas recebem número explícito. */
   .shell { position: static; height: auto; overflow: visible; display: flex; flex-direction: column; }
-  .shell > .viewport { order: 0; }
+.shell > .world-stage { order: 0; }
+  .shell > .world-overlay { order: 1; position: static; padding: 6px 10px 0; z-index: auto; }
   .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
   /* O popover de regras de saída (#260) a 375 px: ancorado na ponta direita do chevron, os
      262 px vazavam pela borda esquerda (#291). No celular ele ocupa a largura da linha da pill:
@@ -1036,7 +1000,8 @@ body {
   .hunt-actions .exit-rules-anchor { position: static; }
   .exit-rules-popover { left: 10px; right: 10px; width: auto; bottom: calc(100% + 4px); }
   .exit-rules-summary { left: 10px; right: 10px; bottom: calc(100% + 2px); text-align: center; white-space: normal; }
-  .viewport { position: relative; height: 40vh; }
+  .world-stage { position: relative; height: 40vh; }
+  .world-status { right: 12px; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
     gap: 6px 10px; padding: 6px 8px;
@@ -1051,14 +1016,13 @@ body {
   }
   .shell > .windows-left { order: 3; }
   .shell > .windows-right { order: 4; }
-  .windows > section { max-height: none; overflow: visible; }
-  /* A ordem dos blocos no celular (#161, #253, #254, #256, #257, #259, #261): vitais → set →
-     mochila → bolsa → batalha → bolsa da party → bot → personagem → party na hunt → analisador →
+  /* A ordem dos blocos no celular (#161, #253, #254, #257, #259, #261, #317, #319): vitais → set →
+     mochila → bolsa → batalha → bolsa da party → bot → skills → party na hunt → analisador →
      bestiário. Cada coluna reordena só os PRÓPRIOS filhos — `.windows-left` e `.windows-right`
      são dois flex containers separados, então os números de `order` não competem entre colunas,
      só dentro de cada uma. As vitais (#253) não precisam de regra aqui — `order: 0` já vem da
      regra base de `.windows-right > .vitals`, e é o menor `order` da coluna direita.
-     `PartyBag` (#257) e `CharacterPanel` (#256) montam `Panel` sem `className` própria — a raiz
+     `PartyBag` (#257) e `SkillsPanel` (#317) montam `Panel` sem `className` própria — a raiz
      fica só `ui-panel`/`ui-panel--dock`, sem classe para mirar — então caem no `<section>`
      genérico da própria coluna, junto com `PartyMembers` (#259) à esquerda; dentro do mesmo
      `order`, a ordem de montagem em `Shell.tsx` decide (#261: audit de RF-02 encontrou `PartyBag`
@@ -1067,44 +1031,80 @@ body {
   .windows-right > .inventory { order: 1; }
   .windows-right > .container-window { order: 2; }
   .windows-right > .battle-panel { order: 3; }
-  /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, entre Batalha e o
-     Analisador, como a coluna do OTClient já lista no D6 ("Set, bolsa, mochila, Batalha, bolsa
-     da party, Analisador"). */
+  /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, depois de Batalha. */
   .windows-right > section { order: 4; }
   .windows-left > .bot-panel { order: 4; }
   .windows-left > section { order: 5; }
-  .windows-right > .analyzer { order: 6; }
+  /* O Analisador saiu de .windows-right (#315): é filho direto de .shell agora, então o `order`
+     dele compete com .windows-left/.windows-right/.chat-window, não mais com os outros filhos da
+     coluna. `order: 4` — o mesmo de `.windows-right` — o coloca logo depois da coluna direita. */
+  .shell > .ui-floating-window--analyzer { order: 4; }
   .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   /* O chat vira seção da página como as outras (#252): sai do `position: fixed` sobre o mundo —
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
      o caso de uso móvel é configurar o bot (comentário de cima), não conversar (DT-05). */
   .chat-window { position: static; width: auto; margin: 10px; order: 5; }
+  /* No modo página a janela deixa de flutuar e arrastar não tem função. */
+  .floating-window { position: static; margin: 10px 10px 0; z-index: auto; }
+  .floating-window-drag { pointer-events: none; }
 }
 
 /* --- party: formação (#197). Classes INALTERADAS nesta issue — a formação (PartyPanel.tsx)
    é redesenhada em DS-16 (#259), dentro do modal de caçada, não aqui. */
-.party-panel {
-  background: var(--window-bg); border: 1px solid var(--window-line); border-radius: 6px;
-  padding: 8px; display: flex; flex-direction: column; gap: 6px;
-}
+/* Fundo/borda/padding são do Panel desde #305; via bodyClassName, só espaça os filhos do corpo. */
+.party-panel { display: flex; flex-direction: column; gap: 6px; }
 .party-form { display: flex; flex-direction: column; gap: 6px; }
 .party-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .party-row input, .party-row select { min-width: 0; flex: 1 1 90px; }
 .party-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .party-member { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .party-member-down { opacity: 0.5; }
-.party-approved { color: #8fd18f; }
-.party-kick {
-  width: 14px; height: 14px; padding: 0; border: 0; background: none;
-  color: var(--text-faint); font: 10px/1 var(--font-mono); cursor: pointer;
-}
-.party-kick:hover { color: var(--danger); }
-.party-kick:disabled { opacity: 0.5; cursor: default; }
+.party-approved { color: var(--ok); }
+.party-status { margin: 0; font: 7px var(--font-mono); color: var(--text-faint); }
 
-/* --- party: companheiros na hunt e bolsa (DS-14, #257, #318) — sobre os tokens do design. A moldura
-   de `PartyBag` e de `PartyMembers` é o `Panel` `dock` (`shell/ui/Panel.tsx`). Aqui o CONTEÚDO de
-   dentro dos dois. --------------------------------------------------------------------------- */
-.party-members-panel { display: flex; flex-direction: column; gap: 6px; }
+/* --- party: companheiros na hunt (#197, #318) — dentro do `Panel` dock. A moldura, o título e
+   a estrela já existem; aqui ficam somente as linhas e o rodapé. O layout reserva o espaço para
+   dados futuros sem fingir vocação, mana, gasto, DPS/HPS ou expulsão antes dos respectivos SVs. */
+.party-companions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.party-companion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.party-companion-down { opacity: 0.55; }
+.party-companion-name {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font: 8px var(--font-mono);
+}
+.party-leader-star { color: var(--gold-4); font-size: 7px; }
+.party-companion-self { color: var(--gold-4); }
+.party-companion-vitals { display: grid; gap: 2px; margin: 4px 0 3px; }
+.party-hp-row { display: flex; align-items: center; gap: 6px; }
+.party-hp { flex: 1 1 auto; min-width: 0; }
+
+/* Rodapé do kit: a nota é estática; o modo continua texto enquanto não houver dois eixos de
+   rateio (SV-23). O botão é uma exceção local menor que o `sm` padrão do design system. */
+.party-footer { display: grid; gap: 6px; width: 100%; }
+.party-footer-note {
+  margin: 0;
+  font: italic 6.5px var(--font-mono);
+  color: var(--text-faint);
+  line-height: 1.4;
+}
 .party-mode {
   margin: 0;
   font: 7px var(--font-mono);
@@ -1112,108 +1112,46 @@ body {
   text-transform: uppercase;
   color: var(--text-faint);
 }
-.party-companions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.party-companion {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 0 5px;
-  border-bottom: 1px solid rgba(255, 255, 255, .04);
-}
-.party-companion:last-child {
-  border-bottom: none;
-}
-.party-companion-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-}
-.party-leader-star {
-  color: var(--gold-4);
-  font-size: 10px;
-  line-height: 1;
-}
-.party-companion-down { opacity: 0.55; }
-.party-companion-self { color: var(--gold-4); }
-.party-companion-voc {
-  font: 700 8.5px var(--font-mono);
-  letter-spacing: .04em;
-}
-.party-companion-voc-knight { color: var(--voc-knight); }
-.party-companion-voc-paladin { color: var(--voc-paladin); }
-.party-companion-voc-druid { color: var(--voc-druid); }
-.party-companion-voc-sorcerer { color: var(--voc-sorcerer); }
+.party-footer-leave { height: 22px; font-size: 6.5px; }
 
-.party-companion-level {
-  font: 8px var(--font-mono);
-  color: var(--text-muted);
+/* --- party: modal "Gerenciar party" (#320, ADR 0030 decisão 3, R3-11/R3-12). A aba Formação usa
+   PartyPanel.tsx sem CSS próprio aqui (herda o dele); as classes abaixo são só da aba Na hunt e
+   do rodapé de status, que são NOVOS nesta issue. */
+.party-modal-tabs { margin-bottom: 11px; }
+.party-modal-empty { margin: 8px 0; color: var(--text-faint); font: 8px var(--font-mono); }
+.party-modal-companions {
+  list-style: none; margin: 4px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.party-companion-vitals {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.party-modal-companion {
+  display: grid; grid-template-columns: 1fr 90px 36px; align-items: center; gap: 8px;
+  height: 24px; font: 8.5px var(--font-mono); color: var(--parchment-2);
 }
-.party-hp-row { display: flex; align-items: center; gap: 6px; }
-.party-hp { flex: 1 1 auto; min-width: 0; }
-.party-members-note {
-  margin: 0 0 4px;
-  font: 7.5px var(--font-mono);
-  color: var(--text-faint);
-  line-height: 1.3;
+.party-modal-companion-down { color: var(--text-faint); }
+.party-modal-companion-self { color: var(--parchment-1); }
+.party-modal-companion-name {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.party-members-mode {
-  margin: 0 0 6px;
-  font: 8px var(--font-mono);
-  color: var(--gold-4);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-}
+/* A estrela é SEMPRE dourada, independente de ser "você" (R3-13). */
+.party-modal-leader-star { color: var(--gold-4); font-size: 7px; }
+.party-modal-percent { text-align: right; font-size: 7px; color: var(--text-muted); }
+.party-modal-companion-down .party-modal-percent { color: var(--blood-7); }
+.party-modal-status { font: 7px var(--font-mono); color: var(--text-faint); }
 
-.party-bag { display: flex; flex-direction: column; gap: 6px; }
-.party-bag-grid { display: grid; grid-template-columns: repeat(auto-fill, 30px); gap: 3px; }
-.party-bag-cap {
-  position: relative;
-  height: 5px;
-  background: var(--ash-3);
-  border-radius: 1px;
-  overflow: hidden;
-}
-.party-bag-cap-fill { display: block; height: 100%; background: var(--gold-3); }
-
-/* --- Sobreposições sobre o mundo (RC-14, #327, kit v3 Hud.jsx:68-80) ------------------------ */
-.world-overlay {
-  position: absolute;
-  top: 48px;
-  left: 14px;
-  z-index: 10;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.world-overlay-line {
-  margin: 0;
-  font: 8px var(--font-mono);
-  letter-spacing: .06em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, .8);
-}
-.world-overlay-area {
-  color: var(--gold-4);
-  text-transform: uppercase;
-}
-.world-overlay-note {
-  color: var(--text-faint);
-}
-
-.buff-bar {
-  position: absolute; left: 12px; bottom: calc(24px + 34px);
-  z-index: 5;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  pointer-events: none;
-}
-
-@media (max-width: 720px) {
-  .world-overlay { display: none; }
-  .shell > .buff-bar { order: 1; position: static; padding: 4px 10px 0; z-index: auto; }
+/* --- party loot: janela flutuante da bolsa compartilhada (#316, RC-03, ADR 0030 decisão 3).
+   Vive FORA das colunas, dentro de um `FloatingWindow` (#314) — aqui só o CONTEÚDO de dentro.
+   Sucede o `.party-bag*` de DS-14/#257: grade FIXA 6×2 (R4-23) no lugar de `auto-fill`, sem
+   linha/marcador de "cap reservado" (R4-21). ---------------------------------------------- */
+.party-loot { display: flex; flex-direction: column; gap: 6px; }
+.party-loot-grid { display: grid; grid-template-columns: repeat(6, 30px); gap: 3px; justify-content: center; }
+.party-loot-totals { display: grid; gap: 3px; font: 8px var(--font-mono); color: var(--text-muted); }
+.party-loot-row { display: flex; justify-content: space-between; gap: 8px; }
+.party-loot-row b { color: var(--parchment-1); font-weight: 500; }
+.party-loot-row-faint { font-size: 7px; color: var(--text-faint); }
+.party-loot-bar { position: relative; height: 5px; background: var(--ash-3); border-radius: 1px; overflow: hidden; }
+.party-loot-bar-fill { display: block; height: 100%; background: var(--gold-3); }
+.party-loot-note {
+  margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--ash-5);
+  font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
 }

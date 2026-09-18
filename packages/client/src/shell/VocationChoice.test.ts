@@ -105,6 +105,36 @@ describe('VocationChoice', () => {
     expect(sendIntentIndex).toBeGreaterThan(footerIndex);
     expect(sendIntentIndex).toBeLessThan(cardOnClickIndex);
   });
+
+  it('renders role short and full description for each vocation in order (R1-18)', async () => {
+    const html = await render();
+    // Papel curto
+    expect(html).toContain('Tanque · corpo a corpo');
+    expect(html).toContain('Dano à distância · Sagrado');
+    expect(html).toContain('Suporte e cura · Gelo e Terra');
+    expect(html).toContain('Dano mágico · Fogo e Energia');
+
+    // Descrição completa
+    expect(html).toContain('Tanque: mais vida e capacidade, bate de perto com espada, machado ou maça.');
+    expect(html).toContain('Dano à distância: atira com bow e munição. Canaliza a luz sagrada contra o que não devia andar.');
+    expect(html).toContain('Suporte e cura: a maior mana, magias de cura. Congela e envenena o campo com a fúria da terra.');
+    expect(html).toContain('Dano mágico: a maior mana, magias de ataque. Chamas de dragão e raios que rasgam hordas — frágil, mas devastador.');
+  });
+
+  it('renders starting weapon before gains in the card (R1-18)', async () => {
+    const html = await render();
+    const weaponIndex = html.indexOf('class="vocation-weapon"');
+    const gainsIndex = html.indexOf('class="vocation-gains"');
+    expect(weaponIndex).toBeGreaterThan(-1);
+    expect(gainsIndex).toBeGreaterThan(-1);
+    expect(weaponIndex).toBeLessThan(gainsIndex);
+  });
+
+  it('renders the vocation subtitle explaining permanence and group role (R1-18)', async () => {
+    const html = await render();
+    expect(html).toContain('vocation-subtitle');
+    expect(html).toContain('A vocação define suas armas, elementos e o papel no grupo. Não pode ser alterada depois.');
+  });
 });
 
 describe('resolveChosenVocationId (RF-04)', () => {

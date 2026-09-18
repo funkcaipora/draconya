@@ -1,8 +1,8 @@
 // "Sair sozinho quando…" (#260, DS-17) — o popover de 262 px no chevron » da pill "Sair da
-// caçada" (HuntActions.tsx, criada por #259/DS-16). Três checkboxes: `hp-below` (com o
-// percentual editável), `out-of-gold`, `party-member-lost` — as três que `botExitRuleSchema`
-// conhece hoje. A quarta linha do protótipo (capacidade cheia) NÃO aparece: não existe no
-// schema (M15, SV-06).
+// caçada" (HuntActions.tsx, criada por #259/DS-16). Três checkboxes, na ordem do kit (#309,
+// R4-11) — `out-of-gold`, `party-member-lost`, `hp-below` (com o percentual editável, exceção
+// mantida — R4-13/R5-06). A quarta linha do protótipo (capacidade cheia) NÃO aparece: não
+// existe no schema (M15, SV-06).
 //
 // Cada mudança grava `draft.exit` e agenda `bot-config` com o MESMO debounce do interruptor de
 // regra (#162, `bot/store.ts`): ligar é ligar, sem botão "Salvar" — o servidor grava a

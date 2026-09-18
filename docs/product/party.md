@@ -108,14 +108,17 @@ morte encerra, loot é do matador sem sorteio.
 
 ### O que o cliente vê
 
-`session-state` leva `party` (líder, membros, vivos, vocação, level, manaPercent), `partySpending` (gasto de cada um e a prévia de rateio) e, no modo
-compartilhado, `partyBag`; `party-state` leva a composição dos membros com HP, vocação
-(`vocationId`), level (`level`) e percentual de mana (`manaPercent`), reenviado ao vivo sempre que
-qualquer um desses valores, a composição ou a liderança mudam (via `sameParty` no host, #339).
-`party-bag`, `party-settlement` e `party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente). Durante
-a hunt a coluna esquerda mostra os companheiros com HP, num painel fixo (`PartyMembers`, #259); a
-bolsa aparece à direita, após a mochila, só em `shared` (`PartyBag`); o analisador é por
-personagem (`analyzer.md`).
+`session-state` leva `party` (líder, membros, vivos, vocação, level, manaPercent), `partySpending`
+(gasto de cada um e a prévia de rateio) e, no modo compartilhado, `partyBag`; `party-state` leva a
+composição dos membros com HP, vocação (`vocationId`), level (`level`) e percentual de mana
+(`manaPercent`), reenviado ao vivo sempre que qualquer um desses valores, a composição ou a
+liderança mudam (via `sameParty` no host, #339). `party-bag`, `party-settlement` e
+`party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente). Durante a hunt
+a coluna esquerda mostra os companheiros com HP, num painel fixo (`PartyMembers`, #259); em
+`shared`, a bolsa aparece como a janela flutuante "Party loot" (`PartyLootWindow`, #316) sobre o
+mundo, aberta por padrão durante a hunt e alternável pelo ▣ do cabeçalho da party; a engrenagem ⚙
+do mesmo cabeçalho reabre a formação e as ações da party durante a hunt, no modal "Gerenciar
+party" (#320); o analisador é por personagem (`analyzer.md`).
 
 ## Regras
 

@@ -1,12 +1,9 @@
-// packages/client/src/shell/current-hunt.ts
+// A identidade da caçada atual, do ponto de vista do cliente (#325, RC-12).
 //
-// A identidade da caçada atual, do PONTO DE VISTA DO CLIENTE (#325, RC-12).
-//
-// O servidor não diz qual `catalogue.hunts[]` é a hunt ativa (Correção de premissa nº 2 desta
-// spec; SV-05, M15, fecha isso de vez). Até lá, esta store guarda só o que O PRÓPRIO CLIENTE
-// mandou em `enter-hunt` nesta aba — a lembrança da própria intenção enviada, o mesmo tipo de
-// dado que `net/pending-ticket.ts` já guarda para a reconexão. Esvaziada por reload da página e
-// por sair da hunt; nunca reconstruída por adivinhação.
+// O servidor ainda não diz qual `catalogue.hunts[]` é a hunt ativa (SV-05 fecha isso). Até lá,
+// esta store guarda somente a intenção `enter-hunt` que o próprio cliente conseguiu enviar nesta
+// aba, como `pending-ticket.ts` guarda uma reconexão. Ela nunca é persistida, reconstruída por
+// adivinhação ou enviada de volta ao servidor.
 
 import { createStore } from '../state/hud.js';
 

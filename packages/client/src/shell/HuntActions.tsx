@@ -1,8 +1,12 @@
-// As duas pills sobre o mundo (#259, ADR 0029 D3/D6): "Escolher caçada" na Cidade, "Sair da
-// caçada" na hunt. Substitui o "sair da hunt" que morava dentro do antigo menu de hunts, fixo na
-// coluna esquerda. O "»" no fim do texto de saída é decorativo aqui — o chevron interativo do
-// popover "Sair sozinho quando…" (`ExitRulesPopover`, #260/DS-17) é um botão à parte, autocontido
-// (RF-09/DT-04): esta issue só adiciona a linha que o renderiza.
+// As pills sobre o mundo (#259, #325): "Escolher caçada" na Cidade; "Detalhes da caçada" e
+// "Sair da caçada" na hunt, nesta ordem. "Despachar loot" fica fora até E5: não há venda por
+// item nem raridade para a ação representar. O modal é IRMÃO de `div.hunt-actions`, nunca filho:
+// o contêiner deixa os cliques passarem ao mundo, e essa propriedade herdada tornaria o scrim
+// inteiro inclicável.
+//
+// Sob a hunt, a saída e o chevron de regras (`ExitRulesPopover`, #260/DS-17) continuam um botão
+// partido. `hunt-exit-actions` os mantém colados, enquanto a pill de detalhes fica separada à
+// esquerda como no kit.
 
 import { useEffect, useState } from 'react';
 import type { C2SMessage } from '@draconya/protocol';
@@ -22,6 +26,9 @@ export function leaveHunt(send: (message: C2SMessage) => boolean): boolean {
 export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose: () => void }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
 
+  // Sair por qualquer motivo não deve fazer o modal reaparecer na próxima hunt com estado de
+  // apresentação velho. A identidade local só é limpa pelo clique bem-sucedido abaixo: um
+  // envio sem conexão não mudou a hunt real e ainda precisa conservar seus detalhes.
   useEffect(() => {
     if (!hunting) setDetailsOpen(false);
   }, [hunting]);
@@ -41,11 +48,15 @@ export function HuntActions({ hunting, onChoose }: { hunting: boolean; onChoose:
         <button type="button" className="hunt-pill" onClick={() => { setDetailsOpen(true); }}>
           <span aria-hidden="true" className="hunt-pill-icon">i</span> Detalhes da caçada
         </button>
-        <button type="button" className="hunt-pill hunt-pill-danger"
-          onClick={() => { leaveHunt(sendIntent); setCurrentHunt(null); }}>
-          <span aria-hidden="true">↩</span> Sair da caçada <span aria-hidden="true">»</span>
-        </button>
-        <ExitRulesPopover />
+        <div className="hunt-exit-actions">
+          <button type="button" className="hunt-pill hunt-pill-danger"
+            onClick={() => {
+              if (leaveHunt(sendIntent)) setCurrentHunt(null);
+            }}>
+            <span aria-hidden="true">↩</span> Sair da caçada
+          </button>
+          <ExitRulesPopover />
+        </div>
       </div>
       <HuntDetailsModal open={detailsOpen} onClose={() => { setDetailsOpen(false); }} />
     </>

@@ -1,11 +1,12 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
+import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Shell } from './Shell.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Aggregates } from '../state/hud.js';
 
-// A geografia (§5.3, ADR 0026 d.7, #161): set, mochila e bolsa FIXOS à direita, nessa ordem,
+// A geografia (§5.3, ADR 0026 d.7, #161, #307): set, bolsa e mochila FIXOS à direita, nessa ordem,
 // antes do analisador e do Bestiário. `prerender` roda a árvore inteira sem DOM e sem efeitos
 // — o viewport monta vazio, e o que se prende é a ordem das seções.
 
@@ -14,15 +15,32 @@ async function render(): Promise<string> {
   return new Response(prelude).text();
 }
 
+function buttonFor(html: string, id: string): string {
+  const marker = html.indexOf(`data-window="${id}"`);
+  const start = html.lastIndexOf('<button', marker);
+  const end = html.indexOf('</button>', marker);
+  return html.slice(start, end + '</button>'.length);
+}
+
 beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD }));
 });
 
 describe('Shell', () => {
-  it('the right column is set → backpack → satchel → analyzer, always mounted, in that order', async () => {
+it('always mounts the player vitals overlay inside the world stage (#328, RC-15)', async () => {
+    const html = await render();
+    const stageIndex = html.indexOf('class="world-stage"');
+    const vitalsIndex = html.indexOf('class="player-vitals"', stageIndex);
+    const topbarIndex = html.indexOf('class="topbar"', stageIndex);
+    expect(stageIndex).toBeGreaterThanOrEqual(0);
+    expect(vitalsIndex).toBeGreaterThan(stageIndex);
+    expect(topbarIndex).toBeGreaterThan(vitalsIndex);
+  });
+
+  it('the right column is set → satchel → backpack, always mounted, in that order (#307, RF-05)', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
-    const order = ['aria-label="set"', 'aria-label="mochila"', 'aria-label="bolsa"']
+    const order = ['ui-panel-title">Set', 'ui-panel-title">Bolsa', 'ui-panel-title">Mochila']
       .map((marker) => right.indexOf(marker));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -30,19 +48,53 @@ describe('Shell', () => {
     expect((right.match(/Carregando/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
-  // RF-02 (#252): o chat nasce aberto — é onde chegam as recusas do servidor
-  // (`system-message`), e uma janela que abre fechada esconderia a primeira da sessão.
-  it('the chat is mounted from the start (DEFAULT_WINDOWS.chat)', async () => {
+  it('keeps the chat closed from the start (DEFAULT_WINDOWS.chat)', async () => {
     const html = await render();
-    expect(html).toContain('aria-label="chat"');
+    expect(html).not.toContain('aria-label="chat"');
   });
 
-  // RC-04 (#317): o painel Skills é FIXO na coluna esquerda, sem guarda de `open` —
-  // não há ícone "Skills" na barra do topo para condicioná-lo.
+  it('shows a gold Chat badge for an unseen warning while the chat is closed', async () => {
+    hud.set((state) => ({
+      ...state,
+      systemMessages: [{ level: 'warning', text: 'warning', atMs: 5 }],
+    }));
+
+    const html = await render();
+    const chat = buttonFor(html, 'chat');
+    expect(chat).toContain('topbar-icon-button-badge-gold');
+    expect(chat).not.toContain('topbar-icon-badge-dot');
+  });
+
+  it('shows a danger dot for an unseen error while the chat is closed', async () => {
+    hud.set((state) => ({
+      ...state,
+      systemMessages: [{ level: 'error', text: 'error', atMs: 5 }],
+    }));
+
+    const html = await render();
+    const chat = buttonFor(html, 'chat');
+    expect(chat).toContain('topbar-icon-badge-dot');
+    expect(chat).not.toContain('topbar-icon-button-badge-gold');
+  });
+
+  // RC-04 (#317): Skills é FIXO na coluna esquerda, sem guarda de open — não há ícone próprio
+  // na barra do topo para condicioná-lo.
   it('windows-left always mounts SkillsPanel, unconditionally of open.*', async () => {
     const html = await render();
     const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
-    expect(left).toContain('>Skills<');
+    expect(left).toContain('Skills');
+  });
+
+  // RC-06 (#319): Personagem saiu da coluna e só monta como modal sob open.character.
+  it('does not leave a fixed CharacterPanel in the left column and gates CharacterModal by open.character', async () => {
+    const html = await render();
+    const left = html.slice(html.indexOf('janelas à esquerda'), html.indexOf('janelas à direita'));
+    expect(left).not.toContain('PERSONAGEM');
+    expect(html).not.toContain('aria-label="Personagem"');
+
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('{open.character && <CharacterModal');
+    expect(source).not.toContain('<CharacterPanel');
   });
 
   it('windows-right renders .vitals as the first child, before the set (#253, RF-01)', async () => {
@@ -51,18 +103,14 @@ describe('Shell', () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
     const vitalsIndex = right.indexOf('class="vitals"');
-    const setIndex = right.indexOf('aria-label="set"');
+    const setIndex = right.indexOf('ui-panel-title">Set');
     expect(vitalsIndex).toBeGreaterThan(0);
     expect(setIndex).toBeGreaterThan(vitalsIndex);
   });
 
-  // #258 (D6): o analisador deixou de ser `{open.analyzer && <Analyzer />}` — montado/desmontado
-  // pela barra do topo — e virou uma seção FIXA, como `BotPanel`/`EquipmentPanel`. Mutação que
-  // mata: voltar a montá-lo condicionalmente em `Shell.tsx` faria este teste continuar passando
-  // (a janela nasce aberta, `DEFAULT_WINDOWS.analyzer: true`) — quem prova "nunca desmonta" é
-  // `Analyzer.test.ts` (`collapsed={true}` ainda com o cabeçalho no HTML); aqui só se prova que
-  // o `Panel dock` "ANALISADOR" está na coluna certa, depois de mochila e bolsa.
-  it('the analyzer is a fixed "ANALISADOR" panel in the right column, with an active session', async () => {
+  // #315: o Analisador deixou a coluna direita e virou janela FLUTUANTE fora das colunas.
+  // Mutação que mata: voltar a montá-lo como `Panel dock` dentro de `.windows-right`.
+  it('mounts the analyzer as a floating window, with an active session', async () => {
     const aggregates: Aggregates = {
       durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
     };
@@ -71,10 +119,34 @@ describe('Shell', () => {
       analyzer: { sessionType: 'hunt', aggregates, notableEvents: [], receivedAtMs: 0, ended: false },
     }));
     const html = await render();
-    const right = html.slice(html.indexOf('janelas à direita'));
-    const satchelIndex = right.indexOf('aria-label="bolsa"');
-    const analyzerIndex = right.indexOf('ui-panel-title">ANALISADOR');
-    expect(satchelIndex).toBeGreaterThan(0);
-    expect(analyzerIndex).toBeGreaterThan(satchelIndex);
+    expect(html).toContain('ui-floating-window--analyzer');
+    expect(html).toContain('ui-panel-title">Analisador de caçada');
+
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('<Analyzer open={open.analyzer}');
+    expect(source).not.toContain('<Analyzer collapsed=');
+  });
+
+  // #316: "Party loot" é janela flutuante fora das colunas e só existe durante a hunt.
+  it('mounts the Party loot floating window during a hunt, never in the city', async () => {
+    hud.set((state) => ({
+      ...state,
+      analyzer: { ...state.analyzer, sessionType: 'hunt' },
+      party: { leaderId: 'me', mode: 'shared', members: [] },
+      partyBag: { gold: 1, items: [], weight: 0, capacity: 10 },
+    }));
+    const hunt = await render();
+    expect(hunt).toContain('vendido e dividido ao fim');
+    expect(hunt).toContain('party-loot-grid');
+
+    hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'city' } }));
+    expect(await render()).not.toContain('vendido e dividido ao fim');
+  });
+
+  // #320: a engrenagem do painel da party abre o modal "Gerenciar party".
+  it('wires the party gear to the Manage party modal', async () => {
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('onManage={() => { setPartyModalOpen(true); }}');
+    expect(source).toContain('{partyModalOpen && (');
   });
 });

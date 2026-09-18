@@ -1,14 +1,12 @@
-// Cyclopedia — modal com abas Itens e Bestiary (#321, #344, RC-08, ADR 0030 decisão 3). Bosstiary
-// não aparece antes do respectivo sistema; busca, grade/lista e ordenação são apresentação
+// Cyclopedia — modal com a aba Bestiary (#321, RC-08, ADR 0030 decisão 3). Itens e Bosstiary
+// não aparecem antes dos respectivos sistemas; busca, grade/lista e ordenação são apresentação
 // local sobre `catalogue` e `bestiary`, sem mensagem ao servidor.
 
 import { useMemo, useState } from 'react';
-import type { BestiaryConfig, BestiaryCounts, ItemDefinition, MonsterListing } from '../state/hud.js';
+import type { BestiaryConfig, BestiaryCounts, MonsterListing } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { bonusPercent, progressOf } from './bestiary-progress.js';
 import type { BestiaryProgress } from './bestiary-progress.js';
-import { SLOT_TEXT } from './EquipmentPanel.js';
-import { ItemSprite } from './ItemSprite.js';
 import { Badge } from './ui/Badge.js';
 import { Button } from './ui/Button.js';
 import { IconButton } from './ui/IconButton.js';
@@ -16,17 +14,14 @@ import { Input } from './ui/Input.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { Select } from './ui/Select.js';
-import { Tabs } from './ui/Tabs.js';
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const percentFmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const collator = new Intl.Collator('pt-BR');
-const weightFmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 
 const count = (value: number): string => integer.format(value);
 const bonusText = (value: number): string => `+${percentFmt.format(value)} %`;
 
-export type CyclopediaTab = 'Itens' | 'Bestiary';
 export type BestiarySort = 'progress' | 'name' | 'kills';
 
 const SORT_OPTIONS: ReadonlyArray<{ value: BestiarySort; label: string }> = [
@@ -143,79 +138,10 @@ function EntryRow({ entry }: { entry: BestiaryEntry }) {
   );
 }
 
-/**
- * Categoria de exibição — pelo `slot` (§9, DT-04): reaproveita o mesmo rótulo do painel do
- * set em vez de inventar um segundo texto para o mesmo `ItemSlot`. Sem slot (comida, moeda
- * antiga), "Outros" — nunca `null`/`undefined` na tela.
- */
-export function categoryOf(item: ItemDefinition): string {
-  if (item.slot === null) return 'Outros';
-  return SLOT_TEXT[item.slot] ?? item.slot;
-}
-
-/**
- * Busca por nome, case-insensitive — a MESMA regra de `filterEntries` (linha acima), agora
- * sobre `catalogue.items` em vez de monstros. Query vazia devolve todos, na mesma ordem.
- */
-export function filterItems(items: readonly ItemDefinition[], query: string): ItemDefinition[] {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return [...items];
-  return items.filter((item) => item.name.toLowerCase().includes(needle));
-}
-
-function ItemRow({ item }: { item: ItemDefinition }) {
-  const category = categoryOf(item);
-  const attack = item.attack ?? 0;
-  const armor = item.armor ?? 0;
-  return (
-    <article className="cyclopedia-modal-item-row">
-      <span className="cyclopedia-modal-item-sprite">
-        <ItemSprite appearanceId={item.appearanceId} name={item.name} />
-      </span>
-      <span className="cyclopedia-modal-item-info">
-        <b className="cyclopedia-modal-item-name">{item.name}</b>
-        <span className="cyclopedia-modal-item-category">{category}</span>
-      </span>
-      <span className="cyclopedia-modal-item-stats">
-        {attack > 0 && (
-          <Badge tone="muted" dot={false}>{`⚔ Atq ${String(attack)}`}</Badge>
-        )}
-        {armor > 0 && (
-          <Badge tone="muted" dot={false}>{`⛨ Def ${String(armor)}`}</Badge>
-        )}
-        <span className="cyclopedia-modal-item-weight">
-          {`⚖ ${weightFmt.format(item.weight)} oz`}
-        </span>
-      </span>
-    </article>
-  );
-}
-
-function ItemsTab({ items, query }: { items: readonly ItemDefinition[]; query: string }) {
-  const visible = useMemo(() => filterItems(items, query), [items, query]);
-
-  if (visible.length === 0) {
-    return <p className="cyclopedia-modal-empty">Nenhum item encontrado.</p>;
-  }
-  return (
-    <div className="cyclopedia-modal-items-list">
-      {visible.map((item) => <ItemRow key={item.id} item={item} />)}
-    </div>
-  );
-}
-
-export function itemsFooterNote(items: readonly ItemDefinition[], query: string): string {
-  const total = items.length;
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return `${count(total)} itens no catálogo`;
-  const visible = items.filter((item) => item.name.toLowerCase().includes(needle)).length;
-  return `${count(visible)} de ${count(total)} itens`;
-}
-
-function BestiaryTab({ monsters, counts, config, query }: {
+function BestiaryTab({ monsters, counts, config }: {
   monsters: readonly MonsterListing[]; counts: BestiaryCounts; config: BestiaryConfig | null;
-  query: string;
 }) {
+  const [query, setQuery] = useState('');
   const [grid, setGrid] = useState(true);
   const [sort, setSort] = useState<BestiarySort>('progress');
   const entries = useMemo(
@@ -230,6 +156,8 @@ function BestiaryTab({ monsters, counts, config, query }: {
   return (
     <div className="cyclopedia-modal-body">
       <div className="cyclopedia-modal-sidebar">
+        <Input size="sm" placeholder="Digite para buscar…" value={query}
+          onChange={(event) => { setQuery(event.target.value); }} />
         {config !== null && <ProgressBox entries={entries} config={config} counts={counts} />}
       </div>
       <div className="cyclopedia-modal-main">
@@ -260,15 +188,13 @@ function BestiaryTab({ monsters, counts, config, query }: {
   );
 }
 
-export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; initialTab?: CyclopediaTab }) {
+export function CyclopediaModal({ onClose }: { onClose: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const counts = useHudSlice((state) => state.bestiary);
-  const [tab, setTab] = useState<CyclopediaTab>(initialTab ?? 'Bestiary');
-  const [query, setQuery] = useState('');
-
   const monsters = catalogue?.monsters ?? [];
-  const items = catalogue?.items ?? [];
   const config = catalogue?.bestiary ?? null;
+  // Entre catálogo e `bestiary` do attach, ausência significa zero — a mesma convenção da tela
+  // anterior, não uma terceira tela intermediária.
   const known = counts ?? {};
   const bonus = config === null
     ? null
@@ -277,25 +203,13 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
     ? 0
     : monsters.reduce((sum, monster) => sum + progressOf(known[monster.id] ?? 0, config.milestones).reached, 0);
   const total = config === null ? 0 : monsters.length * config.milestones.length;
-
-  const bestiaryFooterNote = monsters.length === 0
-    ? 'Este servidor não tem Bestiário.'
-    : bonus === null
-      ? `${count(monsters.length)} monstros no Bestiário`
-      : `Bônus do Bestiário: ${bonusText(bonus)} de experiência (${count(reached)} / ${count(total)} marcos)`;
-
   const footerNote = catalogue === null
     ? 'Carregando…'
-    : tab === 'Itens'
-      ? itemsFooterNote(items, query)
-      : bestiaryFooterNote;
-
-  const footer = (
-    <>
-      <span className="cyclopedia-modal-footer-note">{footerNote}</span>
-      <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
-    </>
-  );
+    : monsters.length === 0
+      ? 'Este servidor não tem Bestiário.'
+      : bonus === null
+        ? `${count(monsters.length)} monstros no Bestiário`
+        : `Bônus do Bestiário: ${bonusText(bonus)} de experiência (${count(reached)} / ${count(total)} marcos)`;
 
   return (
     <Modal
@@ -305,32 +219,19 @@ export function CyclopediaModal({ onClose, initialTab }: { onClose: () => void; 
       onClose={onClose}
       width={860}
       height={600}
-      footer={footer}
+      footer={
+        <>
+          <span className="cyclopedia-modal-footer-note">{footerNote}</span>
+          <Button variant="secondary" size="sm" onClick={onClose}>Fechar</Button>
+        </>
+      }
     >
+      {/* Só Bestiary existe hoje; uma aba única seria ruído e afirmaria sistemas ausentes. */}
       {catalogue === null
         ? <p className="cyclopedia-modal-empty">Carregando…</p>
-        : (
-          <>
-            <Tabs
-              items={['Itens', 'Bestiary']}
-              value={tab}
-              className="cyclopedia-modal-tabs"
-              onChange={(value) => { setTab(value as CyclopediaTab); }}
-            />
-            <Input
-              size="sm"
-              placeholder="Digite para buscar…"
-              value={query}
-              className="cyclopedia-modal-search"
-              onChange={(event) => { setQuery(event.target.value); }}
-            />
-            {tab === 'Bestiary'
-              ? (monsters.length === 0
-                ? <p className="cyclopedia-modal-empty">Este servidor não tem Bestiário.</p>
-                : <BestiaryTab monsters={monsters} counts={known} config={config} query={query} />)
-              : <ItemsTab items={items} query={query} />}
-          </>
-        )}
+        : monsters.length === 0
+          ? <p className="cyclopedia-modal-empty">Este servidor não tem Bestiário.</p>
+          : <BestiaryTab monsters={monsters} counts={known} config={config} />}
     </Modal>
   );
 }

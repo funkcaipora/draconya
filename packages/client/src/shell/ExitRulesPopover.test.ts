@@ -21,11 +21,11 @@ async function renderPopover(): Promise<string> {
 beforeEach(() => { bot.set(() => INITIAL_BOT); });
 
 describe('ExitRulesList (RF-01)', () => {
-  it('mostra exatamente três linhas, na ordem fixa HP → gold → grupo, nunca uma quarta', async () => {
+  it('mostra exatamente três linhas, na ordem do kit — gold → grupo → HP por último (R4-11) —, nunca uma quarta', async () => {
     const html = await renderList([]);
     const labels = [...html.matchAll(/class="exit-rule-label">([^<]*)/g)].map((m) => m[1]);
     expect(labels).toEqual([
-      `HP abaixo de 30 %`, 'Acabar o gold', 'Alguém do grupo sair',
+      'Acabar o gold', 'Alguém do grupo sair', `HP abaixo de 30 %`,
     ]);
     expect(html).not.toContain('Acabar a capacidade');
   });
@@ -50,7 +50,7 @@ describe('ExitRulesList (RF-01)', () => {
     expect(checkboxes).toHaveLength(3);
     const goldRow = html.slice(html.indexOf('Acabar o gold'), html.indexOf('Alguém do grupo sair'));
     expect(goldRow).toContain('checked=""');
-    const hpRow = html.slice(html.indexOf('exit-rule-row'), html.indexOf('Acabar o gold'));
+    const hpRow = html.slice(html.indexOf('HP abaixo de 30 %'));
     expect(hpRow).not.toContain('checked=""');
   });
 
@@ -81,13 +81,13 @@ describe('ExitRulesPopover (RF-01, RF-07, RF-09)', () => {
     expect(html).not.toContain('exit-rules-summary');
   });
 
-  it('com alguma regra ligada e o popover fechado, mostra "Saindo sozinho: …" (RF-07)', async () => {
+  it('com alguma regra ligada e o popover fechado, mostra "Saindo sozinho: …" na ordem do kit (RF-07)', async () => {
     bot.set((state) => ({
       ...state,
       draft: { ...state.draft, exit: [{ kind: 'hp-below', percent: 30 }, { kind: 'out-of-gold' }] },
     }));
     const html = await renderPopover();
-    expect(html).toContain('Saindo sozinho: hp abaixo de 30 % · acabar o gold');
+    expect(html).toContain('Saindo sozinho: acabar o gold · hp abaixo de 30 %');
   });
 
   it('não recebe nenhuma prop de HuntActions — renderiza sozinho (RF-09, DT-04)', async () => {

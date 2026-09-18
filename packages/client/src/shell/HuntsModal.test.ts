@@ -2,7 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HuntsModal, attemptEnter, enterHuntMessage, pullLabel, resolveSelection } from './HuntsModal.js';
+import {
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, resolveSelection,
+} from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
@@ -13,25 +15,8 @@ import { INITIAL_PARTY, party } from '../party/store.js';
 // aqui só se prende a ESTRUTURA e o que essas funções produzem por padrão.
 
 const hunts: HuntListing[] = [
-  {
-    id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
-    difficulties: ['cautious', 'bold', 'reckless'],
-    difficultyDetails: [
-      { id: 'cautious', monsterCount: 2 },
-      { id: 'bold', monsterCount: 5 },
-      { id: 'reckless', monsterCount: 8 },
-    ],
-    outfitIds: [21], lootDrops: 2, monsters: [], loot: [],
-  },
-  {
-    id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60,
-    difficulties: ['cautious', 'bold'],
-    difficultyDetails: [
-      { id: 'cautious', monsterCount: 1 },
-      { id: 'bold', monsterCount: 3 },
-    ],
-    outfitIds: [], lootDrops: 7, monsters: [], loot: [],
-  },
+  { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2 },
+  { id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7 },
 ];
 
 const catalogue: Catalogue = {
@@ -51,6 +36,13 @@ beforeEach(() => {
 });
 
 describe('HuntsModal', () => {
+  it('renders the name search and the visible-hunts count', async () => {
+    const html = await render({ hunting: false });
+
+    expect(html).toContain('placeholder="⌕ Buscar uma caçada ou criatura"');
+    expect(html).toContain('2 caçadas disponíveis');
+  });
+
   it('RF-01: lists every hunt of the catalogue with sprite, name, "level N+" and pulls/drops', async () => {
     const html = await render({ hunting: false });
     for (const hunt of hunts) {
@@ -92,7 +84,7 @@ describe('HuntsModal', () => {
     const html = await render({ hunting: false });
     const detailIndex = html.indexOf('hunts-modal-detail');
     expect(detailIndex).toBeGreaterThan(-1);
-    expect(html.slice(detailIndex)).toMatch(/class="[^"]*ui-button-primary[^"]*">Cauteloso · 2</);
+    expect(html.slice(detailIndex)).toMatch(/class="[^"]*ui-button-primary[^"]*">Cauteloso</);
   });
 
   it('an empty catalogue.hunts shows the "no hunt" message, without pull buttons', async () => {
@@ -100,12 +92,35 @@ describe('HuntsModal', () => {
     const html = await render({ hunting: false });
     expect(html).toContain('Nenhuma caçada disponível neste servidor.');
     expect(html).not.toContain('hunts-modal-pulls');
+    expect(html).not.toContain('Buscar uma caçada ou criatura');
   });
 
   it('catalogue === null shows "Carregando…"', async () => {
     hud.set((state) => ({ ...state, catalogue: null }));
     const html = await render({ hunting: false });
     expect(html).toContain('Carregando…');
+    expect(html).not.toContain('Buscar uma caçada ou criatura');
+  });
+});
+
+describe('filterHunts (RF-08)', () => {
+  it('returns every hunt in the same order for empty or whitespace-only search', () => {
+    expect(filterHunts(hunts, '')).toEqual(hunts);
+    expect(filterHunts(hunts, '   ')).toEqual(hunts);
+  });
+
+  it('matches a name substring without differentiating case', () => {
+    expect(filterHunts(hunts, 'DRAG')).toEqual([hunts[1]]);
+  });
+
+  it('returns an empty list when no name matches', () => {
+    expect(filterHunts(hunts, 'hydra')).toEqual([]);
+  });
+
+  it('does not replace the selection when the filter hides it', () => {
+    expect(filterHunts(hunts, 'rat')).toEqual([hunts[0]]);
+    expect(resolveSelection(hunts, 'dragon-lair', null))
+      .toEqual({ hunt: hunts[1], difficulty: 'cautious' });
   });
 });
 
@@ -148,22 +163,20 @@ describe('enterHuntMessage (RF-04)', () => {
   });
 });
 
-describe('attemptEnter (RF-04)', () => {
-  const message = { type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' } as const;
-
-  it('closes the modal only when send() returns true', () => {
+describe('attemptEnter (RF-04, RF-09)', () => {
+  it('returns true and closes the modal when send() returns true', () => {
     const onClose = vi.fn();
-    expect(attemptEnter(message, () => true, onClose)).toBe(true);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => true, onClose)).toBe(true);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('does NOT close the modal when send() returns false (no connection)', () => {
+  it('returns false and does NOT close the modal when send() returns false', () => {
     const onClose = vi.fn();
-    expect(attemptEnter(message, () => false, onClose)).toBe(false);
+    expect(attemptEnter({ type: 'enter-hunt', huntId: 'rat-cellars', difficulty: 'bold' }, () => false, onClose)).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('never calls send(), nor closes, with a null message', () => {
+  it('returns false, never calls send(), nor closes, with a null message', () => {
     const send = vi.fn(() => true);
     const onClose = vi.fn();
     expect(attemptEnter(null, send, onClose)).toBe(false);
@@ -171,47 +184,13 @@ describe('attemptEnter (RF-04)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('wires setCurrentHunt to run only after attemptEnter succeeds', async () => {
+  it('stores the local hunt only after the successful attempt', async () => {
     const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
-    const enterIndex = source.indexOf('const enter = (): void => {');
+    const enterIndex = source.indexOf('const enter = (): void =>');
+    const attemptIndex = source.indexOf('if (attemptEnter(message, sendIntent, onClose)', enterIndex);
+    const storeIndex = source.indexOf('setCurrentHunt({ huntId: selected.id, difficulty });', enterIndex);
     expect(enterIndex).toBeGreaterThan(-1);
-    const enterBody = source.slice(enterIndex, source.indexOf('};', enterIndex));
-    const attemptEnterIndex = enterBody.indexOf('attemptEnter(message, sendIntent, onClose)');
-    const setCurrentHuntIndex = enterBody.indexOf('setCurrentHunt({ huntId: message.huntId, difficulty: message.difficulty })');
-    expect(attemptEnterIndex).toBeGreaterThan(-1);
-    expect(setCurrentHuntIndex).toBeGreaterThan(attemptEnterIndex);
-    expect(enterBody).toMatch(/if\s*\(\s*attemptEnter\([^)]*\)\s*&&\s*message\s*!==\s*null\s*\)\s*\{\s*setCurrentHunt/);
+    expect(attemptIndex).toBeGreaterThan(enterIndex);
+    expect(storeIndex).toBeGreaterThan(attemptIndex);
   });
 });
-
-describe('pullLabel (SV-19, #355)', () => {
-  it('appends · N when monsterCount is present', () => {
-    expect(pullLabel(hunts[0]!, 'bold')).toBe('Ousado · 5');
-    expect(pullLabel(hunts[0]!, 'cautious')).toBe('Cauteloso · 2');
-    expect(pullLabel(hunts[0]!, 'reckless')).toBe('Agressivo · 8');
-  });
-
-  it('falls back to just difficulty name when difficultyDetails is empty or missing that difficulty', () => {
-    const huntWithoutDetails: HuntListing = {
-      ...hunts[0]!,
-      difficultyDetails: [],
-    };
-    expect(pullLabel(huntWithoutDetails, 'bold')).toBe('Ousado');
-
-    const huntWithMissingDiff: HuntListing = {
-      ...hunts[0]!,
-      difficultyDetails: [{ id: 'cautious', monsterCount: 2 }],
-    };
-    expect(pullLabel(huntWithMissingDiff, 'reckless')).toBe('Agressivo');
-  });
-
-  it('falls back to raw difficulty key when unknown to DIFFICULTY_TEXT', () => {
-    const customHunt: HuntListing = {
-      ...hunts[0]!,
-      difficulties: ['nightmare'],
-      difficultyDetails: [{ id: 'nightmare', monsterCount: 10 }],
-    };
-    expect(pullLabel(customHunt, 'nightmare')).toBe('nightmare · 10');
-  });
-});
-

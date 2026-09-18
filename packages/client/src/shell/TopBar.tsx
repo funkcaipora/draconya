@@ -1,32 +1,39 @@
-// A barra do topo, na casca do design (#251, #351 — D3, D8, D9 de docs/design-system-plan.md).
+// A barra do topo, na casca do design (#251 — D3, D8, D9 de docs/design-system-plan.md;
+// reordenada em #322/RC-09 sob o ADR 0030).
 //
 // Retrato-inicial (a cor de vocação chega com o sprite do outfit, SV-14), nome em Cinzel,
-// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro com contagem de jogadores online
-// (SV-15, #351) e os seis ícones PNG de 36 px que abrem as janelas do M14. Nenhum ícone
-// para sistema inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca
-// mostra o que o servidor não disse que existe.
+// "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro (sem contagem de jogadores — SV-15
+// não existe ainda) e os CINCO ícones PNG de 36 px que abrem as janelas, na MESMA ordem do kit
+// (`Hud.jsx:2`): Personagem, Hunts, Analisador, Cyclopedia, Chat. Nenhum ícone para sistema
+// inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca mostra o que o
+// servidor não disse que existe.
+//
+// Bot e Inventário SAÍRAM daqui (R1-09, RC-09/#322 — revoga DS-08 de docs/design-system-plan.md):
+// quem minimiza esses painéis agora é só o próprio cabeçalho de cada um (`BotPanel` já usava
+// `Panel`+`onToggle`; `EquipmentPanel` já tinha o próprio botão ▸/▾ — nenhum dos dois precisou de
+// código novo, só perderam o segundo gatilho que a TopBar oferecia).
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { account } from '../account/store.js';
-import type { OutfitColors } from '../assets/outfit.js';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { world } from '../state/world.js';
-import { paintOf } from '../world/outfit-colors.js';
-import { ConnectionBadge } from './ConnectionBadge.js';
-import { OutfitSprite } from './OutfitSprite.js';
-import { HEALTH_POLL_MS } from './PartyMembers.js';
+import { IconButton } from './ui/IconButton.js';
+import type { ChatBadgeTier } from './chat-badge.js';
 
-export type WindowId = 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+// 'bot' e 'inventory' continuam válidos como chaves de `open` (Shell.tsx os usa para os
+// cabeçalhos de BotPanel/EquipmentPanel) — só não aparecem mais no array `WINDOWS` abaixo, que é
+// o que desenha a nav.
 
 /**
- * Os seis ícones da barra. `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono
- * do projeto, copiada do handoff (D9). `glyph` é o texto de reserva enquanto a imagem não
- * carrega: NUNCA emoji (D9 — "nenhum emoji, só glifos e PNG").
+ * Os CINCO ícones da barra, na ORDEM do kit (`Hud.jsx:2` — `nav` = [character, combat, analyzer,
+ * loot(Cyclopedia), guild, social, prey, chat], sem os três que não têm sistema — RC-09/#322).
+ * `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono do projeto, copiada do
+ * handoff (D9). `glyph` é o texto de reserva enquanto a imagem não carrega: NUNCA emoji
+ * (D9 — "nenhum emoji, só glifos e PNG").
  */
 const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph: string }> = [
+  { id: 'character', label: 'Personagem', icon: 'character', glyph: 'PER' },
   { id: 'hunts', label: 'Hunts', icon: 'combat', glyph: 'HNT' },
-  { id: 'bot', label: 'Bot', icon: 'actions', glyph: 'BOT' },
-  { id: 'inventory', label: 'Inventário', icon: 'inventory', glyph: 'INV' },
   { id: 'analyzer', label: 'Analisador', icon: 'analyzer-chart', glyph: 'ANL' },
   { id: 'bestiary', label: 'Cyclopedia', icon: 'bestiary', glyph: 'CYC' },
   { id: 'chat', label: 'Chat', icon: 'chat', glyph: 'CHT' },
@@ -34,19 +41,25 @@ const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph:
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
-/** Um ícone de 36 px, com o glifo de texto como reserva se o PNG falhar ao carregar. */
-function NavIcon({ id, label, icon, glyph, open, onClick }: {
-  id: WindowId; label: string; icon: string; glyph: string; open: boolean; onClick: () => void;
+/**
+ * Um ícone de 36 px (R0-05: o uso mais visível do `IconButton` no kit), com o glifo de texto
+ * como reserva se o PNG falhar ao carregar. Nenhum rótulo de texto permanente é renderizado
+ * (R1-10), apenas o tooltip nativo `title`. O selo do Chat (#323) é a única decoração extra.
+ */
+function NavIcon({ id, label, icon, glyph, open, badge, onClick }: {
+  id: WindowId; label: string; icon: string; glyph: string; open: boolean;
+  badge: ChatBadgeTier | null; onClick: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const badgeClass = badge === 'gold' ? 'topbar-icon-button-badge-gold' : undefined;
   return (
-    <button
-      type="button"
-      className={`topbar-icon-button${open ? ' topbar-icon-button-open' : ''}`}
-      aria-pressed={open}
+    <IconButton
+      size="lg"
       title={label}
-      data-window={id}
+      active={open}
       onClick={onClick}
+      data-window={id}
+      {...(badgeClass === undefined ? {} : { className: badgeClass })}
     >
       {failed
         ? <span className="topbar-icon-glyph" aria-hidden="true">{glyph}</span>
@@ -54,34 +67,23 @@ function NavIcon({ id, label, icon, glyph, open, onClick }: {
           <img
             className="topbar-icon-img"
             src={`/hud-icons/${icon}.png`}
-            width={36}
-            height={36}
+            width={32}
+            height={32}
             alt=""
             onError={() => { setFailed(true); }}
           />
         )}
-      <span className="topbar-icon-label">{label}</span>
-    </button>
+      {/* Só `error` ganha marcador próprio; o selo dourado muda o botão inteiro. */}
+      {badge === 'danger' && <span className="topbar-icon-badge-dot" aria-hidden="true" />}
+    </IconButton>
   );
 }
 
-function selfOutfit(): { appearanceId: number; colors: OutfitColors } | null {
-  if (world.selfId === null) return null;
-  const self = world.creatures.get(world.selfId);
-  if (self === undefined) return null;
-  return { appearanceId: self.appearanceId, colors: paintOf(self) };
-}
-
-export function TopBar({ open, toggle }: {
+export function TopBar({ open, toggle, chatBadge }: {
   open: Readonly<Record<WindowId, boolean>>;
   toggle: (id: WindowId) => void;
+  chatBadge: ChatBadgeTier | null;
 }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => { setTick((t) => t + 1); }, HEALTH_POLL_MS);
-    return () => { clearInterval(timer); };
-  }, []);
-
   const characterId = useHudSlice((state) => state.characterId);
   const level = useHudSlice((state) => state.level);
   const gold = useHudSlice((state) => state.gold);
@@ -90,23 +92,22 @@ export function TopBar({ open, toggle }: {
   const vocationName = useHudSlice((state) =>
     state.catalogue?.vocations.find((vocation) => vocation.id === state.vocationId)?.name ?? null);
   const characters = useStoreSlice(account, (state) => state.characters);
-  const onlinePlayers = useHudSlice((state) => state.onlinePlayers);
   const name = characters.find((character) => character.id === characterId)?.name ?? null;
   const initial = (name ?? characterId ?? '?').slice(0, 1).toUpperCase();
-  const outfit = selfOutfit();
 
   return (
     <header className="topbar" aria-label="barra do topo">
       <div className="topbar-left">
-        {/* Sem onClick: "Personagem" é um painel fixo da coluna esquerda (DS-13), não um modal
-            que este retrato abriria — D6. */}
-        <span className="topbar-portrait" aria-hidden="true">
-          {outfit === null ? (
-            initial
-          ) : (
-            <OutfitSprite outfitId={outfit.appearanceId} name={name ?? characterId ?? undefined} colors={outfit.colors} />
-          )}
-        </span>
+        {/* Retrato e primeiro ícone levam ao mesmo modal Personagem (#319, ADR 0030 §3). */}
+        <button
+          type="button"
+          className="topbar-portrait"
+          title="Personagem"
+          data-window="character"
+          onClick={() => { toggle('character'); }}
+        >
+          {initial}
+        </button>
         <div className="topbar-identity">
           <span className="topbar-name">{name ?? characterId ?? '—'}</span>
           <span className="topbar-vocation">
@@ -121,9 +122,6 @@ export function TopBar({ open, toggle }: {
       </div>
       <div className="topbar-wordmark">
         <b>DRACONYA</b>
-        <span className="topbar-online">
-          {onlinePlayers === null ? '—' : `${integer.format(onlinePlayers)} players online`}
-        </span>
       </div>
       <div className="topbar-right">
         <nav className="topbar-nav" aria-label="janelas">
@@ -135,11 +133,11 @@ export function TopBar({ open, toggle }: {
               icon={window.icon}
               glyph={window.glyph}
               open={open[window.id]}
+              badge={window.id === 'chat' ? chatBadge : null}
               onClick={() => { toggle(window.id); }}
             />
           ))}
         </nav>
-        <ConnectionBadge />
       </div>
     </header>
   );

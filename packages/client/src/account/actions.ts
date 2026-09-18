@@ -7,6 +7,13 @@ import { account } from './store.js';
 import * as api from './api.js';
 import { ApiError } from './api.js';
 
+/**
+ * A frase de "sem conexão": o `else` de `attempt` a usa quando a chamada nem chegou a
+ * responder. `Entry.tsx` (`entryReadiness`) compara contra ela para distinguir essa falha de
+ * uma recusa da API (o servidor respondeu, só que com "não").
+ */
+export const NO_SERVER_MESSAGE = 'Não foi possível falar com o servidor.';
+
 /** Roda a chamada mostrando "ocupado" e traduzindo a recusa. `null` quando ela falhou. */
 async function attempt<T>(run: () => Promise<T>): Promise<T | null> {
   account.set((state) => ({ ...state, busy: true, error: null }));
@@ -17,7 +24,7 @@ async function attempt<T>(run: () => Promise<T>): Promise<T | null> {
     // precisa saber que falhou mesmo quando ninguém previu o caso.
     const message = error instanceof ApiError
       ? error.message
-      : 'Não foi possível falar com o servidor.';
+      : NO_SERVER_MESSAGE;
     account.set((state) => ({ ...state, error: message }));
     return null;
   } finally {

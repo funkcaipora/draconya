@@ -357,6 +357,15 @@ pnpm tsx scripts/make-sheet-fixture.ts
   dos outros.
 - **Não recebe snapshot por tick.** Um passo chega uma vez, com origem, destino e duração; o
   cliente anima os ~400 ms.
+- **`SkillsPanel` é a primeira leitura/escrita de `localStorage` no cliente** (RC-04, #317,
+  `shell/skills-preference.ts`). É preferência de TELA — quais das seis linhas do painel Skills
+  aparecem —, nunca estado de jogo: não passa pelo servidor, não é lida de volta por outra aba
+  nem por outro personagem. `typeof localStorage === 'undefined'` (sem lançar) é o ambiente REAL
+  de `pnpm vitest run packages/client` (`environment: 'node'`, sem `jsdom`) — não é um caso raro
+  de navegador, é o que os testes exercitam por padrão; leitura e escrita são só `try/catch` em
+  volta, e falha de qualquer tipo cai no default (todas as seis visíveis), nunca num painel
+  vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
+  `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
 
 ## Como testar
 
@@ -496,11 +505,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
-  botão "Inventário" da barra minimiza as três (`collapsed` esconde tudo menos o cabeçalho),
-  nunca remove. Com bow na mão o escudo é o seletor de munição (`AmmoPicker`). Arrastar é DnD
+  botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. Com bow na mão o escudo é o
+  seletor de munição (`AmmoPicker`). Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada, minimizável pela barra (`collapsed` esconde
+  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,
+  minimizável pelo próprio cabeçalho (RC-09/#322 — antes era a barra do topo; `collapsed` esconde
   tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
   (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
   `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
@@ -509,11 +520,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, abaixo de `SkillsPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
-  (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`; `PartyBag` na direita, só em
-  `shared`, minimiza com o inventário. A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
+  (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`. "Party loot" (#316) é uma janela
+  FLUTUANTE, independente das colunas: nasce aberta durante a hunt quando a party está em
+  `shared`, e o ▣ no cabeçalho de `PartyMembers` a abre/fecha — não compartilha controle com o
+  toggle "Inventário" (ADR 0030 decisão 3). A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
   guarda a última cópia que o servidor devolveu — não importa `net/` (ADR 0007): a casca
   injeta o cliente e o `enterHunt` em `useConnection`. O polling de `mine` a cada 2 s só
   enquanto há party. **Entrar na hunt é oferecer o ticket à conexão e reconectar**
@@ -534,8 +547,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
   esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251
   (ADR 0029, D3/D6/D8/D9), a casca veste o design system:** topo de 65 px com identidade, gold e
-  os seis ícones PNG das janelas (Hunts, Bot, Inventário, Analisador, Cyclopedia, Chat — nunca
-  emoji, D9), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
+  os cinco ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
+  Chat — nunca
+  emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
+  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
   faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
   marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
   Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que

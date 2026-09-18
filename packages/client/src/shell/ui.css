@@ -28,10 +28,12 @@
   background: var(--grad-blood);
   color: var(--text-on-blood);
   font-family: var(--font-display);
+  font-size: 12px;
   letter-spacing: var(--tracking-cta);
   text-transform: uppercase;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 2px 0 rgba(0, 0, 0, .6);
 }
+.ui-button-primary.ui-button-lg { font-size: 14px; }
 .ui-button-primary:hover:not(:disabled) { background: linear-gradient(180deg, #a3222a, #7d1319 60%, #560c11); transform: translateY(-1px); }
 .ui-button-primary:active:not(:disabled) { transform: translateY(1px); }
 
@@ -40,10 +42,12 @@
   background: linear-gradient(180deg, #d2ab60, #b58c43);
   color: #191409;
   font-family: var(--font-display);
+  font-size: 12px;
   letter-spacing: var(--tracking-cta);
   text-transform: uppercase;
   box-shadow: inset 0 1px 0 #fff2;
 }
+.ui-button-gold.ui-button-lg { font-size: 14px; }
 .ui-button-gold:hover:not(:disabled) { background: linear-gradient(180deg, #e1bf7c, #cba359); transform: translateY(-1px); }
 .ui-button-gold:active:not(:disabled) { transform: translateY(1px); }
 
@@ -53,6 +57,7 @@
   color: var(--parchment-2);
   font-family: var(--font-mono);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -64,6 +69,8 @@
   background: transparent;
   color: var(--parchment-3);
   font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
 }
 .ui-button-ghost:hover:not(:disabled) { border-color: var(--gold-3); color: var(--gold-5); }
 
@@ -73,6 +80,7 @@
   color: var(--blood-7);
   font-family: var(--font-mono);
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -83,8 +91,11 @@
   background: transparent;
   color: var(--gold-4);
   font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
 }
 .ui-button-text:hover:not(:disabled) { color: var(--gold-5); }
+.ui-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── IconButton ── */
 .ui-icon-button {
@@ -106,7 +117,21 @@
   color: var(--gold-5);
 }
 .ui-icon-button-active { background: var(--surface-selected); }
+.ui-icon-button-lg {
+  width: 36px;
+  height: 36px;
+  padding: 1px;
+  border-radius: 0;
+  background: var(--ash-1);
+  border-color: var(--gold-1);
+}
+.ui-icon-button-lg.ui-icon-button-active {
+  background: var(--ash-1);
+  border-color: var(--gold-4);
+  filter: brightness(1.16);
+}
 .ui-icon-button:disabled { cursor: not-allowed; opacity: .55; }
+.ui-icon-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── Input (e o NumField, DT-03: size="sm" type="number") ── */
 .ui-input { display: block; margin-bottom: 18px; font-family: var(--font-body); }
@@ -201,6 +226,7 @@
 .ui-select-lg { height: 46px; border-radius: 7px; font: 14px var(--font-body); }
 .ui-select-md { height: 32px; border-radius: 4px; font: 11px var(--font-mono); }
 .ui-select-sm { height: 23px; border-radius: 4px; font: 9px var(--font-mono); }
+.ui-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-select-caret {
   position: absolute;
   right: 8px;
@@ -214,8 +240,8 @@
 /* ── Checkbox ── */
 .ui-checkbox { display: flex; align-items: center; gap: 9px; font-family: var(--font-body); font-size: 11px; line-height: 1.5; color: var(--parchment-3); cursor: pointer; min-height: 24px; }
 .ui-checkbox-box {
-  width: 15px;
-  height: 15px;
+  width: var(--checkbox-size, 15px);
+  height: var(--checkbox-size, 15px);
   flex: none;
   display: grid;
   place-items: center;
@@ -223,13 +249,13 @@
   border-radius: 2px;
   background: var(--surface-slot);
   color: #1a1206;
-  font-size: 11px;
+  font-size: calc(var(--checkbox-size, 15px) - 4px);
   font-weight: 700;
 }
 .ui-checkbox-box::after { content: ''; }
 .ui-checkbox-checked { border-color: var(--gold-4); background: var(--grad-gold); }
 .ui-checkbox-checked::after { content: '✓'; }
-.ui-checkbox-box:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.ui-checkbox-box:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* ── Switch — role="switch" já carrega o estado semântico; a cor é decoração sobre isso ── */
 .ui-switch {
@@ -244,6 +270,7 @@
   transition: background .15s, border-color .15s;
 }
 .ui-switch:disabled { cursor: not-allowed; opacity: .5; }
+.ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-switch-knob {
   position: absolute;
   top: 2px;
@@ -266,6 +293,7 @@
 .ui-switch-traffic.ui-switch-on .ui-switch-knob { background: linear-gradient(180deg, #8fd98a, #4d9a5a); box-shadow: 0 0 6px rgba(95, 181, 106, .6); }
 
 /* ── Tabs ── */
+.ui-tab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-tabs-underline {
   display: flex;
   border-bottom: 1px solid var(--ash-5);
@@ -363,7 +391,7 @@
   border: 1px solid var(--ash-5);
   border-radius: 3px;
   background: var(--grad-panel);
-  box-shadow: var(--shadow-panel);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .7), inset 0 0 0 1px #080505;
   backdrop-filter: blur(var(--blur-panel));
 }
 .ui-panel--footer { grid-template-rows: 34px minmax(0, 1fr) auto; }
@@ -372,6 +400,10 @@
 .ui-panel--collapsed,
 .ui-panel--collapsed.ui-panel--footer { grid-template-rows: 34px; }
 .ui-panel--dock { border-radius: 0; box-shadow: none; }
+/* O corpo do painel encaixado leva o padding do SidePanel do kit (Hud.jsx:34,
+   `bodyStyle={{ padding: "6px 10px 8px" }}`): antes de #305 ele vinha de
+   `.windows > section > *:not(header)` em shell.css, que saiu junto com a pele antiga. */
+.ui-panel--dock > .ui-panel-body { padding: 6px 10px 8px; }
 .ui-panel--modal { box-shadow: var(--shadow-modal); }
 
 .ui-panel-hairline {
@@ -451,6 +483,8 @@
 }
 .ui-slot[data-kind="loot"] { border-color: var(--gold-2); }
 .ui-slot:hover { border-color: var(--gold-3); }
+.ui-slot[draggable] { cursor: grab; }
+.ui-slot:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-slot--dashed { border-style: dashed; }
 .ui-slot--empty {
   border-color: var(--ash-5);
@@ -496,7 +530,7 @@
 .ui-vital-track {
   position: relative; overflow: hidden;
   border: 1px solid #080505;
-  background: linear-gradient(180deg, var(--ash-4), var(--ash-3));
+  background: var(--grad-vital-track);
   box-shadow: inset 0 1px 2px rgba(0,0,0,.7), 0 1px rgba(255,255,255,.04);
   border-radius: 1px;
 }
@@ -505,10 +539,10 @@
   box-shadow: inset 0 1px rgba(255,255,255,.18), inset 0 -1px rgba(0,0,0,.3);
   transition: width .18s var(--ease-out);
 }
-.ui-vital-fill[data-kind="hp"] { background: var(--vital-hp); }
-.ui-vital-fill[data-kind="mp"] { background: var(--vital-mp); }
-.ui-vital-fill[data-kind="exp"] { background: var(--vital-exp); }
-.ui-vital-fill[data-kind="stamina"] { background: var(--vital-stamina); }
+.ui-vital-fill[data-kind="hp"] { background: var(--grad-vital-hp); }
+.ui-vital-fill[data-kind="mp"] { background: var(--grad-vital-mp); }
+.ui-vital-fill[data-kind="exp"] { background: var(--grad-vital-exp); }
+.ui-vital-fill[data-kind="stamina"] { background: var(--grad-vital-stamina); }
 .ui-vital-text {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--parchment-1);

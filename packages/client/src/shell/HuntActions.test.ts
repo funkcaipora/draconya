@@ -4,10 +4,9 @@ import { prerender } from 'react-dom/static';
 import { describe, expect, it, vi } from 'vitest';
 import { HuntActions, leaveHunt } from './HuntActions.js';
 
-// RF-07 (#259): as duas pills sobre o mundo. `prerender` roda sem DOM — um clique real não
-// dispara (mesmo limite de VocationChoice.test.ts). A intenção de saída é uma função pura,
-// testada direto; a fiação do clique com ela (e com `onChoose`) é provada por inspeção do
-// código-fonte, o mesmo padrão que `VocationChoice.test.ts` já usa para o mesmo problema.
+// As pills sobre o mundo (#259, #325). `prerender` roda sem DOM — um clique real não dispara
+// (mesmo limite de VocationChoice.test.ts). A intenção de saída é uma função pura, testada
+// direto; a fiação do clique é provada por inspeção do código-fonte.
 
 async function render(hunting: boolean): Promise<string> {
   const { prelude } = await prerender(createElement(HuntActions, { hunting, onChoose: () => {} }));
@@ -15,7 +14,7 @@ async function render(hunting: boolean): Promise<string> {
 }
 
 describe('HuntActions', () => {
-  it('hunting=false: shows the "⚔ Escolher caçada" pill, and no details pill', async () => {
+  it('hunting=false: shows the "⚔ Escolher caçada" pill, and only that one', async () => {
     const html = await render(false);
     expect(html).toContain('Escolher caçada');
     expect(html).not.toContain('Sair da caçada');
@@ -25,31 +24,41 @@ describe('HuntActions', () => {
     expect(html).not.toContain('hunt-pill-danger');
   });
 
-  it('hunting=true: shows "Detalhes da caçada" before "Sair da caçada", and never "Despachar loot"', async () => {
+  it('hunting=true: puts details before the exit pair, without dispatching loot', async () => {
     const html = await render(true);
-    const detailsIdx = html.indexOf('Detalhes da caçada');
-    const leaveIdx = html.indexOf('Sair da caçada');
-    expect(detailsIdx).toBeGreaterThan(-1);
-    expect(leaveIdx).toBeGreaterThan(-1);
-    expect(detailsIdx).toBeLessThan(leaveIdx);
-    expect(html).toContain('»');
+    const detailsIndex = html.indexOf('Detalhes da caçada');
+    const exitIndex = html.indexOf('Sair da caçada');
+    expect(detailsIndex).toBeGreaterThan(-1);
+    expect(exitIndex).toBeGreaterThan(detailsIndex);
+    expect(html).toContain('Sair da caçada');
     expect(html).not.toContain('Escolher caçada');
     expect(html).not.toContain('Despachar loot');
     expect(html).toContain('hunt-pill-danger');
+    // Antes desta correção existiam DOIS "»": o decorativo dentro do texto da pill (removido
+    // agora) e o funcional do `ExitRulesPopover`. O kit desenha só um, no mesmo botão partido.
+    const chevronCount = (html.match(/»/g) ?? []).length;
+    expect(chevronCount).toBe(1);
   });
 
-  it('wires onChoose to the non-hunting pill, and leaveHunt(sendIntent) with setCurrentHunt(null) to the exit pill', async () => {
+  it('wires onChoose to the non-hunting pill, and leaveHunt(sendIntent) to the exit pill', async () => {
     const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
     const notHuntingIndex = source.indexOf('if (!hunting)');
     const onChooseIndex = source.indexOf('onClick={onChoose}');
     const huntingReturnIndex = source.lastIndexOf('return (');
-    const leaveHuntCallIndex = source.indexOf('leaveHunt(sendIntent); setCurrentHunt(null);');
+    const leaveHuntCallIndex = source.indexOf('leaveHunt(sendIntent)');
     expect(notHuntingIndex).toBeGreaterThan(-1);
     // `onClick={onChoose}` mora DENTRO do bloco `if (!hunting)`, antes do segundo `return`.
     expect(onChooseIndex).toBeGreaterThan(notHuntingIndex);
     expect(onChooseIndex).toBeLessThan(huntingReturnIndex);
-    // `leaveHunt(sendIntent); setCurrentHunt(null);` mora DEPOIS do segundo `return` — o pill de saída.
+    // `leaveHunt(sendIntent)` mora DEPOIS do segundo `return` — o pill de saída.
     expect(leaveHuntCallIndex).toBeGreaterThan(huntingReturnIndex);
+  });
+
+  it('clears the local hunt identity only from the successful exit handler', async () => {
+    const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
+    const exitIndex = source.indexOf('if (leaveHunt(sendIntent)) setCurrentHunt(null);');
+    expect(exitIndex).toBeGreaterThan(-1);
+    expect(source.indexOf('<HuntDetailsModal', exitIndex)).toBeGreaterThan(exitIndex);
   });
 });
 

@@ -13,23 +13,12 @@ import { useEffect, useState } from 'react';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { party, partyActions } from '../party/store.js';
 import type { HuntListing } from '../state/hud.js';
+import { Panel } from './ui/Panel.js';
 
 const DIFFICULTY_TEXT: Record<string, string> = {
   cautious: 'Cauteloso', bold: 'Ousado', reckless: 'Agressivo',
 };
 const MODE_TEXT = { split: 'Dividido', shared: 'Compartilhado' } as const;
-
-/**
- * O rótulo do pull no seletor de dificuldade — "Ousado · 4" como o Huntera mostra (kit:
- * Modals.jsx:52; SV-19). Duplicada de `HuntsModal.pullLabel` de propósito: os dois arquivos já
- * duplicam `DIFFICULTY_TEXT`, e `HuntsModal` importa `PartyPanel` — importar de volta criaria
- * um ciclo entre os dois módulos.
- */
-function pullLabel(hunt: HuntListing, difficulty: string): string {
-  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
-  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
-  return count === undefined ? label : `${label} · ${String(count)}`;
-}
 
 /** De quanto em quanto tempo a tela pergunta ao servidor pela party (DT-01). */
 export const POLL_MS = 2_000;
@@ -60,8 +49,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
   const hunt = hunts.find((h) => h.id === huntId) ?? hunts[0];
 
   return (
-    <section className="party-panel" aria-label="party">
-      <header className="analyzer-head"><strong>Party</strong></header>
+    <Panel dock title={current === null ? 'Party' : `Party · ${String(current.members.length)}`} bodyClassName="party-panel">
       {state.entering && <p className="quiet">Entrando na hunt…</p>}
       {!state.entering && current === null && (
         <div className="party-form">
@@ -91,19 +79,11 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
           <ul className="party-members">
             {current.members.map((member) => (
               <li key={member.characterId} className="party-member">
-                <span>{`${member.characterId === current.leaderId ? '★ ' : ''}${member.characterId === me ? 'você' : member.name}`}</span>
+                <span>
+                  {member.characterId === current.leaderId && <span className="party-leader-star">★</span>}
+                  {member.characterId === me ? 'você' : member.characterId}
+                </span>
                 <span className={member.approved ? 'party-approved' : 'entry-meta'}>{member.approved ? '✓ aprovou' : 'aguardando'}</span>
-                {leader && member.characterId !== me && (
-                  <button
-                    type="button"
-                    className="party-kick"
-                    title="Remover da party"
-                    disabled={state.busy}
-                    onClick={() => { void partyActions.kick(member.characterId); }}
-                  >
-                    ×
-                  </button>
-                )}
               </li>
             ))}
           </ul>
@@ -130,9 +110,7 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
                   {hunts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
                 <select aria-label="dificuldade" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); }}>
-                  {hunt === undefined ? null : hunt.difficulties.map((d) => (
-                    <option key={d} value={d}>{pullLabel(hunt, d)}</option>
-                  ))}
+                  {(hunt?.difficulties ?? []).map((d) => <option key={d} value={d}>{DIFFICULTY_TEXT[d] ?? d}</option>)}
                 </select>
                 <select aria-label="modo" value={mode} onChange={(event) => { setMode(event.target.value as 'split' | 'shared'); }}>
                   <option value="split">{MODE_TEXT.split}</option>
@@ -158,12 +136,13 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
               Aprovar
             </button>
           )}
+          <p className="party-status">{everyoneApproved ? 'Todos aprovaram' : 'Aguardando aprovação'}</p>
           <button type="button" className="entry-quiet" disabled={state.busy} onClick={() => { void partyActions.leave(); }}>
             sair da party
           </button>
         </div>
       )}
       {state.error !== null && <p className="system-error">{state.error}</p>}
-    </section>
+    </Panel>
   );
 }

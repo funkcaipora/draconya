@@ -13,10 +13,12 @@
 import type { DragEvent } from 'react';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
-import type { Inventory, ItemDefinition } from '../state/hud.js';
+import type { Inventory } from '../state/hud.js';
 import { clickIntent, dropIntent, parsePlace, serializePlace } from './drag-intent.js';
 import type { DragPlace } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
+import { Panel } from './ui/Panel.js';
+import { Slot } from './ui/Slot.js';
 
 const TITLE: Readonly<Record<'backpack' | 'satchel', string>> = { backpack: 'Mochila', satchel: 'Bolsa' };
 
@@ -40,38 +42,29 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
   const inventory = useHudSlice((state) => state.inventory);
   const catalogue = useHudSlice((state) => state.catalogue);
   const title = TITLE[container];
-
-  const header = (icon: ItemDefinition | undefined, count: string) => (
-    <header className="analyzer-head container-head">
-      {icon !== undefined && <span className="container-icon"><ItemSprite appearanceId={icon.appearanceId} name={icon.name} /></span>}
-      <strong>{title}</strong>
-      <span className="entry-meta">{count}</span>
-      {onToggle !== undefined && (
-        <button type="button" className="entry-quiet" aria-label={collapsed ? 'expandir' : 'minimizar'} onClick={onToggle}>
-          {collapsed ? '▸' : '▾'}
-        </button>
-      )}
-    </header>
-  );
+  const panelProps = onToggle === undefined ? {} : { onToggle };
 
   if (inventory === null || catalogue === null) {
     return (
-      <section className={`container-window${collapsed ? ' collapsed' : ''}`} aria-label={title.toLowerCase()}>
-        {header(undefined, '')}
+      <Panel dock title={title} className="container-window" collapsed={collapsed} {...panelProps}>
         <p className="quiet">Carregando…</p>
-      </section>
+      </Panel>
     );
   }
 
   const byId = new Map(catalogue.items.map((item) => [item.id, item]));
   const places = inventory[container];
-  const back = inventory.equipped['back'];
-  const icon = container === 'backpack' && back !== undefined ? byId.get(back.itemId) : undefined;
   const used = places.filter((place) => place !== null).length;
 
   return (
-    <section className={`container-window${collapsed ? ' collapsed' : ''}`} aria-label={title.toLowerCase()}>
-      {header(icon, `${String(used)}/${String(places.length)}`)}
+    <Panel
+      dock
+      title={title}
+      className="container-window"
+      meta={`${String(used)}/${String(places.length)}`}
+      collapsed={collapsed}
+      {...panelProps}
+    >
       {places.length === 0
         ? <p className="quiet">{container === 'backpack' ? 'Sem mochila nas costas' : 'Bolsa vazia'}</p>
         : (
@@ -82,11 +75,11 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                 return (
                   <li
                     key={index}
-                    className="slot slot-empty-place"
-                    aria-label="lugar vazio"
                     onDragOver={(event) => { event.preventDefault(); }}
                     onDrop={(event) => { dropOn(place, event, inventory); }}
-                  />
+                  >
+                    <Slot size={26} empty icon={<span />} ariaLabel="lugar vazio" />
+                  </li>
                 );
               }
               const definition = byId.get(item.itemId);
@@ -95,15 +88,14 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
               return (
                 <li
                   key={item.instanceId}
-                  className="slot"
                   onDragOver={(event) => { event.preventDefault(); }}
                   onDrop={(event) => { dropOn(place, event, inventory); }}
                 >
-                  <button
-                    type="button"
-                    className="slot-button"
-                    draggable
+                  <Slot
+                    size={26}
+                    kind="loot"
                     title={wearable ? `Vestir ${name}` : name}
+                    draggable
                     onDragStart={(event) => { startDrag(place, event); }}
                     // O clique veste — o caminho do celular. Quem confere se dá é o servidor.
                     onClick={() => {
@@ -111,15 +103,14 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                       const intent = clickIntent(place, inventory);
                       if (intent !== null) sendIntent(intent);
                     }}
-                  >
-                    <ItemSprite appearanceId={definition?.appearanceId} name={name} />
-                    {item.quantity > 1 && <span className="slot-count">{item.quantity}</span>}
-                  </button>
+                    icon={<ItemSprite appearanceId={definition?.appearanceId} name={name} />}
+                    count={item.quantity}
+                  />
                 </li>
               );
             })}
           </ul>
         )}
-    </section>
+    </Panel>
   );
 }

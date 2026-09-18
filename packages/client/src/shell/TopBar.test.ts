@@ -2,22 +2,30 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TopBar } from './TopBar.js';
+import type { ChatBadgeTier } from './chat-badge.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
-import type { Creature } from '../state/world.js';
-import { world } from '../state/world.js';
 
-// A casca do design (#251, #351, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
-// wordmark com contagem de jogadores (SV-15) e os seis ícones PNG — nenhum emoji, nenhum ícone para
-// sistema inexistente. `prerender` roda a árvore inteira sem DOM.
+// A casca do design (#251, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
+// wordmark sem contagem de jogadores e os cinco ícones PNG na ordem do kit — nenhum emoji,
+// nenhum ícone para sistema inexistente. `prerender` roda a árvore inteira sem DOM.
 
-const OPEN = { hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
+const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
 
-async function render(open = OPEN): Promise<string> {
-  const { prelude } = await prerender(createElement(TopBar, { open, toggle: NOOP_TOGGLE }));
+async function render(open = OPEN, chatBadge: ChatBadgeTier | null = null): Promise<string> {
+  const { prelude } = await prerender(createElement(TopBar, {
+    open, toggle: NOOP_TOGGLE, chatBadge,
+  }));
   return new Response(prelude).text();
+}
+
+function buttonFor(html: string, id: string): string {
+  const marker = html.indexOf(`data-window="${id}"`);
+  const start = html.lastIndexOf('<button', marker);
+  const end = html.indexOf('</button>', marker);
+  return html.slice(start, end + '</button>'.length);
 }
 
 const catalogue: Catalogue = {
@@ -37,12 +45,10 @@ const catalogue: Catalogue = {
 beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD }));
   account.set(() => ({ ...INITIAL_ACCOUNT }));
-  world.selfId = null;
-  world.creatures.clear();
 });
 
 describe('TopBar', () => {
-  it('shows the portrait, name, "VOCAÇÃO · LV N", the gold pill and the connection badge after the icons', async () => {
+  it('shows the portrait, name, "VOCAÇÃO · LV N" and the gold pill', async () => {
     hud.set(() => ({
       ...INITIAL_HUD, characterId: 'c1', level: 12, gold: 2_134_760, vocationId: 'knight', catalogue,
     }));
@@ -52,8 +58,8 @@ describe('TopBar', () => {
     }));
     const html = await render();
     expect(html).toContain('class="topbar-portrait"');
+    expect(html).toMatch(/<button[^>]*class="topbar-portrait"[^>]*data-window="character"/);
     expect(html).toContain('>A<'); // a inicial do nome
-    expect(html).not.toContain('item-sprite');
     expect(html).toContain('>Aldric<');
     // A ordem é "VOCAÇÃO · LV N" (DT-04): vocação primeiro. `react-dom/static` insere um
     // comentário de fronteira entre os dois `{}` adjacentes, então o texto não fica contíguo.
@@ -62,10 +68,11 @@ describe('TopBar', () => {
     expect(vocationIndex).toBeGreaterThan(0);
     expect(levelIndex).toBeGreaterThan(vocationIndex);
     expect(html).toContain('2.134.760');
-    const statusIndex = html.indexOf('role="status"');
-    const lastIconIndex = html.lastIndexOf('topbar-icon-button');
-    expect(statusIndex).toBeGreaterThan(0);
-    expect(statusIndex).toBeGreaterThan(lastIconIndex);
+  });
+
+  it('does not render the connection status after it moved to the world overlay', async () => {
+    const html = await render();
+    expect(html).not.toContain('role="status"');
   });
 
   it('shows only "LV N", without "VOCAÇÃO ·", when vocationId is null (D8)', async () => {
@@ -75,36 +82,54 @@ describe('TopBar', () => {
     expect(html).not.toContain(' · LV 3');
   });
 
-  it('shows the six window icons, and no icon for a system that does not exist', async () => {
+  it('shows exactly five window icons, in the kit order, and none for Bot/Inventory/inexistent systems', async () => {
     const html = await render();
-    expect((html.match(/topbar-icon-button/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(5);
+    // Cinco ícones de navegação e o retrato clicável carregam data-window.
     expect((html.match(/data-window="/g) ?? []).length).toBe(6);
-    for (const label of ['Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
-      expect(html).toContain(`title="${label}"`);
-    }
-    for (const label of ['Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
+    const order = ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat'];
+    const indexes = order.map((label) => html.indexOf(`title="${label}"`));
+    expect(indexes.every((index) => index >= 0)).toBe(true);
+    expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
+    for (const label of ['Bot', 'Inventário', 'Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
       expect(html).not.toContain(`title="${label}"`);
     }
   });
 
-  it('renders formatted number "1.284 players online" inside .topbar-online when onlinePlayers is 1284', async () => {
-    hud.set((state) => ({ ...state, onlinePlayers: 1284 }));
+  it('never renders a permanent text label under a nav icon (R1-10) — only the title tooltip', async () => {
+    const html = await render();
+    expect(html).not.toContain('topbar-icon-label');
+    // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
+    for (const label of ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat']) {
+      expect(html).toContain(`title="${label}"`);
+    }
+  });
+
+  it('shows the gold badge only on Chat', async () => {
+    const html = await render(OPEN, 'gold');
+
+    expect(buttonFor(html, 'chat')).toContain('topbar-icon-button-badge-gold');
+    expect(buttonFor(html, 'analyzer')).not.toContain('topbar-icon-button-badge-gold');
+  });
+
+  it('shows the danger dot only on Chat', async () => {
+    const html = await render(OPEN, 'danger');
+
+    expect(buttonFor(html, 'chat')).toContain('topbar-icon-badge-dot');
+    expect(buttonFor(html, 'analyzer')).not.toContain('topbar-icon-badge-dot');
+  });
+
+  it('shows no badge when Chat has no unseen system message', async () => {
+    const html = await render(OPEN, null);
+
+    expect(buttonFor(html, 'chat')).not.toContain('topbar-icon-button-badge-gold');
+    expect(buttonFor(html, 'chat')).not.toContain('topbar-icon-badge-dot');
+  });
+
+  it('centers the "DRACONYA" wordmark without any player count', async () => {
     const html = await render();
     expect(html).toContain('DRACONYA');
-    expect(html).toContain('class="topbar-online"');
-    expect(html).toContain('1.284 players online');
-  });
-
-  it('renders "0 players online" inside .topbar-online when onlinePlayers is 0', async () => {
-    hud.set((state) => ({ ...state, onlinePlayers: 0 }));
-    const html = await render();
-    expect(html).toContain('0 players online');
-  });
-
-  it('renders "—" inside .topbar-online when onlinePlayers is null', async () => {
-    hud.set((state) => ({ ...state, onlinePlayers: null }));
-    const html = await render();
-    expect(html).toContain('<span class="topbar-online">—</span>');
+    expect(html).not.toContain('online');
   });
 
   it('never renders an emoji', async () => {
@@ -120,57 +145,8 @@ describe('TopBar', () => {
     expect(html).toContain('>?<');
   });
 
-  it('renders the outfit sprite inside .topbar-portrait when world.selfId and the creature exist', async () => {
-    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
-    account.set(() => ({
-      ...INITIAL_ACCOUNT,
-      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'hunt', sessionId: 's1' }],
-    }));
-    world.selfId = 1;
-    world.creatures.set(1, {
-      id: 1,
-      name: 'Aldric',
-      kind: 'player',
-      tile: { x: 0, y: 0 },
-      position: { x: 0, y: 0, z: 7 },
-      step: null,
-      moving: false,
-      stepProgress: 0,
-      targetTile: null,
-      direction: 'south',
-      appearanceId: 128,
-      colors: { head: 10, body: 20, legs: 30, feet: 40 },
-      health: 100,
-      maxHealth: 100,
-    } as unknown as Creature);
+  it('every window icon carries aria-pressed (#306)', async () => {
     const html = await render();
-    expect(html).toContain('class="topbar-portrait"');
-    expect(html).toContain('class="item-sprite"');
-    expect(html).toMatch(/class="topbar-portrait"[^>]*>\s*<span class="item-sprite"/);
-  });
-
-  it('keeps the plain initial when the world does not have the self creature yet (city loading, entry)', async () => {
-    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
-    account.set(() => ({
-      ...INITIAL_ACCOUNT,
-      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null }],
-    }));
-    world.selfId = null;
-    const html = await render();
-    expect(html).not.toContain('item-sprite');
-    expect(html).toContain('>A<');
-  });
-
-  it('keeps the plain initial when selfId is set but the creature has not arrived yet (race)', async () => {
-    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
-    account.set(() => ({
-      ...INITIAL_ACCOUNT,
-      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null }],
-    }));
-    world.selfId = 1;
-    world.creatures.clear();
-    const html = await render();
-    expect(html).not.toContain('item-sprite');
-    expect(html).toContain('>A<');
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(5);
   });
 });

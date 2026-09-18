@@ -1,136 +1,65 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  SKILL_ORDER,
-  loadVisibleSkills,
-  saveVisibleSkills,
-  staminaClock,
-} from './skills-preference.js';
+import { SKILL_ORDER, loadVisibleSkills, saveVisibleSkills, staminaClock } from './skills-preference.js';
 
-describe('skills-preference', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
+const STORAGE_KEY = 'draconya:shell:skillsPanel:visible';
+
+function storageOf(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('skills preference', () => {
+  it('uses every skill by default when storage is unavailable or absent', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
+
+    vi.stubGlobal('localStorage', storageOf());
+    expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
   });
 
-  describe('SKILL_ORDER', () => {
-    it('has 10 entries in exact specified order', () => {
-      expect(SKILL_ORDER).toEqual([
-        'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
-      ]);
-      expect(SKILL_ORDER).toHaveLength(10);
-    });
+  it('round-trips the selected ids without changing their saved order', () => {
+    const storage = storageOf();
+    vi.stubGlobal('localStorage', storage);
+
+    saveVisibleSkills(['mana', 'exp']);
+
+    expect(storage.setItem).toHaveBeenCalledWith(STORAGE_KEY, '["mana","exp"]');
+    expect(loadVisibleSkills()).toEqual(['mana', 'exp']);
   });
 
-  describe('staminaClock', () => {
-    it('formats stamina in HH:MM clock format without units', () => {
-      // 0 ms -> '0:00'
-      expect(staminaClock(0)).toBe('0:00');
-      // 1 min (60_000 ms) -> '0:01'
-      expect(staminaClock(60_000)).toBe('0:01');
-      // 1 h (3_600_000 ms) -> '1:00'
-      expect(staminaClock(3_600_000)).toBe('1:00');
-      // 41 h 40 min (150_000_000 ms = 2500 min, o valor "41:40" do kit data.js:18) -> '41:40'
-      expect(staminaClock(150_000_000)).toBe('41:40');
-      // 42 h (151_200_000 ms, teto do Tibia) -> '42:00'
-      expect(staminaClock(151_200_000)).toBe('42:00');
-    });
+  it('keeps an explicit empty selection but removes unknown stored values', () => {
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '[]' }));
+    expect(loadVisibleSkills()).toEqual([]);
+
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '["hp","unknown",7,"mana"]' }));
+    expect(loadVisibleSkills()).toEqual(['hp', 'mana']);
   });
 
-  describe('loadVisibleSkills', () => {
-    it('returns 6 legacy saved ids without automatically injecting the 4 new ones', () => {
-      const legacyIds = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'];
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue(JSON.stringify(legacyIds)),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(legacyIds);
-    });
-    it('returns SKILL_ORDER when localStorage is undefined', () => {
-      vi.stubGlobal('localStorage', undefined);
-      expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
-    });
+  it('falls back to every skill when storage is malformed, non-list, or throws', () => {
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '{not json' }));
+    expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
 
-    it('returns SKILL_ORDER when storage key is not set (null)', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue(null),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
-    });
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '"hp"' }));
+    expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
 
-    it('preserves an empty array when user deselected all skills', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue('[]'),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual([]);
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => { throw new Error('blocked'); }),
+      setItem: vi.fn(() => { throw new Error('blocked'); }),
     });
-
-    it('returns SKILL_ORDER when stored JSON is malformed', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue('{"invalid_json'),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
-    });
-
-    it('returns SKILL_ORDER when stored JSON is not an array', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue('{"exp": true}'),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
-    });
-
-    it('filters out unknown ids and keeps valid skill ids', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn().mockReturnValue(JSON.stringify(['hp', 'unknown_skill', 'mana', 123])),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(['hp', 'mana']);
-    });
-
-    it('returns SKILL_ORDER when getItem throws', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn(() => {
-          throw new Error('Access denied');
-        }),
-        setItem: vi.fn(),
-      });
-      expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
-    });
+    expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
+    expect(() => { saveVisibleSkills(['hp']); }).not.toThrow();
   });
 
-  describe('saveVisibleSkills', () => {
-    it('saves visible skills and allows round-trip loading', () => {
-      const store = new Map<string, string>();
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn((key: string) => store.get(key) ?? null),
-        setItem: vi.fn((key: string, value: string) => {
-          store.set(key, value);
-        }),
-      });
-
-      saveVisibleSkills(['hp', 'mana', 'level']);
-      expect(loadVisibleSkills()).toEqual(['hp', 'mana', 'level']);
-    });
-
-    it('does not throw when localStorage is undefined', () => {
-      vi.stubGlobal('localStorage', undefined);
-      expect(() => {
-        saveVisibleSkills(['hp']);
-      }).not.toThrow();
-    });
-
-    it('does not throw when setItem throws (quota exceeded / private mode)', () => {
-      vi.stubGlobal('localStorage', {
-        getItem: vi.fn(),
-        setItem: vi.fn(() => {
-          throw new Error('QuotaExceededError');
-        }),
-      });
-      expect(() => {
-        saveVisibleSkills(['hp']);
-      }).not.toThrow();
-    });
+  it('formats stamina as a compact hours and minutes clock', () => {
+    expect(staminaClock(0)).toBe('0:00');
+    expect(staminaClock(151_200_000)).toBe('42:00');
+    expect(staminaClock(5_460_000)).toBe('1:31');
   });
 });

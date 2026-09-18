@@ -25,9 +25,10 @@ nunca branco puro. Elementos e vocações têm matiz própria.
 
 ## Tipografia
 
-Cinzel (display, 400–900) para títulos; IBM Plex Sans para corpo; JetBrains Mono para dados de HUD
-(substitui o `ui-monospace` de hoje). As três vêm de `packages/client/public/fonts/`, nunca de
-CDN (ADR 0022, D1 do ADR 0029) — Cinzel e Plex Sans com `OFL.txt` ao lado.
+Cinzel (display, 400–900) para títulos; IBM Plex Sans (100–700, fonte variável) para corpo;
+JetBrains Mono (400/500/600/700, instâncias estáticas) para dados de HUD (substitui o
+`ui-monospace` de hoje). As três vêm de `packages/client/public/fonts/`, nunca de CDN (ADR 0022,
+D1 do ADR 0029), cada uma com o próprio `OFL.txt` ao lado.
 
 ## Janelas, slots e estados
 
@@ -37,6 +38,10 @@ título 34px, corpo com sombra `0 18px 45px #000b`. Slots: 36px (ação), 30px (
 tela (`docs/design-system-plan.md` §1). Hover = borda dourada + brilho; selecionado = anel dourado
 interno; foco = 2px ouro; pressionar = `translateY(1px)`; desabilitado = opacidade .55. Nenhuma
 sombra colorida fora de glow de ouro/sangue em foco ou seleção.
+
+Janelas flutuantes usam FloatingWindow: arrastam pela faixa do título, fora dos 60 px dos botões,
+e lembram a posição por navegador em localStorage, nunca por conta ou sessão. Abaixo de 720 px
+viram blocos estáticos do modo página.
 
 ## Layout fixado (números que DS-02/DS-08 leem daqui)
 

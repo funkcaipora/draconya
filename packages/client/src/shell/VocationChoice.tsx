@@ -24,14 +24,30 @@ import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
 
 /**
- * O papel de cada vocação, em uma linha — o texto curto de `docs/product/onboarding.md`. É
- * apresentação por id: um id sem linha aqui mostra só o nome, e o jogo continua.
+ * O papel de cada vocação, em uma linha curta e colorida — `k.role` do kit
+ * (`ui_kits/draconya/data.js:7-10`), sob o nome do cartão. Apresentação por id: um id sem linha
+ * aqui mostra só o nome, e o jogo continua.
  */
-const ROLE: Readonly<Record<string, string>> = {
-  knight: 'Tanque: mais vida e capacidade, bate de perto.',
-  paladin: 'Dano à distância: atira com bow e munição.',
-  sorcerer: 'Dano mágico: a maior mana, magias de ataque.',
-  druid: 'Suporte e cura: a maior mana, magias de cura.',
+const ROLE_SHORT: Readonly<Record<string, string>> = {
+  knight: 'Tanque · corpo a corpo',
+  paladin: 'Dano à distância · Sagrado',
+  druid: 'Suporte e cura · Gelo e Terra',
+  sorcerer: 'Dano mágico · Fogo e Energia',
+};
+
+/**
+ * A descrição completa de cada vocação, em parágrafo — `k.desc` do kit (mesmo arquivo). Separada
+ * de `ROLE_SHORT` porque o kit mostra as duas, uma embaixo da outra (R1-18): a linha curta no
+ * cabeçalho do cartão, o parágrafo completo logo abaixo. As palavras de elemento ("Sagrado",
+ * "Gelo e Terra", "Fogo e Energia") são texto estático de apresentação, copiado do kit — não uma
+ * promessa de dano elemental: o sistema de elemento (R1-17) continua fora de escopo, sem badge
+ * nenhum aqui (ver `docs/kit-fidelity-plan.md` §1, "Dados de mentira").
+ */
+const DESC_FULL: Readonly<Record<string, string>> = {
+  knight: 'Tanque: mais vida e capacidade, bate de perto com espada, machado ou maça.',
+  paladin: 'Dano à distância: atira com bow e munição. Canaliza a luz sagrada contra o que não devia andar.',
+  druid: 'Suporte e cura: a maior mana, magias de cura. Congela e envenena o campo com a fúria da terra.',
+  sorcerer: 'Dano mágico: a maior mana, magias de ataque. Chamas de dragão e raios que rasgam hordas — frágil, mas devastador.',
 };
 
 /**
@@ -102,6 +118,9 @@ export function VocationChoice() {
           </div>
         }
       >
+        <p className="vocation-subtitle">
+          A vocação define suas armas, elementos e o papel no grupo. Não pode ser alterada depois.
+        </p>
         <ul className="vocation-cards">
           {catalogue.vocations.map((vocation) => {
             const weapon = itemsById.get(vocation.startingWeaponItemId);
@@ -124,15 +143,16 @@ export function VocationChoice() {
                     <span className="vocation-card-icon">{vocation.name.charAt(0)}</span>
                     <span className="vocation-card-title">
                       <strong>{vocation.name} <span className="vocation-card-id">{vocation.id.toUpperCase()}</span></strong>
-                      <span className="vocation-role">{ROLE[vocation.id] ?? ''}</span>
+                      <span className="vocation-role">{ROLE_SHORT[vocation.id] ?? ''}</span>
                     </span>
                   </span>
-                  <span className="vocation-gains">
-                    {`+${String(vocation.healthPerLevel)} HP · +${String(vocation.manaPerLevel)} mana · +${String(vocation.capacityPerLevel)} cap por level`}
-                  </span>
+                  <span className="vocation-desc">{DESC_FULL[vocation.id] ?? ''}</span>
                   <span className="vocation-weapon">
                     <ItemSprite appearanceId={weapon?.appearanceId} name={weapon?.name} />
                     <span>{weapon?.name ?? vocation.startingWeaponItemId}</span>
+                  </span>
+                  <span className="vocation-gains">
+                    {`+${String(vocation.healthPerLevel)} HP · +${String(vocation.manaPerLevel)} mana · +${String(vocation.capacityPerLevel)} cap por level`}
                   </span>
                 </button>
               </li>
