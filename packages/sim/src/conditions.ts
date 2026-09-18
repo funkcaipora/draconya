@@ -13,7 +13,12 @@
 
 export type ConditionKind = 'haste' | 'buff' | 'mana-shield' | 'heal-over-time';
 
-export type DamageSource = 'melee' | 'distance' | 'spell';
+/**
+ * A FAMÍLIA de golpe que a condição escala (`damageDealtPercent`). É vocabulário de skill, não
+ * de resolução: `distance` cobre bow e munição, `spell` cobre magia, runa e wand. Não confundir
+ * com o `DamageSource` canônico do resolver (CMB-02), que diz de ONDE o dano veio.
+ */
+export type DamageScaleSource = 'melee' | 'distance' | 'spell';
 
 export interface DamagePercentBySource {
   readonly melee?: number | undefined;
@@ -76,7 +81,7 @@ export class Conditions {
   }
 
   /** O multiplicador de dano CAUSADO por fonte: haste (Swift Foot) e postura somam. */
-  damageDealtScale(source: DamageSource): number {
+  damageDealtScale(source: DamageScaleSource): number {
     let percent = 0;
     for (const condition of this.#active.values()) {
       percent += condition.damageDealtPercent?.[source] ?? 0;

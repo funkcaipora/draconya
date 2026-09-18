@@ -275,14 +275,14 @@ export function castSpell(
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
         const result = resolveDamage(
-          { power, kind: 'magic' },
+          { rawDamage: power, source: 'spell', damageType: 'arcane' },
           { armor: target.armor, dodgeChance: target.dodgeChance },
           'pve',
           combat,
           rng,
         );
-        hits.push(result.damage);
-        total += result.damage;
+        hits.push(result.resolvedDamage);
+        total += result.resolvedDamage;
       }
       return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
     }
@@ -363,9 +363,12 @@ export function useSupply(
       // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia.
       const { min, max } = spellPowerRange(supply.effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
-      const result = resolveDamage({ power, kind: 'magic' }, { armor: target.armor, dodgeChance: target.dodgeChance }, 'pve', combat, rng);
-      hits.push(result.damage);
-      total += result.damage;
+      const result = resolveDamage(
+        { rawDamage: power, source: 'rune', damageType: 'arcane' },
+        { armor: target.armor, dodgeChance: target.dodgeChance }, 'pve', combat, rng,
+      );
+      hits.push(result.resolvedDamage);
+      total += result.resolvedDamage;
     }
     return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
   }

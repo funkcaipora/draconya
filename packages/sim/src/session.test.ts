@@ -1,5 +1,7 @@
+import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
+import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
 import { Session } from './session.js';
 import type { EndReason, Ruleset } from './session.js';
@@ -376,5 +378,79 @@ describe('agregados e extrato por participante (#187, ADR 0027)', () => {
     const fromLegacy = Session.fromSnapshot(legacy, testRuleset(), Rng.fromSeed('x'));
     expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
     expect(fromLegacy.aggregates.kills).toBe(9);
+  });
+});
+
+describe('resolver canônico: seed, snapshot e retomada (CMB-02)', () => {
+  const combat: Combat = {
+    id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+    armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+    player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
+    spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
+  };
+
+  /**
+   * Um ruleset que resolve dano DE VERDADE pelo ponto canônico. É o que prende que a ORDEM do
+   * RNG — a faixa do ataque e a rolagem de Dodge — sobrevive ao snapshot: dois processos com a
+   * mesma semente e o mesmo ponto de retomada consomem os mesmos sorteios. Se a resolução
+   * omitisse um estado (ou mudasse a ordem), os números divergiriam.
+   */
+  const damageRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      const outcome = resolveDamage(
+        { rawDamage: session.rng.integer(10, 20), source: 'basic-attack', damageType: 'physical' },
+        { armor: 5, dodgeChance: 0.5 }, 'pve', combat, session.rng,
+      );
+      session.credit(p.id, 'xpGained', outcome.resolvedDamage);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
+    },
+  });
+
+  const damageSession = (seed: string): Session => {
+    const session = new Session({
+      id: 'damage', contentVersion: 'v1', ruleset: damageRuleset(),
+      rng: Rng.fromSeed(seed), createdAtMs: 0,
+    });
+    session.enter(character());
+    return session;
+  };
+
+  it('a mesma semente rende o mesmo dano antes e depois do snapshot', () => {
+    const straight = damageSession('damage-seed');
+    for (let i = 0; i < 60; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('damage-seed');
+    for (let i = 0; i < 30; i++) interrupted.advanceBy(1000);
+    const snap = JSON.parse(JSON.stringify(interrupted.snapshot())) as ReturnType<Session['snapshot']>;
+
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 30; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(straight.getRngState());
+  });
+
+  it('cada ataque consome DOIS sorteios: a faixa e o Dodge, na mesma ordem', () => {
+    // A ordem é contrato (DT-03 do ADR 0031). Sem o estado do gerador no snapshot, o primeiro
+    // golpe retomado repetiria o sorteio anterior — o dano divergiria com a MESMA semente.
+    const straight = damageSession('dodge-seed');
+    for (let i = 0; i < 10; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('dodge-seed');
+    for (let i = 0; i < 5; i++) interrupted.advanceBy(1000);
+    const snap = interrupted.snapshot();
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 5; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
   });
 });

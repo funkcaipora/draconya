@@ -1,5 +1,6 @@
 {
   "id": "baseline",
+  "compatibilityProfile": "combat-v1",
   "dodgeMultiplier": 0.5,
   "armorEffectiveness": {
     "melee": 1,

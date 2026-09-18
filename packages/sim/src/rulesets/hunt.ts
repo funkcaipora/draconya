@@ -2002,14 +2002,16 @@ export class HuntRuleset implements Ruleset {
     // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
     const { min, max } = attackRange(definition.attack);
     const result = resolveDamage(
-      { power: session.rng.integer(min, max), kind: 'melee' },
+      { rawDamage: session.rng.integer(min, max), source: 'monster-attack', damageType: 'physical' },
       this.#playerDefender(character),
       'pve',
       this.#options.combat,
       session.rng,
     );
     // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
-    const applied = character.receiveDamage(Math.round(result.damage * character.conditions.damageTakenScale()));
+    const applied = character.receiveDamage(
+      Math.round(result.resolvedDamage * character.conditions.damageTakenScale()),
+    );
     recordDamage(character.contribution, subject, applied);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
@@ -2186,10 +2188,14 @@ export class HuntRuleset implements Ruleset {
       });
       // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio.
       const result = resolveDamage(
-        { power: this.#scaledPower(character, 'distance-hit', ammo.attack), kind: 'melee' },
+        {
+          rawDamage: this.#scaledPower(character, 'distance-hit', ammo.attack),
+          source: 'basic-attack',
+          damageType: 'physical',
+        },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.damage, 'melee');
+      this.#land(session, character, monster, result.resolvedDamage, 'melee');
       this.#gainSkills(session, character, 'distance-hit', 1);
       return;
     }
@@ -2208,10 +2214,14 @@ export class HuntRuleset implements Ruleset {
       // Dano por faixa fixa e MÁGICO: no Tibia a wand não escala com skill nenhuma, e a
       // armadura que vale é a mágica (`armorEffectiveness.magic`).
       const result = resolveDamage(
-        { power: session.rng.integer(range.min, range.max), kind: 'magic' },
+        {
+          rawDamage: session.rng.integer(range.min, range.max),
+          source: 'basic-attack',
+          damageType: 'arcane',
+        },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.damage, 'spell');
+      this.#land(session, character, monster, result.resolvedDamage, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
       this.#gainSkills(session, character, 'spell-cast', manaPerHit);
       return;
@@ -2220,11 +2230,14 @@ export class HuntRuleset implements Ruleset {
     const result = resolveDamage(
       // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
       // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
-      { power: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
-        kind: 'melee' },
+      {
+        rawDamage: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
+        source: 'basic-attack',
+        damageType: 'physical',
+      },
       defender, 'pve', this.#options.combat, session.rng,
     );
-    this.#land(session, character, monster, result.damage, 'melee');
+    this.#land(session, character, monster, result.resolvedDamage, 'melee');
     // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
     // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
     // que "sobe pelo uso" quer dizer.

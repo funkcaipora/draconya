@@ -8,7 +8,7 @@ import { Rng } from './rng.js';
 // alcance, mana e gold —, e um dano que varia por sorteio esconderia exatamente isso. Quem
 // cuida da matemática do golpe é `combat/damage.test.ts`.
 const combat: Combat = {
-  id: 'baseline', dodgeMultiplier: 0.5,
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
   armorEffectiveness: { melee: 1, magic: 1 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },

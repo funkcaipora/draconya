@@ -1,6 +1,6 @@
 # Combate
 
-**Status:** parcial — resolução de dano (FUN-35), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
+**Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -18,9 +18,11 @@ comportamento entregue.
 
 ## Comportamento atual
 
-A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`, detalhada
-em "O que já existe". Hoje ela só conhece os tipos `melee` e `magic`, aplica armadura por tipo,
-piso, uma rolagem de Dodge sempre consumida e arredonda no fim.
+A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`. Desde o
+CMB-02 ele é o **ponto público único** de resolução — arma, magia, runa e monstro passam por
+ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. O perfil
+`combat-v1` aplica armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredonda no
+fim; a seção "O resolver canônico" detalha o contrato.
 
 ## Compatibilidade aprovada
 
@@ -68,6 +70,71 @@ A ordem do cálculo, e cada passo tem um porquê:
 
 O bônus de Bestiário é **PvE-only por construção**: `resolveDamage` recebe o contexto, e o
 acréscimo só entra quando ele é `pve`. A Guild War não tem como herdá-lo por esquecimento.
+
+## O resolver canônico e o outcome v1 (CMB-02)
+
+O CMB-02 materializou o contrato do ADR 0031. A resolução deixou de devolver um número e passou
+a devolver um **outcome** que explica cada estágio, para o host e o extrato conseguirem auditar o
+dano sem recalcular nada (DT-02). O contrato é:
+
+```ts
+type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack';
+type DamageType = 'physical' | 'arcane';
+
+interface DamageIntent {
+  readonly rawDamage: number;
+  readonly source: DamageSource;
+  readonly damageType: DamageType;
+}
+
+interface DamageOutcome {
+  readonly profile: string;        // 'combat-v1' — o perfil que resolveu
+  readonly intent: DamageIntent;   // a entrada, preservada
+  readonly armorReduction: number; // quanto a armadura subtraiu
+  readonly minimumDamage: number;  // o piso que valeu
+  readonly dodged: boolean;
+  readonly resolvedDamage: number; // o que o ruleset aplica
+}
+```
+
+O outcome é **efêmero**: nunca vai ao cliente e nunca entra no snapshot. O ruleset continua
+aplicando só `resolvedDamage` — `receiveDamage`, atribuição, `creature-hit` e `resolveDeath` não
+mudaram. O resolver não cobra mana nem gold, não agenda evento, não escreve vida, não atribui
+dano e não decide morte.
+
+### O mapa de fonte e tipo (transitório até o CMB-03)
+
+`source` e `damageType` são vocabulário **interno** do motor, não o `source` visual de
+`CreatureHit` (`'melee' | 'spell'`, que é apresentação). Hoje `damageType` só escolhe a coluna de
+`combat.armorEffectiveness`; a tabela do conteúdo **não mudou de nome**:
+
+| Produtor | `source` | `damageType` | coluna de armadura |
+|---|---|---|---|
+| corpo a corpo (arma ou desarmado) | `basic-attack` | `physical` | `melee` |
+| bow / munição | `basic-attack` | `physical` | `melee` |
+| wand / rod | `basic-attack` | `arcane` | `magic` |
+| magia de dano | `spell` | `arcane` | `magic` |
+| runa (supply de ataque) | `rune` | `arcane` | `magic` |
+| ataque de monstro | `monster-attack` | `physical` | `melee` |
+
+Os cinco produtores — golpe básico (com seus três modos), magia, runa e monstro — passam pelo
+MESMO `resolveDamage`; nenhum calcula dano por fora. `test('todo dano passa pelo resolver
+canônico')` em `hunt.test.ts` prende isso.
+
+### Perfil, boot e retomada
+
+O perfil mora no conteúdo (`combat.compatibilityProfile`, default `combat-v1` para legado e
+fixture) e entra em `Content.version`; **não** é serializado no snapshot e
+`SNAPSHOT_FORMAT_VERSION` não sobe por causa dele. Um perfil que o motor não conhece **derruba o
+boot** em `buildContent` e o despachante do resolver **lança** — não existe fallback silencioso.
+Um perfil novo exige ADR e uma nova entrada em `COMBAT_PROFILES`.
+
+### Limites do v1
+
+O perfil é ADITIVO e preserva bit a bit o resultado entregue. Ficam **fora** do v1, por decisão,
+e entram sob perfil novo nas tarefas seguintes: elemento, resistência e imunidade por tipo
+(CMB-03), defesa e escudo (CMB-04), chance de acerto ofensivo, crítico, leech, mana shield
+(CMB-08) e qualquer tela de detalhamento do dano. O cliente não vê o outcome.
 
 ## Ação por tempo decorrido, nunca por contagem de tick
 
@@ -135,10 +202,11 @@ O catálogo de magias e seus números de dano/custo/cooldown pertence a `progres
 
 ## Magia usa a MESMA resolução de dano (FUN-74)
 
-Uma magia de dano não tem matemática própria: ela chama `resolveDamage` com `kind: 'magic'`, e é
-só isso que a distingue de um golpe. A consequência é que a efetividade da armadura contra magia
-— hoje `0`, e provisória — vale por construção, e o dodge do defensor também: as duas são
-conteúdo, e nenhuma das duas precisou ser escrita duas vezes.
+Uma magia de dano não tem matemática própria: ela chama `resolveDamage` com a intenção
+`source: 'spell'` e `damageType: 'arcane'`, e é só isso que a distingue de um golpe. A
+consequência é que a efetividade da armadura contra magia — hoje `0`, e provisória — vale por
+construção, e o dodge do defensor também: as duas são conteúdo, e nenhuma das duas precisou ser
+escrita duas vezes.
 
 O que é da magia, e não do golpe, é o **portão**: level mínimo, cooldown próprio, alcance próprio
 e custo de mana. Ele mora em `packages/sim/src/casting.ts`, e os números moram em
@@ -246,8 +314,8 @@ O que difere da magia de ataque, e por quê:
   `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
   há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
   flag de gold por uma recusa que nunca foi sobre gold — o defeito que a #217 corrigiu.
-- **O dano é o mesmo pipeline** (`resolveDamage` com `kind: 'magic'`, `#applyHits` da hunt —
-  o mesmo que a magia usa), com atribuição e morte por alvo.
+- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e `damageType: 'arcane'`,
+  `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo.
 
 Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
 da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um

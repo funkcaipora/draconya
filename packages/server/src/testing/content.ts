@@ -54,7 +54,8 @@ export const TEST_PROGRESSION = {
 };
 
 export const TEST_COMBAT = {
-  id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+  armorEffectiveness: { melee: 1, magic: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };

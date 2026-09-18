@@ -30,7 +30,7 @@ const baseline = {
 };
 
 const combat = {
-  id: 'baseline', dodgeMultiplier: 0.5,
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
   armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
@@ -207,6 +207,31 @@ describe('combat baseline', () => {
     const provisional = { ...combat, _open: '§12.1 — armadura contra magia não decidida' };
     expect(buildContent(base({ combat: [provisional] })).openValues)
       .toContain('combat/baseline: §12.1 — armadura contra magia não decidida');
+  });
+});
+
+describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {
+  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
+    // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
+    // ADITIVO: nada do resultado entregue muda por ele estar implícito.
+    const { compatibilityProfile: _omitido, ...legacy } = combat;
+    expect(buildContent(base({ combat: [legacy] })).combat.compatibilityProfile).toBe('combat-v1');
+  });
+
+  it('perfil DESCONHECIDO derruba o boot, sem fallback silencioso', () => {
+    // Um perfil que o motor não conhece não pode ser reinterpretado: aceitá-lo faria a sessão
+    // rodar com uma fórmula que ninguém implementou, com cara de legítima (ADR 0031).
+    expect(() => buildContent(base({ combat: [{ ...combat, compatibilityProfile: 'combat-v99' }] })))
+      .toThrow(/perfil de compatibilidade "combat-v99" desconhecido/);
+  });
+
+  it('o perfil explícito entra na versão do conteúdo: trocá-lo muda a identidade da sessão', () => {
+    // O perfil é conteúdo versionado (invariante 7). Só há um perfil válido hoje, então o que
+    // se prende é que o campo EXPLÍCITO é hasheado: `computeVersion` lê o cru, não o parseado.
+    const { compatibilityProfile: _omitido, ...withoutProfile } = combat;
+    const withProfile = { ...withoutProfile, compatibilityProfile: 'combat-v1' };
+    expect(computeVersion(base({ combat: [withProfile] })))
+      .not.toBe(computeVersion(base({ combat: [withoutProfile] })));
   });
 });
 

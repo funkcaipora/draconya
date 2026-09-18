@@ -601,6 +601,37 @@ export const progressionSchema = z.object({
 export type Progression = z.infer<typeof progressionSchema>;
 
 /**
+ * O perfil semântico de combate (ADR 0031, CMB-02). É o CONTRATO de compatibilidade, não
+ * balanceamento: `id` é o que o resolver canônico despacha, e os outros campos documentam a
+ * release de referência e como uma mudança de fórmula atravessa conteúdo, sessão e snapshot.
+ */
+export interface CombatCompatibilityProfile {
+  readonly id: string;
+  readonly referenceRelease: string;
+  readonly productExceptions: readonly string[];
+  readonly migrationPolicy: 'additive' | 'breaking';
+}
+
+/**
+ * O perfil inicial, `combat-v1`: ADITIVO — preserva bit a bit o resultado já entregue e só
+ * acrescenta estágios que hoje são identidade (ADR 0031). Mudança de dano resolvido,
+ * quantidade/ordem de sorteio, arredondamento ou snapshot exige perfil novo.
+ */
+export const COMBAT_V1: CombatCompatibilityProfile = {
+  id: 'combat-v1',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'additive',
+};
+
+/**
+ * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
+ * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
+ */
+export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
+  new Map([[COMBAT_V1.id, COMBAT_V1]]);
+
+/**
  * Coeficientes de combate. O §12.1 é explícito: fórmula e parâmetro são CONTEÚDO, não código.
  *
  * O que o PRD decide (§12.2) e o que ele não decide estão separados de propósito — o que não
@@ -608,6 +639,12 @@ export type Progression = z.infer<typeof progressionSchema>;
  */
 export const combatSchema = z.object({
   id: z.literal('baseline'),
+  /**
+   * O perfil semântico de combate (ADR 0031, CMB-02). `Content.version` o inclui e a sessão o
+   * congela na criação (invariante 7); ele NÃO entra no snapshot. Ausente é o default
+   * compatível — conteúdo legado e fixture. Valor fora de `COMBAT_PROFILES` falha no boot.
+   */
+  compatibilityProfile: z.string().min(1).default(COMBAT_V1.id),
   /** §12.2 DECIDIDO: dodge não zera o dano, reduz à metade. */
   dodgeMultiplier: z.number().min(0).max(1),
   /** Quanto da armadura do alvo é subtraído, por tipo de ataque. */

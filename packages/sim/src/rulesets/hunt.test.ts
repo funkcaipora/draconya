@@ -1,7 +1,8 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { resolveDamage } from '../combat/damage.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -14,6 +15,15 @@ import {
   HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView } from './hunt.js';
+
+// O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
+// implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
+// fim consegue provar que CADA produtor passa por este ponto. Um produtor que calculasse dano
+// por fora não apareceria nas chamadas gravadas.
+vi.mock('../combat/damage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/damage.js')>();
+  return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
 // num mapa assim dá para dizer, olhando, onde cada criatura está — e um teste de simulação
@@ -4571,5 +4581,105 @@ describe('raio livre do spawn (#236)', () => {
     const { session, ruleset } = start({ loaded });
     session.advanceBy(100);
     expect(ruleset.monsters).toHaveLength(1);
+  });
+});
+
+// --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
+
+describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
+  const resolver = vi.mocked(resolveDamage);
+  // Bloco, e não arrow de expressão: `mockClear` devolve o próprio mock, e o Vitest trataria
+  // um retorno de função como teardown — chamando o resolver com zero argumentos.
+  beforeEach(() => { resolver.mockClear(); });
+
+  /** Os pares `fonte/tipo` que o resolver recebeu neste cenário. */
+  const passed = (source: string, damageType: string): boolean =>
+    resolver.mock.calls.some(([intent]) =>
+      intent.source === source && intent.damageType === damageType);
+
+  /** Avança drenando a cada passo: sem isso o teto de eventos pendentes descarta o `shot`. */
+  const events = (session: Session, durationMs: number, stepMs = 100): DomainEvent[] => {
+    const out: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += stepMs) {
+      session.advanceBy(stepMs);
+      out.push(...session.drainEvents());
+    }
+    return out;
+  };
+
+  it('corpo a corpo: basic-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('bow: basic-attack/físico pelo caminho da munição', () => {
+    // Sem arma de corpo a corpo, o único produtor possível é o tiro — se ele calculasse dano
+    // por fora, `passed` seria falso mesmo com o herói batendo a hunt inteira.
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const bow = {
+      id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0,
+      twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+    };
+    const loaded = content({ items: [bow], ammunition: [arrow] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 } },
+    };
+    const { session } = start({ loaded, inventory });
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('wand: basic-attack/arcano pelo caminho da mana', () => {
+    const wand = {
+      id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0,
+      weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } },
+    };
+    const loaded = content({ items: [wand] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'wand-i', itemId: 'wand', quantity: 1 } },
+    };
+    const { session, hero } = start({ loaded, inventory });
+    // `maxMana` também: a regeneração de mana clampa no máximo, e a fixture nasce com zero.
+    hero.mana = 200;
+    hero.maxMana = 200;
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'arcane')).toBe(true);
+  });
+
+  it('magia: spell/arcano', () => {
+    const { session } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    }));
+    run(session, 20_000, 100);
+    expect(passed('spell', 'arcane')).toBe(true);
+  });
+
+  it('runa: rune/arcano', () => {
+    const rune = {
+      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+      requires: { level: 1, magicLevel: 0 },
+      effect: {
+        kind: 'damage', basePower: 400, range: 4,
+        area: { shape: 'circle', radius: 1, centered: 'target' },
+      },
+    };
+    const { session } = withSpells(botConfig({
+      rune: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'supply', supplyId: 'avalanche-rune' },
+      }],
+    }), { gold: 10_000, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    run(session, 20_000, 100);
+    expect(passed('rune', 'arcane')).toBe(true);
+  });
+
+  it('ataque de monstro: monster-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'physical')).toBe(true);
   });
 });

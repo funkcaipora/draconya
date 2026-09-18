@@ -7,6 +7,7 @@ import { buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
+  COMBAT_PROFILES,
   appearancesSchema,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
@@ -160,6 +161,15 @@ export function buildContent(raw: RawContent): Content {
   // default em código faria o §12.1 deixar de valer no dia em que ninguém estivesse olhando.
   if (combat === undefined) {
     problems.push('combat/baseline.json ausente: sem ele não há como resolver dano');
+  }
+  // Perfil de compatibilidade desconhecido derruba o boot, SEM fallback (ADR 0031, CMB-02): o
+  // resolver canônico não reinterpreta uma fórmula que não conhece. Um perfil novo entra por
+  // ADR e por `COMBAT_PROFILES`, nunca por um valor que passou em silêncio.
+  if (combat !== undefined && !COMBAT_PROFILES.has(combat.compatibilityProfile)) {
+    problems.push(
+      `combat/${combat.id}: perfil de compatibilidade "${combat.compatibilityProfile}" ` +
+        'desconhecido — o motor não escolhe fallback (ADR 0031)',
+    );
   }
   const staminas = parseAll('stamina', raw.stamina ?? [], staminaSchema, problems);
   const stamina = staminas.get('baseline');
