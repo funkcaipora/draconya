@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SKILL_ORDER, loadVisibleSkills, saveVisibleSkills, staminaClock } from './skills-preference.js';
+import {
+  SKILL_LABELS, SKILL_ORDER, loadVisibleSkills, saveVisibleSkills, staminaClock,
+} from './skills-preference.js';
 
 const STORAGE_KEY = 'draconya:shell:skillsPanel:visible';
 
@@ -16,6 +18,19 @@ afterEach(() => {
 });
 
 describe('skills preference', () => {
+  it('has the ten kit rows, in the fixed order SV-10 specifies', () => {
+    expect(SKILL_ORDER).toEqual([
+      'exp', 'level', 'hp', 'mana', 'capacity', 'speed', 'stamina', 'magic', 'melee', 'distance',
+    ]);
+  });
+
+  it('labels the four rows SV-10 adds with the kit\'s classic terms', () => {
+    expect(SKILL_LABELS.speed).toBe('Speed');
+    expect(SKILL_LABELS.magic).toBe('Magic Level');
+    expect(SKILL_LABELS.melee).toBe('Corpo a Corpo');
+    expect(SKILL_LABELS.distance).toBe('Distância');
+  });
+
   it('uses every skill by default when storage is unavailable or absent', () => {
     vi.stubGlobal('localStorage', undefined);
     expect(loadVisibleSkills()).toEqual(SKILL_ORDER);
@@ -34,12 +49,30 @@ describe('skills preference', () => {
     expect(loadVisibleSkills()).toEqual(['mana', 'exp']);
   });
 
+  it('round-trips the four ids SV-10 adds, same as any other id', () => {
+    const storage = storageOf();
+    vi.stubGlobal('localStorage', storage);
+
+    saveVisibleSkills(['speed', 'magic', 'melee', 'distance']);
+
+    expect(storage.setItem).toHaveBeenCalledWith(STORAGE_KEY, '["speed","magic","melee","distance"]');
+    expect(loadVisibleSkills()).toEqual(['speed', 'magic', 'melee', 'distance']);
+  });
+
   it('keeps an explicit empty selection but removes unknown stored values', () => {
     vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '[]' }));
     expect(loadVisibleSkills()).toEqual([]);
 
     vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: '["hp","unknown",7,"mana"]' }));
     expect(loadVisibleSkills()).toEqual(['hp', 'mana']);
+  });
+
+  it('loads a pre-SV-10 six-id selection as-is, without injecting the four new rows', () => {
+    // Quem salvou a preferência antes desta issue tinha só as seis linhas antigas; o filtro por
+    // id conhecido não pode inventar "speed"/"magic"/"melee"/"distance" que a pessoa não marcou.
+    const legacySelection = ['exp', 'level', 'hp', 'mana', 'capacity', 'stamina'];
+    vi.stubGlobal('localStorage', storageOf({ [STORAGE_KEY]: JSON.stringify(legacySelection) }));
+    expect(loadVisibleSkills()).toEqual(legacySelection);
   });
 
   it('falls back to every skill when storage is malformed, non-list, or throws', () => {
