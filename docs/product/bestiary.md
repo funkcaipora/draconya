@@ -24,13 +24,14 @@ Fechar um marco é evento notável, como o level up: aparece na lista curta do a
 (§16.2) como "Bestiário: Rato · marco 1 (+1 % XP)". O abate comum não aparece, pela regra de
 sempre — uma hunt de oito horas com uma linha por rato não é lista, é log.
 
-**O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com a aba Bestiary, não uma
-seção fixa na coluna. O modal traz busca por nome, ordenação por progresso/nome/abates e alternância
-entre grade e lista; cada monstro mostra o placeholder de sprite, abates, estrelas pelos marcos
-alcançados e a barra até o próximo marco (ou cheia e verde depois do último). A caixa "Progresso
-no Bestiário" soma os marcos reais dos monstros presentes no catálogo e mostra o bônus global de
-XP; ela não aparece quando o servidor não trouxe configuração de marcos. Itens, Bosstiary,
-categorias e sprite real permanecem ausentes até os respectivos sistemas transportarem esses dados.
+**O que a tela mostra.** O ícone Cyclopedia da barra abre um modal com as abas Itens e Bestiary,
+não uma seção fixa na coluna. Na aba Bestiary, o modal traz busca por nome, ordenação
+por progresso/nome/abates e alternância entre grade e lista; cada monstro mostra o placeholder de
+sprite, abates, estrelas pelos marcos alcançados e a barra até o próximo marco (ou cheia e verde
+depois do último). A caixa "Progresso no Bestiário" soma os marcos reais dos monstros presentes no
+catálogo e mostra o bônus global de XP; ela não aparece quando o servidor não trouxe configuração
+de marcos. Bosstiary, categorias de monstro e sprite real permanecem ausentes até os respectivos
+sistemas transportarem esses dados.
 Num servidor sem monstros no catálogo, o modal diz "Este servidor não tem Bestiário" em vez de uma
 lista vazia com "+0 %". Os contadores chegam inteiros do servidor (`bestiary`, no attach e sempre
 que um muda); os marcos e o valor de cada um vêm no `catalogue`, fixados na sessão (invariante 7).
@@ -40,9 +41,10 @@ carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_
 `mammal`); é o dado que a `SideList` de categorias da Cyclopedia usa para agrupar.
 
 Desde a #344, o modal ganhou a aba "Itens": a lista de `catalogue.items`, com sprite, nome,
-categoria (derivada de onde o item veste — o mesmo rótulo do painel do set) e Atq/Def quando o
-item tem ataque ou defesa (`attack`/`armor`, desde a #337). A busca do modal é uma só e filtra
-a aba que estiver ativa. Descrição e "dropado por" não aparecem: nenhum dos dois existe em
+categoria (derivada de onde o item veste — o mesmo rótulo do painel do set) e peso; Atq/Def só
+aparecem quando o item tem ataque ou defesa (`attack`/`armor`, desde a #337, ambos opcionais no
+protocolo). A busca do modal é uma só, fica acima das abas e filtra a aba que estiver ativa.
+Descrição e "dropado por" não aparecem: nenhum dos dois existe em
 `content` hoje (ver `docs/reviews/kit-fidelity-audit-2026-09-16.md`, achado R8-22b).
 
 ## Regras
