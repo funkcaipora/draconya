@@ -26,7 +26,9 @@ aprovam → iniciar** — sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/l
   /api/party/:id/kick` com `targetId`; #358), propõe `{ huntId, difficulty, mode }` e inicia.
   Expulsar outro membro desaprova a proposta corrente (a composição mudou), nunca admite auto-kick
   (para isso existe `leave`) nem expulsar quem não é membro. Convidado entra por id da party; um
-  personagem está em no máximo uma party (`party:by-char:{id}`), e o teto é `maxMembers` (4).
+  personagem está em no máximo uma party (`party:by-char:{id}`), e o teto é `maxMembers` (4). Na
+  tela (`PartyPanel.tsx`), o `×` de expulsar só aparece para o líder, num OUTRO membro — nunca em
+  si mesmo, que já tem `leave`.
 - A visão da party (`PartyMemberView`, #358) inclui o nome do personagem (`name`, além de
   `characterId` e `approved`) resolvido a partir da conta do membro na party.
 - **Iniciar exige**: ≥ 2 membros, todos aprovaram a proposta atual (trocar a proposta zera as
@@ -114,7 +116,9 @@ composição dos membros com HP, vocação (`vocationId`), level (`level`) e per
 (`manaPercent`), reenviado ao vivo sempre que qualquer um desses valores, a composição ou a
 liderança mudam (via `sameParty` no host, #339). `party-bag`, `party-settlement` e
 `party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente). Durante a hunt
-a coluna esquerda mostra os companheiros com HP, num painel fixo (`PartyMembers`, #259); em
+a coluna esquerda mostra os companheiros com HP, vocação (abreviação de uma letra, colorida pela
+vocação, com o id cru como reserva se o catálogo não reconhecer), level e mana — os dois últimos
+só quando o `party-state` os manda —, num painel fixo (`PartyMembers`, #259, #347); em
 `shared`, a bolsa aparece como a janela flutuante "Party loot" (`PartyLootWindow`, #316) sobre o
 mundo, aberta por padrão durante a hunt e alternável pelo ▣ do cabeçalho da party; a engrenagem ⚙
 do mesmo cabeçalho reabre a formação e as ações da party durante a hunt, no modal "Gerenciar

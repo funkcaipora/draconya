@@ -6,10 +6,14 @@
 // por ele que se casa. Lido num intervalo curto, e não por assinatura: o mundo é um objeto
 // mutado no lugar (ADR 0007), e o painel só existe em party.
 //
-// Só aparecem campos que a sessão realmente transmite. Vocação/nível e mana esperam SV-03,
-// gasto espera SV-18, DPS/HPS esperam E2 e expulsar espera SV-22. O modo (`split`/`shared`)
-// continua texto: os interruptores de rateio e loot exigem SV-23, pois o modo é FIXADO na
-// proposta (ADR 0027 decisão 5).
+// Vocação, level e mana chegaram com o SV-11 (#347): a abreviação vem do NOME em
+// `catalogue.vocations`, buscada pelo `vocationId` que o `party-state` manda — nunca escrita à
+// mão aqui — e cai para o id cru, sem cor, quando o catálogo não o reconhece (nó `game` ou
+// conteúdo divergente). Nada aparece quando `vocationId` é `null` ou, para level/mana, quando o
+// campo é `undefined` (D8: o cliente não fabrica o que o servidor não mandou). Gasto ainda
+// espera SV-18, DPS/HPS esperam E2; expulsar é ação da FORMAÇÃO (`PartyPanel.tsx`, SV-22/#358),
+// não deste painel. O modo (`split`/`shared`) continua texto: os interruptores de rateio e loot
+// exigem SV-23, pois o modo é FIXADO na proposta (ADR 0027 decisão 5).
 //
 // O botão usa `leave-hunt`, não `partyActions.leave()`: depois do start a party HTTP já foi
 // consumida, enquanto o opcode 10 retira somente este personagem da sessão compartilhada.
@@ -33,6 +37,11 @@ export const HEALTH_POLL_MS = 1_000;
  */
 const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
 
+/** A letra que representa a vocação (SV-11, #347) — a inicial do NOME, nunca do id. */
+export function vocationAbbreviation(name: string): string {
+  return name.charAt(0).toUpperCase();
+}
+
 export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   partyLootOpen: boolean;
   onToggleLoot: () => void;
@@ -40,6 +49,7 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
 }) {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
+  const catalogue = useHudSlice((state) => state.catalogue);
   const [, tick] = useState(0);
   useEffect(() => {
     if (partyView === null) return;
@@ -85,14 +95,34 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
           const percent = percentFromWorld(member.name) ?? member.healthPercent;
           const isSelf = member.characterId === me;
           const isLeader = member.characterId === partyView.leaderId;
+          // A vocação é procurada pelo NOME no catálogo (SV-11, #347); sem correspondência
+          // (nó `game` anterior ou conteúdo divergente), cai para o id cru, sem cor.
+          const vocation = member.vocationId !== null
+            ? catalogue?.vocations.find((v) => v.id === member.vocationId)
+            : undefined;
+          const vocationLabel = member.vocationId === null
+            ? null
+            : (vocation !== undefined ? vocationAbbreviation(vocation.name) : member.vocationId);
+          const vocationTitle = vocation?.name ?? member.vocationId ?? undefined;
+          const vocationClass = vocation !== undefined ? ` party-companion-voc-${vocation.id}` : '';
           return (
             <li key={member.characterId} className={`party-companion${member.alive ? '' : ' party-companion-down'}`}>
-              <span className="party-companion-name">
-                {isLeader && <span className="party-leader-star">★</span>}
-                <b className={isSelf ? 'party-companion-self' : undefined}>{isSelf ? 'você' : member.name}</b>
-              </span>
-              {/* Não há vocação/nível ou mana (SV-03), gasto (SV-18), DPS/HPS (E2) ou expulsão
-                  (SV-22): o HUD não fabrica valores que o servidor não transmitiu. */}
+              <div className="party-companion-header">
+                <span className="party-companion-name">
+                  {isLeader && <span className="party-leader-star">★</span>}
+                  <b className={isSelf ? 'party-companion-self' : undefined}>{isSelf ? 'você' : member.name}</b>
+                </span>
+                {vocationLabel !== null && (
+                  <span className={`party-companion-voc${vocationClass}`} title={vocationTitle}>
+                    {vocationLabel}
+                  </span>
+                )}
+                {member.level !== undefined && (
+                  <span className="party-companion-level">{`LV ${String(member.level)}`}</span>
+                )}
+              </div>
+              {/* Gasto (SV-18), DPS/HPS (E2) e expulsão (formação, SV-22/#358) ficam de fora:
+                  o HUD não fabrica valores que o servidor não transmitiu. */}
               <div className="party-companion-vitals">
                 <span className="party-hp-row">
                   <span className="party-hp" aria-label={`HP de ${member.name}`}>
@@ -100,6 +130,14 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
                   </span>
                   <span className="entry-meta">{member.alive ? `${String(percent)} %` : 'caiu'}</span>
                 </span>
+                {member.manaPercent !== undefined && (
+                  <span className="party-hp-row">
+                    <span className="party-hp" aria-label={`Mana de ${member.name}`}>
+                      <VitalBar kind="mp" percent={member.alive ? member.manaPercent : 0} height={3} showText={false} />
+                    </span>
+                    <span className="entry-meta">{member.alive ? `${String(member.manaPercent)} %` : '—'}</span>
+                  </span>
+                )}
               </div>
             </li>
           );
