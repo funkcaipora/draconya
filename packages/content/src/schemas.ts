@@ -4,6 +4,82 @@
 
 import { z } from 'zod';
 
+/**
+ * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031). É a fonte ÚNICA: o
+ * `sim` importa `DamageType` daqui e não redeclara o enum.
+ *
+ * Os sete primeiros são os tipos de dano do Tibia 13.32 (`CombatType` do TFS/Canary — só os
+ * NOMES, que são fato de domínio; nenhum código GPL é copiado, ADR 0019): físico, energia,
+ * terra, fogo, gelo, sagrado e morte. `arcane` é o tipo NÃO-ELEMENTAL da magia cujo elemento o
+ * conteúdo ainda não declarou — é o vocabulário do `combat-v1` (`melee`/`magic`) preservado
+ * para que a ausência de tipo continue rendendo bit a bit o mesmo dano (DT-03).
+ *
+ * Tipo é separado de ORIGEM (`DamageSource`) e de EFEITO VISUAL (`CreatureHit.source`), pela
+ * DT-01: o mesmo elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem
+ * dizer qual fórmula resolveu.
+ */
+export const DAMAGE_TYPES = [
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+] as const;
+export type DamageType = (typeof DAMAGE_TYPES)[number];
+
+/**
+ * O perfil de mitigação de uma entidade (CMB-03): o que ela RESISTE e ao que é IMUNE.
+ *
+ * `resistances` é uma fração por tipo, no intervalo `[-1, 1)` aprovado na emenda do ADR 0031:
+ * positivo reduz (`dano × (1 − r)`), negativo é VULNERABILIDADE e amplifica (`dano × (1 + |r|)`).
+ * `1` é recusado por ser indistinguível de imunidade — a DT-02 exige que imunidade seja
+ * EXPLÍCITA, nunca comunicada por resistência de 100 %.
+ *
+ * Imutável e compilado no boot: o caminho quente faz `resistances[tipo]` (lookup) e
+ * `immunities.has(tipo)` (Set), nunca uma varredura por golpe.
+ */
+export const mitigationSchema = z.object({
+  resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(-1).lt(1)).default({}),
+  immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
+}).superRefine((mitigation, context) => {
+  const seen = new Set<DamageType>();
+  for (const type of mitigation.immunities) {
+    // Duplicata é dado ambíguo: não se sabe se é engano ou ênfase, e o boot é o lugar de
+    // perguntar.
+    if (seen.has(type)) {
+      context.addIssue({ code: 'custom', message: `imunidade duplicada para "${type}"` });
+    }
+    seen.add(type);
+    // Resistência E imunidade para o mesmo tipo é a ambiguidade que a DT-02 descarta: escolha
+    // uma. Aceitar deixaria a regra depender da ordem em que o resolver lê os dois.
+    if (mitigation.resistances[type] !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: `"${type}" declara resistência e imunidade ao mesmo tempo — escolha uma`,
+      });
+    }
+  }
+});
+
+export type MitigationProfile = z.infer<typeof mitigationSchema>;
+
+/**
+ * A forma COMPILADA de `MitigationProfile` (CMB-03): a tabela completa por tipo (zero onde não
+ * há resistência) e um `Set` de imunidades. É o que o resolver lê no caminho quente, para o
+ * custo por golpe ser O(1) e não uma varredura.
+ */
+export interface CompiledMitigation {
+  readonly resistances: Readonly<Record<DamageType, number>>;
+  readonly immunities: ReadonlySet<DamageType>;
+}
+
+/**
+ * A tabela de efetividade de armadura que reproduz o `combat-v1` bit a bit (CMB-03): `physical`
+ * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0). É a REFERÊNCIA
+ * da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua, porque o
+ * schema exige os oito tipos e um default em código faria o balanceamento morar onde ninguém
+ * procura.
+ */
+export const V1_ARMOR_EFFECTIVENESS: Readonly<Record<DamageType, number>> = {
+  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+};
+
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
 const appearanceId = z.number().int().positive();
 
@@ -142,6 +218,17 @@ export const appearancesSchema = z.object({
   hits: z.object({
     melee: appearanceId.optional(),
   }).default({}),
+  /**
+   * `chave semântica → { missile, effect }` para as abilities de monstro (CMB-06). A ability
+   * declara `presentation.missileKey`/`impactKey` — nunca um id de arte (invariante 6) —, e o
+   * host resolve a chave aqui. As chaves são um VOCABULÁRIO COMPARTILHADO (duas abilities podem
+   * apontar a mesma), então, ao contrário de `spells`/`supplies`, não há id de conteúdo de um
+   * lado só: chave sem linha é MUDA, e linha sem uso é vocabulário à espera — as duas válidas.
+   */
+  abilities: z.record(z.string().min(1), z.object({
+    missile: appearanceId.optional(),
+    effect: appearanceId.optional(),
+  })).default({}),
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;
@@ -244,10 +331,92 @@ export type AmmoFamily = (typeof AMMO_FAMILIES)[number];
 export const WEAPON_KINDS = ['melee', 'distance', 'wand'] as const;
 export type WeaponKind = (typeof WEAPON_KINDS)[number];
 
+/**
+ * As FAMÍLIAS de arma (CMB-05, #333), a taxonomia decidida: `fist` (desarmado), as três
+ * corpo a corpo (sword/axe/club), `distance` e as duas de conjuração (wand/rod).
+ *
+ * A família é DADO (DT-01): o motor não infere a família pelo NOME do item, e o ruleset não
+ * tem `if` por id, nome ou vocação. `fist` é o fallback sem item — nunca aparece como arma
+ * do catálogo, e `buildContent` recusa o item que a declare.
+ */
+export const WEAPON_FAMILIES = ['fist', 'sword', 'axe', 'club', 'distance', 'wand', 'rod'] as const;
+export type WeaponFamily = (typeof WEAPON_FAMILIES)[number];
+
+/**
+ * O que uma família declara em `content` (CMB-05): alcance, tipo, recurso, fórmula e a SKILL
+ * que a escala e cujo `gain` é a prática. A fórmula traz os fatores que são da FAMÍLIA
+ * (`levelFactor`, `spread`); a contribuição por nível de skill vem do `damagePerLevel` da
+ * skill apontada, para rebalanceá-la num lugar só.
+ */
+export const weaponFamilySchema = z.strictObject({
+  id: z.enum(WEAPON_FAMILIES),
+  name: z.string().min(1),
+  /** O despacho que a família segue: corpo a corpo, distância ou wand/rod. */
+  kind: z.enum(WEAPON_KINDS),
+  /** A skill que escala a família e cujo `gain` define a prática. */
+  skillId: z.string().min(1),
+  /** Alcance default em tiles; a arma pode declarar o seu. */
+  range: z.number().int().positive(),
+  /** Tipo de dano default; a arma (ou a munição) pode declarar o seu. */
+  damageType: z.enum(DAMAGE_TYPES),
+  /** O recurso gasto por golpe. `mana` é de wand/rod; corpo a corpo e distância não gastam. */
+  resource: z.enum(['none', 'mana']),
+  /**
+   * A fórmula da família, ausente em wand/rod (que usam a faixa fixa da arma). Os fatores são
+   * provisórios e marcados em `_open`; `spread: 0` não consome sorteio, preservando o v1.
+   */
+  formula: z.object({
+    levelFactor: z.number().nonnegative(),
+    spread: z.number().min(0).max(1),
+  }).optional(),
+  _open: z.string().optional(),
+});
+
+export type WeaponFamilyDefinition = z.infer<typeof weaponFamilySchema>;
+
+/**
+ * A fórmula de poder de arma COMPILADA (CMB-05). `base` é o `attack` da arma (ou da munição,
+ * resolvido no golpe); `skillFactor`/`skillStartingLevel` vêm da skill da família, e
+ * `levelFactor`/`spread` da família. `spread: 0` devolve o valor sem consumir RNG.
+ */
+export interface WeaponPowerFormula {
+  readonly base: number;
+  readonly levelFactor: number;
+  readonly skillFactor: number;
+  readonly skillStartingLevel: number;
+  readonly spread: number;
+}
+
+/**
+ * O perfil de arma que o `sim` consome (CMB-05). É o contrato do `resolveWeaponPower`: família,
+ * tipo, alcance, e OU uma fórmula escalada (`power`) OU a faixa fixa de wand/rod
+ * (`fixedDamage`), com o recurso por golpe quando há (`manaPerHit`).
+ */
+export interface WeaponProfile {
+  readonly family: WeaponFamily;
+  readonly damageType: DamageType;
+  readonly range: number;
+  readonly power?: WeaponPowerFormula;
+  readonly manaPerHit?: number;
+  readonly fixedDamage?: { readonly min: number; readonly max: number };
+}
+
 export const weaponSchema = z.strictObject({
   kind: z.enum(WEAPON_KINDS),
-  /** Alcance em tiles. `1` é corpo a corpo; o bow do Tibia alcança 6, wand e rod 3. */
-  range: z.number().int().positive(),
+  /**
+   * A família (CMB-05). Ausente é normalizada pelo `kind` — corpo a corpo vira `sword`,
+   * distância `distance`, wand `wand` —, o mesmo default que `buildContent` já aplicava ao
+   * `kind` para preservar o conteúdo anterior. O conteúdo real declara a sua.
+   */
+  family: z.enum(WEAPON_FAMILIES).optional(),
+  /** Alcance em tiles. Ausente vale o da família; `1` é corpo a corpo. */
+  range: z.number().int().positive().optional(),
+  /**
+   * O TIPO de dano da arma (CMB-03, emenda do ADR 0031). Ausente é o default que preserva o
+   * v1: `physical` em corpo a corpo e distância, `arcane` em wand e rod — o `kind: magic` de
+   * antes. A wand declara o seu elemento (energia, terra) quando o conteúdo o conhece.
+   */
+  damageType: z.enum(DAMAGE_TYPES).optional(),
   ammoFamily: z.enum(AMMO_FAMILIES).optional(),
   manaPerHit: z.number().int().positive().optional(),
   damage: z.object({
@@ -258,6 +427,17 @@ export const weaponSchema = z.strictObject({
 export type Weapon = z.infer<typeof weaponSchema>;
 
 /**
+ * A arma pronta para uso (CMB-03/CMB-05): o `WeaponProfile` do `sim` mais o que o despacho e o
+ * catálogo do servidor ainda leem (`kind`, `ammoFamily`). `damageType`, `range`, família e
+ * fórmula já estão resolvidos no boot — o schema deixa os campos opcionais porque a forma do
+ * arquivo não sabe do `kind`.
+ */
+export type ResolvedWeapon = WeaponProfile & {
+  readonly kind: WeaponKind;
+  readonly ammoFamily?: AmmoFamily;
+};
+
+/**
  * Efeito passivo de anel (§13.9, SV-16) — ativo enquanto o item está EQUIPADO no dedo, ao
  * contrário de `charges`/`durationMs` (adiante neste schema), que são consumo por uso/tempo e
  * ainda não têm mecanismo nenhum (§21.3). Fechado por `kind`, como `botExitRuleSchema` e o
@@ -265,8 +445,8 @@ export type Weapon = z.infer<typeof weaponSchema>;
  * recusado no boot em vez de virar um anel mudo que ninguém explica.
  *
  * - `energy-shield`: o Energy Ring. O dano sofrido debita da MANA antes da vida — a MESMA leitura
- *   que a condição `mana-shield` do utamo vita já faz em `CharacterRuntime.receiveDamage`; as
- *   duas convergem no mesmo lugar e não se somam (ver o comentário do método).
+ *   que a condição `mana-shield` do utamo vita já faz em `applyDamageOutcome`
+ *   (`sim/combat/outcome.ts`, CMB-08); as duas convergem no mesmo estágio e não se somam.
  * - `regen-boost`: o Life Ring. Multiplica a regeneração passiva BASE — o ponto fixo por
  *   vencimento de `progression.regen`, sem nenhum outro bônus, porque hoje não existe nenhum.
  *   `percent: 300` é +300% (quadruplica o ponto por vencimento).
@@ -348,6 +528,14 @@ export const itemSchema = z.strictObject({
   attack: z.number().int().nonnegative().default(0),
   armor: z.number().int().nonnegative().default(0),
   /**
+   * A DEFESA da peça (CMB-04, emenda do ADR 0031): o que ela bloqueia, e não o que ela aguenta.
+   * Diferente da armadura, a defesa vale só contra os tipos aprovados no perfil (`physical` no
+   * v1) e só na combinação aprovada — escudo, ou arma corpo a corpo de uma mão. Bow/twoHanded e
+   * wand/rod não têm defesa residual, e `buildContent` recusa `defense` fora dessas combinações.
+   * `0` é item sem defesa, o default que preserva o v1: nenhum golpe muda por causa dele.
+   */
+  defense: z.number().int().nonnegative().default(0),
+  /**
    * O que o personagem precisa para equipar. Vazio é item que qualquer um veste.
    *
    * Vocação aqui é o mesmo campo que a magia usa (FUN-92): o personagem nasce sem uma e
@@ -366,6 +554,12 @@ export const itemSchema = z.strictObject({
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
+  /**
+   * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
+   * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
+   * defensor (ver `Inventory.mitigation`).
+   */
+  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
   _open: z.string().optional(),
@@ -389,6 +583,8 @@ export const ammunitionSchema = z.strictObject({
   family: z.enum(AMMO_FAMILIES),
   /** O dano do tiro é este `attack` pela skill de distância — o bow não tem attack próprio. */
   attack: z.number().int().nonnegative(),
+  /** O tipo de dano do tiro (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /** Gold debitado por tiro. Zero é a munição grátis, e toda família precisa de uma. */
   price: z.number().int().nonnegative(),
   requires: z.object({
@@ -411,7 +607,200 @@ export type Ammunition = AmmunitionDefinition & {
  * saber que existe uma tabela, e a entidade sem aparência morre na montagem do conteúdo — não
  * no primeiro jogador que abrir a mochila.
  */
-export type Item = ItemDefinition & { readonly appearanceId: number };
+export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
+  readonly appearanceId: number;
+  /** A arma com o tipo de dano já resolvido (CMB-03). Ausente em item que não é arma. */
+  readonly weapon?: ResolvedWeapon;
+  /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
+  readonly mitigation: CompiledMitigation;
+};
+
+/**
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
+ * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * exige alvo nem alcance.
+ *
+ * Mora aqui, antes de monstro, porque a ability de monstro (CMB-06) reusa a MESMA geometria:
+ * a forma é conteúdo, e a matriz não se copia de engine nenhuma (ADR 0019).
+ */
+export const spellAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
+    radius: z.number().int().positive(),
+    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
+    centered: z.enum(['target', 'caster']).default('target'),
+  }),
+  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Os três tiles imediatamente à frente (Front Sweep). */
+  z.object({ shape: z.literal('cleave') }),
+  /** Linha reta de `length` tiles à frente, largura 1. */
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+export type SpellArea = z.infer<typeof spellAreaSchema>;
+
+/** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
+export const damagePercentBySource = z.object({
+  melee: z.number().int().optional(),
+  distance: z.number().int().optional(),
+  spell: z.number().int().optional(),
+});
+
+/**
+ * A POLÍTICA de fusão de uma condição (CMB-07, DT-02): declarada no conteúdo, nunca um campo
+ * por efeito. Evita timers paralelos quando a mesma condição é relançada.
+ */
+export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
+export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
+
+/**
+ * O efeito declarativo de uma condição (CMB-07). É o `ConditionEffect` do contrato da issue: um
+ * estado com prazo que muda uma leitura (haste, postura, magic shield) ou dispara um tique (cura
+ * ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide (`spell`,
+ * `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
+ */
+export const conditionEffectSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('haste'),
+    speedPercent: z.number().int().positive(),
+    damageDealtPercent: damagePercentBySource.optional(),
+  }),
+  z.object({
+    kind: z.literal('buff'),
+    damageDealtPercent: damagePercentBySource.optional(),
+    damageTakenPercent: z.number().int().optional(),
+  }),
+  z.object({ kind: z.literal('mana-shield') }),
+  z.object({
+    kind: z.literal('heal-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal('damage-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    /** O tipo do tique (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+    damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  }),
+]);
+export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
+
+/**
+ * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O
+ * `sim` a compila para o estado de runtime com prazo LÓGICO absoluto. Nunca carrega arte
+ * (invariante 6) — a apresentação, quando existir, é resolvida por id na tabela de aparências.
+ */
+export const conditionSpecSchema = z.object({
+  key: z.string().min(1),
+  merge: conditionMergeSchema.default('refresh'),
+  durationMs: z.number().int().positive(),
+  effect: conditionEffectSchema,
+});
+export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
+
+/**
+ * Um CAMPO de tile declarativo (CMB-07): uma condição que vive no chão por um prazo, numa forma
+ * (`spellAreaSchema`, a MESMA geometria da magia e da ability). O `sim` resolve os tiles no
+ * momento da aplicação e indexa por chave NUMÉRICA de tile — nunca varre todos os campos por
+ * passo. O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01: conteúdo é imutável).
+ */
+export const fieldSpecSchema = z.object({
+  id: z.string().min(1),
+  durationMs: z.number().int().positive(),
+  shape: spellAreaSchema,
+  condition: conditionSpecSchema,
+});
+export type FieldSpec = z.infer<typeof fieldSpecSchema>;
+
+
+/**
+ * O id RESERVADO da ability que o boot sintetiza para o monstro legado (CMB-06, DT-02).
+ *
+ * Ausência de `abilities` vira UMA ability básica com o `attack`/`attackIntervalMs`/
+ * `attackRange`/`damageType` de sempre, e é isso que preserva o rato bit a bit — mesmo sorteio,
+ * mesmos eventos. O conteúdo NÃO pode declarar uma ability com este id: ela é do boot.
+ */
+export const BASIC_ABILITY_ID = 'basic';
+
+/**
+ * O poder de uma ability, JÁ normalizado para faixa (CMB-06). O arquivo aceita um número — a
+ * faixa de um valor só —, e o boot o transforma aqui, como o `attack` do monstro sempre fez.
+ */
+export interface MonsterAbilityPower {
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * O alvo de uma ability de monstro (CMB-06): o alcance até o alvo principal e, opcionalmente,
+ * a forma de área. `area` é só `circle` — o monstro não carrega DIREÇÃO, e `wave`/`cleave`/
+ * `beam` saem do lançador na direção dele; `buildContent` recusa as outras formas.
+ */
+export const monsterAbilityTargetSchema = z.object({
+  range: z.number().int().positive().default(1),
+  area: spellAreaSchema.optional(),
+});
+
+/**
+ * Uma ability declarada de monstro (CMB-06, DT-01): alvo/alcance, forma, poder, tipo de dano e
+ * referências SEMÂNTICAS de apresentação. Não carrega caminho, bitmap nem id de asset — a arte
+ * é do host, pela tabela (invariante 6).
+ */
+export const monsterAbilitySchema = z.strictObject({
+  id: z.string().min(1),
+  /** Milissegundos entre usos. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  cadenceMs: z.number().int().positive(),
+  target: monsterAbilityTargetSchema.default(() => ({ range: 1 })),
+  power: z.union([
+    z.number().int().nonnegative(),
+    z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() })
+      .refine((range) => range.min <= range.max, 'power.min não pode passar de power.max'),
+  ]),
+  /** O tipo de dano da ability (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  /**
+   * As chaves SEMÂNTICAS de apresentação (CMB-06): o host as resolve em ids de aparência na
+   * tabela versionada (`appearances.abilities`). Chave sem linha é MUDA, nunca erro.
+   */
+  presentation: z.object({
+    missileKey: z.string().min(1).optional(),
+    impactKey: z.string().min(1).optional(),
+  }).optional(),
+  /**
+   * A condição que a ability aplica a QUEM ela acerta (CMB-07). Ausente é ability que só bate —
+   * o caso legado. O tique de dano entra no MESMO resolver canônico do golpe.
+   */
+  condition: conditionSpecSchema.optional(),
+  /**
+   * O CAMPO que a ability deixa no chão (CMB-07), centrado no alvo principal. Só `circle`: o
+   * monstro não carrega direção, como na área da própria ability. O `sim` resolve os tiles e os
+   * indexa por tile; o campo vive no ruleset, nunca no `Tilemap`.
+   */
+  field: fieldSpecSchema.optional(),
+  _open: z.string().optional(),
+});
+
+export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
+
+/**
+ * A ability como o `sim` a consome (CMB-06): poder já em faixa e sem os defaults do schema. É o
+ * contrato que o ruleset lê — o mesmo papel do `WeaponProfile` para a arma.
+ */
+export interface MonsterAbility {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly target: { readonly range: number; readonly area?: SpellArea };
+  readonly power: MonsterAbilityPower;
+  readonly damageType: DamageType;
+  readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
+  /** A condição que a ability aplica a quem acerta (CMB-07). Ausente: só o golpe. */
+  readonly condition?: ConditionSpec;
+  /** O campo que a ability deixa no chão, centrado no alvo (CMB-07). Ausente: nenhum. */
+  readonly field?: FieldSpec;
+}
 
 /**
  * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
@@ -454,6 +843,16 @@ export const monsterSchema = z.strictObject({
       .refine((range) => range.min <= range.max, 'attack.min não pode passar de attack.max'),
   ]),
   armor: z.number().int().nonnegative(),
+  /**
+   * O TIPO de dano do ataque do monstro (CMB-03). Ausente é `physical`, o default que preserva
+   * o v1 — o rato morde, e mordida era dano físico. As abilities por tipo são do CMB-06.
+   */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  /**
+   * O que o monstro RESISTE e ao que é IMUNE (CMB-03). Ausente é o monstro neutro, e o default
+   * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
+   */
+  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
@@ -473,6 +872,14 @@ export const monsterSchema = z.strictObject({
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
   loot: lootTableSchema.default({ items: [] }),
+  /**
+   * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
+   * ability básica montada do `attack`/`attackIntervalMs`/`attackRange`/`damageType` — é o que
+   * preserva o monstro legado bit a bit, e é o caminho do rato. Quando declaradas, o
+   * `attack`/`attackIntervalMs`/`attackRange` acima continuam no arquivo, mas quem manda são
+   * elas (o boot NÃO sintetiza a básica). O id `basic` é reservado ao boot.
+   */
+  abilities: z.array(monsterAbilitySchema).optional(),
 });
 
 /**
@@ -661,6 +1068,54 @@ export const progressionSchema = z.object({
 export type Progression = z.infer<typeof progressionSchema>;
 
 /**
+ * O perfil semântico de combate (ADR 0031, CMB-02). É o CONTRATO de compatibilidade, não
+ * balanceamento: `id` é o que o resolver canônico despacha, e os outros campos documentam a
+ * release de referência e como uma mudança de fórmula atravessa conteúdo, sessão e snapshot.
+ */
+export interface CombatCompatibilityProfile {
+  readonly id: string;
+  readonly referenceRelease: string;
+  readonly productExceptions: readonly string[];
+  readonly migrationPolicy: 'additive' | 'breaking';
+}
+
+/**
+ * O perfil inicial, `combat-v1`: ADITIVO — preserva bit a bit o resultado já entregue e só
+ * acrescenta estágios que hoje são identidade (ADR 0031). Mudança de dano resolvido,
+ * quantidade/ordem de sorteio, arredondamento ou snapshot exige perfil novo.
+ */
+export const COMBAT_V1: CombatCompatibilityProfile = {
+  id: 'combat-v1',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'additive',
+};
+
+/**
+ * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
+ * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
+ */
+export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
+  new Map([[COMBAT_V1.id, COMBAT_V1]]);
+
+/**
+ * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
+ *
+ * É o lado do ATACANTE, o irmão de `mitigation` (defensor) e de `defense` (peça). A ausência de
+ * um campo é o default NEUTRO e não consome sorteio nenhum — é o que preserva o `combat-v1` bit
+ * a bit para todo conteúdo que não declara modificador. Declarar `critical` consome a rolagem
+ * do crítico mesmo com `chance: 0`, pela mesma regra aditiva da defesa do CMB-04 (ADR 0031).
+ *
+ * `lifeLeech`/`manaLeech` são a fração do HP EFETIVAMENTE removido que volta como vida/mana; não
+ * consomem RNG, e o quanto de fato repõe é limitado pelo teto do atacante (`applyDamageOutcome`).
+ */
+export interface DamageModifiers {
+  readonly critical?: { readonly chance: number; readonly multiplier: number } | undefined;
+  readonly lifeLeech?: number | undefined;
+  readonly manaLeech?: number | undefined;
+}
+
+/**
  * Coeficientes de combate. O §12.1 é explícito: fórmula e parâmetro são CONTEÚDO, não código.
  *
  * O que o PRD decide (§12.2) e o que ele não decide estão separados de propósito — o que não
@@ -668,13 +1123,23 @@ export type Progression = z.infer<typeof progressionSchema>;
  */
 export const combatSchema = z.object({
   id: z.literal('baseline'),
+  /**
+   * O perfil semântico de combate (ADR 0031, CMB-02). `Content.version` o inclui e a sessão o
+   * congela na criação (invariante 7); ele NÃO entra no snapshot. Ausente é o default
+   * compatível — conteúdo legado e fixture. Valor fora de `COMBAT_PROFILES` falha no boot.
+   */
+  compatibilityProfile: z.string().min(1).default(COMBAT_V1.id),
   /** §12.2 DECIDIDO: dodge não zera o dano, reduz à metade. */
   dodgeMultiplier: z.number().min(0).max(1),
-  /** Quanto da armadura do alvo é subtraído, por tipo de ataque. */
-  armorEffectiveness: z.object({
-    melee: z.number().min(0).max(1),
-    magic: z.number().min(0).max(1),
-  }),
+  /**
+   * Quanto da armadura do alvo é subtraído, POR TIPO DE DANO (CMB-03, emenda do ADR 0031).
+   *
+   * Antes eram duas colunas (`melee`/`magic`). A migração que preserva o v1 é:
+   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic`.
+   * O `z.record` de chave enum é EXAUSTIVO no zod 4: o conteúdo declara os oito tipos, sem
+   * default em código — mudar a efetividade de um elemento é editar JSON, nunca lógica.
+   */
+  armorEffectiveness: z.record(z.enum(DAMAGE_TYPES), z.number().min(0).max(1)),
   /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */
   minimumDamageFraction: z.number().min(0).max(1),
   /**
@@ -695,7 +1160,56 @@ export const combatSchema = z.object({
     attackRange: z.number().int().positive().default(1),
     armor: z.number().int().nonnegative(),
     dodgeChance: z.number().min(0).max(1),
+    /**
+     * O tipo de dano do golpe DESARMADO (CMB-03). Ausente é `physical`, o default que preserva
+     * o v1 — o punho sempre bateu dano físico.
+     */
+    damageType: z.enum(DAMAGE_TYPES).default('physical'),
   }),
+  /**
+   * Defesa e escudo (CMB-04, emenda do ADR 0031). É o estágio entre a rolagem de Dodge e a
+   * armadura: o escudo ou a arma de uma mão bloqueia parte do golpe físico.
+   *
+   * **Ausente é o estágio IDENTIDADE**, e é o que preserva o v1: sem `defense` nenhum golpe
+   * consome sorteio de bloqueio, e o resultado é bit a bit o entregue. O conteúdo real declara.
+   *
+   * `blockChance` é a chance do bloqueio acontecer, uma rolagem por golpe ELEGÍVEL — logo
+   * depois do Dodge, que continua o primeiro sorteio. `blockTypes` são os tipos aprovados
+   * (`physical` no v1): ataque elemental passa intacto e NÃO treina shielding por acidente.
+   * `skillId` é a skill que escala a defesa e sobe por bloqueio; `buildContent` recusa uma que
+   * não exista ou que não suba por `shield-block`.
+   */
+  defense: z.object({
+    skillId: z.string().min(1).optional(),
+    blockChance: z.number().min(0).max(1),
+    blockTypes: z.array(z.enum(DAMAGE_TYPES)).min(1).default(['physical']),
+  }).superRefine((defense, context) => {
+    const seen = new Set<DamageType>();
+    for (const type of defense.blockTypes) {
+      if (seen.has(type)) {
+        context.addIssue({ code: 'custom', message: `blockTypes tem "${type}" duplicado` });
+      }
+      seen.add(type);
+    }
+  }).optional(),
+  /**
+   * Os modificadores avançados do ATACANTE (CMB-08, emenda do ADR 0031): crítico, life leech e
+   * mana leech. **Ausente é o default NEUTRO**, e é o que preserva o v1: sem `modifiers` nenhum
+   * sorteio novo é consumido, e o resultado é bit a bit o do CMB-02/03/04.
+   *
+   * `critical` declarado consome UMA rolagem a mais, DEPOIS do Dodge e da defesa — mesmo com
+   * `chance: 0`, para a sequência não depender do valor. `lifeLeech`/`manaLeech` não consomem
+   * RNG: são fração do HP aplicado, e o `applyDamageOutcome` limita o que repõe ao teto do
+   * atacante. Os números são provisórios (`_open`).
+   */
+  modifiers: z.object({
+    critical: z.object({
+      chance: z.number().min(0).max(1),
+      multiplier: z.number().min(1),
+    }).optional(),
+    lifeLeech: z.number().min(0).max(1).optional(),
+    manaLeech: z.number().min(0).max(1).optional(),
+  }).optional(),
   /**
    * A conversão do Base Power (#155, ADR 0026 decisão 5) — UMA para todas as magias, e nossa:
    * o TibiaWiki não publica a fórmula, e a do TFS é GPL (ADR 0019). `mid = basePower × (1 +
@@ -864,6 +1378,12 @@ export const skillSchema = z.object({
     /** Um tiro de arma de distância (#152). Como o golpe: rende por uso, acerte ou não. */
     z.object({ on: z.literal('distance-hit'), points: z.number().positive() }),
     z.object({ on: z.literal('spell-cast'), pointsPerMana: z.number().positive() }),
+    /**
+     * Um bloqueio físico ELEGÍVEL (CMB-04): o defensor tinha escudo ou arma de uma mão e o
+     * ataque era de um tipo aprovado. Rende uma vez por ataque recebido, nunca por tick e
+     * nunca condicionado ao HP perdido.
+     */
+    z.object({ on: z.literal('shield-block'), points: z.number().positive() }),
   ]),
   /** Fração acrescentada ao poder por nível ACIMA do inicial. `0` é skill que não bate. */
   damagePerLevel: z.number().nonnegative().default(0),
@@ -1192,36 +1712,6 @@ export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
 
 /**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
- * exige alvo nem alcance.
- */
-export const spellAreaSchema = z.discriminatedUnion('shape', [
-  z.object({
-    shape: z.literal('circle'),
-    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
-    radius: z.number().int().positive(),
-    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
-    centered: z.enum(['target', 'caster']).default('target'),
-  }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
-  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
-  /** Os três tiles imediatamente à frente (Front Sweep). */
-  z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
-  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
-]);
-
-export type SpellArea = z.infer<typeof spellAreaSchema>;
-
-/** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
-export const damagePercentBySource = z.object({
-  melee: z.number().int().optional(),
-  distance: z.number().int().optional(),
-  spell: z.number().int().optional(),
-});
-
-/**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
  *
  * Tudo em CONTEÚDO: custo, cooldown, grupo, alcance, forma e efeito. O motor não sabe quanto
@@ -1281,6 +1771,12 @@ export const spellSchema = z.object({
       power: z.number().int().positive().optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
+      /**
+       * O TIPO de dano da magia (CMB-03). Ausente é `arcane` — o `kind: magic` do v1 —, para a
+       * magia cujo elemento o conteúdo ainda não declarou. Onde o catálogo o diz (fogo, gelo,
+       * energia, terra, morte, sagrado), o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
     /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
     z.object({
@@ -1288,6 +1784,19 @@ export const spellSchema = z.object({
       amount: z.number().int().positive(),
       intervalMs: z.number().int().positive(),
       durationMs: z.number().int().positive(),
+    }),
+    /**
+     * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
+     * ao ALVO. Cada tique passa pelo MESMO resolver canônico do golpe (`resolveDamage`), com o
+     * `source: 'spell'` e o tipo declarado — nunca escrita direta de vida.
+     */
+    z.object({
+      kind: z.literal('damage-over-time'),
+      amount: z.number().int().positive(),
+      intervalMs: z.number().int().positive(),
+      durationMs: z.number().int().positive(),
+      range: z.number().int().positive(),
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
     /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
     z.object({
@@ -1338,6 +1847,11 @@ export const supplySchema = z.object({
         radius: z.number().int().positive(),
         centered: z.literal('target').default('target'),
       }),
+      /**
+       * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
+       * Avalanche é gelo, e o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
@@ -1355,10 +1869,17 @@ export type Supply = z.infer<typeof supplySchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = MonsterDefinition & {
+export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
+  /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
+  readonly mitigation: CompiledMitigation;
+  /**
+   * As abilities JÁ NORMALIZADAS (CMB-06): nunca vazio — ausência vira a básica do boot. É o
+   * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.
+   */
+  readonly abilities: readonly MonsterAbility[];
 };
 export type MonsterAttack = MonsterDefinition['attack'];
 export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
@@ -1366,6 +1887,26 @@ export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
 /** A faixa de ataque de um monstro: um número é a faixa de um valor só. */
 export function attackRange(attack: MonsterAttack): { readonly min: number; readonly max: number } {
   return typeof attack === 'number' ? { min: attack, max: attack } : attack;
+}
+
+/** O poder de uma ability declarada, normalizado para faixa — um número é `[n, n]`. */
+export function abilityPower(power: MonsterAbilityDefinition['power']): MonsterAbilityPower {
+  return typeof power === 'number' ? { min: power, max: power } : power;
+}
+
+/**
+ * Até onde o monstro PARA para atacar (CMB-06): o MAIOR alcance entre as abilities.
+ *
+ * É o que o passo guloso consulta para decidir "bater ou aproximar". Sem isto, um monstro de
+ * ability à distância 4 continuaria colando no alvo como um corpo a corpo — e o defeito que a
+ * issue descreve (alcance muda a distância, mas o golpe continua melee) voltaria por outra porta.
+ */
+export function monsterAttackRange(monster: Monster): number {
+  let range = monster.attackRange;
+  for (const ability of monster.abilities) {
+    if (ability.target.range > range) range = ability.target.range;
+  }
+  return range;
 }
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */

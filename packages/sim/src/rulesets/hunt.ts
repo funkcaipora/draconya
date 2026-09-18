@@ -16,20 +16,28 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
+import { BASIC_ABILITY_ID, BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content,
-  Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, Route, Skill, Spell, SpellArea, SpawnPoint,
-  Stamina, Supply, Tilemap, Vocation, Weapon,
+  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
+  Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, Monster, MonsterAbility, PartyConfig, Progression,
+  ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
 import type { CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
-import type { ConditionKind, ConditionState } from '../conditions.js';
+import type { ConditionState } from '../conditions.js';
+import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
+import type { NormalizedTick } from '../conditions.js';
+import { Fields } from '../fields.js';
+import type { TileFieldState } from '../fields.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
-import type { Defender } from '../combat/damage.js';
+import type { DamageOutcome, Defender } from '../combat/damage.js';
+import { applyDamageOutcome } from '../combat/outcome.js';
+import type { DefenseSource } from '../combat/defense.js';
+import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -46,6 +54,7 @@ import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
+import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep } from '../monster/step.js';
 import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
@@ -74,6 +83,17 @@ const PLAYER_STEP = 'player-step';
 const PLAYER_ATTACK = 'player-attack';
 const MONSTER_STEP = 'monster-step';
 const MONSTER_ATTACK = 'monster-attack';
+/**
+ * Uma ability DECLARADA do monstro (CMB-06). O subject é derivado (`m:<id>:<abilityId>`), e é
+ * ele que a morte cancela sem varrer a fila — `#onMonsterDied` conhece os ids pelo conteúdo.
+ *
+ * A básica legada continua em `MONSTER_ATTACK` com subject `m:<id>`: um snapshot de um nó
+ * anterior traz esses eventos, e tratá-los como ability básica é o que mantém a retomada
+ * compatível durante o deploy em rolagem.
+ */
+const MONSTER_ABILITY = 'monster-ability';
+const monsterAbilitySubject = (id: number, abilityId: string): string =>
+  `${monsterSubject(id)}:${abilityId}`;
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
@@ -84,13 +104,28 @@ const EXIT_COUNTDOWN = 'exit-countdown';
 
 type ExitReason = 'manual-exit' | 'exit-rule';
 /**
- * As condições (#155): o vencimento e o tique periódico da cura ao longo do tempo. Eventos
- * da fila (invariante 2), nunca acumulador. `subject` é `${characterId}/${key}`: um
- * cancelamento por condição, sem varrer a fila.
+ * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
+ * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
+ * fila. O alvo pode ser personagem ou monstro desde o CMB-07 — o id do monstro é `m:<id>`.
  */
 const CONDITION_EXPIRE = 'condition-expire';
 const CONDITION_TICK = 'condition-tick';
-const conditionSubject = (characterId: string, key: ConditionKind): string => `${characterId}/${key}`;
+const conditionSubject = (targetId: string, key: string): string => `${targetId}/${key}`;
+/**
+ * Os campos de tile (CMB-07): um evento POR CAMPO. O tique aplica a condição a quem pisa nos
+ * tiles; o vencimento tira o campo. `subject` é `f:<id>`.
+ */
+const FIELD_TICK = 'field-tick';
+const FIELD_EXPIRE = 'field-expire';
+const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
+/**
+ * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
+ * documentada e testada: o tique do instante de expiração não acontece. A prioridade é explícita
+ * (e não a sequência de agendamento) porque relançar reagenda o vencimento depois do tique, e a
+ * ordem não pode depender de quem foi agendado por último.
+ */
+const EXPIRE_PRIORITY = EventPriority.Housekeeping;
+const TICK_PRIORITY = EventPriority.Housekeeping + 1;
 /**
  * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
  * cura que executa não atrasa o ataque, porque são vencimentos independentes na mesma fila.
@@ -167,6 +202,8 @@ export interface PlayerProfile {
   readonly attackRange: number;
   readonly armor: number;
   readonly dodgeChance: number;
+  /** O tipo do golpe desarmado (CMB-03). Vem de `combat.player.damageType`. */
+  readonly damageType: DamageType;
 }
 
 /** O que uma regra de saída consegue enxergar. Estreito de propósito: regra não muda estado. */
@@ -279,6 +316,13 @@ export interface HuntRulesetOptions {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * As famílias de arma (CMB-05): a família do perfil aponta a skill e a prática, e a fórmula
+   * já vem compilada. Indexada no boot — nenhuma varredura de catálogo por golpe.
+   */
+  readonly weaponFamilies: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>;
+  /** O perfil do golpe desarmado (CMB-05): o fallback de quem não tem arma. */
+  readonly unarmed: WeaponProfile;
   /** A munição que o bow dispara (#152): a escolhida por família, ou a grátis. */
   readonly ammunition: ReadonlyMap<string, Ammunition>;
   /**
@@ -336,6 +380,12 @@ export interface CorpseState {
   readonly monsterId: string;
   readonly position: WorldPoint;
 }
+
+/**
+ * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
+ * posição e vida; o tique de dano de um DOT entra no mesmo pipeline para os dois.
+ */
+type ConditionTarget = CharacterRuntime | MonsterRuntime;
 
 /** Como a party divide loot e custo (ADR 0027 decisão 5). */
 export type PartyMode = 'split' | 'shared';
@@ -400,6 +450,11 @@ export interface HuntRulesetState {
   readonly partyOptions?: PartyOptions;
   /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.mode === 'shared'`. */
   readonly partyBag?: PartyBagState;
+  /**
+   * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
+   * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
+   */
+  readonly fields?: readonly TileFieldState[];
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -505,6 +560,11 @@ export class HuntRuleset implements Ruleset {
   /** Os cadáveres no chão, e o próximo id de item de chão (FUN-123). */
   #corpses: CorpseState[] = [];
   #nextGroundItemId = 1;
+  /**
+   * Os campos de tile ativos (CMB-07), indexados por chave NUMÉRICA de tile. O `Tilemap` é
+   * conteúdo imutável; o campo é estado do ruleset (DT-01).
+   */
+  #fields = new Fields();
 
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
@@ -579,6 +639,7 @@ export class HuntRuleset implements Ruleset {
       'melee-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'melee-hit'),
       'distance-hit': [...options.skills.values()].filter((sk) => sk.gain.on === 'distance-hit'),
       'spell-cast': [...options.skills.values()].filter((sk) => sk.gain.on === 'spell-cast'),
+      'shield-block': [...options.skills.values()].filter((sk) => sk.gain.on === 'shield-block'),
     };
     // A munição grátis de cada família, UMA vez: é o tiro de quem não escolheu e de quem
     // ficou sem gold. Por ordem de id, para dois nós com o mesmo conteúdo escolherem a mesma.
@@ -621,6 +682,11 @@ export class HuntRuleset implements Ruleset {
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
   get groundItems(): readonly CorpseState[] {
     return this.#corpses;
+  }
+
+  /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
+  get fields(): readonly TileFieldState[] {
+    return this.#fields.getState();
   }
 
   /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
@@ -767,6 +833,8 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
     this.#ammoFallbackTold.delete(character.id);
+    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
+    this.#cancelConditions(session, character);
     // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
     // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
@@ -851,8 +919,9 @@ export class HuntRuleset implements Ruleset {
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
       case PLAYER_ATTACK: return this.#onPlayerAttack(session, event.subject);
-      case MONSTER_STEP: return this.#onMonsterAction(session, event.subject, 'step');
-      case MONSTER_ATTACK: return this.#onMonsterAction(session, event.subject, 'attack');
+      case MONSTER_STEP: return this.#onMonsterStep(session, event.subject);
+      case MONSTER_ATTACK: return this.#onMonsterAttack(session, event.subject);
+      case MONSTER_ABILITY: return this.#onMonsterAbility(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
@@ -861,6 +930,8 @@ export class HuntRuleset implements Ruleset {
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
+      case FIELD_TICK: return this.#onFieldTick(session, event.subject);
+      case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
       case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
       case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
@@ -949,6 +1020,9 @@ export class HuntRuleset implements Ruleset {
 
   #onCharacterDied(session: Session, character: CharacterRuntime): void {
     this.#world.vacate(character.position.x, character.position.y);
+    // Morto não tem condição: cancelar aqui impede o vencimento de uma condição dele ficar
+    // na fila até o fim da sessão (CMB-07).
+    this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
@@ -1044,6 +1118,7 @@ export class HuntRuleset implements Ruleset {
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
+      fields: this.#fields.getState(),
       nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: state.warnedExhausted,
       warnedFullBackpack: state.warnedFullBackpack,
@@ -1117,6 +1192,9 @@ export class HuntRuleset implements Ruleset {
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
     // da sessão já trouxe de volta (FUN-123).
     this.#corpses = [...(restored.corpses ?? [])];
+    // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
+    // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
+    this.#fields = Fields.fromState(restored.fields);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
@@ -1222,7 +1300,12 @@ export class HuntRuleset implements Ruleset {
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
-    this.#scheduleMonsterAttack(session, monster, 0);
+    // A básica nasce engatilhada e vence AGORA, como sempre (CMB-06). As abilities DECLARADAS
+    // são armadas pelo primeiro passo, que já reavalia a distância — agendá-las aqui seria um
+    // evento por ability por monstro nascendo, para quase sempre não achar alvo.
+    if (definition.abilities.some((ability) => ability.id === BASIC_ABILITY_ID)) {
+      this.#scheduleMonsterAttack(session, monster, 0);
+    }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
     // um que o tem ao alcance (#203).
     for (const character of session.participants) this.#armPlayerAttack(session, character);
@@ -1563,7 +1646,9 @@ export class HuntRuleset implements Ruleset {
 
     const aim = spell.effect.kind === 'damage'
       ? this.#aimFor(character, spell.effect.range, spell.effect.area)
-      : null;
+      : spell.effect.kind === 'damage-over-time'
+        ? this.#aimFor(character, spell.effect.range, undefined)
+        : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
@@ -1590,13 +1675,22 @@ export class HuntRuleset implements Ruleset {
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
       tiles: aim === null ? NO_TILES : [...this.#aimTiles],
     });
-    if (aim === null) {
-      // Condição (#155): haste, postura, magic shield, cura ao longo do tempo — o `castSpell`
-      // devolve, e quem agenda o vencimento é quem tem a fila.
-      if (result.condition !== undefined) {
-        this.#applyCondition(session, character, result.condition);
-        return result;
+    // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
+    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
+    if (result.condition !== undefined) {
+      const target: ConditionTarget | undefined = result.condition.tick?.kind === 'damage'
+        ? this.#spellHits[0]
+        : character;
+      if (target !== undefined) {
+        this.#applyConditionTo(session, target, {
+          ...result.condition,
+          targetId: this.#subjectOf(target),
+          sourceId: character.id,
+        });
       }
+      return result;
+    }
+    if (aim === null) {
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
       this.#emitHealed(session, character, result.healed, 'spell');
@@ -1711,53 +1805,296 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Aplica uma condição (#155) e agenda o vencimento — e o tique, se ela tem um. Relançar
-   * REINICIA (a política `refresh` de `Conditions`): o evento antigo é cancelado antes.
+   * Aplica uma condição a um ALVO — personagem ou monstro (CMB-07) — e agenda o vencimento e o
+   * tique. Relançar segue a política `merge` declarada: o evento antigo é cancelado ANTES do
+   * novo agendamento, sem deixar órfão.
+   *
+   * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
+   * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
+   * um segundo retorno.
    */
-  #applyCondition(session: Session, character: CharacterRuntime, condition: ConditionState): void {
-    const subject = conditionSubject(character.id, condition.key);
-    if (character.conditions.apply(condition) !== null) {
+  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+    const subject = conditionSubject(this.#subjectOf(target), condition.key);
+    const previous = target.conditions.get(condition.key);
+    const tick = tickOf(condition);
+    // Só reaproveita o tique quando HÁ de fato um evento pendente na mesma cadência: um
+    // `nextTickAtMs` ausente (nenhum tique agendado — o último já rodou) ou vencido não é
+    // reaproveitável. Sem este segundo requisito, o relançamento herdaria o fantasma do #334 —
+    // um `nextTickAtMs` sem evento correspondente na fila — e a condição relançada nunca mais
+    // tiquetaria enquanto fosse renovada.
+    const keepTick = previous !== null
+      && sameTick(previous, condition)
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs;
+    // O `nextTickAtMs` é atualizado aqui para o snapshot; quando o tique é REAPROVEITADO, a
+    // cadência antiga continua valendo — é o que impede a inanição do relançamento no mesmo ritmo.
+    const nextTickAtMs = tick === null
+      ? undefined
+      : keepTick
+        ? previous!.nextTickAtMs
+        : session.nowMs + tick.intervalMs;
+    const effective: ConditionState = nextTickAtMs === undefined
+      ? condition
+      : { ...condition, nextTickAtMs };
+    target.conditions.apply(effective);
+    // `strongest` manteve o anterior: o evento dele continua valendo, e reagendar duplicaria.
+    if (target.conditions.get(condition.key) !== effective) return;
+    if (previous !== null) {
       session.cancelEvent(CONDITION_EXPIRE, subject);
-      session.cancelEvent(CONDITION_TICK, subject);
+      // Relançar no MESMO ritmo NÃO cancela o tique: ele mantém a cadência. Cancelar e
+      // reagendar a cada relançamento empurraria o tique para sempre quando as duas cadências
+      // coincidem — o DOT que nunca acontece.
+      if (!keepTick) session.cancelEvent(CONDITION_TICK, subject);
     }
     session.scheduleIn(CONDITION_EXPIRE, condition.expiresAtMs - session.nowMs, {
-      priority: EventPriority.Housekeeping, subject,
+      priority: EXPIRE_PRIORITY, subject,
     });
-    if (condition.tick !== undefined) {
-      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
-        priority: EventPriority.Housekeeping, subject,
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(CONDITION_TICK, nextTickAtMs - session.nowMs, {
+        priority: TICK_PRIORITY, subject,
       });
     }
   }
 
   #onConditionTick(session: Session, subject: string): void {
-    const [characterId, key] = subject.split('/') as [string, ConditionKind];
-    const character = findById(session.participants, characterId);
-    if (character === null || !character.alive) return;
-    const condition = character.conditions.get(key);
-    if (condition?.tick === undefined) return;
-    this.#emitHealed(session, character, character.heal(condition.tick.amount), 'spell');
-    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece.
-    if (session.nowMs + condition.tick.intervalMs <= condition.expiresAtMs) {
-      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
-        priority: EventPriority.Housekeeping, subject,
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null || !target.alive) return;
+    const condition = target.conditions.get(subject.slice(separator + 1));
+    const tick = condition === null ? null : tickOf(condition);
+    if (condition === null || tick === null) return;
+    this.#applyConditionTick(session, target, condition, tick);
+    // O tique pode ter MATADO o alvo: `#cancelConditions` já removeu a condição e os eventos,
+    // e reagendar aqui a ressuscitaria no mapa. Morto não tiqueta.
+    if (!target.alive || target.conditions.get(condition.key) === null) return;
+    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece. O
+    // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência — mas só
+    // quando HÁ de fato um evento pendente (#334): sem tique agendado, a chave fica AUSENTE do
+    // estado, nunca com um valor fantasma que não corresponde a nenhum evento na fila.
+    const nextTickAtMs = session.nowMs + tick.intervalMs;
+    if (nextTickAtMs <= condition.expiresAtMs) {
+      target.conditions.replace({ ...condition, nextTickAtMs });
+      session.scheduleIn(CONDITION_TICK, tick.intervalMs, {
+        priority: TICK_PRIORITY, subject,
       });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = condition;
+      target.conditions.replace(withoutTick);
     }
   }
 
   #onConditionExpire(session: Session, subject: string): void {
-    const [characterId, key] = subject.split('/') as [string, ConditionKind];
-    findById(session.participants, characterId)?.conditions.remove(key);
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    this.#conditionTargetOf(session, subject.slice(0, separator))
+      ?.conditions.remove(subject.slice(separator + 1));
   }
 
-  /** Põe o monstro na mira, com a armadura que o conteúdo dá a ele. */
+  /**
+   * O tique de uma condição: cura repõe; DANO passa pelo resolver canônico e pelo pipeline de
+   * morte (CMB-07) — nunca escrita direta de vida. A atribuição vai para `sourceId` (quem
+   * aplicou), e um monstro que cai no tique é resolvido por `resolveDeath`.
+   */
+  #applyConditionTick(
+    session: Session, target: ConditionTarget, condition: ConditionState, tick: NormalizedTick,
+  ): void {
+    if (!target.alive) return;
+    if (tick.kind === 'heal') {
+      if (target instanceof CharacterRuntime) {
+        this.#emitHealed(session, target, target.heal(tick.amount), 'spell');
+      }
+      return;
+    }
+    const intent = {
+      rawDamage: tick.amount,
+      source: tick.source ?? 'monster-attack',
+      damageType: tick.damageType ?? 'physical',
+    } as const;
+    const attacker = condition.sourceId ?? 'field';
+    if (target instanceof CharacterRuntime) {
+      const outcome = resolveDamage(
+        intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+      );
+      // CMB-08: o mana shield entra como estágio explícito, e o hit/atribuição usam o HP
+      // aplicado. Sem atacante para leech — o DOT não repõe vida de quem o aplicou.
+      const applied = applyDamageOutcome(
+        target, outcome, null, target.conditions.damageTakenScale(),
+        this.#hasEnergyShield(target),
+      );
+      recordDamage(target.contribution, attacker, applied.healthDamage);
+      session.emit({
+        kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
+        amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      });
+      this.#emitCharacterHealth(session, target);
+      if (target.health <= 0) session.kill(target);
+      return;
+    }
+    const definition = this.#options.monsters.get(target.monsterId);
+    const outcome = resolveDamage(
+      intent,
+      { armor: definition?.armor ?? 0, dodgeChance: 0, mitigation: definition?.mitigation },
+      'pve', this.#options.combat, session.rng,
+    );
+    const applied = applyDamageOutcome(target, outcome, null);
+    recordDamage(target.contribution, attacker, applied.healthDamage);
+    session.emit({
+      kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
+      amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+    });
+    this.#emitHealth(session, target);
+    if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
+  }
+
+  /** O alvo de uma condição pelo id: monstro primeiro (`m:<id>`), depois personagem. */
+  #conditionTargetOf(session: Session, id: string): ConditionTarget | null {
+    const monster = this.#monsterBySubject.get(id);
+    if (monster !== undefined) return monster;
+    return findById(session.participants, id);
+  }
+
+  #subjectOf(target: ConditionTarget): string {
+    return target instanceof CharacterRuntime ? target.id : target.subject;
+  }
+
+  /**
+   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
+   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   */
+  #cancelConditions(session: Session, target: ConditionTarget): void {
+    const id = this.#subjectOf(target);
+    for (const condition of target.conditions.getState()) {
+      const subject = conditionSubject(id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      target.conditions.remove(condition.key);
+    }
+  }
+
+  // --- campos de tile (CMB-07) ---------------------------------------------------------------
+
+  /**
+   * Aplica um campo de tile. O `sim` resolve os tiles da forma AGORA, indexa por chave numérica
+   * e agenda tique e vencimento. Relançar o MESMO id reinicia: os eventos antigos são cancelados
+   * antes, sem órfão. É a porta ÚNICA — a ability de monstro e o teste passam por aqui.
+   *
+   * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
+   */
+  applyField(session: Session, spec: FieldSpec, at: WorldPoint): TileFieldState {
+    const subject = fieldSubject(spec.id);
+    const previous = this.#fields.get(spec.id);
+    const interval = specTickIntervalMs(spec.condition);
+    // Relançar no MESMO ritmo reaproveita o tique pendente: cancelar e reagendar a cada
+    // relançamento empurraria o tique para sempre quando a cadência do campo coincide com a da
+    // ability — o mesmo defeito de inanição que o DOT tem. Só o vencimento é sempre reagendado.
+    // Mas só reaproveita quando HÁ de fato um evento pendente (#334): um `nextTickAtMs` ausente
+    // ou vencido é o fantasma que não corresponde a nenhum evento na fila.
+    const keepTick = previous !== null
+      && previous.nextTickAtMs !== undefined
+      && previous.nextTickAtMs <= previous.expiresAtMs
+      && specTickIntervalMs(previous.condition) === interval;
+    const nextTickAtMs = interval === null
+      ? undefined
+      : keepTick
+        ? previous!.nextTickAtMs
+        : session.nowMs + interval;
+    const field: TileFieldState = {
+      id: spec.id,
+      tiles: areaTiles(spec.shape, at, 'south', at),
+      expiresAtMs: session.nowMs + spec.durationMs,
+      condition: spec.condition,
+      ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
+    };
+    if (previous !== null) {
+      session.cancelEvent(FIELD_EXPIRE, subject);
+      if (!keepTick) session.cancelEvent(FIELD_TICK, subject);
+    }
+    this.#fields.apply(field);
+    // O vencimento roda ANTES do tique no mesmo instante (prioridade explícita): o tique do
+    // instante de expiração encontra o campo removido. Ordem documentada e testada.
+    session.scheduleIn(FIELD_EXPIRE, spec.durationMs, {
+      priority: EXPIRE_PRIORITY, subject,
+    });
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(FIELD_TICK, nextTickAtMs - session.nowMs, {
+        priority: TICK_PRIORITY, subject,
+      });
+    }
+    return field;
+  }
+
+  #onFieldTick(session: Session, subject: string): void {
+    const field = this.#fields.get(subject.slice(2));
+    if (field === null) return;
+    const interval = specTickIntervalMs(field.condition);
+    if (interval === null) return;
+    // Quem PISA no campo agora. Um evento por campo, e `at` é O(1) por criatura — nenhum passo
+    // varre a lista de campos.
+    for (const target of this.#occupants(session, field)) {
+      const condition = conditionFromSpec(
+        field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+      );
+      const tick = tickOf(condition);
+      if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
+    }
+    // Reagenda até o prazo, e guarda o `nextTickAtMs` (#334) pelo mesmo motivo do tique de
+    // condição: sem tique agendado, a chave fica AUSENTE, nunca com um valor fantasma.
+    const nextTickAtMs = session.nowMs + interval;
+    if (nextTickAtMs <= field.expiresAtMs) {
+      this.#fields.replace({ ...field, nextTickAtMs });
+      session.scheduleIn(FIELD_TICK, interval, {
+        priority: TICK_PRIORITY, subject,
+      });
+    } else {
+      const { nextTickAtMs: _nextTickAtMs, ...withoutTick } = field;
+      this.#fields.replace(withoutTick);
+    }
+  }
+
+  #onFieldExpire(session: Session, subject: string): void {
+    this.#fields.remove(subject.slice(2));
+  }
+
+  /** Quem está sobre os tiles do campo: participantes e monstros vivos. */
+  #occupants(session: Session, field: TileFieldState): ConditionTarget[] {
+    const occupants: ConditionTarget[] = [];
+    for (const character of session.participants) {
+      if (!character.alive) continue;
+      if (this.#fields.at(this.#at(character))?.id === field.id) occupants.push(character);
+    }
+    for (const monster of this.#monsters) {
+      if (!monster.alive) continue;
+      if (this.#fields.at(this.#at(monster))?.id === field.id) occupants.push(monster);
+    }
+    return occupants;
+  }
+
+  /**
+   * A entrada num campo, observada SÓ depois de um passo aceito (`#step`). Refusão de tile não
+   * chega aqui — `movement` devolve resultado e não infringe dano (CMB-07). Aplica UM tique.
+   */
+  #enterField(session: Session, target: ConditionTarget): void {
+    const field = this.#fields.at(this.#at(target));
+    if (field === null) return;
+    const condition = conditionFromSpec(
+      field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+    );
+    const tick = tickOf(condition);
+    if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
+  }
+
+  /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
   #collect(monster: MonsterRuntime): void {
     this.#spellHits.push(monster);
     // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
     // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
+    const definition = this.#options.monsters.get(monster.monsterId);
     this.#spellTargets.push({
-      armor: this.#options.monsters.get(monster.monsterId)?.armor ?? 0,
+      armor: definition?.armor ?? 0,
       dodgeChance: 0,
+      mitigation: definition?.mitigation,
     });
   }
 
@@ -2000,13 +2337,14 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O passo ou o ataque de um monstro venceu.
+   * O passo de um monstro venceu (CMB-06).
    *
-   * Os dois eventos passam pela mesma decisão e agem só quando ela bate com o tipo deles: é
-   * `decideMonsterAction` que sabe se, deste tile, cabe andar ou bater — e ter uma decisão só
-   * evita que a regra de alcance exista escrita duas vezes, divergindo na terceira mudança.
+   * A decisão de andar ou bater continua sendo UMA (`decideMonsterAction`), e o alcance de
+   * parada é o MAIOR entre as abilities. Depois do passo, as abilities prontas cujo alvo está
+   * no alcance DELAS são armadas para agora — é a mesma regra do golpe engatilhado do
+   * personagem, do outro lado.
    */
-  #onMonsterAction(session: Session, subject: string, which: 'step' | 'attack'): void {
+  #onMonsterStep(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return;
     const definition = this.#options.monsters.get(monster.monsterId);
@@ -2020,63 +2358,204 @@ export class HuntRuleset implements Ruleset {
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
 
-    if (which === 'step') {
-      // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
-      // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
-      // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
-      const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
-      const cadence = result !== null && result.ok
-        ? result.durationMs
-        : movementDuration(this.#world, monster, monster.position, {
-          ...monster.position, z: this.#world.map.z,
-        });
-      session.scheduleIn(MONSTER_STEP, cadence, {
-        priority: EventPriority.Movement, subject,
+    // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
+    // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
+    // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
+    const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
+    const cadence = result !== null && result.ok
+      ? result.durationMs
+      : movementDuration(this.#world, monster, monster.position, {
+        ...monster.position, z: this.#world.map.z,
       });
-      // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo
-      // de um relógio. É a mesma regra do personagem, do outro lado.
-      if (action.kind === 'attack' && monster.attackReady) {
-        this.#scheduleMonsterAttack(session, monster, 0);
-      }
-      return;
-    }
+    session.scheduleIn(MONSTER_STEP, cadence, {
+      priority: EventPriority.Movement, subject,
+    });
+    // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
+    // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
+    this.#armMonsterAbilities(session, monster, definition, target);
+  }
 
-    if (action.kind !== 'attack') {
-      // Sem ninguém ao alcance: engatilha em vez de desperdiçar, e para de acordar. Quem o
-      // traz de volta é o passo, que já reavalia a distância a cada vencimento.
+  /**
+   * O ataque BÁSICO de um monstro venceu — o legado, e o caminho do rato (CMB-06).
+   *
+   * A sequência é a de sempre: reescolhe alvo, confere o alcance, reagenda a cadência e aplica
+   * pelo pipeline canônico. Sem alvo ao alcance, ENGATILHA em vez de desperdiçar — quem o traz
+   * de volta é o passo, que reavalia a distância a cada vencimento.
+   */
+  #onMonsterAttack(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const ability = definition.abilities.find((candidate) => candidate.id === BASIC_ABILITY_ID);
+    if (ability === undefined) {
       monster.attackReady = true;
       return;
     }
 
-    this.#scheduleMonsterAttack(session, monster, definition.attackIntervalMs);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range) {
+      monster.attackReady = true;
+      return;
+    }
 
-    const character = findById(session.participants, action.targetId);
-    if (character === null || !character.alive) return;
+    this.#scheduleMonsterAttack(session, monster, ability.cadenceMs);
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
 
-    // A faixa de ataque sorteada com o `Rng` da sessão (FUN-123): o rato bate de 0 a 8, e a
-    // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
-    const { min, max } = attackRange(definition.attack);
-    const result = resolveDamage(
-      { power: session.rng.integer(min, max), kind: 'melee' },
-      this.#playerDefender(character),
-      'pve',
-      this.#options.combat,
-      session.rng,
+  /**
+   * Uma ability DECLARADA de um monstro venceu (CMB-06). O subject carrega o id dela:
+   * `m:<id>:<abilityId>`, e é ele que a morte cancela sem varrer a fila.
+   */
+  #onMonsterAbility(session: Session, subject: string): void {
+    // `m:<id>:<abilityId>`: o id é numérico e vem primeiro, então o `:` seguinte separa a
+    // ability — o id dela pode conter `:` sem ambiguidade.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const abilityId = rest.slice(separator + 1);
+    const ability = definition.abilities.find((candidate) => candidate.id === abilityId);
+    if (ability === undefined) return;
+
+    monster.scheduledAbilities.delete(ability.id);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range) {
+      // Alvo saiu do alcance no vencimento: NÃO bate, e a ability volta a ficar engatilhada.
+      return;
+    }
+
+    this.#scheduleMonsterAbility(session, monster, ability, ability.cadenceMs);
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
+
+  /**
+   * Arma para AGORA toda ability pronta cujo alvo está no alcance dela.
+   *
+   * A básica usa `attackReady`; as declaradas usam `scheduledAbilities` — cada uma tem a
+   * própria cadência, e um booleano só não distinguiria "vai bater" de "já tem evento na fila".
+   */
+  #armMonsterAbilities(
+    session: Session, monster: MonsterRuntime, definition: Monster, target: Prey | null,
+  ): void {
+    if (target === null || !target.alive) return;
+    for (const ability of definition.abilities) {
+      if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (ability.id === BASIC_ABILITY_ID) {
+        if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
+        continue;
+      }
+      if (monster.scheduledAbilities.has(ability.id)) continue;
+      this.#scheduleMonsterAbility(session, monster, ability, 0);
+    }
+  }
+
+  /**
+   * Aplica uma ability: colhe os alvos ANTES de qualquer dano, emite o lançamento e depois um
+   * golpe por alvo.
+   *
+   * A ORDEM é contrato (FUN-109): o `monster-ability-cast` sai antes dos `creature-hit` dele —
+   * o projétil e o impacto do lançamento acompanham os números, não o contrário. E a colheita
+   * antes do dano é a regra da FUN-92: resolver morte no meio da varredura mexeria na lista
+   * de participantes que está sendo lida.
+   */
+  #executeMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility,
+    primary: CharacterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    const melee = isMeleeAbility(ability);
+    const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
+    // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
+    // legado — é o que mantém o rato bit a bit (nenhum evento a mais por golpe).
+    if (!melee || ability.presentation !== undefined) {
+      session.emit({
+        kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id,
+        casterPosition: this.#at(monster),
+        targets: targets.map((target) => ({
+          creatureId: target.id, position: this.#at(target),
+        })),
+        tiles: abilityTiles(ability, this.#at(monster), this.#at(primary)),
+        ...(ability.presentation?.missileKey === undefined
+          ? {} : { missileKey: ability.presentation.missileKey }),
+        ...(ability.presentation?.impactKey === undefined
+          ? {} : { impactKey: ability.presentation.impactKey }),
+      });
+    }
+
+    for (const character of targets) {
+      const defender = this.#playerDefender(character);
+      // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
+      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
+      const result = resolveDamage(
+        {
+          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          source: 'monster-attack',
+          damageType: ability.damageType,
+        },
+        defender,
+        'pve',
+        this.#options.combat,
+        session.rng,
+      );
+      this.#applyMonsterHit(session, subject, character, ability, defender, result, source);
+      // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
+      // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
+      if (ability.condition !== undefined && character.alive) {
+        this.#applyConditionTo(session, character, conditionFromSpec(
+          ability.condition, character.id, subject, session.nowMs, 'monster-attack',
+        ));
+      }
+    }
+    // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria é a mesma
+    // da magia (`areaTiles`), e o campo é indexado por tile — nenhum passo varre a lista.
+    if (ability.field !== undefined) {
+      this.applyField(session, ability.field, this.#at(primary));
+    }
+  }
+
+  /**
+   * O fim de um golpe de ability em UM alvo: aplica, atribui, anuncia, treina shielding e
+   * decide a morte. É o mesmo corpo do ataque básico de sempre, agora por alvo.
+   */
+  #applyMonsterHit(
+    session: Session, subject: string, character: CharacterRuntime, ability: MonsterAbility,
+    defender: Defender, outcome: DamageOutcome, source: 'melee' | 'spell',
+  ): void {
+    // O CMB-08: o mana shield do personagem vira estágio explícito, e o hit/atribuição usam o
+    // HP APLICADO. A postura (#155) escala o dano TOMADO antes do escudo; o atacante é `null`
+    // porque monstro não faz leech — o outcome informa a mana absorvida sem matar ninguém. O
+    // Energy Ring (SV-16) é a segunda fonte de escudo, resolvida por quem tem o catálogo.
+    const applied = applyDamageOutcome(
+      character, outcome, null, character.conditions.damageTakenScale(),
+      this.#hasEnergyShield(character),
     );
-    // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
-    const ring = character.inventory.ringEffect(this.#options.items);
-    const applied = character.receiveDamage(
-      Math.round(result.damage * character.conditions.damageTakenScale()),
-      ring?.kind === 'energy-shield',
-    );
-    recordDamage(character.contribution, subject, applied);
+    recordDamage(character.contribution, subject, applied.healthDamage);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
-      amount: applied, source: 'melee', position: this.#at(character),
+      amount: applied.healthDamage, source, position: this.#at(character),
     });
     this.#emitCharacterHealth(session, character);
+    // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
+    // de defesa e o tipo está aprovado. Nunca por tick, nunca por dano aplicado: um bloqueio
+    // total (ou um golpe de 0) ainda é um bloqueio praticado. Ataque elemental não entra.
+    if (this.#options.combat.defense !== undefined
+      && defender.defense !== undefined && defender.defense.kind !== 'none'
+      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
+      this.#gainSkills(session, character, 'shield-block', 1);
+    }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
@@ -2088,6 +2567,16 @@ export class HuntRuleset implements Ruleset {
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
     // avisa o ruleset. Chamar os dois é deliberado: quem aplica dano não decide morte.
     session.kill(character);
+  }
+
+  /** O mesmo do lado do monstro, e pela mesma razão. */
+  #scheduleMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, delayMs: number,
+  ): void {
+    monster.scheduledAbilities.add(ability.id);
+    session.scheduleIn(MONSTER_ABILITY, delayMs, {
+      priority: EventPriority.Attack, subject: monsterAbilitySubject(monster.id, ability.id),
+    });
   }
 
   /**
@@ -2111,6 +2600,11 @@ export class HuntRuleset implements Ruleset {
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // A entrada num campo (CMB-07) é observada SÓ depois de um passo ACEITO: `movement`
+      // devolve resultado e nunca infringe dano. Um tile recusado não aplica o campo.
+      if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
+        this.#enterField(session, mover);
+      }
     }
     return result;
   }
@@ -2236,19 +2730,25 @@ export class HuntRuleset implements Ruleset {
   // --- combate ------------------------------------------------------------------------------
 
   /**
-   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4):
-   * corpo a corpo com o `attack` da arma (ou desarmado); tiro com o `attack` da munição
-   * escolhida, debitando o preço dela; ou wand, gastando mana e causando dano mágico por
-   * faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar, contar o recorde,
-   * render skill — e é `#land` quem o faz.
+   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4;
+   * perfis de arma no CMB-05): corpo a corpo com o `attack` da arma (ou desarmado); tiro com o
+   * `attack` da munição escolhida, debitando o preço dela; ou wand, gastando mana e causando
+   * dano mágico por faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar,
+   * contar o recorde, praticar — e é `#land` quem aplica.
+   *
+   * O poder sai de `resolveWeaponPower` com o PERFIL da arma: o ruleset não conhece nome de
+   * item nem vocação (DT-01). A família do perfil aponta a skill e a prática, e é por isso que
+   * wand/rod não recebem multiplicador de weapon skill — o perfil deles não tem `power`.
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    weapon: Item | null, how: Weapon | undefined,
+    weapon: Item | null, how: ResolvedWeapon | undefined,
   ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
-    const defender: Defender = { armor: definition.armor, dodgeChance: 0 };
+    const defender: Defender = {
+      armor: definition.armor, dodgeChance: 0, mitigation: definition.mitigation,
+    };
 
     if (weapon !== null && how?.kind === 'distance') {
       const ammo = this.#ammoFor(session, character, how.ammoFamily ?? 'arrow');
@@ -2265,19 +2765,31 @@ export class HuntRuleset implements Ruleset {
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
-      // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio.
+      // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
+      // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
+      const power = how.power;
+      const profile: WeaponProfile = {
+        family: how.family,
+        damageType: ammo.damageType,
+        range: how.range,
+        ...(power === undefined ? {} : { power: { ...power, base: ammo.attack } }),
+      };
       const result = resolveDamage(
-        { power: this.#scaledPower(character, 'distance-hit', ammo.attack), kind: 'melee' },
+        {
+          rawDamage: this.#weaponPower(session, character, profile),
+          source: 'basic-attack',
+          damageType: profile.damageType,
+          modifiers: this.#options.combat.modifiers,
+        },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.damage, 'melee');
-      this.#gainSkills(session, character, 'distance-hit', 1);
+      this.#land(session, character, monster, result, 'melee');
+      this.#practice(session, character, profile.family, 1);
       return;
     }
 
     if (weapon !== null && how?.kind === 'wand') {
       const manaPerHit = how.manaPerHit ?? 0;
-      const range = how.damage ?? { min: 0, max: 0 };
       // A mana sai ANTES da rolagem, e a conferência foi em `#onPlayerAttack`: chegar aqui é
       // ter mana. Uma rolagem por golpe, com o `Rng` da sessão — a mesma semente, o mesmo
       // dano, como o loot (contrato).
@@ -2286,51 +2798,107 @@ export class HuntRuleset implements Ruleset {
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
       });
-      // Dano por faixa fixa e MÁGICO: no Tibia a wand não escala com skill nenhuma, e a
-      // armadura que vale é a mágica (`armorEffectiveness.magic`).
+      // Dano por faixa fixa e do TIPO da arma (CMB-03): a wand de vortex é energia, o rod de
+      // snakebite é terra; sem declaração o boot resolve `arcane`, o `kind: magic` do v1. O
+      // perfil da wand/rod não tem `power`, então NÃO há multiplicador de weapon skill (DT-02).
       const result = resolveDamage(
-        { power: session.rng.integer(range.min, range.max), kind: 'magic' },
+        {
+          rawDamage: this.#weaponPower(session, character, how),
+          source: 'basic-attack',
+          damageType: how.damageType,
+          modifiers: this.#options.combat.modifiers,
+        },
         defender, 'pve', this.#options.combat, session.rng,
       );
-      this.#land(session, character, monster, result.damage, 'spell');
+      this.#land(session, character, monster, result, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
-      this.#gainSkills(session, character, 'spell-cast', manaPerHit);
+      this.#practice(session, character, how.family, manaPerHit);
       return;
     }
 
+    // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
+    // o `attack`, o alcance e o tipo de `combat.player`.
+    const profile: WeaponProfile = how ?? this.#options.unarmed;
     const result = resolveDamage(
-      // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
-      // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
-      { power: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
-        kind: 'melee' },
+      {
+        rawDamage: this.#weaponPower(session, character, profile),
+        source: 'basic-attack',
+        damageType: profile.damageType,
+        modifiers: this.#options.combat.modifiers,
+      },
       defender, 'pve', this.#options.combat, session.rng,
     );
-    this.#land(session, character, monster, result.damage, 'melee');
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
-    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
-    // que "sobe pelo uso" quer dizer.
-    this.#gainSkills(session, character, 'melee-hit', 1);
+    this.#land(session, character, monster, result, 'melee');
+    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
+    // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
+    this.#practice(session, character, profile.family, 1);
+  }
+
+  /**
+   * O poder bruto de um golpe pelo PERFIL (CMB-05), com a postura por último.
+   *
+   * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
+   * conteúdo e o nível do personagem. Corpo a corpo e distância recebem a postura (`buff`);
+   * wand/rod têm faixa fixa e não passam por ela — como sempre.
+   */
+  #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
+    const family = this.#options.weaponFamilies.get(profile.family);
+    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
+    const skillLevel = skill === undefined ? 0 : character.skills.levelOf(skill);
+    const power = resolveWeaponPower(profile, character.level, skillLevel, session.rng);
+    if (family?.kind === 'distance') {
+      return Math.round(power * character.conditions.damageDealtScale('distance'));
+    }
+    if (family?.kind === 'melee') {
+      return Math.round(power * character.conditions.damageDealtScale('melee'));
+    }
+    return power;
+  }
+
+  /**
+   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
+   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
+   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
+   * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
+   */
+  #practice(
+    session: Session, character: CharacterRuntime, family: WeaponFamily, amount: number,
+  ): void {
+    const definition = this.#options.weaponFamilies.get(family);
+    if (definition === undefined) return;
+    const skill = this.#options.skills.get(definition.skillId);
+    if (skill === undefined) return;
+    this.#gainSkills(session, character, skill.gain.on, amount);
   }
 
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
   #land(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    resolved: number, source: 'melee' | 'spell',
+    outcome: DamageOutcome, source: 'melee' | 'spell',
   ): void {
-    const applied = monster.receiveDamage(resolved);
-    recordDamage(monster.contribution, character.id, applied);
+    // O CMB-08: aplicar é o estágio explícito que passa pelo mana shield (no alvo), remove HP
+    // efetivo e credita o leech clampado no atacante. O `outcome` já traz o resolvido e o
+    // crítico; a atribuição e o hit usam o HP APLICADO, nunca a mana absorvida nem o overkill.
+    const applied = applyDamageOutcome(monster, outcome, character);
+    recordDamage(monster.contribution, character.id, applied.healthDamage);
     // O número que flutua é o APLICADO — o que saiu da barra —, e sai ANTES dela (FUN-109). O
     // resolvido é o recorde do extrato, logo abaixo; mostrar 300 sobre um rato de 10 é o
     // cliente contando uma história que a barra desmente.
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
-      amount: applied, source, position: this.#at(monster),
+      amount: applied.healthDamage, source, position: this.#at(monster),
     });
     this.#emitHealth(session, monster);
+    // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
+    // ou alvo integralmente absorvido pela mana, informa zero e não emite evento — o número
+    // verde não mente.
+    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech');
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
-    session.credit(character.id, 'bestBasicHit', resolved);
+    session.credit(character.id, 'bestBasicHit', outcome.resolvedDamage);
   }
 
   /**
@@ -2486,7 +3054,17 @@ export class HuntRuleset implements Ruleset {
     // se tira o monstro dos índices desta instância — e da atribuição de quem ele bateu, senão
     // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
     const subject = monster.subject;
+    // As CONDIÇÕES do monstro (CMB-07) saem com ele: sem isto, o DOT de um monstro morto
+    // continuaria na fila e venceria contra o vazio. O `resolveDeath` só cancela o `m:<id>`.
+    this.#cancelConditions(session, monster);
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
+    // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —
+    // e é o que impede um monstro morto de acordar uma vez por cadência.
+    for (const ability of definition?.abilities ?? []) {
+      if (ability.id === BASIC_ABILITY_ID) continue;
+      session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
+    }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
@@ -2763,18 +3341,6 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O ataque da ARMA equipada, ou o do desarmado (FUN-82).
-   *
-   * `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
-   * personagem SEM arma — o fallback, e ele é conteúdo. Um zero em código no lugar dele faria
-   * todo personagem novo não machucar nada, e sem arma é como todo personagem começa.
-   */
-  #attackPowerOf(character: CharacterRuntime): number {
-    return character.inventory.weaponAttack(this.#options.items, character)
-      ?? this.#options.player.attackPower;
-  }
-
-  /**
    * A defesa do personagem: a armadura do CONTEÚDO mais a do que ele veste (FUN-82).
    *
    * Soma, e não substituição: `combat.player.armor` é a resistência do corpo, e a peça vestida
@@ -2787,6 +3353,43 @@ export class HuntRuleset implements Ruleset {
     return {
       armor: this.#options.player.armor + character.inventory.armor(this.#options.items),
       dodgeChance: this.#options.player.dodgeChance,
+      // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
+      // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
+      mitigation: character.inventory.mitigation(this.#options.items),
+      // A fonte de defesa (CMB-04): escolhida pelo `Inventory` (DT-01) e escalada aqui pela
+      // skill de shielding, que é do ruleset porque vive no personagem.
+      defense: this.#defenseSourceOf(character),
+    };
+  }
+
+  /**
+   * O Energy Ring no dedo (§13.9, SV-16): a segunda fonte de mana shield, resolvida pelo
+   * catálogo — `CharacterRuntime` não conhece conteúdo. Entra em `applyDamageOutcome` como a
+   * mesma leitura OU-lógica da condição `mana-shield`, e nunca soma com ela.
+   */
+  #hasEnergyShield(character: CharacterRuntime): boolean {
+    return character.inventory.ringEffect(this.#options.items)?.kind === 'energy-shield';
+  }
+
+  /**
+   * A fonte de defesa do personagem (CMB-04), já escalada pela skill de shielding.
+   *
+   * A ESCOLHA é do `Inventory` (DT-01): escudo, arma de uma mão, nenhuma — uma regra só, a
+   * mesma que já recusa bow com escudo. Aqui entra o que é do ruleset: a skill que o conteúdo
+   * apontou em `combat.defense.skillId` multiplica a defesa da peça, como a skill de arma
+   * multiplica o ataque. Sem skill (conteúdo de teste, ou referência ausente), a peça vale o
+   * que ela diz.
+   */
+  #defenseSourceOf(character: CharacterRuntime): DefenseSource {
+    const source = character.inventory.defenseSource(this.#options.items, character);
+    if (source.kind === 'none') return source;
+    const skillId = this.#options.combat.defense?.skillId;
+    if (skillId === undefined) return source;
+    const skill = this.#options.skills.get(skillId);
+    if (skill === undefined) return source;
+    return {
+      kind: source.kind,
+      defense: Math.round(source.defense * powerMultiplier(skill, character.skills.levelOf(skill))),
     };
   }
 
@@ -2804,12 +3407,13 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado — ou a arma sem
-   * `weapon`, que o conteúdo já normalizou — vale `combat.player.attackRange`, o corpo a corpo.
+   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado vale o alcance
+   * do perfil `fist` (CMB-05) — que o boot monta de `combat.player.attackRange`, o corpo a
+   * corpo. A arma sem `range` já saiu do boot com o da família.
    */
   #attackRangeOf(character: CharacterRuntime): number {
     return character.inventory.weapon(this.#options.items, character)?.weapon?.range
-      ?? this.#options.player.attackRange;
+      ?? this.#options.unarmed.range;
   }
 
   /**
@@ -2992,6 +3596,8 @@ export function createHuntRuleset(
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
+    weaponFamilies: content.weaponFamilies,
+    unarmed: content.unarmed,
     ammunition: content.ammunition,
     // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
     // `exactOptionalPropertyTypes`.

@@ -19,5 +19,5 @@
     },
     "damageTakenPercent": 15
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. o Tibia dá +25 % de SKILL, não de dano; sem skill de arma separada (ADR 0026 d.4) a aproximação é em dano."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia dá +25 % de SKILL, não de dano; sem skill de arma separada (ADR 0026 d.4) a aproximação é em dano."
 }

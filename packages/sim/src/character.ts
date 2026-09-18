@@ -331,25 +331,17 @@ export class CharacterRuntime {
   }
 
   /**
-   * Aplica dano e devolve quanto saiu da VIDA. Morrer é decisão do ruleset.
+   * Aplica dano à VIDA e devolve quanto saiu. Morrer é decisão do ruleset.
    *
-   * Com magic shield (#155) OU o Energy Ring (SV-16) o dano sai da mana primeiro, e só o resto
-   * vai na vida — o escudo continua "ativo" até vencer mesmo com a mana em zero, como no Tibia.
-   * **As duas fontes NÃO se somam**: é uma condição OU-lógica, não dois absorvedores em fila —
-   * debitar a mana duas vezes pelo mesmo golpe não faz sentido nenhum, e o personagem com as duas
-   * ativas ao mesmo tempo (condição de magia por cima do anel) continua absorvendo o dano uma
-   * vez só, como se tivesse só uma das duas. `extraManaShield` é resolvido por quem tem o
-   * catálogo — o ruleset, via `Inventory.ringEffect` — porque `CharacterRuntime` não conhece
-   * conteúdo. O devolvido é o que a barra de vida e a atribuição de morte usam.
+   * Desde o CMB-08 a mana shield NÃO mora mais aqui: ela é um estágio explícito de
+   * `applyDamageOutcome` (`combat/outcome.ts`), que descreve quanto absorveu antes de chamar
+   * este método — e é lá que a condição `mana-shield` e o Energy Ring (SV-16) convergem numa
+   * leitura OU-lógica só, sem debitar a mana duas vezes. O personagem guarda só a parte de vida,
+   * como o monstro — a divisão de recurso é de quem aplica, e é o que permite testar absorção
+   * total e parcial.
    */
-  receiveDamage(amount: number, extraManaShield = false): number {
-    let remaining = amount;
-    if (this.conditions.hasManaShield() || extraManaShield) {
-      const absorbed = Math.min(remaining, this.mana);
-      this.mana -= absorbed;
-      remaining -= absorbed;
-    }
-    const applied = Math.min(remaining, this.health);
+  receiveDamage(amount: number): number {
+    const applied = Math.min(amount, this.health);
     this.health -= applied;
     if (this.health <= 0) {
       this.health = 0;

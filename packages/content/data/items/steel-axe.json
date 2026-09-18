@@ -6,9 +6,11 @@
   "weight": 41,
   "value": 140,
   "attack": 21,
-  "_open": "A arma inicial do Knight (ADR 0026, decisão 3). Attack 21 e 41 oz do TibiaWiki; defense 10 não é lida.",
+  "defense": 10,
+  "_open": "A arma inicial do Knight (ADR 0026, decisão 3). Attack 21, defense 10 e 41 oz do TibiaWiki; a defesa é lida pelo blocking físico desde o CMB-04 (emenda do ADR 0031).",
   "weapon": {
     "kind": "melee",
+    "family": "axe",
     "range": 1
   },
   "requires": {

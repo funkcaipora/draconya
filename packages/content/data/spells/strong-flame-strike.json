@@ -14,7 +14,8 @@
   "effect": {
     "kind": "damage",
     "basePower": 125,
-    "range": 7
+    "range": 7,
+    "damageType": "fire"
   },
-  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado sem conferência visual."
+  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior."
 }

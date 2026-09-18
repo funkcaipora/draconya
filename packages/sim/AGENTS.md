@@ -286,18 +286,44 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
   o rato bate de 0 a 8, e a mesma semente dá o mesmo golpe — o contrato do loot vale para o
   dano. Um número no JSON é a faixa de um valor só.
-- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026). `Inventory.weapon()`
-  é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e só sem arma vale
-  `combat.player.attackRange`. `#strike` despacha pelo `weapon.kind`: `melee` como sempre;
-  `distance` atira a MUNIÇÃO — `#ammoFor` devolve a escolhida da família se o gold paga o
-  tiro, senão a grátis, e avisa (`ammo-fallback`) uma vez por sessão — com o `attack` dela pela
-  skill `distance`, debitando `price` em `goldDelta` E `goldSpent` como o supply; `wand` gasta
-  `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma rolagem por golpe —
-  contrato como o loot) e rende `spell-cast` pela mana. **Wand sem mana não bate**: o golpe
-  fica agendado para o intervalo seguinte, sem gastar mana nem render skill. O tiro emite
-  `shot` ANTES do `creature-hit`; o projétil é da tabela, resolvido no hospedeiro (invariante
-  6). `CharacterState.ammo` (família → id) é opcional e viaja no snapshot; `selectAmmo` só
-  confere o level. `hands-full`: bow com escudo, ou escudo com bow, é recusado — nunca trocado.
+- **A ability do monstro é conteúdo declarativo, normalizado no BOOT** (CMB-06, DT-01/DT-02).
+  `monster.abilities` ausente vira UMA básica montada de `attack`/`attackIntervalMs`/
+  `attackRange`/`damageType`, e é isso que preserva o rato bit a bit — mesmo sorteio, mesma
+  ordem de evento. A básica usa o subject `m:<id>` e o kind `monster-attack` de sempre; as
+  declaradas usam subject derivado `m:<id>:<abilityId>` e kind `monster-ability`, e a morte as
+  cancela pelos ids que o conteúdo conhece (sem varrer a fila). A distância emite
+  `monster-ability-cast` ANTES dos `creature-hit`; o golpe de ability não-corpo-a-corpo é
+  `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
+  "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
+  `scheduledAbilities` (opcional no snapshot, sem bump).
+- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05).
+  `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e
+  só sem arma vale o alcance do perfil `fist` (`content.unarmed`). `#strike` despacha pelo
+  `weapon.kind`: `melee` como sempre; `distance` atira a MUNIÇÃO — `#ammoFor` devolve a escolhida
+  da família se o gold paga o tiro, senão a grátis, e avisa (`ammo-fallback`) uma vez por sessão —
+  com o `attack` dela pela skill `distance`, debitando `price` em `goldDelta` E `goldSpent` como o
+  supply; `wand` gasta `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
+  rolagem por golpe — contrato como o loot) e rende `spell-cast` pela mana. **O poder sai de
+  `resolveWeaponPower` com o PERFIL da arma** (`WeaponProfile`: família, tipo, alcance, `power` ou
+  `fixedDamage`): a família aponta a skill e a prática no conteúdo, e o ruleset não conhece nome de
+  item nem vocação (DT-01). Corpo a corpo e distância recebem a postura; wand/rod não, porque o
+  perfil delas não tem `power` — e por isso não ganham multiplicador de weapon skill (DT-02).
+  **Wand sem mana não bate**: o golpe fica agendado para o intervalo seguinte, sem gastar mana nem
+  praticar. A prática é UMA por golpe e não depende do dano final: imune, resistente ou morto no
+  impacto ainda pratica. O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
+  resolvido no hospedeiro (invariante 6). `CharacterState.ammo` (família → id) é opcional e viaja
+  no snapshot; `selectAmmo` só confere o level. `hands-full`: bow com escudo, ou escudo com bow, é
+  recusado — nunca trocado.
+- **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
+  `Inventory.defenseSource` escolhe escudo → arma corpo a corpo de uma mão → nenhuma (DT-01/02),
+  reusando a mesma verdade de slot que já recusa bow com escudo; o ruleset não repete a regra.
+  `resolveDefense` (`combat/defense.ts`) é o estágio entre o Dodge e a armadura: sem fonte, ou
+  com tipo fora de `blockTypes`, é IDENTIDADE e **não consome sorteio** — é o que mantém o v1 bit
+  a bit. Com fonte e físico, é o SEGUNDO sorteio (o Dodge continua o primeiro), e ele é
+  consumido mesmo com `defense` 0, para a sequência não depender do valor da peça. O piso é
+  calculado sobre o poder BRUTO: o bloqueio nunca zera o golpe. Shielding sobe uma vez por
+  ataque físico elegível RECEBIDO (`#onMonsterAttack`), nunca por tick, nunca por HP perdido e
+  nunca em elemental. Não há fight mode, opcode nem UI (DT-03).
 - **Condição é evento, não acumulador; a direção é do `#step`; cooldown tem três livros** (#155).
   Haste, postura, magic shield e cura ao longo do tempo são `ConditionState` no personagem
   (`conditions.ts`, uma por tipo, relançar substitui) com `expiresAtMs` LÓGICO, e o vencimento
@@ -322,3 +348,24 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   de uma vez, e de vida cheia a regeneração não anuncia nada — o level up que não anuncia
   fica com o máximo velho na barra até a reanexação. `targets` do `spell-cast` é vetor NOVO de
   propósito: `#spellHits` é reaproveitado, e o evento é drenado depois.
+- **Outcome avançado é etapa explícita, e a ausência de modificador preserva o v1** (CMB-08,
+  emenda do ADR 0031). `resolveDamage` continua PURO e decide o resolvido e o crítico;
+  `applyDamageOutcome` (`combat/outcome.ts`) é a ÚNICA etapa que escreve recurso — mana shield,
+  HP efetivamente removido e leech —, e opera só os runtimes da sessão dona. O mana shield saiu
+  de `CharacterRuntime.receiveDamage`, que voltou a ser só vida; o escudo absorve até onde a
+  mana alcança e segue ativo até vencer mesmo com mana zero. A ordem do RNG é contrato: Dodge
+  (1º, sempre), defesa (2º, se elegível), crítico (3º, **só quando `intent.modifiers.critical`
+  é declarado** — declarado com chance 0 ainda consome). `combat.modifiers` ausente NÃO consome
+  sorteio nenhum, e é o que mantém bit a bit o CMB-02/03/04; por isso o conteúdo real não o
+  declara ainda. O leech usa o HP APLICADO (`healthDamage`), nunca o resolvido — overkill e
+  absorção total não rendem leech — e o que de fato repõe é clampado no teto do atacante. O
+  `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
+  com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
+  há campo de protocolo nem UI de breakdown (DT-03).
+- **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
+  #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
+  escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é
+  comparado entre as três, nunca copiado para o oráculo — ele não é número que se lê, é
+  propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
+  benchmark vive em `tools` e a interpretação da linha de base em
+  `docs/product/combat-conformance.md`.

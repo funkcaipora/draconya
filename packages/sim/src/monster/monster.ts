@@ -5,7 +5,10 @@
 // e é o que faz uma hunt AFK render sem supervisão.
 
 import type { Monster } from '@draconya/content';
+import { monsterAttackRange } from '@draconya/content';
 import { Cooldowns } from '../cooldown.js';
+import { Conditions } from '../conditions.js';
+import type { ConditionState } from '../conditions.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
@@ -34,6 +37,19 @@ export interface MonsterState {
   readonly speed?: number;
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
+  /**
+   * As abilities DECLARADAS com evento pendente na fila (CMB-06). A básica usa `attackReady`;
+   * estas vivem aqui para a invariante "engatilhada OU agendada" valer por ability.
+   *
+   * Ausente é nenhuma agendada — snapshot anterior a esta issue, que não tinha ability nenhuma
+   * para agendar.
+   */
+  readonly scheduledAbilities?: readonly string[];
+  /**
+   * As condições ativas (CMB-07): DOT de magia, lentidão, o que a condição fizer. Mesmo estado
+   * do personagem, e mesma regra de snapshot: ausente é nenhuma, sem bump de formato.
+   */
+  readonly conditions?: readonly ConditionState[];
   readonly cooldowns: Partial<CooldownState>;
 }
 
@@ -78,6 +94,13 @@ export class MonsterRuntime {
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
   readonly cooldowns: Cooldowns;
+  /**
+   * As abilities declaradas que têm evento pendente (CMB-06). Ver `MonsterState.scheduledAbilities`.
+   * A básica não entra aqui: ela usa `attackReady`, como sempre.
+   */
+  readonly scheduledAbilities: Set<string>;
+  /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
+  readonly conditions: Conditions;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -90,6 +113,8 @@ export class MonsterRuntime {
     this.speed = state.speed ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
+    this.scheduledAbilities = new Set(state.scheduledAbilities ?? []);
+    this.conditions = Conditions.fromState(state.conditions);
   }
 
   get alive(): boolean {
@@ -112,6 +137,10 @@ export class MonsterRuntime {
       speed: this.speed,
       contribution: this.contribution.getState(),
       cooldowns: this.cooldowns.getState(),
+      ...(this.scheduledAbilities.size === 0
+        ? {}
+        : { scheduledAbilities: [...this.scheduledAbilities] }),
+      ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
     };
   }
 
@@ -174,7 +203,9 @@ export function decideMonsterAction(
 ): MonsterAction {
   if (!monster.alive || target === null || !target.alive) return { kind: 'idle' };
 
-  if (distance(monster.position, target.position) <= definition.attackRange) {
+  // O alcance de parada é o MAIOR entre as abilities (CMB-06): um monstro de ability à
+  // distância 4 para a 4 tiles e atira, em vez de colar no alvo como um corpo a corpo.
+  if (distance(monster.position, target.position) <= monsterAttackRange(definition)) {
     return { kind: 'attack', targetId: target.id };
   }
 

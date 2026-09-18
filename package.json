@@ -28,6 +28,7 @@
     "route:trace": "tsx scripts/trace-route.ts",
     "bench:monster": "tsc -b && pnpm --filter @draconya/tools bench:monster",
     "bench:hunts": "tsc -b && pnpm --filter @draconya/tools bench:hunts",
+    "bench:combat": "tsc -b && pnpm --filter @draconya/tools bench:combat",
     "bench:city": "tsc -b && pnpm --filter @draconya/tools bench:city",
     "load": "tsc -b && pnpm --filter @draconya/tools load"
   },

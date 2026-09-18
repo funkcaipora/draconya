@@ -1,12 +1,15 @@
+import { compileMonster, monsterSchema } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from './monster.js';
 
 const rat: Monster = {
-  id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
-  health: 20, experience: 5, attack: 6, armor: 0,
-  attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
-  attackRange: 1, leashRadius: 0, loot: { items: [] },
+  ...compileMonster(monsterSchema.parse({
+    id: 'rat', name: 'Rat', recommendedLevel: 1,
+    health: 20, experience: 5, attack: 6, armor: 0,
+    attackIntervalMs: 2_000, speed: 300, aggroRadius: 4,
+  })),
+  outfitId: 21,
 };
 
 const monsterAt = (x: number, y: number, over: Record<string, unknown> = {}) =>

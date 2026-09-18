@@ -143,6 +143,24 @@ nascer com número, que é a ordem errada. Por isso o placeholder emite as três
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
 
+**`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
+dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
+`presentation.missileKey`/`impactKey`, nunca um id de arte (invariante 6). Chave sem linha é
+MUDA, e linha sem uso é vocabulário à espera: as duas são válidas, e por isso não há id de
+conteúdo para cruzar. O monstro declara `abilities[]`; ausente normaliza no boot para UMA
+básica montada de `attack`/`attackIntervalMs`/`attackRange`/`damageType`, e o id `basic` é
+reservado ao boot. **Os ids que cada chave resolve continuam sendo arte**, então
+`packProblems` os confere contra o inventário do pacote (CMB-09, #242): um projétil fora da
+faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
+
+**A conferência visual dos efeitos e projéteis é auditada e re-rodável** (CMB-09, #242). O
+método, a versão do pacote e o bloqueio da biblioteca parcial estão em
+`docs/combat-presentation-audit.md`; `src/appearances.test.ts` prende que toda referência cai no
+inventário versionado e, quando `things/<versão>/library/manifest.json` existe, que a aparência
+existe no índice dela. **Nesta máquina a biblioteca é parcial** (47 de 4171 folhas), e nenhum
+sprite de efeito/projétil tem PNG — por isso nenhum id foi corrigido sem evidência; os `_open`
+das magias registram o bloqueio em vez da frase genérica "sem conferência visual".
+
 **`maps.<id>.wall` é UM id ou as quatro peças** (FUN-105): `{ vertical, horizontal, corner,
 pole }`, como o Tibia monta muro — o tile bloqueado não tem uma arte só, e a peça é escolhida
 pela vizinhança. A regra que escolhe é do CLIENTE (`world/walls.ts`); aqui moram os quatro ids,
@@ -241,6 +259,13 @@ porque catálogo não existia; agora o que decide é a referência existir.
 `charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
 para o catálogo não mudar quando a mecânica existir.
 
+**`defense` é da peça e só nas combinações aprovadas** (CMB-04, emenda do ADR 0031): escudo, ou
+arma corpo a corpo de uma mão. Bow/twoHanded e wand/rod não têm defesa residual, e `buildContent`
+recusa `defense > 0` fora daí. O perfil declara `combat.defense` (`blockChance`, `blockTypes`,
+`skillId`); ausente é o estágio identidade, que preserva o v1. A `skillId` precisa existir no
+catálogo de skills E subir por `shield-block` — as duas coisas são conferidas no boot, porque uma
+referência torta deixaria o escudo sem treinar ou uma skill que nunca sobe.
+
 **O kit de nascimento e as armas de vocação** (#151, ADR 0026) são os primeiros itens com
 que o jogo se compromete, e cada id de aparência foi **conferido de olho** — o índice da
 biblioteca (`things/<versão>/library/appearances/object.jsonl`) não tem nome, e um id errado
@@ -257,13 +282,18 @@ antes de gravar a linha. Os números do Tibia (TibiaWiki) e os ids do pacote 13.
 | wand of vortex (Sorcerer) / snakebite rod (Druid) | 3074 / 3066 | 19 oz — alcance, mana e dano entram no motor pela #152 |
 
 `kind: 'container'` e `slot: 'back'` andam juntos, e `twoHanded` só em arma — `buildContent`
-recusa o resto. **Como a arma bate é da arma** (#152): `weapon: { kind, range, ammoFamily?,
-manaPerHit?, damage? }` — `melee` (o `attack` do item), `distance` (o `attack` da munição da
-`ammoFamily`, que precisa ter munição no catálogo) ou `wand` (`manaPerHit` e `damage` por
-faixa, `attack` 0). Arma sem `weapon` é `{ kind: 'melee', range: 1 }`, normalizado no boot;
-campo de um tipo em arma de outro, ou `weapon` fora de arma, é recusado. O projétil da wand e
-do rod mora em `appearances.weapons[itemId].missile`, de um lado só como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a
-segura até o level 8: o personagem nasce sem vocação.
+recusa o resto. **Como a arma bate é da arma** (#152, CMB-05): `weapon: { kind, family, range,
+ammoFamily?, manaPerHit?, damage? }` — `melee` (o `attack` do item), `distance` (o `attack` da
+munição da `ammoFamily`, que precisa ter munição no catálogo) ou `wand` (`manaPerHit` e `damage`
+por faixa, `attack` 0). A `family` (`sword`, `axe`, `club`, `distance`, `wand`, `rod`) aponta para
+a skill e a fórmula em `data/weapon-families/`; ausente, o boot normaliza pelo `kind`
+(melee→`sword`, distance→`distance`, wand→`wand`), e o conteúdo real declara. `fist` é o fallback
+desarmado e **não** existe como arma — declará-la num item reprova o boot. Família inexistente ou
+de `kind` diferente também reprova. Arma sem `weapon` é `{ kind: 'melee', family: 'sword',
+range: 1 }`, normalizado no boot; campo de um tipo em arma de outro, ou `weapon` fora de arma, é
+recusado. O projétil da wand e do rod mora em `appearances.weapons[itemId].missile`, de um lado só
+como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a segura
+até o level 8: o personagem nasce sem vocação.
 
 ## Munição (#151, ADR 0026)
 

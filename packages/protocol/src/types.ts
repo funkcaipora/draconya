@@ -236,6 +236,12 @@ export const PartySpending = z.object({
   })),
 });
 
+/**
+ * As condições que a barra de buffs do cliente sabe desenhar (#341, SV-05). Vocabulário FECHADO
+ * do contrato: o host só envia estas, e uma badge nova entra aqui e no cliente na mesma PR.
+ */
+export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time'] as const;
+export type ActiveConditionKind = (typeof ACTIVE_CONDITION_KINDS)[number];
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
   welcome: z.object({ characterId: z.string(), contentVersion: z.string() }),
@@ -687,10 +693,13 @@ export const S2C_SCHEMAS = {
   }),
   /**
    * Condições ativas do jogador (#341, SV-05): tempo restante de cada condição temporária.
+   * Só as de `ACTIVE_CONDITION_KINDS`: o `sim` admite chave livre desde o CMB-07 (DOT de
+   * ability, campo), e o host filtra pelo vocabulário fechado daqui — uma chave nova chega ao
+   * cliente quando ganhar badge, não antes.
    */
   'active-conditions': z.object({
     conditions: z.array(z.object({
-      kind: z.enum(['haste', 'buff', 'mana-shield', 'heal-over-time']),
+      kind: z.enum(ACTIVE_CONDITION_KINDS),
       remainingMs: z.number().int().nonnegative(),
     })),
   }),

@@ -1,7 +1,8 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
-import type { Content, Item, Progression, RawContent } from '@draconya/content';
-import { describe, expect, it } from 'vitest';
+import type { Content, FieldSpec, Item, Progression, RawContent } from '@draconya/content';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { resolveDamage } from '../combat/damage.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -14,6 +15,15 @@ import {
   HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView } from './hunt.js';
+
+// O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
+// implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
+// fim consegue provar que CADA produtor passa por este ponto. Um produtor que calculasse dano
+// por fora não apareceria nas chamadas gravadas.
+vi.mock('../combat/damage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/damage.js')>();
+  return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
 // num mapa assim dá para dizer, olhando, onde cada criatura está — e um teste de simulação
@@ -79,7 +89,7 @@ const progression = {
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   // **Esquiva zero neste conteúdo de teste, e é decisão.** Com ela, dano vira função só do
   // tempo decorrido, e a comparação 10 Hz / 1 Hz mede o que ela deveria medir — a matemática
   // do tempo — em vez de medir em que ordem os sorteios caíram. Quem cuida do dodge é
@@ -99,7 +109,7 @@ const spells = [
   },
   {
     id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
-    effect: { kind: 'damage', power: 40, range: 3 },
+    effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
   },
   // Área de raio 2 e poder que MATA um rato de 50 num golpe: é o que faz o teste de "morte no
   // meio da área" ser sobre morte, e não sobre quanto falta de vida.
@@ -126,6 +136,25 @@ const skills = [
     curve: { base: 100, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 },
     damagePerLevel: 0,
   },
+  // A skill de distância existe para o bow da fixture montar (CMB-05): a família `distance`
+  // aponta para ela, e a contribuição por nível é 0 para o dano ser o `attack` da munição.
+  {
+    id: 'distance', name: 'Distância', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 },
+    damagePerLevel: 0,
+  },
+];
+
+// As famílias de arma (CMB-05). A `melee` contribui 0,5 por nível — é o que faz o teste do
+// desarmado/espada medir a escala da skill, e não só o `attack`.
+const weaponFamilies = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
 ];
 
 // Uma arma que bate MUITO mais que o desarmado (25): com ela o rato de 50 cai num golpe, e o
@@ -159,7 +188,7 @@ const items = [
   // a CONTAGEM de alvos, não o golpe.
   {
     id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
-    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 } },
+    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 }, damageType: 'energy' },
   },
 ];
 
@@ -169,7 +198,7 @@ const items = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells, supplies, skills, items,
+    stamina: [stamina], party: [party], spells, supplies, skills, weaponFamilies, items,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -1407,6 +1436,7 @@ const withSpells = (
   over: {
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
+    combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -1421,6 +1451,8 @@ const withSpells = (
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
+    ...(over.combat === undefined ? {} : { combat: over.combat }),
+    ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
@@ -2920,6 +2952,105 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
+  });
+});
+
+describe('defesa, escudo e prática de shielding (CMB-04)', () => {
+  const shieldItem = {
+    id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield',
+    weight: 40, value: 0, defense: 30,
+  };
+  const shielding = {
+    id: 'shielding', name: 'Escudo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'shield-block', points: 1 },
+    damagePerLevel: 0.5,
+  };
+  const defense = { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] };
+
+  /** O conteúdo do CMB-04: o escudo no catálogo, a skill de bloqueio e o perfil com defesa. */
+  const defenseContent = (over: Partial<RawContent> = {}): Content => content({
+    items: [...items, shieldItem],
+    skills: [...skills, shielding],
+    combat: [{ ...combat, defense }],
+    ...over,
+  });
+
+  const comEscudo: InventoryState = {
+    backpack: [],
+    equipped: { shield: { instanceId: 's1', itemId: 'shield', quantity: 1 } },
+  };
+  const shieldingOf = (hero: CharacterRuntime) => hero.skills.getState()['shielding'] ?? null;
+
+  it('shielding sobe por ataque físico elegível recebido', () => {
+    const { session, hero } = start({
+      loaded: defenseContent(), difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  it('sem fonte de defesa NÃO sobe: desarmado não treina shielding', () => {
+    const { session, hero } = start({ loaded: defenseContent(), difficulty: 'bold', health: 5_000 });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('ataque elemental NÃO treina shielding por acidente', () => {
+    // O perfil aprova só `physical`: um rato de fogo atravessa a defesa sem rolar bloqueio.
+    const fireRat = { ...rat, damageType: 'fire' };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [fireRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é por TICK: sem ser atacado, a skill fica parada', () => {
+    // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
+    const pacificRat = { ...rat, aggroRadius: 0 };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [pacificRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 60_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é condicionada ao HP perdido: bloqueio total ainda treina', () => {
+    // Piso zero e defesa acima do ataque do rato: ele não tira vida, e a skill sobe do mesmo
+    // jeito — a prática é do evento elegível, não do dano aplicado. Regeneração desligada e
+    // dificuldade `cautious` para a vida não subir sozinha e não haver level up.
+    const semRegen = { ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } };
+    const { session, hero } = start({
+      loaded: defenseContent({
+        progression: [semRegen],
+        combat: [{ ...combat, defense, minimumDamageFraction: 0 }],
+      }),
+      difficulty: 'cautious', health: 5_000, inventory: comEscudo,
+    });
+    const antes = hero.health;
+    run(session, 30_000, 100);
+    expect(hero.health).toBe(antes);
+    expect(shieldingOf(hero)?.points).toBeGreaterThan(0);
+  });
+
+  it('a skill de shielding atravessa o snapshot', () => {
+    const loaded = defenseContent();
+    const { session } = start({
+      loaded, difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.skills.getState()['shielding'])
+      .toEqual(session.participants[0]?.skills.getState()['shielding']);
   });
 });
 
@@ -5093,6 +5224,558 @@ describe('raio livre do spawn (#236)', () => {
   });
 });
 
+// --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
+
+describe('famílias de arma e proficiências (CMB-05, #333)', () => {
+  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const weapon = (id: string, family: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    id, name: id, kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 40,
+    weapon: { kind, family, range: kind === 'distance' ? 6 : kind === 'wand' ? 3 : 1, ...extra },
+  });
+  const armory = [
+    weapon('sword-i', 'sword', 'melee'),
+    weapon('axe-i', 'axe', 'melee'),
+    weapon('club-i', 'club', 'melee'),
+    weapon('bow-i', 'distance', 'distance', { ammoFamily: 'arrow' }),
+    weapon('wand-i', 'wand', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+    weapon('rod-i', 'rod', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+  ];
+  const armed = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
+  });
+  const loaded = (): Content => content({ items: [...items, ...armory], ammunition: [arrow] });
+
+  /** A skill subiu OU acumulou pontos: o golpe de fato praticou. */
+  const practiced = (hero: CharacterRuntime, id: string, startingLevel: number): boolean => {
+    const state = hero.skills.getState()[id];
+    return state !== undefined && (state.level > startingLevel || state.points > 0);
+  };
+
+  const strike = (itemId?: string, mana = 0, durationMs = 8_000) => {
+    const { session, hero, ruleset } = start({
+      loaded: loaded(),
+      ...(itemId === undefined ? {} : { inventory: armed(itemId) }),
+    });
+    hero.mana = mana;
+    hero.maxMana = mana;
+    session.advanceBy(50);
+    // Um alvo colado, para o golpe sair já no primeiro vencimento.
+    const rat = ruleset.monsters[0];
+    if (rat !== undefined) rat.position = { ...hero.position, y: hero.position.y + 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    return { session, hero, events };
+  };
+
+  it('fist é o fallback sem item: bate corpo a corpo, pratica melee e não atira', () => {
+    const { hero, events } = strike();
+    expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee')).toBe(true);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+
+  it('sword, axe e club batem pela família corpo a corpo e praticam a melee', () => {
+    for (const id of ['sword-i', 'axe-i', 'club-i']) {
+      const { hero, events } = strike(id);
+      expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee'), id).toBe(true);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(false);
+      expect(practiced(hero, 'melee', 10), id).toBe(true);
+    }
+  });
+
+  it('bow atira a munição e pratica a distância, não a melee', () => {
+    const { hero, events } = strike('bow-i');
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    expect(practiced(hero, 'distance', 10)).toBe(true);
+    expect(hero.skills.getState()['melee']).toBeUndefined();
+  });
+
+  it('wand e rod atiram, gastam mana e praticam magia — sem multiplicador de weapon skill', () => {
+    for (const id of ['wand-i', 'rod-i']) {
+      const { hero, events } = strike(id, 200);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(true);
+      // A prática é `spell-cast` por mana: só existe se a mana foi debitada antes da rolagem.
+      expect(practiced(hero, 'magic', 0), id).toBe(true);
+      // E NÃO pratica arma: wand/rod não recebem multiplicador de weapon skill (DT-02).
+      expect(hero.skills.getState()['melee'], id).toBeUndefined();
+      expect(hero.skills.getState()['distance'], id).toBeUndefined();
+    }
+  });
+
+  it('wand sem mana não atira nem pratica (CMB-05)', () => {
+    // Um segundo é curto demais para a regeneração (1/s) pagar um golpe de 2 de mana.
+    const { hero, events } = strike('wand-i', 0, 1_000);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(hero.skills.getState()['magic']).toBeUndefined();
+  });
+
+  it('imune ao tipo do golpe ainda pratica UMA vez: a prática não depende do dano final (CMB-05)', () => {
+    // O rato imune a físico: o golpe ocorre, o dano resolvido é zero, e a prática sai assim
+    // mesmo. Contar prática só com dano positivo faria a skill parar contra alvo imune.
+    const immune = content({
+      monsters: [{ ...rat, mitigation: { immunities: ['physical'] } }],
+      items: [...items, ...armory], ammunition: [arrow],
+    });
+    const { session, hero, ruleset } = start({ loaded: immune, inventory: armed('sword-i') });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    for (let t = 0; t < 4_000 && session.ended === null; t += 100) session.advanceBy(100);
+    // A vida não caiu — imunidade zera o dano —, e a melee praticou.
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+});
+
+describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
+  const resolver = vi.mocked(resolveDamage);
+  // Bloco, e não arrow de expressão: `mockClear` devolve o próprio mock, e o Vitest trataria
+  // um retorno de função como teardown — chamando o resolver com zero argumentos.
+  beforeEach(() => { resolver.mockClear(); });
+
+  /** Os pares `fonte/tipo` que o resolver recebeu neste cenário. */
+  const passed = (source: string, damageType: string): boolean =>
+    resolver.mock.calls.some(([intent]) =>
+      intent.source === source && intent.damageType === damageType);
+
+  /** Avança drenando a cada passo: sem isso o teto de eventos pendentes descarta o `shot`. */
+  const events = (session: Session, durationMs: number, stepMs = 100): DomainEvent[] => {
+    const out: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += stepMs) {
+      session.advanceBy(stepMs);
+      out.push(...session.drainEvents());
+    }
+    return out;
+  };
+
+  it('corpo a corpo: basic-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('bow: basic-attack/físico pelo caminho da munição', () => {
+    // Sem arma de corpo a corpo, o único produtor possível é o tiro — se ele calculasse dano
+    // por fora, `passed` seria falso mesmo com o herói batendo a hunt inteira.
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const bow = {
+      id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0,
+      twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+    };
+    const loaded = content({ items: [bow], ammunition: [arrow] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 } },
+    };
+    const { session } = start({ loaded, inventory });
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('wand: basic-attack/energia pelo caminho da mana', () => {
+    const wand = {
+      id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0,
+      weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 }, damageType: 'energy' },
+    };
+    const loaded = content({ items: [wand] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'wand-i', itemId: 'wand', quantity: 1 } },
+    };
+    const { session, hero } = start({ loaded, inventory });
+    // `maxMana` também: a regeneração de mana clampa no máximo, e a fixture nasce com zero.
+    hero.mana = 200;
+    hero.maxMana = 200;
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'energy')).toBe(true);
+  });
+
+  it('magia: spell/fogo, o tipo declarado no efeito', () => {
+    const { session } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    }));
+    run(session, 20_000, 100);
+    expect(passed('spell', 'fire')).toBe(true);
+  });
+
+  it('runa: rune/arcano', () => {
+    const rune = {
+      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+      requires: { level: 1, magicLevel: 0 },
+      effect: {
+        kind: 'damage', basePower: 400, range: 4,
+        area: { shape: 'circle', radius: 1, centered: 'target' },
+      },
+    };
+    const { session } = withSpells(botConfig({
+      rune: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'supply', supplyId: 'avalanche-rune' },
+      }],
+    }), { gold: 10_000, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    run(session, 20_000, 100);
+    expect(passed('rune', 'arcane')).toBe(true);
+  });
+
+  it('ataque de monstro: monster-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'physical')).toBe(true);
+  });
+
+  it('o tipo do monstro vem do CONTEÚDO, não de um literal no call site', () => {
+    // O rato do fixture é `physical` por default; declarar fogo no conteúdo tem de chegar ao
+    // resolver. Um literal `'physical'` no `hunt.ts` passaria no teste acima e falharia aqui.
+    const loaded = content({ monsters: [{ ...rat, damageType: 'fire' }] });
+    const { session } = start({ loaded });
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'fire')).toBe(true);
+  });
+});
+
+describe('a ability de monstro entre taxas e no snapshot (CMB-06)', () => {
+  const casterRat = {
+    ...rat, health: 100_000,
+    abilities: [{
+      id: 'spit', cadenceMs: 1_000, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    }],
+  };
+  const loaded = content({ monsters: [casterRat] });
+
+  it('1 Hz == 10 Hz com uma ability à distância', () => {
+    // A ability é evento na fila como o ataque básico (invariante 2): a cadência não depende de
+    // haver alguém olhando, e o dano sofrido é o mesmo nas três taxas.
+    const at = (hz: number): number => {
+      const { session, hero } = start({ loaded, health: 100_000 });
+      run(session, 30_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('a ability agendada sobrevive ao snapshot e volta a bater', () => {
+    // Sem o `scheduledAbilities` no snapshot, a hunt retomada agendaria a ability de novo — o
+    // evento pendente veio na fila — e a habilidade bateria em dobro no primeiro vencimento.
+    const { session } = start({ loaded, health: 100_000 });
+    run(session, 5_000, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const caster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (caster === undefined) throw new Error('sem monstro');
+    expect(caster.scheduledAbilities.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 5_000, 100);
+    expect(resumed.drainEvents().some((e) => e.kind === 'monster-ability-cast')).toBe(true);
+  });
+});
+
+describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {
+  const poison = {
+    id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 500,
+    effect: {
+      kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 2_500,
+      range: 3, damageType: 'earth',
+    },
+  };
+  const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+  // Ataque desarmado ZERO: sem isto o golpe básico (25) mataria o rato e o abate não seria do
+  // DOT. O `minimumDamageFraction` zero derruba também o piso, que sozinho ainda tirava 10 %.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 }, minimumDamageFraction: 0 };
+  const dotConfig = botConfig({
+    attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'poison' } }],
+  });
+  const fireField: FieldSpec = {
+    id: 'fire', durationMs: 20_000,
+    shape: { shape: 'circle', radius: 1, centered: 'caster' },
+    condition: {
+      key: 'fire', merge: 'refresh', durationMs: 20_000,
+      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+    },
+  };
+
+  it('o DOT de magia no MONSTRO passa pelo resolver canônico e mata pelo pipeline', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000, spells: [poison], combat: [pacifist],
+    });
+    run(session, 20_000, 100);
+
+    // O único dano do cenário é o DOT; o abate é dele, e a morte passa por `resolveDeath`.
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const calls = vi.mocked(resolveDamage).mock.calls;
+    expect(calls.some(([intent]) => intent.damageType === 'earth' && intent.source === 'spell')).toBe(true);
+    expect(ruleset.monsters.every((m) => m.health > 0)).toBe(true);
+  });
+
+  it('o DOT de ability no PERSONAGEM usa o mesmo pipeline e pode matar', () => {
+    const venomRat = {
+      ...rat, health: 100_000, attack: 0,
+      abilities: [{
+        id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'venom', merge: 'refresh', durationMs: 3_000,
+          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+        },
+      }],
+    };
+    const { session, hero } = withSpells(botConfig(), { health: 15, monstersRaw: [venomRat] });
+    run(session, 30_000, 100);
+
+    expect(hero.conditions.get('venom')).toBeNull();
+    expect(session.ended).toBe('death');
+    expect(session.aggregates.deaths).toBe(1);
+  });
+
+  it('relançar a condição cancela o vencimento antigo; a morte cancela tudo', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+    }, 'bold');
+    run(session, 2_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    // A chave da condição é a do TIQUE (`damage-over-time`, ver `casting.ts`), não o id da
+    // magia (`poison`). Filtrar por `/poison` (a versão original desta issue) nunca encontra o
+    // subject certo — as asserções abaixo passariam vazias mesmo com o bug do #334 presente.
+    const subject = `m:${monster.id}/damage-over-time`;
+    const eventsOf = (): number =>
+      session.snapshot().schedule.events.filter((e) => e.subject === subject).length;
+    // UMA cadeia por condição, não uma por relançamento.
+    expect(eventsOf()).toBeLessThanOrEqual(2);
+    // E o relançamento deixa exatamente UM tique pendente — nunca zero, o fantasma do #334 em
+    // que `nextTickAtMs` é guardado sem o evento correspondente na fila, silenciando o DOT para
+    // sempre a partir do próximo relançamento.
+    expect(session.snapshot().schedule.events.filter(
+      (e) => e.subject === subject && e.kind === 'condition-tick',
+    )).toHaveLength(1);
+    run(session, 30_000, 100);
+    expect(session.snapshot().schedule.events.filter((e) => e.subject === subject)).toHaveLength(0);
+  });
+
+  it('DOT sobrevive ao relançamento depois do último tique (duração não múltipla do intervalo, #334)', () => {
+    // A reprodução exata da issue: intervalo 500 ms, duração 1 300 ms (não múltipla — o
+    // último tique cabe em +1 000, e +1 500 já passa do vencimento) e cooldown 1 100 ms, que
+    // recasta bem DEPOIS do último tique e ANTES do vencimento — a janela fantasma. Sem a
+    // correção, só os dois tiques do PRIMEIRO lançamento acontecem (40 de dano) e todo
+    // relançamento seguinte fica mudo para sempre.
+    const flakyDot = {
+      id: 'flaky-dot', name: 'Flaky DOT', manaCost: 5, cooldownMs: 1_100,
+      effect: {
+        kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 1_300,
+        range: 3, damageType: 'earth',
+      },
+    };
+    const flakyConfig = botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'flaky-dot' } }],
+    });
+    const { session, ruleset } = withSpells(flakyConfig, {
+      mana: 1_000_000, health: 1_000_000, spells: [flakyDot], combat: [pacifist],
+      monstersRaw: [{ ...rat, health: 100_000, attack: 0 }],
+    });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    // Bem mais que os 40 de dano de um único lançamento: só é possível se o DOT continuou
+    // tiquetando através de vários relançamentos.
+    expect(monster.health).toBeLessThan(100_000 - 100);
+  });
+
+  it('entra no campo só depois do passo aceito, permanece, sai e REENTRA', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // Campo em (4,3): o herói passa por (4,2), (4,3) e (3,3) na primeira volta, sai em (2,3)
+    // e reentra em (4,2) na volta seguinte (rota de dez tiles, 500 ms cada).
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+
+    run(session, 1_400, 100);
+    const beforeEntry = hero.health;
+    run(session, 400, 100);
+    expect(hero.health).toBeLessThan(beforeEntry);
+
+    run(session, 1_200, 100);
+    const afterExit = hero.health;
+    run(session, 500, 100);
+    expect(hero.health).toBe(afterExit);
+
+    run(session, 2_500, 100);
+    const beforeReentry = hero.health;
+    run(session, 1_000, 100);
+    expect(hero.health).toBeLessThan(beforeReentry);
+  });
+
+  it('campo em tile que ninguém pisa não muda mecânica nenhuma', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // (5,5) está fora do mapa jogável; a forma não confero mapa (geometria pura), mas o herói
+    // nunca pisa ali. Recusa de passo não aplica campo — `movement` devolve resultado.
+    ruleset.applyField(session, { ...fireField, id: 'void' }, { x: 5, y: 5, z: 7 });
+    run(session, 5_000, 100);
+    expect(hero.health).toBe(1_000_000);
+  });
+
+  it('no instante de expiração o vencimento vence o tique — uma ordem só', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, { ...fireField, id: 'short', durationMs: 2_000 }, { x: 4, y: 3, z: 7 });
+    run(session, 1_600, 100);
+    const same = session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:short' && e.dueAtMs === 2_000);
+    const expire = same.find((e) => e.kind === 'field-expire');
+    const tick = same.find((e) => e.kind === 'field-tick');
+    expect(expire).toBeDefined();
+    expect(tick).toBeDefined();
+    // A prioridade do vencimento é MENOR que a do tique: no mesmo instante, o vencimento roda
+    // primeiro e o tique acha o campo removido. A ordem não depende de quem foi agendado por
+    // último — relançar reagenda o vencimento depois do tique.
+    expect(expire?.priority).toBeLessThan(tick?.priority ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('o campo vence e sai do índice', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 21_000, 100);
+    expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('campo relançado depois do último tique continua tiquetando (#334)', () => {
+    // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3) — irrelevante aqui de propósito:
+    // `#enterField` aplica um tique a CADA passo aceito sobre o campo (independente do
+    // `FIELD_TICK` agendado), e um herói sempre em cima do campo tomaria dano a cada passo
+    // mesmo com o bug do #334 presente. Medir `hero.health` mediria o passo, não o tique — por
+    // isso a asserção é sobre a FILA DE EVENTOS, que `#enterField` nunca toca (ele chama
+    // `#applyConditionTick` direto, sem agendar nada).
+    const wideField: FieldSpec = {
+      id: 'wide-fire', durationMs: 1_300,
+      shape: { shape: 'circle', radius: 5, centered: 'caster' },
+      condition: {
+        key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
+        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      },
+    };
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const fieldTickEvents = (): number => session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:wide-fire' && e.kind === 'field-tick').length;
+
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    // Dois tiques rodam (+500 e +1000); +1500 já passa do vencimento (+1300), então NENHUM
+    // `field-tick` fica agendado dos dois lados do bug — só muda o que fica gravado em
+    // `nextTickAtMs` (o fantasma, sem a correção).
+    run(session, 1_100, 100);
+    expect(fieldTickEvents()).toBe(0);
+
+    // Relança o MESMO id, na MESMA cadência, DEPOIS do último tique e ANTES do vencimento —
+    // exatamente a janela em que `keepTick` herdaria o fantasma. Sem a correção, `keepTick` só
+    // olha se o intervalo bate (bate) e NÃO agenda nada — o campo fica mudo pelo resto da vida
+    // nova inteira. Com a correção, `previous.nextTickAtMs` está ausente, `keepTick` é falso, e
+    // o relançamento AGENDA um `field-tick` novo.
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    expect(fieldTickEvents()).toBe(1);
+  });
+
+  it('DOT e campo rendem o MESMO a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number) => {
+      const { session, hero, ruleset } = withSpells(dotConfig, {
+        mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+      }, 'bold');
+      ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+      run(session, 30_000, 1000 / hz);
+      return {
+        health: hero.health, kills: session.aggregates.kills,
+        xp: session.aggregates.xpGained, mana: hero.mana,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('um snapshot no meio do campo retoma com o índice e os eventos', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist], monsters: false,
+    }, 'bold');
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 2_000, 100);
+    const snapshot = session.snapshot();
+    const loaded = buildContent(raw({
+      spells: [poison], combat: [pacifist],
+      progression: [{ ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    }));
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('spell-session'),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    expect(resumedRuleset.fields).toHaveLength(1);
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    const before = resumedHero.health;
+    run(resumed, 1_000, 100);
+    expect(resumedHero.health).toBeLessThan(before);
+  });
+});
+
+describe('outcomes avançados na hunt (CMB-08)', () => {
+  // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
+  // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.
+  const critCombat = {
+    ...combat,
+    modifiers: { critical: { chance: 1, multiplier: 2 }, lifeLeech: 0.5 },
+  };
+
+  it('o crítico multiplica o resolvido e o leech repõe no atacante, com evento', () => {
+    // Desarmado 25 ×2 = 50, que é a vida do rato: um golpe, e o leech de 50 % repõe 25.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, combat: [critCombat],
+      monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    const before = hero.health;
+    run(session, 5_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // O recorde é o RESOLVIDO (50), não o aplicado — o rato tinha exatamente 50.
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(50);
+    expect(hero.health).toBe(before + 25);
+    const healed = ofKind(session.drainEvents(), 'creature-healed')
+      .filter((e) => e.source === 'leech');
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed[0]).toMatchObject({ creatureId: 'hero', amount: 25 });
+  });
+
+  it('dano integralmente absorvido pela mana NÃO mata nem conta atribuição de HP', () => {
+    // Sem o escudo, um golpe de 50 mataria o herói de 1. Com mana de sobra, o HP aplicado é zero,
+    // o `creature-hit` carrega zero e nenhum dano entra na contribuição dele.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 1, mana: 1_000,
+      monstersRaw: [{ ...rat, health: 100_000, attack: 50 }],
+    });
+    hero.conditions.apply({
+      key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 1_000_000,
+    });
+    run(session, 20_000, 100);
+
+    expect(hero.alive).toBe(true);
+    expect(session.ended).toBeNull();
+    expect(hero.health).toBe(1);
+    expect(hero.mana).toBeLessThan(1_000);
+    expect(hero.contribution.actorCount).toBe(0);
+
+    const hits = ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.creatureId === 'hero');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.amount === 0)).toBe(true);
+  });
+
+  it('sem modificadores a hunt é a de sempre: nenhum evento de leech', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 100, monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
+      .toBe(false);
+  });
+});
 describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
   it('huntId e difficulty refletem a hunt e a dificuldade da instância', () => {
     const { ruleset } = start({ difficulty: 'bold' });

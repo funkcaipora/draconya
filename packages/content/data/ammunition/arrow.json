@@ -3,5 +3,6 @@
   "name": "Arrow",
   "family": "arrow",
   "attack": 25,
-  "price": 0
+  "price": 0,
+  "_open": "Aparência: projétil (missile 3) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
 }

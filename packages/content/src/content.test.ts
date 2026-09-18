@@ -30,13 +30,35 @@ const baseline = {
 };
 
 const combat = {
-  id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+
+// As famílias de arma e as skills que elas escalam (CMB-05). O conteúdo real vive em
+// `data/weapon-families/` e `data/skills/`; aqui é o mínimo que faz uma arma montar. A fórmula
+// é identidade (`levelFactor`/`spread` zero) e a contribuição por nível vem da skill.
+const skills = [
+  { id: 'melee', name: 'Melee', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0 },
+  { id: 'distance', name: 'Distance', startingLevel: 10, curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 }, damagePerLevel: 0 },
+  { id: 'magic', name: 'Magic', startingLevel: 0, curve: { base: 4, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 }, damagePerLevel: 0 },
+];
+const family = (id: string, kind: string, skillId: string, range: number) => ({
+  id, name: id, kind, skillId, range, damageType: 'physical', resource: 'none',
+  formula: { levelFactor: 0, spread: 0 },
+});
+const weaponFamilies = [
+  family('fist', 'melee', 'melee', 1),
+  family('sword', 'melee', 'melee', 1),
+  family('axe', 'melee', 'melee', 1),
+  family('club', 'melee', 'melee', 1),
+  family('distance', 'distance', 'distance', 6),
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+];
 
 // A aparência é DERIVADA aqui (FUN-94): estes testes falam de loot, rota e referência cruzada,
 // e escrever a tabela à mão em cada um faria trinta fixtures carregarem um dado que nenhuma
@@ -45,6 +67,7 @@ const base = (over: Partial<RawContent> = {}): RawContent => {
   const raw: RawContent = {
     monsters: [rat], hunts: [cellars], vocations: [knight],
     progression: [baseline], combat: [combat], stamina: [stamina], party: [party],
+    skills, weaponFamilies,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -244,6 +267,284 @@ describe('combat baseline', () => {
     const provisional = { ...combat, _open: '§12.1 — armadura contra magia não decidida' };
     expect(buildContent(base({ combat: [provisional] })).openValues)
       .toContain('combat/baseline: §12.1 — armadura contra magia não decidida');
+  });
+});
+
+describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
+  const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
+
+  it('recusa tipo de dano DESCONHECIDO na resistência e na imunidade', () => {
+    // A lista canônica é a fonte única (ADR 0031, emenda). Um tipo que não existe não pode
+    // virar uma coluna silenciosa que ninguém resolve.
+    expect(() => buildContent(withMitigation({ resistances: { sonic: 0.5 } })))
+      .toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ immunities: ['sonic'] })))
+      .toThrow(ContentError);
+  });
+
+  it('recusa resistência fora do intervalo [-1, 1): 1 é ambiguidade com imunidade', () => {
+    // Positivo reduz, negativo amplifica; `1` seria imunidade disfarçada (DT-02), e o schema
+    // recusa para a imunidade continuar explícita.
+    expect(() => buildContent(withMitigation({ resistances: { fire: 1 } }))).toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ resistances: { fire: -1.5 } }))).toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ resistances: { fire: 1.5 } }))).toThrow(ContentError);
+  });
+
+  it('recusa imunidade duplicada', () => {
+    expect(() => buildContent(withMitigation({ immunities: ['fire', 'fire'] })))
+      .toThrow(/imunidade duplicada/);
+  });
+
+  it('recusa resistência e imunidade para o mesmo tipo — a ambiguidade da DT-02', () => {
+    expect(() => buildContent(withMitigation({ resistances: { fire: 0.5 }, immunities: ['fire'] })))
+      .toThrow(/ao mesmo tempo/);
+  });
+
+  it('compila a mitigação no boot: tabela completa por tipo e Set de imunidade', () => {
+    const content = buildContent(withMitigation({ resistances: { fire: 0.5 }, immunities: ['ice'] }));
+    const mitigation = content.monsters.get('rat')?.mitigation;
+    expect(mitigation?.resistances.fire).toBe(0.5);
+    expect(mitigation?.resistances.physical).toBe(0);
+    expect(mitigation?.resistances.arcane).toBe(0);
+    expect(mitigation?.immunities.has('ice')).toBe(true);
+    expect(mitigation?.immunities.has('fire')).toBe(false);
+  });
+
+  it('a tabela de armadura exige os OITO tipos — um só não basta', () => {
+    // `z.record` de chave enum é exaustivo no zod 4: o conteúdo declara tudo, sem default em
+    // código. É o que impede a efetividade de um elemento novo nascer zero por esquecimento.
+    expect(() => buildContent(base({ combat: [{ ...combat, armorEffectiveness: { physical: 1 } }] })))
+      .toThrow(/armorEffectiveness/);
+  });
+
+  it('um spell declara damageType ou recebe `arcane`, o default que preserva o v1', () => {
+    const semTipo = {
+      id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3 },
+    };
+    const content = buildContent(base({ spells: [semTipo] }));
+    expect(content.spells.get('strike')?.effect).toMatchObject({ damageType: 'arcane' });
+  });
+
+  it('recusa um spell com tipo de dano fora da taxonomia', () => {
+    const comTipoErrado = {
+      id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'sonic' },
+    };
+    expect(() => buildContent(base({ spells: [comTipoErrado] }))).toThrow(ContentError);
+  });
+});
+
+describe('a defesa dos itens e do perfil (CMB-04)', () => {
+  const sword = {
+    id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 0,
+    attack: 10, defense: 5,
+  };
+  const shield = {
+    id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 12,
+  };
+  const helmet = {
+    id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 10, value: 0, defense: 5,
+  };
+  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const bow = {
+    id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 30, value: 0,
+    twoHanded: true, defense: 5, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+  };
+  const wand = {
+    id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 10, value: 0, defense: 5,
+    weapon: { kind: 'wand', range: 3, manaPerHit: 1, damage: { min: 1, max: 2 } },
+  };
+  const shielding = {
+    id: 'shielding', name: 'Escudo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'shield-block', points: 1 },
+  };
+
+  it('aceita defense no escudo e na arma corpo a corpo de uma mão', () => {
+    const content = buildContent(base({ items: [sword, shield] }));
+    expect(content.items.get('sword')?.defense).toBe(5);
+    expect(content.items.get('shield')?.defense).toBe(12);
+  });
+
+  it('recusa defense em armadura, arma de duas mãos e wand', () => {
+    // Bow/twoHanded não deixa defesa residual, e wand/rod não bloqueia: os dois são conteúdo
+    // quebrado, e o boot é o lugar de descobrir.
+    expect(() => buildContent(base({ items: [helmet] }))).toThrow(/defense só vale/);
+    expect(() => buildContent(base({ items: [bow], ammunition: [arrow] })))
+      .toThrow(/defense só vale/);
+    expect(() => buildContent(base({ items: [wand] }))).toThrow(/defense só vale/);
+  });
+
+  it('defense 0 — o default — é aceito em qualquer item: é a ausência', () => {
+    const plainHelmet = { id: 'helmet', name: 'Helmet', kind: 'armor', slot: 'head', weight: 10, value: 0 };
+    expect(buildContent(base({ items: [plainHelmet] })).items.get('helmet')?.defense).toBe(0);
+  });
+
+  it('recusa blockTypes vazio e com tipo duplicado', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { blockChance: 0.5, blockTypes: [] } }],
+    }))).toThrow(/blockTypes/);
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { blockChance: 0.5, blockTypes: ['physical', 'physical'] } }],
+    }))).toThrow(/duplicado/);
+  });
+
+  it('recusa defense.skillId que não existe no catálogo', () => {
+    expect(() => buildContent(base({
+      combat: [{ ...combat, defense: { skillId: 'shielding', blockChance: 0.5 } }],
+    }))).toThrow(/defense\.skillId "shielding" não existe/);
+  });
+
+  it('recusa defense.skillId que não sobe por bloqueio', () => {
+    const melee = {
+      id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
+      curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 },
+    };
+    expect(() => buildContent(base({
+      vocations: [], skills: [melee],
+      combat: [{ ...combat, defense: { skillId: 'melee', blockChance: 0.5 } }],
+    }))).toThrow(/não sobe por bloqueio/);
+  });
+
+  it('aceita a skill de shielding, e blockTypes vazio vira `physical`', () => {
+    const content = buildContent(base({
+      vocations: [], skills: [...skills, shielding],
+      combat: [{ ...combat, defense: { skillId: 'shielding', blockChance: 0.5 } }],
+    }));
+    expect(content.combat.defense?.skillId).toBe('shielding');
+    expect(content.combat.defense?.blockTypes).toEqual(['physical']);
+    // Ausente é o estágio identidade — o conteúdo legado não declara defesa e continua montando.
+    expect(buildContent(base()).combat.defense).toBeUndefined();
+  });
+});
+
+describe('abilities de monstro (CMB-06)', () => {
+  const spit = {
+    id: 'spit', cadenceMs: 1_000, target: { range: 3 }, power: 7,
+    damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+  };
+
+  it('ausência normaliza para UMA ability básica com a faixa, a cadência e o tipo de sempre', () => {
+    // DT-02: a normalização é do BOOT, não de cada golpe. É o que preserva o rato bit a bit —
+    // mesmo sorteio, mesma ordem de evento — sem um ramo no caminho quente.
+    const content = buildContent(base());
+    const abilities = content.monsters.get('rat')?.abilities;
+    expect(abilities).toHaveLength(1);
+    expect(abilities?.[0]).toEqual({
+      id: 'basic', cadenceMs: rat.attackIntervalMs, target: { range: 1 },
+      power: { min: 6, max: 6 }, damageType: 'physical',
+    });
+  });
+
+  it('a faixa do `attack` vira `{ min, max }` na básica, preservando o sorteio', () => {
+    const content = buildContent(base({ monsters: [{ ...rat, attack: { min: 2, max: 9 } }] }));
+    expect(content.monsters.get('rat')?.abilities[0]?.power).toEqual({ min: 2, max: 9 });
+  });
+
+  it('abilities declaradas SUBSTITUEM a básica, com o poder já em faixa', () => {
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [spit] }] }));
+    expect(content.monsters.get('rat')?.abilities).toEqual([{
+      id: 'spit', cadenceMs: 1_000, target: { range: 3 }, power: { min: 7, max: 7 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    }]);
+  });
+
+  it('aceita área `circle` centrada no alvo e no lançador', () => {
+    const area = { shape: 'circle', radius: 1, centered: 'caster' } as const;
+    const burst = { id: 'burst', cadenceMs: 2_000, target: { range: 2, area }, power: { min: 1, max: 2 } };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [burst] }] }));
+    expect(content.monsters.get('rat')?.abilities[0]?.target.area).toEqual(area);
+  });
+
+  it('recusa o id `basic`, reservado à ability que o boot sintetiza', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'basic', cadenceMs: 1_000, power: 1 }] }],
+    }))).toThrow(/reservado ao boot/);
+  });
+
+  it('recusa ability duplicada: a escolha por id ficaria ambígua', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'spit', cadenceMs: 1_000, power: 1 }, { id: 'spit', cadenceMs: 2_000, power: 2 }] }],
+    }))).toThrow(/duplicada/);
+  });
+
+  it('recusa forma de área que o monstro não lança — `wave` sai da direção do lançador', () => {
+    const wave = { id: 'wave', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'wave', length: 2 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave] }] })))
+      .toThrow(/só lança `circle`/);
+  });
+
+  it('ability sem linha na tabela de aparências é MUDA, nunca erro', () => {
+    // O mecanismo acontece; só a arte não sai. Recusar aqui obrigaria toda ability a nascer
+    // com arte antes de nascer com número, que é a ordem errada.
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [spit] }] }))).not.toThrow();
+  });
+
+  it('a tabela de aparências ganha a seção `abilities`, e a expõe por chave semântica', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, abilities: [spit] }],
+      appearances: [{
+        id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {},
+        abilities: { spit: { missile: 5 }, 'spit-hit': { effect: 13 } },
+      }],
+    }));
+    expect(content.appearances?.abilities['spit']).toEqual({ missile: 5 });
+    expect(content.appearances?.abilities['spit-hit']).toEqual({ effect: 13 });
+  });
+
+  it('uma chave de aparência sem uso é vocabulário à espera, e é válida', () => {
+    // Ao contrário de `spells`/`supplies`, as chaves são COMPARTILHADAS — duas abilities podem
+    // apontar a mesma. Uma linha sem uso não é a linha órfã que a tabela introduz.
+    expect(() => buildContent(base({
+      appearances: [{
+        id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {},
+        abilities: { 'nunca-usada': { missile: 5 } },
+      }],
+    }))).not.toThrow();
+  });
+});
+
+describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
+    // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
+    // ADITIVO: nada do resultado entregue muda por ele estar implícito.
+    const { compatibilityProfile: _omitido, ...legacy } = combat;
+    expect(buildContent(base({ combat: [legacy] })).combat.compatibilityProfile).toBe('combat-v1');
+  });
+
+  it('perfil DESCONHECIDO derruba o boot, sem fallback silencioso', () => {
+    // Um perfil que o motor não conhece não pode ser reinterpretado: aceitá-lo faria a sessão
+    // rodar com uma fórmula que ninguém implementou, com cara de legítima (ADR 0031).
+    expect(() => buildContent(base({ combat: [{ ...combat, compatibilityProfile: 'combat-v99' }] })))
+      .toThrow(/perfil de compatibilidade "combat-v99" desconhecido/);
+  });
+
+  it('o perfil explícito entra na versão do conteúdo: trocá-lo muda a identidade da sessão', () => {
+    // O perfil é conteúdo versionado (invariante 7). Só há um perfil válido hoje, então o que
+    // se prende é que o campo EXPLÍCITO é hasheado: `computeVersion` lê o cru, não o parseado.
+    const { compatibilityProfile: _omitido, ...withoutProfile } = combat;
+    const withProfile = { ...withoutProfile, compatibilityProfile: 'combat-v1' };
+    expect(computeVersion(base({ combat: [withProfile] })))
+      .not.toBe(computeVersion(base({ combat: [withoutProfile] })));
+  });
+
+  it('modifiers ausente é o default NEUTRO — o conteúdo existente segue v1', () => {
+    // É a ausência que preserva o resultado e a sequência de RNG: nenhum sorteio novo.
+    expect(buildContent(base()).combat.modifiers).toBeUndefined();
+  });
+
+  it('modifiers declarado parseia, e a chance fora de [0,1] derruba o boot', () => {
+    const comMods = {
+      ...combat,
+      modifiers: { critical: { chance: 0.25, multiplier: 2 }, lifeLeech: 0.1, manaLeech: 0.05 },
+    };
+    expect(buildContent(base({ combat: [comMods] })).combat.modifiers).toEqual({
+      critical: { chance: 0.25, multiplier: 2 }, lifeLeech: 0.1, manaLeech: 0.05,
+    });
+    const chanceInvalida = {
+      ...combat,
+      modifiers: { critical: { chance: 1.5, multiplier: 2 } },
+    };
+    expect(() => buildContent(base({ combat: [chanceInvalida] }))).toThrow(/combat/);
   });
 });
 
@@ -878,7 +1179,10 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
 
   it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
     // Sem `weapon`, uma arma é corpo a corpo de alcance 1 — o que toda arma era.
-    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1 });
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({
+      kind: 'melee', family: 'sword', range: 1, damageType: 'physical',
+      power: { base: 10, levelFactor: 0, skillFactor: 0, skillStartingLevel: 10, spread: 0 },
+    });
     const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
     const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
@@ -917,6 +1221,87 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
   it('a aparência NÃO mora na munição: escrevê-la ali é recusado', () => {
     const comAparencia = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447 };
     expect(() => buildContent(base({ ammunition: [comAparencia] }))).toThrow(ContentError);
+  });
+});
+
+describe('famílias de arma e proficiências (CMB-05, #333)', () => {
+  const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
+  const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+
+  it('a arma SEM família recebe o default do `kind`: melee→sword, distance→distance, wand→wand', () => {
+    // A normalização preserva o conteúdo anterior ao CMB-05 e a fixture (DT-03). O real declara.
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon?.family).toBe('sword');
+    const bow = buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon;
+    expect(bow?.family).toBe('distance');
+    const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
+    expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.family).toBe('wand');
+  });
+
+  it('recusa família que não existe no catálogo', () => {
+    const orfa = { ...espada, weapon: { kind: 'melee', family: 'club', range: 1 } };
+    const semClub = weaponFamilies.filter((family) => family.id !== 'club');
+    expect(() => buildContent(base({ items: [orfa], weaponFamilies: semClub })))
+      .toThrow(/a família "club" não existe em weapon-families/);
+  });
+
+  it('recusa família incoerente com o `kind` da arma', () => {
+    // Uma `sword` de distância é a família certa para a fórmula errada.
+    const incoerente = { ...arco, weapon: { kind: 'distance', family: 'sword', range: 6, ammoFamily: 'arrow' } };
+    expect(() => buildContent(base({ items: [incoerente], ammunition: [flecha] })))
+      .toThrow(/família "sword" é "melee", e a arma é "distance"/);
+  });
+
+  it('recusa `fist` como arma: ela é o fallback desarmado, não um item', () => {
+    const punho = { ...espada, weapon: { kind: 'melee', family: 'fist', range: 1 } };
+    expect(() => buildContent(base({ items: [punho] }))).toThrow(/"fist" é o fallback desarmado/);
+  });
+
+  it('recusa família de melee sem fórmula, e wand/rod com fórmula', () => {
+    const semFormula = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, formula: undefined } : family);
+    expect(() => buildContent(base({ weaponFamilies: semFormula })))
+      .toThrow(/família "melee" precisa de fórmula/);
+    const wandComFormula = weaponFamilies.map((family) =>
+      family.id === 'wand' ? { ...family, formula: { levelFactor: 0, spread: 0 } } : family);
+    expect(() => buildContent(base({ weaponFamilies: wandComFormula })))
+      .toThrow(/wand\/rod usam a faixa fixa da arma, não fórmula/);
+  });
+
+  it('recusa família de melee que gasta recurso, e wand/rod sem mana', () => {
+    const meleeComMana = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, resource: 'mana' } : family);
+    expect(() => buildContent(base({ weaponFamilies: meleeComMana })))
+      .toThrow(/família "melee" não gasta recurso/);
+    const wandSemMana = weaponFamilies.map((family) =>
+      family.id === 'wand' ? { ...family, resource: 'none' } : family);
+    expect(() => buildContent(base({ weaponFamilies: wandSemMana })))
+      .toThrow(/wand\/rod gastam mana/);
+  });
+
+  it('recusa família que aponta skill inexistente — quando há skills', () => {
+    const orfa = weaponFamilies.map((family) =>
+      family.id === 'sword' ? { ...family, skillId: 'swordmanship' } : family);
+    expect(() => buildContent(base({ weaponFamilies: orfa })))
+      .toThrow(/weaponFamily\/sword: skillId "swordmanship" não existe/);
+  });
+
+  it('recusa o catálogo sem `fist`: o desarmado perderia a escala de skill', () => {
+    const semFist = weaponFamilies.filter((family) => family.id !== 'fist');
+    expect(() => buildContent(base({ weaponFamilies: semFist })))
+      .toThrow(/falta a família "fist"/);
+  });
+
+  it('a fórmula compilada carrega a contribuição da skill apontada', () => {
+    const comEscala = [{ ...skills[0], damagePerLevel: 0.25 }, skills[1], skills[2]];
+    const content = buildContent(base({ skills: comEscala }));
+    expect(content.weaponFamilies.get('sword')).toMatchObject({
+      skillId: 'melee', skillFactor: 0.25, skillStartingLevel: 10,
+    });
+    // O desarmado é a família `fist` com o `attack` do bloco `player` e a escala da `melee`.
+    expect(content.unarmed.power).toMatchObject({
+      base: 25, levelFactor: 0, skillFactor: 0.25, skillStartingLevel: 10, spread: 0,
+    });
   });
 });
 
@@ -1053,5 +1438,62 @@ describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
     };
     expect(() => buildContent(base({ spells: [spell] })))
       .toThrow(/spell\/exura-vita: secondaryGroup sem group/);
+  });
+});
+
+describe('condições e campos declarativos (CMB-07, #334)', () => {
+  const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
+  const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };
+  const field = {
+    id: 'fire', durationMs: 5_000,
+    shape: { shape: 'circle', radius: 1, centered: 'target' },
+    condition: { key: 'fire', merge: 'refresh', durationMs: 5_000, effect: dot },
+  };
+
+  it('a condição e o campo da ability chegam COMPILADOS ao sim, sem arte', () => {
+    const ability = { id: 'venom', cadenceMs: 1_000, power: 1, condition, field };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    const compiled = content.monsters.get('rat')?.abilities[0];
+    expect(compiled?.condition).toEqual(condition);
+    expect(compiled?.field).toEqual(field);
+    // Nunca um caminho de arte no campo ou na condição (invariante 6).
+    expect(JSON.stringify(compiled?.field)).not.toMatch(/appearance|outfit|sprite|path/i);
+  });
+
+  it('recusa campo com forma que o monstro não deixa — `wave` sai da direção do lançador', () => {
+    const wave = { ...field, shape: { shape: 'wave', length: 2 } };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'w', cadenceMs: 1_000, power: 1, field: wave }] }],
+    }))).toThrow(/círculo/);
+  });
+
+  it('recusa condição fora do vocabulário e efeito malformado', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'v', cadenceMs: 1_000, power: 1, condition: { ...condition, merge: 'sometimes' } }] }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: { ...condition, effect: { kind: 'damage-over-time', amount: -1, intervalMs: 1_000 } },
+        }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a magia de dano ao longo do tempo monta; sem `range` é recusada', () => {
+    const spell = {
+      id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 1_000,
+      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, durationMs: 3_000, range: 3, damageType: 'earth' },
+    };
+    const content = buildContent(base({ spells: [spell] }));
+    expect(content.spells.get('poison')?.effect.kind).toBe('damage-over-time');
+    expect(() => buildContent(base({
+      spells: [{
+        ...spell,
+        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, durationMs: 3_000, damageType: 'earth' },
+      }],
+    }))).toThrow(ContentError);
   });
 });

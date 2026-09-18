@@ -43,7 +43,7 @@ const content = buildContent({
   }],
   combat: [{
     id: 'baseline', dodgeMultiplier: 0.5,
-    armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
     player: {
       attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 4, dodgeChance: 0.05,
     },

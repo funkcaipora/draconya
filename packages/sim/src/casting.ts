@@ -14,7 +14,7 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import type { Combat, Spell, Supply } from '@draconya/content';
+import type { Combat, CompiledMitigation, Spell, Supply } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -93,6 +93,8 @@ export type CastResult = CastSuccess | CastRefused;
 export interface SpellTarget {
   readonly armor: number;
   readonly dodgeChance: number;
+  /** Mitigação compilada do alvo (CMB-03). Ausente é o alvo neutro. */
+  readonly mitigation?: CompiledMitigation | undefined;
 }
 
 /**
@@ -233,8 +235,9 @@ export function castSpell(
   const effect = spell.effect;
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
-  // e `range` não existe nela (o boot recusa).
-  if (effect.kind === 'damage') {
+  // e `range` não existe nela (o boot recusa). O dano ao longo do tempo (CMB-07) mira como o
+  // dano: ele precisa de alvo, e o tique é que passa pelo resolver depois.
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time') {
     if (aim === null || aim.targets.length === 0) {
       return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     }
@@ -275,14 +278,14 @@ export function castSpell(
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
         const result = resolveDamage(
-          { power, kind: 'magic' },
-          { armor: target.armor, dodgeChance: target.dodgeChance },
+          { rawDamage: power, source: 'spell', damageType: effect.damageType },
+          { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
           'pve',
           combat,
           rng,
         );
-        hits.push(result.damage);
-        total += result.damage;
+        hits.push(result.resolvedDamage);
+        total += result.resolvedDamage;
       }
       return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
     }
@@ -311,6 +314,21 @@ export function castSpell(
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    /**
+     * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
+     * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não
+     * conhece o id do alvo; o ruleset o preenche com o alvo principal da mira. Cada tique
+     * chama o resolver canônico com `source: 'spell'`.
+     */
+    case 'damage-over-time':
+      return cast({
+        key: 'damage-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+        merge: 'refresh',
+        tick: {
+          kind: 'damage', amount: effect.amount, intervalMs: effect.intervalMs,
+          damageType: effect.damageType, source: 'spell',
+        },
+      });
   }
 }
 
@@ -363,9 +381,13 @@ export function useSupply(
       // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia.
       const { min, max } = spellPowerRange(supply.effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
-      const result = resolveDamage({ power, kind: 'magic' }, { armor: target.armor, dodgeChance: target.dodgeChance }, 'pve', combat, rng);
-      hits.push(result.damage);
-      total += result.damage;
+      const result = resolveDamage(
+        { rawDamage: power, source: 'rune', damageType: supply.effect.damageType },
+        { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
+        'pve', combat, rng,
+      );
+      hits.push(result.resolvedDamage);
+      total += result.resolvedDamage;
     }
     return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
   }

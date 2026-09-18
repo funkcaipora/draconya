@@ -4,7 +4,7 @@ import {
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, itemSchema, placeholderAppearances,
+  BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, compileItem, itemSchema, placeholderAppearances,
 } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
@@ -19,7 +19,8 @@ import { FakeSocket } from './testing.js';
 import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, rawTestContent, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
+  testContent,
 } from '../testing/content.js';
 
 const logger = createLogger('silent', 'test');
@@ -1973,9 +1974,11 @@ describe('configuração do bot pelo socket (FUN-81)', () => {
 describe('equipar pelo socket (FUN-82)', () => {
   const catalogo = new Map([
     ['sword', {
-      id: 'sword', name: 'Sword', appearanceId: 1, kind: 'weapon' as const, slot: 'hand' as const,
-      weight: 10, value: 0, stackable: false, twoHanded: false, attack: 20, armor: 0,
-      requires: { level: 20 },
+      ...compileItem(itemSchema.parse({
+        id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand',
+        weight: 10, value: 0, attack: 20, requires: { level: 20 },
+      })),
+      appearanceId: 1,
     }],
   ]);
   const mensagens = (socket: FakeSocket) =>
@@ -2545,9 +2548,9 @@ describe('o inventário chega ao cliente (FUN-90)', () => {
   // do `equip`, num erro que não tem nada a ver com o que o teste mede.
   // A aparência vem da tabela e não do schema desde a FUN-94, então ela entra depois do parse.
   const catalogo = new Map([['sword', {
-    ...itemSchema.parse({
+    ...compileItem(itemSchema.parse({
       id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 20,
-    }),
+    })),
     appearanceId: 3264,
   }]]);
   const comMochila = () => {
@@ -3282,6 +3285,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // O projétil do tiro (#152): o da flecha é da MUNIÇÃO, o da wand é da ARMA.
     ammunition: { arrow: { icon: 3447, missile: 3 } },
     weapons: { wand: { missile: 5 } },
+    // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
+    // que ela vira id de arte.
+    abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
   } as const;
   /** As armas de tiro do #152, e a flecha grátis que o bow atira sem ninguém escolher. */
   const BOW = {
@@ -3383,7 +3389,13 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     };
     const content = buildContent({
       ...raw,
-      ...(over.skills === undefined ? {} : { skills: over.skills }),
+      // Skills trocadas (#340): as famílias de arma apontam skill (CMB-05), e o boot recusa a
+      // referência ausente — só ficam as famílias cuja skill o teste declarou.
+      ...(over.skills === undefined ? {} : {
+        skills: over.skills,
+        weaponFamilies: TEST_WEAPON_FAMILIES.filter((family) =>
+          (over.skills as readonly { id: string }[]).some((skill) => skill.id === family.skillId)),
+      }),
       ...armory,
       ...(over.weapon === undefined ? {} : { appearances: [placeholderAppearances({ ...raw, ...armory })] }),
       spells: [...(raw.spells ?? []), STRIKE, BLAST],
@@ -3789,6 +3801,52 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(received(), 'missile')).toHaveLength(0);
   });
 
+  it('a ability à distância do monstro vira missile e effect pela tabela (CMB-06)', () => {
+    // O defeito que a issue corrige: um ataque de alcance > 1 caía como golpe melee, sem
+    // projétil nem impacto próprio. O `sim` diz a chave semântica; o host a resolve na tabela.
+    const ranged = {
+      id: 'spit', cadenceMs: 500, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    };
+    const { runFor, received, heroId } = hunt({
+      rat: { health: 100_000, abilities: [ranged] },
+      health: 100_000,
+    });
+    runFor(3_000);
+    const all = received();
+
+    const missiles = ofType(all, 'missile');
+    expect(missiles.length).toBeGreaterThan(0);
+    expect(missiles[0]?.missileId).toBe(9);
+    expect(ofType(all, 'effect').some((e) => e.effectId === 8)).toBe(true);
+    // O projétil sai ANTES do impacto (a ordem é contrato): o cliente anima o trajeto e só
+    // depois estoura o efeito.
+    const missileAt = all.findIndex((m) => m.type === 'missile' && m.missileId === 9);
+    const impactAt = all.findIndex((m) => m.type === 'effect' && m.effectId === 8);
+    expect(missileAt).toBeGreaterThanOrEqual(0);
+    expect(impactAt).toBeGreaterThan(missileAt);
+    // O golpe da ability é `spell` — sem o sangue do corpo a corpo — e chega ao herói.
+    expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
+  });
+
+  it('a ability SEM linha na tabela é muda, e o golpe continua (CMB-06)', () => {
+    // Chave desconhecida = mudo, nunca erro: a mecânica (dano, morte, atribuição) já aconteceu
+    // no `sim`, e derrubar a apresentação esconderia que ela funcionou.
+    const ranged = {
+      id: 'spit', cadenceMs: 500, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'nope', impactKey: 'nope' },
+    };
+    const { runFor, received, heroId } = hunt({
+      rat: { health: 100_000, abilities: [ranged] },
+      health: 100_000,
+    });
+    runFor(3_000);
+    const all = received();
+    expect(ofType(all, 'missile')).toHaveLength(0);
+    expect(ofType(all, 'effect').filter((e) => e.effectId === 8)).toHaveLength(0);
+    expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
+  });
+
   it('golpe em criatura que o cliente ainda NÃO conhece é descartado; o session-attach é quem a apresenta', () => {
     // O rato nasceu com ninguém olhando: o `creature-appear` dele foi drenado para o nada, e
     // ele não tem id numérico. Quem chega depois liga o socket mas ainda não pediu o mundo —
@@ -4011,12 +4069,43 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(all, 'missile')).toHaveLength(0);
     expect(ofType(all, 'creature-hit').length).toBeGreaterThan(0);
   });
+
+  it('o campo de tile fere e apresenta com OU sem tabela de aparências (CMB-07)', () => {
+    // O campo não tem `appearanceId` (invariante 6): a ausência de arte não muda a mecânica.
+    // A ability tem poder 0, então TODO dano no herói é do campo — o `creature-hit` que chega
+    // ao cliente é a apresentação do tique, e sai igual com e sem tabela.
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 4_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 4_000,
+          effect: { kind: 'damage-over-time', amount: 4, intervalMs: 500, damageType: 'fire' },
+        },
+      },
+    };
+
+    const withTable = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    withTable.runFor(6_000);
+    const hitsWith = ofType(withTable.received(), 'creature-hit')
+      .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
+    expect(hitsWith.length).toBeGreaterThan(0);
+    expect(withTable.hero().health).toBeLessThan(withTable.maxHealth);
+
+    const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
+    withoutTable.runFor(6_000);
+    const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
+      .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
+    expect(hitsWithout.length).toBeGreaterThan(0);
+    expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+  });
 });
 
 describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => {
   const SNIPER: Ammunition = {
     id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5,
-    requires: { level: 20 }, appearanceId: 7364, missileId: 22,
+    damageType: 'physical', requires: { level: 20 }, appearanceId: 7364, missileId: 22,
   };
   const ammunition = new Map([[SNIPER.id, SNIPER]]);
   const warnings = (socket: FakeSocket) =>
@@ -4072,10 +4161,10 @@ describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => 
 
 describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () => {
   const axe = {
-    ...itemSchema.parse({
+    ...compileItem(itemSchema.parse({
       id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21,
       weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
-    }),
+    })),
     appearanceId: 1,
   };
   const knight = {
@@ -4219,8 +4308,8 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
 });
 
 describe('mover item pelo socket (#160, ADR 0026 decisão 6)', () => {
-  const rock = { ...itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 }), appearanceId: 1 };
-  const sword = { ...itemSchema.parse({ id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 }), appearanceId: 2 };
+  const rock = { ...compileItem(itemSchema.parse({ id: 'rock', name: 'Rock', kind: 'other', weight: 5, value: 0 })), appearanceId: 1 };
+  const sword = { ...compileItem(itemSchema.parse({ id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 })), appearanceId: 2 };
   const itemCatalog = new Map([[rock.id, rock], [sword.id, sword]]);
   const progression = { ...TEST_PROGRESSION, satchelInitialSlots: 10, containerRow: 5 } as never;
   const warnings = (socket: FakeSocket) =>

@@ -17,12 +17,13 @@ import type {
   Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
   SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
-import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
+import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
+import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
 import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, ConditionKind, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
+  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
   InventoryState, Place, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
@@ -472,12 +473,20 @@ function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): bool
   return true;
 }
 
-type ConditionsSnapshot = ReadonlyMap<ConditionKind, number>;
+type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
 
+const ACTIVE_CONDITION_KIND_SET: ReadonlySet<string> = new Set(ACTIVE_CONDITION_KINDS);
+
+/**
+ * Só as condições que o contrato conhece (`ACTIVE_CONDITION_KINDS`): desde o CMB-07 a chave da
+ * condição é livre no `sim` (DOT de ability, campo), e o que não tem badge no cliente fica de
+ * fora aqui — o `z.enum` do protocolo recusaria o frame inteiro, e a barra sumiria com ele.
+ */
 function conditionsSnapshotOf(character: CharacterRuntime): ConditionsSnapshot {
-  const snapshot = new Map<ConditionKind, number>();
+  const snapshot = new Map<ActiveConditionKind, number>();
   for (const condition of character.conditions.getState()) {
-    snapshot.set(condition.key, condition.expiresAtMs);
+    if (!ACTIVE_CONDITION_KIND_SET.has(condition.key)) continue;
+    snapshot.set(condition.key as ActiveConditionKind, condition.expiresAtMs);
   }
   return snapshot;
 }
@@ -491,7 +500,7 @@ function sameConditions(a: ConditionsSnapshot, b: ConditionsSnapshot): boolean {
 }
 
 function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CProps<'active-conditions'> {
-  const conditions: { kind: ConditionKind; remainingMs: number }[] = [];
+  const conditions: { kind: ActiveConditionKind; remainingMs: number }[] = [];
   for (const [kind, expiresAtMs] of snapshot) {
     conditions.push({
       kind,
@@ -1584,6 +1593,7 @@ export class SessionHost {
         case 'spell-cast':
         case 'supply-used':
         case 'shot':
+        case 'monster-ability-cast':
           this.#presentCombat(hosted, event);
           continue;
         case 'party-bag-changed':
@@ -1801,6 +1811,40 @@ export class SessionHost {
           : appearances?.ammunition[event.ammoId]?.missile;
         if (missileId === undefined) return;
         messages.push({ type: 'missile', from: event.from, to: event.to, missileId });
+        break;
+      }
+      case 'monster-ability-cast': {
+        // A ability do monstro (CMB-06): as CHAVES SEMÂNTICAS do conteúdo viram ids de arte
+        // AQUI, pela tabela fixada na sessão (invariante 6). Chave sem linha é MUDA, nunca
+        // erro: a mecânica (dano, morte, atribuição) já aconteceu no `sim`, e derrubar a
+        // apresentação por falta de arte esconderia que ela funcionou.
+        const missileId = event.missileKey === undefined
+          ? undefined
+          : appearances?.abilities[event.missileKey]?.missile;
+        const effectId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        // Projétil do lançador ao PRIMEIRO alvo — é um projétil, não uma rajada, como o
+        // `spell-cast`.
+        const first = event.targets[0];
+        if (missileId !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.casterPosition, to: first.position, missileId,
+          });
+        }
+        if (effectId === undefined) break;
+        // O impacto em CADA alvo, e nos tiles da forma que não têm criatura — como a magia em
+        // área. Sem alvo e sem forma (não acontece numa ability que disparou), nada a desenhar.
+        for (const target of event.targets) {
+          messages.push({ type: 'effect', position: target.position, effectId });
+        }
+        const hit = new Set(event.targets.map(
+          (t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`,
+        ));
+        for (const tile of event.tiles) {
+          if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+          messages.push({ type: 'effect', position: tile, effectId });
+        }
         break;
       }
     }

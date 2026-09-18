@@ -16,7 +16,7 @@ const pack: Pack = packSchema.parse({
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
   monsters: {}, items: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
-  supplies: {}, hits: {},
+  supplies: {}, hits: {}, abilities: {},
   ...over,
 });
 
@@ -72,6 +72,22 @@ describe('packProblems', () => {
     expect(packProblems(table({ weapons: { 'wand-of-vortex': { missile: 5 } } }), pack)).toEqual([]);
     expect(packProblems(table({ weapons: { 'wand-of-vortex': { missile: 43 } } }), pack))
       .toEqual(['appearances.weapons.wand-of-vortex.missile: missile 43 não existe no pacote tibia-test']);
+  });
+
+  it('confere os ids das abilities de monstro, que são vocabulário semântico com arte resolvida (#242)', () => {
+    // As chaves não têm entidade de conteúdo para cruzar, mas o id que cada uma resolve é arte:
+    // um projétil/impacto fora do pacote é o quadrado invisível da FUN-21, agora a cada
+    // lançamento. Mutação que mata: apagar o laço de `abilities` em `packProblems` — a tabela
+    // real não usa nenhuma chave hoje, e o defeito só apareceria no primeiro monstro que a usar.
+    expect(packProblems(table({
+      abilities: { spit: { missile: 5, effect: 12 }, 'fire-impact': { effect: 80 } },
+    }), pack)).toEqual([]);
+    expect(packProblems(table({
+      abilities: { spit: { missile: 43 }, 'fire-impact': { effect: 81 } },
+    }), pack)).toEqual([
+      'appearances.abilities.spit.missile: missile 43 não existe no pacote tibia-test',
+      'appearances.abilities.fire-impact.effect: effect 81 não existe no pacote tibia-test',
+    ]);
   });
 
   it('aceita a tabela cujos ids existem todos no pacote', () => {
