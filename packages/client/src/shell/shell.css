@@ -702,7 +702,11 @@ body {
 .hunt-details-col-left { min-width: 0; }
 .hunt-details-col-right { min-width: 0; }
 .hunt-details-kicker { display: block; margin: 10px 0 4px; }
-.hunt-details-pulls { margin: 0 0 10px; font: 8px var(--font-mono); color: var(--text-muted); }
+.hunt-details-pulls {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 10px;
+  font: 8px var(--font-mono); color: var(--text-muted);
+}
+.hunt-details-pull { white-space: nowrap; }
 .hunt-details-monsters { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
 .hunt-details-monster {
   display: flex; flex-direction: column; align-items: center; width: 60px; gap: 2px;

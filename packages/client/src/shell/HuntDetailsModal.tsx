@@ -136,7 +136,13 @@ function HuntDetailsBody() {
         {pulls.length > 0 && (
           <>
             <Kicker tone="muted" className="hunt-details-kicker">Tamanhos de pull</Kicker>
-            <p className="hunt-details-pulls">{pulls.map(pullSizeLabel).join('   ')}</p>
+            {/* Um `span` por pull, não uma string com espaços: o HTML colapsa espaço, e
+                "Cauteloso · 2 Ousado · 5" vira uma frase sem fronteira entre os três. */}
+            <p className="hunt-details-pulls">
+              {pulls.map((pull) => (
+                <span key={pull.id} className="hunt-details-pull">{pullSizeLabel(pull)}</span>
+              ))}
+            </p>
           </>
         )}
         {monsters.length > 0 && (
