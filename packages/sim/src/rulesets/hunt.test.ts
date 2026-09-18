@@ -4913,3 +4913,44 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
     expect(passed('monster-attack', 'fire')).toBe(true);
   });
 });
+
+describe('a ability de monstro entre taxas e no snapshot (CMB-06)', () => {
+  const casterRat = {
+    ...rat, health: 100_000,
+    abilities: [{
+      id: 'spit', cadenceMs: 1_000, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    }],
+  };
+  const loaded = content({ monsters: [casterRat] });
+
+  it('1 Hz == 10 Hz com uma ability à distância', () => {
+    // A ability é evento na fila como o ataque básico (invariante 2): a cadência não depende de
+    // haver alguém olhando, e o dano sofrido é o mesmo nas três taxas.
+    const at = (hz: number): number => {
+      const { session, hero } = start({ loaded, health: 100_000 });
+      run(session, 30_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('a ability agendada sobrevive ao snapshot e volta a bater', () => {
+    // Sem o `scheduledAbilities` no snapshot, a hunt retomada agendaria a ability de novo — o
+    // evento pendente veio na fila — e a habilidade bateria em dobro no primeiro vencimento.
+    const { session } = start({ loaded, health: 100_000 });
+    run(session, 5_000, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const caster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (caster === undefined) throw new Error('sem monstro');
+    expect(caster.scheduledAbilities.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 5_000, 100);
+    expect(resumed.drainEvents().some((e) => e.kind === 'monster-ability-cast')).toBe(true);
+  });
+});

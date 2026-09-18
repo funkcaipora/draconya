@@ -381,6 +381,92 @@ describe('a defesa dos itens e do perfil (CMB-04)', () => {
   });
 });
 
+describe('abilities de monstro (CMB-06)', () => {
+  const spit = {
+    id: 'spit', cadenceMs: 1_000, target: { range: 3 }, power: 7,
+    damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+  };
+
+  it('ausência normaliza para UMA ability básica com a faixa, a cadência e o tipo de sempre', () => {
+    // DT-02: a normalização é do BOOT, não de cada golpe. É o que preserva o rato bit a bit —
+    // mesmo sorteio, mesma ordem de evento — sem um ramo no caminho quente.
+    const content = buildContent(base());
+    const abilities = content.monsters.get('rat')?.abilities;
+    expect(abilities).toHaveLength(1);
+    expect(abilities?.[0]).toEqual({
+      id: 'basic', cadenceMs: rat.attackIntervalMs, target: { range: 1 },
+      power: { min: 6, max: 6 }, damageType: 'physical',
+    });
+  });
+
+  it('a faixa do `attack` vira `{ min, max }` na básica, preservando o sorteio', () => {
+    const content = buildContent(base({ monsters: [{ ...rat, attack: { min: 2, max: 9 } }] }));
+    expect(content.monsters.get('rat')?.abilities[0]?.power).toEqual({ min: 2, max: 9 });
+  });
+
+  it('abilities declaradas SUBSTITUEM a básica, com o poder já em faixa', () => {
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [spit] }] }));
+    expect(content.monsters.get('rat')?.abilities).toEqual([{
+      id: 'spit', cadenceMs: 1_000, target: { range: 3 }, power: { min: 7, max: 7 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    }]);
+  });
+
+  it('aceita área `circle` centrada no alvo e no lançador', () => {
+    const area = { shape: 'circle', radius: 1, centered: 'caster' } as const;
+    const burst = { id: 'burst', cadenceMs: 2_000, target: { range: 2, area }, power: { min: 1, max: 2 } };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [burst] }] }));
+    expect(content.monsters.get('rat')?.abilities[0]?.target.area).toEqual(area);
+  });
+
+  it('recusa o id `basic`, reservado à ability que o boot sintetiza', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'basic', cadenceMs: 1_000, power: 1 }] }],
+    }))).toThrow(/reservado ao boot/);
+  });
+
+  it('recusa ability duplicada: a escolha por id ficaria ambígua', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'spit', cadenceMs: 1_000, power: 1 }, { id: 'spit', cadenceMs: 2_000, power: 2 }] }],
+    }))).toThrow(/duplicada/);
+  });
+
+  it('recusa forma de área que o monstro não lança — `wave` sai da direção do lançador', () => {
+    const wave = { id: 'wave', cadenceMs: 1_000, power: 1, target: { range: 3, area: { shape: 'wave', length: 2 } } };
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [wave] }] })))
+      .toThrow(/só lança `circle`/);
+  });
+
+  it('ability sem linha na tabela de aparências é MUDA, nunca erro', () => {
+    // O mecanismo acontece; só a arte não sai. Recusar aqui obrigaria toda ability a nascer
+    // com arte antes de nascer com número, que é a ordem errada.
+    expect(() => buildContent(base({ monsters: [{ ...rat, abilities: [spit] }] }))).not.toThrow();
+  });
+
+  it('a tabela de aparências ganha a seção `abilities`, e a expõe por chave semântica', () => {
+    const content = buildContent(base({
+      monsters: [{ ...rat, abilities: [spit] }],
+      appearances: [{
+        id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {},
+        abilities: { spit: { missile: 5 }, 'spit-hit': { effect: 13 } },
+      }],
+    }));
+    expect(content.appearances?.abilities['spit']).toEqual({ missile: 5 });
+    expect(content.appearances?.abilities['spit-hit']).toEqual({ effect: 13 });
+  });
+
+  it('uma chave de aparência sem uso é vocabulário à espera, e é válida', () => {
+    // Ao contrário de `spells`/`supplies`, as chaves são COMPARTILHADAS — duas abilities podem
+    // apontar a mesma. Uma linha sem uso não é a linha órfã que a tabela introduz.
+    expect(() => buildContent(base({
+      appearances: [{
+        id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {},
+        abilities: { 'nunca-usada': { missile: 5 } },
+      }],
+    }))).not.toThrow();
+  });
+});
+
 describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.

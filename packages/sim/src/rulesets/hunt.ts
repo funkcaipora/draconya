@@ -16,12 +16,12 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
+import { BASIC_ABILITY_ID, BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
-  Content, DamageType, Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, ResolvedWeapon,
-  Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation, WeaponFamily,
-  WeaponProfile,
+  Content, DamageType, Hunt, HuntDifficulty, Item, Monster, MonsterAbility, PartyConfig, Progression,
+  ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  WeaponFamily, WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
@@ -49,6 +49,7 @@ import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
 } from '../monster/monster.js';
 import type { MonsterState, Prey } from '../monster/monster.js';
+import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep } from '../monster/step.js';
 import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
@@ -77,6 +78,17 @@ const PLAYER_STEP = 'player-step';
 const PLAYER_ATTACK = 'player-attack';
 const MONSTER_STEP = 'monster-step';
 const MONSTER_ATTACK = 'monster-attack';
+/**
+ * Uma ability DECLARADA do monstro (CMB-06). O subject é derivado (`m:<id>:<abilityId>`), e é
+ * ele que a morte cancela sem varrer a fila — `#onMonsterDied` conhece os ids pelo conteúdo.
+ *
+ * A básica legada continua em `MONSTER_ATTACK` com subject `m:<id>`: um snapshot de um nó
+ * anterior traz esses eventos, e tratá-los como ability básica é o que mantém a retomada
+ * compatível durante o deploy em rolagem.
+ */
+const MONSTER_ABILITY = 'monster-ability';
+const monsterAbilitySubject = (id: number, abilityId: string): string =>
+  `${monsterSubject(id)}:${abilityId}`;
 const HEALTH_REGEN = 'health-regen';
 const MANA_REGEN = 'mana-regen';
 const SPAWN = 'spawn';
@@ -814,8 +826,9 @@ export class HuntRuleset implements Ruleset {
     switch (event.kind) {
       case PLAYER_STEP: return this.#onPlayerStep(session, event.subject);
       case PLAYER_ATTACK: return this.#onPlayerAttack(session, event.subject);
-      case MONSTER_STEP: return this.#onMonsterAction(session, event.subject, 'step');
-      case MONSTER_ATTACK: return this.#onMonsterAction(session, event.subject, 'attack');
+      case MONSTER_STEP: return this.#onMonsterStep(session, event.subject);
+      case MONSTER_ATTACK: return this.#onMonsterAttack(session, event.subject);
+      case MONSTER_ABILITY: return this.#onMonsterAbility(session, event.subject);
       case HEALTH_REGEN: return this.#onRegen(session, event.subject, 'health');
       case MANA_REGEN: return this.#onRegen(session, event.subject, 'mana');
       case SPAWN: return this.#onSpawn(session, event.subject);
@@ -1180,7 +1193,12 @@ export class HuntRuleset implements Ruleset {
     session.scheduleIn(MONSTER_STEP, 0, {
       priority: EventPriority.Movement, subject: subjectOf,
     });
-    this.#scheduleMonsterAttack(session, monster, 0);
+    // A básica nasce engatilhada e vence AGORA, como sempre (CMB-06). As abilities DECLARADAS
+    // são armadas pelo primeiro passo, que já reavalia a distância — agendá-las aqui seria um
+    // evento por ability por monstro nascendo, para quase sempre não achar alvo.
+    if (definition.abilities.some((ability) => ability.id === BASIC_ABILITY_ID)) {
+      this.#scheduleMonsterAttack(session, monster, 0);
+    }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
     // um que o tem ao alcance (#203).
     for (const character of session.participants) this.#armPlayerAttack(session, character);
@@ -1960,13 +1978,14 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O passo ou o ataque de um monstro venceu.
+   * O passo de um monstro venceu (CMB-06).
    *
-   * Os dois eventos passam pela mesma decisão e agem só quando ela bate com o tipo deles: é
-   * `decideMonsterAction` que sabe se, deste tile, cabe andar ou bater — e ter uma decisão só
-   * evita que a regra de alcance exista escrita duas vezes, divergindo na terceira mudança.
+   * A decisão de andar ou bater continua sendo UMA (`decideMonsterAction`), e o alcance de
+   * parada é o MAIOR entre as abilities. Depois do passo, as abilities prontas cujo alvo está
+   * no alcance DELAS são armadas para agora — é a mesma regra do golpe engatilhado do
+   * personagem, do outro lado.
    */
-  #onMonsterAction(session: Session, subject: string, which: 'step' | 'attack'): void {
+  #onMonsterStep(session: Session, subject: string): void {
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return;
     const definition = this.#options.monsters.get(monster.monsterId);
@@ -1980,64 +1999,178 @@ export class HuntRuleset implements Ruleset {
     const target = findById(prey, monster.targetId);
     const action = decideMonsterAction(monster, target, definition, this.#blockedFor(monster));
 
-    if (which === 'step') {
-      // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
-      // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
-      // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
-      const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
-      const cadence = result !== null && result.ok
-        ? result.durationMs
-        : movementDuration(this.#world, monster, monster.position, {
-          ...monster.position, z: this.#world.map.z,
-        });
-      session.scheduleIn(MONSTER_STEP, cadence, {
-        priority: EventPriority.Movement, subject,
+    // O passo reagenda sempre: um monstro parado precisa continuar acordando para descobrir
+    // que o alvo se mexeu. É a única cadência que roda mesmo sem nada a fazer — e o ritmo é
+    // o do passo dado, ou o de um passo daqui quando ele ficou (FUN-119).
+    const result = action.kind === 'step' ? this.#step(session, monster, action.to, subject) : null;
+    const cadence = result !== null && result.ok
+      ? result.durationMs
+      : movementDuration(this.#world, monster, monster.position, {
+        ...monster.position, z: this.#world.map.z,
       });
-      // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo
-      // de um relógio. É a mesma regra do personagem, do outro lado.
-      if (action.kind === 'attack' && monster.attackReady) {
-        this.#scheduleMonsterAttack(session, monster, 0);
-      }
-      return;
-    }
+    session.scheduleIn(MONSTER_STEP, cadence, {
+      priority: EventPriority.Movement, subject,
+    });
+    // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
+    // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
+    this.#armMonsterAbilities(session, monster, definition, target);
+  }
 
-    if (action.kind !== 'attack') {
-      // Sem ninguém ao alcance: engatilha em vez de desperdiçar, e para de acordar. Quem o
-      // traz de volta é o passo, que já reavalia a distância a cada vencimento.
+  /**
+   * O ataque BÁSICO de um monstro venceu — o legado, e o caminho do rato (CMB-06).
+   *
+   * A sequência é a de sempre: reescolhe alvo, confere o alcance, reagenda a cadência e aplica
+   * pelo pipeline canônico. Sem alvo ao alcance, ENGATILHA em vez de desperdiçar — quem o traz
+   * de volta é o passo, que reavalia a distância a cada vencimento.
+   */
+  #onMonsterAttack(session: Session, subject: string): void {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const ability = definition.abilities.find((candidate) => candidate.id === BASIC_ABILITY_ID);
+    if (ability === undefined) {
       monster.attackReady = true;
       return;
     }
 
-    this.#scheduleMonsterAttack(session, monster, definition.attackIntervalMs);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range) {
+      monster.attackReady = true;
+      return;
+    }
 
-    const character = findById(session.participants, action.targetId);
-    if (character === null || !character.alive) return;
+    this.#scheduleMonsterAttack(session, monster, ability.cadenceMs);
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
 
-    // A faixa de ataque sorteada com o `Rng` da sessão (FUN-123): o rato bate de 0 a 8, e a
-    // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
-    const { min, max } = attackRange(definition.attack);
-    const defender = this.#playerDefender(character);
-    const result = resolveDamage(
-      {
-        rawDamage: session.rng.integer(min, max),
-        source: 'monster-attack',
-        damageType: definition.damageType,
-      },
-      defender,
-      'pve',
-      this.#options.combat,
-      session.rng,
-    );
+  /**
+   * Uma ability DECLARADA de um monstro venceu (CMB-06). O subject carrega o id dela:
+   * `m:<id>:<abilityId>`, e é ele que a morte cancela sem varrer a fila.
+   */
+  #onMonsterAbility(session: Session, subject: string): void {
+    // `m:<id>:<abilityId>`: o id é numérico e vem primeiro, então o `:` seguinte separa a
+    // ability — o id dela pode conter `:` sem ambiguidade.
+    const rest = subject.startsWith('m:') ? subject.slice(2) : '';
+    const separator = rest.indexOf(':');
+    if (separator < 0) return;
+    const monster = this.#monsterBySubject.get(monsterSubject(Number(rest.slice(0, separator))));
+    if (monster === undefined || !monster.alive) return;
+    const definition = this.#options.monsters.get(monster.monsterId);
+    if (definition === undefined) return;
+    const abilityId = rest.slice(separator + 1);
+    const ability = definition.abilities.find((candidate) => candidate.id === abilityId);
+    if (ability === undefined) return;
+
+    monster.scheduledAbilities.delete(ability.id);
+    const prey: readonly Prey[] = session.participants;
+    monster.targetId = chooseTarget(monster, prey, definition);
+    const target = findById(session.participants, monster.targetId);
+    if (target === null || !target.alive
+      || distance(monster.position, target.position) > ability.target.range) {
+      // Alvo saiu do alcance no vencimento: NÃO bate, e a ability volta a ficar engatilhada.
+      return;
+    }
+
+    this.#scheduleMonsterAbility(session, monster, ability, ability.cadenceMs);
+    this.#executeMonsterAbility(session, monster, ability, target);
+  }
+
+  /**
+   * Arma para AGORA toda ability pronta cujo alvo está no alcance dela.
+   *
+   * A básica usa `attackReady`; as declaradas usam `scheduledAbilities` — cada uma tem a
+   * própria cadência, e um booleano só não distinguiria "vai bater" de "já tem evento na fila".
+   */
+  #armMonsterAbilities(
+    session: Session, monster: MonsterRuntime, definition: Monster, target: Prey | null,
+  ): void {
+    if (target === null || !target.alive) return;
+    for (const ability of definition.abilities) {
+      if (distance(monster.position, target.position) > ability.target.range) continue;
+      if (ability.id === BASIC_ABILITY_ID) {
+        if (monster.attackReady) this.#scheduleMonsterAttack(session, monster, 0);
+        continue;
+      }
+      if (monster.scheduledAbilities.has(ability.id)) continue;
+      this.#scheduleMonsterAbility(session, monster, ability, 0);
+    }
+  }
+
+  /**
+   * Aplica uma ability: colhe os alvos ANTES de qualquer dano, emite o lançamento e depois um
+   * golpe por alvo.
+   *
+   * A ORDEM é contrato (FUN-109): o `monster-ability-cast` sai antes dos `creature-hit` dele —
+   * o projétil e o impacto do lançamento acompanham os números, não o contrário. E a colheita
+   * antes do dano é a regra da FUN-92: resolver morte no meio da varredura mexeria na lista
+   * de participantes que está sendo lida.
+   */
+  #executeMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility,
+    primary: CharacterRuntime,
+  ): void {
+    const subject = monster.subject;
+    const targets = abilityTargets(ability, this.#at(monster), primary, session.participants);
+    const melee = isMeleeAbility(ability);
+    const source: 'melee' | 'spell' = melee ? 'melee' : 'spell';
+    // A apresentação só sai quando há o que desenhar ou quando a ability NÃO é o corpo a corpo
+    // legado — é o que mantém o rato bit a bit (nenhum evento a mais por golpe).
+    if (!melee || ability.presentation !== undefined) {
+      session.emit({
+        kind: 'monster-ability-cast', casterId: subject, abilityId: ability.id,
+        casterPosition: this.#at(monster),
+        targets: targets.map((target) => ({
+          creatureId: target.id, position: this.#at(target),
+        })),
+        tiles: abilityTiles(ability, this.#at(monster), this.#at(primary)),
+        ...(ability.presentation?.missileKey === undefined
+          ? {} : { missileKey: ability.presentation.missileKey }),
+        ...(ability.presentation?.impactKey === undefined
+          ? {} : { impactKey: ability.presentation.impactKey }),
+      });
+    }
+
+    for (const character of targets) {
+      const defender = this.#playerDefender(character);
+      // A faixa sorteada com o `Rng` da sessão, uma rolagem por alvo — o contrato do loot vale
+      // para o dano, e a ordem dos alvos é a de entrada (documentada em `abilityTargets`).
+      const result = resolveDamage(
+        {
+          rawDamage: session.rng.integer(ability.power.min, ability.power.max),
+          source: 'monster-attack',
+          damageType: ability.damageType,
+        },
+        defender,
+        'pve',
+        this.#options.combat,
+        session.rng,
+      );
+      this.#applyMonsterHit(session, subject, character, ability, defender, result.resolvedDamage, source);
+    }
+  }
+
+  /**
+   * O fim de um golpe de ability em UM alvo: aplica, atribui, anuncia, treina shielding e
+   * decide a morte. É o mesmo corpo do ataque básico de sempre, agora por alvo.
+   */
+  #applyMonsterHit(
+    session: Session, subject: string, character: CharacterRuntime, ability: MonsterAbility,
+    defender: Defender, resolved: number, source: 'melee' | 'spell',
+  ): void {
     // A postura (#155): o dano TOMADO escala antes de entrar — Protector baixa, Blood Rage sobe.
     const applied = character.receiveDamage(
-      Math.round(result.resolvedDamage * character.conditions.damageTakenScale()),
+      Math.round(resolved * character.conditions.damageTakenScale()),
     );
     recordDamage(character.contribution, subject, applied);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
-      amount: applied, source: 'melee', position: this.#at(character),
+      amount: applied, source, position: this.#at(character),
     });
     this.#emitCharacterHealth(session, character);
     // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
@@ -2045,7 +2178,7 @@ export class HuntRuleset implements Ruleset {
     // total (ou um golpe de 0) ainda é um bloqueio praticado. Ataque elemental não entra.
     if (this.#options.combat.defense !== undefined
       && defender.defense !== undefined && defender.defense.kind !== 'none'
-      && this.#options.combat.defense.blockTypes.includes(definition.damageType)) {
+      && this.#options.combat.defense.blockTypes.includes(ability.damageType)) {
       this.#gainSkills(session, character, 'shield-block', 1);
     }
     // HP caiu: reavalia AGORA o que está engatilhado (FUN-84). Esperar o próximo múltiplo de
@@ -2059,6 +2192,16 @@ export class HuntRuleset implements Ruleset {
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
     // avisa o ruleset. Chamar os dois é deliberado: quem aplica dano não decide morte.
     session.kill(character);
+  }
+
+  /** O mesmo do lado do monstro, e pela mesma razão. */
+  #scheduleMonsterAbility(
+    session: Session, monster: MonsterRuntime, ability: MonsterAbility, delayMs: number,
+  ): void {
+    monster.scheduledAbilities.add(ability.id);
+    session.scheduleIn(MONSTER_ABILITY, delayMs, {
+      priority: EventPriority.Attack, subject: monsterAbilitySubject(monster.id, ability.id),
+    });
   }
 
   /**
@@ -2500,6 +2643,13 @@ export class HuntRuleset implements Ruleset {
     // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
     const subject = monster.subject;
     for (const character of session.participants) forgetActor(character.contribution, subject);
+    // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
+    // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —
+    // e é o que impede um monstro morto de acordar uma vez por cadência.
+    for (const ability of definition?.abilities ?? []) {
+      if (ability.id === BASIC_ABILITY_ID) continue;
+      session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
+    }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000

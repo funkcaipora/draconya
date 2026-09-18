@@ -106,7 +106,30 @@ export interface Shot {
   readonly to: WorldPoint;
 }
 
-export type CombatEvent = CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot;
+/**
+ * Uma ability de MONSTRO saiu (CMB-06): o projétil, o impacto e a forma, ANTES dos golpes dela.
+ *
+ * É o irmão do `spell-cast` do lado do monstro, e existe pela mesma razão: sem ele, um ataque a
+ * distância caía como `creature-hit` melee, sem projétil e sem impacto próprio — o defeito que
+ * a issue corrige. O `sim` diz O QUE aconteceu e as CHAVES SEMÂNTICAS de apresentação; o host
+ * as resolve em ids de arte na tabela versionada (invariante 6). Chave sem linha é muda.
+ *
+ * `targets` é a mira inteira, na ordem em que os golpes caem; `tiles` é a forma (vazio em alvo
+ * único), para o efeito aparecer onde não há criatura — como o `spell-cast`.
+ */
+export interface MonsterAbilityCast {
+  readonly kind: 'monster-ability-cast';
+  readonly casterId: string | number;
+  readonly abilityId: string;
+  readonly casterPosition: WorldPoint;
+  readonly targets: ReadonlyArray<SpellCastTarget>;
+  readonly tiles: readonly WorldPoint[];
+  readonly missileKey?: string;
+  readonly impactKey?: string;
+}
+
+export type CombatEvent =
+  | CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot | MonsterAbilityCast;
 
 /** A bolsa da party mudou (#192): o que há nela, e quanto cabe. */
 export interface PartyBagChanged {

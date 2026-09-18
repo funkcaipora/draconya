@@ -218,6 +218,17 @@ export const appearancesSchema = z.object({
   hits: z.object({
     melee: appearanceId.optional(),
   }).default({}),
+  /**
+   * `chave semântica → { missile, effect }` para as abilities de monstro (CMB-06). A ability
+   * declara `presentation.missileKey`/`impactKey` — nunca um id de arte (invariante 6) —, e o
+   * host resolve a chave aqui. As chaves são um VOCABULÁRIO COMPARTILHADO (duas abilities podem
+   * apontar a mesma), então, ao contrário de `spells`/`supplies`, não há id de conteúdo de um
+   * lado só: chave sem linha é MUDA, e linha sem uso é vocabulário à espera — as duas válidas.
+   */
+  abilities: z.record(z.string().min(1), z.object({
+    missile: appearanceId.optional(),
+    effect: appearanceId.optional(),
+  })).default({}),
 });
 
 export type Appearances = z.infer<typeof appearancesSchema>;
@@ -579,6 +590,103 @@ export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
   readonly mitigation: CompiledMitigation;
 };
 
+/**
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
+ * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * exige alvo nem alcance.
+ *
+ * Mora aqui, antes de monstro, porque a ability de monstro (CMB-06) reusa a MESMA geometria:
+ * a forma é conteúdo, e a matriz não se copia de engine nenhuma (ADR 0019).
+ */
+export const spellAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
+    radius: z.number().int().positive(),
+    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
+    centered: z.enum(['target', 'caster']).default('target'),
+  }),
+  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Os três tiles imediatamente à frente (Front Sweep). */
+  z.object({ shape: z.literal('cleave') }),
+  /** Linha reta de `length` tiles à frente, largura 1. */
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+export type SpellArea = z.infer<typeof spellAreaSchema>;
+
+/**
+ * O id RESERVADO da ability que o boot sintetiza para o monstro legado (CMB-06, DT-02).
+ *
+ * Ausência de `abilities` vira UMA ability básica com o `attack`/`attackIntervalMs`/
+ * `attackRange`/`damageType` de sempre, e é isso que preserva o rato bit a bit — mesmo sorteio,
+ * mesmos eventos. O conteúdo NÃO pode declarar uma ability com este id: ela é do boot.
+ */
+export const BASIC_ABILITY_ID = 'basic';
+
+/**
+ * O poder de uma ability, JÁ normalizado para faixa (CMB-06). O arquivo aceita um número — a
+ * faixa de um valor só —, e o boot o transforma aqui, como o `attack` do monstro sempre fez.
+ */
+export interface MonsterAbilityPower {
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * O alvo de uma ability de monstro (CMB-06): o alcance até o alvo principal e, opcionalmente,
+ * a forma de área. `area` é só `circle` — o monstro não carrega DIREÇÃO, e `wave`/`cleave`/
+ * `beam` saem do lançador na direção dele; `buildContent` recusa as outras formas.
+ */
+export const monsterAbilityTargetSchema = z.object({
+  range: z.number().int().positive().default(1),
+  area: spellAreaSchema.optional(),
+});
+
+/**
+ * Uma ability declarada de monstro (CMB-06, DT-01): alvo/alcance, forma, poder, tipo de dano e
+ * referências SEMÂNTICAS de apresentação. Não carrega caminho, bitmap nem id de asset — a arte
+ * é do host, pela tabela (invariante 6).
+ */
+export const monsterAbilitySchema = z.strictObject({
+  id: z.string().min(1),
+  /** Milissegundos entre usos. Tempo decorrido, nunca contagem de tick (invariante 2). */
+  cadenceMs: z.number().int().positive(),
+  target: monsterAbilityTargetSchema.default(() => ({ range: 1 })),
+  power: z.union([
+    z.number().int().nonnegative(),
+    z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() })
+      .refine((range) => range.min <= range.max, 'power.min não pode passar de power.max'),
+  ]),
+  /** O tipo de dano da ability (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  /**
+   * As chaves SEMÂNTICAS de apresentação (CMB-06): o host as resolve em ids de aparência na
+   * tabela versionada (`appearances.abilities`). Chave sem linha é MUDA, nunca erro.
+   */
+  presentation: z.object({
+    missileKey: z.string().min(1).optional(),
+    impactKey: z.string().min(1).optional(),
+  }).optional(),
+  _open: z.string().optional(),
+});
+
+export type MonsterAbilityDefinition = z.infer<typeof monsterAbilitySchema>;
+
+/**
+ * A ability como o `sim` a consome (CMB-06): poder já em faixa e sem os defaults do schema. É o
+ * contrato que o ruleset lê — o mesmo papel do `WeaponProfile` para a arma.
+ */
+export interface MonsterAbility {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly target: { readonly range: number; readonly area?: SpellArea };
+  readonly power: MonsterAbilityPower;
+  readonly damageType: DamageType;
+  readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
+}
+
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -625,6 +733,14 @@ export const monsterSchema = z.strictObject({
   /** Raio a partir do qual ele desiste do alvo e volta ao posto. Zero = nunca desiste. */
   leashRadius: z.number().int().nonnegative().default(0),
   loot: lootTableSchema.default({ items: [] }),
+  /**
+   * As abilities declaradas (CMB-06, DT-01). AUSENTE (ou vazia) normaliza no boot para UMA
+   * ability básica montada do `attack`/`attackIntervalMs`/`attackRange`/`damageType` — é o que
+   * preserva o monstro legado bit a bit, e é o caminho do rato. Quando declaradas, o
+   * `attack`/`attackIntervalMs`/`attackRange` acima continuam no arquivo, mas quem manda são
+   * elas (o boot NÃO sintetiza a básica). O id `basic` é reservado ao boot.
+   */
+  abilities: z.array(monsterAbilitySchema).optional(),
 });
 
 /**
@@ -1406,29 +1522,6 @@ export type BotConfig = z.infer<typeof botConfigSchema>;
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
 
-/**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
- * exige alvo nem alcance.
- */
-export const spellAreaSchema = z.discriminatedUnion('shape', [
-  z.object({
-    shape: z.literal('circle'),
-    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
-    radius: z.number().int().positive(),
-    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
-    centered: z.enum(['target', 'caster']).default('target'),
-  }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
-  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
-  /** Os três tiles imediatamente à frente (Front Sweep). */
-  z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
-  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
-]);
-
-export type SpellArea = z.infer<typeof spellAreaSchema>;
-
 /** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
 export const damagePercentBySource = z.object({
   melee: z.number().int().optional(),
@@ -1581,12 +1674,17 @@ export type Supply = z.infer<typeof supplySchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = Omit<MonsterDefinition, 'mitigation'> & {
+export type Monster = Omit<MonsterDefinition, 'mitigation' | 'abilities'> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
   /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
   readonly mitigation: CompiledMitigation;
+  /**
+   * As abilities JÁ NORMALIZADAS (CMB-06): nunca vazio — ausência vira a básica do boot. É o
+   * que o `sim` lê, e é por isso que ele não conhece o par `attack`/`attackIntervalMs`.
+   */
+  readonly abilities: readonly MonsterAbility[];
 };
 export type MonsterAttack = MonsterDefinition['attack'];
 export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
@@ -1594,6 +1692,26 @@ export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];
 /** A faixa de ataque de um monstro: um número é a faixa de um valor só. */
 export function attackRange(attack: MonsterAttack): { readonly min: number; readonly max: number } {
   return typeof attack === 'number' ? { min: attack, max: attack } : attack;
+}
+
+/** O poder de uma ability declarada, normalizado para faixa — um número é `[n, n]`. */
+export function abilityPower(power: MonsterAbilityDefinition['power']): MonsterAbilityPower {
+  return typeof power === 'number' ? { min: power, max: power } : power;
+}
+
+/**
+ * Até onde o monstro PARA para atacar (CMB-06): o MAIOR alcance entre as abilities.
+ *
+ * É o que o passo guloso consulta para decidir "bater ou aproximar". Sem isto, um monstro de
+ * ability à distância 4 continuaria colando no alvo como um corpo a corpo — e o defeito que a
+ * issue descreve (alcance muda a distância, mas o golpe continua melee) voltaria por outra porta.
+ */
+export function monsterAttackRange(monster: Monster): number {
+  let range = monster.attackRange;
+  for (const ability of monster.abilities) {
+    if (ability.target.range > range) range = ability.target.range;
+  }
+  return range;
 }
 export type LootTable = z.infer<typeof lootTableSchema>;
 /** Uma linha da tabela, sem o `itemId`: é o que gold e item têm em comum. */

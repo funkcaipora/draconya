@@ -143,6 +143,14 @@ nascer com número, que é a ordem errada. Por isso o placeholder emite as três
 por isso `load.test.ts` — e não `buildContent` — é quem prende que todo spell do repositório
 tem efeito hoje.
 
+**`appearances.abilities` é a única seção sem conferência dos dois lados** (CMB-06). As chaves
+dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de monstro aponta
+`presentation.missileKey`/`impactKey`, nunca um id de arte (invariante 6). Chave sem linha é
+MUDA, e linha sem uso é vocabulário à espera: as duas são válidas, e por isso não há id de
+conteúdo para cruzar. O monstro declara `abilities[]`; ausente normaliza no boot para UMA
+básica montada de `attack`/`attackIntervalMs`/`attackRange`/`damageType`, e o id `basic` é
+reservado ao boot.
+
 **`maps.<id>.wall` é UM id ou as quatro peças** (FUN-105): `{ vertical, horizontal, corner,
 pole }`, como o Tibia monta muro — o tile bloqueado não tem uma arte só, e a peça é escolhida
 pela vizinhança. A regra que escolhe é do CLIENTE (`world/walls.ts`); aqui moram os quatro ids,

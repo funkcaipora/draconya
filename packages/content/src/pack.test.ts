@@ -16,7 +16,7 @@ const pack: Pack = packSchema.parse({
 const table = (over: Partial<Appearances> = {}): Appearances => ({
   id: 'baseline', pack: 'tibia-test',
   monsters: {}, items: {}, ammunition: {}, weapons: {}, corpses: {}, maps: {}, spells: {},
-  supplies: {}, hits: {},
+  supplies: {}, hits: {}, abilities: {},
   ...over,
 });
 

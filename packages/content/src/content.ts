@@ -7,9 +7,12 @@ import { buildRoute, buildTilemap, isBlocked } from './map.js';
 import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
+  BASIC_ABILITY_ID,
   COMBAT_PROFILES,
   DAMAGE_TYPES,
+  abilityPower,
   appearancesSchema,
+  attackRange,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
   ammunitionSchema, bestiarySchema, itemSchema, partySchema, skillSchema, spellSchema, staminaSchema,
@@ -17,9 +20,9 @@ import {
 } from './schemas.js';
 import type {
   Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
-  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterDefinition, Pack,
-  PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply, Vocation, Weapon,
-  WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
+  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterAbility,
+  MonsterDefinition, Pack, PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply,
+  Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -150,7 +153,7 @@ export class ContentError extends Error {
   }
 }
 
-/** O monstro já com a mitigação compilada (CMB-03), antes de a aparência ser resolvida. */
+/** O monstro já com a mitigação compilada (CMB-03) e as abilities normalizadas (CMB-06). */
 export type CompiledMonster = Omit<Monster, 'outfitId' | 'corpseAppearanceId'>;
 
 /** O item já com arma tipada e mitigação compilada (CMB-03), sem aparência. */
@@ -188,7 +191,54 @@ export function compileMitigation(profile: MitigationProfile | undefined): Compi
 
 /** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
 export function compileMonster(monster: MonsterDefinition): CompiledMonster {
-  return { ...monster, mitigation: compileMitigation(monster.mitigation) };
+  const { mitigation: _rawMitigation, abilities: _rawAbilities, ...rest } = monster;
+  return {
+    ...rest,
+    abilities: normalizeMonsterAbilities(monster),
+    mitigation: compileMitigation(monster.mitigation),
+  };
+}
+
+/**
+ * Normaliza as abilities no BOOT (CMB-06, DT-02), e não a cada golpe.
+ *
+ * Ausência (ou lista vazia) vira UMA ability básica montada do `attack`/`attackIntervalMs`/
+ * `attackRange`/`damageType` de sempre — a MESMA faixa, a MESMA cadência e o MESMO tipo que o
+ * rato já usava, então o resultado entregue é bit a bit. Com abilities declaradas, elas são
+ * copiadas com o poder já em faixa; a básica NÃO é sintetizada.
+ *
+ * O ramo por golpe seria o caminho fácil e errado: além de pagar a decisão no caminho quente,
+ * duas formas de ler o ataque divergiriam na primeira mudança em uma delas.
+ */
+export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly MonsterAbility[] {
+  const declared = monster.abilities;
+  if (declared !== undefined && declared.length > 0) {
+    return declared.map((ability) => ({
+      id: ability.id,
+      cadenceMs: ability.cadenceMs,
+      target: {
+        range: ability.target.range,
+        ...(ability.target.area === undefined ? {} : { area: ability.target.area }),
+      },
+      power: abilityPower(ability.power),
+      damageType: ability.damageType,
+      ...(ability.presentation === undefined ? {} : {
+        presentation: {
+          ...(ability.presentation.missileKey === undefined
+            ? {} : { missileKey: ability.presentation.missileKey }),
+          ...(ability.presentation.impactKey === undefined
+            ? {} : { impactKey: ability.presentation.impactKey }),
+        },
+      }),
+    }));
+  }
+  return [{
+    id: BASIC_ABILITY_ID,
+    cadenceMs: monster.attackIntervalMs,
+    target: { range: monster.attackRange },
+    power: attackRange(monster.attack),
+    damageType: monster.damageType,
+  }];
 }
 
 /** Compila a mitigação de cada monstro no boot (CMB-03). */
@@ -358,7 +408,8 @@ export function compileUnarmed(
 export function buildContent(raw: RawContent): Content {
   const problems: string[] = [];
 
-  const monsterDefinitions = compileMonsters(parseAll('monster', raw.monsters, monsterSchema, problems));
+  const rawMonsterDefinitions = parseAll('monster', raw.monsters, monsterSchema, problems);
+  const monsterDefinitions = compileMonsters(rawMonsterDefinitions);
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
   const progressions = parseAll('progression', raw.progression ?? [], progressionSchema, problems);
@@ -841,6 +892,30 @@ export function buildContent(raw: RawContent): Content {
     }
   }
 
+  // As abilities DECLARADAS (CMB-06), conferidas no arquivo CRU — o compilado já tem a básica
+  // sintetizada, e validá-lo reprovaria todo monstro legado pelo id reservado. O `basic` é do
+  // BOOT; a duplicata tornaria a escolha por id ambígua; e `wave`/`cleave`/`beam` saem da
+  // DIREÇÃO do lançador, que o monstro não carrega.
+  for (const monster of rawMonsterDefinitions.values()) {
+    const seenAbilities = new Set<string>();
+    for (const ability of monster.abilities ?? []) {
+      if (ability.id === BASIC_ABILITY_ID) {
+        problems.push(`monstro "${monster.id}": o id de ability "${BASIC_ABILITY_ID}" é reservado ao boot`);
+      }
+      if (seenAbilities.has(ability.id)) {
+        problems.push(`monstro "${monster.id}": ability "${ability.id}" duplicada`);
+      }
+      seenAbilities.add(ability.id);
+      const area = ability.target.area;
+      if (area !== undefined && area.shape !== 'circle') {
+        problems.push(
+          `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
+            'monstro só lança `circle` — as outras formas saem da direção do lançador',
+        );
+      }
+    }
+  }
+
   // Referência cruzada: validar formato não basta. Uma hunt apontando monstro inexistente
   // passa em qualquer schema e só falha quando alguém entra nela.
   for (const hunt of hunts.values()) {
@@ -994,6 +1069,7 @@ export function placeholderAppearances(raw: Partial<RawContent>): Appearances {
     spells: {},
     supplies: {},
     hits: {},
+    abilities: {},
   };
 }
 

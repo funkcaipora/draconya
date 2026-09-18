@@ -2,8 +2,8 @@
 
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
 de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), famílias de arma e
-proficiências (CMB-05), motor de magias com alvo
-único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de
+proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), motor de magias com
+alvo único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de
 compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
@@ -44,8 +44,6 @@ Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Gu
 Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
 correspondente:
 
-- abilities de monstro além da faixa de ataque (CMB-06);
-- abilities de monstro além da faixa de ataque (CMB-06);
 - condições generalizadas e dano contínuo (CMB-07);
 - outcomes: crítico, leech e mana shield (CMB-08);
 - PvP e Guild War, fora do M19.
@@ -490,6 +488,49 @@ Quatro coisas que a estrutura garante, e não a inspeção:
 O perfil é indexado no boot, junto das famílias e das skills: nenhuma varredura de catálogo por
 golpe. O `Item.weapon` compilado carrega família, tipo, alcance e fórmula, e é o que o ruleset lê.
 
+## Abilities de monstro (CMB-06, #235)
+
+O ataque único do monstro virou uma lista declarativa em `monster.abilities`. **Ausente (ou
+vazia), o boot normaliza para UMA ability básica** montada do `attack`/`attackIntervalMs`/
+`attackRange`/`damageType` de sempre — é o que preserva o rato **bit a bit**, com o mesmo sorteio
+e a mesma ordem de eventos. A normalização é do BOOT, nunca de cada golpe (DT-02): o caminho
+quente não ramifica, e duas formas de ler o ataque não divergem.
+
+```ts
+interface MonsterAbility {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly target: { readonly range: number; readonly area?: SpellArea };  // área: `circle`
+  readonly power: { readonly min: number; readonly max: number };           // faixa, 1 rolagem
+  readonly damageType: DamageType;
+  readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
+}
+```
+
+- **A distância deixou de ser decorativa.** O alcance de parada do passo guloso é o MAIOR entre
+  as abilities, e uma ability de alcance > 1 emite `monster-ability-cast` ANTES do golpe: o host
+  resolve `missileKey`/`impactKey` na tabela versionada e desenha projétil e impacto. O golpe de
+  uma ability não-corpo-a-corpo é `spell` (sem o sangue melee); a básica legada continua `melee`,
+  e não ganha evento nenhum a mais.
+- **A área reusa `area.ts`** (`circle` centrado no alvo ou no lançador). `wave`/`cleave`/`beam`
+  saem da DIREÇÃO do lançador, que o monstro não carrega — o boot recusa. Os alvos são colhidos
+  ANTES de qualquer dano, na ordem de ENTRADA dos participantes, e morto é pulado: a ordem é
+  contrato, como a do loot — cada alvo consome uma rolagem do `Rng` da sessão.
+- **Cada ability é um evento na fila** com subject derivado (`m:<id>:<abilityId>`), e a morte
+  cancela os subjects que o conteúdo conhece — sem varrer a fila. A básica segue em
+  `monster-attack` (`m:<id>`), então um snapshot de um nó anterior retoma durante o deploy.
+- **A arte é do host** (invariante 6). O conteúdo declara chaves semânticas, e o host as resolve
+  em `appearances.abilities`. **Chave sem linha é MUDA**: a mecânica — dano, morte, atribuição e
+  recibo — acontece igual; derrubar a apresentação esconderia que ela funcionou.
+- **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
+  retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
+  vencimento.
+- **Fora do escopo**, por decisão (CMB-07/CMB-08): condições, campos, invocação, cura de monstro,
+  scripts de boss e o detalhamento visual do dano.
+
+O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
+teste de que a normalização preserva o resultado entregue.
+
 ## O que o jogador vê (FUN-106, FUN-109)
 
 O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe
@@ -499,9 +540,11 @@ quando houve dano, um efeito de sangue no atingido. Cura vira `creature-hit` com
 Magia vira `spell-cast` no `sim` e, pela tabela de aparências fixada na sessão, projétil do
 conjurador ao primeiro alvo e um efeito **por alvo** (ou no conjurador, quando é cura); poção
 vira efeito no tile de quem bebeu, e runa (#165) um efeito por tile da forma, como a magia em
-área. Magia sem linha na tabela é muda, nunca erro. Quais ids são
-esses mora em `packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`),
-e só ids (invariante 6).
+área. A ability de monstro (CMB-06) vira `monster-ability-cast` no `sim` e, pela tabela, um
+projétil do monstro ao alvo e um efeito de impacto por alvo/tile. Magia ou ability sem linha na
+tabela é muda, nunca erro. Quais ids são esses mora em
+`packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`, `abilities`), e
+só ids (invariante 6).
 
 Os vitais do personagem saem ao vivo: `creature-health` do personagem em todo lugar que escreve
 a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte), e `player-stats`

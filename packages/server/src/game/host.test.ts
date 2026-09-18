@@ -3281,6 +3281,9 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // O projétil do tiro (#152): o da flecha é da MUNIÇÃO, o da wand é da ARMA.
     ammunition: { arrow: { icon: 3447, missile: 3 } },
     weapons: { wand: { missile: 5 } },
+    // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
+    // que ela vira id de arte.
+    abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
   } as const;
   /** As armas de tiro do #152, e a flecha grátis que o bow atira sem ninguém escolher. */
   const BOW = {
@@ -3723,6 +3726,52 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(received(), 'creature-hit').some((h) => h.kind === 'spell')).toBe(true);
     expect(ofType(received(), 'effect')).toHaveLength(0);
     expect(ofType(received(), 'missile')).toHaveLength(0);
+  });
+
+  it('a ability à distância do monstro vira missile e effect pela tabela (CMB-06)', () => {
+    // O defeito que a issue corrige: um ataque de alcance > 1 caía como golpe melee, sem
+    // projétil nem impacto próprio. O `sim` diz a chave semântica; o host a resolve na tabela.
+    const ranged = {
+      id: 'spit', cadenceMs: 500, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    };
+    const { runFor, received, heroId } = hunt({
+      rat: { health: 100_000, abilities: [ranged] },
+      health: 100_000,
+    });
+    runFor(3_000);
+    const all = received();
+
+    const missiles = ofType(all, 'missile');
+    expect(missiles.length).toBeGreaterThan(0);
+    expect(missiles[0]?.missileId).toBe(9);
+    expect(ofType(all, 'effect').some((e) => e.effectId === 8)).toBe(true);
+    // O projétil sai ANTES do impacto (a ordem é contrato): o cliente anima o trajeto e só
+    // depois estoura o efeito.
+    const missileAt = all.findIndex((m) => m.type === 'missile' && m.missileId === 9);
+    const impactAt = all.findIndex((m) => m.type === 'effect' && m.effectId === 8);
+    expect(missileAt).toBeGreaterThanOrEqual(0);
+    expect(impactAt).toBeGreaterThan(missileAt);
+    // O golpe da ability é `spell` — sem o sangue do corpo a corpo — e chega ao herói.
+    expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
+  });
+
+  it('a ability SEM linha na tabela é muda, e o golpe continua (CMB-06)', () => {
+    // Chave desconhecida = mudo, nunca erro: a mecânica (dano, morte, atribuição) já aconteceu
+    // no `sim`, e derrubar a apresentação esconderia que ela funcionou.
+    const ranged = {
+      id: 'spit', cadenceMs: 500, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'nope', impactKey: 'nope' },
+    };
+    const { runFor, received, heroId } = hunt({
+      rat: { health: 100_000, abilities: [ranged] },
+      health: 100_000,
+    });
+    runFor(3_000);
+    const all = received();
+    expect(ofType(all, 'missile')).toHaveLength(0);
+    expect(ofType(all, 'effect').filter((e) => e.effectId === 8)).toHaveLength(0);
+    expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
   });
 
   it('golpe em criatura que o cliente ainda NÃO conhece é descartado; o session-attach é quem a apresenta', () => {

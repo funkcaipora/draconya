@@ -1425,6 +1425,7 @@ export class SessionHost {
         case 'spell-cast':
         case 'supply-used':
         case 'shot':
+        case 'monster-ability-cast':
           this.#presentCombat(hosted, event);
           continue;
         case 'party-bag-changed':
@@ -1642,6 +1643,40 @@ export class SessionHost {
           : appearances?.ammunition[event.ammoId]?.missile;
         if (missileId === undefined) return;
         messages.push({ type: 'missile', from: event.from, to: event.to, missileId });
+        break;
+      }
+      case 'monster-ability-cast': {
+        // A ability do monstro (CMB-06): as CHAVES SEMÂNTICAS do conteúdo viram ids de arte
+        // AQUI, pela tabela fixada na sessão (invariante 6). Chave sem linha é MUDA, nunca
+        // erro: a mecânica (dano, morte, atribuição) já aconteceu no `sim`, e derrubar a
+        // apresentação por falta de arte esconderia que ela funcionou.
+        const missileId = event.missileKey === undefined
+          ? undefined
+          : appearances?.abilities[event.missileKey]?.missile;
+        const effectId = event.impactKey === undefined
+          ? undefined
+          : appearances?.abilities[event.impactKey]?.effect;
+        // Projétil do lançador ao PRIMEIRO alvo — é um projétil, não uma rajada, como o
+        // `spell-cast`.
+        const first = event.targets[0];
+        if (missileId !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.casterPosition, to: first.position, missileId,
+          });
+        }
+        if (effectId === undefined) break;
+        // O impacto em CADA alvo, e nos tiles da forma que não têm criatura — como a magia em
+        // área. Sem alvo e sem forma (não acontece numa ability que disparou), nada a desenhar.
+        for (const target of event.targets) {
+          messages.push({ type: 'effect', position: target.position, effectId });
+        }
+        const hit = new Set(event.targets.map(
+          (t) => `${String(t.position.x)},${String(t.position.y)},${String(t.position.z)}`,
+        ));
+        for (const tile of event.tiles) {
+          if (hit.has(`${String(tile.x)},${String(tile.y)},${String(tile.z)}`)) continue;
+          messages.push({ type: 'effect', position: tile, effectId });
+        }
         break;
       }
     }

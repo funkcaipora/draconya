@@ -286,6 +286,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **O ataque do monstro é uma faixa sorteada com o `Rng` da sessão** (`attackRange`, FUN-123):
   o rato bate de 0 a 8, e a mesma semente dá o mesmo golpe — o contrato do loot vale para o
   dano. Um número no JSON é a faixa de um valor só.
+- **A ability do monstro é conteúdo declarativo, normalizado no BOOT** (CMB-06, DT-01/DT-02).
+  `monster.abilities` ausente vira UMA básica montada de `attack`/`attackIntervalMs`/
+  `attackRange`/`damageType`, e é isso que preserva o rato bit a bit — mesmo sorteio, mesma
+  ordem de evento. A básica usa o subject `m:<id>` e o kind `monster-attack` de sempre; as
+  declaradas usam subject derivado `m:<id>:<abilityId>` e kind `monster-ability`, e a morte as
+  cancela pelos ids que o conteúdo conhece (sem varrer a fila). A distância emite
+  `monster-ability-cast` ANTES dos `creature-hit`; o golpe de ability não-corpo-a-corpo é
+  `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
+  "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
+  `scheduledAbilities` (opcional no snapshot, sem bump).
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05).
   `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e
   só sem arma vale o alcance do perfil `fist` (`content.unarmed`). `#strike` despacha pelo

@@ -709,6 +709,12 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
   linha aponte para algo que existe, não o contrário; uma magia nova sem arte ainda bate, e o
   número e a barra provam. Golpe em criatura sem id numérico (nasceu sem ninguém olhando, e o
   cliente ainda não pediu o `session-state`) é descartado, não mandado com id inventado.
+- **A ability de monstro resolve a arte por CHAVE SEMÂNTICA** (CMB-06). O `sim` emite
+  `monster-ability-cast` com `missileKey`/`impactKey` — nunca um id de arte (invariante 6) —, e
+  `#presentCombat` os resolve em `appearances.abilities`: o projétil sai do monstro ao primeiro
+  alvo, e o efeito de impacto em cada alvo/tile. Chave sem linha é MUDA, não erro: a mecânica
+  (dano, morte, atribuição) já aconteceu no `sim`. O golpe da ability chega como `creature-hit`
+  com `kind: 'spell'`; a básica legada continua `melee` com o sangue de `hits.melee`.
 - **O herói "level 8 com XP zero" do helper da FUN-103 é inconsistente, e a mana some no
   primeiro abate.** `grantXp` recalcula o level a partir da XP acumulada (zero → 1) e devolve os
   máximos à tabela de progressão — cuja mana inicial de teste é zero. Para golpe não faz

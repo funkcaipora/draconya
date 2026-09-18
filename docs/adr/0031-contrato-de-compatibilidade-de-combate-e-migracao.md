@@ -409,3 +409,51 @@ acontece em ataque elemental. A skill viaja no `CharacterState.skills` que já e
 
 Fight mode, stance, PvP, parry, reflect, cargas e UI de bloqueio ficam de fora, sem protocolo,
 opcode ou seletor nesta entrega (DT-03).
+
+## Emenda — 2026-09-18: abilities de monstro (CMB-06)
+
+Esta emenda implementa a linha "Abilities de monstro" da matriz: o ataque único vira uma lista
+declarativa em `monster.abilities`, com alcance, forma, poder, tipo e referências semânticas de
+apresentação. O que ela NÃO muda: o perfil `combat-v1` continua aditivo, a ordem de mitigação e a
+posição do RNG seguem intocadas, e o resolver canônico continua o ponto público único.
+
+### Normalização legada (DT-02)
+
+- Ausente ou vazia, `monster.abilities` é normalizada no **BOOT** para UMA ability básica montada
+  do `attack`/`attackIntervalMs`/`attackRange`/`damageType` de sempre. O rato preserva **bit a
+  bit** o resultado entregue — mesma faixa, mesma cadência, mesmo tipo e o mesmo número de
+  sorteios —, e o caminho quente não ramifica por "tem ou não ability".
+- A básica usa o kind `monster-attack` e o subject `m:<id>` de antes; um snapshot de um nó
+  anterior retoma durante o deploy em rolagem. As abilities declaradas usam kind
+  `monster-ability` e subject derivado `m:<id>:<abilityId>`.
+- O id `basic` é reservado ao boot: o conteúdo não o declara.
+
+### RNG e ordem
+
+- Cada alvo de uma ability consome **exatamente** os sorteios do resolver canônico (um Dodge,
+  mais o bloqueio quando há fonte elegível e o tipo é aprovado). A ordem dos alvos de uma área é
+  a ordem de ENTRADA dos participantes, colhida ANTES de qualquer dano, e morto é pulado — a
+  mesma regra da FUN-92.
+- A apresentação (`monster-ability-cast`) sai ANTES dos `creature-hit` dela. O golpe de uma
+  ability que não é corpo a corpo é `spell`; a básica legada continua `melee`.
+- Isso não exige perfil novo: o conteúdo que já existia continua consumindo a mesma sequência, e
+  a sequência nova é de conteúdo NOVO, com `Content.version` novo.
+
+### Snapshot
+
+- `MonsterState.scheduledAbilities` (opcional) registra as abilities declaradas com evento
+  pendente. **Não sobe `SNAPSHOT_FORMAT_VERSION`**: ausente é "nenhuma agendada", que é o estado
+  de um snapshot anterior a esta emenda. Sem o campo, a hunt retomada reagendaria a ability que
+  já veio na fila e bateria em dobro no primeiro vencimento.
+
+### Apresentação
+
+- O `sim` carrega apenas CHAVES SEMÂNTICAS (`presentation.missileKey`/`impactKey`); o host as
+  resolve em `appearances.abilities`, e chave sem linha é MUDA — a mecânica (dano, morte,
+  atribuição e recibo) não muda (invariantes 1, 3 e 6). Nenhuma mensagem S2C nova: a
+  apresentação reusa `missile`, `effect` e `creature-hit`.
+
+### Fora do escopo
+
+Condições, campos, invocação, cura de monstro, scripts de boss e o detalhamento visual do dano
+ficam para CMB-07/CMB-08, como a matriz já previa.
