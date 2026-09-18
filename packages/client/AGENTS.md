@@ -358,12 +358,12 @@ pnpm tsx scripts/make-sheet-fixture.ts
 - **Não recebe snapshot por tick.** Um passo chega uma vez, com origem, destino e duração; o
   cliente anima os ~400 ms.
 - **`SkillsPanel` é a primeira leitura/escrita de `localStorage` no cliente** (RC-04, #317,
-  `shell/skills-preference.ts`). É preferência de TELA — quais das seis linhas do painel Skills
+  `shell/skills-preference.ts`). É preferência de TELA — quais das dez linhas do painel Skills
   aparecem —, nunca estado de jogo: não passa pelo servidor, não é lida de volta por outra aba
   nem por outro personagem. `typeof localStorage === 'undefined'` (sem lançar) é o ambiente REAL
   de `pnpm vitest run packages/client` (`environment: 'node'`, sem `jsdom`) — não é um caso raro
   de navegador, é o que os testes exercitam por padrão; leitura e escrita são só `try/catch` em
-  volta, e falha de qualquer tipo cai no default (todas as seis visíveis), nunca num painel
+  volta, e falha de qualquer tipo cai no default (todas as dez visíveis), nunca num painel
   vazio. A RC-06 (#319) substituiu o painel fixo pelo `CharacterModal` tabulado, aberto por
   `open.character` — o antigo `CharacterPanel.tsx` saiu do repositório no mesmo commit.
 
@@ -592,15 +592,12 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   nenhum `book.get` roda, então nada foi guardado antes da arte — não há entrada envenenada.
   Conferido no navegador segurando o `catalog-content.json` por 15 s: retângulos até lá,
   sprites depois, sem a câmera andar.
-- **A preferência de visibilidade de Skills vive no `localStorage`** (RC-04, #317, SV-10, #346, ADR 0030 D5).
-  `SkillsPanel` salva a lista de campos visíveis sob `'draconya:shell:skillsPanel:visible'`. É
-  preferência de tela pura (`shell/skills-preference.ts`), nunca passa pelo servidor nem pelo
-  ledger, e falhas de leitura/escrita degradam silenciosamente para a exibição de todos os
-  dez campos (experiência, level, HP, mana, capacidade, speed, stamina, magic level, corpo a corpo,
-  distância).
 - **Speed, Magic Level e progresso de skills no HUD** (SV-10, #346, M15). `HudState` expõe `speed`
   e `skills` (`melee`, `distance`, `magic`: nível e percentual inteiro para o próximo), alimentados
-  por `player-stats` e `session-state.self` (com preservação de estado em caso de omissão). Em
-  `SkillsPanel`, as skills (`magic`, `melee`, `distance`) exibem a barra de progresso sob o valor;
-  `magic` ganha o tom `vital-mp`, enquanto `speed` não tem barra de progresso.
+  por `player-stats` e `session-state.self`. Um `skills` VAZIO — o `default` do protocolo, o que
+  um nó `game` anterior à SV-04 produz — preserva o que a tela já tinha em vez de zerar as
+  barras. Em `SkillsPanel`, as dez linhas do kit (experiência, level, HP, mana, capacidade, speed,
+  stamina, magic level, corpo a corpo, distância) seguem a preferência de `localStorage` acima;
+  `magic`, `melee` e `distance` exibem a barra de progresso sob o valor, `magic` ganha o tom
+  `vital-mp`, e `speed` não tem barra.
 
