@@ -10,10 +10,10 @@ import type { Point } from '../state/world.js';
 export const TILE = 32;
 
 /**
- * Campo de visão MÁXIMO, em tiles. ~18×14 é também o raio de interesse da rede (FUN-33): o que
- * o servidor manda e o que a tela mostra têm que ser a mesma coisa, senão ou se paga banda por
- * algo invisível, ou aparece um buraco onde deveria ter criatura. Desde a FUN-115 o mundo
- * ocupa a tela inteira e o que cabe nela é `viewFor`; estes dois são o teto.
+ * Raio de INTERESSE da rede (FUN-33), em tiles. O servidor só manda criaturas dentro desta
+ * janela em torno do personagem; a CÂMERA não é mais limitada por ela. Desde #415 o canvas
+ * inteiro é desenhado — fora do interesse aparece chão sem criatura, como no Tibia —, e o
+ * teto de 18×14 vale só para o que chega pelo fio. Ver `viewFor`.
  */
 export const VIEW_WIDTH = 18;
 export const VIEW_HEIGHT = 14;
@@ -34,13 +34,16 @@ export function zoomFor(widthPx: number, heightPx: number): number {
 /**
  * Quantos tiles cabem numa tela, num zoom. FRACIONÁRIO de propósito: a câmera centra o alvo
  * exatamente no meio do canvas, seja qual for a largura, e `visibleTiles` já pinta a margem.
- * Teto em `VIEW_WIDTH × VIEW_HEIGHT`: além do raio de interesse não chega criatura, e
- * desenhar mais chão que isso mostraria um mundo vazio em volta.
+ *
+ * **Sem teto (#415):** o mundo ocupa o canvas INTEIRO, e o que a tela desenha é o tamanho real
+ * dela. O teto de `VIEW_WIDTH × VIEW_HEIGHT` é do raio de interesse da rede, não da câmera —
+ * limitar aqui deixava o alvo à esquerda do centro e uma faixa preta onde o canvas não era
+ * pintado. Fora do interesse aparece chão sem criatura, que é o que o Tibia faz.
  */
 export function viewFor(widthPx: number, heightPx: number, zoom: number): Viewport {
   return {
-    widthTiles: Math.min(VIEW_WIDTH, widthPx / (TILE * zoom)),
-    heightTiles: Math.min(VIEW_HEIGHT, heightPx / (TILE * zoom)),
+    widthTiles: widthPx / (TILE * zoom),
+    heightTiles: heightPx / (TILE * zoom),
   };
 }
 
