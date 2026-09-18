@@ -52,9 +52,12 @@ export function RingSwapModal({ initial, items, level, advancedFromLevel, onClos
           </span>
           <span className="ring-swap-actions">
             <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
+            {/* Desabilitado com faixa inválida ou sem anel: o servidor recusaria (`botConfigSchema`
+                exige `removeAbove > equipBelow`), e o modal fecharia como se tivesse salvo. */}
             <Button
               variant="primary"
               size="sm"
+              disabled={bad || selected === undefined}
               onClick={() => { setRingSwap(ring); onClose(); }}
             >
               Salvar

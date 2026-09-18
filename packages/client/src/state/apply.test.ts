@@ -390,7 +390,7 @@ describe('HUD deltas', () => {
     });
   });
 
-  it('preserves speed and skills when player-stats omits them', () => {
+  it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
     hud.set((state) => ({
       ...state,
       speed: 130,
@@ -401,6 +401,8 @@ describe('HUD deltas', () => {
       },
     }));
 
+    // O que o codec entrega de um `player-stats` sem `speed`/`skills`: os defaults do protocolo
+    // (`speed: 0`, `skills: {}`). O registro vazio é "não sei", e não zera as barras.
     applyMessage(
       {
         type: 'player-stats',
@@ -408,17 +410,34 @@ describe('HUD deltas', () => {
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         targetId: null,
         ammo: { arrow: null, bolt: null }, vocationId: null,
-      } as any,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       0,
     );
 
     expect(hud.get().health).toBe(140);
-    expect(hud.get().speed).toBe(130);
+    expect(hud.get().speed).toBe(0);
     expect(hud.get().skills).toEqual({
       melee: { level: 20, percent: 50 },
       distance: { level: 18, percent: 40 },
       magic: { level: 8, percent: 30 },
     });
+  });
+
+  it('clears the target when player-stats says there is none', () => {
+    hud.set((state) => ({ ...state, targetId: 7 }));
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      0,
+    );
+    expect(hud.get().targetId).toBeNull();
   });
 
   it('measures latency from the round trip', () => {

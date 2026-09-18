@@ -8,35 +8,25 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { OutfitColors, S2CMessage } from '@draconya/protocol';
-import {
-  appendCapped, hud, type ActiveCondition, type PlayerSkills, type SkillProgress,
-} from './hud.js';
+import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
+import { appendCapped, hud, type PlayerSkills, type SkillProgress } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
 
-function extractSkills(skills: unknown, previous: PlayerSkills): PlayerSkills {
-  if (!skills || typeof skills !== 'object') return previous;
-  const record = skills as Record<string, unknown>;
-  if (record['melee'] === undefined && record['distance'] === undefined && record['magic'] === undefined) {
-    return previous;
-  }
-  const toProgress = (p: unknown, fallback: SkillProgress): SkillProgress => {
-    if (!p || typeof p !== 'object') return fallback;
-    const obj = p as Record<string, unknown>;
-    const level = typeof obj['level'] === 'number' ? obj['level'] : fallback.level;
-    const percent = typeof obj['percent'] === 'number'
-      ? obj['percent']
-      : typeof obj['percentToNext'] === 'number'
-        ? obj['percentToNext']
-        : fallback.percent;
-    return { level, percent };
+/**
+ * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
+ * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
+ * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ */
+function skillsOf(
+  skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
+): PlayerSkills {
+  if (Object.keys(skills).length === 0) return previous;
+  const of = (id: keyof PlayerSkills): SkillProgress => {
+    const progress = skills[id];
+    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
   };
-  return {
-    melee: toProgress(record['melee'], previous.melee),
-    distance: toProgress(record['distance'], previous.distance),
-    magic: toProgress(record['magic'], previous.magic),
-  };
+  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
 }
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
@@ -175,11 +165,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
-        targetId: (message as { targetId?: number | null }).targetId ?? state.targetId ?? null,
+        // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
+        targetId: message.targetId,
         ammo: message.ammo,
         vocationId: message.vocationId,
-        speed: (message as { speed?: number }).speed ?? state.speed,
-        skills: extractSkills((message as { skills?: unknown }).skills, state.skills),
+        speed: message.speed,
+        skills: skillsOf(message.skills, state.skills),
       }));
       return;
 
@@ -348,8 +339,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
-        speed: (message.self as { speed?: number }).speed ?? state.speed,
-        skills: extractSkills((message.self as { skills?: unknown }).skills, state.skills),
+        speed: message.self.speed,
+        skills: skillsOf(message.self.skills, state.skills),
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre
@@ -366,10 +357,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
         onlinePlayers: message.onlinePlayers ?? null,
-        targetId: (message.self as { targetId?: number | null }).targetId ?? null,
+        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats` e
+        // `active-conditions` logo depois dele, no mesmo attach (#341, SV-05). Zerar aqui é o
+        // que impede a moldura e a barra de uma sessão anterior de sobreviverem à reanexação.
+        targetId: null,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,
-        conditions: (message as { conditions?: readonly ActiveCondition[] }).conditions ?? [],
+        conditions: [],
         conditionsReceivedAtMs: nowMs,
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
