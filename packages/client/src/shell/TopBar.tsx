@@ -1,10 +1,17 @@
-// A barra do topo, na casca do design (#251 — D3, D8, D9 de docs/design-system-plan.md).
+// A barra do topo, na casca do design (#251 — D3, D8, D9 de docs/design-system-plan.md;
+// reordenada em #322/RC-09 sob o ADR 0030).
 //
 // Retrato-inicial (a cor de vocação chega com o sprite do outfit, SV-14), nome em Cinzel,
 // "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro (sem contagem de jogadores — SV-15
-// não existe ainda) e os sete ícones PNG de 36 px que abrem as janelas existentes. Nenhum ícone
-// para sistema inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca
-// mostra o que o servidor não disse que existe.
+// não existe ainda) e os CINCO ícones PNG de 36 px que abrem as janelas, na MESMA ordem do kit
+// (`Hud.jsx:2`): Personagem, Hunts, Analisador, Cyclopedia, Chat. Nenhum ícone para sistema
+// inexistente (Loja, Guild, Amigos, Prey, Configurações) — D8: o cliente nunca mostra o que o
+// servidor não disse que existe.
+//
+// Bot e Inventário SAÍRAM daqui (R1-09, RC-09/#322 — revoga DS-08 de docs/design-system-plan.md):
+// quem minimiza esses painéis agora é só o próprio cabeçalho de cada um (`BotPanel` já usava
+// `Panel`+`onToggle`; `EquipmentPanel` já tinha o próprio botão ▸/▾ — nenhum dos dois precisou de
+// código novo, só perderam o segundo gatilho que a TopBar oferecia).
 
 import { useState } from 'react';
 import { account } from '../account/store.js';
@@ -13,18 +20,20 @@ import { IconButton } from './ui/IconButton.js';
 import type { ChatBadgeTier } from './chat-badge.js';
 
 export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+// 'bot' e 'inventory' continuam válidos como chaves de `open` (Shell.tsx os usa para os
+// cabeçalhos de BotPanel/EquipmentPanel) — só não aparecem mais no array `WINDOWS` abaixo, que é
+// o que desenha a nav.
 
 /**
- * Os sete ícones da barra. `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono
- * do projeto, copiada do handoff (D9). `glyph` é o texto de reserva enquanto a imagem não
- * carrega: NUNCA emoji (D9 — "nenhum emoji, só glifos e PNG").
+ * Os CINCO ícones da barra, na ORDEM do kit (`Hud.jsx:2` — `nav` = [character, combat, analyzer,
+ * loot(Cyclopedia), guild, social, prey, chat], sem os três que não têm sistema — RC-09/#322).
+ * `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono do projeto, copiada do
+ * handoff (D9). `glyph` é o texto de reserva enquanto a imagem não carrega: NUNCA emoji
+ * (D9 — "nenhum emoji, só glifos e PNG").
  */
 const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph: string }> = [
-  // Primeiro item, como a navegação do kit; a arte já existe no pacote público.
   { id: 'character', label: 'Personagem', icon: 'character', glyph: 'PER' },
   { id: 'hunts', label: 'Hunts', icon: 'combat', glyph: 'HNT' },
-  { id: 'bot', label: 'Bot', icon: 'actions', glyph: 'BOT' },
-  { id: 'inventory', label: 'Inventário', icon: 'inventory', glyph: 'INV' },
   { id: 'analyzer', label: 'Analisador', icon: 'analyzer-chart', glyph: 'ANL' },
   { id: 'bestiary', label: 'Cyclopedia', icon: 'bestiary', glyph: 'CYC' },
   { id: 'chat', label: 'Chat', icon: 'chat', glyph: 'CHT' },

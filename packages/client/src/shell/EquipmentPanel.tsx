@@ -2,9 +2,10 @@
 //
 // Os dez slots no desenho de corpo do Tibia — mochila no canto superior direito —, e a
 // capacidade embaixo (o gold mora na TopBar, não aqui — R6-04). Fixo na coluna da direita,
-// minimizável pela barra do topo, nunca removido. Cada lugar é o primitivo `ui/Slot` (FD-07):
-// borda dourada, tracejado nos sete lugares que o kit traceja, fundo claro vazio / marrom
-// ocupado — tudo do próprio `Slot`, nada daqui.
+// minimizável pelo próprio cabeçalho (RC-09/#322 — o botão ▸/▾ também controla ContainerWindow×2
+// e PartyBag, que seguem o mesmo `open.inventory` sem botão próprio), nunca removido. Cada lugar
+// é o primitivo `ui/Slot` (FD-07): borda dourada, tracejado nos sete lugares que o kit traceja,
+// fundo claro vazio / marrom ocupado — tudo do próprio `Slot`, nada daqui.
 //
 // **Com uma arma de distância na mão, o escudo é o seletor de munição** (ADR 0026 decisão 3):
 // a célula mostra a munição em uso — a escolhida, ou a grátis, que é o que o servidor atira

@@ -47,7 +47,8 @@ import { chatBadgeTier } from './chat-badge.js';
 
 /**
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
- * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão da barra minimiza os três, nunca remove.
+ * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão do próprio `EquipmentPanel` minimiza
+ * os três, nunca remove (RC-09/#322 — antes era um ícone na barra do topo).
  * O analisador também é FIXO desde #258 (D6): `open.analyzer` só minimiza, nunca desmonta —
  * uma janela que existe sozinha continua não aparecendo sem sessão (`Analyzer.tsx` devolve
  * `null`). Hunts e Cyclopedia são modais e nascem fechados. Chat nasce fechado (#323, RC-10,
@@ -108,7 +109,8 @@ export function Shell() {
         <TopBar open={open} toggle={toggle} chatBadge={chatBadge} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
-              montado; a barra do topo MINIMIZA, nunca remove. A edição fina abre por cima. */}
+              montado; o próprio cabeçalho do Panel minimiza (RC-09/#322 — não há mais ícone
+              "Bot" na barra do topo), nunca remove. A edição fina abre por cima. */}
           <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
           {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
               cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills"). */}
@@ -124,8 +126,9 @@ export function Shell() {
           {/* As vitais no alto da coluna (#253, ADR 0029 D3): saíram do topo — a barra do topo
               não desenha HP/mana no design (#251). */}
           <Vitals />
-          {/* A coluna do OTClient (#161): set, bolsa e mochila FIXOS — um botão da barra
-              minimiza os três juntos (R7-02: a Bolsa vem antes da Mochila, como App.jsx do kit) —,
+          {/* A coluna do OTClient (#161): set, bolsa e mochila FIXOS — o botão do próprio
+              `EquipmentPanel` minimiza os três juntos (RC-09/#322 — antes era um ícone na barra
+              do topo; R7-02: a Bolsa vem antes da Mochila, como App.jsx do kit) —,
               e abaixo deles o analisador. */}
           <EquipmentPanel collapsed={!open.inventory} onToggle={() => { toggle('inventory'); }} />
           <ContainerWindow container="satchel" collapsed={!open.inventory} />

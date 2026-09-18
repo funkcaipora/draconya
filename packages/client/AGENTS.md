@@ -505,11 +505,13 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   nos mesmos lugares em hunt e em conteúdo manual. Reorganizar por
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
-  botão "Inventário" da barra minimiza as três (`collapsed` esconde tudo menos o cabeçalho),
-  nunca remove. Com bow na mão o escudo é o seletor de munição (`AmmoPicker`). Arrastar é DnD
+  botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. Com bow na mão o escudo é o
+  seletor de munição (`AmmoPicker`). Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada, minimizável pela barra (`collapsed` esconde
+  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,
+  minimizável pelo próprio cabeçalho (RC-09/#322 — antes era a barra do topo; `collapsed` esconde
   tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
   (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
   `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
@@ -543,9 +545,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
   esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251
   (ADR 0029, D3/D6/D8/D9), a casca veste o design system:** topo de 65 px com identidade, gold e
-  os sete ícones PNG das janelas (Personagem, Hunts, Bot, Inventário, Analisador, Cyclopedia,
+  os cinco ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
   Chat — nunca
-  emoji, D9), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
+  emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
+  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
   faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
   marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
   Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que

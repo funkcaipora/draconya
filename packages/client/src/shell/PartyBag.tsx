@@ -4,10 +4,11 @@
 // O cliente não soma peso nem calcula cota (invariante 4).
 //
 // A moldura é o `Panel` `dock` do design system (DS-04, #247): o resumo de peso/gold vai no
-// `meta` do cabeçalho, e quem decide se o corpo existe é o `collapsed` que a barra do topo
-// injeta ("quem decide se a janela existe é a barra", `packages/client/AGENTS.md`) — o próprio
-// `Panel` some o corpo quando `collapsed` é `true`. Nenhum `onToggle` é passado: sem ele o
-// `Panel` não desenha o próprio botão de minimizar, que duplicaria o da barra "Inventário".
+// `meta` do cabeçalho, e quem decide se o corpo existe é o `collapsed` que o `EquipmentPanel`
+// controla (RC-09/#322 — antes era a barra do topo; "quem decide se a janela existe é a barra",
+// `packages/client/AGENTS.md`) — o próprio `Panel` some o corpo quando `collapsed` é `true`.
+// Nenhum `onToggle` é passado: sem ele o `Panel` não desenha o próprio botão de minimizar, que
+// duplicaria o do `EquipmentPanel`.
 
 import { useHudSlice } from '../state/useSlice.js';
 import { ItemSprite } from './ItemSprite.js';
