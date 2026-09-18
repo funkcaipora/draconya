@@ -457,3 +457,59 @@ posição do RNG seguem intocadas, e o resolver canônico continua o ponto públ
 
 Condições, campos, invocação, cura de monstro, scripts de boss e o detalhamento visual do dano
 ficam para CMB-07/CMB-08, como a matriz já previa.
+
+## Emenda — 2026-09-18: condições generalizadas, dano contínuo e campos (CMB-07)
+
+Esta emenda generaliza o mecanismo de condições do #155 — que só valia para o personagem e só
+tinha os quatro tipos fixos — para efeitos temporários TIPADOS sobre personagem e monstro,
+incluindo dano ao longo do tempo (DOT) e campos por tile. O que ela NÃO muda: o perfil
+`combat-v1` continua aditivo, a ordem de mitigação e a posição do RNG seguem intocadas, e o
+resolver canônico continua o ponto público único.
+
+### Condição declarativa e alvo
+
+- O conteúdo declara `ConditionSpec` (`key`, `merge`, `durationMs`, `effect`) e o `effect` é uma
+  união discriminada: `haste`, `buff`, `mana-shield`, `heal-over-time` e `damage-over-time`. Não
+  carrega `appearanceId` nem caminho de arte (invariante 6).
+- A condição vale para PERSONAGEM e MONSTRO. O estado de runtime continua PLANO — os campos do
+  #155 mais `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais —, e o tique virou união
+  `heal`/`damage` com `kind` opcional: um snapshot anterior a esta issue, sem `kind`, lê como
+  `heal`, que era o único tique existente. Por isso o `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+- O DOT não escreve vida: cada tique chama `resolveDamage` com um `DamageIntent` tipado
+  (`source` e `damageType`) e passa pela MESMA atribuição e morte (`recordDamage`/`resolveDeath`).
+  Um monstro que cai no tique é resolvido pelo pipeline; um personagem, por `session.kill`.
+
+### Política de fusão (DT-02)
+
+- `merge` é DECLARADO por condição: `refresh` (o de sempre: relançar reinicia), `replace` (o
+  novo substitui) e `strongest` (o de maior magnitude vence; o mais fraco não derruba o ativo).
+- Relançar cancela o evento antigo ANTES de agendar o novo, sem órfão. **Quando o intervalo do
+  tique é o mesmo, o evento de tique é REAPROVEITADO**: cancelar e reagendar a cada relançamento
+  empurraria o tique para sempre quando as duas cadências coincidem — o DOT que nunca acontece.
+  É a razão de o estado carregar `nextTickAtMs`.
+
+### Campos de tile (DT-01, DT-03)
+
+- O conteúdo declara `FieldSpec` (`id`, `durationMs`, `shape`, `condition`). O campo pertence ao
+  RULESET, nunca ao `Tilemap`: conteúdo é imutável e fixado na sessão (invariantes 1 e 7).
+- O índice é por chave NUMÉRICA de tile, como a ocupação de `movement.ts`; nenhum passo varre a
+  lista de campos. Sobreposição no mesmo tile é resolvida pelo mais recente.
+- A ENTRADA é observada só depois de um passo ACEITO (DT-03): `movement` devolve resultado e
+  nunca infringe dano, e um tile recusado não aplica o campo.
+- O tique e o vencimento são eventos da fila. **No empate do instante de expiração o vencimento
+  vence** — ele tem prioridade MENOR que a do tique, e o tique encontra o campo já removido. A
+  prioridade é explícita porque relançar reagenda o vencimento depois do tique, e a ordem não
+  pode depender de quem foi agendado por último. É a ordem documentada e testada.
+- Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.
+
+### Snapshot e apresentação
+
+- `MonsterState.conditions` e `HuntRulesetState.fields` são opcionais; ausente é vazio, que é o
+  estado de um snapshot anterior. O `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+- Nenhuma mensagem S2C nova. O tique de um campo ou de um DOT vira `creature-hit` +
+  `creature-health-changed`, e a ausência de aparência não muda a mecânica (invariantes 3 e 6).
+
+### Fora do escopo
+
+Campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP e a UI detalhada de buff ficam
+para CMB-08 e seguintes, como a matriz já previa.

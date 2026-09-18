@@ -1362,3 +1362,60 @@ describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
       .toThrow(/spell\/exura-vita: secondaryGroup sem group/);
   });
 });
+
+describe('condições e campos declarativos (CMB-07, #334)', () => {
+  const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
+  const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };
+  const field = {
+    id: 'fire', durationMs: 5_000,
+    shape: { shape: 'circle', radius: 1, centered: 'target' },
+    condition: { key: 'fire', merge: 'refresh', durationMs: 5_000, effect: dot },
+  };
+
+  it('a condição e o campo da ability chegam COMPILADOS ao sim, sem arte', () => {
+    const ability = { id: 'venom', cadenceMs: 1_000, power: 1, condition, field };
+    const content = buildContent(base({ monsters: [{ ...rat, abilities: [ability] }] }));
+    const compiled = content.monsters.get('rat')?.abilities[0];
+    expect(compiled?.condition).toEqual(condition);
+    expect(compiled?.field).toEqual(field);
+    // Nunca um caminho de arte no campo ou na condição (invariante 6).
+    expect(JSON.stringify(compiled?.field)).not.toMatch(/appearance|outfit|sprite|path/i);
+  });
+
+  it('recusa campo com forma que o monstro não deixa — `wave` sai da direção do lançador', () => {
+    const wave = { ...field, shape: { shape: 'wave', length: 2 } };
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'w', cadenceMs: 1_000, power: 1, field: wave }] }],
+    }))).toThrow(/círculo/);
+  });
+
+  it('recusa condição fora do vocabulário e efeito malformado', () => {
+    expect(() => buildContent(base({
+      monsters: [{ ...rat, abilities: [{ id: 'v', cadenceMs: 1_000, power: 1, condition: { ...condition, merge: 'sometimes' } }] }],
+    }))).toThrow(ContentError);
+    expect(() => buildContent(base({
+      monsters: [{
+        ...rat,
+        abilities: [{
+          id: 'v', cadenceMs: 1_000, power: 1,
+          condition: { ...condition, effect: { kind: 'damage-over-time', amount: -1, intervalMs: 1_000 } },
+        }],
+      }],
+    }))).toThrow(ContentError);
+  });
+
+  it('a magia de dano ao longo do tempo monta; sem `range` é recusada', () => {
+    const spell = {
+      id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 1_000,
+      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, durationMs: 3_000, range: 3, damageType: 'earth' },
+    };
+    const content = buildContent(base({ spells: [spell] }));
+    expect(content.spells.get('poison')?.effect.kind).toBe('damage-over-time');
+    expect(() => buildContent(base({
+      spells: [{
+        ...spell,
+        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 1_000, durationMs: 3_000, damageType: 'earth' },
+      }],
+    }))).toThrow(ContentError);
+  });
+});

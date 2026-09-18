@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
 import type { CharacterState } from './character.js';
-import { Conditions } from './conditions.js';
+import { Conditions, conditionFromSpec, tickOf } from './conditions.js';
 import type { ConditionState } from './conditions.js';
+import { MonsterRuntime } from './monster/monster.js';
 
 // As condições (#155): estado com prazo, sem tempo dentro — quem vence é a fila. O que se
 // prende aqui é a política (uma por chave, relançar substitui), as leituras e a serialização.
@@ -54,6 +55,72 @@ describe('Conditions', () => {
     const restored = Conditions.fromState(JSON.parse(JSON.stringify(conditions.getState())) as ConditionState[]);
     expect(restored.getState()).toEqual(conditions.getState());
     expect(Conditions.fromState(undefined).size).toBe(0);
+  });
+
+  it('a política `strongest` mantém o mais forte e NÃO reagenda o mais fraco', () => {
+    // Mutação que mata: trocar por `refresh` no `apply` — o veneno fraco rebaixaria o forte.
+    const conditions = new Conditions();
+    const strong: ConditionState = {
+      key: 'poison', targetId: 'm:1', expiresAtMs: 10_000, merge: 'strongest',
+      tick: { kind: 'damage', amount: 30, intervalMs: 1_000, damageType: 'earth', source: 'spell' },
+    };
+    const weak: ConditionState = {
+      ...strong, expiresAtMs: 20_000,
+      tick: { kind: 'damage', amount: 5, intervalMs: 1_000, damageType: 'earth', source: 'spell' },
+    };
+    expect(conditions.apply(strong)).toBeNull();
+    expect(conditions.apply(weak)).toBe(strong);
+    // O objeto guardado continua sendo o forte — é o que o ruleset compara para não reagendar.
+    expect(conditions.get('poison')).toBe(strong);
+    // `replace`/`refresh` substituem: o novo vence mesmo sendo mais fraco.
+    expect(conditions.apply({ ...weak, merge: 'refresh' })).toBe(strong);
+    expect(conditions.get('poison')?.tick?.amount).toBe(5);
+  });
+
+  it('o tique de dano (DOT) viaja no estado e um snapshot antigo sem `kind` lê como cura', () => {
+    const conditions = new Conditions();
+    conditions.apply({
+      key: 'fire', targetId: 'm:1', expiresAtMs: 5_000,
+      tick: { kind: 'damage', amount: 12, intervalMs: 1_000, damageType: 'fire', source: 'spell' },
+    });
+    expect(tickOf(conditions.get('fire') as ConditionState)?.kind).toBe('damage');
+    // Formato do #155: sem `kind`. Ausente é cura, e o snapshot continua legível sem bump.
+    expect(tickOf({ key: 'heal-over-time', expiresAtMs: 1, tick: { amount: 3, intervalMs: 1 } })?.kind)
+      .toBe('heal');
+    expect(tickOf({ key: 'haste', expiresAtMs: 1 })).toBeNull();
+  });
+
+  it('compila um `ConditionSpec` do conteúdo para o alvo, com prazo lógico absoluto', () => {
+    const condition = conditionFromSpec(
+      {
+        key: 'poison', merge: 'strongest', durationMs: 4_000,
+        effect: { kind: 'damage-over-time', amount: 7, intervalMs: 2_000, damageType: 'earth' },
+      },
+      'm:9', 'hero', 1_000, 'spell',
+    );
+    expect(condition.targetId).toBe('m:9');
+    expect(condition.sourceId).toBe('hero');
+    expect(condition.expiresAtMs).toBe(5_000);
+    expect(condition.tick).toEqual({ kind: 'damage', amount: 7, intervalMs: 2_000, damageType: 'earth', source: 'spell' });
+  });
+});
+
+describe('condições no monstro (CMB-07)', () => {
+  const monster = (): MonsterRuntime => new MonsterRuntime({
+    id: 7, monsterId: 'rat', position: { x: 2, y: 2 }, home: { x: 2, y: 2 },
+    health: 100, targetId: null, cooldowns: {},
+  });
+
+  it('o monstro carrega condição, serializa e restaura', () => {
+    const runtime = monster();
+    runtime.conditions.apply({
+      key: 'poison', targetId: 'm:7', expiresAtMs: 5_000,
+      tick: { kind: 'damage', amount: 9, intervalMs: 1_000, damageType: 'earth', source: 'spell' },
+    });
+    const restored = new MonsterRuntime(JSON.parse(JSON.stringify(runtime.getState())) as never);
+    expect(restored.conditions.get('poison')?.tick?.amount).toBe(9);
+    // Sem condição a chave é omitida: um snapshot anterior a esta issue continua lido.
+    expect(monster().getState()).not.toHaveProperty('conditions');
   });
 });
 

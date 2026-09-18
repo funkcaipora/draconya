@@ -2,9 +2,10 @@
 
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
 de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), famílias de arma e
-proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), motor de magias com
-alvo único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de
-compatibilidade de combate (ADR 0031) implementados
+proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), condições
+generalizadas, dano contínuo e campos de tile (CMB-07), motor de magias com alvo único, área e
+requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de
+combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -44,7 +45,6 @@ Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Gu
 Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
 correspondente:
 
-- condições generalizadas e dano contínuo (CMB-07);
 - outcomes: crítico, leech e mana shield (CMB-08);
 - PvP e Guild War, fora do M19.
 
@@ -363,8 +363,9 @@ das issues por vocação (#156–#159). O que o motor ganhou:
   no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset.
 
 O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
-de condição e dano ao longo do tempo (não há condições de monstro), magias de escudo, elemento e
-resistência.
+de condição, magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições
+de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
+catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …).
 
 ### Requisito de vocação (§9.2)
 
@@ -525,11 +526,62 @@ interface MonsterAbility {
 - **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
   retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
   vencimento.
-- **Fora do escopo**, por decisão (CMB-07/CMB-08): condições, campos, invocação, cura de monstro,
-  scripts de boss e o detalhamento visual do dano.
+- **Fora do escopo**, por decisão (CMB-08): invocação, cura de monstro, scripts de boss e o
+  detalhamento visual do dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a
+  seção seguinte).
 
 O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
 teste de que a normalização preserva o resultado entregue.
+
+## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
+
+O #155 criou as condições como estado temporário do PERSONAGEM com quatro chaves fixas (haste,
+postura, magic shield, cura ao longo do tempo). O CMB-07 generalizou o mecanismo: condição
+TIPADA sobre personagem **e monstro**, com DANO AO LONGO DO TEMPO (DOT) e CAMPOS por tile. Tudo
+reusa a fila lógica, o resolver canônico e a apresentação — nenhum laço por tick novo.
+
+```ts
+interface ConditionSpec {                 // declarado em content
+  readonly key: string;
+  readonly merge: 'replace' | 'refresh' | 'strongest';
+  readonly durationMs: number;
+  readonly effect: ConditionEffect;       // haste | buff | mana-shield | heal-over-time | damage-over-time
+}
+
+interface FieldSpec {                     // declarado em content
+  readonly id: string;
+  readonly durationMs: number;
+  readonly shape: SpellArea;              // a MESMA geometria da magia/ability
+  readonly condition: ConditionSpec;
+}
+```
+
+- **Alvo duplo.** O estado de runtime do #155 continua plano (compatibilidade de snapshot) e
+  ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
+  `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no
+  monstro) — cancelar no relançamento e na morte não varre a fila.
+- **O DOT entra pelo mesmo pipeline.** Cada tique chama `resolveDamage` com um `DamageIntent`
+  tipado (`source` e `damageType`) e passa por `recordDamage` e `resolveDeath`/`session.kill`.
+  Não existe escrita direta de vida: a armadura, a resistência e a esquiva valem no tique como
+  valem no golpe. A atribuição vai para quem aplicou (`sourceId`); num campo, para o id do campo.
+- **Política de fusão declarada (DT-02).** `refresh` é o de sempre (relançar reinicia);
+  `replace` substitui; `strongest` mantém o de maior magnitude. Relançar cancela o evento antigo
+  antes do novo — e, quando o intervalo do tique é o mesmo, REAPROVEITA o evento pendente, senão
+  a cadência coincidente empurraria o tique para sempre e o DOT nunca aconteceria.
+- **O campo vive no ruleset, não no `Tilemap` (DT-01).** Índice por chave NUMÉRICA de tile,
+  leitura O(1); sobreposição no mesmo tile fica com o mais recente. A ENTRADA é observada só
+  depois de um passo ACEITO (DT-03): `movement` devolve resultado e nunca infringe dano, e um
+  tile recusado não aplica o campo.
+- **Tique x vencimento.** No instante em que o tique do campo cai no vencimento, o VENCIMENTO
+  vence (é agendado primeiro) e o tique encontra o campo removido. É a única ordem, e é testada.
+  Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.
+- **Sem arte (invariante 6).** Campo não tem `appearanceId`; a apresentação do tique reusa
+  `creature-hit` + `creature-health-changed`, e a ausência de aparência não muda a mecânica.
+- **Snapshot aditivo.** `MonsterState.conditions` e `HuntRulesetState.fields` são opcionais e o
+  `tick` antigo (sem `kind`) lê como cura. `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+
+**Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
+e a UI detalhada de buff.
 
 ## O que o jogador vê (FUN-106, FUN-109)
 

@@ -3996,6 +3996,37 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(all, 'missile')).toHaveLength(0);
     expect(ofType(all, 'creature-hit').length).toBeGreaterThan(0);
   });
+
+  it('o campo de tile fere e apresenta com OU sem tabela de aparências (CMB-07)', () => {
+    // O campo não tem `appearanceId` (invariante 6): a ausência de arte não muda a mecânica.
+    // A ability tem poder 0, então TODO dano no herói é do campo — o `creature-hit` que chega
+    // ao cliente é a apresentação do tique, e sai igual com e sem tabela.
+    const ability = {
+      id: 'flame', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'fire',
+      field: {
+        id: 'flame', durationMs: 4_000,
+        shape: { shape: 'circle', radius: 1, centered: 'target' },
+        condition: {
+          key: 'flame', merge: 'refresh', durationMs: 4_000,
+          effect: { kind: 'damage-over-time', amount: 4, intervalMs: 500, damageType: 'fire' },
+        },
+      },
+    };
+
+    const withTable = hunt({ rat: { abilities: [ability] }, regen: false, table: true });
+    withTable.runFor(6_000);
+    const hitsWith = ofType(withTable.received(), 'creature-hit')
+      .filter((h) => h.id === withTable.heroId && h.kind === 'spell');
+    expect(hitsWith.length).toBeGreaterThan(0);
+    expect(withTable.hero().health).toBeLessThan(withTable.maxHealth);
+
+    const withoutTable = hunt({ rat: { abilities: [ability] }, regen: false, table: false });
+    withoutTable.runFor(6_000);
+    const hitsWithout = ofType(withoutTable.received(), 'creature-hit')
+      .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
+    expect(hitsWithout.length).toBeGreaterThan(0);
+    expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+  });
 });
 
 describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => {

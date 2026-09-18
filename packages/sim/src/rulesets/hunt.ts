@@ -19,7 +19,7 @@
 import { BASIC_ABILITY_ID, BOT_CATEGORIES, isBlocked } from '@draconya/content';
 import type {
   AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
-  Content, DamageType, Hunt, HuntDifficulty, Item, Monster, MonsterAbility, PartyConfig, Progression,
+  Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, Monster, MonsterAbility, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
   WeaponFamily, WeaponProfile,
 } from '@draconya/content';
@@ -27,7 +27,11 @@ import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import { NOT_IN_CATALOG, balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
 import type { CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
-import type { ConditionKind, ConditionState } from '../conditions.js';
+import type { ConditionState } from '../conditions.js';
+import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
+import type { NormalizedTick } from '../conditions.js';
+import { Fields } from '../fields.js';
+import type { TileFieldState } from '../fields.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
@@ -96,13 +100,28 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 /**
- * As condições (#155): o vencimento e o tique periódico da cura ao longo do tempo. Eventos
- * da fila (invariante 2), nunca acumulador. `subject` é `${characterId}/${key}`: um
- * cancelamento por condição, sem varrer a fila.
+ * As condições (#155, CMB-07): o vencimento e o tique periódico. Eventos da fila (invariante 2),
+ * nunca acumulador. `subject` é `<targetId>/<key>`: um cancelamento por condição, sem varrer a
+ * fila. O alvo pode ser personagem ou monstro desde o CMB-07 — o id do monstro é `m:<id>`.
  */
 const CONDITION_EXPIRE = 'condition-expire';
 const CONDITION_TICK = 'condition-tick';
-const conditionSubject = (characterId: string, key: ConditionKind): string => `${characterId}/${key}`;
+const conditionSubject = (targetId: string, key: string): string => `${targetId}/${key}`;
+/**
+ * Os campos de tile (CMB-07): um evento POR CAMPO. O tique aplica a condição a quem pisa nos
+ * tiles; o vencimento tira o campo. `subject` é `f:<id>`.
+ */
+const FIELD_TICK = 'field-tick';
+const FIELD_EXPIRE = 'field-expire';
+const fieldSubject = (fieldId: string): string => `f:${fieldId}`;
+/**
+ * No MESMO instante, o vencimento roda ANTES do tique — de condição e de campo. É a ordem
+ * documentada e testada: o tique do instante de expiração não acontece. A prioridade é explícita
+ * (e não a sequência de agendamento) porque relançar reagenda o vencimento depois do tique, e a
+ * ordem não pode depender de quem foi agendado por último.
+ */
+const EXPIRE_PRIORITY = EventPriority.Housekeeping;
+const TICK_PRIORITY = EventPriority.Housekeeping + 1;
 /**
  * Um evento POR CATEGORIA (FUN-84, §13.4/§13.5). Não existe prioridade global entre elas: uma
  * cura que executa não atrasa o ataque, porque são vencimentos independentes na mesma fila.
@@ -344,6 +363,12 @@ export interface CorpseState {
   readonly position: WorldPoint;
 }
 
+/**
+ * Quem pode carregar uma condição (CMB-07): personagem ou monstro. Os dois têm `conditions`,
+ * posição e vida; o tique de dano de um DOT entra no mesmo pipeline para os dois.
+ */
+type ConditionTarget = CharacterRuntime | MonsterRuntime;
+
 /** Como a party divide loot e custo (ADR 0027 decisão 5). */
 export type PartyMode = 'split' | 'shared';
 
@@ -405,6 +430,11 @@ export interface HuntRulesetState {
   readonly partyOptions?: PartyOptions;
   /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.mode === 'shared'`. */
   readonly partyBag?: PartyBagState;
+  /**
+   * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
+   * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
+   */
+  readonly fields?: readonly TileFieldState[];
   /**
    * A configuração do bot, CRUA (FUN-81).
    *
@@ -508,6 +538,11 @@ export class HuntRuleset implements Ruleset {
   /** Os cadáveres no chão, e o próximo id de item de chão (FUN-123). */
   #corpses: CorpseState[] = [];
   #nextGroundItemId = 1;
+  /**
+   * Os campos de tile ativos (CMB-07), indexados por chave NUMÉRICA de tile. O `Tilemap` é
+   * conteúdo imutável; o campo é estado do ruleset (DT-01).
+   */
+  #fields = new Fields();
 
   /** Até que instante lógico a stamina já foi cobrada. Ver `#burnStamina`. */
   #staminaAnchorMs = 0;
@@ -613,6 +648,11 @@ export class HuntRuleset implements Ruleset {
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
   get groundItems(): readonly CorpseState[] {
     return this.#corpses;
+  }
+
+  /** Os campos de tile ativos agora (CMB-07): leitura para snapshot, host e teste. */
+  get fields(): readonly TileFieldState[] {
+    return this.#fields.getState();
   }
 
   /** O prazo de um cadáver venceu: sai do chão, e a tela fica sabendo. */
@@ -747,6 +787,8 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
     this.#ammoFallbackTold.delete(character.id);
+    // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
+    this.#cancelConditions(session, character);
     // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
     // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
@@ -836,6 +878,8 @@ export class HuntRuleset implements Ruleset {
       case EXIT_RULES: return this.#onExitRules(session);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
+      case FIELD_TICK: return this.#onFieldTick(session, event.subject);
+      case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
       case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
       case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
@@ -920,6 +964,9 @@ export class HuntRuleset implements Ruleset {
 
   #onCharacterDied(session: Session, character: CharacterRuntime): void {
     this.#world.vacate(character.position.x, character.position.y);
+    // Morto não tem condição: cancelar aqui impede o vencimento de uma condição dele ficar
+    // na fila até o fim da sessão (CMB-07).
+    this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
     // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
@@ -1015,6 +1062,7 @@ export class HuntRuleset implements Ruleset {
       monsters: this.#monsters.map((m) => m.getState()),
       nextCreatureId: this.#nextCreatureId,
       corpses: [...this.#corpses],
+      fields: this.#fields.getState(),
       nextGroundItemId: this.#nextGroundItemId,
       warnedExhausted: state.warnedExhausted,
       warnedFullBackpack: state.warnedFullBackpack,
@@ -1088,6 +1136,9 @@ export class HuntRuleset implements Ruleset {
     // Os cadáveres voltam com o snapshot; o prazo de cada um é o evento `CORPSE`, que a fila
     // da sessão já trouxe de volta (FUN-123).
     this.#corpses = [...(restored.corpses ?? [])];
+    // Os campos voltam indexados por tile (CMB-07); os eventos de tique e vencimento já vêm na
+    // fila serializada. Ausente é nenhum — snapshot anterior a esta issue.
+    this.#fields = Fields.fromState(restored.fields);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
@@ -1539,7 +1590,9 @@ export class HuntRuleset implements Ruleset {
 
     const aim = spell.effect.kind === 'damage'
       ? this.#aimFor(character, spell.effect.range, spell.effect.area)
-      : null;
+      : spell.effect.kind === 'damage-over-time'
+        ? this.#aimFor(character, spell.effect.range, undefined)
+        : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
@@ -1566,13 +1619,22 @@ export class HuntRuleset implements Ruleset {
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
       tiles: aim === null ? NO_TILES : [...this.#aimTiles],
     });
-    if (aim === null) {
-      // Condição (#155): haste, postura, magic shield, cura ao longo do tempo — o `castSpell`
-      // devolve, e quem agenda o vencimento é quem tem a fila.
-      if (result.condition !== undefined) {
-        this.#applyCondition(session, character, result.condition);
-        return result;
+    // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
+    // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
+    if (result.condition !== undefined) {
+      const target: ConditionTarget | undefined = result.condition.tick?.kind === 'damage'
+        ? this.#spellHits[0]
+        : character;
+      if (target !== undefined) {
+        this.#applyConditionTo(session, target, {
+          ...result.condition,
+          targetId: this.#subjectOf(target),
+          sourceId: character.id,
+        });
       }
+      return result;
+    }
+    if (aim === null) {
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
       this.#emitHealed(session, character, result.healed, 'spell');
@@ -1687,43 +1749,251 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Aplica uma condição (#155) e agenda o vencimento — e o tique, se ela tem um. Relançar
-   * REINICIA (a política `refresh` de `Conditions`): o evento antigo é cancelado antes.
+   * Aplica uma condição a um ALVO — personagem ou monstro (CMB-07) — e agenda o vencimento e o
+   * tique. Relançar segue a política `merge` declarada: o evento antigo é cancelado ANTES do
+   * novo agendamento, sem deixar órfão.
+   *
+   * Quando `strongest` mantém a condição que já estava, o mapa não muda e NADA é reagendado —
+   * comparar a identidade do estado guardado com o que foi passado distingue os dois casos sem
+   * um segundo retorno.
    */
-  #applyCondition(session: Session, character: CharacterRuntime, condition: ConditionState): void {
-    const subject = conditionSubject(character.id, condition.key);
-    if (character.conditions.apply(condition) !== null) {
+  #applyConditionTo(session: Session, target: ConditionTarget, condition: ConditionState): void {
+    const subject = conditionSubject(this.#subjectOf(target), condition.key);
+    const previous = target.conditions.get(condition.key);
+    const tick = tickOf(condition);
+    const keepTick = previous !== null && sameTick(previous, condition);
+    // O `nextTickAtMs` é atualizado aqui para o snapshot; quando o tique é REAPROVEITADO, a
+    // cadência antiga continua valendo — é o que impede a inanição do relançamento no mesmo ritmo.
+    const nextTickAtMs = tick === null
+      ? undefined
+      : keepTick && previous?.nextTickAtMs !== undefined
+        ? previous.nextTickAtMs
+        : session.nowMs + tick.intervalMs;
+    const effective: ConditionState = nextTickAtMs === undefined
+      ? condition
+      : { ...condition, nextTickAtMs };
+    target.conditions.apply(effective);
+    // `strongest` manteve o anterior: o evento dele continua valendo, e reagendar duplicaria.
+    if (target.conditions.get(condition.key) !== effective) return;
+    if (previous !== null) {
       session.cancelEvent(CONDITION_EXPIRE, subject);
-      session.cancelEvent(CONDITION_TICK, subject);
+      // Relançar no MESMO ritmo NÃO cancela o tique: ele mantém a cadência. Cancelar e
+      // reagendar a cada relançamento empurraria o tique para sempre quando as duas cadências
+      // coincidem — o DOT que nunca acontece.
+      if (!keepTick) session.cancelEvent(CONDITION_TICK, subject);
     }
     session.scheduleIn(CONDITION_EXPIRE, condition.expiresAtMs - session.nowMs, {
-      priority: EventPriority.Housekeeping, subject,
+      priority: EXPIRE_PRIORITY, subject,
     });
-    if (condition.tick !== undefined) {
-      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
-        priority: EventPriority.Housekeeping, subject,
+    if (!keepTick && nextTickAtMs !== undefined) {
+      session.scheduleIn(CONDITION_TICK, nextTickAtMs - session.nowMs, {
+        priority: TICK_PRIORITY, subject,
       });
     }
   }
 
   #onConditionTick(session: Session, subject: string): void {
-    const [characterId, key] = subject.split('/') as [string, ConditionKind];
-    const character = findById(session.participants, characterId);
-    if (character === null || !character.alive) return;
-    const condition = character.conditions.get(key);
-    if (condition?.tick === undefined) return;
-    this.#emitHealed(session, character, character.heal(condition.tick.amount), 'spell');
-    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece.
-    if (session.nowMs + condition.tick.intervalMs <= condition.expiresAtMs) {
-      session.scheduleIn(CONDITION_TICK, condition.tick.intervalMs, {
-        priority: EventPriority.Housekeeping, subject,
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    const target = this.#conditionTargetOf(session, subject.slice(0, separator));
+    if (target === null || !target.alive) return;
+    const condition = target.conditions.get(subject.slice(separator + 1));
+    const tick = condition === null ? null : tickOf(condition);
+    if (condition === null || tick === null) return;
+    this.#applyConditionTick(session, target, condition, tick);
+    // O tique pode ter MATADO o alvo: `#cancelConditions` já removeu a condição e os eventos,
+    // e reagendar aqui a ressuscitaria no mapa. Morto não tiqueta.
+    if (!target.alive || target.conditions.get(condition.key) === null) return;
+    // Reagenda até o prazo: o tique que só caberia DEPOIS de `expiresAtMs` não acontece. O
+    // `nextTickAtMs` guardado é o que permite o relançamento reaproveitar a cadência.
+    const nextTickAtMs = session.nowMs + tick.intervalMs;
+    target.conditions.replace({ ...condition, nextTickAtMs });
+    if (nextTickAtMs <= condition.expiresAtMs) {
+      session.scheduleIn(CONDITION_TICK, tick.intervalMs, {
+        priority: TICK_PRIORITY, subject,
       });
     }
   }
 
   #onConditionExpire(session: Session, subject: string): void {
-    const [characterId, key] = subject.split('/') as [string, ConditionKind];
-    findById(session.participants, characterId)?.conditions.remove(key);
+    const separator = subject.lastIndexOf('/');
+    if (separator < 0) return;
+    this.#conditionTargetOf(session, subject.slice(0, separator))
+      ?.conditions.remove(subject.slice(separator + 1));
+  }
+
+  /**
+   * O tique de uma condição: cura repõe; DANO passa pelo resolver canônico e pelo pipeline de
+   * morte (CMB-07) — nunca escrita direta de vida. A atribuição vai para `sourceId` (quem
+   * aplicou), e um monstro que cai no tique é resolvido por `resolveDeath`.
+   */
+  #applyConditionTick(
+    session: Session, target: ConditionTarget, condition: ConditionState, tick: NormalizedTick,
+  ): void {
+    if (!target.alive) return;
+    if (tick.kind === 'heal') {
+      if (target instanceof CharacterRuntime) {
+        this.#emitHealed(session, target, target.heal(tick.amount), 'spell');
+      }
+      return;
+    }
+    const intent = {
+      rawDamage: tick.amount,
+      source: tick.source ?? 'monster-attack',
+      damageType: tick.damageType ?? 'physical',
+    } as const;
+    const attacker = condition.sourceId ?? 'field';
+    if (target instanceof CharacterRuntime) {
+      const outcome = resolveDamage(
+        intent, this.#playerDefender(target), 'pve', this.#options.combat, session.rng,
+      );
+      const applied = target.receiveDamage(
+        Math.round(outcome.resolvedDamage * target.conditions.damageTakenScale()),
+      );
+      recordDamage(target.contribution, attacker, applied);
+      session.emit({
+        kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
+        amount: applied, source: 'spell', position: this.#at(target),
+      });
+      this.#emitCharacterHealth(session, target);
+      if (target.health <= 0) session.kill(target);
+      return;
+    }
+    const definition = this.#options.monsters.get(target.monsterId);
+    const outcome = resolveDamage(
+      intent,
+      { armor: definition?.armor ?? 0, dodgeChance: 0, mitigation: definition?.mitigation },
+      'pve', this.#options.combat, session.rng,
+    );
+    const applied = target.receiveDamage(outcome.resolvedDamage);
+    recordDamage(target.contribution, attacker, applied);
+    session.emit({
+      kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
+      amount: applied, source: 'spell', position: this.#at(target),
+    });
+    this.#emitHealth(session, target);
+    if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
+  }
+
+  /** O alvo de uma condição pelo id: monstro primeiro (`m:<id>`), depois personagem. */
+  #conditionTargetOf(session: Session, id: string): ConditionTarget | null {
+    const monster = this.#monsterBySubject.get(id);
+    if (monster !== undefined) return monster;
+    return findById(session.participants, id);
+  }
+
+  #subjectOf(target: ConditionTarget): string {
+    return target instanceof CharacterRuntime ? target.id : target.subject;
+  }
+
+  /**
+   * Cancela os eventos das condições de um alvo (CMB-07). Chamado quando ele morre ou sai: sem
+   * isto, o vencimento de uma condição de quem não existe mais ficaria na fila até vencer, e o
+   * despacho encontraria o vazio — o órfão que o critério da issue proíbe.
+   */
+  #cancelConditions(session: Session, target: ConditionTarget): void {
+    const id = this.#subjectOf(target);
+    for (const condition of target.conditions.getState()) {
+      const subject = conditionSubject(id, condition.key);
+      session.cancelEvent(CONDITION_EXPIRE, subject);
+      session.cancelEvent(CONDITION_TICK, subject);
+      target.conditions.remove(condition.key);
+    }
+  }
+
+  // --- campos de tile (CMB-07) ---------------------------------------------------------------
+
+  /**
+   * Aplica um campo de tile. O `sim` resolve os tiles da forma AGORA, indexa por chave numérica
+   * e agenda tique e vencimento. Relançar o MESMO id reinicia: os eventos antigos são cancelados
+   * antes, sem órfão. É a porta ÚNICA — a ability de monstro e o teste passam por aqui.
+   *
+   * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
+   */
+  applyField(session: Session, spec: FieldSpec, at: WorldPoint): TileFieldState {
+    const field: TileFieldState = {
+      id: spec.id,
+      tiles: areaTiles(spec.shape, at, 'south', at),
+      expiresAtMs: session.nowMs + spec.durationMs,
+      condition: spec.condition,
+    };
+    const subject = fieldSubject(spec.id);
+    const previous = this.#fields.get(spec.id);
+    const interval = specTickIntervalMs(spec.condition);
+    // Relançar no MESMO ritmo reaproveita o tique pendente: cancelar e reagendar a cada
+    // relançamento empurraria o tique para sempre quando a cadência do campo coincide com a da
+    // ability — o mesmo defeito de inanição que o DOT tem. Só o vencimento é sempre reagendado.
+    const keepTick = previous !== null
+      && specTickIntervalMs(previous.condition) === interval;
+    if (previous !== null) {
+      session.cancelEvent(FIELD_EXPIRE, subject);
+      if (!keepTick) session.cancelEvent(FIELD_TICK, subject);
+    }
+    this.#fields.apply(field);
+    // O vencimento roda ANTES do tique no mesmo instante (prioridade explícita): o tique do
+    // instante de expiração encontra o campo removido. Ordem documentada e testada.
+    session.scheduleIn(FIELD_EXPIRE, spec.durationMs, {
+      priority: EXPIRE_PRIORITY, subject,
+    });
+    if (!keepTick && interval !== null) {
+      session.scheduleIn(FIELD_TICK, interval, {
+        priority: TICK_PRIORITY, subject,
+      });
+    }
+    return field;
+  }
+
+  #onFieldTick(session: Session, subject: string): void {
+    const field = this.#fields.get(subject.slice(2));
+    if (field === null) return;
+    const interval = specTickIntervalMs(field.condition);
+    if (interval === null) return;
+    // Quem PISA no campo agora. Um evento por campo, e `at` é O(1) por criatura — nenhum passo
+    // varre a lista de campos.
+    for (const target of this.#occupants(session, field)) {
+      const condition = conditionFromSpec(
+        field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+      );
+      const tick = tickOf(condition);
+      if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
+    }
+    if (session.nowMs + interval <= field.expiresAtMs) {
+      session.scheduleIn(FIELD_TICK, interval, {
+        priority: TICK_PRIORITY, subject,
+      });
+    }
+  }
+
+  #onFieldExpire(session: Session, subject: string): void {
+    this.#fields.remove(subject.slice(2));
+  }
+
+  /** Quem está sobre os tiles do campo: participantes e monstros vivos. */
+  #occupants(session: Session, field: TileFieldState): ConditionTarget[] {
+    const occupants: ConditionTarget[] = [];
+    for (const character of session.participants) {
+      if (!character.alive) continue;
+      if (this.#fields.at(this.#at(character))?.id === field.id) occupants.push(character);
+    }
+    for (const monster of this.#monsters) {
+      if (!monster.alive) continue;
+      if (this.#fields.at(this.#at(monster))?.id === field.id) occupants.push(monster);
+    }
+    return occupants;
+  }
+
+  /**
+   * A entrada num campo, observada SÓ depois de um passo aceito (`#step`). Refusão de tile não
+   * chega aqui — `movement` devolve resultado e não infringe dano (CMB-07). Aplica UM tique.
+   */
+  #enterField(session: Session, target: ConditionTarget): void {
+    const field = this.#fields.at(this.#at(target));
+    if (field === null) return;
+    const condition = conditionFromSpec(
+      field.condition, this.#subjectOf(target), field.id, session.nowMs, 'monster-attack',
+    );
+    const tick = tickOf(condition);
+    if (tick !== null) this.#applyConditionTick(session, target, condition, tick);
   }
 
   /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
@@ -2150,6 +2420,18 @@ export class HuntRuleset implements Ruleset {
         session.rng,
       );
       this.#applyMonsterHit(session, subject, character, ability, defender, result.resolvedDamage, source);
+      // A condição da ability (CMB-07), aplicada a CADA alvo vivo que ela acertou. O tique de
+      // dano entra no mesmo pipeline do golpe; quem aplicou (o monstro) leva a atribuição.
+      if (ability.condition !== undefined && character.alive) {
+        this.#applyConditionTo(session, character, conditionFromSpec(
+          ability.condition, character.id, subject, session.nowMs, 'monster-attack',
+        ));
+      }
+    }
+    // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria é a mesma
+    // da magia (`areaTiles`), e o campo é indexado por tile — nenhum passo varre a lista.
+    if (ability.field !== undefined) {
+      this.applyField(session, ability.field, this.#at(primary));
     }
   }
 
@@ -2225,6 +2507,11 @@ export class HuntRuleset implements Ruleset {
         kind: 'creature-moved', creatureId,
         from: result.from, to: result.to, durationMs: result.durationMs,
       });
+      // A entrada num campo (CMB-07) é observada SÓ depois de um passo ACEITO: `movement`
+      // devolve resultado e nunca infringe dano. Um tile recusado não aplica o campo.
+      if (mover instanceof CharacterRuntime || mover instanceof MonsterRuntime) {
+        this.#enterField(session, mover);
+      }
     }
     return result;
   }
@@ -2642,6 +2929,9 @@ export class HuntRuleset implements Ruleset {
     // se tira o monstro dos índices desta instância — e da atribuição de quem ele bateu, senão
     // o mapa do personagem cresce uma chave por respawn até o fim da hunt.
     const subject = monster.subject;
+    // As CONDIÇÕES do monstro (CMB-07) saem com ele: sem isto, o DOT de um monstro morto
+    // continuaria na fila e venceria contra o vazio. O `resolveDeath` só cancela o `m:<id>`.
+    this.#cancelConditions(session, monster);
     for (const character of session.participants) forgetActor(character.contribution, subject);
     // As abilities DECLARADAS têm subject DERIVADO (CMB-06), e o `resolveDeath` só cancelou o
     // `m:<id>`. Cancelar pelos ids que o conteúdo conhece é O(abilities), sem varrer a fila —

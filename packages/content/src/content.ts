@@ -230,6 +230,11 @@ export function normalizeMonsterAbilities(monster: MonsterDefinition): readonly 
             ? {} : { impactKey: ability.presentation.impactKey }),
         },
       }),
+      // A condição e o campo (CMB-07) passam direto: já vêm na forma que o `sim` lê, como o
+      // poder já vem em faixa. Copiar aqui mantém a normalização do BOOT (DT-02) e o caminho
+      // quente sem ramificar.
+      ...(ability.condition === undefined ? {} : { condition: ability.condition }),
+      ...(ability.field === undefined ? {} : { field: ability.field }),
     }));
   }
   return [{
@@ -911,6 +916,14 @@ export function buildContent(raw: RawContent): Content {
         problems.push(
           `monstro "${monster.id}": ability "${ability.id}" usa área "${area.shape}", e o ` +
             'monstro só lança `circle` — as outras formas saem da direção do lançador',
+        );
+      }
+      // O campo (CMB-07) segue a mesma regra da área: só `circle`, pela mesma razão — o
+      // monstro não carrega direção. A condição do campo é validada pelo schema.
+      if (ability.field !== undefined && ability.field.shape.shape !== 'circle') {
+        problems.push(
+          `monstro "${monster.id}": o campo da ability "${ability.id}" usa forma ` +
+            `"${ability.field.shape.shape}", e o monstro só deixa círculo`,
         );
       }
     }

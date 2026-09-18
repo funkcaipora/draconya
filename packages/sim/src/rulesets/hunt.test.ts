@@ -1,5 +1,5 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
-import type { Content, Progression, RawContent } from '@draconya/content';
+import type { Content, FieldSpec, Progression, RawContent } from '@draconya/content';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import { resolveDamage } from '../combat/damage.js';
@@ -1386,6 +1386,7 @@ const withSpells = (
   over: {
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
+    combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -1400,6 +1401,8 @@ const withSpells = (
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
+    ...(over.combat === undefined ? {} : { combat: over.combat }),
+    ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
@@ -4952,5 +4955,171 @@ describe('a ability de monstro entre taxas e no snapshot (CMB-06)', () => {
     resumed.drainEvents();
     run(resumed, 5_000, 100);
     expect(resumed.drainEvents().some((e) => e.kind === 'monster-ability-cast')).toBe(true);
+  });
+});
+
+describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {
+  const poison = {
+    id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 500,
+    effect: {
+      kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 2_500,
+      range: 3, damageType: 'earth',
+    },
+  };
+  const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+  // Ataque desarmado ZERO: sem isto o golpe básico (25) mataria o rato e o abate não seria do
+  // DOT. O `minimumDamageFraction` zero derruba também o piso, que sozinho ainda tirava 10 %.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 }, minimumDamageFraction: 0 };
+  const dotConfig = botConfig({
+    attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'poison' } }],
+  });
+  const fireField: FieldSpec = {
+    id: 'fire', durationMs: 20_000,
+    shape: { shape: 'circle', radius: 1, centered: 'caster' },
+    condition: {
+      key: 'fire', merge: 'refresh', durationMs: 20_000,
+      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+    },
+  };
+
+  it('o DOT de magia no MONSTRO passa pelo resolver canônico e mata pelo pipeline', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000, spells: [poison], combat: [pacifist],
+    });
+    run(session, 20_000, 100);
+
+    // O único dano do cenário é o DOT; o abate é dele, e a morte passa por `resolveDeath`.
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const calls = vi.mocked(resolveDamage).mock.calls;
+    expect(calls.some(([intent]) => intent.damageType === 'earth' && intent.source === 'spell')).toBe(true);
+    expect(ruleset.monsters.every((m) => m.health > 0)).toBe(true);
+  });
+
+  it('o DOT de ability no PERSONAGEM usa o mesmo pipeline e pode matar', () => {
+    const venomRat = {
+      ...rat, health: 100_000, attack: 0,
+      abilities: [{
+        id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'venom', merge: 'refresh', durationMs: 3_000,
+          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+        },
+      }],
+    };
+    const { session, hero } = withSpells(botConfig(), { health: 15, monstersRaw: [venomRat] });
+    run(session, 30_000, 100);
+
+    expect(hero.conditions.get('venom')).toBeNull();
+    expect(session.ended).toBe('death');
+    expect(session.aggregates.deaths).toBe(1);
+  });
+
+  it('relançar a condição cancela o vencimento antigo; a morte cancela tudo', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+    }, 'bold');
+    run(session, 2_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    const subject = `m:${monster.id}/poison`;
+    const eventsOf = (): number =>
+      session.snapshot().schedule.events.filter((e) => e.subject === subject).length;
+    // UMA cadeia por condição, não uma por relançamento.
+    expect(eventsOf()).toBeLessThanOrEqual(2);
+    run(session, 30_000, 100);
+    expect(session.snapshot().schedule.events.filter((e) => e.subject === subject)).toHaveLength(0);
+  });
+
+  it('entra no campo só depois do passo aceito, permanece, sai e REENTRA', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // Campo em (4,3): o herói passa por (4,2), (4,3) e (3,3) na primeira volta, sai em (2,3)
+    // e reentra em (4,2) na volta seguinte (rota de dez tiles, 500 ms cada).
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+
+    run(session, 1_400, 100);
+    const beforeEntry = hero.health;
+    run(session, 400, 100);
+    expect(hero.health).toBeLessThan(beforeEntry);
+
+    run(session, 1_200, 100);
+    const afterExit = hero.health;
+    run(session, 500, 100);
+    expect(hero.health).toBe(afterExit);
+
+    run(session, 2_500, 100);
+    const beforeReentry = hero.health;
+    run(session, 1_000, 100);
+    expect(hero.health).toBeLessThan(beforeReentry);
+  });
+
+  it('campo em tile que ninguém pisa não muda mecânica nenhuma', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // (5,5) está fora do mapa jogável; a forma não confero mapa (geometria pura), mas o herói
+    // nunca pisa ali. Recusa de passo não aplica campo — `movement` devolve resultado.
+    ruleset.applyField(session, { ...fireField, id: 'void' }, { x: 5, y: 5, z: 7 });
+    run(session, 5_000, 100);
+    expect(hero.health).toBe(1_000_000);
+  });
+
+  it('no instante de expiração o vencimento vence o tique — uma ordem só', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, { ...fireField, id: 'short', durationMs: 2_000 }, { x: 4, y: 3, z: 7 });
+    run(session, 1_600, 100);
+    const same = session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:short' && e.dueAtMs === 2_000);
+    const expire = same.find((e) => e.kind === 'field-expire');
+    const tick = same.find((e) => e.kind === 'field-tick');
+    expect(expire).toBeDefined();
+    expect(tick).toBeDefined();
+    // A prioridade do vencimento é MENOR que a do tique: no mesmo instante, o vencimento roda
+    // primeiro e o tique acha o campo removido. A ordem não depende de quem foi agendado por
+    // último — relançar reagenda o vencimento depois do tique.
+    expect(expire?.priority).toBeLessThan(tick?.priority ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('o campo vence e sai do índice', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 21_000, 100);
+    expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('DOT e campo rendem o MESMO a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number) => {
+      const { session, hero, ruleset } = withSpells(dotConfig, {
+        mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+      }, 'bold');
+      ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+      run(session, 30_000, 1000 / hz);
+      return {
+        health: hero.health, kills: session.aggregates.kills,
+        xp: session.aggregates.xpGained, mana: hero.mana,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('um snapshot no meio do campo retoma com o índice e os eventos', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist], monsters: false,
+    }, 'bold');
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 2_000, 100);
+    const snapshot = session.snapshot();
+    const loaded = buildContent(raw({
+      spells: [poison], combat: [pacifist],
+      progression: [{ ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    }));
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('spell-session'),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    expect(resumedRuleset.fields).toHaveLength(1);
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    const before = resumedHero.health;
+    run(resumed, 1_000, 100);
+    expect(resumedHero.health).toBeLessThan(before);
   });
 });

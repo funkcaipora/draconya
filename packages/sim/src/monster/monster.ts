@@ -7,6 +7,8 @@
 import type { Monster } from '@draconya/content';
 import { monsterAttackRange } from '@draconya/content';
 import { Cooldowns } from '../cooldown.js';
+import { Conditions } from '../conditions.js';
+import type { ConditionState } from '../conditions.js';
 import { Contribution } from '../death.js';
 import type { ContributionState } from '../death.js';
 import type { CooldownState } from '../cooldown.js';
@@ -43,6 +45,11 @@ export interface MonsterState {
    * para agendar.
    */
   readonly scheduledAbilities?: readonly string[];
+  /**
+   * As condições ativas (CMB-07): DOT de magia, lentidão, o que a condição fizer. Mesmo estado
+   * do personagem, e mesma regra de snapshot: ausente é nenhuma, sem bump de formato.
+   */
+  readonly conditions?: readonly ConditionState[];
   readonly cooldowns: Partial<CooldownState>;
 }
 
@@ -92,6 +99,8 @@ export class MonsterRuntime {
    * A básica não entra aqui: ela usa `attackReady`, como sempre.
    */
   readonly scheduledAbilities: Set<string>;
+  /** Mutadas pelo ruleset ao lançar e ao vencer — ver `Conditions` (CMB-07). */
+  readonly conditions: Conditions;
 
   constructor(state: MonsterState) {
     this.id = state.id;
@@ -105,6 +114,7 @@ export class MonsterRuntime {
     this.contribution = Contribution.fromState(state.contribution);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.scheduledAbilities = new Set(state.scheduledAbilities ?? []);
+    this.conditions = Conditions.fromState(state.conditions);
   }
 
   get alive(): boolean {
@@ -130,6 +140,7 @@ export class MonsterRuntime {
       ...(this.scheduledAbilities.size === 0
         ? {}
         : { scheduledAbilities: [...this.scheduledAbilities] }),
+      ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),
     };
   }
 

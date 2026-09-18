@@ -616,6 +616,81 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
 
 export type SpellArea = z.infer<typeof spellAreaSchema>;
 
+/** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
+export const damagePercentBySource = z.object({
+  melee: z.number().int().optional(),
+  distance: z.number().int().optional(),
+  spell: z.number().int().optional(),
+});
+
+/**
+ * A POLÍTICA de fusão de uma condição (CMB-07, DT-02): declarada no conteúdo, nunca um campo
+ * por efeito. Evita timers paralelos quando a mesma condição é relançada.
+ */
+export const conditionMergeSchema = z.enum(['replace', 'refresh', 'strongest']);
+export type ConditionMerge = z.infer<typeof conditionMergeSchema>;
+
+/**
+ * O efeito declarativo de uma condição (CMB-07). É o `ConditionEffect` do contrato da issue: um
+ * estado com prazo que muda uma leitura (haste, postura, magic shield) ou dispara um tique (cura
+ * ou DANO ao longo do tempo). O dano contínuo NÃO traz origem — quem aplica decide (`spell`,
+ * `monster-attack`), e é a mesma divisão do `DamageSource` canônico (CMB-02).
+ */
+export const conditionEffectSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('haste'),
+    speedPercent: z.number().int().positive(),
+    damageDealtPercent: damagePercentBySource.optional(),
+  }),
+  z.object({
+    kind: z.literal('buff'),
+    damageDealtPercent: damagePercentBySource.optional(),
+    damageTakenPercent: z.number().int().optional(),
+  }),
+  z.object({ kind: z.literal('mana-shield') }),
+  z.object({
+    kind: z.literal('heal-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal('damage-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    /** O tipo do tique (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+    damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  }),
+]);
+export type ConditionEffect = z.infer<typeof conditionEffectSchema>;
+
+/**
+ * A condição declarativa do conteúdo (CMB-07): chave, política de fusão, prazo e efeito. O
+ * `sim` a compila para o estado de runtime com prazo LÓGICO absoluto. Nunca carrega arte
+ * (invariante 6) — a apresentação, quando existir, é resolvida por id na tabela de aparências.
+ */
+export const conditionSpecSchema = z.object({
+  key: z.string().min(1),
+  merge: conditionMergeSchema.default('refresh'),
+  durationMs: z.number().int().positive(),
+  effect: conditionEffectSchema,
+});
+export type ConditionSpec = z.infer<typeof conditionSpecSchema>;
+
+/**
+ * Um CAMPO de tile declarativo (CMB-07): uma condição que vive no chão por um prazo, numa forma
+ * (`spellAreaSchema`, a MESMA geometria da magia e da ability). O `sim` resolve os tiles no
+ * momento da aplicação e indexa por chave NUMÉRICA de tile — nunca varre todos os campos por
+ * passo. O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01: conteúdo é imutável).
+ */
+export const fieldSpecSchema = z.object({
+  id: z.string().min(1),
+  durationMs: z.number().int().positive(),
+  shape: spellAreaSchema,
+  condition: conditionSpecSchema,
+});
+export type FieldSpec = z.infer<typeof fieldSpecSchema>;
+
+
 /**
  * O id RESERVADO da ability que o boot sintetiza para o monstro legado (CMB-06, DT-02).
  *
@@ -669,6 +744,17 @@ export const monsterAbilitySchema = z.strictObject({
     missileKey: z.string().min(1).optional(),
     impactKey: z.string().min(1).optional(),
   }).optional(),
+  /**
+   * A condição que a ability aplica a QUEM ela acerta (CMB-07). Ausente é ability que só bate —
+   * o caso legado. O tique de dano entra no MESMO resolver canônico do golpe.
+   */
+  condition: conditionSpecSchema.optional(),
+  /**
+   * O CAMPO que a ability deixa no chão (CMB-07), centrado no alvo principal. Só `circle`: o
+   * monstro não carrega direção, como na área da própria ability. O `sim` resolve os tiles e os
+   * indexa por tile; o campo vive no ruleset, nunca no `Tilemap`.
+   */
+  field: fieldSpecSchema.optional(),
   _open: z.string().optional(),
 });
 
@@ -685,6 +771,10 @@ export interface MonsterAbility {
   readonly power: MonsterAbilityPower;
   readonly damageType: DamageType;
   readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
+  /** A condição que a ability aplica a quem acerta (CMB-07). Ausente: só o golpe. */
+  readonly condition?: ConditionSpec;
+  /** O campo que a ability deixa no chão, centrado no alvo (CMB-07). Ausente: nenhum. */
+  readonly field?: FieldSpec;
 }
 
 export const monsterSchema = z.strictObject({
@@ -1522,13 +1612,6 @@ export type BotConfig = z.infer<typeof botConfigSchema>;
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
 
-/** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
-export const damagePercentBySource = z.object({
-  melee: z.number().int().optional(),
-  distance: z.number().int().optional(),
-  spell: z.number().int().optional(),
-});
-
 /**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
  *
@@ -1602,6 +1685,19 @@ export const spellSchema = z.object({
       amount: z.number().int().positive(),
       intervalMs: z.number().int().positive(),
       durationMs: z.number().int().positive(),
+    }),
+    /**
+     * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
+     * ao ALVO. Cada tique passa pelo MESMO resolver canônico do golpe (`resolveDamage`), com o
+     * `source: 'spell'` e o tipo declarado — nunca escrita direta de vida.
+     */
+    z.object({
+      kind: z.literal('damage-over-time'),
+      amount: z.number().int().positive(),
+      intervalMs: z.number().int().positive(),
+      durationMs: z.number().int().positive(),
+      range: z.number().int().positive(),
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
     /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
     z.object({

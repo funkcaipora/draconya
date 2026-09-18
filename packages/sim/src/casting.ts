@@ -235,8 +235,9 @@ export function castSpell(
   const effect = spell.effect;
   // Dano precisa de alvo ao alcance — ANTES da mana, que sai por último. Forma que sai do
   // lançador (onda, feixe, explosão em volta) não tem alcance: `aim.distance` vem zero da mira,
-  // e `range` não existe nela (o boot recusa).
-  if (effect.kind === 'damage') {
+  // e `range` não existe nela (o boot recusa). O dano ao longo do tempo (CMB-07) mira como o
+  // dano: ele precisa de alvo, e o tique é que passa pelo resolver depois.
+  if (effect.kind === 'damage' || effect.kind === 'damage-over-time') {
     if (aim === null || aim.targets.length === 0) {
       return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     }
@@ -313,6 +314,21 @@ export function castSpell(
       });
     case 'mana-shield':
       return cast({ key: 'mana-shield', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs });
+    /**
+     * Dano ao longo do tempo (CMB-07): a magia NÃO bate agora — devolve a condição, e quem a
+     * aplica (o ruleset) agenda o tique. O `targetId` fica vazio aqui porque o lançador não
+     * conhece o id do alvo; o ruleset o preenche com o alvo principal da mira. Cada tique
+     * chama o resolver canônico com `source: 'spell'`.
+     */
+    case 'damage-over-time':
+      return cast({
+        key: 'damage-over-time', spellId: spell.id, expiresAtMs: nowMs + effect.durationMs,
+        merge: 'refresh',
+        tick: {
+          kind: 'damage', amount: effect.amount, intervalMs: effect.intervalMs,
+          damageType: effect.damageType, source: 'spell',
+        },
+      });
   }
 }
 
