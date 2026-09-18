@@ -575,9 +575,13 @@ body {
 }
 .hunt-details-loot-sprite { position: relative; width: 22px; height: 22px; }
 
+/* ---- Cyclopedia: abas + busca compartilhada (#344, SV-08) --------------------------------- */
+.cyclopedia-modal-tabs { margin-bottom: 8px; }
+.cyclopedia-modal-search { margin-bottom: 8px; }
+
 /* ---- O modal Cyclopedia, aba Bestiary (#321, RC-08) --------------------------------------- */
 .cyclopedia-modal-body {
-  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; height: 470px;
+  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; height: 424px;
 }
 .cyclopedia-modal-sidebar { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .cyclopedia-modal-progress {
@@ -652,6 +656,26 @@ body {
 .cyclopedia-modal-row span:last-child { text-align: right; color: var(--parchment-2); }
 .cyclopedia-modal-row span:last-child.cyclopedia-modal-count-done { color: var(--ok); }
 .cyclopedia-modal-footer-note { font: 7px var(--font-mono); color: var(--text-faint); }
+
+/* ---- Cyclopedia: aba Itens (#344, SV-08) -------------------------------------------------- */
+.cyclopedia-modal-items-list {
+  display: flex; flex-direction: column; gap: 6px; overflow: auto; min-height: 0;
+  max-height: 424px; scrollbar-width: thin;
+}
+.cyclopedia-modal-item-row {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px;
+  align-items: center; padding: 7px 10px; border: 1px solid var(--ash-5); border-radius: 4px;
+  background: var(--ash-1);
+}
+.cyclopedia-modal-item-sprite { position: relative; width: 34px; height: 34px; }
+.cyclopedia-modal-item-info { min-width: 0; display: grid; gap: 2px; }
+.cyclopedia-modal-item-name {
+  font: 600 9.5px var(--font-mono); color: var(--parchment-1);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cyclopedia-modal-item-category { font: 7.5px var(--font-mono); color: var(--gold-4); }
+.cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
+.cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
 
 /* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
    de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,

@@ -39,6 +39,12 @@ divergisse do `sim`, a conta do `sim` é a verdadeira. Desde a SV-20, `catalogue
 carrega `class` quando o conteúdo define uma (vocabulário fechado em `MONSTER_CLASSES`, hoje só
 `mammal`); é o dado que a `SideList` de categorias da Cyclopedia usa para agrupar.
 
+Desde a #344, o modal ganhou a aba "Itens": a lista de `catalogue.items`, com sprite, nome,
+categoria (derivada de onde o item veste — o mesmo rótulo do painel do set) e Atq/Def quando o
+item tem ataque ou defesa (`attack`/`armor`, desde a #337). A busca do modal é uma só e filtra
+a aba que estiver ativa. Descrição e "dropado por" não aparecem: nenhum dos dois existe em
+`content` hoje (ver `docs/reviews/kit-fidelity-audit-2026-09-16.md`, achado R8-22b).
+
 ## Regras
 
 - Cinco marcos de abates por monstro: 10 000 / 25 000 / 50 000 / 100 000 / 200 000.
