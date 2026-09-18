@@ -234,8 +234,6 @@ function characterFromTicket(
       // guarda; ausente, o personagem parte de `{}` — nenhum abate contado, sem marco, sem
       // bônus — e o próximo extrato traz de volta o que ele matar.
       ...(initialCharacter.bestiary === undefined ? {} : { bestiary: initialCharacter.bestiary }),
-      // A munição escolhida (#152): validada na emissão e no consumo; ausente, atira a grátis.
-      ...(initialCharacter.ammo === undefined ? {} : { ammo: initialCharacter.ammo }),
       // A mochila vem do ticket porque a arma equipada decide o dano (FUN-82). Entrada
       // quebrada vira "sem item", não sessão que não abre.
       ...(isInventoryState(initialCharacter.inventory)

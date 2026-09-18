@@ -17,7 +17,7 @@ async function render(): Promise<string> {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],

@@ -1075,22 +1075,6 @@ body {
   list-style: none; margin: 6px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
-/* O seletor de munição: sobreposição pequena, "Panel ancorado" ao painel do set — fio dourado
-   no topo, como o resto do design (#253, §5 DS-10). */
-.ammo-picker {
-  position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 260px;
-}
-.ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
-.ammo-option {
-  width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; text-align: left;
-  background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
-  color: var(--parchment-2); font: 8px var(--font-mono); cursor: pointer;
-}
-.ammo-option.active { border-color: var(--gold-4); color: var(--gold-5); }
-.ammo-option:disabled { opacity: 0.45; cursor: default; }
-.ammo-name { flex: 1 1 auto; }
-.slot-ammo-picker { outline: 1px dashed var(--gold-4); outline-offset: -1px; }
-
 /* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: 30 px no set, 26 px na
    mochila e na bolsa (#253, ADR 0029 D4/DT-04) — o tamanho vem do CONTEXTO (`.equipment .slot`,
    `.container-grid .slot`), não de uma classe por tamanho. O lugar vazio mostra o RÓTULO
@@ -1209,7 +1193,6 @@ body {
      dele compete com .windows-left/.windows-right/.chat-window, não mais com os outros filhos da
      coluna. `order: 4` — o mesmo de `.windows-right` — o coloca logo depois da coluna direita. */
   .shell > .ui-floating-window--analyzer { order: 4; }
-  .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   /* O chat vira seção da página como as outras (#252): sai do `position: fixed` sobre o mundo —
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
      o caso de uso móvel é configurar o bot (comentário de cima), não conversar (DT-05). */

@@ -186,7 +186,6 @@ async function main(): Promise<void> {
       // O catálogo, para as regras de equipar. Não é o `Content` inteiro: o host não precisa
       // de balanceamento para decidir se uma espada cabe num slot.
       itemCatalog: content.items,
-      ammunition: content.ammunition,
       vocations: content.vocations,
       vocationLevel: content.progression.vocationLevel,
       progression: content.progression,

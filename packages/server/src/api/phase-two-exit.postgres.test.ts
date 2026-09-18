@@ -81,7 +81,7 @@ const raw: RawContent = {
     twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
   }, TEST_SUPPLY, {
     id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.7, value: 0, attack: 20, price: 0, ammunition: { family: 'arrow' },
+    weight: 0.7, value: 0, attack: 20, price: 1, ammunition: { family: 'arrow' },
   }, {
     id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
     weight: 0.8, value: 0, attack: 30, price: 5, requires: { level: 20 },
@@ -182,7 +182,6 @@ async function startNode(nodeId: string): Promise<GameRole> {
     // produção. O catálogo entra pela mesma razão.
     acceptBotConfig: createBotConfigValidator(content),
     itemCatalog: content.items,
-    ammunition: content.ammunition,
     catalogue: () => buildCatalogue(content),
     now: () => clockMs,
   });
@@ -574,7 +573,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     inbox.close();
   }, 120_000);
 
-  it('keeps settled gold and selected ammunition across City reattach (#241)', async () => {
+  it('keeps settled gold and equipped ammunition across City reattach (#241, #420)', async () => {
     await retireNodes();
     const node = await startNode('phase-two-d');
     const { cookie } = await login();
@@ -586,25 +585,33 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     await db.update(characters)
       .set({ gold: 20_000, level: 20, xp: totalXpForLevel(20, content.progression) })
       .where(eq(characters.id, characterId));
-    await db.insert(itemInstances).values({
-      id: `${characterId}:bow`, itemId: 'bow', ownerCharacterId: characterId,
-      quantity: 1, origin: 'admin', equippedSlot: 'hand',
-    });
+    await db.insert(itemInstances).values([
+      {
+        id: `${characterId}:bow`, itemId: 'bow', ownerCharacterId: characterId,
+        quantity: 1, origin: 'admin', equippedSlot: 'hand',
+      },
+      {
+        // A munição é item no slot `ammo` (AB-05): ela viaja no layout do inventário, não numa
+        // coluna de preferência.
+        id: `${characterId}:ammo`, itemId: 'sniper-arrow', ownerCharacterId: characterId,
+        quantity: 100, origin: 'admin', equippedSlot: 'ammo',
+      },
+    ]);
     expect((await db.select().from(itemInstances).where(eq(itemInstances.ownerCharacterId, characterId)))
       .find((item) => item.id === `${characterId}:bow`)?.equippedSlot).toBe('hand');
 
     let inbox = await connect(cookie, characterId);
-    inbox.send({ type: 'select-ammo', ammoId: 'sniper-arrow' });
-    expect((await inbox.waitFor('player-stats')).ammo.arrow).toBe('sniper-arrow');
     const cityHero = node.host?.sessionFor(characterId)?.participants.find((participant) => participant.id === characterId);
     expect(cityHero).toBeDefined();
     expect(cityHero?.inventory.getState().equipped.hand?.itemId).toBe('bow');
+    expect(cityHero?.inventory.getState().equipped.ammo?.itemId).toBe('sniper-arrow');
     inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await inbox.waitFor('session-state');
     await advance(60_000);
     inbox.send({ type: 'session-attach' });
     const firstHunt = await inbox.waitForNext('session-state');
-    expect(firstHunt.aggregates.goldSpent).toBeGreaterThan(0);
+    // A munição não debita gold por tiro (AB-05): o que prova que a hunt rodou é o abate.
+    expect(firstHunt.aggregates.kills).toBeGreaterThan(0);
 
     inbox.send({ type: 'leave-hunt' });
     await until(() => inbox.last('session-state')?.sessionType === 'city', 'the first return to City');
@@ -614,22 +621,23 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     inbox = await connect(cookie, characterId);
     inbox.send({ type: 'session-attach' });
     await inbox.waitForNext('session-state');
-    const [row] = await db.select({ gold: characters.gold, ammo: characters.ammo })
+    const [row] = await db.select({ gold: characters.gold })
       .from(characters).where(eq(characters.id, characterId));
     const hot = node.host?.sessionFor(characterId)?.participants.find((participant) => participant.id === characterId);
     const stats = inbox.last('player-stats');
     expect(hot?.gold).toBe(row?.gold);
     expect(hot?.goldDelta).toBe(0);
     expect(stats?.gold).toBe(row?.gold);
-    expect(stats?.ammo.arrow).toBe('sniper-arrow');
-    expect(row?.ammo).toEqual({ arrow: 'sniper-arrow' });
+    expect(hot?.inventory.getState().equipped.ammo?.itemId).toBe('sniper-arrow');
+    // A pilha encolheu na primeira hunt e sobreviveu à volta para a Cidade.
+    expect(hot?.inventory.getState().equipped.ammo?.quantity).toBeLessThan(100);
 
     inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await inbox.waitForNext('session-state');
     await advance(60_000);
     inbox.send({ type: 'session-attach' });
     const secondHunt = await inbox.waitForNext('session-state');
-    expect(secondHunt.aggregates.goldSpent).toBeGreaterThan(0);
+    expect(secondHunt.aggregates.kills).toBeGreaterThan(0);
     inbox.close();
   }, 120_000);
 });

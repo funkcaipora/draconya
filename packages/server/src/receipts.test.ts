@@ -127,20 +127,6 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('bestiary');
   });
 
-  it('carries the ammo selection through Redis and back, and a receipt without one stays without (#152)', async () => {
-    // A mesma lista de PERMISSÃO, o mesmo defeito a pegar: a escolha gravada tem de voltar
-    // inteira, e o extrato sem ela não pode ganhar a chave — o ledger não toca na coluna.
-    const store = new ReceiptStore(redis);
-    const characterId = randomUUID();
-    await store.save(receiptOf(randomUUID(), characterId, { ammo: { arrow: 'sniper-arrow' } }));
-    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
-
-    const found = await store.pendingFor(characterId);
-
-    expect(found.find((receipt) => receipt.seq === 1)?.ammo).toEqual({ arrow: 'sniper-arrow' });
-    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('ammo');
-  });
-
   it('carries the purchase entries through Redis and back, and one without stays without (#419)', async () => {
     // Lista de PERMISSÃO, como as skills: sem a linha em `parseReceipt` as compras somem no
     // caminho de volta sem erro nenhum, e o ledger perde o lançamento `purchase`.

@@ -244,7 +244,7 @@ describe('loadContent', () => {
     expect(distance?.startingLevel).toBe(10);
   });
 
-  it('a munição é item empilhável, e content.ammunition é a projeção derivada (ADR 0032, decisão 7)', () => {
+  it('a munição é item empilhável; `content.ammunition` não existe mais e a arrow tem preço > 0 (AB-05)', () => {
     const content = loadContent(DATA);
     // A munição é item do catálogo, com peso, pilha, preço e lote de reposição (RF-01).
     for (const id of ['arrow', 'burst-arrow', 'sniper-arrow', 'onyx-arrow']) {
@@ -256,18 +256,11 @@ describe('loadContent', () => {
       expect(item?.price, id).toBeDefined();
       expect(item?.restock, id).toBeDefined();
     }
-    // A projeção mantém a forma que o `sim` já consome: id, família, attack, preço, ícone (o do
-    // item) e projétil. Ordem alfabética pelo id dos arquivos.
-    const ammo = [...content.ammunition.values()]
-      .map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId, a.missileId]);
-    expect(ammo).toEqual([
-      ['arrow', 'arrow', 25, 0, 3447, 3],
-      ['burst-arrow', 'arrow', 27, 3, 3446, 4],
-      ['onyx-arrow', 'arrow', 38, 7, 7365, 23],
-      ['sniper-arrow', 'arrow', 28, 5, 7364, 22],
-    ]);
-    expect(content.ammunition.get('sniper-arrow')?.requires.level).toBe(20);
-    expect(content.ammunition.get('onyx-arrow')?.requires.level).toBe(40);
+    // A projeção `content.ammunition` foi aposentada: a escolha é o item no slot (ADR 0032 d.7).
+    expect(content).not.toHaveProperty('ammunition');
+    // A `arrow` deixou de ser infinita e grátis: preço > 0 (DT-02).
+    expect(content.items.get('arrow')?.price).toBeGreaterThan(0);
+    expect(content.items.get('arrow')?.attack).toBe(25);
     // O ícone NÃO se duplica na tabela: `appearances.ammunition` guarda só o projétil (DT-03).
     expect(content.appearances?.ammunition['arrow']).toEqual({ missile: 3 });
     expect(content.appearances?.ammunition['arrow']).not.toHaveProperty('icon');

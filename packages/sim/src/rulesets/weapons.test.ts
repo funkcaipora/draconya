@@ -7,7 +7,7 @@ import { buildContent, placeholderAppearances } from '@draconya/content';
 import type { Content, Progression, RawContent } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
-import type { InventoryState } from '../inventory.js';
+import type { CarriedItem, InventoryState } from '../inventory.js';
 import { statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
 import type { DomainEvent } from '../session.js';
@@ -83,9 +83,10 @@ const items = [
   { id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield', weight: 1, value: 0 },
 ];
 const ammunition = [
-  { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 20, price: 0, ammunition: { family: 'arrow' } },
+  { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 20, price: 1, ammunition: { family: 'arrow' } },
   { id: 'onyx-arrow', name: 'Onyx Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 40, price: 7, requires: { level: 1 }, ammunition: { family: 'arrow' } },
   { id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 30, price: 5, requires: { level: 20 }, ammunition: { family: 'arrow' } },
+  { id: 'bolt', name: 'Bolt', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 30, price: 2, ammunition: { family: 'bolt' } },
 ];
 
 const raw = (over: Partial<RawContent> = {}): RawContent => {
@@ -105,7 +106,21 @@ const armed = (itemId: string): InventoryState => ({
   backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
 });
 
-function start(options: { inventory?: InventoryState; gold?: number; ammo?: Record<'arrow', string>; mana?: number } = {}) {
+/** Bow na mão e uma pilha de munição EQUIPADA no slot `ammo` (ADR 0032 d.7). */
+const bowWithAmmo = (
+  ammoId: string, quantity: number, backpack: readonly CarriedItem[] = [],
+): InventoryState => ({
+  backpack: [...backpack],
+  equipped: {
+    hand: { instanceId: 'i-bow', itemId: 'bow', quantity: 1 },
+    ammo: { instanceId: `eq-${ammoId}`, itemId: ammoId, quantity },
+  },
+});
+
+const stack = (itemId: string, quantity: number, instanceId = `b-${itemId}`): CarriedItem =>
+  ({ instanceId, itemId, quantity });
+
+function start(options: { inventory?: InventoryState; gold?: number; mana?: number } = {}) {
   const loaded = content();
   const session = createHuntSession({
     id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
@@ -118,7 +133,6 @@ function start(options: { inventory?: InventoryState; gold?: number; ammo?: Reco
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: options.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
     ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
-    ...(options.ammo === undefined ? {} : { ammo: options.ammo }),
   });
   session.enter(hero);
   return { session, hero, ruleset: session.ruleset as HuntRuleset, loaded };
@@ -157,7 +171,7 @@ describe('o alcance é da arma (#152)', () => {
   });
 
   it('o bow alcança a 6 tiles e não a 7', () => {
-    const { session, ruleset } = start({ inventory: armed('bow') });
+    const { session, ruleset } = start({ inventory: bowWithAmmo('arrow', 100) });
     session.advanceBy(50);
     const rat = ratAt(ruleset, 7);
     const h0 = rat.health;
@@ -181,52 +195,60 @@ describe('o alcance é da arma (#152)', () => {
   });
 });
 
-describe('o bow atira a munição escolhida (#152)', () => {
-  it('sem escolha, atira a grátis: o dano é o attack dela, e nenhum gold sai', () => {
-    const { session, hero, ruleset } = start({ inventory: armed('bow'), gold: 100 });
+describe('o bow atira a munição equipada no slot (#420, ADR 0032 d.7)', () => {
+  it('a pilha equipada cai uma unidade por tiro, e nenhum gold sai (RF-01)', () => {
+    const { session, hero } = start({ inventory: bowWithAmmo('arrow', 100), gold: 100 });
+    // O rato nasce ao lado do herói: o tiro de t = 0 acontece neste primeiro avanço.
     session.advanceBy(50);
-    const rat = ratAt(ruleset, 3);
-    const events = run(session, 1_050, 50);
-    // Dois tiros de 20 (a arrow) — o de t = 0, ao lado, e o de t = 1 s, no bolsão —, com
-    // armadura zero e sem esquiva.
-    expect(rat.health).toBe(960);
+    expect(hero.inventory.equippedAt('ammo')?.quantity).toBe(99);
     expect(hero.goldDelta).toBe(0);
     expect(session.aggregates.goldSpent).toBe(0);
-    // O tiro SAI antes do golpe, com a arma e a munição — o projétil é do hospedeiro.
-    const shots = events.filter((e) => e.kind === 'shot');
-    expect(shots).toHaveLength(2);
-    expect(shots[1]).toMatchObject({ kind: 'shot', weaponItemId: 'bow', ammoId: 'arrow', to: { x: 1, y: 4, z: 7 } });
-    const lastShot = events.lastIndexOf(shots[1] as DomainEvent);
-    const lastHit = events.map((e) => e.kind).lastIndexOf('creature-hit');
-    expect(lastShot).toBeLessThan(lastHit);
   });
 
-  it('a paga debita o preço por tiro, no personagem E no agregado', () => {
-    const { session, hero, ruleset } = start({ inventory: armed('bow'), gold: 100, ammo: { arrow: 'onyx-arrow' } });
+  it('ao zerar, puxa a próxima pilha da MESMA família da mochila (RF-02)', () => {
+    const { session, hero } = start({
+      inventory: bowWithAmmo('onyx-arrow', 1, [stack('arrow', 50)]),
+    });
     session.advanceBy(50);
-    const rat = ratAt(ruleset, 3);
-    run(session, 3_050, 50);
-    // Quatro tiros de 40 (t = 0, 1, 2 e 3 s), a 7 de gold cada.
-    expect(rat.health).toBe(840);
-    expect(hero.goldDelta).toBe(-28);
-    expect(session.aggregates.goldSpent).toBe(28);
+    const equipped = hero.inventory.equippedAt('ammo');
+    // A pilha de 1 saiu e a de 50 (a arrow) entrou no slot.
+    expect(equipped?.itemId).toBe('arrow');
+    expect(equipped?.quantity).toBe(50);
   });
 
-  it('sem gold para a escolhida, o tiro sai com a grátis — e o jogador é avisado uma vez', () => {
-    const { session, hero, ruleset } = start({ inventory: armed('bow'), gold: 10, ammo: { arrow: 'onyx-arrow' } });
+  it('sem munição no slot, o tiro NÃO sai: sem shot, sem dano, sem fallback (RF-03)', () => {
+    const { session, ruleset } = start({ inventory: armed('bow'), gold: 100 });
     session.advanceBy(50);
     const rat = ratAt(ruleset, 3);
-    run(session, 3_050, 50);
-    // Um tiro pago (7, sobram 3), depois três com a arrow: 40 + 20 + 20 + 20.
-    expect(rat.health).toBe(900);
-    expect(hero.goldDelta).toBe(-7);
-    expect(session.notableEvents.filter((e) => e.type === 'ammo-fallback')).toEqual([
-      expect.objectContaining({ type: 'ammo-fallback', detail: 'onyx-arrow' }),
-    ]);
+    const h0 = rat.health;
+    const events = run(session, 3_000, 50);
+    expect(events.filter((e) => e.kind === 'shot')).toHaveLength(0);
+    expect(rat.health).toBe(h0);
+    // O evento `ammo-fallback` morreu com o fallback grátis (ADR 0032 d.7).
+    expect(session.notableEvents.filter((e) => e.type === 'ammo-fallback')).toHaveLength(0);
+  });
+
+  it('munição de família errada no slot também não atira (RF-04)', () => {
+    const { session, ruleset } = start({ inventory: bowWithAmmo('bolt', 50) });
+    session.advanceBy(50);
+    const rat = ratAt(ruleset, 3);
+    const h0 = rat.health;
+    const events = run(session, 3_000, 50);
+    expect(events.filter((e) => e.kind === 'shot')).toHaveLength(0);
+    expect(rat.health).toBe(h0);
+  });
+
+  it('o dano do tiro é o `attack` da MUNIÇÃO, não o da arma (RF-04)', () => {
+    // O bow não tem attack próprio: o `base` da fórmula vem do item de munição (arrow = 20).
+    const { session, ruleset } = start({ inventory: bowWithAmmo('arrow', 100) });
+    session.advanceBy(50);
+    const rat = ruleset.monsters[0];
+    if (rat === undefined) throw new Error('sem rato');
+    expect(rat.health).toBe(980);
   });
 
   it('a skill de distância sobe por tiro, e a corpo a corpo não', () => {
-    const { session, hero, ruleset, loaded } = start({ inventory: armed('bow') });
+    const { session, hero, ruleset, loaded } = start({ inventory: bowWithAmmo('arrow', 100) });
     session.advanceBy(50);
     ratAt(ruleset, 3);
     run(session, 4_050, 50);
@@ -237,15 +259,59 @@ describe('o bow atira a munição escolhida (#152)', () => {
     expect(hero.skills.levelOf(distance)).toBe(12);
     expect(hero.skills.levelOf(melee)).toBe(10);
   });
+});
 
-  it('escolher munição confere o level; a família é da munição', () => {
-    const { hero, loaded } = start();
-    const sniper = loaded.ammunition.get('sniper-arrow');
-    const onyx = loaded.ammunition.get('onyx-arrow');
-    if (sniper === undefined || onyx === undefined) throw new Error('ammo');
-    expect(hero.selectAmmo(sniper)).toEqual({ ok: false, reason: 'level-too-low' });
-    expect(hero.selectAmmo(onyx)).toEqual({ ok: true });
-    expect(hero.getState().ammo).toEqual({ arrow: 'onyx-arrow' });
+describe('o snapshot migra a munição por família para o item no slot (#420, RF-08)', () => {
+  /** Um herói de `level` com o inventário e o `ammo` legado que o snapshot trazia. */
+  const legacyHero = (level: number, inventory: InventoryState, ammo: Record<string, string>) => {
+    const stats = statsForLevel(level, null, progression as Progression);
+    return new CharacterRuntime({
+      id: 'hero', position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: stats.maxMana, maxMana: stats.maxMana, level, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+      inventory, ammo,
+    });
+  };
+
+  it('com a pilha presente, a escolha sobrevive e o legado é limpo; `getState` não o reemite', () => {
+    const loaded = content();
+    const session = createHuntSession({
+      id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
+    });
+    const hero = legacyHero(
+      20, { backpack: [stack('sniper-arrow', 50)], equipped: {} }, { arrow: 'sniper-arrow' },
+    );
+    session.enter(hero);
+    expect(hero.inventory.equippedAt('ammo')?.itemId).toBe('sniper-arrow');
+    expect(hero.inventory.equippedAt('ammo')?.quantity).toBe(50);
+    expect(hero.legacyAmmo.size).toBe(0);
+    // Sem bump de `SNAPSHOT_FORMAT_VERSION`: `getState` deixa de emitir `ammo`.
+    expect(hero.getState().ammo).toBeUndefined();
+  });
+
+  it('sem a pilha, a escolha é descartada (não se inventa item) e o legado é limpo (DT-05)', () => {
+    const loaded = content();
+    const session = createHuntSession({
+      id: 'session-1', content: loaded, huntId: 'range', difficulty: 'cautious', createdAtMs: 0,
+    });
+    const hero = legacyHero(20, { backpack: [], equipped: {} }, { arrow: 'sniper-arrow' });
+    session.enter(hero);
+    expect(hero.inventory.equippedAt('ammo')).toBeNull();
+    expect(hero.legacyAmmo.size).toBe(0);
+  });
+
+  it('a munição equipada sobrevive a um snapshot/retomada de verdade', () => {
+    const { session, loaded } = start({ inventory: bowWithAmmo('onyx-arrow', 100) });
+    session.advanceBy(50);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    const hero = resumed.participants[0] as CharacterRuntime;
+    expect(hero.inventory.equippedAt('ammo')?.itemId).toBe('onyx-arrow');
+    expect(hero.inventory.equippedAt('ammo')?.quantity).toBe(99);
   });
 });
 
@@ -300,11 +366,15 @@ describe('a arma que o personagem não pode usar não bate por ele (#152)', () =
   });
 });
 
-describe('equivalência entre taxas e snapshot com arma na mão (#152)', () => {
-  it('1 Hz == 10 Hz com o bow pago e com a wand', () => {
-    for (const weapon of ['bow', 'wand'] as const) {
-      const fast = start({ inventory: armed(weapon), gold: 100, ammo: { arrow: 'onyx-arrow' }, mana: 10 });
-      const slow = start({ inventory: armed(weapon), gold: 100, ammo: { arrow: 'onyx-arrow' }, mana: 10 });
+describe('equivalência entre taxas com munição e arma na mão (#420)', () => {
+  it('1 Hz == 10 Hz: o bow com munição finita consome as MESMAS pilhas, e a wand a mesma mana', () => {
+    const cases = [
+      { inventory: bowWithAmmo('arrow', 100, [stack('arrow', 50)]) },
+      { inventory: armed('wand') },
+    ];
+    for (const c of cases) {
+      const fast = start({ inventory: c.inventory, mana: 10 });
+      const slow = start({ inventory: c.inventory, mana: 10 });
       fast.session.advanceBy(50); slow.session.advanceBy(50);
       ratAt(fast.ruleset, 2); ratAt(slow.ruleset, 2);
       run(fast.session, 10_000, 100);
@@ -312,37 +382,11 @@ describe('equivalência entre taxas e snapshot com arma na mão (#152)', () => {
       expect(fast.ruleset.monsters[0]?.health).toBe(slow.ruleset.monsters[0]?.health);
       expect(fast.hero.goldDelta).toBe(slow.hero.goldDelta);
       expect(fast.hero.mana).toBe(slow.hero.mana);
+      // O consumo é do EVENTO de ataque (invariante 2): a 1 Hz e a 10 Hz a pilha equipada e a
+      // da mochila terminam iguais.
+      expect(fast.hero.inventory.equippedAt('ammo')?.quantity)
+        .toBe(slow.hero.inventory.equippedAt('ammo')?.quantity);
+      expect(fast.hero.inventory.quantityOf('arrow')).toBe(slow.hero.inventory.quantityOf('arrow'));
     }
-  });
-
-  it('o aviso de munição sem gold sai uma vez por sessão, mesmo com retomada no meio', () => {
-    // A hunt é desanexada e retomada o tempo todo; um aviso que zerasse a cada retomada
-    // encheria a tela de retorno com a mesma linha. O conjunto de avisados vai no snapshot.
-    const { session, ruleset, loaded } = start({ inventory: armed('bow'), gold: 3, ammo: { arrow: 'onyx-arrow' } });
-    session.advanceBy(50);
-    ratAt(ruleset, 2);
-    run(session, 2_000, 100);
-    expect(session.notableEvents.filter((e) => e.type === 'ammo-fallback')).toHaveLength(1);
-
-    const snapshot = session.snapshot();
-    const resumed = Session.fromSnapshot(
-      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
-    );
-    const rat = (resumed.ruleset as HuntRuleset).monsters[0];
-    if (rat === undefined) throw new Error('sem rato');
-    rat.position = { x: 1, y: 3 };
-    run(resumed, 2_000, 100);
-    expect(resumed.notableEvents.filter((e) => e.type === 'ammo-fallback')).toHaveLength(1);
-  });
-
-  it('a escolha de munição sobrevive ao snapshot', () => {
-    const { session, loaded } = start({ inventory: armed('bow'), gold: 100, ammo: { arrow: 'onyx-arrow' } });
-    session.advanceBy(50);
-    const snapshot = session.snapshot();
-    const restored = Session.fromSnapshot(
-      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('resume'),
-    );
-    const hero = restored.participants[0] as CharacterRuntime;
-    expect(hero.ammo.get('arrow')).toBe('onyx-arrow');
   });
 });

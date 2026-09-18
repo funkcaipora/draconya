@@ -167,7 +167,6 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         staminaMs: message.staminaMs,
         // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
         targetId: message.targetId,
-        ammo: message.ammo,
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
@@ -228,8 +227,6 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           monsters: message.monsters,
           bot: message.bot,
           items: message.items,
-          // A munição (#152): o seletor no slot do escudo lista a família do bow por aqui.
-          ammunition: message.ammunition,
           // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui.
           vocations: message.vocations,
           vocationLevel: message.vocationLevel,

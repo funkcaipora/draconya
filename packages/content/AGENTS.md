@@ -312,15 +312,13 @@ A aparência: o **ícone** é `appearances.items[id]`, como todo item; `appearan
 guarda só o **projétil** (`missile`). Não duplicar o ícone — duas verdades para o mesmo número
 (DT-03). Os projéteis do pacote 13.32: arrow 3, burst arrow 4, sniper arrow 22, onyx arrow 23.
 
-`content.ammunition` continua existindo como **projeção derivada** dos itens de munição — mesma
-forma (`id, name, family, attack, damageType, price, requires, appearanceId, missileId`) e
-mesmos consumidores (`sim`/`server`/`client`) —, e é **temporária**: a AB-05 (#421) a aposenta
-junto com `select-ammo`, o fallback grátis e `characters.ammo`. Toda família ainda precisa de
-uma munição `price: 0` (a `arrow`), porque o fallback do `sim` v1 depende dela (DT-02); o preço
-> 0 da `arrow` também é da AB-05. O primeiro colar (`glacier-amulet`, `kind: 'amulet'`,
-`slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real (`wooden-shield`,
-`kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da carga é a AB-06
-(#421).
+A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`, o
+fallback grátis e `characters.ammo`: a escolha é o item no slot `ammo`, e o `sim` lê `attack`/
+`ammunition` do próprio item. Não existe mais munição grátis por família, e a `arrow` tem
+`price > 0` (ponto de partida 1, provisório). O primeiro colar (`glacier-amulet`,
+`kind: 'amulet'`, `slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real
+(`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
+carga é a AB-06 (#421).
 
 ## Como testar
 

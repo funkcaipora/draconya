@@ -113,7 +113,7 @@ munição no catálogo.
 
 | Item | `family` | `attack` | `price` | `requires` | Arquivo |
 |---|---|---|---|---|---|
-| `arrow` | `arrow` | 25 | 0 (a grátis) | — | `data/items/arrow.json` |
+| `arrow` | `arrow` | 25 | 1 | — | `data/items/arrow.json` |
 | `burst-arrow` | `arrow` | 27 | 3 | — | `data/items/burst-arrow.json` |
 | `sniper-arrow` | `arrow` | 28 | 5 | `level: 20` | `data/items/sniper-arrow.json` |
 | `onyx-arrow` | `arrow` | 38 | 7 | `level: 40` | `data/items/onyx-arrow.json` |
@@ -121,10 +121,9 @@ munição no catálogo.
 O primeiro **colar** (`glacier-amulet`, `kind: 'amulet'`, `slot: 'neck'`, `charges: 20`,
 resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: 'shield'`,
 `slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar é a AB-06
-(#421). `content.ammunition` sobrevive como **projeção derivada** dos itens de munição — mesma
-forma e mesmos consumidores (`sim`, `server`, `client`) — até a AB-05 aposentar `select-ammo` e o
-fallback grátis. O preço > 0 da `arrow` também é da AB-05 (DT-02); aqui ela segue `price: 0`
-porque o fallback ainda exige uma munição grátis por família.
+(#421). A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`
+e o fallback grátis: a escolha é o item no slot `ammo`, e a `arrow` deixou de ser infinita e grátis
+(`price > 0`, ponto de partida 1, provisório).
 
 ## Inventário e equipamento (FUN-82)
 
@@ -191,9 +190,10 @@ e rod 3 gastando mana, corpo a corpo 1. Desde o CMB-05 (#333) a arma declara tam
 a skill e a fórmula em `packages/content/data/weapon-families/` — o ruleset não conhece nome de
 item nem vocação. `fist` é o fallback desarmado e não existe como arma. **A munição é item**
 (AB-02, ADR 0032 d.7): flecha e virote são `kind: 'ammo'`, `slot: 'ammo'`, empilháveis, e cada
-tiro consome um; a projeção `content.ammunition` ainda existe até a AB-05 aposentar o seletor
-por família (`select-ammo`). Ver "Munição, colar e escudo como itens" abaixo. Arma de duas mãos
-(`twoHanded`, o bow) recusa escudo, e vice-versa.
+tiro consome uma unidade da pilha EQUIPADA; ao zerar, o bot puxa a próxima pilha da mesma família
+da mochila, e sem nenhuma o tiro não sai. O seletor por família (`select-ammo`) e a projeção
+`content.ammunition` foram aposentados na AB-05 (#420). Ver "Munição, colar e escudo como itens"
+abaixo. Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
 
 Desde o CMB-04 o combate lê também a **defesa** (`defense`) da peça: escudo ou arma corpo a corpo
 de uma mão bloqueia parte do golpe físico. A escolha da fonte é do inventário (`defenseSource`),
@@ -233,14 +233,10 @@ desenhado com o quadrado de pedra do pacote e a pilha com a quantidade; e abaixo
 analisador e o Bestiário. As três são **fixas**: sempre montadas, um botão da barra do topo
 minimiza as três juntas (só o cabeçalho fica), nunca removidas.
 
-**Com uma arma de distância na mão, o slot do escudo é o seletor de munição** (ADR 0026 d.3,
-**superado** pela AB-02/ADR 0032 d.7): a célula mostra a munição em uso — a escolhida, ou a
-grátis, que é o que o servidor atira sem escolha — com o preço por tiro; o clique abre o
-`AmmoPicker`, a lista da família com sprite, nome, attack, preço ou "grátis" e level exigido
-(desabilitado acima do level, só para não oferecer o que o servidor vai recusar); um clique manda
-`select-ammo`, e a escolha aparece quando `player-stats.ammo` volta. Desde a AB-02 a munição é
-item no slot `ammo`, e `content.ammunition` é uma **projeção derivada** dos itens de munição; o
-seletor e o opcode `select-ammo` são aposentados na AB-05, junto com o fallback grátis.
+**O slot `ammo` é genérico** desde a AB-05 (#420): a munição é item empilhável no slot (ADR 0032
+d.7), desenhada pelo caminho comum de `EquipmentPanel` com a pilha e a contagem. O seletor sobre o
+Escudo (`AmmoPicker`) e o opcode `select-ammo` foram removidos, junto com o fallback grátis e a
+projeção `content.ammunition`; equipar a pilha usa `move-item`/`equip`, que já são intenção.
 
 **Arrastar e clicar.** Arrastar (HTML5, nativo) de lugar para lugar manda `move-item`, de lugar
 para slot manda `equip`, de slot para lugar manda `move-item` com `from: { slot }`; o
@@ -354,9 +350,10 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
 ## Decidido (ADR 0026): munição, containers e runa
 
 - **Munição é seleção, não item** (decisão 3, o Huntera) — **revogada pela AB-02 (ADR 0032
-  decisão 7)**: flecha e virote são itens empilháveis de `kind: 'ammo'` no slot `ammo`, com
-  peso, pilha, `price` e `restock`; o seletor por família (`select-ammo`) e a projeção
-  `content.ammunition` seguem vivos só até a AB-05 os aposentar. Issues #151, #152, #161, #417.
+  decisão 7) e fechada pela AB-05 (#420)**: flecha e virote são itens empilháveis de
+  `kind: 'ammo'` no slot `ammo`, com peso, pilha, `price` e `restock`; o seletor por família
+  (`select-ammo`), a projeção `content.ammunition` e o fallback grátis foram aposentados, e cada
+  tiro consome uma unidade da pilha equipada. Issues #151, #152, #161, #417, #420.
 - **Mochila e bolsa elásticas** (decisão 6): a mochila é o item no slot `back`, a bolsa é fixa
   do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
   peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o

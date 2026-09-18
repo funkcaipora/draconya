@@ -47,7 +47,7 @@ function creature(id: number, over: Partial<Creature> = {}): Creature {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],

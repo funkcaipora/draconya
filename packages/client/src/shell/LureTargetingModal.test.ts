@@ -13,7 +13,6 @@ const catalogue: Catalogue = {
     { id: 'dragon', name: 'Dragon' },
     { id: 'demon', name: 'Demon' },
   ],
-  ammunition: [],
   items: [],
   vocations: [],
   vocationLevel: 8,

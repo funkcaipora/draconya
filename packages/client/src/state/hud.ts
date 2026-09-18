@@ -140,8 +140,6 @@ export interface HudState {
   readonly staminaMs: number;
   readonly speed: number;
   readonly skills: PlayerSkills;
-  /** A munição escolhida por família (#152): `null` é a grátis. Chega em `player-stats`. */
-  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
 
@@ -220,7 +218,6 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
-  ammo: { arrow: null, bolt: null },
   vocationId: null,
   latencyMs: null,
   connection: 'idle',

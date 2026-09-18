@@ -171,6 +171,26 @@ export class Inventory {
   }
 
   /**
+   * Tira UMA unidade do item equipado no slot e devolve o que sobrou, ou `null` se o slot
+   * esvaziou (#420). Não mexe em container, não conhece conteúdo e não chama o ruleset: quem
+   * puxa a próxima pilha é quem tem o catálogo (o `HuntRuleset`).
+   *
+   * O peso total cai por uma unidade, então não há conferência de capacidade — consumir nunca
+   * estoura. Slot vazio devolve `null`.
+   */
+  consumeEquipped(slot: ItemSlot): CarriedItem | null {
+    const carried = this.#equipped.get(slot);
+    if (carried === undefined) return null;
+    if (carried.quantity > 1) {
+      const left = { ...carried, quantity: carried.quantity - 1 };
+      this.#equipped.set(slot, left);
+      return left;
+    }
+    this.#equipped.delete(slot);
+    return null;
+  }
+
+  /**
    * O peso do que ele carrega — containers MAIS equipado.
    *
    * Equipado conta: uma armadura vestida não fica mais leve por estar no corpo, e a alternativa

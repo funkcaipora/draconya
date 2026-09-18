@@ -426,21 +426,21 @@ O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bo
 `weapon.kind`:
 
 - **`melee`** — o `attack` do item pela skill corpo a corpo, como sempre.
-- **`distance`** — o bow atira a **munição** da família dele (`ammoFamily`): a escolhida pelo
-  jogador (`select-ammo`, guardada por família e persistida como preferência), ou a grátis. O
-  dano é o `attack` da munição pela skill `distance` (nova, sobe por tiro). Cada tiro da
-  munição paga debita `price` do gold do personagem e do agregado da sessão, como o supply
-  (§20.1); sem gold para ela, o tiro sai com a grátis e o jogador é avisado uma vez por sessão
-  (`ammo-fallback`) — o bot nunca para de atirar (invariante 11). **A munição é item empilhável**
-  desde a AB-02 (ADR 0032 d.7): o seletor por família e o fallback grátis são aposentados na
-  AB-05, que passa a consumir a pilha do slot `ammo` e a puxar a próxima da mochila; até lá
-  `content.ammunition` é a projeção derivada dos itens de munição.
+- **`distance`** — o bow atira a **munição EQUIPADA no slot `ammo`** da família dele
+  (`ammoFamily`). O dano é o `attack` do item de munição pela skill `distance` (sobe por tiro), e
+  o tipo é o `ammunition.damageType` dele. Cada tiro consome UMA unidade da pilha; ao zerar, o bot
+  puxa a próxima pilha da MESMA família da mochila (mochila antes da bolsa), e sem nenhuma o tiro
+  NÃO sai — nem projétil, nem dano. **Sem fallback grátis e sem débito de gold por tiro** (AB-05,
+  #420): a `arrow` tem preço e lote como qualquer consumível, e a reposição é por lote pelo
+  ledger (ADR 0032 d.6). O seletor por família (`select-ammo`) e a projeção `content.ammunition`
+  foram aposentados; a escolha é o item no slot.
 - **`wand`** — wand e rod gastam `manaPerHit` por golpe, causam dano **mágico** por faixa fixa
   (`damage.min..max`, uma rolagem do `Rng` da sessão por golpe, como o loot) e rendem magia
   pela mana gasta, como uma magia. Sem mana, o golpe não sai: fica para o intervalo seguinte.
 
 O tiro emite um projétil (`shot` → `missile`), resolvido pela tabela de aparências no
-hospedeiro: o da munição para a flecha, o da arma (`appearances.weapons`) para wand e rod. O
+hospedeiro: o da munição para a flecha (`appearances.ammunition[itemId]`), o da arma
+(`appearances.weapons`) para wand e rod. O
 bow ocupa as duas mãos: com escudo vestido é recusado (`hands-full`), e vice-versa. O elemento
 da wand e do rod é declarado no conteúdo desde o CMB-03 (energia e terra) e passa a valer contra
 resistência e imunidade do monstro.
@@ -450,7 +450,7 @@ resistência e imunidade do monstro.
 | Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
-| Munição — attack e preço | arrow 25 / 0; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/items/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (itens desde a AB-02; o projétil fica em `appearances.ammunition`) |
+| Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/items/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (itens desde a AB-02; o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)

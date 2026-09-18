@@ -45,7 +45,6 @@ const huntWithoutDesc: HuntListing = { ...huntWithDesc, description: undefined }
 const catalogue: Catalogue = {
   hunts: [huntWithDesc],
   monsters: [ratMonster, caveRatMonster],
-  ammunition: [],
   bot: {
     vocabularyVersion: 1,
     slots: {},

@@ -645,25 +645,6 @@ export type ItemDefinition = z.infer<typeof itemSchema>;
 
 
 /**
- * A munição como o `sim` a conhece (ADR 0026, decisão 3; #152) — DERIVADA dos itens de munição
- * (ADR 0032, decisão 7). A projeção preserva a forma que `hunt.ts`/`host.ts`/`catalogue.ts`
- * consomem até a AB-05 (#421) aposentá-la junto com `select-ammo`. `appearanceId` é o ícone do
- * item (`appearances.items[id]`), `missileId` o projétil (`appearances.ammunition[id].missile`),
- * ambos resolvidos no boot.
- */
-export type Ammunition = {
-  readonly id: string;
-  readonly name: string;
-  readonly family: AmmoFamily;
-  readonly attack: number;
-  readonly damageType: DamageType;
-  readonly price: number;
-  readonly requires: { readonly level?: number };
-  readonly appearanceId: number;
-  readonly missileId: number;
-};
-
-/**
  * O item pronto para uso, com a aparência já resolvida por `buildContent`.
  *
  * A resolução acontece no boot e não no ponto de uso: quem desenha um item nunca precisa

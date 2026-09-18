@@ -296,13 +296,21 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
   "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
   `scheduledAbilities` (opcional no snapshot, sem bump).
-- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05).
-  `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e
-  só sem arma vale o alcance do perfil `fist` (`content.unarmed`). `#strike` despacha pelo
-  `weapon.kind`: `melee` como sempre; `distance` atira a MUNIÇÃO — `#ammoFor` devolve a escolhida
-  da família se o gold paga o tiro, senão a grátis, e avisa (`ammo-fallback`) uma vez por sessão —
-  com o `attack` dela pela skill `distance`, debitando `price` em `goldDelta` E `goldSpent` como o
-  supply; `wand` gasta `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
+- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
+  munição no slot desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
+  lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
+  `#strike` despacha pelo `weapon.kind`: `melee` como sempre; `distance` atira a MUNIÇÃO EQUIPADA
+  no slot `ammo` (ADR 0032 decisão 7): `#equippedAmmo` devolve a pilha e a definição do ITEM
+  (`kind: 'ammo'`, família batendo com a da arma), e o `attack`/`damageType` do tiro são os do
+  item pela skill `distance`. **Sem pilha da família o tiro NÃO sai** — nem `shot`, nem dano —, e
+  não existe mais fallback grátis nem débito de gold por tiro; a `arrow` tem preço e lote como
+  qualquer consumível. Resolvido o golpe, `#strike` consome UMA unidade com
+  `Inventory.consumeEquipped('ammo')` e, ao zerar, `#pullNextAmmo` equipa a próxima pilha da
+  mesma família (mochila antes da bolsa). O legado `CharacterState.ammo` (família → id) é LIDO uma
+  vez por `#migrateLegacyAmmo` em `onEnter`/`onResume`, que equipa a pilha do item escolhido se
+  ela existe e limpa o legado; `getState` não o emite, sem bump de formato. `#configuredConsumables`
+  aceita `kind: 'ammo'`, então a reposição por lote (AB-04) também compra munição. `wand` gasta
+  `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
   rolagem por golpe — contrato como o loot) e rende `spell-cast` pela mana. **O poder sai de
   `resolveWeaponPower` com o PERFIL da arma** (`WeaponProfile`: família, tipo, alcance, `power` ou
   `fixedDamage`): a família aponta a skill e a prática no conteúdo, e o ruleset não conhece nome de
@@ -311,8 +319,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   **Wand sem mana não bate**: o golpe fica agendado para o intervalo seguinte, sem gastar mana nem
   praticar. A prática é UMA por golpe e não depende do dano final: imune, resistente ou morto no
   impacto ainda pratica. O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
-  resolvido no hospedeiro (invariante 6). `CharacterState.ammo` (família → id) é opcional e viaja
-  no snapshot; `selectAmmo` só confere o level. `hands-full`: bow com escudo, ou escudo com bow, é
+  resolvido no hospedeiro (invariante 6). `hands-full`: bow com escudo, ou escudo com bow, é
   recusado — nunca trocado.
 - **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
   `Inventory.defenseSource` escolhe escudo → arma corpo a corpo de uma mão → nenhuma (DT-01/02),

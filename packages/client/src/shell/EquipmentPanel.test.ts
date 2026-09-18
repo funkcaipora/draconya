@@ -24,10 +24,6 @@ const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
   vocations: [], vocationLevel: 8,
-  ammunition: [
-    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447, requires: {} },
-    { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
-  ],
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
@@ -157,27 +153,19 @@ describe('a coluna da direita (#161)', () => {
     expect(html).not.toContain('1.234');
   });
 
-  it('com um bow na mão, o escudo vira o seletor de munição — a grátis quando não há escolha, a escolhida quando há', async () => {
-    // Mutação que mata: ignorar `weapon.kind` (o escudo continua slot), ou mostrar a escolhida
-    // com `ammo.arrow` nulo em vez de cair na grátis.
+  it('com um bow na mão, o escudo NÃO é mais seletor: o slot `ammo` é genérico (#420)', async () => {
+    // O seletor por família sobre o Escudo (ADR 0026 d.3) saiu: a escolha é o item no slot
+    // `ammo` (ADR 0032 d.7), desenhado pelo caminho genérico como todo slot.
     hud.set((state) => ({
       ...state, catalogue,
       inventory: inventory({ equipped: { hand: { instanceId: 'b1', itemId: 'bow', quantity: 1 } } }),
     }));
-    const free = await render();
-    // #218: o seletor é o slot ESCUDO (`slot-shield`) com o contorno tracejado próprio
-    // (`slot-ammo-picker`); a classe `slot-ammo` continua sendo só do slot `ammo` de verdade.
-    expect(free).toContain('class="slot-shield"');
-    expect(free).toContain('slot-ammo-picker');
-    expect(free).toContain('class="slot-ammo"');
-    expect(free).toContain('munição: Arrow · grátis');
-    expect(free).not.toContain('Escudo (vazio)');
-    hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
-    const chosen = await render();
-    expect(chosen).toContain('munição: Sniper Arrow · 5 gold/tiro');
-    // Sem bow, o escudo é um slot.
-    hud.set((state) => ({ ...state, inventory: inventory() }));
-    expect(await render()).toContain('Escudo (vazio)');
+    const html = await render();
+    expect(html).toContain('class="slot-shield"');
+    expect(html).not.toContain('slot-ammo-picker');
+    expect(html).toContain('Escudo (vazio)');
+    expect(html).toContain('class="slot-ammo"');
+    expect(html).toContain('Munição (vazio)');
   });
 
   it('minimizado mantém o cabeçalho e não desmonta', async () => {

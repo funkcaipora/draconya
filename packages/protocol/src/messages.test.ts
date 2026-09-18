@@ -281,10 +281,9 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // `monsters` também tem default (FUN-113), e `lootDrops` (FUN-123): o que volta é a
     // mensagem com os dois preenchidos.
     const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
-    // E `ammunition` (#152): um nó anterior manda sem, e o seletor lista nada.
     // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
-      ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+      ...withIds, monsters: [], vocations: [], vocationLevel: 0,
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
         ...hunt, difficultyDetails: [], lootDrops: 0, monsters: [], loot: [],
       })),
@@ -380,7 +379,6 @@ describe('the bestiary (FUN-113, §18)', () => {
     const full = {
       ...base,
       monsters: [{ id: 'rat', name: 'Rat' }],
-      ammunition: [],
       vocations: [],
       vocationLevel: 8,
       bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
@@ -453,7 +451,6 @@ describe('the bestiary (FUN-113, §18)', () => {
       },
       items: [],
       monsters: [],
-      ammunition: [],
       vocations: [],
       vocationLevel: 8,
     };
@@ -505,8 +502,10 @@ describe('the bestiary (FUN-113, §18)', () => {
 
 describe('vocation choice (#154)', () => {
   it('is intention only: the client names the vocation, and the opcode is 15', () => {
-    // O 14 foi do `select-ammo` (#152); a ADR 0026 registra o 15. Mutação que mata: trocar
-    // por 14 (duplicado) ou apagar a linha (o schema fica órfão e o teste estrutural reprova).
+    // O 14 está QUEIMADO (era o `select-ammo`, #152); a ADR 0026 registra o 15. Mutação que
+    // mata: reciclar o 14 (duplicado) ou apagar a linha (o schema fica órfão).
+    expect(BURNED_OPCODES_C2S).toContain(14);
+    expect(OPCODE_TO_NAME_C2S.has(14)).toBe(false);
     expect(CLIENT_TO_SERVER['choose-vocation']).toBe(15);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight' }).success).toBe(true);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: '' }).success).toBe(false);
@@ -537,7 +536,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     health: 150, maxHealth: 150, mana: 20, maxMana: 20,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
     targetId: null,
-    ammo: { arrow: null, bolt: null }, vocationId: 'knight',
+    vocationId: 'knight',
     speed: 292,
     skills: {
       melee: { level: 15, percentToNext: 45 },
@@ -556,7 +555,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       type: 'player-stats',
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 1, xp: 0, capacity: 400, gold: 0, staminaMs: 1000,
-      ammo: { arrow: null, bolt: null }, vocationId: null,
+      vocationId: null,
     };
     const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
     expect(decoded).toEqual([{
@@ -863,7 +862,6 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       gold: 50,
       staminaMs: 50000,
       targetId: 42,
-      ammo: { arrow: null, bolt: null },
       vocationId: 'knight',
       speed: 250,
       skills: {},

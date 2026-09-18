@@ -1201,16 +1201,14 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
       .toThrow(/"ammunition" só faz sentido em munição/);
   });
 
-  it('content.ammunition é a projeção derivada do item, e a tabela só guarda o projétil (RF-04)', () => {
+  it('a munição é item com `price` próprio; a projeção `content.ammunition` NÃO existe (RF-06)', () => {
     const flecha = {
       id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
+      weight: 0.7, value: 0, attack: 25, price: 1, ammunition: { family: 'arrow' },
     };
     const content = buildContent(base({ items: [flecha] }));
-    expect(content.ammunition.get('arrow')).toEqual({
-      id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, damageType: 'physical',
-      price: 0, requires: {}, appearanceId: 1, missileId: 1,
-    });
+    expect(content.items.get('arrow')?.price).toBe(1);
+    expect(content).not.toHaveProperty('ammunition');
     // O ícone NÃO se duplica na tabela: é `appearances.items[id]`, como todo item (DT-03).
     expect(content.appearances?.ammunition['arrow']).toEqual({ missile: 1 });
   });
@@ -1270,17 +1268,13 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     expect(() => buildContent(orfa)).toThrow(/appearances.weapons mapeia "helmet"/);
   });
 
-  it('toda família de munição precisa da grátis — é o que o bow dispara quando o gold acaba', () => {
+  it('não existe mais munição grátis por família: uma munição paga passa o boot (RF-06)', () => {
     const paga = {
       id: 'onyx-arrow', name: 'Onyx Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
       weight: 0.8, value: 0, attack: 38, price: 7, ammunition: { family: 'arrow' },
     };
-    expect(() => buildContent(base({ items: [paga] }))).toThrow(/não tem munição grátis/);
-    const gratis = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-    };
-    expect(buildContent(base({ items: [paga, gratis] })).ammunition.size).toBe(2);
+    // O fallback grátis saiu (ADR 0032 d.7): nada exige uma munição de preço zero.
+    expect(buildContent(base({ items: [paga] })).items.get('onyx-arrow')?.price).toBe(7);
   });
 
   it('a aparência NÃO mora no item de munição: escrevê-la ali é recusado', () => {

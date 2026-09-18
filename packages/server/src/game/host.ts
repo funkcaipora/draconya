@@ -20,7 +20,7 @@ import type {
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
+import type { Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
 import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
   CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
@@ -114,13 +114,8 @@ export interface SessionHostOptions {
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
   /**
-   * O catálogo de munição (#152), para a escolha pelo socket. Ausente: nada se escolhe, e a
-   * recusa é honesta — como o de itens.
-   */
-  readonly ammunition?: ReadonlyMap<string, Ammunition>;
-  /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
-   * Ausentes: nada se escolhe, e a recusa é honesta — como munição e itens.
+   * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
    */
   readonly vocations?: ReadonlyMap<string, Vocation>;
   readonly vocationLevel?: number;
@@ -317,10 +312,6 @@ function playerStatsOf(
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
     targetId,
-    ammo: {
-      arrow: character?.ammo.get('arrow') ?? null,
-      bolt: character?.ammo.get('bolt') ?? null,
-    },
     vocationId: character?.vocationId ?? null,
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
@@ -365,8 +356,6 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.capacity === b.capacity
     && a.gold === b.gold
     && a.targetId === b.targetId
-    && a.ammo.arrow === b.ammo.arrow
-    && a.ammo.bolt === b.ammo.bolt
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
@@ -1054,9 +1043,6 @@ export class SessionHost {
         // level basta e em que slot vai é o servidor.
         this.#requestEquip(viewer, message.instanceId);
         return;
-      case 'select-ammo':
-        this.#requestAmmo(viewer, message.ammoId);
-        return;
       case 'choose-vocation':
         // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
         this.#requestVocation(viewer, message.vocationId);
@@ -1230,31 +1216,6 @@ export class SessionHost {
       return { backpackSlots: 0, satchelSlots: 0, row: 1 };
     }
     return containerRulesFor(character.inventory, this.#options.itemCatalog ?? EMPTY_ITEMS, progression);
-  }
-
-  /**
-   * Escolher a munição (#152, ADR 0026 decisão 3). Processado NA CHEGADA, como equipar. Quem
-   * confere o level é o `sim`; o host traduz a recusa e, no sucesso, manda os vitais com a
-   * escolha nova — na Cidade não há ciclo que os compare, e o seletor precisa ver a resposta.
-   */
-  #requestAmmo(viewer: Viewer, ammoId: string): void {
-    const hosted = this.#hostedSession(viewer.characterId);
-    const character = this.#ownerOf(viewer.characterId);
-    if (hosted === undefined || character === undefined) return;
-    const ammo = this.#options.ammunition?.get(ammoId);
-    if (ammo === undefined) {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
-      return;
-    }
-    const result = character.selectAmmo(ammo);
-    if (!result.ok) {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Seu level não basta para essa munição.' });
-      return;
-    }
-    hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
-    hosted.sentStats.set(character.id, stats);
-    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**
@@ -2695,9 +2656,6 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
-      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
-      // login se ficasse só na sessão.
-      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -2740,8 +2698,8 @@ export class SessionHost {
    * O extrato de ESTADO DURÁVEL de um shard (#154).
    *
    * O shard não credita progresso (ADR 0023) — mas guarda estado: vocação, equipamento, arma
-   * de vocação e munição mudam na praça e, sem isto, sumiam no logout (o `equip` da FUN-82 e
-   * o `select-ammo` do #152 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
+   * de vocação e munição equipada mudam na praça e, sem isto, sumiam no logout (o `equip` da
+   * FUN-82 e o `move-item` da AB-05 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
    * Agregados zerados: a linha de ledger que o `jobs` insere é a chave de idempotência
    * (`UNIQUE (session_id, seq)`), não um crédito. `seq` avança na cópia compartilhada, e
    * cada extrato tem o seu.
@@ -2762,7 +2720,6 @@ export class SessionHost {
       aggregates: EMPTY_AGGREGATES,
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
-      ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
@@ -3078,7 +3035,6 @@ export class SessionHost {
         // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
-        ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
         // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
         // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
         ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),

@@ -202,9 +202,11 @@ const items = [
 ];
 
 // A flecha é item empilhável (ADR 0032, decisão 7): a munição que o bow dispara nos testes.
+// `price > 0` desde a AB-05 — a flecha deixou de ser infinita e grátis.
 const arrowItem = {
   id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-  weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
+  weight: 0.7, value: 0, attack: 25, price: 1, restock: { batch: 100, min: 20 },
+  ammunition: { family: 'arrow' },
 };
 
 // A aparência é DERIVADA (FUN-94). Estes testes falam de combate, rota, loot e bot; a arte não
@@ -1742,6 +1744,26 @@ describe('estoque e reposição por item (#419)', () => {
     expect(session.purchases[0]?.seq).toBeGreaterThan(0);
     expect(session.aggregates.goldSpent).toBe(2_250);
     expect(hero.goldDelta).toBe(-2_250);
+  });
+
+  it('a MUNIÇÃO configurada repõe pelo mesmo `planRestock` (RF-07, ADR 0032 d.7)', () => {
+    // A munição é item com `price` e `restock`: `#configuredConsumables` a aceita como o
+    // consumível, senão o paladino ficaria sem tiro para sempre.
+    const { session, hero, content: loaded } = withSpells(
+      // Condição que nunca vale: isola a compra de ENTRADA do uso do item.
+      botConfig({ potion: [itemRule('arrow', 0)] }),
+      { health: 1_000, gold: 10_000, items: [...items, ...consumables, arrowItem], monsters: false },
+    );
+    seedStack(hero, loaded, 'arrow', 10);
+
+    session.advanceBy(50);
+
+    // 10 < min 20 → lote 100 limitado pelo teto de pilha (MAX_STACK - 10 = 90).
+    expect(session.purchases).toHaveLength(1);
+    expect(session.purchases[0]).toMatchObject({
+      characterId: 'hero', itemId: 'arrow', quantity: 90, unitPrice: 1, total: 90,
+    });
+    expect(hero.inventory.quantityOf('arrow')).toBe(100);
   });
 
   it('entrar na hunt com a pilha abaixo do min dispara a PRIMEIRA compra (RF-02)', () => {
@@ -5410,7 +5432,13 @@ describe('famílias de arma e proficiências (CMB-05, #333)', () => {
     weapon('rod-i', 'rod', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
   ];
   const armed = (itemId: string): InventoryState => ({
-    backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
+    // Uma pilha de flechas EQUIPADA no slot `ammo` para o bow: a munição é item no slot (AB-05),
+    // e sem ela o tiro não sai. Inofensiva para as armas corpo a corpo e a wand.
+    backpack: [],
+    equipped: {
+      hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 },
+      ammo: { instanceId: 'arrow-stack', itemId: 'arrow', quantity: 100 },
+    },
   });
   const loaded = (): Content => content({ items: [...items, ...armory, arrowItem] });
 
@@ -5534,7 +5562,11 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
     };
     const loaded = content({ items: [bow, arrowItem] });
     const inventory: InventoryState = {
-      backpack: [], equipped: { hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 } },
+      backpack: [],
+      equipped: {
+        hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 },
+        ammo: { instanceId: 'arrow-stack', itemId: 'arrow', quantity: 100 },
+      },
     };
     const { session } = start({ loaded, inventory });
     expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);

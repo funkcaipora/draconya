@@ -87,8 +87,8 @@ export function buildCatalogue(content: Content): Catalogue {
       value: item.value,
       attack: item.attack,
       armor: item.armor,
-      // Como a arma bate (#152): tipo, alcance e família — para o tooltip e o seletor. Mana
-      // por golpe e faixa de dano ficam de fora: balanceamento (invariante 4).
+      // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
+      // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
         ? {}
         : {
@@ -98,17 +98,6 @@ export function buildCatalogue(content: Content): Catalogue {
             ...(item.weapon.ammoFamily === undefined ? {} : { ammoFamily: item.weapon.ammoFamily }),
           },
         }),
-    })),
-    // A munição (#152, ADR 0026 decisão 3): o seletor lista a família do bow com o preço por
-    // tiro, o único número de balanceamento aqui — é o que o jogador olha para escolher.
-    ammunition: [...content.ammunition.values()].map((ammo) => ({
-      id: ammo.id,
-      name: ammo.name,
-      family: ammo.family,
-      attack: ammo.attack,
-      price: ammo.price,
-      appearanceId: ammo.appearanceId,
-      requires: ammo.requires.level === undefined ? {} : { level: ammo.requires.level },
     })),
     // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui — a tela não
     // pode ter o 8 em código. Só os ganhos e a arma inicial (id de item); nada de fórmula.

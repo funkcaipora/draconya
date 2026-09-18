@@ -46,8 +46,6 @@ export interface CharacterRecord {
    * na sessão com `{}`. Sem método de escrita: quem escreve é o ledger, na transação do extrato.
    */
   readonly bestiary: unknown;
-  /** A munição escolhida por família (#152), como veio do banco; `null` é a grátis. */
-  readonly ammo: unknown;
   readonly createdAt: Date;
 }
 
@@ -398,7 +396,6 @@ function toCharacter(row: typeof characters.$inferSelect): CharacterRecord {
     skills: row.skills,
     outfitColors: row.outfitColors,
     bestiary: row.bestiary,
-    ammo: row.ammo,
     createdAt: row.createdAt,
   };
 }

@@ -497,18 +497,18 @@ não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálog
 `monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
 só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
 
-## A munição escolhida viaja como a vocação: ticket → runtime → extrato → coluna (#152)
+## A munição é item no slot; a coluna `characters.ammo` é dado morto (#152, #420)
 
-`characters.ammo` é `jsonb` nulável (`{ arrow: 'sniper-arrow' }`), lida na emissão do ticket com
-a régua `isAmmoSelection` (torta vira ausente, nunca login recusado), adotada em
-`CharacterState.ammo`, escolhida pelo socket (`select-ammo`, processado na chegada; a recusa
-é `system-message`, o sucesso é `player-stats` com `ammo` — mandado na hora, porque a Cidade
-não tem ciclo que o compare), levada no extrato (`ammo`, lista de PERMISSÃO em
-`parseReceipt`) e escrita pelo ledger na transação do extrato. **Última escrita vence**: é
-preferência, não progresso — e o extrato SEM o campo (Cidade, nó antigo) não toca na coluna.
-`#creditUnrestorable` a leva também. O projétil do tiro (`shot`) é resolvido em
-`#presentCombat` pela tabela: `appearances.ammunition[ammoId].missile` para a flecha,
-`appearances.weapons[itemId].missile` para wand e rod; sem linha, o tiro é mudo.
+A munição escolhida por família foi **revogada** (ADR 0032 decisão 7, AB-05): a escolha é o item
+equipado no slot `ammo`, o `sim` a consome por tiro, e `select-ammo` (opcode 14, **queimado**) e o
+campo `player-stats.ammo`/`catalogue.ammunition` não existem mais. O ticket não carrega `ammo`, o
+extrato não tem `SessionReceipt.ammo`, e o ledger não lê nem escreve `characters.ammo` — a coluna
+`jsonb` continua na tabela como **dado morto** até uma issue de limpeza (ADR 0014: descartar dado
+persistido exige tratamento explícito, e um `DROP` em deploy em rolagem apagaria a preferência de
+quem ainda não migrou). Equipar a pilha usa `move-item`/`equip`, que já marcam o shard como
+`dirty` e viajam no layout do inventário. O projétil do tiro (`shot`) continua resolvido em
+`#presentCombat` pela tabela: `appearances.ammunition[ammoId].missile` para a flecha (o `ammoId` é
+o id do ITEM), `appearances.weapons[itemId].missile` para wand e rod; sem linha, o tiro é mudo.
 
 ## A vocação é escrita UMA vez, pelo `jobs`; e o shard grava um extrato de ESTADO (#154)
 
@@ -526,10 +526,10 @@ decide (`chooseVocation`). A arma nasce com `instanceId` `${sessionId}:${charact
 `origin: 'vocation-choice'`, que o ledger grava (`item.origin ?? 'loot'`).
 
 **O shard não credita progresso, mas grava estado.** Antes de #154 a Cidade nunca gravava
-extrato: `equip`, `select-ammo` e agora a vocação feitos na praça sumiam no logout. Agora cada
+extrato: `equip` e agora a vocação feitos na praça sumiam no logout. Agora cada
 `HostedSession` de shard tem `dirty: Set<characterId>` — marcado por `equip`, `unequip`,
-`select-ammo` e `choose-vocation` — e `release` (antes do `leave`) e `drainAll` gravam, para
-quem está em `dirty`, um **extrato de estado durável**: agregados zerados, `vocation`, `ammo`,
+`move-item` e `choose-vocation` — e `release` (antes do `leave`) e `drainAll` gravam, para
+quem está em `dirty`, um **extrato de estado durável**: agregados zerados, `vocation`,
 `equipment`, `acquired`, `lootBox`, `seq` do `ledgerSeq` compartilhado da cópia. A linha de
 ledger que o `jobs` insere tem `delta: 0` e é só a chave de idempotência. Quem não mexeu em
 nada sai sem extrato. **Limite:** a Cidade não tem snapshot (ADR 0023) — nó que cai sem drenar

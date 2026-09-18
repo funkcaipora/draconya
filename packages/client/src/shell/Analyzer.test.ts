@@ -32,7 +32,7 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
 const catalogue: Catalogue = {
   hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], difficultyDetails: [], outfitIds: [], lootDrops: 0, monsters: [], loot: [] }],
   monsters: [{ id: 'rat', name: 'Rato' }],
-  ammunition: [], vocations: [], vocationLevel: 8,
+  vocations: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],

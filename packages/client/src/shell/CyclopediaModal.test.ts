@@ -44,7 +44,7 @@ const items: ItemDefinition[] = [sword, shield, cheese, machete];
 
 function catalogue(over: Partial<Catalogue> = {}): Catalogue {
   return {
-    hunts: [], monsters, ammunition: [], vocations: [], vocationLevel: 8,
+    hunts: [], monsters, vocations: [], vocationLevel: 8,
     bot: {
       vocabularyVersion: 1, slots: {},
       spells: [], supplies: [],

@@ -506,8 +506,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
   botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
-  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. Com bow na mão o escudo é o
-  seletor de munição (`AmmoPicker`). Arrastar é DnD
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. O slot `ammo` é genérico
+  desde a AB-05 (#420): a munição é item empilhável no slot, e o seletor por família sobre o
+  Escudo (`AmmoPicker`) foi removido. Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
   lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,

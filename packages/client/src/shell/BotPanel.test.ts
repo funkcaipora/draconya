@@ -17,7 +17,7 @@ async function render(props: { collapsed?: boolean } = {}): Promise<string> {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [], items: [], vocations: [], vocationLevel: 8,
+  hunts: [], monsters: [], items: [], vocations: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, // `heal` no teto (2 regras para 2 slots): prova que "+ regra" some quando a categoria
     // enche. `potion` continua com folga (0/4): prova que "+ regra" aparece com folga. As

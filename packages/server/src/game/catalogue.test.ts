@@ -76,9 +76,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
-  it('leva a munição e como cada arma bate — tipo, alcance, família, duas mãos — e nunca mana nem faixa de dano (#152)', () => {
-    // O seletor no slot do escudo precisa da família e do preço por tiro; o tooltip, do
-    // alcance. Mana por golpe e faixa de dano são balanceamento (invariante 4) e ficam fora.
+  it('leva como cada arma bate — tipo, alcance, família, duas mãos — e nunca mana nem faixa de dano (#152)', () => {
+    // O tooltip precisa do alcance e da família da munição; mana por golpe e faixa de dano são
+    // balanceamento (invariante 4) e ficam fora. O catálogo NÃO tem mais `ammunition`: a munição
+    // é item no slot (AB-05), e o slot `ammo` do set a desenha como todo item.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withWeapons = {
       ...raw,
@@ -86,20 +87,17 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
         ...(raw.items ?? []),
         { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
         { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
-        { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' } },
+        { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 25, price: 1, ammunition: { family: 'arrow' } },
         { id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 28, price: 5, requires: { level: 20 }, ammunition: { family: 'arrow' } },
       ],
     };
     const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
-    const { items, ammunition } = buildCatalogue(content);
+    const catalogue = buildCatalogue(content);
 
-    expect(items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
-    const wand = items.find((item) => item.id === 'wand');
+    expect(catalogue.items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
+    const wand = catalogue.items.find((item) => item.id === 'wand');
     expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
-    expect(ammunition).toEqual([
-      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 4, requires: {} },
-      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 5, requires: { level: 20 } },
-    ]);
+    expect(catalogue).not.toHaveProperty('ammunition');
   });
 
   it('leva as vocações — ganhos por level e arma inicial — e o level da escolha (#154)', () => {

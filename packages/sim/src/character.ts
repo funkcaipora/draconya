@@ -1,7 +1,7 @@
 // Estado quente do personagem. A sessão dona é o único objeto que escreve aqui
 // (invariante 9) — é também o que dispensa lock sobre o gold.
 
-import type { AmmoFamily, Ammunition, Item, Vocation } from '@draconya/content';
+import type { AmmoFamily, Item, Vocation } from '@draconya/content';
 import type { Direction } from './area.js';
 import { Bestiary } from './bestiary.js';
 import type { BestiaryState } from './bestiary.js';
@@ -119,10 +119,12 @@ export interface CharacterState {
   /** Quem bateu nele e quanto (FUN-63). Ausente é snapshot anterior: atribuição vazia. */
   readonly contribution?: ContributionState;
   /**
-   * A munição escolhida por família (#152, ADR 0026 decisão 3): `{ arrow: 'sniper-arrow' }`.
-   * Ausente, ou família sem chave, é a munição GRÁTIS da família — o padrão de quem nunca
-   * escolheu. Opcional, então o `SNAPSHOT_FORMAT_VERSION` não precisou subir. Viaja no
-   * ticket e no extrato como a vocação.
+   * A munição escolhida por família (#152, ADR 0026 decisão 3), LEGADO.
+   *
+   * @deprecated A AB-05 (#420) revogou a decisão 3 do ADR 0026: a munição é item no slot
+   * `ammo`, e a escolha por família não existe mais. O campo é **lido** uma vez para migrar o
+   * snapshot (a pilha do item escolhido é equipada) e nunca reescrito; `getState` para de
+   * emiti-lo, e por isso o `SNAPSHOT_FORMAT_VERSION` continua o mesmo.
    */
   readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
   readonly cooldowns: Partial<CooldownState>;
@@ -139,10 +141,6 @@ export interface CharacterState {
    */
   readonly conditions?: readonly ConditionState[];
 }
-
-/** Por que a munição não foi escolhida. Tipada: o jogador merece saber qual foi. */
-export type AmmoRefusal = 'level-too-low';
-export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly reason: AmmoRefusal };
 
 /** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
 export type VocationRefusal = 'level-too-low' | 'already-chosen';
@@ -189,8 +187,11 @@ export class CharacterRuntime {
   lootSeq: number;
   /** Mutada no lugar a cada golpe — ver `recordDamage`. */
   readonly contribution: Contribution;
-  /** A munição escolhida por família. Só a sessão dona escreve (`selectAmmo`). */
-  readonly ammo: Map<AmmoFamily, string>;
+  /**
+   * O `state.ammo` LEGADO lido (#420): o ruleset equipa a pilha do item escolhido e o esvazia
+   * em `onEnter`/`onResume`. Vazio é "sem legado" — snapshot novo ou anterior ao #152.
+   */
+  readonly legacyAmmo: Map<AmmoFamily, string>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -222,7 +223,7 @@ export class CharacterRuntime {
     this.lootBox = [...(state.lootBox ?? [])];
     this.lootSeq = state.lootSeq ?? 0;
     this.contribution = Contribution.fromState(state.contribution);
-    this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
+    this.legacyAmmo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
@@ -247,20 +248,6 @@ export class CharacterRuntime {
   settleGoldDelta(): void {
     this.#gold += this.goldDelta;
     this.goldDelta = 0;
-  }
-
-  /**
-   * Escolhe a munição da família dela (#152). Só o level é conferido: a família é da
-   * munição, e a arma na mão não precisa existir ainda — o Huntera mostra a seleção só com o
-   * bow, mas guarda a escolha sempre. Sem gold para ela, o tiro sai com a grátis (o ruleset
-   * decide isso a cada tiro, não aqui).
-   */
-  selectAmmo(ammo: Ammunition): AmmoResult {
-    if (ammo.requires.level !== undefined && this.level < ammo.requires.level) {
-      return { ok: false, reason: 'level-too-low' };
-    }
-    this.ammo.set(ammo.family, ammo.id);
-    return { ok: true };
   }
 
   /**
@@ -323,7 +310,6 @@ export class CharacterRuntime {
       lootBox: this.lootBox,
       lootSeq: this.lootSeq,
       contribution: this.contribution.getState(),
-      ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),

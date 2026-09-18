@@ -6,7 +6,7 @@
 
 ## Comportamento
 
-Poções, runas e munições comuns não existem como itens físicos carregados durante a hunt: usar um supply desconta gold diretamente, sem gerenciar pilha nem reposição. Quando um monstro "dropa" um item desse tipo, o valor correspondente entra na economia como gold, não como pilha física de consumível. Os preços de poções e runas usam o Tibia como referência inicial de balanceamento. A munição tem catálogo próprio desde o ADR 0026 (decisão 3, #151): é uma seleção por família, a `arrow` é grátis e cada tiro das outras debita o preço dela — o modelo do Huntera, ver `items.md`. Todos os valores devem ser configuráveis.
+Poções, runas e munições comuns não existem como itens físicos carregados durante a hunt: usar um supply desconta gold diretamente, sem gerenciar pilha nem reposição. Quando um monstro "dropa" um item desse tipo, o valor correspondente entra na economia como gold, não como pilha física de consumível. Os preços de poções e runas usam o Tibia como referência inicial de balanceamento. A munição é item empilhável desde a AB-02/AB-05 (ADR 0032 decisão 7, #417/#420): cada tiro consome uma unidade da pilha equipada no slot `ammo`, a `arrow` deixou de ser infinita e grátis (tem preço e lote) e a reposição é por lote pelo ledger (ADR 0032 decisão 6), não uma seleção por família — ver `items.md`. Todos os valores devem ser configuráveis.
 
 Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar os supplies necessários e pode morrer (ver `bot.md`, §13.9).
 
@@ -30,7 +30,7 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
   cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
   nele (ver "Divergências" abaixo).
-- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente — desde a AB-02 é item empilhável (`packages/content/data/items/*-arrow.json`), mas o `sim` v1 ainda debita o preço por tiro pelo caminho do supply até a AB-05 aposentar o fallback grátis.
+- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição é item empilhável desde a AB-02 (`packages/content/data/items/*-arrow.json`) e, desde a AB-05, cada tiro consome uma unidade da pilha equipada — sem débito de gold por tiro e sem fallback grátis; o gold sai na compra do lote pela reposição (ADR 0032 decisão 6).
 - Drop de supply por monstro credita gold, não gera pilha física.
 - Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
 - Com a regra ativa: personagem sai da hunt quando o gold acaba.

@@ -64,12 +64,6 @@ export interface SessionReceipt {
    */
   readonly bestiary?: BestiaryState;
   /**
-   * A munição escolhida por família (#152): `{ arrow: 'sniper-arrow' }`. ABSOLUTA e
-   * última-escrita-vence: é preferência do jogador, não progresso — um extrato antigo fora de
-   * ordem escreveria a escolha antiga, e o jogador a refaria num clique.
-   */
-  readonly ammo?: Readonly<Record<string, string>>;
-  /**
    * A vocação escolhida nesta sessão (#154, ADR 0026 decisão 1). Escrita UMA vez pelo `jobs`
    * (`coalesce`): um extrato fora de ordem com outra vocação não sobrescreve — e não pode
    * haver outra, porque `already-chosen` recusa a segunda na sessão e o ticket a traz de volta.
@@ -299,10 +293,6 @@ function parseReceipt(raw: string): SessionReceipt | null {
     // linha existir é a mesma que a do comentário delas.
     ...(typeof value['bestiary'] === 'object' && value['bestiary'] !== null
       ? { bestiary: value['bestiary'] as BestiaryState }
-      : {}),
-    // A munição (#152): lista de PERMISSÃO, pela razão das skills.
-    ...(typeof value['ammo'] === 'object' && value['ammo'] !== null
-      ? { ammo: value['ammo'] as Record<string, string> }
       : {}),
     // A vocação (#154): lista de PERMISSÃO, pela razão das skills.
     ...(typeof value['vocation'] === 'string' && value['vocation'].length > 0

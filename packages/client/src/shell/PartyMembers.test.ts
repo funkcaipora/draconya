@@ -11,7 +11,7 @@ import type { Catalogue } from '../state/hud.js';
 // campos condicionais sem apresentar dado que a sessão não transmitiu (D8).
 
 const mockCatalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
     vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],

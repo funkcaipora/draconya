@@ -24,7 +24,6 @@ const mockCatalogue: Catalogue = {
     loot: [],
   }],
   monsters: [],
-  ammunition: [],
   bot: {
     vocabularyVersion: 1,
     slots: {},
