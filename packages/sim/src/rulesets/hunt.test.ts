@@ -5643,8 +5643,12 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
   });
 
   it('campo relançado depois do último tique continua tiquetando (#334)', () => {
-    // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3): o herói está sempre em cima
-    // do campo, andando ou parado, e o teste mede só o tique — não a entrada no tile.
+    // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3) — irrelevante aqui de propósito:
+    // `#enterField` aplica um tique a CADA passo aceito sobre o campo (independente do
+    // `FIELD_TICK` agendado), e um herói sempre em cima do campo tomaria dano a cada passo
+    // mesmo com o bug do #334 presente. Medir `hero.health` mediria o passo, não o tique — por
+    // isso a asserção é sobre a FILA DE EVENTOS, que `#enterField` nunca toca (ele chama
+    // `#applyConditionTick` direto, sem agendar nada).
     const wideField: FieldSpec = {
       id: 'wide-fire', durationMs: 1_300,
       shape: { shape: 'circle', radius: 5, centered: 'caster' },
@@ -5653,18 +5657,24 @@ describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', 
         effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
       },
     };
-    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const fieldTickEvents = (): number => session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:wide-fire' && e.kind === 'field-tick').length;
+
     ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
-    // Dois tiques (+500 e +1000); +1500 já passa do vencimento (+1300) e não é agendado — o
-    // fantasma do #334, se `nextTickAtMs` for guardado mesmo sem evento correspondente.
+    // Dois tiques rodam (+500 e +1000); +1500 já passa do vencimento (+1300), então NENHUM
+    // `field-tick` fica agendado dos dois lados do bug — só muda o que fica gravado em
+    // `nextTickAtMs` (o fantasma, sem a correção).
     run(session, 1_100, 100);
-    const beforeRelaunch = hero.health;
+    expect(fieldTickEvents()).toBe(0);
+
     // Relança o MESMO id, na MESMA cadência, DEPOIS do último tique e ANTES do vencimento —
-    // exatamente a janela em que o relançamento herdaria o fantasma. Sem a correção, o campo
-    // fica mudo pelo resto da vida nova inteira.
+    // exatamente a janela em que `keepTick` herdaria o fantasma. Sem a correção, `keepTick` só
+    // olha se o intervalo bate (bate) e NÃO agenda nada — o campo fica mudo pelo resto da vida
+    // nova inteira. Com a correção, `previous.nextTickAtMs` está ausente, `keepTick` é falso, e
+    // o relançamento AGENDA um `field-tick` novo.
     ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
-    run(session, 5_000, 100);
-    expect(hero.health).toBeLessThan(beforeRelaunch);
+    expect(fieldTickEvents()).toBe(1);
   });
 
   it('DOT e campo rendem o MESMO a 10 Hz e a 1 Hz', () => {
