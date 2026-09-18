@@ -89,7 +89,7 @@ const progression = {
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   // **Esquiva zero neste conteúdo de teste, e é decisão.** Com ela, dano vira função só do
   // tempo decorrido, e a comparação 10 Hz / 1 Hz mede o que ela deveria medir — a matemática
   // do tempo — em vez de medir em que ordem os sorteios caíram. Quem cuida do dodge é
@@ -109,7 +109,7 @@ const spells = [
   },
   {
     id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
-    effect: { kind: 'damage', power: 40, range: 3 },
+    effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
   },
   // Área de raio 2 e poder que MATA um rato de 50 num golpe: é o que faz o teste de "morte no
   // meio da área" ser sobre morte, e não sobre quanto falta de vida.
@@ -163,7 +163,7 @@ const items = [
   // a CONTAGEM de alvos, não o golpe.
   {
     id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
-    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 } },
+    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 }, damageType: 'energy' },
   },
 ];
 
@@ -4630,10 +4630,10 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
     expect(passed('basic-attack', 'physical')).toBe(true);
   });
 
-  it('wand: basic-attack/arcano pelo caminho da mana', () => {
+  it('wand: basic-attack/energia pelo caminho da mana', () => {
     const wand = {
       id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0,
-      weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } },
+      weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 }, damageType: 'energy' },
     };
     const loaded = content({ items: [wand] });
     const inventory: InventoryState = {
@@ -4644,10 +4644,10 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
     hero.mana = 200;
     hero.maxMana = 200;
     expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
-    expect(passed('basic-attack', 'arcane')).toBe(true);
+    expect(passed('basic-attack', 'energy')).toBe(true);
   });
 
-  it('magia: spell/arcano', () => {
+  it('magia: spell/fogo, o tipo declarado no efeito', () => {
     const { session } = withSpells(botConfig({
       attack: [{
         when: { kind: 'targets', op: '>=', count: 1 },
@@ -4655,7 +4655,7 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
       }],
     }));
     run(session, 20_000, 100);
-    expect(passed('spell', 'arcane')).toBe(true);
+    expect(passed('spell', 'fire')).toBe(true);
   });
 
   it('runa: rune/arcano', () => {
@@ -4681,5 +4681,14 @@ describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
     const { session } = start();
     run(session, 20_000, 100);
     expect(passed('monster-attack', 'physical')).toBe(true);
+  });
+
+  it('o tipo do monstro vem do CONTEÚDO, não de um literal no call site', () => {
+    // O rato do fixture é `physical` por default; declarar fogo no conteúdo tem de chegar ao
+    // resolver. Um literal `'physical'` no `hunt.ts` passaria no teste acima e falharia aqui.
+    const loaded = content({ monsters: [{ ...rat, damageType: 'fire' }] });
+    const { session } = start({ loaded });
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'fire')).toBe(true);
   });
 });

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { itemSchema } from '@draconya/content';
+import { compileItem, itemSchema } from '@draconya/content';
 import type { Item } from '@draconya/content';
 import { Inventory, MAX_STACK } from './inventory.js';
 import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 
 // A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
 // então o schema não a produz e ela entra aqui à mão. O que este teste exercita é peso, slot e
-// empilhamento — arte não muda nenhum dos três.
+// empilhamento — arte não muda nenhum dos três. `compileItem` resolve a arma e a mitigação
+// (CMB-03) como o boot faz.
 const define = (over: Record<string, unknown>): Item => ({
-  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over }),
+  ...compileItem(itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over })),
   appearanceId: 1,
 });
 

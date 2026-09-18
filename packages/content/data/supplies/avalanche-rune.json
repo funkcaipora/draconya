@@ -10,11 +10,12 @@
     "kind": "damage",
     "basePower": 45,
     "range": 4,
+    "damageType": "ice",
     "area": {
       "shape": "circle",
       "radius": 3,
       "centered": "target"
     }
   },
-  "_open": "TibiaWiki (conferir ao gravar): level 30, magic level 4, 4 cargas; o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo ignorado até haver resistência por elemento."
+  "_open": "TibiaWiki (conferir ao gravar): level 30, magic level 4, 4 cargas; o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo declarado no efeito desde o CMB-03."
 }

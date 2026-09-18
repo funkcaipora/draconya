@@ -21,7 +21,8 @@
 // container, sem item largado — o §26 do documento de referência lista isso como rejeição
 // deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
 
-import type { Item, ItemSlot, Progression } from '@draconya/content';
+import { DAMAGE_TYPES } from '@draconya/content';
+import type { CompiledMitigation, DamageType, Item, ItemSlot, Progression } from '@draconya/content';
 
 /** Teto de empilhamento (§21.5). Munição empilha; espada não empilha por não ser `stackable`. */
 export const MAX_STACK = 100;
@@ -453,7 +454,50 @@ export class Inventory {
     for (const item of this.#equipped.values()) total += catalog.get(item.itemId)?.armor ?? 0;
     return total;
   }
+
+  /**
+   * A resistência/vulnerabilidade e as imunidades do EQUIPAMENTO (CMB-03).
+   *
+   * Soma a resistência por tipo (como a armadura soma) e UNE as imunidades: qualquer peça que
+   * imuniza imuniza o portador. São poucos slots, então o custo por golpe é limitado e não
+   * depende do catálogo — nenhuma varredura de tabela de resistência.
+   *
+   * O item guarda o perfil já COMPILADO no boot (`Item.mitigation`), então aqui só há lookup.
+   */
+  mitigation(catalog: ReadonlyMap<string, Item>): CompiledMitigation {
+    // Fast path: sem NENHUMA peça com mitigação, o defensor é neutro e não há o que alocar no
+    // caminho quente. É o caso de todo o conteúdo v1, em que nenhum item resiste a nada.
+    let contributing = false;
+    for (const carried of this.#equipped.values()) {
+      const item = catalog.get(carried.itemId);
+      if (item === undefined) continue;
+      if (item.mitigation.immunities.size > 0
+        || DAMAGE_TYPES.some((type) => item.mitigation.resistances[type] !== 0)) {
+        contributing = true;
+        break;
+      }
+    }
+    if (!contributing) return NEUTRAL_MITIGATION;
+
+    const resistances: Record<DamageType, number> = {
+      physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+    };
+    const immunities = new Set<DamageType>();
+    for (const carried of this.#equipped.values()) {
+      const item = catalog.get(carried.itemId);
+      if (item === undefined) continue;
+      for (const type of DAMAGE_TYPES) resistances[type] += item.mitigation.resistances[type];
+      for (const type of item.mitigation.immunities) immunities.add(type);
+    }
+    return { resistances, immunities };
+  }
 }
+
+/** O defensor sem equipamento que mitigue: identidade, e um objeto só para toda a sessão. */
+const NEUTRAL_MITIGATION: CompiledMitigation = {
+  resistances: { physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+  immunities: new Set(),
+};
 
 /**
  * As regras de container de um personagem, do conteúdo (#160): a mochila é o item em `back`

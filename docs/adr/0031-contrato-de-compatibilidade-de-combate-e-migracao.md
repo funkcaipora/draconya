@@ -239,3 +239,103 @@ Nenhum muda. A decisão é medida contra os seis que o M19 declara:
 - **invariante 7** — o perfil é conteúdo versionado, e a versão é fixada na sessão.
 - **invariante 9** — só a sessão dona escreve estado quente; a migração de perfil passa por
   conteúdo e snapshot, nunca por outro processo tocando o `CharacterRuntime`.
+
+## Emenda — 2026-09-17: a taxonomia de dano e a ordem de mitigação do CMB-03
+
+Esta emenda corrige a ordem de mitigação congelada na decisão original e fixa a taxonomia
+canônica de tipos de dano, que a decisão deixava em aberto. O que ela NÃO muda: o perfil
+`combat-v1` continua aditivo, a rolagem de Dodge continua o primeiro ato e o arredondamento
+continua só no fim. Onde esta emenda e o texto acima divergirem, vale a emenda.
+
+### Taxonomia canônica de `DamageType`
+
+A fonte única é `DAMAGE_TYPES`, exportado por `@draconya/content`; o `sim` importa o tipo e
+não redeclara o enum. A lista é:
+
+```ts
+type DamageType =
+  | 'physical' | 'energy' | 'earth' | 'fire' | 'ice' | 'holy' | 'death' // Tibia 13.32
+  | 'arcane';                                                          // não-elemental
+```
+
+Os sete primeiros são os tipos de dano do **Tibia 13.32**, lidos do `CombatType` do TFS/Canary
+— só os NOMES, que são fato de domínio; nenhuma linha de código GPL é copiada (ADR 0019). O
+conjunto confere com o que o cliente do gênero desenha como elemento (físico, fogo, terra,
+energia, gelo, sagrado, morte — ver `docs/reviews/kit-fidelity-audit-2026-09-16.md`).
+
+`arcane` é o OITAVO tipo, e existe por uma razão de compatibilidade: o `combat-v1` tinha
+`physical`/`arcane` como vocabulário, e magia sem elemento declarado usava a coluna `magic` da
+armadura. `arcane` é esse caso — "magia não-elemental, ou cujo elemento o conteúdo ainda não
+declarou". Ele é o DEFAULT de magia, runa e wand sem tipo explícito, e existe para que a
+ausência de tipo continue rendendo **bit a bit** o mesmo dano do v1. A lista tem "pelo menos"
+os sete canônicos: um tipo novo entra por emenda a este ADR, nunca por um valor que passou em
+silêncio.
+
+### Ordem de mitigação (CORRIGE a decisão original)
+
+A ordem canônica do perfil v1 passa a ser, nesta ordem exata:
+
+1. **uma única rolagem de Dodge, sempre consumida, primeiro ato do resolver** (inalterado);
+2. **defesa/escudo** — identidade em v1, encaixe do CMB-04;
+3. **armadura por tipo de dano**, sem RNG;
+4. **piso de armadura** (`minimumDamageFraction`) — DEPOIS da armadura e ANTES da resistência;
+5. **resistência/vulnerabilidade por tipo** — identidade sem dado;
+6. **imunidade explícita** — zera, e o piso não a revoga;
+7. **corte do Dodge**, se a rolagem ativou;
+8. **arredondamento** só no fim, com piso em zero.
+
+A decisão original punha o piso DEPOIS da resistência. A ordem desta emenda o põe antes, e a
+diferença é observável: com armadura que leva o dano a negativo e resistência de 50 %, a ordem
+antiga daria `max(piso, pós-armadura × 0,5)` e a nova dá `max(piso, pós-armadura) × 0,5`. O
+CMB-03 é a primeira tarefa em que resistência deixa de ser identidade, então a ordem só se
+torna observável agora — e é agora que ela é corrigida e testada. A ordem antiga nunca
+produziu um resultado entregue, porque em v1 a resistência era identidade.
+
+A posição do SORTEIO continua sendo a decisão do Draconya, e continua intocada: a rolagem é o
+primeiro ato para que nenhum estágio novo a desloque. A imunidade e a resistência não consomem
+RNG; um estágio que precise de sorteio próprio muda a ordem de RNG e exige perfil novo.
+
+### Resistência, vulnerabilidade e imunidade
+
+- `resistances` é uma fração por tipo no intervalo **`[-1, 1)`**. Positivo reduz
+  (`dano × (1 − r)`); negativo é **vulnerabilidade** e amplifica (`dano × (1 + |r|)`). O teto de
+  amplificação é 2× (`r = −1`).
+- **`r = 1` é recusado no boot**: 100 % de resistência seria imunidade disfarçada, e a DT-02
+  exige que imunidade seja EXPLÍCITA. Resistência e imunidade para o mesmo tipo, no mesmo
+  perfil, é ambiguidade e também é recusada.
+- Imunidade é uma lista explícita de tipos; duplicata é recusada. Ela zera o dano mesmo com
+  piso, e não consome sorteio extra.
+- O perfil é dado de conteúdo de monstro e de EQUIPAMENTO (item), compilado no boot para uma
+  tabela completa por tipo (lookup O(1)) e um `Set` de imunidade. O equipamento do personagem
+  SOMA a resistência por tipo e UNE as imunidades; a defesa do monstro vem da definição dele.
+
+### Migração de `armorEffectiveness`
+
+A tabela de armadura deixa de ter as colunas `melee`/`magic` e passa a ser indexada pelos OITO
+tipos de dano, exaustiva no schema. A migração que preserva o v1 é:
+
+- **`physical` fica com o antigo `melee`**;
+- **todo tipo não-físico fica com o antigo `magic`** — inclusive `arcane`.
+
+Ela é a referência `V1_ARMOR_EFFECTIVENESS` exportada por `content`, e o que as fixtures usam. O
+conteúdo real declara os oito valores, porque o schema é exaustivo: mudar a efetividade de um
+elemento é editar JSON, nunca lógica (§12.1).
+
+### Consequências do CMB-03
+
+- **A versão de conteúdo muda**, como em qualquer deploy que altera `data/`. Uma sessão gravada
+  antes desta emenda é recusada na retomada e creditada (ADR 0010, ADR 0024) — não é
+  reinterpretada. O `SNAPSHOT_FORMAT_VERSION` NÃO sobe: o outcome é efêmero e o perfil continua
+  identificado por `Content.version` (invariante 7).
+- Os tipos dos produtores ficam em conteúdo: arma (`weapon.damageType`), munição
+  (`ammunition.damageType`), efeito de magia e de runa (`effect.damageType`), ability de monstro
+  (`monster.damageType`) e o golpe desarmado (`combat.player.damageType`). Os defaults que
+  preservam o v1 são `physical` em corpo a corpo, distância, monstro e desarmado, e `arcane` em
+  magia, runa e wand/rod. Um elemento só é declarado onde o catálogo o diz — nunca inferido do
+  NOME do item ou da magia (DT-03).
+- O elemento declarado de um golpe NÃO muda o número entregue: `physical` usa a coluna `melee`
+  de antes e todo elemento usa a coluna `magic` de antes. O que muda o resultado é
+  resistência/imunidade, que não existia.
+- O `DamageOutcome` ganha `damageType`, `afterDefense`, `afterArmor`, `afterResistance` e
+  `immune`, e mantém os campos do CMB-02. Continua efêmero: nunca vai ao cliente nem ao
+  snapshot.

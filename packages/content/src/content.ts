@@ -8,6 +8,7 @@ import type { Route, Tilemap } from './map.js';
 import {
   BOT_VOCABULARY_VERSION,
   COMBAT_PROFILES,
+  DAMAGE_TYPES,
   appearancesSchema,
   packSchema,
   botSchema, combatSchema, huntSchema, monsterSchema, progressionSchema, routeSchema,
@@ -15,8 +16,9 @@ import {
   supplySchema, tilemapSchema, vocationSchema,
 } from './schemas.js';
 import type {
-  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, Hunt, Item, Monster,
-  Pack, PartyConfig, Progression, Skill, Spell, Stamina, Supply, Vocation,
+  Ammunition, AmmunitionDefinition, Appearances, Bestiary, BotLimits, Combat, CompiledMitigation,
+  DamageType, Hunt, Item, ItemDefinition, MitigationProfile, Monster, MonsterDefinition, Pack,
+  PartyConfig, Progression, ResolvedWeapon, Skill, Spell, Stamina, Supply, Vocation, Weapon,
 } from './schemas.js';
 import { packProblems } from './pack.js';
 import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
@@ -134,6 +136,76 @@ export class ContentError extends Error {
   }
 }
 
+/** O monstro já com a mitigação compilada (CMB-03), antes de a aparência ser resolvida. */
+export type CompiledMonster = Omit<Monster, 'outfitId' | 'corpseAppearanceId'>;
+
+/** O item já com arma tipada e mitigação compilada (CMB-03), sem aparência. */
+export type CompiledItem = Omit<Item, 'appearanceId'>;
+
+/**
+ * Compila um `MitigationProfile` para a forma do caminho quente (CMB-03): a tabela completa por
+ * tipo — zero onde não há resistência, que é a identidade — e um `Set` de imunidades. O boot
+ * paga a compilação uma vez; cada golpe faz só um lookup e um `has`.
+ */
+export function compileMitigation(profile: MitigationProfile | undefined): CompiledMitigation {
+  const resistances: Record<DamageType, number> = {
+    physical: 0, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+  };
+  if (profile !== undefined) {
+    for (const type of DAMAGE_TYPES) {
+      const value = profile.resistances[type];
+      if (value !== undefined) resistances[type] = value;
+    }
+  }
+  return { resistances, immunities: new Set(profile?.immunities ?? []) };
+}
+
+/** O monstro resolvido (CMB-03), usado pelo boot e por fixture que monta `Monster` à mão. */
+export function compileMonster(monster: MonsterDefinition): CompiledMonster {
+  return { ...monster, mitigation: compileMitigation(monster.mitigation) };
+}
+
+/** Compila a mitigação de cada monstro no boot (CMB-03). */
+function compileMonsters(
+  definitions: ReadonlyMap<string, MonsterDefinition>,
+): Map<string, CompiledMonster> {
+  const compiled = new Map<string, CompiledMonster>();
+  for (const [id, monster] of definitions) compiled.set(id, compileMonster(monster));
+  return compiled;
+}
+
+/**
+ * Resolve o tipo de dano default de cada arma e compila a mitigação de cada item (CMB-03).
+ *
+ * O default preserva o v1: `physical` em corpo a corpo e distância, `arcane` (o antigo
+ * `magic`) em wand e rod. Onde o conteúdo conhece o elemento — a wand de energia, o rod de
+ * terra —, o arquivo declara e o default não entra.
+ */
+export function compileItem(item: ItemDefinition): CompiledItem {
+  // O cast cobre item NÃO-arma com um `weapon` escrito por engano: a validação de forma em
+  // `buildContent` reprova esse caso, então o valor nunca chega ao `sim`.
+  let weapon = item.weapon as ResolvedWeapon | undefined;
+  if (item.kind === 'weapon') {
+    const base: Weapon = weapon ?? { kind: 'melee', range: 1 };
+    weapon = {
+      ...base,
+      damageType: base.damageType ?? (base.kind === 'wand' ? 'arcane' : 'physical'),
+    };
+  }
+  const { weapon: _rawWeapon, mitigation: _rawMitigation, ...rest } = item;
+  return {
+    ...rest,
+    mitigation: compileMitigation(item.mitigation),
+    ...(weapon === undefined ? {} : { weapon }),
+  };
+}
+
+function compileItems(definitions: ReadonlyMap<string, ItemDefinition>): Map<string, CompiledItem> {
+  const compiled = new Map<string, CompiledItem>();
+  for (const [id, item] of definitions) compiled.set(id, compileItem(item));
+  return compiled;
+}
+
 /**
  * Valida, resolve referências cruzadas e devolve o conteúdo pronto.
  *
@@ -144,7 +216,7 @@ export class ContentError extends Error {
 export function buildContent(raw: RawContent): Content {
   const problems: string[] = [];
 
-  const monsterDefinitions = parseAll('monster', raw.monsters, monsterSchema, problems);
+  const monsterDefinitions = compileMonsters(parseAll('monster', raw.monsters, monsterSchema, problems));
   const hunts = parseAll('hunt', raw.hunts, huntSchema, problems);
   const vocations = parseAll('vocation', raw.vocations, vocationSchema, problems);
   const progressions = parseAll('progression', raw.progression ?? [], progressionSchema, problems);
@@ -205,7 +277,7 @@ export function buildContent(raw: RawContent): Content {
   const spells = parseAll('spell', raw.spells ?? [], spellSchema, problems);
   const supplies = parseAll('supply', raw.supplies ?? [], supplySchema, problems);
   const skills = parseAll('skill', raw.skills ?? [], skillSchema, problems);
-  const itemDefinitions = parseAll('item', raw.items ?? [], itemSchema, problems);
+  const itemDefinitions = compileItems(parseAll('item', raw.items ?? [], itemSchema, problems));
 
   // O catálogo de magias do Tibia (#155, ADR 0026 decisão 5): o schema fecha a forma de cada
   // campo; o que UM campo não sabe do OUTRO é conferido aqui. Cada regra é um defeito que, sem
@@ -252,15 +324,10 @@ export function buildContent(raw: RawContent): Content {
       }
     }
   }
-  // Arma sem `weapon` é corpo a corpo de alcance 1 (#152): é o que toda arma era antes de
-  // haver bow e wand, e é o que a machete e o steel axe são. O default mora AQUI, e não no
-  // schema, porque o schema de um campo opcional não sabe do `kind` — um capacete não ganha
-  // alcance por engano.
-  for (const [id, item] of itemDefinitions) {
-    if (item.kind === 'weapon' && item.weapon === undefined) {
-      itemDefinitions.set(id, { ...item, weapon: { kind: 'melee', range: 1 } });
-    }
-  }
+  // Arma sem `weapon` é corpo a corpo de alcance 1 (#152), e o tipo de dano default de cada
+  // `kind` (CMB-03) é resolvido em `compileItems`: corpo a corpo e distância são `physical`,
+  // wand e rod são `arcane` — o `kind: magic` do v1. O default NÃO mora no schema, porque o
+  // schema de um campo opcional não sabe do `kind`.
   const ammunitionDefinitions = parseAll('munição', raw.ammunition ?? [], ammunitionSchema, problems);
   // A forma do item que o schema sozinho não fecha (ADR 0026): a mochila é o único item que
   // se veste nas costas, e o que se veste nas costas é a mochila; e só arma ocupa as duas

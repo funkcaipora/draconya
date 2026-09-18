@@ -4,6 +4,82 @@
 
 import { z } from 'zod';
 
+/**
+ * A taxonomia CANÔNICA de tipos de dano (CMB-03, emenda do ADR 0031). É a fonte ÚNICA: o
+ * `sim` importa `DamageType` daqui e não redeclara o enum.
+ *
+ * Os sete primeiros são os tipos de dano do Tibia 13.32 (`CombatType` do TFS/Canary — só os
+ * NOMES, que são fato de domínio; nenhum código GPL é copiado, ADR 0019): físico, energia,
+ * terra, fogo, gelo, sagrado e morte. `arcane` é o tipo NÃO-ELEMENTAL da magia cujo elemento o
+ * conteúdo ainda não declarou — é o vocabulário do `combat-v1` (`melee`/`magic`) preservado
+ * para que a ausência de tipo continue rendendo bit a bit o mesmo dano (DT-03).
+ *
+ * Tipo é separado de ORIGEM (`DamageSource`) e de EFEITO VISUAL (`CreatureHit.source`), pela
+ * DT-01: o mesmo elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem
+ * dizer qual fórmula resolveu.
+ */
+export const DAMAGE_TYPES = [
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+] as const;
+export type DamageType = (typeof DAMAGE_TYPES)[number];
+
+/**
+ * O perfil de mitigação de uma entidade (CMB-03): o que ela RESISTE e ao que é IMUNE.
+ *
+ * `resistances` é uma fração por tipo, no intervalo `[-1, 1)` aprovado na emenda do ADR 0031:
+ * positivo reduz (`dano × (1 − r)`), negativo é VULNERABILIDADE e amplifica (`dano × (1 + |r|)`).
+ * `1` é recusado por ser indistinguível de imunidade — a DT-02 exige que imunidade seja
+ * EXPLÍCITA, nunca comunicada por resistência de 100 %.
+ *
+ * Imutável e compilado no boot: o caminho quente faz `resistances[tipo]` (lookup) e
+ * `immunities.has(tipo)` (Set), nunca uma varredura por golpe.
+ */
+export const mitigationSchema = z.object({
+  resistances: z.partialRecord(z.enum(DAMAGE_TYPES), z.number().gte(-1).lt(1)).default({}),
+  immunities: z.array(z.enum(DAMAGE_TYPES)).default([]),
+}).superRefine((mitigation, context) => {
+  const seen = new Set<DamageType>();
+  for (const type of mitigation.immunities) {
+    // Duplicata é dado ambíguo: não se sabe se é engano ou ênfase, e o boot é o lugar de
+    // perguntar.
+    if (seen.has(type)) {
+      context.addIssue({ code: 'custom', message: `imunidade duplicada para "${type}"` });
+    }
+    seen.add(type);
+    // Resistência E imunidade para o mesmo tipo é a ambiguidade que a DT-02 descarta: escolha
+    // uma. Aceitar deixaria a regra depender da ordem em que o resolver lê os dois.
+    if (mitigation.resistances[type] !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: `"${type}" declara resistência e imunidade ao mesmo tempo — escolha uma`,
+      });
+    }
+  }
+});
+
+export type MitigationProfile = z.infer<typeof mitigationSchema>;
+
+/**
+ * A forma COMPILADA de `MitigationProfile` (CMB-03): a tabela completa por tipo (zero onde não
+ * há resistência) e um `Set` de imunidades. É o que o resolver lê no caminho quente, para o
+ * custo por golpe ser O(1) e não uma varredura.
+ */
+export interface CompiledMitigation {
+  readonly resistances: Readonly<Record<DamageType, number>>;
+  readonly immunities: ReadonlySet<DamageType>;
+}
+
+/**
+ * A tabela de efetividade de armadura que reproduz o `combat-v1` bit a bit (CMB-03): `physical`
+ * vale o antigo `melee` (1), e todo tipo não-físico vale o antigo `magic` (0). É a REFERÊNCIA
+ * da migração e o valor que uma fixture pode reusar; o conteúdo real declara a sua, porque o
+ * schema exige os oito tipos e um default em código faria o balanceamento morar onde ninguém
+ * procura.
+ */
+export const V1_ARMOR_EFFECTIVENESS: Readonly<Record<DamageType, number>> = {
+  physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0,
+};
+
 /** Referência a uma aparência no pacote de assets. NUNCA um caminho de arquivo (invariante 6). */
 const appearanceId = z.number().int().positive();
 
@@ -248,6 +324,12 @@ export const weaponSchema = z.strictObject({
   kind: z.enum(WEAPON_KINDS),
   /** Alcance em tiles. `1` é corpo a corpo; o bow do Tibia alcança 6, wand e rod 3. */
   range: z.number().int().positive(),
+  /**
+   * O TIPO de dano da arma (CMB-03, emenda do ADR 0031). Ausente é o default que preserva o
+   * v1: `physical` em corpo a corpo e distância, `arcane` em wand e rod — o `kind: magic` de
+   * antes. A wand declara o seu elemento (energia, terra) quando o conteúdo o conhece.
+   */
+  damageType: z.enum(DAMAGE_TYPES).optional(),
   ammoFamily: z.enum(AMMO_FAMILIES).optional(),
   manaPerHit: z.number().int().positive().optional(),
   damage: z.object({
@@ -256,6 +338,13 @@ export const weaponSchema = z.strictObject({
   }).optional(),
 });
 export type Weapon = z.infer<typeof weaponSchema>;
+
+/**
+ * A arma pronta para uso: `damageType` já resolvido no boot (CMB-03). O schema deixa o campo
+ * opcional porque a forma do arquivo não sabe do `kind`; `buildContent` preenche o default e o
+ * que chega ao `sim` sempre tem tipo.
+ */
+export type ResolvedWeapon = Weapon & { readonly damageType: DamageType };
 
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**
@@ -343,6 +432,12 @@ export const itemSchema = z.strictObject({
    */
   charges: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
+  /**
+   * O que o EQUIPAMENTO resiste e ao que é imune (CMB-03). Ausente é o item neutro — o default
+   * preserva o v1, em que nenhum item tinha mitigação. Soma com os outros equipados no boot do
+   * defensor (ver `Inventory.mitigation`).
+   */
+  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   _open: z.string().optional(),
 });
 
@@ -364,6 +459,8 @@ export const ammunitionSchema = z.strictObject({
   family: z.enum(AMMO_FAMILIES),
   /** O dano do tiro é este `attack` pela skill de distância — o bow não tem attack próprio. */
   attack: z.number().int().nonnegative(),
+  /** O tipo de dano do tiro (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
   /** Gold debitado por tiro. Zero é a munição grátis, e toda família precisa de uma. */
   price: z.number().int().nonnegative(),
   requires: z.object({
@@ -386,7 +483,13 @@ export type Ammunition = AmmunitionDefinition & {
  * saber que existe uma tabela, e a entidade sem aparência morre na montagem do conteúdo — não
  * no primeiro jogador que abrir a mochila.
  */
-export type Item = ItemDefinition & { readonly appearanceId: number };
+export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
+  readonly appearanceId: number;
+  /** A arma com o tipo de dano já resolvido (CMB-03). Ausente em item que não é arma. */
+  readonly weapon?: ResolvedWeapon;
+  /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
+  readonly mitigation: CompiledMitigation;
+};
 
 export const monsterSchema = z.strictObject({
   id: z.string().min(1),
@@ -405,6 +508,16 @@ export const monsterSchema = z.strictObject({
       .refine((range) => range.min <= range.max, 'attack.min não pode passar de attack.max'),
   ]),
   armor: z.number().int().nonnegative(),
+  /**
+   * O TIPO de dano do ataque do monstro (CMB-03). Ausente é `physical`, o default que preserva
+   * o v1 — o rato morde, e mordida era dano físico. As abilities por tipo são do CMB-06.
+   */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  /**
+   * O que o monstro RESISTE e ao que é IMUNE (CMB-03). Ausente é o monstro neutro, e o default
+   * preserva o v1. É o lado do DEFENSOR: entra no resolver junto da armadura e do Dodge.
+   */
+  mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Milissegundos entre ataques. Tempo decorrido, nunca contagem de tick (invariante 2). */
   attackIntervalMs: z.number().int().positive(),
   /**
@@ -647,11 +760,15 @@ export const combatSchema = z.object({
   compatibilityProfile: z.string().min(1).default(COMBAT_V1.id),
   /** §12.2 DECIDIDO: dodge não zera o dano, reduz à metade. */
   dodgeMultiplier: z.number().min(0).max(1),
-  /** Quanto da armadura do alvo é subtraído, por tipo de ataque. */
-  armorEffectiveness: z.object({
-    melee: z.number().min(0).max(1),
-    magic: z.number().min(0).max(1),
-  }),
+  /**
+   * Quanto da armadura do alvo é subtraído, POR TIPO DE DANO (CMB-03, emenda do ADR 0031).
+   *
+   * Antes eram duas colunas (`melee`/`magic`). A migração que preserva o v1 é:
+   * `physical` fica com o antigo `melee`; TODO tipo não-físico fica com o antigo `magic`.
+   * O `z.record` de chave enum é EXAUSTIVO no zod 4: o conteúdo declara os oito tipos, sem
+   * default em código — mudar a efetividade de um elemento é editar JSON, nunca lógica.
+   */
+  armorEffectiveness: z.record(z.enum(DAMAGE_TYPES), z.number().min(0).max(1)),
   /** Piso de dano, como fração do ataque: nem a armadura mais alta zera um golpe. */
   minimumDamageFraction: z.number().min(0).max(1),
   /**
@@ -672,6 +789,11 @@ export const combatSchema = z.object({
     attackRange: z.number().int().positive().default(1),
     armor: z.number().int().nonnegative(),
     dodgeChance: z.number().min(0).max(1),
+    /**
+     * O tipo de dano do golpe DESARMADO (CMB-03). Ausente é `physical`, o default que preserva
+     * o v1 — o punho sempre bateu dano físico.
+     */
+    damageType: z.enum(DAMAGE_TYPES).default('physical'),
   }),
   /**
    * A conversão do Base Power (#155, ADR 0026 decisão 5) — UMA para todas as magias, e nossa:
@@ -1254,6 +1376,12 @@ export const spellSchema = z.object({
       power: z.number().int().positive().optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
+      /**
+       * O TIPO de dano da magia (CMB-03). Ausente é `arcane` — o `kind: magic` do v1 —, para a
+       * magia cujo elemento o conteúdo ainda não declarou. Onde o catálogo o diz (fogo, gelo,
+       * energia, terra, morte, sagrado), o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
     /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
     z.object({
@@ -1311,6 +1439,11 @@ export const supplySchema = z.object({
         radius: z.number().int().positive(),
         centered: z.literal('target').default('target'),
       }),
+      /**
+       * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
+       * Avalanche é gelo, e o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
     }),
   ]),
   /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
@@ -1328,10 +1461,12 @@ export type Supply = z.infer<typeof supplySchema>;
 export type MonsterDefinition = z.infer<typeof monsterSchema>;
 
 /** O monstro pronto para uso, com o `outfitId` já resolvido por `buildContent`. */
-export type Monster = MonsterDefinition & {
+export type Monster = Omit<MonsterDefinition, 'mitigation'> & {
   readonly outfitId: number;
   /** A aparência do cadáver (FUN-123), quando a tabela tem uma. Ausente: não deixa cadáver. */
   readonly corpseAppearanceId?: number;
+  /** A mitigação compilada (CMB-03): lookup por tipo e Set de imunidade. */
+  readonly mitigation: CompiledMitigation;
 };
 export type MonsterAttack = MonsterDefinition['attack'];
 export type HuntDifficultyName = (typeof HUNT_DIFFICULTY_NAMES)[number];

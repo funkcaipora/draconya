@@ -15,7 +15,8 @@
       "shape": "circle",
       "radius": 1,
       "centered": "target"
-    }
+    },
+    "damageType": "holy"
   },
   "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. escala com magic level no Tibia, aqui com `distance` como o resto."
 }

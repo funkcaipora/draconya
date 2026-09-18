@@ -12,7 +12,7 @@ const raw: RawContent = {
     deathPenalty: { fraction: 0.6, premiumFraction: 0.54, levelFloor: 8 },
   }],
   combat: [{
-    id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
+    id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
     minimumDamageFraction: 0.1,
     player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
   }],

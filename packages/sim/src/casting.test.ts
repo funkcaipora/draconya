@@ -9,8 +9,8 @@ import { Rng } from './rng.js';
 // cuida da matemática do golpe é `combat/damage.test.ts`.
 const combat: Combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 1 }, minimumDamageFraction: 0.1,
-  player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0 },
+  armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 }, minimumDamageFraction: 0.1,
+  player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };
 
@@ -20,7 +20,7 @@ const heal: Spell = {
 };
 const strike: Spell = {
   id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000, minLevel: 1,
-  effect: { kind: 'damage', power: 40, range: 3 },
+  effect: { kind: 'damage', power: 40, range: 3, damageType: 'arcane' },
 };
 
 const potion: Supply = {
@@ -176,7 +176,7 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
 describe('magia em ÁREA (FUN-92)', () => {
   const blast = {
     id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
-    effect: { kind: 'damage' as const, power: 30, range: 4, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
+    effect: { kind: 'damage' as const, power: 30, range: 4, damageType: 'fire' as const, area: { shape: 'circle' as const, radius: 1, centered: 'target' as const } },
   };
   const aim = (targets: readonly { armor: number; dodgeChance: number }[], distance = 2) =>
     ({ distance, targets });
@@ -311,12 +311,12 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
   it('the group locks every spell of the group, the secondary only its own, and no mana leaves on refusal', () => {
     const flame: Spell = {
       ...strike, id: 'flame-strike', group: 'attack', groupCooldownMs: 2_000, cooldownMs: 2_000,
-      effect: { kind: 'damage', basePower: 45, range: 3 },
+      effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'fire' },
     };
     const beam: Spell = {
       ...flame, id: 'great-energy-beam', groupCooldownMs: 2_000, cooldownMs: 6_000,
       secondaryGroup: { name: 'great-beams', cooldownMs: 6_000 },
-      effect: { kind: 'damage', basePower: 155, area: { shape: 'beam', length: 8 } },
+      effect: { kind: 'damage', basePower: 155, area: { shape: 'beam', length: 8 }, damageType: 'energy' },
     };
     const deathBeam: Spell = { ...beam, id: 'great-death-beam' };
     const stance: Spell = {
@@ -364,7 +364,7 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
 
   it('a self-origin shape needs no range and no primary distance; the posture scales the spell hit', () => {
     const wave: Spell = {
-      ...strike, id: 'fire-wave', effect: { kind: 'damage', power: 40, area: { shape: 'wave', length: 3 } },
+      ...strike, id: 'fire-wave', effect: { kind: 'damage', power: 40, area: { shape: 'wave', length: 3 }, damageType: 'fire' },
     };
     const caster = hero({ level: 20 });
     // A mira vem com `distance: 0` e os alvos colhidos pela forma; o alcance não é conferido.
@@ -382,7 +382,7 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
   const rune: Supply = {
     id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
     requires: { level: 30, magicLevel: 4 },
-    effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+    effect: { kind: 'damage', basePower: 45, range: 4, damageType: 'ice', area: { shape: 'circle', radius: 3, centered: 'target' } },
   };
   const three = { distance: 2, targets: [{ armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }] };
   const scaling = (skillLevel: number) => ({ skillLevel, powerScale: 1 });

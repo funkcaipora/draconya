@@ -1,18 +1,19 @@
-import type { Combat } from '@draconya/content';
+import { compileMitigation } from '@draconya/content';
+import type { Combat, DamageType } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../rng.js';
 import { effectiveDodge, resolveDamage } from './damage.js';
-import type { DamageIntent, DamageType } from './damage.js';
+import type { DamageIntent } from './damage.js';
 
 const combat: Combat = {
   id: 'baseline',
   compatibilityProfile: 'combat-v1',
   dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 },
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   // O personagem desarmado não participa de nenhum caso deste arquivo: aqui o atacante e o
   // defensor são montados à mão, tijolo por tijolo. Está preenchido porque o tipo pede.
-  player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
+  player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05, damageType: 'physical' },
   spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
 };
 
@@ -56,7 +57,8 @@ describe('resolveDamage', () => {
     expect(resolveDamage(spell, plate, 'pve', combat, rigged(false)).resolvedDamage).toBe(100);
 
     const armouredAgainstMagic: Combat = {
-      ...combat, armorEffectiveness: { melee: 1, magic: 1 },
+      ...combat,
+      armorEffectiveness: { physical: 1, energy: 1, earth: 1, fire: 1, ice: 1, holy: 1, death: 1, arcane: 1 },
     };
     expect(resolveDamage(spell, plate, 'pve', armouredAgainstMagic, rigged(false)).resolvedDamage)
       .toBe(80);
@@ -101,8 +103,13 @@ describe('o outcome v1 é auditável (CMB-02, ADR 0031)', () => {
     expect(result).toEqual({
       profile: 'combat-v1',
       intent: swing,
+      damageType: 'physical',
+      afterDefense: 100,
+      afterArmor: 80,
       armorReduction: 20,
       minimumDamage: 10,
+      afterResistance: 80,
+      immune: false,
       dodged: false,
       resolvedDamage: 80,
     });
@@ -150,6 +157,84 @@ describe('o outcome v1 é auditável (CMB-02, ADR 0031)', () => {
     const unknown: Combat = { ...combat, compatibilityProfile: 'combat-v99' };
     expect(() => resolveDamage(swing, plate, 'pve', unknown, rigged(false)))
       .toThrow(/perfil de combate "combat-v99" desconhecido/);
+  });
+});
+
+describe('mitigação por tipo: resistência, vulnerabilidade e imunidade (CMB-03)', () => {
+  const mitigation = (
+    resistances: Partial<Record<DamageType, number>>, immunities: DamageType[] = [],
+  ) => compileMitigation({ resistances, immunities });
+  const guard = (
+    resistances: Partial<Record<DamageType, number>>, immunities: DamageType[] = [],
+  ) => ({ armor: 20, dodgeChance: 0, mitigation: mitigation(resistances, immunities) });
+
+  it('tipo elemental ignora a armadura quando a tabela diz que ela não vale', () => {
+    // A coluna agora é POR TIPO: fogo vale 0 na tabela, então a armadura não subtrai nada.
+    expect(resolveDamage(hit(100, 'fire'), guard({}), 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(100);
+  });
+
+  it('resistência reduz por fração, sem RNG', () => {
+    const result = resolveDamage(hit(100, 'fire'), guard({ fire: 0.5 }), 'pve', combat, rigged(false));
+    expect(result.afterResistance).toBe(50);
+    expect(result.resolvedDamage).toBe(50);
+  });
+
+  it('vulnerabilidade (resistência negativa) amplifica', () => {
+    expect(resolveDamage(hit(100, 'fire'), guard({ fire: -0.5 }), 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(150);
+  });
+
+  it('imunidade zera, e o piso NÃO a revoga', () => {
+    // Armadura altíssima + piso 10 % dariam 10; a imunidade explícita derruba para zero.
+    const tank = { armor: 500, dodgeChance: 0, mitigation: mitigation({}, ['physical']) };
+    const result = resolveDamage(swing, tank, 'pve', combat, rigged(false));
+    expect(result.immune).toBe(true);
+    expect(result.resolvedDamage).toBe(0);
+    // Sem a imunidade o piso valeria 10 — é a prova de que a imunidade vence o piso.
+    expect(resolveDamage(swing, { armor: 500, dodgeChance: 0 }, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(10);
+  });
+
+  it('a ordem é a do contrato: o piso entra ANTES da resistência', () => {
+    // Armadura 500 contra 100 físico: afterArmor = −400 e o piso vale 10. Com resistência 0,5
+    // o correto é 5 (piso, e SÓ ENTÃO resistência). Se o piso viesse depois, daria 10.
+    const tank = { armor: 500, dodgeChance: 0, mitigation: mitigation({ physical: 0.5 }) };
+    expect(resolveDamage(swing, tank, 'pve', combat, rigged(false)).resolvedDamage).toBe(5);
+  });
+
+  it('o Dodge corta DEPOIS da imunidade e do piso', () => {
+    const dodged = resolveDamage(
+      hit(100, 'fire'), { armor: 0, dodgeChance: 0, mitigation: mitigation({ fire: 0.5 }) },
+      'pve', combat, rigged(true),
+    );
+    // 100 → resistência 0,5 → 50 → dodge → 25.
+    expect(dodged.resolvedDamage).toBe(25);
+    const immune = resolveDamage(
+      hit(100, 'fire'), { armor: 0, dodgeChance: 0, mitigation: mitigation({}, ['fire']) },
+      'pve', combat, rigged(true),
+    );
+    expect(immune.resolvedDamage).toBe(0);
+  });
+
+  it('dano zero por imunidade consome a MESMA rolagem de Dodge', () => {
+    // A sequência do gerador não pode depender de o alvo ser imune: um sorteio por golpe.
+    const withImmunity = Rng.fromSeed('x');
+    const without = Rng.fromSeed('x');
+    resolveDamage(
+      hit(100, 'fire'), { armor: 0, dodgeChance: 0, mitigation: mitigation({}, ['fire']) },
+      'pve', combat, withImmunity,
+    );
+    resolveDamage(hit(100, 'fire'), { armor: 0, dodgeChance: 0 }, 'pve', combat, without);
+    expect(withImmunity.getState()).toEqual(without.getState());
+  });
+
+  it('sem mitigação o resultado é BIT A BIT o v1', () => {
+    const plain = resolveDamage(swing, plate, 'pve', combat, rigged(false));
+    const empty = resolveDamage(
+      swing, { armor: 20, dodgeChance: 0, mitigation: mitigation({}) }, 'pve', combat, rigged(false),
+    );
+    expect(empty).toEqual(plain);
   });
 });
 

@@ -5,10 +5,11 @@
   "slot": "hand",
   "weight": 19,
   "value": 100,
-  "_open": "A arma inicial do Sorcerer (ADR 0026, decisão 3): alcance 3, 2 de mana por golpe, dano 8–18 (TibiaWiki, energia — elemento ignorado até haver resistência).",
+  "_open": "A arma inicial do Sorcerer (ADR 0026, decisão 3): alcance 3, 2 de mana por golpe, dano 8–18 (TibiaWiki, energia declarada no `weapon.damageType` desde o CMB-03).",
   "weapon": {
     "kind": "wand",
     "range": 3,
+    "damageType": "energy",
     "manaPerHit": 2,
     "damage": {
       "min": 8,

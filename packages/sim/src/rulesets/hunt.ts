@@ -18,9 +18,9 @@
 
 import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content,
-  Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, Route, Skill, Spell, SpellArea, SpawnPoint,
-  Stamina, Supply, Tilemap, Vocation, Weapon,
+  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, DamageType,
+  Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, ResolvedWeapon, Route, Skill, Spell,
+  SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
@@ -163,6 +163,8 @@ export interface PlayerProfile {
   readonly attackRange: number;
   readonly armor: number;
   readonly dodgeChance: number;
+  /** O tipo do golpe desarmado (CMB-03). Vem de `combat.player.damageType`. */
+  readonly damageType: DamageType;
 }
 
 /** O que uma regra de saída consegue enxergar. Estreito de propósito: regra não muda estado. */
@@ -1695,14 +1697,16 @@ export class HuntRuleset implements Ruleset {
     findById(session.participants, characterId)?.conditions.remove(key);
   }
 
-  /** Põe o monstro na mira, com a armadura que o conteúdo dá a ele. */
+  /** Põe o monstro na mira, com a armadura e a mitigação que o conteúdo dá a ele. */
   #collect(monster: MonsterRuntime): void {
     this.#spellHits.push(monster);
     // Monstro não esquiva do jogador — é a mesma regra do `#strike`, e ela vale igual para
     // magia. Quando esquiva de monstro existir, vem do conteúdo e os dois leem do mesmo campo.
+    const definition = this.#options.monsters.get(monster.monsterId);
     this.#spellTargets.push({
-      armor: this.#options.monsters.get(monster.monsterId)?.armor ?? 0,
+      armor: definition?.armor ?? 0,
       dodgeChance: 0,
+      mitigation: definition?.mitigation,
     });
   }
 
@@ -2002,7 +2006,11 @@ export class HuntRuleset implements Ruleset {
     // mesma semente dá o mesmo golpe — o contrato do loot vale para o dano.
     const { min, max } = attackRange(definition.attack);
     const result = resolveDamage(
-      { rawDamage: session.rng.integer(min, max), source: 'monster-attack', damageType: 'physical' },
+      {
+        rawDamage: session.rng.integer(min, max),
+        source: 'monster-attack',
+        damageType: definition.damageType,
+      },
       this.#playerDefender(character),
       'pve',
       this.#options.combat,
@@ -2165,11 +2173,13 @@ export class HuntRuleset implements Ruleset {
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
-    weapon: Item | null, how: Weapon | undefined,
+    weapon: Item | null, how: ResolvedWeapon | undefined,
   ): void {
     const definition = this.#options.monsters.get(monster.monsterId);
     if (definition === undefined) return;
-    const defender: Defender = { armor: definition.armor, dodgeChance: 0 };
+    const defender: Defender = {
+      armor: definition.armor, dodgeChance: 0, mitigation: definition.mitigation,
+    };
 
     if (weapon !== null && how?.kind === 'distance') {
       const ammo = this.#ammoFor(session, character, how.ammoFamily ?? 'arrow');
@@ -2186,12 +2196,13 @@ export class HuntRuleset implements Ruleset {
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
-      // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio.
+      // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio. O TIPO
+      // também é da munição (CMB-03): a flecha é `physical`, e o conteúdo pode declarar outro.
       const result = resolveDamage(
         {
           rawDamage: this.#scaledPower(character, 'distance-hit', ammo.attack),
           source: 'basic-attack',
-          damageType: 'physical',
+          damageType: ammo.damageType,
         },
         defender, 'pve', this.#options.combat, session.rng,
       );
@@ -2211,13 +2222,13 @@ export class HuntRuleset implements Ruleset {
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
       });
-      // Dano por faixa fixa e MÁGICO: no Tibia a wand não escala com skill nenhuma, e a
-      // armadura que vale é a mágica (`armorEffectiveness.magic`).
+      // Dano por faixa fixa e do TIPO da arma (CMB-03): a wand de vortex é energia, o rod de
+      // snakebite é terra; sem declaração o boot resolve `arcane`, o `kind: magic` do v1.
       const result = resolveDamage(
         {
           rawDamage: session.rng.integer(range.min, range.max),
           source: 'basic-attack',
-          damageType: 'arcane',
+          damageType: how.damageType,
         },
         defender, 'pve', this.#options.combat, session.rng,
       );
@@ -2233,7 +2244,8 @@ export class HuntRuleset implements Ruleset {
       {
         rawDamage: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
         source: 'basic-attack',
-        damageType: 'physical',
+        // O tipo é da ARMA (CMB-03); desarmado, é o do punho, que o conteúdo declara.
+        damageType: how?.damageType ?? this.#options.player.damageType,
       },
       defender, 'pve', this.#options.combat, session.rng,
     );
@@ -2719,6 +2731,9 @@ export class HuntRuleset implements Ruleset {
     return {
       armor: this.#options.player.armor + character.inventory.armor(this.#options.items),
       dodgeChance: this.#options.player.dodgeChance,
+      // A resistência e a imunidade do EQUIPAMENTO (CMB-03), compiladas na hora do golpe a
+      // partir dos poucos slots vestidos — não é varredura de tabela de resistência.
+      mitigation: character.inventory.mitigation(this.#options.items),
     };
   }
 

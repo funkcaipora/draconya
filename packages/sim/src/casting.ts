@@ -14,7 +14,7 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import type { Combat, Spell, Supply } from '@draconya/content';
+import type { Combat, CompiledMitigation, Spell, Supply } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -93,6 +93,8 @@ export type CastResult = CastSuccess | CastRefused;
 export interface SpellTarget {
   readonly armor: number;
   readonly dodgeChance: number;
+  /** Mitigação compilada do alvo (CMB-03). Ausente é o alvo neutro. */
+  readonly mitigation?: CompiledMitigation | undefined;
 }
 
 /**
@@ -275,8 +277,8 @@ export function castSpell(
         const target = targets[i] as SpellTarget;
         const power = Math.round(powerOf(effect, caster, scaling, combat, rng) * dealt);
         const result = resolveDamage(
-          { rawDamage: power, source: 'spell', damageType: 'arcane' },
-          { armor: target.armor, dodgeChance: target.dodgeChance },
+          { rawDamage: power, source: 'spell', damageType: effect.damageType },
+          { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
           'pve',
           combat,
           rng,
@@ -364,8 +366,9 @@ export function useSupply(
       const { min, max } = spellPowerRange(supply.effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
-        { rawDamage: power, source: 'rune', damageType: 'arcane' },
-        { armor: target.armor, dodgeChance: target.dodgeChance }, 'pve', combat, rng,
+        { rawDamage: power, source: 'rune', damageType: supply.effect.damageType },
+        { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
+        'pve', combat, rng,
       );
       hits.push(result.resolvedDamage);
       total += result.resolvedDamage;

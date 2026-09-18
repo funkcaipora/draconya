@@ -8,6 +8,7 @@
 
 import { performance } from 'node:perf_hooks';
 import { MonsterRuntime, chooseTarget, decideMonsterAction, type Prey } from '@draconya/sim';
+import { compileMitigation } from '@draconya/content';
 import type { Monster } from '@draconya/content';
 
 /** 48 monstros é a instância cheia que o §17 descreve. */
@@ -18,9 +19,10 @@ const DT_MS = 100;
 
 const definition: Monster = {
   id: 'rat', name: 'Rat', outfitId: 21, recommendedLevel: 1,
-  health: 20, experience: 5, attack: 6, armor: 0,
+  health: 20, experience: 5, attack: 6, armor: 0, damageType: 'physical',
   attackIntervalMs: 2_000, speed: 300, aggroRadius: 8,
   attackRange: 1, leashRadius: 0, loot: { items: [] },
+  mitigation: compileMitigation(undefined),
 };
 
 // Grade com paredes espalhadas: caminho livre demais não exercita o desvio, que é o ramo

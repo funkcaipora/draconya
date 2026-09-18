@@ -206,11 +206,11 @@ describe('loadContent', () => {
   it('cada arma diz como bate, e a skill de distância existe (#152, ADR 0026 decisões 3 e 4)', () => {
     const content = loadContent(DATA);
     const weapon = (id: string) => content.items.get(id)?.weapon;
-    expect(weapon('machete')).toEqual({ kind: 'melee', range: 1 });
-    expect(weapon('steel-axe')).toEqual({ kind: 'melee', range: 1 });
-    expect(weapon('bow')).toEqual({ kind: 'distance', range: 6, ammoFamily: 'arrow' });
-    expect(weapon('wand-of-vortex')).toEqual({ kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } });
-    expect(weapon('snakebite-rod')).toEqual({ kind: 'wand', range: 3, manaPerHit: 1, damage: { min: 8, max: 18 } });
+    expect(weapon('machete')).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
+    expect(weapon('steel-axe')).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
+    expect(weapon('bow')).toEqual({ kind: 'distance', range: 6, ammoFamily: 'arrow', damageType: 'physical' });
+    expect(weapon('wand-of-vortex')).toEqual({ kind: 'wand', range: 3, manaPerHit: 2, damageType: 'energy', damage: { min: 8, max: 18 } });
+    expect(weapon('snakebite-rod')).toEqual({ kind: 'wand', range: 3, manaPerHit: 1, damageType: 'earth', damage: { min: 8, max: 18 } });
     // Os projéteis da wand e do rod: energia (5) e terra pequena (39), conferidos de olho.
     expect(content.appearances?.weapons).toEqual({ 'wand-of-vortex': { missile: 5 }, 'snakebite-rod': { missile: 39 } });
     const distance = content.skills.get('distance');

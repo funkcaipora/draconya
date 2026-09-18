@@ -10,7 +10,8 @@
   "effect": {
     "kind": "damage",
     "basePower": 15,
-    "range": 3
+    "range": 3,
+    "damageType": "energy"
   },
   "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado sem conferência visual. a mesma Apprentice's Strike do Druid (DT-02)."
 }

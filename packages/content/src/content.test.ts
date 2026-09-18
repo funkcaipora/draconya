@@ -31,7 +31,7 @@ const baseline = {
 
 const combat = {
   id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 4, dodgeChance: 0.05 },
 };
 
@@ -210,8 +210,72 @@ describe('combat baseline', () => {
   });
 });
 
-describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {
-  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
+describe('a taxonomia de dano e a mitigação (CMB-03)', () => {
+  const withMitigation = (mitigation: unknown) => base({ monsters: [{ ...rat, mitigation }] });
+
+  it('recusa tipo de dano DESCONHECIDO na resistência e na imunidade', () => {
+    // A lista canônica é a fonte única (ADR 0031, emenda). Um tipo que não existe não pode
+    // virar uma coluna silenciosa que ninguém resolve.
+    expect(() => buildContent(withMitigation({ resistances: { sonic: 0.5 } })))
+      .toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ immunities: ['sonic'] })))
+      .toThrow(ContentError);
+  });
+
+  it('recusa resistência fora do intervalo [-1, 1): 1 é ambiguidade com imunidade', () => {
+    // Positivo reduz, negativo amplifica; `1` seria imunidade disfarçada (DT-02), e o schema
+    // recusa para a imunidade continuar explícita.
+    expect(() => buildContent(withMitigation({ resistances: { fire: 1 } }))).toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ resistances: { fire: -1.5 } }))).toThrow(ContentError);
+    expect(() => buildContent(withMitigation({ resistances: { fire: 1.5 } }))).toThrow(ContentError);
+  });
+
+  it('recusa imunidade duplicada', () => {
+    expect(() => buildContent(withMitigation({ immunities: ['fire', 'fire'] })))
+      .toThrow(/imunidade duplicada/);
+  });
+
+  it('recusa resistência e imunidade para o mesmo tipo — a ambiguidade da DT-02', () => {
+    expect(() => buildContent(withMitigation({ resistances: { fire: 0.5 }, immunities: ['fire'] })))
+      .toThrow(/ao mesmo tempo/);
+  });
+
+  it('compila a mitigação no boot: tabela completa por tipo e Set de imunidade', () => {
+    const content = buildContent(withMitigation({ resistances: { fire: 0.5 }, immunities: ['ice'] }));
+    const mitigation = content.monsters.get('rat')?.mitigation;
+    expect(mitigation?.resistances.fire).toBe(0.5);
+    expect(mitigation?.resistances.physical).toBe(0);
+    expect(mitigation?.resistances.arcane).toBe(0);
+    expect(mitigation?.immunities.has('ice')).toBe(true);
+    expect(mitigation?.immunities.has('fire')).toBe(false);
+  });
+
+  it('a tabela de armadura exige os OITO tipos — um só não basta', () => {
+    // `z.record` de chave enum é exaustivo no zod 4: o conteúdo declara tudo, sem default em
+    // código. É o que impede a efetividade de um elemento novo nascer zero por esquecimento.
+    expect(() => buildContent(base({ combat: [{ ...combat, armorEffectiveness: { physical: 1 } }] })))
+      .toThrow(/armorEffectiveness/);
+  });
+
+  it('um spell declara damageType ou recebe `arcane`, o default que preserva o v1', () => {
+    const semTipo = {
+      id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3 },
+    };
+    const content = buildContent(base({ spells: [semTipo] }));
+    expect(content.spells.get('strike')?.effect).toMatchObject({ damageType: 'arcane' });
+  });
+
+  it('recusa um spell com tipo de dano fora da taxonomia', () => {
+    const comTipoErrado = {
+      id: 'strike', name: 'Golpe', manaCost: 15, cooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'sonic' },
+    };
+    expect(() => buildContent(base({ spells: [comTipoErrado] }))).toThrow(ContentError);
+  });
+});
+
+describe('o perfil de compatibilidade de combate (ADR 0031, CMB-02)', () => {  it('conteúdo legado/fixture SEM o campo recebe o default compatível `combat-v1`', () => {
     // O default existe para o conteúdo anterior ao perfil continuar montando. O perfil é
     // ADITIVO: nada do resultado entregue muda por ele estar implícito.
     const { compatibilityProfile: _omitido, ...legacy } = combat;
@@ -845,7 +909,7 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
 
   it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
     // Sem `weapon`, uma arma é corpo a corpo de alcance 1 — o que toda arma era.
-    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1 });
+    expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
     const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
     const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);

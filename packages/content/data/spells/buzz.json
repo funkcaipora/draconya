@@ -10,7 +10,8 @@
   "effect": {
     "kind": "damage",
     "basePower": 15,
-    "range": 3
+    "range": 3,
+    "damageType": "energy"
   },
   "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina."
 }

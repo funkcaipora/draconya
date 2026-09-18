@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { itemSchema } from '@draconya/content';
+import { compileItem, itemSchema } from '@draconya/content';
 import type { Item, Vocation } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
 import type { CharacterState, VocationChoiceOptions } from './character.js';
@@ -9,7 +9,7 @@ import type { CharacterState, VocationChoiceOptions } from './character.js';
 // e isso é `progression.test.ts`.
 
 const define = (over: Record<string, unknown>): Item => ({
-  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over }),
+  ...compileItem(itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over })),
   appearanceId: 1,
 });
 
