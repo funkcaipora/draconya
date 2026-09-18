@@ -37,7 +37,7 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(topbarIndex).toBeGreaterThan(vitalsIndex);
   });
 
-  it('the right column is set → satchel → backpack → analyzer, always mounted, in that order (#307, RF-05)', async () => {
+  it('the right column is set → satchel → backpack, always mounted, in that order (#307, RF-05)', async () => {
     const html = await render();
     const right = html.slice(html.indexOf('janelas à direita'));
     const order = ['ui-panel-title">Set', 'ui-panel-title">Bolsa', 'ui-panel-title">Mochila']
@@ -108,13 +108,9 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(setIndex).toBeGreaterThan(vitalsIndex);
   });
 
-  // #258 (D6): o analisador deixou de ser `{open.analyzer && <Analyzer />}` — montado/desmontado
-  // pela barra do topo — e virou uma seção FIXA, como `BotPanel`/`EquipmentPanel`. Mutação que
-  // mata: voltar a montá-lo condicionalmente em `Shell.tsx` faria este teste continuar passando
-  // (a janela nasce aberta, `DEFAULT_WINDOWS.analyzer: true`) — quem prova "nunca desmonta" é
-  // `Analyzer.test.ts` (`collapsed={true}` ainda com o cabeçalho no HTML); aqui só se prova que
-  // o `Panel dock` "Analisador de caçada" está na coluna certa, depois de mochila e bolsa.
-  it('the analyzer is a fixed "Analisador de caçada" panel in the right column, with an active session', async () => {
+  // #315: o Analisador deixou a coluna direita e virou janela FLUTUANTE fora das colunas.
+  // Mutação que mata: voltar a montá-lo como `Panel dock` dentro de `.windows-right`.
+  it('mounts the analyzer as a floating window, with an active session', async () => {
     const aggregates: Aggregates = {
       durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
     };
@@ -123,10 +119,11 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
       analyzer: { sessionType: 'hunt', aggregates, notableEvents: [], receivedAtMs: 0, ended: false },
     }));
     const html = await render();
-    const right = html.slice(html.indexOf('janelas à direita'));
-    const backpackIndex = right.indexOf('ui-panel-title">Mochila');
-    const analyzerIndex = right.indexOf('ui-panel-title">Analisador de caçada');
-    expect(backpackIndex).toBeGreaterThan(0);
-    expect(analyzerIndex).toBeGreaterThan(backpackIndex);
+    expect(html).toContain('ui-floating-window--analyzer');
+    expect(html).toContain('ui-panel-title">Analisador de caçada');
+
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('<Analyzer open={open.analyzer}');
+    expect(source).not.toContain('<Analyzer collapsed=');
   });
 });

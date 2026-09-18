@@ -26,6 +26,14 @@ describe('FloatingWindow', () => {
     expect(html).toContain('conteúdo');
   });
 
+  it('aceita uma classe de instância extra (para o order de mobile do consumidor)', async () => {
+    const html = await render({
+      name: 'analyzer', title: 'X', initial: { x: 0, y: 0 }, className: 'ui-floating-window--analyzer',
+    });
+
+    expect(html).toContain('floating-window ui-floating-window--analyzer');
+  });
+
   it('reserva sessenta pixels para os botões da janela', async () => {
     const html = await render({ name: 'x', title: 'X', initial: { x: 0, y: 0 } });
 

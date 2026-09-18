@@ -49,9 +49,9 @@ import { chatBadgeTier } from './chat-badge.js';
  * Quais janelas nascem abertas: as do loop de todo dia. Bot e Bestiário são visita. Set,
  * mochila e bolsa são FIXOS (ADR 0026 d.7, #161): o botão do próprio `EquipmentPanel` minimiza
  * os três, nunca remove (RC-09/#322 — antes era um ícone na barra do topo).
- * O analisador também é FIXO desde #258 (D6): `open.analyzer` só minimiza, nunca desmonta —
- * uma janela que existe sozinha continua não aparecendo sem sessão (`Analyzer.tsx` devolve
- * `null`). Hunts e Cyclopedia são modais e nascem fechados. Chat nasce fechado (#323, RC-10,
+ * O analisador é janela FLUTUANTE desde #315 (ADR 0030 decisão 3): `open.analyzer` monta e
+ * desmonta a janela, e sem sessão — ou na Cidade — o próprio componente devolve `null`.
+ * Hunts e Cyclopedia são modais e nascem fechados. Chat nasce fechado (#323, RC-10,
  * ADR 0030 §3): o kit não o desenha, e as recusas do servidor agora justificam o ícone acender
  * quando uma `system-message` chega com ele fechado.
  */
@@ -138,10 +138,13 @@ export function Shell() {
           <BattlePanel />
           {/* A bolsa da party (#197): só no modo compartilhado; minimiza com o inventário. */}
           <PartyBag collapsed={!open.inventory} />
-          {/* O analisador é FIXO (#258, D6): sempre montado; a barra do topo MINIMIZA, nunca
-              desmonta — o mesmo padrão de `BotPanel`/`EquipmentPanel` acima. */}
-          <Analyzer collapsed={!open.analyzer} onToggle={() => { toggle('analyzer'); }} />
         </div>
+        {/* O Analisador é janela FLUTUANTE fora das colunas desde #315 (R4-14, ADR 0030 decisão 3):
+            abre e fecha pelo ícone "Analisador" do topo — nunca mais minimiza, porque uma janela
+            flutuante fecha, não encolhe. Continua SEMPRE montado: é o próprio componente quem
+            decide, por dentro, se há o que desenhar (sem sessão, na Cidade, ou fechada) — é assim
+            que o `forceOpen` ao encerrar a hunt continua funcionando mesmo com a janela fechada. */}
+        <Analyzer open={open.analyzer} onToggle={() => { toggle('analyzer'); }} />
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha

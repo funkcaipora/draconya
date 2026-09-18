@@ -32,6 +32,8 @@ export interface FloatingWindowProps {
   readonly actions?: ReactNode;
   readonly width?: number;
   readonly footer?: ReactNode;
+  /** Classe extra da instância (`ui-floating-window--<name>`), usada pelo `order` de mobile. */
+  readonly className?: string;
   readonly children?: ReactNode;
 }
 
@@ -99,6 +101,7 @@ export function FloatingWindow({
   actions,
   width,
   footer,
+  className,
   children,
 }: FloatingWindowProps) {
   const root = useRef<HTMLDivElement | null>(null);
@@ -170,7 +173,7 @@ export function FloatingWindow({
   return (
     <div
       ref={root}
-      className="floating-window"
+      className={['floating-window', className ?? null].filter((value): value is string => value !== null).join(' ')}
       style={{ left: position.x, top: position.y }}
       aria-label={title}
     >

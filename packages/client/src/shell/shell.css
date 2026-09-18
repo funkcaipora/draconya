@@ -311,6 +311,21 @@ body {
 /* "Mortes": cor de perigo, inspirada no `color(c)` do handoff (`Hud.jsx:184`, `c === "red"`). */
 .analyzer-line-danger b { color: var(--blood-7); }
 
+/* O modal expandido do Analisador (#315, R8-25): as dez linhas de `DR.analyzer.rows` do kit
+   (data.js:68), com os números reais de `Aggregates`. Prefixo próprio para não mexer nas classes
+   `.analyzer-*` que a janela já usa. */
+.analyzer-modal-box { display: flex; flex-direction: column; }
+.analyzer-modal-row {
+  display: grid; grid-template-columns: 1fr auto 92px; align-items: center; gap: 8px;
+  height: 21px; font: 9.5px var(--font-mono); color: var(--text-muted);
+  border-bottom: 1px solid rgba(255, 255, 255, .04);
+}
+.analyzer-modal-row b { font-weight: 500; color: var(--parchment-1); font-variant-numeric: tabular-nums; }
+.analyzer-modal-row .analyzer-modal-value-ok { color: var(--ok); }
+.analyzer-modal-row i {
+  font-style: normal; text-align: right; color: var(--text-faint); font-size: 8.5px;
+}
+
 /* A entrada (#248, ADR 0029 D7/D8). Tela cheia, sem nenhuma janela do jogo: por isso as
    classes daqui não usam os tokens `--hud-*` (aqueles são do HUD pós-login, DS-08) — a
    entrada tem a própria escala, herdada linha a linha do handoff (Entry.jsx). */
@@ -1016,13 +1031,14 @@ body {
   .windows-right > .inventory { order: 1; }
   .windows-right > .container-window { order: 2; }
   .windows-right > .battle-panel { order: 3; }
-  /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, entre Batalha e o
-     Analisador, como a coluna do OTClient já lista no D6 ("Set, bolsa, mochila, Batalha, bolsa
-     da party, Analisador"). */
+  /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, depois de Batalha. */
   .windows-right > section { order: 4; }
   .windows-left > .bot-panel { order: 4; }
   .windows-left > section { order: 5; }
-  .windows-right > .analyzer { order: 6; }
+  /* O Analisador saiu de .windows-right (#315): é filho direto de .shell agora, então o `order`
+     dele compete com .windows-left/.windows-right/.chat-window, não mais com os outros filhos da
+     coluna. `order: 4` — o mesmo de `.windows-right` — o coloca logo depois da coluna direita. */
+  .shell > .ui-floating-window--analyzer { order: 4; }
   .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   /* O chat vira seção da página como as outras (#252): sai do `position: fixed` sobre o mundo —
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
