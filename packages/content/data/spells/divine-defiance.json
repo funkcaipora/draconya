@@ -16,5 +16,5 @@
     "durationMs": 10000,
     "damageTakenPercent": -12
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil escolhidos pelas constantes do protocolo (CONST_ME/CONST_ANI), sem conferência visual: o pacote de arte não está nesta máquina. o Tibia dá +12 % de esquiva; sem buff de esquiva no motor, −12 % de dano tomado tem o mesmo valor esperado."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia dá +12 % de esquiva; sem buff de esquiva no motor, −12 % de dano tomado tem o mesmo valor esperado."
 }

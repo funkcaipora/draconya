@@ -149,7 +149,17 @@ dela são SEMÂNTICAS e compartilhadas (`spit`, `fire-impact`) — a ability de 
 MUDA, e linha sem uso é vocabulário à espera: as duas são válidas, e por isso não há id de
 conteúdo para cruzar. O monstro declara `abilities[]`; ausente normaliza no boot para UMA
 básica montada de `attack`/`attackIntervalMs`/`attackRange`/`damageType`, e o id `basic` é
-reservado ao boot.
+reservado ao boot. **Os ids que cada chave resolve continuam sendo arte**, então
+`packProblems` os confere contra o inventário do pacote (CMB-09, #242): um projétil fora da
+faixa é o quadrado invisível da FUN-21, agora a cada lançamento.
+
+**A conferência visual dos efeitos e projéteis é auditada e re-rodável** (CMB-09, #242). O
+método, a versão do pacote e o bloqueio da biblioteca parcial estão em
+`docs/combat-presentation-audit.md`; `src/appearances.test.ts` prende que toda referência cai no
+inventário versionado e, quando `things/<versão>/library/manifest.json` existe, que a aparência
+existe no índice dela. **Nesta máquina a biblioteca é parcial** (47 de 4171 folhas), e nenhum
+sprite de efeito/projétil tem PNG — por isso nenhum id foi corrigido sem evidência; os `_open`
+das magias registram o bloqueio em vez da frase genérica "sem conferência visual".
 
 **`maps.<id>.wall` é UM id ou as quatro peças** (FUN-105): `{ vertical, horizontal, corner,
 pole }`, como o Tibia monta muro — o tile bloqueado não tem uma arte só, e a peça é escolhida

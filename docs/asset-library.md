@@ -95,6 +95,13 @@ carregar um arquivo JSON gigante. `manifest.json` informa quantas folhas e sprit
 presentes. O gerador nunca chama um pacote incompleto de completo: quando uma folha citada no
 catálogo não existe, o índice preserva o id e grava `png: null`.
 
+**A biblioteca de `things/1332` desta máquina é parcial** (`complete: false`, 47 de 4171 folhas,
+5508 de 184443 sprites, gerada em 2026-09-18). O `.dat` de aparências está inteiro — todos os ids
+existem no índice —, mas a maioria das folhas de sprite não está no pacote-fonte. A consequência
+prática é que ids de **efeito e projétil de combate não têm PNG para abrir** nesta máquina; a
+auditoria de apresentação de combate (#242) registra esse bloqueio em vez de inferir fidelidade.
+Ver [`combat-presentation-audit.md`](combat-presentation-audit.md) para o método e a tabela.
+
 No formato moderno, `sheets/` e os PNGs individuais são produzidos. No formato DatSpr, `atlases/`
 contém todas as páginas e `sprites.jsonl` contém as coordenadas de cada quadro. O `Tibia.dat` é
 mantido como fonte e seus totais de objetos, outfits, efeitos e projéteis entram no manifesto;

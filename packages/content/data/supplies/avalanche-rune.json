@@ -17,5 +17,5 @@
       "centered": "target"
     }
   },
-  "_open": "TibiaWiki (conferir ao gravar): level 30, magic level 4, 4 cargas; o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo declarado no efeito desde o CMB-03."
+  "_open": "TibiaWiki (conferir ao gravar): level 30, magic level 4, 4 cargas; o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo declarado no efeito desde o CMB-03. Aparência: efeito (effect 41, o mesmo de ice-wave) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, QA por tile pendente e id mantido (ver docs/combat-presentation-audit.md)."
 }
