@@ -8,6 +8,10 @@
 // Tudo é INTENÇÃO (invariante 4): a tela nunca calcula cota, XP ou valor de venda; pede ao
 // `api` e mostra o que ele devolveu. Quem inicia é o servidor — e o ticket que ele manda é o
 // que a conexão usa para entrar, pelo mesmo `connect` de sempre.
+//
+// Nome e expulsão chegaram com o SV-22 (#358): `PartyMemberView.name` substitui o `characterId`
+// cru na lista, e o líder vê um `×` em cada OUTRO membro (nunca em si — para isso existe
+// `leave`). SV-19 (#355) rotula a dificuldade com a contagem de monstros do catálogo.
 
 import { useEffect, useState } from 'react';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
@@ -22,6 +26,18 @@ const MODE_TEXT = { split: 'Dividido', shared: 'Compartilhado' } as const;
 
 /** De quanto em quanto tempo a tela pergunta ao servidor pela party (DT-01). */
 export const POLL_MS = 2_000;
+
+/**
+ * O rótulo do pull no seletor de dificuldade — "Ousado · 4" como o Huntera mostra (SV-19,
+ * #355). Definida AQUI, e não importada de `HuntsModal.tsx`: ele importa `PartyPanel`, e
+ * importar de volta criaria um ciclo entre os dois módulos. `HuntsModal.tsx` mantém a própria
+ * cópia; as duas já divergiam em `DIFFICULTY_TEXT` antes desta issue.
+ */
+function pullLabel(hunt: HuntListing, difficulty: string): string {
+  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
+  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
+  return count === undefined ? label : `${label} · ${String(count)}`;
+}
 
 export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
   const me = useHudSlice((state) => state.characterId);
@@ -81,9 +97,20 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
               <li key={member.characterId} className="party-member">
                 <span>
                   {member.characterId === current.leaderId && <span className="party-leader-star">★</span>}
-                  {member.characterId === me ? 'você' : member.characterId}
+                  {member.characterId === me ? 'você' : member.name}
                 </span>
                 <span className={member.approved ? 'party-approved' : 'entry-meta'}>{member.approved ? '✓ aprovou' : 'aguardando'}</span>
+                {leader && member.characterId !== me && (
+                  <button
+                    type="button"
+                    className="party-kick"
+                    title="Remover da party"
+                    disabled={state.busy}
+                    onClick={() => { void partyActions.kick(member.characterId); }}
+                  >
+                    ×
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -110,7 +137,9 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
                   {hunts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
                 </select>
                 <select aria-label="dificuldade" value={difficulty} onChange={(event) => { setDifficulty(event.target.value); }}>
-                  {(hunt?.difficulties ?? []).map((d) => <option key={d} value={d}>{DIFFICULTY_TEXT[d] ?? d}</option>)}
+                  {hunt === undefined ? null : hunt.difficulties.map((d) => (
+                    <option key={d} value={d}>{pullLabel(hunt, d)}</option>
+                  ))}
                 </select>
                 <select aria-label="modo" value={mode} onChange={(event) => { setMode(event.target.value as 'split' | 'shared'); }}>
                   <option value="split">{MODE_TEXT.split}</option>
