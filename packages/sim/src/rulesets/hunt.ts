@@ -16,10 +16,10 @@
 // A instância é ISOLADA: mapa, rota e spawns são desta sessão e de mais ninguém. Não existe
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
-import { BASIC_ABILITY_ID, BOT_CATEGORIES, isBlocked } from '@draconya/content';
+import { BASIC_ABILITY_ID, BOT_CATEGORIES, ITEM_SLOTS, isBlocked } from '@draconya/content';
 import type {
   AmmoFamily, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
-  Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, Monster, MonsterAbility, PartyConfig, Progression,
+  Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot, Monster, MonsterAbility, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
   WeaponFamily, WeaponProfile,
 } from '@draconya/content';
@@ -47,7 +47,7 @@ import { rollLoot } from '../loot.js';
 import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
-import type { CarriedItem, ContainerRules } from '../inventory.js';
+import type { CarriedItem, ContainerRules, EquipmentObserver } from '../inventory.js';
 import { MAX_STACK } from '../inventory.js';
 import { planRestock } from '../restock.js';
 import { compileBot } from '../bot.js';
@@ -109,6 +109,16 @@ const EXIT_COUNTDOWN = 'exit-countdown';
  * personagem; é ele quem compra.
  */
 const RESTOCK = 'restock';
+
+/**
+ * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
+ * um evento da fila, agendado no equip e cancelado no desequip (invariante 2) — nunca um
+ * `remainingMs -= dtMs`. O subject é `<characterId>:<slot>`, o que permite cancelar por slot.
+ */
+const EQUIP_EXPIRE = 'equip-expire';
+function equipExpirySubject(characterId: string, slot: ItemSlot): string {
+  return `${characterId}:${slot}`;
+}
 
 type ExitReason = 'manual-exit' | 'exit-rule';
 /**
@@ -779,6 +789,9 @@ export class HuntRuleset implements Ruleset {
     // Os containers ganham os tamanhos iniciais aqui (#160) — é onde o conteúdo existe, e é o
     // que migra um snapshot anterior sem bump: nunca encolhe.
     character.inventory.ensureContainers(this.#containerRules(character));
+    // Instala o observer e agenda o vencimento do que já está vestido (ADR 0032 d.8): a
+    // entrada fresca não passa por `equip`, e o anel que já vinha do ticket precisa vencer.
+    this.#armEquipment(session, character);
     // O primeiro entra NO tile inicial da rota; o segundo em diante, no livre mais próximo —
     // tile é exclusivo, e o `rejoinNearest` do primeiro passo o põe na rota (#203).
     const at = runner.walker.current;
@@ -853,6 +866,9 @@ export class HuntRuleset implements Ruleset {
     // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
+    // O observer sai com ele: a Cidade não simula, e uma closure apontando para a sessão que
+    // ele deixou vazaria. A carga/duração dele não o segue (fora do escopo, §12).
+    character.inventory.setEquipmentObserver(null);
     // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
     this.#cancelConditions(session, character);
     // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
@@ -953,6 +969,7 @@ export class HuntRuleset implements Ruleset {
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
+      case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
       case BOT_EVENT.potion: return this.#onBot(session, 'potion', event.subject);
       case BOT_EVENT.attack: return this.#onBot(session, 'attack', event.subject);
@@ -1113,6 +1130,11 @@ export class HuntRuleset implements Ruleset {
   }
 
   onEnd(session: Session, _reason: EndReason): void {
+    // O observer morre com a sessão: os eventos dele não vão mais vencer, e a closure não pode
+    // segurar uma sessão encerrada.
+    for (const character of session.participants) {
+      character.inventory.setEquipmentObserver(null);
+    }
     // A bolsa é vendida e dividida entre os presentes (#192); os extratos saem DEPOIS disto,
     // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
     // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
@@ -1166,6 +1188,10 @@ export class HuntRuleset implements Ruleset {
     this.#pendingRunners = null;
     for (const character of session.participants) {
       character.inventory.ensureContainers(this.#containerRules(character));
+      // SÓ reinstala o observer (ADR 0032 d.8): a fila restaurada já tem o `EQUIP_EXPIRE`, e
+      // reagendar aqui duplicaria o evento e o item venceria cedo. Snapshot anterior sem o
+      // evento é degradação declarada — o item só volta a vencer quando for reequipado.
+      character.inventory.setEquipmentObserver(this.#equipmentObserver(session, character.id));
       // O legado `ammo` por família vira o item no slot `ammo` (AB-05), como em `onEnter`:
       // aqui o catálogo já existe, e a pilha do item escolhido está no inventário restaurado.
       this.#migrateLegacyAmmo(character);
@@ -2482,6 +2508,87 @@ export class HuntRuleset implements Ruleset {
     character.inventory.equip(previous, character, this.#options.items);
   }
 
+  /**
+   * Instala o observer de equipamento e agenda o vencimento do que já está vestido (ADR 0032
+   * d.8). A varredura é de no máximo 10 slots UMA vez na entrada — nunca por tick (invariante 2).
+   */
+  #armEquipment(session: Session, character: CharacterRuntime): void {
+    character.inventory.setEquipmentObserver(this.#equipmentObserver(session, character.id));
+    for (const slot of ITEM_SLOTS) {
+      const equipped = character.inventory.equippedAt(slot);
+      if (equipped === null) continue;
+      const definition = this.#options.items.get(equipped.itemId);
+      if (definition?.durationMs === undefined) continue;
+      session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+        priority: EventPriority.Housekeeping,
+        subject: equipExpirySubject(character.id, slot),
+      });
+    }
+  }
+
+  /** O que agenda e cancela o vencimento por duração. É uma closure pura sobre a `Session`. */
+  #equipmentObserver(session: Session, characterId: string): EquipmentObserver {
+    return {
+      onEquip: (slot, item) => {
+        const subject = equipExpirySubject(characterId, slot);
+        // Cancela SEMPRE, inclusive quando o novo item não dura: um anel de duração que saiu
+        // para outro anel tem de perder o prazo antigo.
+        session.cancelEvent(EQUIP_EXPIRE, subject);
+        const definition = this.#options.items.get(item.itemId);
+        if (definition?.durationMs === undefined) return;
+        session.scheduleIn(EQUIP_EXPIRE, definition.durationMs, {
+          priority: EventPriority.Housekeeping, subject,
+        });
+      },
+      onUnequip: (slot) => {
+        session.cancelEvent(EQUIP_EXPIRE, equipExpirySubject(characterId, slot));
+      },
+    };
+  }
+
+  /**
+   * O prazo de um item equipado venceu. Confere que o slot ainda é o item que dura — o
+   * cancelamento no desequip cobre o caso comum, e a guarda cobre o resto —, destrói sem passar
+   * por container e avisa a apresentação.
+   */
+  #onEquipExpire(session: Session, subject: string): void {
+    const separator = subject.lastIndexOf(':');
+    if (separator < 0) return;
+    const characterId = subject.slice(0, separator);
+    const slot = subject.slice(separator + 1) as ItemSlot;
+    const character = findById(session.participants, characterId);
+    if (character === null) return;
+    const equipped = character.inventory.equippedAt(slot);
+    if (equipped === null) return;
+    const definition = this.#options.items.get(equipped.itemId);
+    if (definition?.durationMs === undefined) return;
+    character.inventory.destroy(slot);
+    session.record('item-expired', equipped.itemId);
+    session.emit({ kind: 'equipment-changed', characterId });
+  }
+
+  /**
+   * Gasta uma carga do colar quando o golpe é de um tipo que ELE protege (ADR 0032 d.8). Olha a
+   * definição do item vestido, e não a mitigação somada: a soma não diz de quem é a proteção.
+   *
+   * Gasta mesmo quando o golpe é esquivado (DT-03): a mitigação incide no cálculo antes do corte
+   * do Dodge, então ela "trabalhou" no golpe. Resistência negativa é vulnerabilidade e não gasta.
+   */
+  #consumeAmuletCharge(
+    session: Session, character: CharacterRuntime, damageType: DamageType,
+  ): void {
+    const amulet = character.inventory.equippedAt('neck');
+    if (amulet === null) return;
+    const definition = this.#options.items.get(amulet.itemId);
+    if (definition?.charges === undefined) return;
+    const protects = definition.mitigation.immunities.has(damageType)
+      || definition.mitigation.resistances[damageType] > 0;
+    if (!protects) return;
+    if (character.inventory.consumeCharge('neck', definition.charges) > 0) return;
+    session.record('amulet-spent', amulet.itemId);
+    session.emit({ kind: 'equipment-changed', characterId: character.id });
+  }
+
   #armPlayerAttack(session: Session, character: CharacterRuntime): void {
     if (!this.#runnerOf(character.id).playerAttackReady) return;
     if (!character.alive) return;
@@ -2694,6 +2801,9 @@ export class HuntRuleset implements Ruleset {
       this.#hasEnergyShield(character),
     );
     recordDamage(character.contribution, subject, applied.healthDamage);
+    // O colar gasta UMA carga por golpe do tipo que ele protege (ADR 0032 d.8), mesmo esquivado
+    // (DT-03). A proteção vale NESTE golpe; a destruição, se zerou, é para o próximo.
+    this.#consumeAmuletCharge(session, character, ability.damageType);
     // O golpe ANTES da barra (FUN-109): o número flutuante acompanha a barra caindo, não o
     // contrário. `attackerId` é o subject do monstro, o mesmo id com que ele nasceu e anda.
     session.emit({

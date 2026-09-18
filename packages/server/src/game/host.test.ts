@@ -5289,3 +5289,63 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     });
   });
 });
+
+describe('o equipamento que o sim muda sozinho chega ao cliente (#421)', () => {
+  it('o colar que esgota vira um inventory sem a chave neck (RF-07)', () => {
+    const raw = rawTestContent();
+    const amulet = {
+      id: 'glacier-amulet', name: 'Glacier Amulet', kind: 'amulet', slot: 'neck',
+      weight: 5.5, value: 0, charges: 1,
+      mitigation: { resistances: { fire: 0.2 } },
+    };
+    // A aparência é DERIVADA (FUN-94): a tabela é recalculada depois de o item entrar.
+    const withAmulet = {
+      ...raw,
+      items: [...(raw.items as unknown[]), amulet],
+      // O rato de fogo, e tanky: o herói não o mata antes de a carga esgotar.
+      monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+        m['id'] === 'rat' ? { ...m, health: 100_000, damageType: 'fire' } : m),
+    };
+    const content = buildContent({
+      ...withAmulet,
+      appearances: [placeholderAppearances(withAmulet)],
+    });
+    let now = 0;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger, now: () => now,
+      monsterCatalog: content.monsters,
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 0, maxMana: 0,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          inventory: {
+            backpack: [],
+            equipped: {
+              neck: { instanceId: 'a1', itemId: 'glacier-amulet', quantity: 1, charges: 1 },
+            },
+          },
+        }));
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    host.attach(socket, 'hero');
+    host.flush();
+    socket.frames.length = 0;
+
+    // O rato de fogo acerta o herói; a última carga sai e o colar é destruído.
+    for (let t = 0; t < 15_000; t += 100) { now += 100; host.cycle(); }
+    host.flush();
+
+    const inventories = socket.received().filter((m) => m.type === 'inventory');
+    expect(inventories.length).toBeGreaterThan(0);
+    const last = inventories.at(-1);
+    expect(last?.type === 'inventory' && 'neck' in last.equipped).toBe(false);
+    const session = host.sessionFor('hero');
+    expect(session?.participants[0]?.inventory.equippedAt('neck')).toBeNull();
+  });
+});

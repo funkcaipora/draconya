@@ -75,8 +75,9 @@ dois subisse.
 issues seguintes do marco, e é por isso que a regra de bot `item` continua recusada — agora com o
 motivo certo: não falta catálogo, falta inventário.
 
-`charges` e `durationMs` estão declarados no schema e **ninguém os consome** (§21.3). A forma
-entra agora para o catálogo não mudar quando a mecânica existir.
+`charges` e `durationMs` deixaram de ser campos mortos na AB-06 (#421): o `sim` consome a carga
+do colar a cada golpe elemental que ele protege e agenda o vencimento do item de duração na fila
+de eventos (ver "Duração e carga do equipamento", abaixo).
 
 ### Consumíveis no catálogo (AB-01, ADR 0032 decisão 6)
 
@@ -120,8 +121,8 @@ munição no catálogo.
 
 O primeiro **colar** (`glacier-amulet`, `kind: 'amulet'`, `slot: 'neck'`, `charges: 20`,
 resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: 'shield'`,
-`slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar é a AB-06
-(#421). A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`
+`slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar foi ligado na
+AB-06 (#421). A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`
 e o fallback grátis: a escolha é o item no slot `ammo`, e a `arrow` deixou de ser infinita e grátis
 (`price > 0`, ponto de partida 1, provisório).
 
@@ -297,8 +298,9 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
-está equipado no dedo (`slot: 'finger'`), sem carga e sem duração — `charges`/`durationMs`
-continuam declarados no schema e mortos (§21.3); a durabilidade de anéis é E7, issue própria.
+está equipado no dedo (`slot: 'finger'`), sem carga e sem duração. Anéis que gastam por TEMPO
+usam `durationMs`, consumido pelo `sim` desde a AB-06 (#421) — ver "Duração e carga do
+equipamento".
 
 **Energy Ring** — o dano sofrido debita da MANA antes da vida, e só o excedente vai para a vida.
 É a MESMA leitura que a condição `mana-shield` do utamo vita (Magic Shield) já faz — as duas
@@ -312,6 +314,30 @@ modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
 O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
 dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
 descrito aqui, lido do catálogo no momento do dano/regeneração, que dá sentido a essa troca.
+
+## Duração e carga do equipamento (AB-06, #421)
+
+`durationMs` e `charges` são mecanismos diferentes, e a AB-06 ligou os dois no `sim` (ADR 0032
+decisão 8).
+
+**Duração é TEMPO EQUIPADO, e o vencimento é um evento.** Ao equipar um item com `durationMs`, o
+`sim` agenda `EQUIP_EXPIRE` para `agora + durationMs` na fila; ao desequipar, mover do slot ou
+destruir, cancela. O item que vence sai do corpo e **não volta para a mochila** — é destruído.
+Duração reinicia cheia ao reequipar: não há `remainingMs` guardado (DT-04), então tirar e vestir
+de novo devolve o prazo inteiro. Como o prazo é um evento no relógio LÓGICO, a hunt desanexada a
+1 Hz vence no MESMO instante que a anexada a 10 Hz (invariante 2, ADR 0020).
+
+**Carga é por GOLPE PROTEGIDO.** O colar equipado no `neck` gasta uma carga a cada golpe de
+monstro cujo tipo ele protege — imunidade explícita ou resistência positiva; resistência negativa
+é vulnerabilidade e não gasta. A carga é da INSTÂNCIA (`CarriedItem.charges`), ausente é "cheio",
+e o total vem de `Item.charges`; em zero o item sai do corpo e não vai para a mochila. O golpe é
+gasto mesmo quando esquivado (DT-03): a mitigação incide no cálculo antes do corte do Dodge.
+
+**A destruição avisa a apresentação.** O `sim` emite `equipment-changed`, e o `server` o mapeia
+para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
+destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
+bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
+linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora do escopo da AB-06).
 
 ## Parâmetros de balanceamento
 

@@ -199,6 +199,17 @@ const items = [
     id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 }, damageType: 'energy' },
   },
+  // O anel que gasta por TEMPO e o colar que gasta por CARGA (AB-06/#421, ADR 0032 d.8). A
+  // duração é curta de propósito: o teste mede o instante do vencimento, e não o balanceamento.
+  {
+    id: 'time-ring', name: 'Time Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0, durationMs: 4_000,
+  },
+  {
+    id: 'glacier-amulet', name: 'Glacier Amulet', kind: 'amulet', slot: 'neck',
+    weight: 5.5, value: 0, charges: 2,
+    mitigation: { resistances: { fire: 0.2 } },
+  },
 ];
 
 // A flecha é item empilhável (ADR 0032, decisão 7): a munição que o bow dispara nos testes.
@@ -6028,3 +6039,134 @@ describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () 
   });
 });
 
+
+describe('carga e duração do equipamento (#421, ADR 0032 d.8)', () => {
+  const withAmulet = (charges: number): InventoryState => ({
+    backpack: [],
+    equipped: { neck: { instanceId: 'a1', itemId: 'glacier-amulet', quantity: 1, charges } },
+  });
+
+  /** Um monstro do tipo dado, colado no herói, que aguenta os golpes dele. */
+  const brawl = (damageType: string, ms: number) => {
+    const loaded = content({ monsters: [{ ...rat, health: 100_000, damageType }] });
+    const { session, hero, ruleset } = start({ loaded, inventory: withAmulet(2) });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < ms && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    return { session, hero, events };
+  };
+
+  it('golpe de fogo gasta carga; em zero o colar some do slot e não vai à mochila (RF-04/RF-06)', () => {
+    const { hero, events } = brawl('fire', 12_000);
+    // Não é vácuo: o monstro de fato acertou o herói.
+    expect(events.some((e) => e.kind === 'creature-hit' && e.creatureId === 'hero'
+      && String(e.attackerId).startsWith('m:'))).toBe(true);
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+    expect([...hero.inventory.items()].some((i) => i.itemId === 'glacier-amulet')).toBe(false);
+    expect(events.some((e) => e.kind === 'equipment-changed' && e.characterId === 'hero')).toBe(true);
+  });
+
+  it('golpe de tipo que o colar NÃO protege não gasta carga (RF-05)', () => {
+    const { hero, events } = brawl('physical', 8_000);
+    expect(events.some((e) => e.kind === 'creature-hit' && e.creatureId === 'hero'
+      && String(e.attackerId).startsWith('m:'))).toBe(true);
+    expect(hero.inventory.equippedAt('neck')?.charges).toBe(2);
+  });
+
+  it('equipar item com durationMs agenda o vencimento no instante exato (RF-01)', () => {
+    const loaded = content();
+    const { session, hero } = start({
+      loaded,
+      inventory: { backpack: [{ instanceId: 'r1', itemId: 'time-ring', quantity: 1 }], equipped: {} },
+    });
+    const before = session.pendingEvents;
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    expect(session.pendingEvents).toBe(before + 1);
+    expect(hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+
+    session.advanceBy(3_999);
+    expect(hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    session.advanceBy(1);
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+    expect(session.drainEvents().some((e) => e.kind === 'equipment-changed')).toBe(true);
+  });
+
+  it('desequipar antes de vencer cancela o vencimento e o anel volta à mochila (RF-02)', () => {
+    const loaded = content();
+    const { session, hero } = start({
+      loaded,
+      inventory: { backpack: [{ instanceId: 'r1', itemId: 'time-ring', quantity: 1 }], equipped: {} },
+    });
+    expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+    session.advanceBy(2_000);
+    expect(hero.inventory.unequip('finger', { backpackSlots: 0, satchelSlots: 20, row: 1 }).ok).toBe(true);
+
+    session.advanceBy(5_000);
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+    expect([...hero.inventory.items()].some((i) => i.instanceId === 'r1')).toBe(true);
+  });
+
+  it('o vencimento a 1 Hz desanexado é idêntico ao de 10 Hz (RF-03)', () => {
+    // O teste estrutural do invariante 2: se alguém trocar o evento por um contador de tick,
+    // os dois instantes divergem e este teste reprova.
+    const expiry = (stepMs: number) => {
+      const loaded = content();
+      const { session, hero } = start({
+        loaded,
+        inventory: { backpack: [{ instanceId: 'r1', itemId: 'time-ring', quantity: 1 }], equipped: {} },
+      });
+      expect(hero.inventory.equip('r1', hero, loaded.items).ok).toBe(true);
+      let atMs = -1;
+      while (session.nowMs < 8_000 && session.ended === null) {
+        session.advanceBy(stepMs);
+        if (atMs < 0 && hero.inventory.equippedAt('finger') === null) atMs = session.nowMs;
+      }
+      return { atMs, state: hero.inventory.getState(), snapshot: session.snapshot() };
+    };
+
+    const tenHz = expiry(100);
+    const oneHz = expiry(1_000);
+    expect(tenHz.atMs).toBe(4_000);
+    expect(oneHz.atMs).toBe(tenHz.atMs);
+    expect(oneHz.state).toEqual(tenHz.state);
+    expect(oneHz.snapshot).toEqual(tenHz.snapshot);
+  });
+
+  it('snapshot no meio da carga restaura charges e o EQUIP_EXPIRE, que vence no instante original (RF-08)', () => {
+    const loaded = content();
+    const { session, hero } = start({
+      loaded,
+      inventory: {
+        backpack: [],
+        equipped: {
+          neck: { instanceId: 'a1', itemId: 'glacier-amulet', quantity: 1, charges: 1 },
+          finger: { instanceId: 'r1', itemId: 'time-ring', quantity: 1 },
+        },
+      },
+    });
+    expect(hero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    session.advanceBy(1_000);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    expect(resumedHero.inventory.equippedAt('neck')?.charges).toBe(1);
+    expect(resumedHero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+
+    // O vencimento volta na fila e vence no instante lógico original (4000), sem `onResume`
+    // reagendar.
+    resumed.advanceBy(2_999);
+    expect(resumedHero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
+    resumed.advanceBy(1);
+    expect(resumedHero.inventory.equippedAt('finger')).toBeNull();
+  });
+});

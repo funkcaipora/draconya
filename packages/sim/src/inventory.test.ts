@@ -264,6 +264,85 @@ describe('consumir do EQUIPADO (#420)', () => {
   });
 });
 
+describe('carga e destruição do equipado (#421)', () => {
+  const amuletCatalog = new Map<string, Item>([
+    ['amulet', define({
+      id: 'amulet', kind: 'amulet', slot: 'neck', weight: 5, value: 0, charges: 3,
+      mitigation: { resistances: { fire: 0.2 } },
+    })],
+    ['ring', define({ id: 'ring', kind: 'ring', slot: 'finger', weight: 1, value: 0, durationMs: 1_000 })],
+  ]);
+
+  const comCarga = (charges: number) => Inventory.fromState({
+    backpack: [],
+    equipped: { neck: { instanceId: 'a1', itemId: 'amulet', quantity: 1, charges } },
+  });
+
+  it('2 → 1 → 0, e em zero o item sai do corpo (RF-04/RF-06)', () => {
+    const inventory = comCarga(2);
+    expect(inventory.consumeCharge('neck', 3)).toBe(1);
+    expect(inventory.equippedAt('neck')?.charges).toBe(1);
+    expect(inventory.consumeCharge('neck', 3)).toBe(0);
+    expect(inventory.equippedAt('neck')).toBeNull();
+    // Não vai para container: carga esgotada destrói (§24), e devolver à mochila daria uma
+    // segunda vida a ele.
+    expect([...inventory.items()]).toHaveLength(0);
+  });
+
+  it('`charges` ausente é CHEIO: o primeiro consumo materializa o total da definição', () => {
+    const inventory = Inventory.fromState({
+      backpack: [], equipped: { neck: { instanceId: 'a1', itemId: 'amulet', quantity: 1 } },
+    });
+    expect(inventory.consumeCharge('neck', 3)).toBe(2);
+    expect(inventory.equippedAt('neck')?.charges).toBe(2);
+  });
+
+  it('slot vazio devolve 0', () => {
+    expect(new Inventory().consumeCharge('neck', 3)).toBe(0);
+  });
+
+  it('`destroy` some com o item sem passar por container, e devolve o que saiu', () => {
+    const inventory = comCarga(1);
+    expect(inventory.destroy('neck')?.instanceId).toBe('a1');
+    expect(inventory.equippedAt('neck')).toBeNull();
+    expect([...inventory.items()]).toHaveLength(0);
+    expect(inventory.destroy('neck')).toBeNull();
+  });
+
+  it('o observer é notificado no equip, no desequip, no move e no destroy', () => {
+    const inventory = new Inventory();
+    // Um lugar na bolsa que sobrevive ao equip (não é aparado), para o `move` ter destino. O
+    // tamanho inicial vem de `ensureContainers`, e não de `add` — é ele que a apara respeita.
+    const comLugar: ContainerRules = { backpackSlots: 0, satchelSlots: 1, row: 1 };
+    inventory.ensureContainers(comLugar);
+    inventory.add(carried('ring', 'r1'), amuletCatalog, wearer(), comLugar);
+    const events: string[] = [];
+    inventory.setEquipmentObserver({
+      onEquip: (slot, item) => events.push(`equip:${slot}:${item.instanceId}`),
+      onUnequip: (slot, item) => events.push(`unequip:${slot}:${item.instanceId}`),
+    });
+
+    inventory.equip('r1', wearer(), amuletCatalog);
+    inventory.unequip('finger', comLugar);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    // Move corpo → lugar: mesmo cancelamento do desequip, pelo outro caminho.
+    inventory.move({ slot: 'finger' }, { container: 'satchel', index: 0 }, amuletCatalog, wearer(), comLugar);
+    inventory.equip('r1', wearer(), amuletCatalog);
+    inventory.destroy('finger');
+
+    expect(events).toEqual([
+      'equip:finger:r1', 'unequip:finger:r1', 'equip:finger:r1',
+      'unequip:finger:r1', 'equip:finger:r1', 'unequip:finger:r1',
+    ]);
+  });
+
+  it('`charges` sobrevive ao snapshot (RF-08)', () => {
+    const inventory = comCarga(1);
+    const state = JSON.parse(JSON.stringify(inventory.getState())) as ReturnType<Inventory['getState']>;
+    expect(Inventory.fromState(state).equippedAt('neck')?.charges).toBe(1);
+  });
+});
+
 describe('o que o combate lê', () => {
   it('sem arma, o ataque é NULO — e não zero', () => {
     // Zero faria o personagem desarmado não machucar nada, e desarmado é como todo personagem

@@ -1567,6 +1567,11 @@ export class SessionHost {
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
           continue;
+        case 'equipment-changed':
+          // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
+          // pelo `inventory`, e a mensagem é a MESMA de sempre (opcode 16, sem campo novo).
+          this.#sendInventory(event.characterId);
+          continue;
         case 'creature-moved':
           break;
       }
