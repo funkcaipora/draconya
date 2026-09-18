@@ -42,6 +42,7 @@ import { VocationChoice } from './VocationChoice.js';
 import { Vitals } from './Vitals.js';
 import { TopBar } from './TopBar.js';
 import { WorldOverlay } from './WorldOverlay.js';
+import { BuffBar } from './BuffBar.js';
 import { PlayerVitalsOverlay } from './PlayerVitalsOverlay.js';
 import type { WindowId } from './TopBar.js';
 import { chatBadgeTier } from './chat-badge.js';
@@ -114,6 +115,9 @@ export function Shell() {
           <PlayerVitalsOverlay />
         </div>
         <WorldOverlay hunting={hunting} />
+        {/* Condições ativas sobre o mundo (#348, SV-12): existe sozinha — devolve `null` sem
+            nenhuma em `hud.conditions`. */}
+        <BuffBar />
         <TopBar open={open} toggle={toggle} chatBadge={chatBadge} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
           {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
