@@ -3,7 +3,8 @@
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
 de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), famílias de arma e
 proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), condições
-generalizadas, dano contínuo e campos de tile (CMB-07), motor de magias com alvo único, área e
+generalizadas, dano contínuo e campos de tile (CMB-07), auditoria de apresentação de combate
+(CMB-09, bloqueada pela biblioteca parcial), motor de magias com alvo único, área e
 requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de
 combate (ADR 0031) implementados
 **PRD:** §12
@@ -407,8 +408,10 @@ O que difere da magia de ataque, e por quê:
 Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
 da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um
 efeito só, no tile de quem bebeu. O id do efeito da Avalanche mora em
-`appearances/baseline.json` (`supplies['avalanche-rune']`) e **não foi conferido
-visualmente** — o pacote de assets não está no repositório.
+`appearances/baseline.json` (`supplies['avalanche-rune']`, effect 41) e a QA visual dele é
+**por tile** — a auditoria de #242 está bloqueada pela biblioteca parcial (o sprite 160962 não
+tem PNG na máquina) e o id foi mantido; ver
+[`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
 Os números (preço 14 por uso, Base Power 45, raio 3, level 30, magic level 4) são
 provisórios e estão marcados em `_open` no arquivo; o preço é o da runa no NPC dividido pelas
@@ -596,7 +599,9 @@ vira efeito no tile de quem bebeu, e runa (#165) um efeito por tile da forma, co
 projétil do monstro ao alvo e um efeito de impacto por alvo/tile. Magia ou ability sem linha na
 tabela é muda, nunca erro. Quais ids são esses mora em
 `packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`, `abilities`), e
-só ids (invariante 6).
+só ids (invariante 6). A auditoria visual desses ids é a de
+[`combat-presentation-audit.md`](../combat-presentation-audit.md): hoje **bloqueada** pela
+biblioteca parcial — os 33 efeitos/projéteis existem no índice, mas nenhum tem PNG na máquina.
 
 Os vitais do personagem saem ao vivo: `creature-health` do personagem em todo lugar que escreve
 a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte), e `player-stats`
@@ -717,6 +722,9 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 - `[ABERTO]` `physical-strike` é dano físico no Tibia, mas fica em `arcane` nesta versão para
   não mudar o dano entregue (a armadura passaria a contar). Trocar para `physical` exige perfil
   novo (ADR 0031).
+- `[ABERTO]` A conferência visual dos efeitos e projéteis de combate está bloqueada pela
+  biblioteca local parcial (47 de 4171 folhas; nenhum sprite de efeito/projétil tem PNG). Nenhum
+  id foi corrigido sem evidência — ver [`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

@@ -83,5 +83,13 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, effect] of Object.entries(appearances.hits)) {
     check(`hits.${id}`, 'effect', effect);
   }
+  // As abilities de monstro (CMB-06, #242). As CHAVES são vocabulário semântico e não têm
+  // entidade de conteúdo para cruzar — mas os ids que cada linha resolve SÃO de arte, e um
+  // projétil/impacto fora do pacote é o mesmo quadrado invisível, agora a cada lançamento.
+  // A conferência de um lado só (aqui) é o que a seção `abilities` admitia faltar.
+  for (const [id, ability] of Object.entries(appearances.abilities)) {
+    check(`abilities.${id}.missile`, 'missile', ability.missile);
+    check(`abilities.${id}.effect`, 'effect', ability.effect);
+  }
   return problems;
 }
