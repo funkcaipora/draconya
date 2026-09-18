@@ -332,6 +332,12 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     await viewport.tick(16);
     const repaintsBefore = viewport.placeholderClears();
 
+    // Achado 4 da rodada 1 de revisão (#382): sem isto, um `paintTerrain` que já pintasse uma
+    // janela maior (margem 4, por exemplo) passaria igual — só a metade "pedida antes de
+    // entrar na visível" era provada. Em (10, 10) a janela de render vai só até `maxX = 15`
+    // (5..15, ver RF-03 acima); a coluna 116 (x = 16) ainda não foi pedida.
+    expect(art.requests.some((r) => r.key === 'object:116:0:0')).toBe(false);
+
     // Um passo de (10, 10) para (11, 10): a nova janela de render tem `maxX = 16` (id 116),
     // mas a visível só chega a `maxX = 13` — a coluna 16 ainda não apareceria na tela de hoje.
     viewport.step(1, { x: 10, y: 10, z: 7 }, { x: 11, y: 10, z: 7 }, 1000, 400);
@@ -351,5 +357,59 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     expect(visibleTiles({ x: 14, y: 10, z: 7 }, view).maxX).toBeGreaterThanOrEqual(16);
     const requestsFor116 = art.requests.filter((r) => r.key === 'object:116:0:0');
     expect(requestsFor116).toHaveLength(1);
+  });
+
+  // Achado 2 da rodada 1 de revisão (#382): `warm` (viewport.ts) também trocou de
+  // `visibleTiles` para `renderTiles`, mas nenhum teste consultava `SyntheticArt.warmedObjects`
+  // (testing/art.ts) — mutar `warm` de volta para margem 0 não reprovava nada. O harness monta
+  // com `scene` ANTES do `spawnSelf` (`mountTestViewport`), então o `setScene` do mount aquece
+  // com o alvo em "sem self ainda" (o centro do mapa); chamar `handle.setScene` de novo DEPOIS
+  // do `spawnSelf` é o que aquece com o alvo certo, e é isso que o teste abaixo aciona.
+  it('setScene aquece a janela de RENDER, não só a visível', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
+    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
+    const viewport = await mountTestViewport({ art, clock, width: 128, height: 96 });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+
+    viewport.handle.setScene(scene);
+
+    // Vista 4×3 em (10, 10): visível cobre x 8..12 (ids 108..112, o que APARECE na tela);
+    // render soma 3 de cada lado, x 5..15 (ids 105..115, RF-03 acima) — o que precisa estar
+    // pronto quando a câmera chegar lá. `warm` com margem 0 aqueceria só 108..112.
+    const warmed = new Set(art.warmedObjects.flat());
+    for (let x = 5; x <= 15; x++) expect(warmed.has(100 + x)).toBe(true);
+    // E não é a janela do mapa inteiro por acidente: fora da janela de render não é aquecido.
+    expect(warmed.has(100 + 4)).toBe(false);
+    expect(warmed.has(100 + 16)).toBe(false);
+  });
+
+  // Achado 3 da rodada 1 de revisão (#382): os dois cenários RF-03 ficam inteiros dentro do
+  // mapa 40×40 quando o alvo está em (10, 10) — a filtragem por `Scene.tileAt` (RF-07, §11)
+  // nunca é exercitada. Perto do canto a janela de render extrapola o mapa dos dois lados.
+  it('RF-07: perto do canto do mapa, o chão pintado conta só os tiles DENTRO do mapa', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
+    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
+    const viewport = await mountTestViewport({
+      scene, art, clock, width: 128, height: 96,
+    });
+    viewport.spawnSelf(1, { x: 2, y: 2, z: 7 }, 0);
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    // Janela de render em (2, 2), vista 4×3: x −3..7, y −2..6 (mesma conta de `tileWindow` das
+    // outras RF-03) — metade cai fora do mapa 40×40. `Scene.tileAt` devolve `null` fora
+    // (scene.ts), e só os tiles DENTRO do mapa viram sprite: x 0..7 (8 colunas) × y 0..6
+    // (7 linhas) = 56, e não os 11×9 = 99 de um alvo longe da borda (RF-03 acima) — a
+    // diferença só aparece se a filtragem estiver acontecendo de fato.
+    const renderWindow = renderTiles({ x: 2, y: 2, z: 7 }, view);
+    expect(renderWindow).toEqual({
+      minX: -3, minY: -2, maxX: 7, maxY: 6,
+    });
+    const groundSprites = viewport.layers().terrain.children
+      .filter((child) => 'texture' in child && child.visible);
+    expect(groundSprites).toHaveLength(56);
   });
 });

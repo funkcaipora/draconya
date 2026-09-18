@@ -31,6 +31,15 @@ describe('camera', () => {
     expect(render.maxX).toBeGreaterThan(visible.maxX);
   });
 
+  it('RENDER_OVERSCAN_TILES e PREFETCH_TILES são os números do PRD: 3 e 5', () => {
+    // Achado 1 da rodada 1 de revisão (#382): os outros testes usam as próprias constantes
+    // como parâmetro (`renderTiles(t, v)` já É `tileWindow(t, v, RENDER_OVERSCAN_TILES)`), o
+    // que prova que os wrappers delegam certo, mas não prende O VALOR — mudar a constante para
+    // 2 ou 4 não reprovava nada aqui. Esta é a única asserção que trava o NÚMERO.
+    expect(RENDER_OVERSCAN_TILES).toBe(3);
+    expect(PREFETCH_TILES).toBe(5);
+  });
+
   it('tileWindow com margem 0, 3 e 5 a partir do mesmo alvo: cada lado cresce exatamente a margem', () => {
     const target = at(10, 10);
     const visible = tileWindow(target, view, 0);
@@ -90,6 +99,16 @@ describe('camera', () => {
   it('propriedade da caminhada: todo tile que entra na janela visível já esteve na de render há 3 passos e na de prefetch há 5', () => {
     // Alvo de x = 10 a x = 40, passo de 1 tile, y fixo. Só a partir do 5º passo dá para olhar
     // 5 passos para trás sem sair do intervalo caminhado.
+    //
+    // Achado 1 da rodada 1 de revisão (#382): os offsets abaixo são os LITERAIS `3` e `5`, não
+    // `RENDER_OVERSCAN_TILES`/`PREFETCH_TILES` — com a constante, mudar a margem para 2 também
+    // mudava quantos passos a propriedade olhava para trás, e as duas mudanças se cancelavam
+    // (a propriedade virava tautologia, verdadeira para qualquer margem). Com o literal, uma
+    // margem menor que 3 (ou 5) deixa o tile fora da janela correspondente. A igualdade — não
+    // só "dentro de" — é o que fecha "≥ 3 passos" (RF-05): com largura constante, o tile que
+    // entra em `visibleTiles` no passo `k` é EXATAMENTE `renderTiles(k - 3).maxX` quando a
+    // margem é 3; uma margem de 2 deixaria esse tile UM À FRENTE da janela de render de 3
+    // passos atrás, não só fora de uma faixa frouxa.
     const START = 10;
     const STEPS = 30;
     let checked = 0;
@@ -100,13 +119,11 @@ describe('camera', () => {
       const entering = tilesEntering(previous, next);
       expect(entering.length).toBeGreaterThan(0);
 
-      const renderWindow = renderTiles(at(START + k - RENDER_OVERSCAN_TILES, 10), view);
-      const prefetchWindow = prefetchTiles(at(START + k - PREFETCH_TILES, 10), view);
+      const renderWindow = renderTiles(at(START + k - 3, 10), view);
+      const prefetchWindow = prefetchTiles(at(START + k - 5, 10), view);
       for (const tile of entering) {
-        expect(tile.x).toBeGreaterThanOrEqual(renderWindow.minX);
-        expect(tile.x).toBeLessThanOrEqual(renderWindow.maxX);
-        expect(tile.x).toBeGreaterThanOrEqual(prefetchWindow.minX);
-        expect(tile.x).toBeLessThanOrEqual(prefetchWindow.maxX);
+        expect(tile.x).toBe(renderWindow.maxX);
+        expect(tile.x).toBe(prefetchWindow.maxX);
       }
       checked += 1;
     }
