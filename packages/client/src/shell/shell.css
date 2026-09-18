@@ -510,6 +510,9 @@ body {
   border: 1px solid var(--ash-5); border-radius: 2px; background: rgba(13, 9, 8, .92);
   font: 6.5px var(--font-mono); color: var(--text-muted);
 }
+.exit-rules-note {
+  margin: 8px 0 0; font: italic 7px var(--font-mono); color: var(--text-faint); line-height: 1.5;
+}
 
 /* ---- O modal "Escolha uma caçada" (#259, DS-16) ------------------------------------------ */
 .hunts-modal-body {

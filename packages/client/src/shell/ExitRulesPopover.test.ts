@@ -59,6 +59,11 @@ describe('ExitRulesList (RF-01)', () => {
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-label="Sair sozinho quando…"');
   });
+
+  it('exibe a nota de contagem regressiva de cinco segundos (#360)', async () => {
+    const html = await renderList([]);
+    expect(html).toContain('<p class="exit-rules-note">A mesma saída de cinco segundos, iniciada para você.</p>');
+  });
 });
 
 describe('ExitRulesPopover (RF-01, RF-07, RF-09)', () => {

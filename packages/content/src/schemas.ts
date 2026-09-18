@@ -532,6 +532,11 @@ export const huntSchema = z.object({
    */
   corpseTtlMs: z.number().int().positive().optional(),
   /**
+   * Contagem regressiva de saída da hunt em milissegundos (#360).
+   * Ausente é saída imediata.
+   */
+  exitDelayMs: z.number().int().positive().optional(),
+  /**
    * A menos de quantos tiles (Chebyshev) de um participante VIVO o monstro NÃO nasce (#236).
    * O lugar não é perdido — o spawn espera e tenta de novo (`SPAWN_RETRY_MS` do ruleset); a
    * densidade continua sendo a da dificuldade. `0` desliga, e é o default: o conteúdo de

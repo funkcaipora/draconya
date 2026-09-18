@@ -143,7 +143,7 @@ export interface PartyState {
 export interface MemberLeft {
   readonly kind: 'member-left';
   readonly characterId: string;
-  readonly reason: 'death' | 'exit-rule';
+  readonly reason: 'death' | 'exit-rule' | 'manual-exit';
   readonly departure: Departure;
 }
 

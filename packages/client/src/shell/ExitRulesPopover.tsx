@@ -63,6 +63,7 @@ export function ExitRulesList({ rules }: { rules: readonly BotExitRule[] }) {
           </label>
         );
       })}
+      <p className="exit-rules-note">A mesma saída de cinco segundos, iniciada para você.</p>
     </div>
   );
 }

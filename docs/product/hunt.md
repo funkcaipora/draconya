@@ -67,6 +67,16 @@ nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita a
 O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
 fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
 
+## Saída da hunt (#360)
+
+A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de morte: por **regra automática de saída** (configurada nas opções de saída do bot, como `hp-below` ou `out-of-gold`) ou por **solicitação manual** (`ruleset.requestExit(session, characterId)`).
+
+- **Contagem regressiva (`exitDelayMs`)**: Quando configurado na hunt (`exitDelayMs` em `packages/content`), tanto o disparo de uma regra automática de saída quanto a solicitação manual iniciam uma contagem regressiva (por padrão 5 segundos — 5 000 ms). Durante esse intervalo, o personagem continua no mundo e sujeito ao combate. Se `exitDelayMs` estiver ausente, a saída é imediata.
+- **Registro do evento**: O evento notável (`exit-rule`) é registrado no instante exato do disparo do gatilho (`t`), enquanto o encerramento da sessão ou a partida do participante é diferida para `t + exitDelayMs`.
+- **Múltiplos disparos**: Novas solicitações de saída durante uma contagem já em andamento são ignoradas e não reiniciam o timer.
+- **Preservação em snapshot**: Se o estado for serializado no meio da contagem regressiva, o timer agendado e o motivo de saída pendente (`pendingExit`) são preservados na retomada.
+- **Exceção para `party-member-lost`**: A regra de saída em cascata quando um membro do grupo sai ou morre (`party-member-lost`) permanece **imediata**, sem passar pelo atraso de `exitDelayMs`.
+
 ## Regras
 
 - Rota fixa e única por hunt; sem pathfinding dinâmico do bot dentro da hunt.
@@ -397,6 +407,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars tem; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |

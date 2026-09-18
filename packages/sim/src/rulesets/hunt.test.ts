@@ -2236,11 +2236,13 @@ const withExit = (
     goldDelta?: number;
     capacity?: number;
     inventory?: InventoryState;
+    exitDelayMs?: number;
   } = {},
 ) => {
   const loaded = buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
     progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...(over.exitDelayMs !== undefined ? { hunts: [{ ...hunt, exitDelayMs: over.exitDelayMs }] } : {}),
   }));
   const session = createHuntSession({
     id: 'saida', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -2259,7 +2261,7 @@ const withExit = (
     ...(over.inventory !== undefined ? { inventory: over.inventory } : {}),
   });
   session.enter(hero);
-  return { session, hero };
+  return { session, hero, ruleset: session.ruleset as HuntRuleset, loaded };
 };
 
 /** O motivo que o extrato registrou, ou `null`. É a resposta a "por que minha hunt acabou?". */
@@ -2513,6 +2515,96 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
 
   it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
     expect(compileExitRules([], new Map())).toEqual([]);
+  });
+});
+
+describe('contagem regressiva de saída solo (#360)', () => {
+  it('withExit sem exitDelayMs encerra imediatamente e continua passando testes existentes (RF-01)', () => {
+    const { session } = withExit([{ kind: 'hp-below', percent: 50 }], { health: 100 });
+    session.advanceBy(250);
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('hp-below-50');
+  });
+
+  it('hp-below com exitDelayMs aguarda contagem antes de encerrar e registra evento no disparo (RF-02, RF-03, DT-04)', () => {
+    const { session } = withExit(
+      [{ kind: 'hp-below', percent: 50 }],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    // EXIT_RULES avalia em t = 250ms
+    session.advanceBy(250);
+    expect(session.ended).toBeNull();
+    // Evento gravado no instante do disparo (DT-04)
+    const event = session.notableEvents.find((e) => e.type === 'exit-rule');
+    expect(event).toBeDefined();
+    expect(event?.detail).toBe('hp-below-50');
+
+    // Em t + 4_999ms (250 + 4_999 = 5_249ms), ainda não encerrou (RF-02)
+    session.advanceBy(4_999);
+    expect(session.ended).toBeNull();
+
+    // Em t + 5_000ms (5_250ms), encerra com 'exit-rule' (RF-03)
+    session.advanceBy(1);
+    expect(session.ended).toBe('exit-rule');
+  });
+
+  it('requestExit encerra a sessão em manual-exit após exitDelayMs e chamadas múltiplas não resetam o timer (RF-04)', () => {
+    const { session, hero, ruleset } = withExit(
+      [],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(1_000);
+    expect(session.ended).toBeNull();
+
+    // Primeiro pedido de saída em t = 1_000ms
+    ruleset.requestExit(session, hero.id);
+    expect(session.ended).toBeNull();
+
+    // Segundo pedido após 2_000ms não reseta o timer
+    session.advanceBy(2_000); // t = 3_000ms
+    ruleset.requestExit(session, hero.id);
+
+    // Em t = 5_999ms (1_000 + 4_999ms), ainda não encerrou
+    session.advanceBy(2_999);
+    expect(session.ended).toBeNull();
+
+    // Em t = 6_000ms (1_000 + 5_000ms), encerra em manual-exit
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('exitDelayMs sozinho sem disparo de regra ou requestExit não encerra a hunt', () => {
+    const { session } = withExit([], { health: 100, exitDelayMs: 5_000 });
+    run(session, 15_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('retomada de snapshot no meio da contagem preserva o timer e o motivo (RF-05)', () => {
+    const { session, hero, ruleset, loaded } = withExit(
+      [],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+
+    // Avança 2_000ms na contagem (t = 3_000ms; faltam 3_000ms para 6_000ms)
+    session.advanceBy(2_000);
+    expect(session.ended).toBeNull();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    // Em t = 5_999ms (2_999ms após restauração), ainda não encerrou
+    retomado.advanceBy(2_999);
+    expect(retomado.ended).toBeNull();
+
+    // Em t = 6_000ms (3_000ms após restauração), encerra preservando 'manual-exit'
+    retomado.advanceBy(1);
+    expect(retomado.ended).toBe('manual-exit');
   });
 });
 
@@ -4890,6 +4982,31 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     ]);
     expect(session.participants.map((p) => p.id)).toEqual(['lead', 'd']);
     expect(session.notableEvents.filter((e) => e.type === 'exit-rule' && e.detail === 'party-member-lost')).toHaveLength(2);
+    expect(session.ended).toBeNull();
+  });
+
+  it('party-member-lost com exitDelayMs permanece imediata (DT-03)', () => {
+    const loadedWithDelay = content({
+      monsters: [killer],
+      hunts: [{ ...hunt, exitDelayMs: 5_000 }],
+    });
+    const session = createHuntSession({
+      id: 'leave-session-delay', content: loadedWithDelay, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split' }, botConfigs: { b: exitOnLoss },
+    });
+    session.enter(member('frail', 1));
+    session.enter(member('lead'));
+    session.enter(member('b'));
+    session.enter(member('c'));
+
+    run(session, 10_000, 100);
+
+    const events = left(session);
+    expect(events.map((e) => (e.kind === 'member-left' ? [e.characterId, e.reason] : null))).toEqual([
+      ['frail', 'death'], ['b', 'exit-rule'],
+    ]);
+    expect(session.participants.map((p) => p.id)).toEqual(['lead', 'c']);
+    expect(session.notableEvents.filter((e) => e.type === 'exit-rule' && e.detail === 'party-member-lost')).toHaveLength(1);
     expect(session.ended).toBeNull();
   });
 

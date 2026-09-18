@@ -80,6 +80,9 @@ const SPAWN = 'spawn';
 /** O cadáver apodreceu (FUN-123): sai do chão. */
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
+const EXIT_COUNTDOWN = 'exit-countdown';
+
+type ExitReason = 'manual-exit' | 'exit-rule';
 /**
  * As condições (#155): o vencimento e o tique periódico da cura ao longo do tempo. Eventos
  * da fila (invariante 2), nunca acumulador. `subject` é `${characterId}/${key}`: um
@@ -141,6 +144,7 @@ function runnerState(runner: Runner): RunnerState {
     warnedFullBackpack: runner.warnedFullBackpack,
     warnedNoGold: runner.warnedNoGold,
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
+    ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
 }
 
@@ -425,6 +429,7 @@ interface Runner {
   /** A configuração crua correspondente, para o snapshot. Anda junto com `bot`, sempre. */
   botConfig: BotConfig | undefined;
   exitRules: readonly HuntExitRule[];
+  pendingExit: ExitReason | null;
   /** Por categoria: `true` = ENGATILHADA (nenhum evento pendente), `false` = agendada. */
   readonly botReady: Record<BotCategory, boolean>;
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
@@ -449,6 +454,7 @@ export interface RunnerState {
   readonly warnedFullBackpack: boolean;
   readonly warnedNoGold: boolean;
   readonly botConfig?: BotConfig;
+  readonly pendingExit?: ExitReason;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -800,12 +806,17 @@ export class HuntRuleset implements Ruleset {
     });
   }
 
+  requestExit(session: Session, characterId: string): void {
+    this.#beginExit(session, characterId, 'manual-exit');
+  }
+
   #newRunner(config: BotConfig | undefined, state?: RunnerState): Runner {
     const runner: Runner = {
       walker: new RouteWalker(this.#options.route, state?.route),
       bot: config === undefined ? undefined : compileBot(config),
       botConfig: config,
       exitRules: this.#composeExitRules(config),
+      pendingExit: state?.pendingExit ?? null,
       botReady: { heal: true, potion: true, attack: true, rune: true, support: true },
       playerAttackReady: state?.playerAttackReady ?? true,
       running: state?.luring ?? true,
@@ -847,6 +858,7 @@ export class HuntRuleset implements Ruleset {
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
+      case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case BOT_EVENT.heal: return this.#onBot(session, 'heal', event.subject);
@@ -976,7 +988,7 @@ export class HuntRuleset implements Ruleset {
    * extrato dele, e o hospedeiro recebe `member-left` com o extrato e o personagem, porque não
    * foi ele quem chamou. O último a sair encerra a sessão com o motivo dele.
    */
-  #depart(session: Session, characterId: string, reason: 'death' | 'exit-rule'): void {
+  #depart(session: Session, characterId: string, reason: 'death' | ExitReason): void {
     const departure = session.leave(characterId, reason);
     if (departure === null) return;
     session.emit({ kind: 'member-left', characterId, reason, departure });
@@ -2176,7 +2188,7 @@ export class HuntRuleset implements Ruleset {
     // sessão: em solo, encerrar; em party, sair (#193).
     for (const character of session.participants) {
       const runner = this.#runners.get(character.id);
-      if (runner === undefined) continue;
+      if (runner === undefined || runner.pendingExit !== null) continue;
       const view: HuntView = {
         elapsedMs: session.aggregates.durationMs,
         aggregates: session.aggregatesOf(character.id),
@@ -2188,15 +2200,37 @@ export class HuntRuleset implements Ruleset {
         // O extrato precisa dizer QUAL regra — "sua hunt encerrou por uma regra de saída" sem
         // dizer qual é a mensagem que faz o jogador desconfiar do bot que ele mesmo configurou.
         session.record('exit-rule', rule.id);
-        // Solo: encerra. Party (#193): SAI, e os outros ficam — a regra é dele.
-        if (session.participants.length <= 1) {
-          session.end('exit-rule');
-          return;
-        }
-        this.#depart(session, character.id, 'exit-rule');
+        this.#beginExit(session, character.id, 'exit-rule');
         break;
       }
     }
+  }
+
+  #beginExit(session: Session, characterId: string, reason: ExitReason): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.pendingExit !== null) return;
+    runner.pendingExit = reason;
+    const delayMs = this.#options.hunt.exitDelayMs;
+    if (delayMs === undefined) { this.#finishExit(session, characterId); return; }
+    session.scheduleIn(EXIT_COUNTDOWN, delayMs, {
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
+  }
+
+  #onExitCountdown(session: Session, characterId: string): void {
+    this.#finishExit(session, characterId);
+  }
+
+  #finishExit(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    const reason = runner?.pendingExit ?? null;
+    if (runner === undefined || reason === null) return;
+    runner.pendingExit = null;
+    if (session.participants.length <= 1) {
+      if (session.ended === null) session.end(reason);
+      return;
+    }
+    this.#depart(session, characterId, reason);
   }
 
   // --- combate ------------------------------------------------------------------------------
