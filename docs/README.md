@@ -1,13 +1,14 @@
 # docs/
 
 Índice. Ordem de leitura para quem chega no projeto: `prd-v0.9.md` → `architecture.md` →
-`technical-architecture.md` → `harness-plan.md`.
+`technical-architecture.md` → `system-architecture.md` → `harness-plan.md`.
 
 | Documento | O que é | Natureza |
 |---|---|---|
 | [`prd-v0.9.md`](./prd-v0.9.md) | O que o produto pretendia ser na data do handoff técnico — a entrada deste projeto. | Instantâneo |
 | [`architecture.md`](./architecture.md) | Restrições que o design do jogo impõe ao motor. | Instantâneo |
 | [`technical-architecture.md`](./technical-architecture.md) | Arquitetura de sistema e plano de execução do MVP: épicos, fases, estimativas. | Instantâneo |
+| [`system-architecture.md`](./system-architecture.md) | Visão integrada e atual de onde cada componente roda e de como uma hunt atravessa o sistema. | Vivo |
 | [`harness-plan.md`](./harness-plan.md) | Como o harness deste repositório (`CLAUDE.md`, hooks, skills, CI) foi projetado, e por quê. | Instantâneo |
 | [`adr/`](./adr/) | Uma decisão técnica por arquivo: contexto, decisão, alternativas descartadas, consequências. | Vivo — cresce a cada decisão |
 | [`product/`](./product/) | O que cada sistema faz de fato, hoje, incluindo onde e por que divergiu do PRD. | Vivo — atualizado quando um sistema sai do papel |
