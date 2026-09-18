@@ -16,7 +16,7 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { visibleTiles, viewFor } from './camera.js';
+import { renderTiles, visibleTiles, viewFor } from './camera.js';
 
 /** O catálogo mínimo dos testes desta issue — ver a seção 11 da spec (#381). */
 const GRASS = 100;
@@ -119,7 +119,7 @@ describe('viewport (issue #381)', () => {
     expect(viewport.placeholderClears()).toBe(2);
   });
 
-  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `visibleTiles`', async () => {
+  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `renderTiles` (M16/#382: era `visibleTiles`)', async () => {
     const scene = sceneOf({
       width: 40, height: 40, floors: [7], fill: { 7: { ground: GRASS, items: [] } },
     });
@@ -128,7 +128,7 @@ describe('viewport (issue #381)', () => {
 
     await viewport.tick(0);
 
-    const window = visibleTiles({ x: 20, y: 20, z: 7 }, viewFor(576, 448, 1));
+    const window = renderTiles({ x: 20, y: 20, z: 7 }, viewFor(576, 448, 1));
     const expected = (window.maxX - window.minX + 1) * (window.maxY - window.minY + 1);
     const rects = viewport.placeholderOps().filter((op) => op.kind === 'rect');
     expect(rects.length).toBe(expected);
@@ -247,5 +247,109 @@ describe('viewport (issue #381)', () => {
     // `at (0) + latencyMs (100) <= nowMs`: o PRIMEIRO quadro que atinge o prazo, não "mais um".
     await viewport.tick(100);
     expect(viewport.creatureSprite(1)?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
+  });
+});
+
+/**
+ * A janela de RENDER (issue #382, §11 da spec): o viewport passa a pintar e aquecer
+ * `renderTiles`, não `visibleTiles`. Um mapa 40×40 com `groundAt(x, y) = 100 + x` deixa a
+ * coluna virar id — é como o teste lê "que coluna já foi pedida" sem precisar inspecionar
+ * `objectTexture`. `mountTestViewport({ width: 128, height: 96 })` dá zoom 1 e vista 4×3
+ * (`zoomFor`/`viewFor`), o mínimo em que a diferença entre janela visível e de render é grande
+ * o bastante para não empatar com arredondamento.
+ */
+describe('viewport pinta a janela de render (issue #382)', () => {
+  const view = { widthTiles: 4, heightTiles: 3 };
+
+  /** Um chão de 40×40, id = 100 + x — a coluna vira id, para o teste ler "que coluna pediu". */
+  function groundMap(): Record<string, { ground: number; items: never[] }> {
+    const tiles: Record<string, { ground: number; items: never[] }> = {};
+    for (let y = 0; y < 40; y++) {
+      for (let x = 0; x < 40; x++) tiles[`${x},${y},7`] = { ground: 100 + x, items: [] };
+    }
+    return tiles;
+  }
+
+  function groundCatalog(): SyntheticCatalog {
+    const catalog: Record<number, { kind: 'object' }> = {};
+    for (let x = 0; x < 40; x++) catalog[100 + x] = { kind: 'object' };
+    return catalog;
+  }
+
+  it('RF-03: o chão pintado cobre a janela de RENDER, três tiles além de cada borda visível', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
+    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
+    const viewport = await mountTestViewport({
+      scene, art, clock, width: 128, height: 96,
+    });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+
+    await viewport.tick(0); // dispara os pedidos; texturas ainda não resolveram (DT-07)
+    await viewport.tick(16); // `book.version` subiu — repinta com as texturas já prontas
+
+    // Vista 4×3 fracionária em (10, 10): visível cobre 8..12 (x) × 9..11 (y); render soma 3 de
+    // cada lado — 5..15 (11 colunas) × 6..14 (9 linhas) = 99, todos dentro do mapa 40×40.
+    const window = { visible: visibleTiles({ x: 10, y: 10, z: 7 }, view) };
+    expect(window.visible).toEqual({ minX: 8, minY: 9, maxX: 12, maxY: 11 });
+    const groundSprites = viewport.layers().terrain.children
+      .filter((child) => 'texture' in child && child.visible);
+    expect(groundSprites).toHaveLength(99);
+  });
+
+  it('RF-03: parado exatamente no meio de um passo (câmera inteira), a janela de render some 3 tiles de cada lado sem a coluna parcial', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
+    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
+    const viewport = await mountTestViewport({
+      scene, art, clock, width: 128, height: 96,
+    });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+    viewport.moveSelfTo({ x: 10.5, y: 10, z: 7 });
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    // origin.x = 9.0 (inteiro): a vista visível cobre exatamente 9..12 (4 colunas, sem parcial);
+    // a de render soma 3 de cada lado: 6..15 (10 colunas) × 6..14 (9 linhas) = 90.
+    expect(visibleTiles({ x: 10.5, y: 10, z: 7 }, view)).toEqual({
+      minX: 9, minY: 9, maxX: 12, maxY: 11,
+    });
+    const groundSprites = viewport.layers().terrain.children
+      .filter((child) => 'texture' in child && child.visible);
+    expect(groundSprites).toHaveLength(90);
+  });
+
+  it('RF-04: a coluna que entra na janela de RENDER é pedida ao livro antes de entrar na visível', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
+    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
+    const viewport = await mountTestViewport({
+      scene, art, clock, width: 128, height: 96,
+    });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+    await viewport.tick(0);
+    await viewport.tick(16);
+    const repaintsBefore = viewport.placeholderClears();
+
+    // Um passo de (10, 10) para (11, 10): a nova janela de render tem `maxX = 16` (id 116),
+    // mas a visível só chega a `maxX = 13` — a coluna 16 ainda não apareceria na tela de hoje.
+    viewport.step(1, { x: 10, y: 10, z: 7 }, { x: 11, y: 10, z: 7 }, 1000, 400);
+    await viewport.tick(1400); // `elapsed (400) >= durationMs (400)`: o passo já venceu
+    await viewport.tick(1400);
+
+    expect(viewport.placeholderClears()).toBeGreaterThan(repaintsBefore);
+    expect(visibleTiles({ x: 11, y: 10, z: 7 }, view).maxX).toBe(13);
+    expect(art.requests.some((r) => r.key === 'object:116:0:0')).toBe(true);
+
+    // Mais três passos, até (14, 10): agora `visibleTiles` CONTÉM `x = 16` — e o pedido pela
+    // coluna 116 não se repete, porque o livro já tinha a textura em cache.
+    viewport.moveSelfTo({ x: 14, y: 10, z: 7 });
+    await viewport.tick(2000);
+    await viewport.tick(2000);
+
+    expect(visibleTiles({ x: 14, y: 10, z: 7 }, view).maxX).toBeGreaterThanOrEqual(16);
+    const requestsFor116 = art.requests.filter((r) => r.key === 'object:116:0:0');
+    expect(requestsFor116).toHaveLength(1);
   });
 });

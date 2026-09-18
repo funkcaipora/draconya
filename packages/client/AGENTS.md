@@ -254,7 +254,10 @@ pnpm tsx scripts/make-sheet-fixture.ts
   escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
   sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
   inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera de 18×14,
-  camadas, ordem de desenho por `y`, pool e interpolação.
+  camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
+  `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta e
+  aquece) e prefetch (`PREFETCH_TILES` = 5) — porque a textura de uma coluna pedida no quadro
+  em que ela entra na tela chega tarde; a janela de render é o que compra a antecedência.
 - **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
   (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
   hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que

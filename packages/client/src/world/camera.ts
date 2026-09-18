@@ -33,7 +33,7 @@ export function zoomFor(widthPx: number, heightPx: number): number {
 
 /**
  * Quantos tiles cabem numa tela, num zoom. FRACIONÁRIO de propósito: a câmera centra o alvo
- * exatamente no meio do canvas, seja qual for a largura, e `visibleTiles` já pinta a margem.
+ * exatamente no meio do canvas, seja qual for a largura, e `renderTiles` já pinta a margem.
  * Teto em `VIEW_WIDTH × VIEW_HEIGHT`: além do raio de interesse não chega criatura, e
  * desenhar mais chão que isso mostraria um mundo vazio em volta.
  */
@@ -70,18 +70,79 @@ export function cameraOrigin(target: Point, view: Viewport): { x: number; y: num
 }
 
 /**
- * Faixa de tiles que precisa ser desenhada. Uma tile de margem de cada lado, porque a câmera
- * fica entre tiles: sem a margem, a coluna que está entrando pela borda só aparece quando já
- * deveria estar inteira na tela.
+ * Tiles desenhados além da borda visível, em cada direção (PRD do M16, §10.5). Três é o que o
+ * MapView do OTClient desenha além da dimensão visível; é a distância entre "entrou na janela
+ * pintada" e "entrou na tela", e portanto o tempo que a folha tem para sair do Worker.
  */
-export function visibleTiles(target: Point, view: Viewport): TileWindow {
+export const RENDER_OVERSCAN_TILES = 3;
+/** Tiles cuja arte precisa estar pronta além da borda visível (§10.6). Consumido em 383. */
+export const PREFETCH_TILES = 5;
+
+/** Um tile por coordenada de mapa, sem andar: a janela é do andar do alvo. */
+export interface TileCoord {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * A faixa INCLUSIVA de tiles que a vista cobre, mais `margin` tiles de cada lado.
+ *
+ * A vista vai de `origin` a `origin + widthTiles` em coordenadas fracionárias. O primeiro tile
+ * coberto é `floor(origin)` — a coluna que entra pela esquerda, mesmo parcial. O último é
+ * `ceil(origin + width) - 1`: com a borda direita em 19.5 o tile 19 está meio na tela e entra;
+ * com a borda exatamente em 19.0 o tile 19 começa fora e NÃO entra — o `+ 1` da versão antiga
+ * o incluía, e mais um. Margem é margem: `visibleTiles` é a tela, e nada além dela.
+ *
+ * Não recorta pelo mapa. `minX` negativo e `maxX` além da largura são válidos e esperados no
+ * canto do mapa; quem filtra é `Scene.tileAt`, que devolve `null` fora — recortar aqui exigiria
+ * a cena numa função pura, e a grade de reserva (sem cena) precisa da janela inteira.
+ */
+export function tileWindow(target: Point, view: Viewport, margin: number): TileWindow {
   const origin = cameraOrigin(target, view);
   return {
-    minX: Math.floor(origin.x) - 1,
-    minY: Math.floor(origin.y) - 1,
-    maxX: Math.ceil(origin.x + view.widthTiles) + 1,
-    maxY: Math.ceil(origin.y + view.heightTiles) + 1,
+    minX: Math.floor(origin.x) - margin,
+    minY: Math.floor(origin.y) - margin,
+    maxX: Math.ceil(origin.x + view.widthTiles) - 1 + margin,
+    maxY: Math.ceil(origin.y + view.heightTiles) - 1 + margin,
   };
+}
+
+/** O que o jogador vê: margem 0. */
+export function visibleTiles(target: Point, view: Viewport): TileWindow {
+  return tileWindow(target, view, 0);
+}
+
+/** O que já está desenhado fora da tela: é a janela que o viewport pinta e aquece. */
+export function renderTiles(target: Point, view: Viewport): TileWindow {
+  return tileWindow(target, view, RENDER_OVERSCAN_TILES);
+}
+
+/** O que precisa de arte pronta antes de chegar à janela de render. */
+export function prefetchTiles(target: Point, view: Viewport): TileWindow {
+  return tileWindow(target, view, PREFETCH_TILES);
+}
+
+/** Igualdade dos quatro cantos. */
+export function sameWindow(a: TileWindow, b: TileWindow): boolean {
+  return a.minX === b.minX && a.minY === b.minY && a.maxX === b.maxX && a.maxY === b.maxY;
+}
+
+/**
+ * Os tiles de `next` que não estavam em `previous`, em ordem de linha, sem repetição. `null`
+ * é "não havia janela": todos. É o que o aquecimento contínuo (383) percorre a
+ * cada troca de tile — uma coluna ou uma linha no passo comum, um L na diagonal, a janela
+ * inteira no teleporte —, e nunca a janela inteira por quadro.
+ */
+export function tilesEntering(previous: TileWindow | null, next: TileWindow): TileCoord[] {
+  const entering: TileCoord[] = [];
+  for (let y = next.minY; y <= next.maxY; y++) {
+    const rowWasInside = previous !== null && y >= previous.minY && y <= previous.maxY;
+    for (let x = next.minX; x <= next.maxX; x++) {
+      if (rowWasInside && x >= previous.minX && x <= previous.maxX) continue;
+      entering.push({ x, y });
+    }
+  }
+  return entering;
 }
 
 /** De coordenada de mundo (tiles, possivelmente fracionária) para pixel na tela. */

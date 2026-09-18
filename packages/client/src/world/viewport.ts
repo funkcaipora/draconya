@@ -28,7 +28,7 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor,
+  TILE, compareDrawOrder, renderTiles, toScreen, viewFor, zoomFor,
 } from './camera.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
@@ -287,15 +287,15 @@ export async function mountViewport(
   }
 
   /**
-   * Aquece as folhas da janela inicial (FUN-121), como `warmOutfit` faz com os monstros: sem
-   * isto Thais abria em retângulos pelos segundos que a primeira folha de cada chão leva no
-   * Worker. Só os ids que a câmera vê agora; o resto chega à medida que ela anda.
+   * Aquece as folhas da janela de RENDER (FUN-121; M16): sem isto Thais abria em retângulos
+   * pelos segundos que a primeira folha de cada chão leva no Worker. A janela de render, e
+   * não a visível, porque é ela que `paintTerrain` pede ao livro no quadro seguinte.
    */
   function warm(next: Scene): void {
     const art = pack;
     if (art === null) return;
     const center = target();
-    const window = visibleTiles(center, view);
+    const window = renderTiles(center, view);
     const ids = new Set<number>();
     for (const z of floorsBelow(next.floors, Math.round(center.z))) {
       for (let y = window.minY; y <= window.maxY; y++) {
@@ -311,7 +311,11 @@ export async function mountViewport(
   }
 
   function paintTerrain(center: { x: number; y: number; z: number }): void {
-    const window = visibleTiles(center, view);
+    // A janela de RENDER (M16): três tiles além de cada borda visível já estão pintados, e é
+    // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
+    // tela, que é o tempo que a folha tem para sair do Worker. A chave abaixo muda quando ESTA
+    // janela muda, exatamente como antes mudava com a visível: uma vez por tile cruzado.
+    const window = renderTiles(center, view);
     // **O terreno é pintado em coordenada RELATIVA à janela e o CONTAINER é que anda.** Pintar
     // com o centro fracionário só quando a janela vira faria o chão pular um tile inteiro
     // enquanto as criaturas — posicionadas a cada quadro — deslizam: cisalhamento de até 32 px
