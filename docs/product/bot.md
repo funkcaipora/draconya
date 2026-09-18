@@ -555,8 +555,9 @@ descobrir o limite montando uma configuração inteira e levando um não é pior
 checkboxes — HP abaixo de N % (o percentual é editável só com a regra ligada), acabar o gold,
 alguém do grupo sair — que gravam a mesma lista `exit` do rascunho e salvam sozinhos, com o
 mesmo debounce do interruptor de regra. Fechado, um resumo ("Saindo sozinho: …") substitui o
-popover quando alguma regra está ligada. `out-of-capacity` não aparece: o schema não a tem
-ainda (M15).
+popover quando alguma regra está ligada. `out-of-capacity` ainda não aparece: o schema e o
+`sim` já a conhecem (SV-06, #342), mas a quarta linha do popover é a issue de cliente que a #342
+deixou fora do escopo (FD-09, #309).
 
 ### Ring swap (SV-17, #353)
 
