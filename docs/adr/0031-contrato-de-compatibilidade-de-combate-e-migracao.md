@@ -1,6 +1,6 @@
 # 0031 — Contrato de compatibilidade de combate e migração
 
-**Status:** aceito
+**Status:** aceito — o adiamento de fight mode (emenda CMB-04) cai com o [ADR 0032](0032-the-rendered-hud-is-the-game-contract.md), decisão 10: a postura entra com o perfil `combat-v2`, pelo caminho que este ADR exige
 **Data:** 2026-09-17
 **Contexto técnico:** `content` (perfil e versão), `sim` (combate, `damage`, rulesets), `server` (retomada e drenagem); marco M19, issue #329
 
