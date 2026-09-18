@@ -122,9 +122,10 @@ function Category({ category, vocabulary, vocationId, onEdit }: {
 }
 
 /**
- * Uma seção FIXA da coluna da esquerda (#162): sempre montada, minimizável pela barra do topo
- * (`collapsed` esconde tudo menos o cabeçalho), nunca removida. Sem catálogo o painel EXISTE e
- * diz que carrega — sumir deixaria o botão da barra aceso sem nada acontecer.
+ * Uma seção FIXA da coluna da esquerda (#162): sempre montada, minimizável pelo próprio
+ * cabeçalho do `Panel` (RC-09/#322 — não há mais ícone "Bot" na barra do topo; `collapsed`
+ * esconde tudo menos o cabeçalho), nunca removida. Sem catálogo o painel EXISTE e
+ * diz que carrega — sumir deixaria o cabeçalho aceso sem nada acontecer.
  */
 export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);

@@ -8,8 +8,8 @@ import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
 
 // A casca do design (#251, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
-// wordmark sem contagem de jogadores e os sete ícones PNG — nenhum emoji, nenhum ícone para
-// sistema inexistente. `prerender` roda a árvore inteira sem DOM.
+// wordmark sem contagem de jogadores e os cinco ícones PNG na ordem do kit — nenhum emoji,
+// nenhum ícone para sistema inexistente. `prerender` roda a árvore inteira sem DOM.
 
 const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
@@ -82,16 +82,16 @@ describe('TopBar', () => {
     expect(html).not.toContain(' · LV 3');
   });
 
-  it('shows Personagem as the first of seven window icons, and no nonexistent system icon', async () => {
+  it('shows exactly five window icons, in the kit order, and none for Bot/Inventory/inexistent systems', async () => {
     const html = await render();
-    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(7);
-    // Sete ícones de navegação e o retrato clicável carregam data-window.
-    expect((html.match(/data-window="/g) ?? []).length).toBe(8);
-    expect(html.indexOf('title="Personagem"')).toBeLessThan(html.indexOf('title="Hunts"'));
-    for (const label of ['Personagem', 'Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
-      expect(html).toContain(`title="${label}"`);
-    }
-    for (const label of ['Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(5);
+    // Cinco ícones de navegação e o retrato clicável carregam data-window.
+    expect((html.match(/data-window="/g) ?? []).length).toBe(6);
+    const order = ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat'];
+    const indexes = order.map((label) => html.indexOf(`title="${label}"`));
+    expect(indexes.every((index) => index >= 0)).toBe(true);
+    expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
+    for (const label of ['Bot', 'Inventário', 'Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
       expect(html).not.toContain(`title="${label}"`);
     }
   });
@@ -100,7 +100,7 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).not.toContain('topbar-icon-label');
     // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
-    for (const label of ['Personagem', 'Hunts', 'Bot', 'Inventário', 'Analisador', 'Cyclopedia', 'Chat']) {
+    for (const label of ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
   });
@@ -109,14 +109,14 @@ describe('TopBar', () => {
     const html = await render(OPEN, 'gold');
 
     expect(buttonFor(html, 'chat')).toContain('topbar-icon-button-badge-gold');
-    expect(buttonFor(html, 'bot')).not.toContain('topbar-icon-button-badge-gold');
+    expect(buttonFor(html, 'analyzer')).not.toContain('topbar-icon-button-badge-gold');
   });
 
   it('shows the danger dot only on Chat', async () => {
     const html = await render(OPEN, 'danger');
 
     expect(buttonFor(html, 'chat')).toContain('topbar-icon-badge-dot');
-    expect(buttonFor(html, 'bot')).not.toContain('topbar-icon-badge-dot');
+    expect(buttonFor(html, 'analyzer')).not.toContain('topbar-icon-badge-dot');
   });
 
   it('shows no badge when Chat has no unseen system message', async () => {
@@ -147,6 +147,6 @@ describe('TopBar', () => {
 
   it('every window icon carries aria-pressed (#306)', async () => {
     const html = await render();
-    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(7);
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(5);
   });
 });
