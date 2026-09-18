@@ -9,6 +9,7 @@
   "_open": "A arma inicial do Knight (ADR 0026, decisão 3). Attack 21 e 41 oz do TibiaWiki; defense 10 não é lida.",
   "weapon": {
     "kind": "melee",
+    "family": "axe",
     "range": 1
   },
   "requires": {

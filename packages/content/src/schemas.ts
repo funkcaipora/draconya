@@ -320,10 +320,86 @@ export type AmmoFamily = (typeof AMMO_FAMILIES)[number];
 export const WEAPON_KINDS = ['melee', 'distance', 'wand'] as const;
 export type WeaponKind = (typeof WEAPON_KINDS)[number];
 
+/**
+ * As FAMÍLIAS de arma (CMB-05, #333), a taxonomia decidida: `fist` (desarmado), as três
+ * corpo a corpo (sword/axe/club), `distance` e as duas de conjuração (wand/rod).
+ *
+ * A família é DADO (DT-01): o motor não infere a família pelo NOME do item, e o ruleset não
+ * tem `if` por id, nome ou vocação. `fist` é o fallback sem item — nunca aparece como arma
+ * do catálogo, e `buildContent` recusa o item que a declare.
+ */
+export const WEAPON_FAMILIES = ['fist', 'sword', 'axe', 'club', 'distance', 'wand', 'rod'] as const;
+export type WeaponFamily = (typeof WEAPON_FAMILIES)[number];
+
+/**
+ * O que uma família declara em `content` (CMB-05): alcance, tipo, recurso, fórmula e a SKILL
+ * que a escala e cujo `gain` é a prática. A fórmula traz os fatores que são da FAMÍLIA
+ * (`levelFactor`, `spread`); a contribuição por nível de skill vem do `damagePerLevel` da
+ * skill apontada, para rebalanceá-la num lugar só.
+ */
+export const weaponFamilySchema = z.strictObject({
+  id: z.enum(WEAPON_FAMILIES),
+  name: z.string().min(1),
+  /** O despacho que a família segue: corpo a corpo, distância ou wand/rod. */
+  kind: z.enum(WEAPON_KINDS),
+  /** A skill que escala a família e cujo `gain` define a prática. */
+  skillId: z.string().min(1),
+  /** Alcance default em tiles; a arma pode declarar o seu. */
+  range: z.number().int().positive(),
+  /** Tipo de dano default; a arma (ou a munição) pode declarar o seu. */
+  damageType: z.enum(DAMAGE_TYPES),
+  /** O recurso gasto por golpe. `mana` é de wand/rod; corpo a corpo e distância não gastam. */
+  resource: z.enum(['none', 'mana']),
+  /**
+   * A fórmula da família, ausente em wand/rod (que usam a faixa fixa da arma). Os fatores são
+   * provisórios e marcados em `_open`; `spread: 0` não consome sorteio, preservando o v1.
+   */
+  formula: z.object({
+    levelFactor: z.number().nonnegative(),
+    spread: z.number().min(0).max(1),
+  }).optional(),
+  _open: z.string().optional(),
+});
+
+export type WeaponFamilyDefinition = z.infer<typeof weaponFamilySchema>;
+
+/**
+ * A fórmula de poder de arma COMPILADA (CMB-05). `base` é o `attack` da arma (ou da munição,
+ * resolvido no golpe); `skillFactor`/`skillStartingLevel` vêm da skill da família, e
+ * `levelFactor`/`spread` da família. `spread: 0` devolve o valor sem consumir RNG.
+ */
+export interface WeaponPowerFormula {
+  readonly base: number;
+  readonly levelFactor: number;
+  readonly skillFactor: number;
+  readonly skillStartingLevel: number;
+  readonly spread: number;
+}
+
+/**
+ * O perfil de arma que o `sim` consome (CMB-05). É o contrato do `resolveWeaponPower`: família,
+ * tipo, alcance, e OU uma fórmula escalada (`power`) OU a faixa fixa de wand/rod
+ * (`fixedDamage`), com o recurso por golpe quando há (`manaPerHit`).
+ */
+export interface WeaponProfile {
+  readonly family: WeaponFamily;
+  readonly damageType: DamageType;
+  readonly range: number;
+  readonly power?: WeaponPowerFormula;
+  readonly manaPerHit?: number;
+  readonly fixedDamage?: { readonly min: number; readonly max: number };
+}
+
 export const weaponSchema = z.strictObject({
   kind: z.enum(WEAPON_KINDS),
-  /** Alcance em tiles. `1` é corpo a corpo; o bow do Tibia alcança 6, wand e rod 3. */
-  range: z.number().int().positive(),
+  /**
+   * A família (CMB-05). Ausente é normalizada pelo `kind` — corpo a corpo vira `sword`,
+   * distância `distance`, wand `wand` —, o mesmo default que `buildContent` já aplicava ao
+   * `kind` para preservar o conteúdo anterior. O conteúdo real declara a sua.
+   */
+  family: z.enum(WEAPON_FAMILIES).optional(),
+  /** Alcance em tiles. Ausente vale o da família; `1` é corpo a corpo. */
+  range: z.number().int().positive().optional(),
   /**
    * O TIPO de dano da arma (CMB-03, emenda do ADR 0031). Ausente é o default que preserva o
    * v1: `physical` em corpo a corpo e distância, `arcane` em wand e rod — o `kind: magic` de
@@ -340,11 +416,15 @@ export const weaponSchema = z.strictObject({
 export type Weapon = z.infer<typeof weaponSchema>;
 
 /**
- * A arma pronta para uso: `damageType` já resolvido no boot (CMB-03). O schema deixa o campo
- * opcional porque a forma do arquivo não sabe do `kind`; `buildContent` preenche o default e o
- * que chega ao `sim` sempre tem tipo.
+ * A arma pronta para uso (CMB-03/CMB-05): o `WeaponProfile` do `sim` mais o que o despacho e o
+ * catálogo do servidor ainda leem (`kind`, `ammoFamily`). `damageType`, `range`, família e
+ * fórmula já estão resolvidos no boot — o schema deixa os campos opcionais porque a forma do
+ * arquivo não sabe do `kind`.
  */
-export type ResolvedWeapon = Weapon & { readonly damageType: DamageType };
+export type ResolvedWeapon = WeaponProfile & {
+  readonly kind: WeaponKind;
+  readonly ammoFamily?: AmmoFamily;
+};
 
 /** De onde uma instância veio. É a proveniência do §25.3, e ela existe desde o dia um. */
 /**

@@ -1,8 +1,9 @@
 # Combate
 
 **Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
-de dano e mitigação (CMB-03), motor de magias com alvo único, área e requisito de vocação (FUN-74,
-FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
+de dano e mitigação (CMB-03), famílias de arma e proficiências (CMB-05), motor de magias com alvo
+único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de
+compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
@@ -43,7 +44,6 @@ Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, co
 correspondente:
 
 - defesa e escudo (CMB-04);
-- famílias de arma e proficiências (CMB-05);
 - abilities de monstro além da faixa de ataque (CMB-06);
 - condições generalizadas e dano contínuo (CMB-07);
 - outcomes: crítico, leech e mana shield (CMB-08);
@@ -407,6 +407,50 @@ resistência e imunidade do monstro.
 | Munição — attack e preço por tiro | arrow 25 / 0; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/*.json` |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
 
+## Famílias de arma e proficiências (CMB-05, #333)
+
+`Weapon.kind` continua sendo o DESPACHO (`melee`, `distance`, `wand`), mas a fórmula e a
+proficiência deixaram de ser genéricas: cada arma declara uma **família**, e a família é dado em
+`packages/content/data/weapon-families/`. O `sim` resolve o poder por `resolveWeaponPower` com o
+perfil da arma — sem conhecer nome de item nem vocação (DT-01).
+
+```ts
+interface WeaponProfile {
+  readonly family: WeaponFamily;      // fist | sword | axe | club | distance | wand | rod
+  readonly damageType: DamageType;
+  readonly range: number;
+  readonly power?: WeaponPowerFormula;          // base, levelFactor, skillFactor, skillStartingLevel, spread
+  readonly manaPerHit?: number;                 // wand/rod
+  readonly fixedDamage?: { min: number; max: number }; // wand/rod
+}
+
+resolveWeaponPower(profile, level, skillLevel, rng): number
+```
+
+| Família | `kind` | Skill | Fórmula / recurso |
+|---|---|---|---|
+| `fist` | melee | `melee` | fórmula; `attack`/alcance/tipo de `combat.player` (fallback sem item) |
+| `sword`, `axe`, `club` | melee | `melee` | fórmula; `base` = `attack` da arma |
+| `distance` | distance | `distance` | fórmula; `base` = `attack` da **munição**, tipo também |
+| `wand`, `rod` | wand | `magic` | **sem fórmula**: faixa fixa e `manaPerHit` da arma; pratica por mana |
+
+Quatro coisas que a estrutura garante, e não a inspeção:
+
+- **A família é coerente com o `kind`.** `buildContent` recusa família inexistente, família de
+  outro `kind`, e `fist` como arma — ela é o fallback desarmado, nunca um item.
+- **A fórmula preserva o v1 bit a bit.** `levelFactor` e `spread` são 0 no conteúdo inicial, e a
+  contribuição por nível é o `damagePerLevel` da skill apontada. `spread: 0` **não consome
+  sorteio**, então a sequência de RNG da hunt é a mesma de antes (DT-03).
+- **Wand/rod não recebem multiplicador de weapon skill.** O perfil delas não tem `power`; a
+  fórmula de arma e o `spellPower` continuam separados (DT-02), e mudar isso exige perfil novo
+  (ADR 0031).
+- **A prática é uma só por golpe, e não depende do dano final.** Imunidade, resistência alta,
+  bloqueio (CMB-04) ou alvo que morre no impacto não impedem a prática — ela sai do gatilho da
+  skill da família (`melee-hit`, `distance-hit`, `spell-cast`), nunca de um `if` por nome.
+
+O perfil é indexado no boot, junto das famílias e das skills: nenhuma varredura de catálogo por
+golpe. O `Item.weapon` compilado carrega família, tipo, alcance e fórmula, e é o que o ruleset lê.
+
 ## O que o jogador vê (FUN-106, FUN-109)
 
 O combate é calculado no `sim` e **apresentado** pelo host, como o passo (§12). Cada golpe
@@ -529,6 +573,9 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 ## Em aberto
 
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
+- `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
+  zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
+  muda o consumo de RNG e exige perfil novo (ADR 0031).
 - `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
   provisórios até a leitura da infobox do TibiaWiki. O elemento é `ice` desde o CMB-03.
 - `[ABERTO]` `physical-strike` é dano físico no Tibia, mas fica em `arcane` nesta versão para

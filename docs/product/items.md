@@ -138,9 +138,13 @@ valesse menos que o número base.
 
 Desde a #152 o combate lê também **como** a arma bate — `weapon: { kind, range, ammoFamily,
 manaPerHit, damage }` —, e o alcance passou a ser da arma: bow 6 com a munição escolhida, wand
-e rod 3 gastando mana, corpo a corpo 1. A munição não é item: é uma seleção por família
-(`select-ammo`), com a grátis por padrão e as pagas debitando gold por tiro; ver `combat.md`
-("Como cada arma bate"). Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
+e rod 3 gastando mana, corpo a corpo 1. Desde o CMB-05 (#333) a arma declara também a
+**família** (`weapon.family`: `sword`, `axe`, `club`, `distance`, `wand`, `rod`), que aponta para
+a skill e a fórmula em `packages/content/data/weapon-families/` — o ruleset não conhece nome de
+item nem vocação. `fist` é o fallback desarmado e não existe como arma. A munição não é item: é
+uma seleção por família (`select-ammo`), com a grátis por padrão e as pagas debitando gold por
+tiro; ver `combat.md` ("Famílias de arma e proficiências"). Arma de duas mãos (`twoHanded`, o bow)
+recusa escudo, e vice-versa.
 
 ### Como o item vai e volta do banco
 

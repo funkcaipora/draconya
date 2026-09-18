@@ -18,9 +18,10 @@
 
 import { BOT_CATEGORIES, attackRange, isBlocked } from '@draconya/content';
 import type {
-  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, Content, DamageType,
-  Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, ResolvedWeapon, Route, Skill, Spell,
-  SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
+  AmmoFamily, Ammunition, BotAction, BotCategory, BotConfig, BotExitRule, Combat, CompiledWeaponFamily,
+  Content, DamageType, Hunt, HuntDifficulty, Item, Monster, PartyConfig, Progression, ResolvedWeapon,
+  Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation, WeaponFamily,
+  WeaponProfile,
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
@@ -30,6 +31,7 @@ import type { ConditionKind, ConditionState } from '../conditions.js';
 import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { Defender } from '../combat/damage.js';
+import { resolveWeaponPower } from '../combat/weapon-power.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -264,6 +266,13 @@ export interface HuntRulesetOptions {
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
   readonly items: ReadonlyMap<string, Item>;
+  /**
+   * As famílias de arma (CMB-05): a família do perfil aponta a skill e a prática, e a fórmula
+   * já vem compilada. Indexada no boot — nenhuma varredura de catálogo por golpe.
+   */
+  readonly weaponFamilies: ReadonlyMap<WeaponFamily, CompiledWeaponFamily>;
+  /** O perfil do golpe desarmado (CMB-05): o fallback de quem não tem arma. */
+  readonly unarmed: WeaponProfile;
   /** A munição que o bow dispara (#152): a escolhida por família, ou a grátis. */
   readonly ammunition: ReadonlyMap<string, Ammunition>;
   /**
@@ -2165,11 +2174,15 @@ export class HuntRuleset implements Ruleset {
   // --- combate ------------------------------------------------------------------------------
 
   /**
-   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4):
-   * corpo a corpo com o `attack` da arma (ou desarmado); tiro com o `attack` da munição
-   * escolhida, debitando o preço dela; ou wand, gastando mana e causando dano mágico por
-   * faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar, contar o recorde,
-   * render skill — e é `#land` quem o faz.
+   * Um golpe do personagem, do jeito que a arma na mão bate (#152, ADR 0026 decisões 3 e 4;
+   * perfis de arma no CMB-05): corpo a corpo com o `attack` da arma (ou desarmado); tiro com o
+   * `attack` da munição escolhida, debitando o preço dela; ou wand, gastando mana e causando
+   * dano mágico por faixa. Os três compartilham o mesmo fim — aplicar, atribuir, anunciar,
+   * contar o recorde, praticar — e é `#land` quem aplica.
+   *
+   * O poder sai de `resolveWeaponPower` com o PERFIL da arma: o ruleset não conhece nome de
+   * item nem vocação (DT-01). A família do perfil aponta a skill e a prática, e é por isso que
+   * wand/rod não recebem multiplicador de weapon skill — o perfil deles não tem `power`.
    */
   #strike(
     session: Session, character: CharacterRuntime, monster: MonsterRuntime,
@@ -2196,24 +2209,30 @@ export class HuntRuleset implements Ruleset {
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
-      // O dano é o da MUNIÇÃO pela skill de distância — o bow não tem attack próprio. O TIPO
-      // também é da munição (CMB-03): a flecha é `physical`, e o conteúdo pode declarar outro.
+      // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
+      // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
+      const power = how.power;
+      const profile: WeaponProfile = {
+        family: how.family,
+        damageType: ammo.damageType,
+        range: how.range,
+        ...(power === undefined ? {} : { power: { ...power, base: ammo.attack } }),
+      };
       const result = resolveDamage(
         {
-          rawDamage: this.#scaledPower(character, 'distance-hit', ammo.attack),
+          rawDamage: this.#weaponPower(session, character, profile),
           source: 'basic-attack',
-          damageType: ammo.damageType,
+          damageType: profile.damageType,
         },
         defender, 'pve', this.#options.combat, session.rng,
       );
       this.#land(session, character, monster, result.resolvedDamage, 'melee');
-      this.#gainSkills(session, character, 'distance-hit', 1);
+      this.#practice(session, character, profile.family, 1);
       return;
     }
 
     if (weapon !== null && how?.kind === 'wand') {
       const manaPerHit = how.manaPerHit ?? 0;
-      const range = how.damage ?? { min: 0, max: 0 };
       // A mana sai ANTES da rolagem, e a conferência foi em `#onPlayerAttack`: chegar aqui é
       // ter mana. Uma rolagem por golpe, com o `Rng` da sessão — a mesma semente, o mesmo
       // dano, como o loot (contrato).
@@ -2223,10 +2242,11 @@ export class HuntRuleset implements Ruleset {
         weaponItemId: weapon.id, from: this.#at(character), to: this.#at(monster),
       });
       // Dano por faixa fixa e do TIPO da arma (CMB-03): a wand de vortex é energia, o rod de
-      // snakebite é terra; sem declaração o boot resolve `arcane`, o `kind: magic` do v1.
+      // snakebite é terra; sem declaração o boot resolve `arcane`, o `kind: magic` do v1. O
+      // perfil da wand/rod não tem `power`, então NÃO há multiplicador de weapon skill (DT-02).
       const result = resolveDamage(
         {
-          rawDamage: session.rng.integer(range.min, range.max),
+          rawDamage: this.#weaponPower(session, character, how),
           source: 'basic-attack',
           damageType: how.damageType,
         },
@@ -2234,26 +2254,64 @@ export class HuntRuleset implements Ruleset {
       );
       this.#land(session, character, monster, result.resolvedDamage, 'spell');
       // Rende magia pela MANA gasta, como a magia (§9.4): é assim que a wand treina magic level.
-      this.#gainSkills(session, character, 'spell-cast', manaPerHit);
+      this.#practice(session, character, how.family, manaPerHit);
       return;
     }
 
+    // Corpo a corpo — ou desarmado: sem arma na mão vale o perfil `fist` (CMB-05), que carrega
+    // o `attack`, o alcance e o tipo de `combat.player`.
+    const profile: WeaponProfile = how ?? this.#options.unarmed;
     const result = resolveDamage(
-      // A skill escala o poder do golpe (FUN-75). O número base continua sendo do conteúdo;
-      // o que a skill faz é multiplicá-lo, e quanto por nível também é conteúdo.
       {
-        rawDamage: this.#scaledPower(character, 'melee-hit', this.#attackPowerOf(character)),
+        rawDamage: this.#weaponPower(session, character, profile),
         source: 'basic-attack',
-        // O tipo é da ARMA (CMB-03); desarmado, é o do punho, que o conteúdo declara.
-        damageType: how?.damageType ?? this.#options.player.damageType,
+        damageType: profile.damageType,
       },
       defender, 'pve', this.#options.combat, session.rng,
     );
     this.#land(session, character, monster, result.resolvedDamage, 'melee');
-    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão. Contar só
-    // acerto cheio faria a skill subir mais devagar contra alvo blindado, que é o oposto do
-    // que "sobe pelo uso" quer dizer.
-    this.#gainSkills(session, character, 'melee-hit', 1);
+    // O golpe ACONTECEU: conta como uso, tenha ele acertado forte ou de raspão, e mesmo que o
+    // alvo seja imune ou já esteja morto — praticar não depende do dano final (CMB-05).
+    this.#practice(session, character, profile.family, 1);
+  }
+
+  /**
+   * O poder bruto de um golpe pelo PERFIL (CMB-05), com a postura por último.
+   *
+   * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
+   * conteúdo e o nível do personagem. Corpo a corpo e distância recebem a postura (`buff`);
+   * wand/rod têm faixa fixa e não passam por ela — como sempre.
+   */
+  #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
+    const family = this.#options.weaponFamilies.get(profile.family);
+    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
+    const skillLevel = skill === undefined ? 0 : character.skills.levelOf(skill);
+    const power = resolveWeaponPower(profile, character.level, skillLevel, session.rng);
+    if (family?.kind === 'distance') {
+      return Math.round(power * character.conditions.damageDealtScale('distance'));
+    }
+    if (family?.kind === 'melee') {
+      return Math.round(power * character.conditions.damageDealtScale('melee'));
+    }
+    return power;
+  }
+
+  /**
+   * Pratica UMA vez pelo golpe, pela skill que a família aponta (CMB-05). A prática é o
+   * `gain` da skill — `melee-hit`/`distance-hit` rendem por uso, `spell-cast` por mana gasta —
+   * e o gatilho vem do conteúdo, nunca de um `if` por nome.
+   *
+   * É chamada DEPOIS do `#land` e sem condição de dano: imunidade, resistência alta ou alvo
+   * morto no impacto não impedem a prática, porque o golpe de fato ocorreu.
+   */
+  #practice(
+    session: Session, character: CharacterRuntime, family: WeaponFamily, amount: number,
+  ): void {
+    const definition = this.#options.weaponFamilies.get(family);
+    if (definition === undefined) return;
+    const skill = this.#options.skills.get(definition.skillId);
+    if (skill === undefined) return;
+    this.#gainSkills(session, character, skill.gain.on, amount);
   }
 
   /** O fim de todo golpe do personagem: aplicar, atribuir, anunciar e contar o recorde. */
@@ -2707,18 +2765,6 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O ataque da ARMA equipada, ou o do desarmado (FUN-82).
-   *
-   * `combat.player.attackPower` deixou de ser "o ataque do personagem" e passou a ser o do
-   * personagem SEM arma — o fallback, e ele é conteúdo. Um zero em código no lugar dele faria
-   * todo personagem novo não machucar nada, e sem arma é como todo personagem começa.
-   */
-  #attackPowerOf(character: CharacterRuntime): number {
-    return character.inventory.weaponAttack(this.#options.items, character)
-      ?? this.#options.player.attackPower;
-  }
-
-  /**
    * A defesa do personagem: a armadura do CONTEÚDO mais a do que ele veste (FUN-82).
    *
    * Soma, e não substituição: `combat.player.armor` é a resistência do corpo, e a peça vestida
@@ -2751,12 +2797,13 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado — ou a arma sem
-   * `weapon`, que o conteúdo já normalizou — vale `combat.player.attackRange`, o corpo a corpo.
+   * O alcance é da ARMA (#152): o bow alcança 6, wand e rod 3, e o desarmado vale o alcance
+   * do perfil `fist` (CMB-05) — que o boot monta de `combat.player.attackRange`, o corpo a
+   * corpo. A arma sem `range` já saiu do boot com o da família.
    */
   #attackRangeOf(character: CharacterRuntime): number {
     return character.inventory.weapon(this.#options.items, character)?.weapon?.range
-      ?? this.#options.player.attackRange;
+      ?? this.#options.unarmed.range;
   }
 
   /**
@@ -2939,6 +2986,8 @@ export function createHuntRuleset(
     vocations: content.vocations,
     skills: content.skills,
     items: content.items,
+    weaponFamilies: content.weaponFamilies,
+    unarmed: content.unarmed,
     ammunition: content.ammunition,
     // Opcional no conteúdo, opcional aqui — e a chave só existe quando há valor, por causa do
     // `exactOptionalPropertyTypes`.

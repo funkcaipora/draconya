@@ -257,13 +257,18 @@ antes de gravar a linha. Os números do Tibia (TibiaWiki) e os ids do pacote 13.
 | wand of vortex (Sorcerer) / snakebite rod (Druid) | 3074 / 3066 | 19 oz — alcance, mana e dano entram no motor pela #152 |
 
 `kind: 'container'` e `slot: 'back'` andam juntos, e `twoHanded` só em arma — `buildContent`
-recusa o resto. **Como a arma bate é da arma** (#152): `weapon: { kind, range, ammoFamily?,
-manaPerHit?, damage? }` — `melee` (o `attack` do item), `distance` (o `attack` da munição da
-`ammoFamily`, que precisa ter munição no catálogo) ou `wand` (`manaPerHit` e `damage` por
-faixa, `attack` 0). Arma sem `weapon` é `{ kind: 'melee', range: 1 }`, normalizado no boot;
-campo de um tipo em arma de outro, ou `weapon` fora de arma, é recusado. O projétil da wand e
-do rod mora em `appearances.weapons[itemId].missile`, de um lado só como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a
-segura até o level 8: o personagem nasce sem vocação.
+recusa o resto. **Como a arma bate é da arma** (#152, CMB-05): `weapon: { kind, family, range,
+ammoFamily?, manaPerHit?, damage? }` — `melee` (o `attack` do item), `distance` (o `attack` da
+munição da `ammoFamily`, que precisa ter munição no catálogo) ou `wand` (`manaPerHit` e `damage`
+por faixa, `attack` 0). A `family` (`sword`, `axe`, `club`, `distance`, `wand`, `rod`) aponta para
+a skill e a fórmula em `data/weapon-families/`; ausente, o boot normaliza pelo `kind`
+(melee→`sword`, distance→`distance`, wand→`wand`), e o conteúdo real declara. `fist` é o fallback
+desarmado e **não** existe como arma — declará-la num item reprova o boot. Família inexistente ou
+de `kind` diferente também reprova. Arma sem `weapon` é `{ kind: 'melee', family: 'sword',
+range: 1 }`, normalizado no boot; campo de um tipo em arma de outro, ou `weapon` fora de arma, é
+recusado. O projétil da wand e do rod mora em `appearances.weapons[itemId].missile`, de um lado só
+como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a segura
+até o level 8: o personagem nasce sem vocação.
 
 ## Munição (#151, ADR 0026)
 

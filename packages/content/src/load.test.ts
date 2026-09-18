@@ -203,14 +203,38 @@ describe('loadContent', () => {
     expect(weight).toBeLessThan(content.progression.startingCapacity);
   });
 
-  it('cada arma diz como bate, e a skill de distância existe (#152, ADR 0026 decisões 3 e 4)', () => {
+  it('cada arma diz como bate, e a skill de distância existe (#152, ADR 0026 decisões 3 e 4; CMB-05)', () => {
     const content = loadContent(DATA);
     const weapon = (id: string) => content.items.get(id)?.weapon;
-    expect(weapon('machete')).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
-    expect(weapon('steel-axe')).toEqual({ kind: 'melee', range: 1, damageType: 'physical' });
-    expect(weapon('bow')).toEqual({ kind: 'distance', range: 6, ammoFamily: 'arrow', damageType: 'physical' });
-    expect(weapon('wand-of-vortex')).toEqual({ kind: 'wand', range: 3, manaPerHit: 2, damageType: 'energy', damage: { min: 8, max: 18 } });
-    expect(weapon('snakebite-rod')).toEqual({ kind: 'wand', range: 3, manaPerHit: 1, damageType: 'earth', damage: { min: 8, max: 18 } });
+    // A família é DADO (CMB-05): a arma declara a sua, e a fórmula traz a contribuição da skill
+    // apontada (`damagePerLevel` 0,02 da `melee`/`distance`, a partir do nível 10).
+    const scaled = (base: number, skillFactor = 0.02, skillStartingLevel = 10) =>
+      ({ base, levelFactor: 0, skillFactor, skillStartingLevel, spread: 0 });
+    expect(weapon('machete')).toEqual({
+      kind: 'melee', family: 'sword', range: 1, damageType: 'physical', power: scaled(12),
+    });
+    expect(weapon('steel-axe')).toEqual({
+      kind: 'melee', family: 'axe', range: 1, damageType: 'physical', power: scaled(21),
+    });
+    expect(weapon('bow')).toEqual({
+      kind: 'distance', family: 'distance', range: 6, ammoFamily: 'arrow', damageType: 'physical',
+      power: scaled(0),
+    });
+    expect(weapon('wand-of-vortex')).toEqual({
+      kind: 'wand', family: 'wand', range: 3, manaPerHit: 2, damageType: 'energy',
+      fixedDamage: { min: 8, max: 18 },
+    });
+    expect(weapon('snakebite-rod')).toEqual({
+      kind: 'wand', family: 'rod', range: 3, manaPerHit: 1, damageType: 'earth',
+      fixedDamage: { min: 8, max: 18 },
+    });
+    // O desarmado é a família `fist` com o bloco `player` (CMB-05), preservando o v1.
+    expect(content.unarmed).toEqual({
+      family: 'fist', damageType: 'physical', range: 1, power: scaled(25),
+    });
+    expect([...content.weaponFamilies.keys()].sort()).toEqual(
+      ['axe', 'club', 'distance', 'fist', 'rod', 'sword', 'wand'],
+    );
     // Os projéteis da wand e do rod: energia (5) e terra pequena (39), conferidos de olho.
     expect(content.appearances?.weapons).toEqual({ 'wand-of-vortex': { missile: 5 }, 'snakebite-rod': { missile: 39 } });
     const distance = content.skills.get('distance');
