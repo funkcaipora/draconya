@@ -1,6 +1,6 @@
 # 0030 — Fidelidade estrita ao ui_kit: a composição renderizada do kit é a especificação da tela
 
-**Status:** aceito
+**Status:** aceito — decisões 2, 4, 5, 6 e 7 emendadas pelo [ADR 0032](0032-the-rendered-hud-is-the-game-contract.md) (a imagem decide: disparo manual entra, postura funciona, nada fica omitido sem issue, bolsa com moeda física, P1/P4 confirmadas)
 **Data:** 2026-09-16
 **Contexto técnico:** `packages/client` (toda a casca `shell/`); `packages/protocol`, `packages/sim`,
 `packages/content`, `packages/server` (campos e mecânicas que as telas do kit exigem, sequenciados

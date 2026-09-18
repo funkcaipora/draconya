@@ -6,10 +6,15 @@ import type { ChatBadgeTier } from './chat-badge.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue } from '../state/hud.js';
 import { INITIAL_ACCOUNT, account } from '../account/store.js';
+import { world } from '../state/world.js';
+import type { Creature } from '../state/world.js';
 
 // A casca do design (#251, D3/D8/D9): identidade, "VOCAÇÃO · LV N", a pill de gold, o
-// wordmark sem contagem de jogadores e os cinco ícones PNG na ordem do kit — nenhum emoji,
-// nenhum ícone para sistema inexistente. `prerender` roda a árvore inteira sem DOM.
+// wordmark com a contagem de jogadores (SV-15, #351) e os cinco ícones PNG na ordem do kit —
+// nenhum emoji, nenhum ícone para sistema inexistente. `prerender` roda a árvore inteira sem
+// DOM e pula os efeitos, então o retrato (SV-14, #350) só troca para o sprite quando a
+// criatura já está em `world` ANTES da renderização — o `setInterval` do polling nunca dispara
+// aqui, como em `BattlePanel.test.ts`.
 
 const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
@@ -26,6 +31,19 @@ function buttonFor(html: string, id: string): string {
   const start = html.lastIndexOf('<button', marker);
   const end = html.indexOf('</button>', marker);
   return html.slice(start, end + '</button>'.length);
+}
+
+function creature(id: number, over: Partial<Creature> = {}): Creature {
+  return {
+    id,
+    appearanceId: 128,
+    name: 'Aldric',
+    health: 100,
+    maxHealth: 100,
+    position: { x: 0, y: 0, z: 7 },
+    step: null,
+    ...over,
+  };
 }
 
 const catalogue: Catalogue = {
@@ -45,6 +63,8 @@ const catalogue: Catalogue = {
 beforeEach(() => {
   hud.set(() => ({ ...INITIAL_HUD }));
   account.set(() => ({ ...INITIAL_ACCOUNT }));
+  world.selfId = null;
+  world.creatures.clear();
 });
 
 describe('TopBar', () => {
@@ -126,10 +146,16 @@ describe('TopBar', () => {
     expect(buttonFor(html, 'chat')).not.toContain('topbar-icon-badge-dot');
   });
 
-  it('centers the "DRACONYA" wordmark without any player count', async () => {
+  it('shows "—" in .topbar-online while onlinePlayers is null (SV-15, #351)', async () => {
     const html = await render();
     expect(html).toContain('DRACONYA');
-    expect(html).not.toContain('online');
+    expect(html).toContain('<span class="topbar-online">—</span>');
+  });
+
+  it('shows the pt-BR formatted count in .topbar-online once it arrives (SV-15, #351)', async () => {
+    hud.set((state) => ({ ...state, onlinePlayers: 1_234 }));
+    const html = await render();
+    expect(html).toContain('<span class="topbar-online">1.234 players online</span>');
   });
 
   it('never renders an emoji', async () => {
@@ -143,6 +169,32 @@ describe('TopBar', () => {
     const html = await render();
     expect(html).toContain('>—<');
     expect(html).toContain('>?<');
+  });
+
+  it('shows the outfit sprite in the portrait once the own creature is in the world (SV-14, #350)', async () => {
+    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
+    account.set(() => ({
+      ...INITIAL_ACCOUNT,
+      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'hunt', sessionId: 's1' }],
+    }));
+    world.selfId = 1;
+    world.creatures.set(1, creature(1, { colors: { head: 10, body: 20, legs: 30, feet: 40 } }));
+    const html = await render();
+    // O sprite substitui a inicial DENTRO do mesmo botão — o retrato continua sendo
+    // `.topbar-portrait` (props/onClick intocados), só o conteúdo muda.
+    expect(html).toMatch(/class="topbar-portrait"[^>]*>\s*<span class="item-sprite"/);
+  });
+
+  it('keeps the plain initial in the portrait while the own creature has not arrived in the world (SV-14, #350)', async () => {
+    hud.set(() => ({ ...INITIAL_HUD, characterId: 'c1' }));
+    account.set(() => ({
+      ...INITIAL_ACCOUNT,
+      characters: [{ id: 'c1', name: 'Aldric', level: 12, xp: 0, gold: 0, vocation: 'knight', state: 'city', sessionId: null }],
+    }));
+    // world.selfId continua null (beforeEach) — a corrida entre welcome e session-state.
+    const html = await render();
+    expect(html).not.toContain('item-sprite');
+    expect(html).toContain('>A<');
   });
 
   it('every window icon carries aria-pressed (#306)', async () => {

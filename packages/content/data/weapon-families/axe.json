@@ -1,0 +1,11 @@
+{
+  "id": "axe",
+  "name": "Axe",
+  "kind": "melee",
+  "skillId": "melee",
+  "range": 1,
+  "damageType": "physical",
+  "resource": "none",
+  "formula": { "levelFactor": 0, "spread": 0 },
+  "_open": "Família corpo a corpo (CMB-05). A fórmula preserva o v1: `levelFactor` e `spread` são 0, e a escala por nível é o `damagePerLevel` da skill `melee`. Rebalancear é editar aqui ou na skill, nunca o ruleset."
+}

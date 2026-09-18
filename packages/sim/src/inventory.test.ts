@@ -1,26 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { itemSchema } from '@draconya/content';
+import { compileItem, itemSchema } from '@draconya/content';
 import type { Item } from '@draconya/content';
+import { NO_DEFENSE } from './combat/defense.js';
 import { Inventory, MAX_STACK } from './inventory.js';
 import type { CarriedItem, ContainerRules, Wearer } from './inventory.js';
 
 // A aparência é resolvida por `buildContent` a partir de `appearances/baseline.json` (FUN-94),
 // então o schema não a produz e ela entra aqui à mão. O que este teste exercita é peso, slot e
-// empilhamento — arte não muda nenhum dos três.
+// empilhamento — arte não muda nenhum dos três. `compileItem` resolve a arma e a mitigação
+// (CMB-03) como o boot faz.
 const define = (over: Record<string, unknown>): Item => ({
-  ...itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over }),
+  ...compileItem(itemSchema.parse({ id: 'x', name: 'X', kind: 'other', weight: 10, value: 0, ...over })),
   appearanceId: 1,
 });
 
 const catalog = new Map<string, Item>([
-  ['sword', define({ id: 'sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 })],
+  ['sword', define({ id: 'sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24, defense: 3 })],
   ['armor', define({ id: 'armor', kind: 'armor', slot: 'chest', weight: 90, value: 0, armor: 4 })],
   ['helmet', define({ id: 'helmet', kind: 'armor', slot: 'head', weight: 20, value: 0, armor: 2 })],
   // Empilhável: o queijo — munição deixou de ser item (ADR 0026), e o schema já não a aceita.
   ['arrow', define({ id: 'arrow', kind: 'other', weight: 1, value: 0, stackable: true })],
   ['rock', define({ id: 'rock', kind: 'other', weight: 5 })],
   ['bow', define({ id: 'bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } })],
-  ['shield', define({ id: 'shield', kind: 'shield', slot: 'shield', weight: 40 })],
+  ['shield', define({ id: 'shield', kind: 'shield', slot: 'shield', weight: 40, defense: 5 })],
   ['great-sword', define({
     id: 'great-sword', kind: 'weapon', slot: 'hand', weight: 60, value: 0, attack: 40,
     requires: { level: 20 },
@@ -29,6 +31,8 @@ const catalog = new Map<string, Item>([
     id: 'druid-staff', kind: 'weapon', slot: 'hand', weight: 30, value: 0, attack: 12,
     requires: { vocationId: 'druid' },
   })],
+  ['energy-ring', define({ id: 'energy-ring', kind: 'ring', slot: 'finger', weight: 2, ringEffect: { kind: 'energy-shield' } })],
+  ['plain-ring', define({ id: 'plain-ring', kind: 'ring', slot: 'finger', weight: 2 })],
 ]);
 
 const carried = (itemId: string, instanceId = itemId, quantity = 1): CarriedItem =>
@@ -247,6 +251,90 @@ describe('o que o combate lê', () => {
     inventory.equip('armor', wearer(), catalog);
     inventory.equip('helmet', wearer(), catalog);
     expect(inventory.armor(catalog)).toBe(6);
+  });
+
+  it('ringEffect lê o efeito do anel no dedo pelo catálogo', () => {
+    const inventory = new Inventory();
+    // null sem anel equipado
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // null com item equipado em slot diferente de dedo
+    inventory.add(carried('armor'), catalog, wearer(), rules);
+    inventory.equip('armor', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // null com anel no dedo que não possui ringEffect
+    inventory.add(carried('plain-ring'), catalog, wearer(), rules);
+    inventory.equip('plain-ring', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toBeNull();
+
+    // Devolve o efeito com anel equipado no dedo
+    inventory.add(carried('energy-ring'), catalog, wearer(), rules);
+    inventory.equip('energy-ring', wearer(), catalog);
+    expect(inventory.ringEffect(catalog)).toEqual({ kind: 'energy-shield' });
+  });
+});
+
+describe('a fonte de defesa do que está vestido (CMB-04)', () => {
+  it('o escudo precede a arma de uma mão (DT-02)', () => {
+    // Somar as duas mãos seria stacking implícito; o que o jogador vê na mão é uma fonte só.
+    const inventory = new Inventory();
+    inventory.add(carried('sword'), catalog, wearer(), rules);
+    inventory.add(carried('shield'), catalog, wearer(), rules);
+    inventory.equip('sword', wearer(), catalog);
+    inventory.equip('shield', wearer(), catalog);
+    expect(inventory.defenseSource(catalog, wearer())).toEqual({ kind: 'shield', defense: 5 });
+  });
+
+  it('sem escudo, a arma corpo a corpo de uma mão é a fonte', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('sword'), catalog, wearer(), rules);
+    inventory.equip('sword', wearer(), catalog);
+    expect(inventory.defenseSource(catalog, wearer())).toEqual({ kind: 'weapon', defense: 3 });
+  });
+
+  it('desarmado não tem fonte', () => {
+    expect(new Inventory().defenseSource(catalog, wearer())).toEqual(NO_DEFENSE);
+  });
+
+  it('bow (duas mãos) não deixa defesa residual', () => {
+    const inventory = new Inventory();
+    inventory.add(carried('bow'), catalog, wearer({ capacity: 1_000 }), rules);
+    inventory.equip('bow', wearer(), catalog);
+    expect(inventory.defenseSource(catalog, wearer())).toEqual({ kind: 'none', defense: 0 });
+  });
+
+  it('arma de duas mãos NÃO usa a defesa da arma, mesmo com `defense` declarado', () => {
+    const greatAxe = define({
+      id: 'great-axe', kind: 'weapon', slot: 'hand', weight: 60, value: 0,
+      attack: 30, twoHanded: true, defense: 12,
+    });
+    const withIt = new Map([...catalog, ['great-axe', greatAxe]]);
+    const inventory = Inventory.fromState({ backpack: [], equipped: { hand: carried('great-axe') } });
+    expect(inventory.defenseSource(withIt, wearer())).toEqual(NO_DEFENSE);
+  });
+
+  it('escudo que exige level que o portador não tem conta como ausente', () => {
+    // Pela mesma razão que `weapon()` lê a arma inacessível como mão vazia: um snapshot pode
+    // trazer o item equipado sem passar por `equip`.
+    const kite = define({
+      id: 'kite-shield', kind: 'shield', slot: 'shield', weight: 40, defense: 8,
+      requires: { level: 20 },
+    });
+    const withIt = new Map([...catalog, ['kite-shield', kite]]);
+    const inventory = Inventory.fromState({ backpack: [], equipped: { shield: carried('kite-shield') } });
+    expect(inventory.defenseSource(withIt, wearer({ level: 19 }))).toEqual(NO_DEFENSE);
+    expect(inventory.defenseSource(withIt, wearer({ level: 20 }))).toEqual({ kind: 'shield', defense: 8 });
+  });
+
+  it('escudo com defesa 0 continua sendo a FONTE — a prática segue a política', () => {
+    // A elegibilidade é da peça, não do número: um escudo que não bloqueia ainda é um escudo.
+    const buckler = define({
+      id: 'buckler', kind: 'shield', slot: 'shield', weight: 10, defense: 0,
+    });
+    const withIt = new Map([...catalog, ['buckler', buckler]]);
+    const inventory = Inventory.fromState({ backpack: [], equipped: { shield: carried('buckler') } });
+    expect(inventory.defenseSource(withIt, wearer())).toEqual({ kind: 'shield', defense: 0 });
   });
 });
 

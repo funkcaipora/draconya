@@ -106,7 +106,7 @@ describe('o painel Batalha (#254)', () => {
     hud.set((state) => ({
       ...state,
       party: party([
-        { characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100 },
+        { characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100, vocationId: null },
       ]),
     }));
 
@@ -134,5 +134,45 @@ describe('o painel Batalha (#254)', () => {
     expect(html).toContain('Corpse');
     expect(html).toContain('0%');
     expect(html).not.toContain('NaN');
+  });
+
+  it('destaca apenas a criatura alvo com battle-row-selected (#348, SV-12)', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    world.creatures.set(2, creature(2, { name: 'Bat' }));
+    hud.set((state) => ({ ...state, targetId: 2 }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).toContain('battle-row battle-row-selected');
+    const selectedMatches = html.match(/battle-row-selected/g);
+    expect(selectedMatches).toHaveLength(1);
+    expect(html).toMatch(/class="battle-row"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Rat<\/span>/);
+    expect(html).toMatch(/class="battle-row battle-row-selected"[^>]*>(<span class="battle-icon"[^>]*><\/span>)?<span class="battle-name">Bat<\/span>/);
+  });
+
+  it('targetId 999 não seleciona nenhuma linha', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    hud.set((state) => ({ ...state, targetId: 999 }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).not.toContain('battle-row-selected');
+  });
+
+  it('targetId nulo não seleciona nenhuma linha', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    hud.set((state) => ({ ...state, targetId: null }));
+
+    const html = await render(createElement(BattlePanel));
+    expect(html).not.toContain('battle-row-selected');
+  });
+
+  it('não possui botões interativos dentro de battle-list', async () => {
+    world.selfId = 99;
+    world.creatures.set(1, creature(1, { name: 'Rat' }));
+    const html = await render(createElement(BattlePanel));
+    const listHtml = html.slice(html.indexOf('battle-list'));
+    expect(listHtml).not.toContain('<button');
   });
 });

@@ -1,9 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, resolveSelection,
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, pullLabel, resolveSelection,
 } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
@@ -15,8 +14,17 @@ import { INITIAL_PARTY, party } from '../party/store.js';
 // aqui só se prende a ESTRUTURA e o que essas funções produzem por padrão.
 
 const hunts: HuntListing[] = [
-  { id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2 },
-  { id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60, difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7 },
+  {
+    id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1,
+    difficulties: ['cautious', 'bold', 'reckless'], outfitIds: [21], lootDrops: 2,
+    difficultyDetails: [], monsters: [], loot: [],
+  },
+  {
+    id: 'dragon-lair', name: 'Covil dos Dragões', recommendedLevel: 60,
+    difficulties: ['cautious', 'bold'], outfitIds: [], lootDrops: 7,
+    difficultyDetails: [{ id: 'cautious', monsterCount: 3 }, { id: 'bold', monsterCount: 6 }],
+    monsters: [], loot: [],
+  },
 ];
 
 const catalogue: Catalogue = {
@@ -183,14 +191,21 @@ describe('attemptEnter (RF-04, RF-09)', () => {
     expect(send).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
+});
 
-  it('stores the local hunt only after the successful attempt', async () => {
-    const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
-    const enterIndex = source.indexOf('const enter = (): void =>');
-    const attemptIndex = source.indexOf('if (attemptEnter(message, sendIntent, onClose)', enterIndex);
-    const storeIndex = source.indexOf('setCurrentHunt({ huntId: selected.id, difficulty });', enterIndex);
-    expect(enterIndex).toBeGreaterThan(-1);
-    expect(attemptIndex).toBeGreaterThan(enterIndex);
-    expect(storeIndex).toBeGreaterThan(attemptIndex);
+describe('pullLabel (SV-19)', () => {
+  it('appends the monster count from difficultyDetails when present', () => {
+    expect(pullLabel(hunts[1]!, 'cautious')).toBe('Cauteloso · 3');
+    expect(pullLabel(hunts[1]!, 'bold')).toBe('Ousado · 6');
+  });
+
+  it('falls back to only the localized name without a count, never "· undefined"', () => {
+    // rat-cellars tem `difficultyDetails: []` — o catálogo de um nó anterior à SV-19.
+    expect(pullLabel(hunts[0]!, 'reckless')).toBe('Agressivo');
+    expect(pullLabel(hunts[0]!, 'reckless')).not.toContain('undefined');
+  });
+
+  it('falls back to the raw difficulty id when it has no localized text', () => {
+    expect(pullLabel(hunts[0]!, 'custom')).toBe('custom');
   });
 });

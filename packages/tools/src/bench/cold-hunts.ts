@@ -1,12 +1,15 @@
-// Cenário frio: milhares de hunts desanexadas (FUN-46).
+// Cenário frio: milhares de hunts desanexadas (FUN-46). Desde o CMB-10 (#336) o mesmo relatório
+// roda também o CENÁRIO MISTO de combate (`SCENARIO=combat`), que compõe ability, área,
+// resistência, defesa, condição/campo e modificadores — o pipeline que o M19 entregou.
 //
 // **É a medição que decide se a arquitetura está certa**, e o único número do projeto que não
 // dá para derivar de fora. Toda a projeção de custo depende do custo de tick por instância; se
 // o número real estourar a projeção por uma ordem de grandeza, é aqui que a arquitetura muda —
 // e não depois de cinco meses de conteúdo empilhado em cima.
 //
-//   pnpm bench:hunts                 # 5.000 hunts, o cenário da issue
+//   pnpm bench:hunts                          # 5.000 hunts, o cenário frio da issue
 //   HUNTS=500 MINUTES=1 pnpm bench:hunts
+//   SCENARIO=combat pnpm bench:hunts          # o cenário misto do CMB-10
 //
 // **O número só vale com a máquina junto.** O tick é single-thread, então quem decide é
 // desempenho por core, e um OCPU Ampere, um core de EPYC e um core M-series rendem valores
@@ -27,12 +30,18 @@ import { CharacterRuntime, createHuntSession, statsForLevel } from '@draconya/si
 import type { HuntRuleset } from '@draconya/sim';
 import type { Session } from '@draconya/sim';
 import { scenario } from './cold-scenario.js';
+import {
+  COMBAT_DIFFICULTY, COMBAT_HUNT_ID, combatCharacter, combatScenario,
+} from './combat-scenario.js';
 
 const HUNTS = Number(process.env['HUNTS'] ?? 5_000);
 /** Minutos SIMULADOS, não de espera: o relógio é parâmetro (invariante 1). */
 const MINUTES = Number(process.env['MINUTES'] ?? 10);
 /** Desanexada roda a 1 Hz (ADR 0003). É o cenário da issue. */
 const HZ = Number(process.env['HZ'] ?? 1);
+/** `cold` (o motor, FUN-46) ou `combat` (o pipeline do M19, CMB-10). */
+const SCENARIO = process.env['SCENARIO'] ?? 'cold';
+const COMBAT = SCENARIO === 'combat';
 
 // --- medição ---------------------------------------------------------------------------------
 
@@ -57,21 +66,28 @@ const observer = new PerformanceObserver((list) => {
     gcPeakMs = Math.max(gcPeakMs, entry.duration);
   }
 });
-const content = scenario();
+const content = COMBAT ? combatScenario() : scenario();
 const stats = statsForLevel(1, null, content.progression);
+const huntId = COMBAT ? COMBAT_HUNT_ID : 'cold';
+const difficulty = COMBAT ? COMBAT_DIFFICULTY : 'reckless';
+const sessionPrefix = COMBAT ? 'combat' : 'cold';
+
+const characterFor = (i: number): CharacterRuntime => COMBAT
+  ? combatCharacter(content, `p${i}`, { x: 0, y: 0, z: 7 })
+  : new CharacterRuntime({
+    id: `p${i}`, position: { x: 0, y: 0, z: 7 },
+    health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 0, maxMana: stats.maxMana,
+    level: 1, xp: 0, vocationId: null, staminaMs: 86_400_000, staminaUpdatedAtMs: 0,
+    goldDelta: 0, alive: true, cooldowns: {},
+  });
 
 const before = heapMb();
 const sessions: Session[] = [];
 for (let i = 0; i < HUNTS; i++) {
   const session = createHuntSession({
-    id: `cold-${i}`, content, huntId: 'cold', difficulty: 'reckless', createdAtMs: 0,
+    id: `${sessionPrefix}-${i}`, content, huntId, difficulty, createdAtMs: 0,
   });
-  session.enter(new CharacterRuntime({
-    id: `p${i}`, position: { x: 0, y: 0, z: 7 },
-    health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 0, maxMana: stats.maxMana,
-    level: 1, xp: 0, vocationId: null, staminaMs: 86_400_000, staminaUpdatedAtMs: 0,
-    goldDelta: 0, alive: true, cooldowns: {},
-  }));
+  session.enter(characterFor(i));
   sessions.push(session);
 }
 
@@ -173,6 +189,7 @@ console.log(`memória total       ${(totalmem() / 1024 ** 3).toFixed(1)} GiB`);
 console.log(`gc forçado          ${(globalThis as { gc?: unknown }).gc !== undefined ? 'sim' : 'não (rode com --expose-gc para memória exata)'}`);
 
 console.log('--- cenário ---------------------------------------------------------');
+console.log(`cenário             ${SCENARIO}${COMBAT ? ' (pipeline de combate do M19)' : ' (motor, FUN-46)'}`);
 console.log(`hunts               ${HUNTS.toLocaleString('pt-BR')} desanexadas a ${HZ} Hz`);
 console.log(`monstros por hunt   ${(monsters / HUNTS).toFixed(1)} vivos ao fim`);
 console.log(`simulado            ${MINUTES} min (${ticks.toLocaleString('pt-BR')} ticks)`);

@@ -54,9 +54,9 @@ describe('HuntActions', () => {
     expect(leaveHuntCallIndex).toBeGreaterThan(huntingReturnIndex);
   });
 
-  it('clears the local hunt identity only from the successful exit handler', async () => {
+  it('renders the details modal after the exit pill, with the exit click wired straight to leaveHunt', async () => {
     const source = await readFile(new URL('./HuntActions.tsx', import.meta.url), 'utf8');
-    const exitIndex = source.indexOf('if (leaveHunt(sendIntent)) setCurrentHunt(null);');
+    const exitIndex = source.indexOf('onClick={() => { leaveHunt(sendIntent); }}');
     expect(exitIndex).toBeGreaterThan(-1);
     expect(source.indexOf('<HuntDetailsModal', exitIndex)).toBeGreaterThan(exitIndex);
   });

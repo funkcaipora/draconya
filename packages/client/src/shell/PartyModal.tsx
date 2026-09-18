@@ -10,8 +10,11 @@
 // na coluna esquerda (nome, estrela de líder, HP, "caiu"), só que dentro do modal — por isso o
 // percentual de HP vem da mesma função pura (`party-member-view.ts`) extraída de PartyMembers.
 //
-// Vocação/level/DPS/HPS de cada membro NÃO entram: `PartyState` (party-state, opcode 24) não
-// carrega esses campos ainda. D8 (ADR 0030): dado que o servidor não manda não aparece na tela.
+// Vocação/level/mana chegaram ao `PartyState` (party-state, opcode 24) com o SV-11 (#347), e
+// `PartyMembers.tsx` já os mostra na coluna esquerda — mas esta aba, de propósito, ainda só
+// espelha o que já mostrava antes disso (nome, estrela, HP, "caiu"): ficar coerente com o painel
+// é trabalho opcional desta mesma issue, não uma dívida separada. DPS/HPS continuam fora porque
+// não existe campo nenhum para eles ainda (E2) — aí sim D8 (ADR 0030) se aplica.
 //
 // O "/4" do título do kit também fica de fora: `maxMembers` é uma constante de `content` que
 // nenhuma mensagem manda ao cliente hoje — mostrar "4" fixo seria inventar dado (D8). O título

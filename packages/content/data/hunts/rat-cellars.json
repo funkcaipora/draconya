@@ -5,6 +5,7 @@
   "mapId": "rat-cellars",
   "routeId": "rat-cellars",
   "ambience": "cavern",
+  "description": "Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.",
   "corpseTtlMs": 10000,
   "spawnClearRadius": 3,
   "difficulties": {

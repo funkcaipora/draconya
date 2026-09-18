@@ -1,7 +1,8 @@
 import { buildContent, isBlocked, placeholderAppearances } from '@draconya/content';
-import type { Content, Progression, RawContent } from '@draconya/content';
-import { describe, expect, it } from 'vitest';
+import type { Content, FieldSpec, Item, Progression, RawContent } from '@draconya/content';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CharacterRuntime } from '../character.js';
+import { resolveDamage } from '../combat/damage.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
@@ -14,6 +15,15 @@ import {
   HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView } from './hunt.js';
+
+// O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
+// implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
+// fim consegue provar que CADA produtor passa por este ponto. Um produtor que calculasse dano
+// por fora não apareceria nas chamadas gravadas.
+vi.mock('../combat/damage.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../combat/damage.js')>();
+  return { ...actual, resolveDamage: vi.fn(actual.resolveDamage) };
+});
 
 // Um mapa pequeno, com uma sala e um laço de dez tiles em volta dela. Pequeno de propósito:
 // num mapa assim dá para dizer, olhando, onde cada criatura está — e um teste de simulação
@@ -79,7 +89,7 @@ const progression = {
 
 const combat = {
   id: 'baseline', dodgeMultiplier: 0.5,
-  armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
   // **Esquiva zero neste conteúdo de teste, e é decisão.** Com ela, dano vira função só do
   // tempo decorrido, e a comparação 10 Hz / 1 Hz mede o que ela deveria medir — a matemática
   // do tempo — em vez de medir em que ordem os sorteios caíram. Quem cuida do dodge é
@@ -99,7 +109,7 @@ const spells = [
   },
   {
     id: 'strike', name: 'Golpe Arcano', manaCost: 15, cooldownMs: 2_000,
-    effect: { kind: 'damage', power: 40, range: 3 },
+    effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
   },
   // Área de raio 2 e poder que MATA um rato de 50 num golpe: é o que faz o teste de "morte no
   // meio da área" ser sobre morte, e não sobre quanto falta de vida.
@@ -126,6 +136,25 @@ const skills = [
     curve: { base: 100, factor: 1 }, gain: { on: 'spell-cast', pointsPerMana: 1 },
     damagePerLevel: 0,
   },
+  // A skill de distância existe para o bow da fixture montar (CMB-05): a família `distance`
+  // aponta para ela, e a contribuição por nível é 0 para o dano ser o `attack` da munição.
+  {
+    id: 'distance', name: 'Distância', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'distance-hit', points: 1 },
+    damagePerLevel: 0,
+  },
+];
+
+// As famílias de arma (CMB-05). A `melee` contribui 0,5 por nível — é o que faz o teste do
+// desarmado/espada medir a escala da skill, e não só o `attack`.
+const weaponFamilies = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
 ];
 
 // Uma arma que bate MUITO mais que o desarmado (25): com ela o rato de 50 cai num golpe, e o
@@ -134,6 +163,12 @@ const items = [
   {
     id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger',
     weight: 1, value: 0, armor: 2,
+    ringEffect: { kind: 'regen-boost', percent: 300 },
+  },
+  {
+    id: 'energy-ring', name: 'Energy Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0,
+    ringEffect: { kind: 'energy-shield' },
   },
   {
     id: 'other-ring', name: 'Other Ring', kind: 'ring', slot: 'finger',
@@ -153,7 +188,7 @@ const items = [
   // a CONTAGEM de alvos, não o golpe.
   {
     id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
-    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 } },
+    weapon: { kind: 'wand', range: 3, manaPerHit: 999, damage: { min: 1, max: 1 }, damageType: 'energy' },
   },
 ];
 
@@ -163,7 +198,7 @@ const items = [
 const raw = (over: Partial<RawContent> = {}): RawContent => {
   const base: RawContent = {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
-    stamina: [stamina], party: [party], spells, supplies, skills, items,
+    stamina: [stamina], party: [party], spells, supplies, skills, weaponFamilies, items,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
     bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
@@ -469,6 +504,40 @@ describe('regeneração (FUN-36)', () => {
     const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
     const at = (hz: number): number => {
       const { session, hero } = start({ loaded: semSpawn, health: 100 });
+      run(session, 600_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('o Life Ring quadruplica a regeneração passiva (224 HP em 30s em vez de 131)', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const { session, hero } = start({
+      loaded: semSpawn, health: 100,
+      inventory: {
+        backpack: [],
+        equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+      },
+    });
+
+    run(session, 30_000, 100);
+
+    // Bônus de +300% (SV-16): 1 ponto vira 4 a cada vencimento. Em 30 segundos são
+    // 31 vencimentos × 4 = 124 pontos somados aos 100 iniciais.
+    expect(hero.health).toBe(224);
+  });
+
+  it('o Life Ring rende exatamente o mesmo a 10 Hz e a 1 Hz', () => {
+    const semSpawn = content({ routes: [{ ...route, spawnPoints: [] }] });
+    const at = (hz: number): number => {
+      const { session, hero } = start({
+        loaded: semSpawn, health: 100,
+        inventory: {
+          backpack: [],
+          equipped: { finger: { instanceId: 'ring', itemId: 'life-ring', quantity: 1 } },
+        },
+      });
       run(session, 600_000, 1000 / hz);
       return hero.health;
     };
@@ -919,6 +988,16 @@ describe('seleção de hunt', () => {
     expect(huntListings(content({ hunts: [alta, hunt] })).map((h) => h.id))
       .toEqual(['arena', 'deep']);
   });
+
+  it('copia description quando definida e deixa undefined quando não definida (SV-21, #357)', () => {
+    const comDescricao = { ...hunt, description: 'Os porões de pedra sob Rookgaard.' };
+    const [com] = huntListings(content({ hunts: [comDescricao] }));
+    expect(com?.description).toBe('Os porões de pedra sob Rookgaard.');
+
+    const [sem] = huntListings(content({ hunts: [hunt] }));
+    expect(sem?.description).toBeUndefined();
+    expect('description' in (sem ?? {})).toBe(false);
+  });
 });
 
 describe('eventos de domínio (FUN-69)', () => {
@@ -1357,6 +1436,7 @@ const withSpells = (
   over: {
     health?: number; mana?: number; gold?: number;
     spells?: readonly unknown[]; supplies?: readonly unknown[]; monsters?: boolean;
+    combat?: readonly unknown[]; monstersRaw?: readonly unknown[];
   } = {},
   difficulty: 'cautious' | 'bold' = 'cautious',
 ) => {
@@ -1371,6 +1451,8 @@ const withSpells = (
     ...(over.monsters === false ? { routes: [{ ...route, spawnPoints: [] }] } : {}),
     ...(over.spells === undefined ? {} : { spells: over.spells }),
     ...(over.supplies === undefined ? {} : { supplies: over.supplies }),
+    ...(over.combat === undefined ? {} : { combat: over.combat }),
+    ...(over.monstersRaw === undefined ? {} : { monsters: over.monstersRaw }),
   }));
   const session = createHuntSession({
     id: 'spell-session', content: loaded, huntId: 'arena', difficulty,
@@ -2180,11 +2262,19 @@ describe('a equivalência entre taxas vale para a postura também', () => {
 /** Uma hunt sem monstro nenhum: aqui o assunto é quando ela ENCERRA, não o que acontece nela. */
 const withExit = (
   exit: readonly Record<string, unknown>[],
-  over: { health?: number; gold?: number; goldDelta?: number } = {},
+  over: {
+    health?: number;
+    gold?: number;
+    goldDelta?: number;
+    capacity?: number;
+    inventory?: InventoryState;
+    exitDelayMs?: number;
+  } = {},
 ) => {
   const loaded = buildContent(raw({
     routes: [{ ...route, spawnPoints: [] }],
     progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...(over.exitDelayMs !== undefined ? { hunts: [{ ...hunt, exitDelayMs: over.exitDelayMs }] } : {}),
   }));
   const session = createHuntSession({
     id: 'saida', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
@@ -2199,9 +2289,11 @@ const withExit = (
     mana: stats.maxMana, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
     staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 500, goldDelta: over.goldDelta ?? 0, alive: true, cooldowns: {},
+    capacity: over.capacity ?? stats.capacity,
+    ...(over.inventory !== undefined ? { inventory: over.inventory } : {}),
   });
   session.enter(hero);
-  return { session, hero };
+  return { session, hero, ruleset: session.ruleset as HuntRuleset, loaded };
 };
 
 /** O motivo que o extrato registrou, ou `null`. É a resposta a "por que minha hunt acabou?". */
@@ -2292,6 +2384,34 @@ describe('regras de saída (FUN-86)', () => {
     run(session, 5_000, 100);
     expect(session.ended).toBe('exit-rule');
   });
+
+  it('out-of-capacity encerra por `exit-rule` e o extrato registra o motivo', () => {
+    const inv: InventoryState = {
+      backpack: [{ instanceId: 'sw1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // sword pesa 50 no catálogo de teste da hunt; capacidade do herói 50
+    const { session } = withExit(
+      [{ kind: 'out-of-capacity' }],
+      { capacity: 50, inventory: inv },
+    );
+    run(session, 5_000, 100);
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('out-of-capacity');
+  });
+
+  it('sem a regra out-of-capacity, capacidade excedida deixa a hunt correr', () => {
+    const inv: InventoryState = {
+      backpack: [{ instanceId: 'sw1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    const { session } = withExit(
+      [],
+      { capacity: 50, inventory: inv },
+    );
+    run(session, 5_000, 100);
+    expect(session.ended).toBeNull();
+  });
 });
 
 describe('os predicados de saída, isolados (FUN-86)', () => {
@@ -2308,8 +2428,14 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     monstersAlive: 0,
   });
 
+  const exitCatalog = new Map<string, Item>([
+    ['sword', { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0 } as Item],
+    ['plate', { id: 'plate', name: 'Plate Armor', kind: 'armor', slot: 'chest', weight: 80, value: 0 } as Item],
+  ]);
+
   const alguem = (over: Partial<{
     id: string; health: number; maxHealth: number; gold: number; goldDelta: number; alive: boolean;
+    capacity: number; inventory: InventoryState;
   }> = {}): CharacterRuntime => new CharacterRuntime({
     id: over.id ?? 'hero', position: { x: 1, y: 1, z: 7 },
     health: over.health ?? 100, maxHealth: over.maxHealth ?? 100,
@@ -2317,10 +2443,12 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     staminaMs: null, staminaUpdatedAtMs: 0,
     gold: over.gold ?? 0, goldDelta: over.goldDelta ?? 0,
     alive: over.alive ?? true, cooldowns: {},
+    ...(over.capacity !== undefined ? { capacity: over.capacity } : {}),
+    ...(over.inventory !== undefined ? { inventory: over.inventory } : {}),
   });
 
-  const only = (rule: Record<string, unknown>) =>
-    (compileExitRules([botExitRuleSchema.parse(rule)])[0] as HuntExitRule);
+  const only = (rule: Record<string, unknown>, catalog: ReadonlyMap<string, Item> = exitCatalog) =>
+    (compileExitRules([botExitRuleSchema.parse(rule)], catalog)[0] as HuntExitRule);
 
   it('hp-below compara ESTRITAMENTE: 100% de vida não dispara uma regra de 100%', () => {
     // Com `<=`, quem configurasse "sair abaixo de 100%" veria a hunt encerrar no instante em
@@ -2376,8 +2504,139 @@ describe('os predicados de saída, isolados (FUN-86)', () => {
     expect(rule.when(view([alguem({ id: 'hero' }), alguem({ id: 'friend', alive: false })]))).toBe(false);
   });
 
+  it('out-of-capacity dispara quando peso >= capacidade (tanto == quanto >)', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // peso == capacidade (50 == 50)
+    expect(semCap.when(view([alguem({ capacity: 50, inventory: inv50 })]))).toBe(true);
+    // peso > capacidade (50 > 40)
+    expect(semCap.when(view([alguem({ capacity: 40, inventory: inv50 })]))).toBe(true);
+  });
+
+  it('out-of-capacity não dispara quando peso < capacidade', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    // peso < capacidade (50 < 100)
+    expect(semCap.when(view([alguem({ capacity: 100, inventory: inv50 })]))).toBe(false);
+  });
+
+  it('out-of-capacity não dispara quando capacidade <= 0', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    expect(semCap.when(view([alguem({ capacity: 0, inventory: inv50 })]))).toBe(false);
+    expect(semCap.when(view([alguem({ capacity: -10, inventory: inv50 })]))).toBe(false);
+  });
+
+  it('out-of-capacity não dispara sobre personagem morto', () => {
+    const semCap = only({ kind: 'out-of-capacity' });
+    const inv50: InventoryState = {
+      backpack: [{ instanceId: 'i1', itemId: 'sword', quantity: 1 }],
+      equipped: {},
+    };
+    expect(semCap.when(view([alguem({ alive: false, capacity: 50, inventory: inv50 })]))).toBe(false);
+  });
+
   it('lista vazia compila para lista vazia — nada avaliado, nada custa', () => {
-    expect(compileExitRules([])).toEqual([]);
+    expect(compileExitRules([], new Map())).toEqual([]);
+  });
+});
+
+describe('contagem regressiva de saída solo (#360)', () => {
+  it('withExit sem exitDelayMs encerra imediatamente e continua passando testes existentes (RF-01)', () => {
+    const { session } = withExit([{ kind: 'hp-below', percent: 50 }], { health: 100 });
+    session.advanceBy(250);
+    expect(session.ended).toBe('exit-rule');
+    expect(motivo(session)).toBe('hp-below-50');
+  });
+
+  it('hp-below com exitDelayMs aguarda contagem antes de encerrar e registra evento no disparo (RF-02, RF-03, DT-04)', () => {
+    const { session } = withExit(
+      [{ kind: 'hp-below', percent: 50 }],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    // EXIT_RULES avalia em t = 250ms
+    session.advanceBy(250);
+    expect(session.ended).toBeNull();
+    // Evento gravado no instante do disparo (DT-04)
+    const event = session.notableEvents.find((e) => e.type === 'exit-rule');
+    expect(event).toBeDefined();
+    expect(event?.detail).toBe('hp-below-50');
+
+    // Em t + 4_999ms (250 + 4_999 = 5_249ms), ainda não encerrou (RF-02)
+    session.advanceBy(4_999);
+    expect(session.ended).toBeNull();
+
+    // Em t + 5_000ms (5_250ms), encerra com 'exit-rule' (RF-03)
+    session.advanceBy(1);
+    expect(session.ended).toBe('exit-rule');
+  });
+
+  it('requestExit encerra a sessão em manual-exit após exitDelayMs e chamadas múltiplas não resetam o timer (RF-04)', () => {
+    const { session, hero, ruleset } = withExit(
+      [],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(1_000);
+    expect(session.ended).toBeNull();
+
+    // Primeiro pedido de saída em t = 1_000ms
+    ruleset.requestExit(session, hero.id);
+    expect(session.ended).toBeNull();
+
+    // Segundo pedido após 2_000ms não reseta o timer
+    session.advanceBy(2_000); // t = 3_000ms
+    ruleset.requestExit(session, hero.id);
+
+    // Em t = 5_999ms (1_000 + 4_999ms), ainda não encerrou
+    session.advanceBy(2_999);
+    expect(session.ended).toBeNull();
+
+    // Em t = 6_000ms (1_000 + 5_000ms), encerra em manual-exit
+    session.advanceBy(1);
+    expect(session.ended).toBe('manual-exit');
+  });
+
+  it('exitDelayMs sozinho sem disparo de regra ou requestExit não encerra a hunt', () => {
+    const { session } = withExit([], { health: 100, exitDelayMs: 5_000 });
+    run(session, 15_000, 100);
+    expect(session.ended).toBeNull();
+  });
+
+  it('retomada de snapshot no meio da contagem preserva o timer e o motivo (RF-05)', () => {
+    const { session, hero, ruleset, loaded } = withExit(
+      [],
+      { health: 100, exitDelayMs: 5_000 },
+    );
+    session.advanceBy(1_000);
+    ruleset.requestExit(session, hero.id);
+
+    // Avança 2_000ms na contagem (t = 3_000ms; faltam 3_000ms para 6_000ms)
+    session.advanceBy(2_000);
+    expect(session.ended).toBeNull();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    // Em t = 5_999ms (2_999ms após restauração), ainda não encerrou
+    retomado.advanceBy(2_999);
+    expect(retomado.ended).toBeNull();
+
+    // Em t = 6_000ms (3_000ms após restauração), encerra preservando 'manual-exit'
+    retomado.advanceBy(1);
+    expect(retomado.ended).toBe('manual-exit');
   });
 });
 
@@ -2693,6 +2952,105 @@ describe('skills sobem pelo uso, e a curva é conteúdo (FUN-75)', () => {
     const rapido = at(100);
     expect(at(1_000)).toEqual(rapido);
     expect(rapido.skills['melee']?.level).toBeGreaterThan(10);
+  });
+});
+
+describe('defesa, escudo e prática de shielding (CMB-04)', () => {
+  const shieldItem = {
+    id: 'shield', name: 'Shield', kind: 'shield', slot: 'shield',
+    weight: 40, value: 0, defense: 30,
+  };
+  const shielding = {
+    id: 'shielding', name: 'Escudo', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'shield-block', points: 1 },
+    damagePerLevel: 0.5,
+  };
+  const defense = { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] };
+
+  /** O conteúdo do CMB-04: o escudo no catálogo, a skill de bloqueio e o perfil com defesa. */
+  const defenseContent = (over: Partial<RawContent> = {}): Content => content({
+    items: [...items, shieldItem],
+    skills: [...skills, shielding],
+    combat: [{ ...combat, defense }],
+    ...over,
+  });
+
+  const comEscudo: InventoryState = {
+    backpack: [],
+    equipped: { shield: { instanceId: 's1', itemId: 'shield', quantity: 1 } },
+  };
+  const shieldingOf = (hero: CharacterRuntime) => hero.skills.getState()['shielding'] ?? null;
+
+  it('shielding sobe por ataque físico elegível recebido', () => {
+    const { session, hero } = start({
+      loaded: defenseContent(), difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)?.level).toBeGreaterThan(10);
+  });
+
+  it('sem fonte de defesa NÃO sobe: desarmado não treina shielding', () => {
+    const { session, hero } = start({ loaded: defenseContent(), difficulty: 'bold', health: 5_000 });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('ataque elemental NÃO treina shielding por acidente', () => {
+    // O perfil aprova só `physical`: um rato de fogo atravessa a defesa sem rolar bloqueio.
+    const fireRat = { ...rat, damageType: 'fire' };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [fireRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é por TICK: sem ser atacado, a skill fica parada', () => {
+    // O rato com aggro 0 nunca chega a atacar: o tempo passa e a skill não se move.
+    const pacificRat = { ...rat, aggroRadius: 0 };
+    const { session, hero } = start({
+      loaded: defenseContent({ monsters: [pacificRat] }), difficulty: 'bold',
+      health: 5_000, inventory: comEscudo,
+    });
+    run(session, 60_000, 100);
+    expect(shieldingOf(hero)).toBeNull();
+  });
+
+  it('não é condicionada ao HP perdido: bloqueio total ainda treina', () => {
+    // Piso zero e defesa acima do ataque do rato: ele não tira vida, e a skill sobe do mesmo
+    // jeito — a prática é do evento elegível, não do dano aplicado. Regeneração desligada e
+    // dificuldade `cautious` para a vida não subir sozinha e não haver level up.
+    const semRegen = { ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } };
+    const { session, hero } = start({
+      loaded: defenseContent({
+        progression: [semRegen],
+        combat: [{ ...combat, defense, minimumDamageFraction: 0 }],
+      }),
+      difficulty: 'cautious', health: 5_000, inventory: comEscudo,
+    });
+    const antes = hero.health;
+    run(session, 30_000, 100);
+    expect(hero.health).toBe(antes);
+    expect(shieldingOf(hero)?.points).toBeGreaterThan(0);
+  });
+
+  it('a skill de shielding atravessa o snapshot', () => {
+    const loaded = defenseContent();
+    const { session } = start({
+      loaded, difficulty: 'bold', health: 5_000, inventory: comEscudo,
+    });
+    run(session, 30_000, 100);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const retomado = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    );
+
+    expect(retomado.participants[0]?.skills.getState()['shielding'])
+      .toEqual(session.participants[0]?.skills.getState()['shielding']);
   });
 });
 
@@ -3827,6 +4185,104 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
   });
 });
 
+describe('Energy Ring no combate (SV-16, #352)', () => {
+  const brawler = {
+    ...rat,
+    id: 'brawler', name: 'Brawler',
+    health: 1_000_000, experience: 0, attack: 40, armor: 0,
+    attackIntervalMs: 10_000, speed: 1500, aggroRadius: 8, attackRange: 1,
+    loot: { items: [] },
+  };
+
+  const ringCombatProgression = {
+    ...progression,
+    startingHealth: 100, startingMana: 200, startingCapacity: 1_000,
+    healthPerLevel: 0, manaPerLevel: 0, capacityPerLevel: 0,
+    regen: { healthPerSecond: 0, manaPerSecond: 0 },
+  } as Progression;
+
+  const ringCombatContent = (): Content => buildContent(raw({
+    monsters: [brawler],
+    hunts: [{
+      ...hunt,
+      difficulties: {
+        cautious: {
+          monsterCount: 1, composition: [{ monsterId: 'brawler', weight: 1 }],
+          respawnDelayMs: 30_000,
+        },
+      },
+    }],
+    routes: [{ ...route, spawnPoints: [{ routeIndex: 0, radius: 1 }] }],
+    progression: [ringCombatProgression],
+  }));
+
+  const startRingCombat = (options: {
+    equippedRing?: string;
+    mana: number;
+    withManaShield?: boolean;
+  }) => {
+    const loaded = ringCombatContent();
+    const session = createHuntSession({
+      id: 'energy-ring-session', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+    });
+    const stats = statsForLevel(1, null, ringCombatProgression);
+    const hero = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: 100, maxHealth: 100,
+      mana: options.mana, maxMana: stats.maxMana,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {}, capacity: stats.capacity,
+      inventory: {
+        backpack: [],
+        equipped: options.equippedRing === undefined
+          ? {}
+          : { finger: { instanceId: 'r1', itemId: options.equippedRing, quantity: 1 } },
+      },
+    });
+    if (options.withManaShield) {
+      hero.conditions.apply({
+        key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 180_000,
+      });
+    }
+    session.enter(hero);
+    return { session, hero };
+  };
+
+  it('o Energy Ring equipado absorve o dano na mana antes da vida (mana 30 e dano 40: mana 0, vida 90)', () => {
+    const { session, hero } = startRingCombat({ equippedRing: 'energy-ring', mana: 30 });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(0);
+    expect(hero.health).toBe(90);
+  });
+
+  it('sem o anel (mesmo cenário, mana 200), o dano de 40 vai inteiro na vida', () => {
+    const { session, hero } = startRingCombat({ mana: 200 });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(200);
+    expect(hero.health).toBe(60);
+  });
+
+  it('Energy Ring + condição mana-shield ao mesmo tempo: dano de 40 absorve 40 de mana uma vez só', () => {
+    const { session, hero } = startRingCombat({
+      equippedRing: 'energy-ring', mana: 200, withManaShield: true,
+    });
+    session.advanceBy(100);
+
+    const hits = session.drainEvents().filter((e) => e.kind === 'creature-hit' && e.creatureId === 'hero');
+    expect(hits).toHaveLength(1);
+    expect(hero.mana).toBe(160);
+    expect(hero.health).toBe(100);
+  });
+});
+
 describe('o catálogo do Tibia no motor (#155, ADR 0026 decisão 5)', () => {
   const wave = {
     id: 'fire-wave', name: 'Fire Wave', manaCost: 25, cooldownMs: 1_000, group: 'attack', groupCooldownMs: 1_000,
@@ -4405,6 +4861,49 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(settlements[1]?.detail).toBe(`${String(later)}/2`);
   });
 
+  it('partySpendingPreview: calling repeatedly does not mutate bag, does not emit events, and matches real settlement', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0), member('c', 0)]);
+    run(session, 30_000, 100);
+
+    const bagBefore = JSON.parse(JSON.stringify(ruleset.getState().partyBag));
+    session.drainEvents();
+
+    const preview1 = ruleset.partySpendingPreview(session);
+    const preview2 = ruleset.partySpendingPreview(session);
+
+    expect(preview1).toBeDefined();
+    expect([...(preview1?.entries() ?? [])]).toEqual([...(preview2?.entries() ?? [])]);
+    expect(JSON.parse(JSON.stringify(ruleset.getState().partyBag))).toEqual(bagBefore);
+    expect(session.drainEvents()).toHaveLength(0);
+
+    let previewSum = 0;
+    for (const gold of preview1!.values()) previewSum += gold;
+
+    // Termina a sessão e verifica que o total do settlement real bate com a soma do preview
+    session.end('manual-exit');
+    const settlementEvent = session.drainEvents().find((e) => e.kind === 'party-settlement');
+    expect(settlementEvent).toBeDefined();
+    if (settlementEvent?.kind === 'party-settlement') {
+      expect(previewSum).toBe(settlementEvent.total);
+    }
+  });
+
+  it('partySpendingPreview: returns undefined in split mode and in solo', () => {
+    const solo = createHuntSession({
+      id: 'solo-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    solo.enter(member('solo', 0));
+    expect((solo.ruleset as HuntRuleset).partySpendingPreview(solo)).toBeUndefined();
+
+    const splitSession = createHuntSession({
+      id: 'split-session', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split' },
+    });
+    splitSession.enter(member('lead', 0));
+    splitSession.enter(member('b', 0));
+    expect((splitSession.ruleset as HuntRuleset).partySpendingPreview(splitSession)).toBeUndefined();
+  });
+
   it('the bag survives the snapshot, with its weight and the next instance id', () => {
     const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
     run(session, 20_000, 100);
@@ -4423,6 +4922,132 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
       const { session, ruleset } = shared([member('lead', 50, 1_000, 10), member('b', 50)], { botConfigs: { lead: drinkAlways } });
       run(session, 30_000, 1000 / hz);
       return { bag: ruleset.getState().partyBag, spent: [spent(session, 'lead'), spent(session, 'b')] };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
+
+describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
+  const sword = { id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 10, weapon: { kind: 'melee', range: 1 } };
+  const rich = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
+  const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
+  const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
+    monsters: [rich], items: [...items, sword], supplies: [potion],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...over,
+  }));
+  const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold, goldDelta: 0, alive: true, cooldowns: {}, capacity,
+    });
+  };
+  const drinkAlways = botConfig({ potion: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'health-potion' } }] });
+  const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
+
+  it('combination C (shareCosts: true, splitLoot: false): shares supply costs in real-time, no party bag, loot goes to drawn member', () => {
+    const session = createHuntSession({
+      id: 'comb-c', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
+      botConfigs: { u: drinkAlways },
+    });
+    session.enter(member('u', 100, 1_000, 10));
+    session.enter(member('a', 100));
+    session.enter(member('b', 100));
+    session.enter(member('c', 100));
+
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.getState().partyBag).toBeUndefined();
+
+    run(session, 1_500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(uses * 5);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(uses * 3);
+    expect(session.aggregates.goldSpent).toBe(uses * 14);
+
+    expect(ruleset.getState().partyBag).toBeUndefined();
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const totalGained = ['u', 'a', 'b', 'c'].reduce((sum, id) => sum + session.aggregatesOf(id).goldGained, 0);
+    expect(totalGained).toBe(session.aggregates.goldGained);
+  });
+
+  it('combination D (shareCosts: false, splitLoot: true): each pays own supply, loot goes to party bag and splits on settlement', () => {
+    const session = createHuntSession({
+      id: 'comb-d', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'u', mode: 'split', shareCosts: false, splitLoot: true },
+      botConfigs: { u: drinkAlways },
+    });
+    session.enter(member('u', 100, 1_000, 10));
+    session.enter(member('a', 100));
+    session.enter(member('b', 100));
+    session.enter(member('c', 100));
+
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.getState().partyBag).toBeDefined();
+
+    run(session, 1_500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(uses * 14);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(0);
+
+    const bag = ruleset.getState().partyBag;
+    expect(bag).toBeDefined();
+    expect(bag!.gold + bag!.items.length).toBeGreaterThan(0);
+
+    session.end('manual-exit');
+    const settlement = session.drainEvents().find((e) => e.kind === 'party-settlement');
+    expect(settlement).toBeDefined();
+  });
+
+  it('1 Hz == 10 Hz in combination C (shareCosts: true, splitLoot: false)', () => {
+    const at = (hz: number) => {
+      const session = createHuntSession({
+        id: 'c-hz', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
+        botConfigs: { u: drinkAlways },
+      });
+      session.enter(member('u', 100, 1_000, 10));
+      session.enter(member('a', 100));
+      run(session, 20_000, 1000 / hz);
+      return {
+        kills: session.aggregates.kills,
+        goldGained: session.aggregates.goldGained,
+        goldSpentU: spent(session, 'u'),
+        goldSpentA: spent(session, 'a'),
+        uGained: session.aggregatesOf('u').goldGained,
+        aGained: session.aggregatesOf('a').goldGained,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('1 Hz == 10 Hz in combination D (shareCosts: false, splitLoot: true)', () => {
+    const at = (hz: number) => {
+      const session = createHuntSession({
+        id: 'd-hz', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'u', mode: 'split', shareCosts: false, splitLoot: true },
+        botConfigs: { u: drinkAlways },
+      });
+      session.enter(member('u', 100, 1_000, 10));
+      session.enter(member('a', 100));
+      run(session, 20_000, 1000 / hz);
+      const bag = (session.ruleset as HuntRuleset).getState().partyBag;
+      return {
+        kills: session.aggregates.kills,
+        bagGold: bag?.gold,
+        bagItems: bag?.items,
+        goldSpentU: spent(session, 'u'),
+        goldSpentA: spent(session, 'a'),
+      };
     };
     expect(at(1)).toEqual(at(10));
   });
@@ -4488,6 +5113,31 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     ]);
     expect(session.participants.map((p) => p.id)).toEqual(['lead', 'd']);
     expect(session.notableEvents.filter((e) => e.type === 'exit-rule' && e.detail === 'party-member-lost')).toHaveLength(2);
+    expect(session.ended).toBeNull();
+  });
+
+  it('party-member-lost com exitDelayMs permanece imediata (DT-03)', () => {
+    const loadedWithDelay = content({
+      monsters: [killer],
+      hunts: [{ ...hunt, exitDelayMs: 5_000 }],
+    });
+    const session = createHuntSession({
+      id: 'leave-session-delay', content: loadedWithDelay, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split' }, botConfigs: { b: exitOnLoss },
+    });
+    session.enter(member('frail', 1));
+    session.enter(member('lead'));
+    session.enter(member('b'));
+    session.enter(member('c'));
+
+    run(session, 10_000, 100);
+
+    const events = left(session);
+    expect(events.map((e) => (e.kind === 'member-left' ? [e.characterId, e.reason] : null))).toEqual([
+      ['frail', 'death'], ['b', 'exit-rule'],
+    ]);
+    expect(session.participants.map((p) => p.id)).toEqual(['lead', 'c']);
+    expect(session.notableEvents.filter((e) => e.type === 'exit-rule' && e.detail === 'party-member-lost')).toHaveLength(1);
     expect(session.ended).toBeNull();
   });
 
@@ -4573,3 +5223,607 @@ describe('raio livre do spawn (#236)', () => {
     expect(ruleset.monsters).toHaveLength(1);
   });
 });
+
+// --- o resolver canônico é o ponto único de dano (CMB-02, ADR 0031) --------------------------
+
+describe('famílias de arma e proficiências (CMB-05, #333)', () => {
+  const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const weapon = (id: string, family: string, kind: string, extra: Record<string, unknown> = {}) => ({
+    id, name: id, kind: 'weapon', slot: 'hand', weight: 1, value: 0, attack: 40,
+    weapon: { kind, family, range: kind === 'distance' ? 6 : kind === 'wand' ? 3 : 1, ...extra },
+  });
+  const armory = [
+    weapon('sword-i', 'sword', 'melee'),
+    weapon('axe-i', 'axe', 'melee'),
+    weapon('club-i', 'club', 'melee'),
+    weapon('bow-i', 'distance', 'distance', { ammoFamily: 'arrow' }),
+    weapon('wand-i', 'wand', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+    weapon('rod-i', 'rod', 'wand', { manaPerHit: 2, damage: { min: 8, max: 18 } }),
+  ];
+  const armed = (itemId: string): InventoryState => ({
+    backpack: [], equipped: { hand: { instanceId: `i-${itemId}`, itemId, quantity: 1 } },
+  });
+  const loaded = (): Content => content({ items: [...items, ...armory], ammunition: [arrow] });
+
+  /** A skill subiu OU acumulou pontos: o golpe de fato praticou. */
+  const practiced = (hero: CharacterRuntime, id: string, startingLevel: number): boolean => {
+    const state = hero.skills.getState()[id];
+    return state !== undefined && (state.level > startingLevel || state.points > 0);
+  };
+
+  const strike = (itemId?: string, mana = 0, durationMs = 8_000) => {
+    const { session, hero, ruleset } = start({
+      loaded: loaded(),
+      ...(itemId === undefined ? {} : { inventory: armed(itemId) }),
+    });
+    hero.mana = mana;
+    hero.maxMana = mana;
+    session.advanceBy(50);
+    // Um alvo colado, para o golpe sair já no primeiro vencimento.
+    const rat = ruleset.monsters[0];
+    if (rat !== undefined) rat.position = { ...hero.position, y: hero.position.y + 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    return { session, hero, events };
+  };
+
+  it('fist é o fallback sem item: bate corpo a corpo, pratica melee e não atira', () => {
+    const { hero, events } = strike();
+    expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee')).toBe(true);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+
+  it('sword, axe e club batem pela família corpo a corpo e praticam a melee', () => {
+    for (const id of ['sword-i', 'axe-i', 'club-i']) {
+      const { hero, events } = strike(id);
+      expect(events.some((e) => e.kind === 'creature-hit' && e.source === 'melee'), id).toBe(true);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(false);
+      expect(practiced(hero, 'melee', 10), id).toBe(true);
+    }
+  });
+
+  it('bow atira a munição e pratica a distância, não a melee', () => {
+    const { hero, events } = strike('bow-i');
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    expect(practiced(hero, 'distance', 10)).toBe(true);
+    expect(hero.skills.getState()['melee']).toBeUndefined();
+  });
+
+  it('wand e rod atiram, gastam mana e praticam magia — sem multiplicador de weapon skill', () => {
+    for (const id of ['wand-i', 'rod-i']) {
+      const { hero, events } = strike(id, 200);
+      expect(events.some((e) => e.kind === 'shot'), id).toBe(true);
+      // A prática é `spell-cast` por mana: só existe se a mana foi debitada antes da rolagem.
+      expect(practiced(hero, 'magic', 0), id).toBe(true);
+      // E NÃO pratica arma: wand/rod não recebem multiplicador de weapon skill (DT-02).
+      expect(hero.skills.getState()['melee'], id).toBeUndefined();
+      expect(hero.skills.getState()['distance'], id).toBeUndefined();
+    }
+  });
+
+  it('wand sem mana não atira nem pratica (CMB-05)', () => {
+    // Um segundo é curto demais para a regeneração (1/s) pagar um golpe de 2 de mana.
+    const { hero, events } = strike('wand-i', 0, 1_000);
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(hero.skills.getState()['magic']).toBeUndefined();
+  });
+
+  it('imune ao tipo do golpe ainda pratica UMA vez: a prática não depende do dano final (CMB-05)', () => {
+    // O rato imune a físico: o golpe ocorre, o dano resolvido é zero, e a prática sai assim
+    // mesmo. Contar prática só com dano positivo faria a skill parar contra alvo imune.
+    const immune = content({
+      monsters: [{ ...rat, mitigation: { immunities: ['physical'] } }],
+      items: [...items, ...armory], ammunition: [arrow],
+    });
+    const { session, hero, ruleset } = start({ loaded: immune, inventory: armed('sword-i') });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    for (let t = 0; t < 4_000 && session.ended === null; t += 100) session.advanceBy(100);
+    // A vida não caiu — imunidade zera o dano —, e a melee praticou.
+    expect(practiced(hero, 'melee', 10)).toBe(true);
+  });
+});
+
+describe('todo dano passa pelo resolver canônico (CMB-02)', () => {
+  const resolver = vi.mocked(resolveDamage);
+  // Bloco, e não arrow de expressão: `mockClear` devolve o próprio mock, e o Vitest trataria
+  // um retorno de função como teardown — chamando o resolver com zero argumentos.
+  beforeEach(() => { resolver.mockClear(); });
+
+  /** Os pares `fonte/tipo` que o resolver recebeu neste cenário. */
+  const passed = (source: string, damageType: string): boolean =>
+    resolver.mock.calls.some(([intent]) =>
+      intent.source === source && intent.damageType === damageType);
+
+  /** Avança drenando a cada passo: sem isso o teto de eventos pendentes descarta o `shot`. */
+  const events = (session: Session, durationMs: number, stepMs = 100): DomainEvent[] => {
+    const out: DomainEvent[] = [];
+    for (let t = 0; t < durationMs && session.ended === null; t += stepMs) {
+      session.advanceBy(stepMs);
+      out.push(...session.drainEvents());
+    }
+    return out;
+  };
+
+  it('corpo a corpo: basic-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('bow: basic-attack/físico pelo caminho da munição', () => {
+    // Sem arma de corpo a corpo, o único produtor possível é o tiro — se ele calculasse dano
+    // por fora, `passed` seria falso mesmo com o herói batendo a hunt inteira.
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const bow = {
+      id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0,
+      twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
+    };
+    const loaded = content({ items: [bow], ammunition: [arrow] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'bow-i', itemId: 'bow', quantity: 1 } },
+    };
+    const { session } = start({ loaded, inventory });
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'physical')).toBe(true);
+  });
+
+  it('wand: basic-attack/energia pelo caminho da mana', () => {
+    const wand = {
+      id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0,
+      weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 }, damageType: 'energy' },
+    };
+    const loaded = content({ items: [wand] });
+    const inventory: InventoryState = {
+      backpack: [], equipped: { hand: { instanceId: 'wand-i', itemId: 'wand', quantity: 1 } },
+    };
+    const { session, hero } = start({ loaded, inventory });
+    // `maxMana` também: a regeneração de mana clampa no máximo, e a fixture nasce com zero.
+    hero.mana = 200;
+    hero.maxMana = 200;
+    expect(events(session, 20_000).some((e) => e.kind === 'shot')).toBe(true);
+    expect(passed('basic-attack', 'energy')).toBe(true);
+  });
+
+  it('magia: spell/fogo, o tipo declarado no efeito', () => {
+    const { session } = withSpells(botConfig({
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    }));
+    run(session, 20_000, 100);
+    expect(passed('spell', 'fire')).toBe(true);
+  });
+
+  it('runa: rune/arcano', () => {
+    const rune = {
+      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+      requires: { level: 1, magicLevel: 0 },
+      effect: {
+        kind: 'damage', basePower: 400, range: 4,
+        area: { shape: 'circle', radius: 1, centered: 'target' },
+      },
+    };
+    const { session } = withSpells(botConfig({
+      rune: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'supply', supplyId: 'avalanche-rune' },
+      }],
+    }), { gold: 10_000, supplies: [...supplies, rune], health: 5_000 }, 'bold');
+    run(session, 20_000, 100);
+    expect(passed('rune', 'arcane')).toBe(true);
+  });
+
+  it('ataque de monstro: monster-attack/físico', () => {
+    const { session } = start();
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'physical')).toBe(true);
+  });
+
+  it('o tipo do monstro vem do CONTEÚDO, não de um literal no call site', () => {
+    // O rato do fixture é `physical` por default; declarar fogo no conteúdo tem de chegar ao
+    // resolver. Um literal `'physical'` no `hunt.ts` passaria no teste acima e falharia aqui.
+    const loaded = content({ monsters: [{ ...rat, damageType: 'fire' }] });
+    const { session } = start({ loaded });
+    run(session, 20_000, 100);
+    expect(passed('monster-attack', 'fire')).toBe(true);
+  });
+});
+
+describe('a ability de monstro entre taxas e no snapshot (CMB-06)', () => {
+  const casterRat = {
+    ...rat, health: 100_000,
+    abilities: [{
+      id: 'spit', cadenceMs: 1_000, target: { range: 4 }, power: { min: 5, max: 5 },
+      damageType: 'energy', presentation: { missileKey: 'spit', impactKey: 'spit-hit' },
+    }],
+  };
+  const loaded = content({ monsters: [casterRat] });
+
+  it('1 Hz == 10 Hz com uma ability à distância', () => {
+    // A ability é evento na fila como o ataque básico (invariante 2): a cadência não depende de
+    // haver alguém olhando, e o dano sofrido é o mesmo nas três taxas.
+    const at = (hz: number): number => {
+      const { session, hero } = start({ loaded, health: 100_000 });
+      run(session, 30_000, 1000 / hz);
+      return hero.health;
+    };
+    expect(at(1)).toBe(at(10));
+    expect(at(20)).toBe(at(10));
+  });
+
+  it('a ability agendada sobrevive ao snapshot e volta a bater', () => {
+    // Sem o `scheduledAbilities` no snapshot, a hunt retomada agendaria a ability de novo — o
+    // evento pendente veio na fila — e a habilidade bateria em dobro no primeiro vencimento.
+    const { session } = start({ loaded, health: 100_000 });
+    run(session, 5_000, 100);
+    const snapshot = session.snapshot();
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('session-1'),
+    );
+    const caster = (resumed.ruleset as HuntRuleset).monsters[0];
+    if (caster === undefined) throw new Error('sem monstro');
+    expect(caster.scheduledAbilities.size).toBeGreaterThan(0);
+
+    resumed.drainEvents();
+    run(resumed, 5_000, 100);
+    expect(resumed.drainEvents().some((e) => e.kind === 'monster-ability-cast')).toBe(true);
+  });
+});
+
+describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {
+  const poison = {
+    id: 'poison', name: 'Poison', manaCost: 5, cooldownMs: 500,
+    effect: {
+      kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 2_500,
+      range: 3, damageType: 'earth',
+    },
+  };
+  const alwaysTarget = { kind: 'targets' as const, op: '>=' as const, count: 1 };
+  // Ataque desarmado ZERO: sem isto o golpe básico (25) mataria o rato e o abate não seria do
+  // DOT. O `minimumDamageFraction` zero derruba também o piso, que sozinho ainda tirava 10 %.
+  const pacifist = { ...combat, player: { ...combat.player, attackPower: 0 }, minimumDamageFraction: 0 };
+  const dotConfig = botConfig({
+    attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'poison' } }],
+  });
+  const fireField: FieldSpec = {
+    id: 'fire', durationMs: 20_000,
+    shape: { shape: 'circle', radius: 1, centered: 'caster' },
+    condition: {
+      key: 'fire', merge: 'refresh', durationMs: 20_000,
+      effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+    },
+  };
+
+  it('o DOT de magia no MONSTRO passa pelo resolver canônico e mata pelo pipeline', () => {
+    vi.mocked(resolveDamage).mockClear();
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000, spells: [poison], combat: [pacifist],
+    });
+    run(session, 20_000, 100);
+
+    // O único dano do cenário é o DOT; o abate é dele, e a morte passa por `resolveDeath`.
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const calls = vi.mocked(resolveDamage).mock.calls;
+    expect(calls.some(([intent]) => intent.damageType === 'earth' && intent.source === 'spell')).toBe(true);
+    expect(ruleset.monsters.every((m) => m.health > 0)).toBe(true);
+  });
+
+  it('o DOT de ability no PERSONAGEM usa o mesmo pipeline e pode matar', () => {
+    const venomRat = {
+      ...rat, health: 100_000, attack: 0,
+      abilities: [{
+        id: 'venom', cadenceMs: 500, target: { range: 3 }, power: 0, damageType: 'physical',
+        condition: {
+          key: 'venom', merge: 'refresh', durationMs: 3_000,
+          effect: { kind: 'damage-over-time', amount: 15, intervalMs: 500, damageType: 'earth' },
+        },
+      }],
+    };
+    const { session, hero } = withSpells(botConfig(), { health: 15, monstersRaw: [venomRat] });
+    run(session, 30_000, 100);
+
+    expect(hero.conditions.get('venom')).toBeNull();
+    expect(session.ended).toBe('death');
+    expect(session.aggregates.deaths).toBe(1);
+  });
+
+  it('relançar a condição cancela o vencimento antigo; a morte cancela tudo', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+    }, 'bold');
+    run(session, 2_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    // A chave da condição é a do TIQUE (`damage-over-time`, ver `casting.ts`), não o id da
+    // magia (`poison`). Filtrar por `/poison` (a versão original desta issue) nunca encontra o
+    // subject certo — as asserções abaixo passariam vazias mesmo com o bug do #334 presente.
+    const subject = `m:${monster.id}/damage-over-time`;
+    const eventsOf = (): number =>
+      session.snapshot().schedule.events.filter((e) => e.subject === subject).length;
+    // UMA cadeia por condição, não uma por relançamento.
+    expect(eventsOf()).toBeLessThanOrEqual(2);
+    // E o relançamento deixa exatamente UM tique pendente — nunca zero, o fantasma do #334 em
+    // que `nextTickAtMs` é guardado sem o evento correspondente na fila, silenciando o DOT para
+    // sempre a partir do próximo relançamento.
+    expect(session.snapshot().schedule.events.filter(
+      (e) => e.subject === subject && e.kind === 'condition-tick',
+    )).toHaveLength(1);
+    run(session, 30_000, 100);
+    expect(session.snapshot().schedule.events.filter((e) => e.subject === subject)).toHaveLength(0);
+  });
+
+  it('DOT sobrevive ao relançamento depois do último tique (duração não múltipla do intervalo, #334)', () => {
+    // A reprodução exata da issue: intervalo 500 ms, duração 1 300 ms (não múltipla — o
+    // último tique cabe em +1 000, e +1 500 já passa do vencimento) e cooldown 1 100 ms, que
+    // recasta bem DEPOIS do último tique e ANTES do vencimento — a janela fantasma. Sem a
+    // correção, só os dois tiques do PRIMEIRO lançamento acontecem (40 de dano) e todo
+    // relançamento seguinte fica mudo para sempre.
+    const flakyDot = {
+      id: 'flaky-dot', name: 'Flaky DOT', manaCost: 5, cooldownMs: 1_100,
+      effect: {
+        kind: 'damage-over-time', amount: 20, intervalMs: 500, durationMs: 1_300,
+        range: 3, damageType: 'earth',
+      },
+    };
+    const flakyConfig = botConfig({
+      attack: [{ when: alwaysTarget, do: { kind: 'spell' as const, spellId: 'flaky-dot' } }],
+    });
+    const { session, ruleset } = withSpells(flakyConfig, {
+      mana: 1_000_000, health: 1_000_000, spells: [flakyDot], combat: [pacifist],
+      monstersRaw: [{ ...rat, health: 100_000, attack: 0 }],
+    });
+    run(session, 20_000, 100);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('sem monstro');
+    // Bem mais que os 40 de dano de um único lançamento: só é possível se o DOT continuou
+    // tiquetando através de vários relançamentos.
+    expect(monster.health).toBeLessThan(100_000 - 100);
+  });
+
+  it('entra no campo só depois do passo aceito, permanece, sai e REENTRA', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // Campo em (4,3): o herói passa por (4,2), (4,3) e (3,3) na primeira volta, sai em (2,3)
+    // e reentra em (4,2) na volta seguinte (rota de dez tiles, 500 ms cada).
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    expect(ruleset.fields).toHaveLength(1);
+
+    run(session, 1_400, 100);
+    const beforeEntry = hero.health;
+    run(session, 400, 100);
+    expect(hero.health).toBeLessThan(beforeEntry);
+
+    run(session, 1_200, 100);
+    const afterExit = hero.health;
+    run(session, 500, 100);
+    expect(hero.health).toBe(afterExit);
+
+    run(session, 2_500, 100);
+    const beforeReentry = hero.health;
+    run(session, 1_000, 100);
+    expect(hero.health).toBeLessThan(beforeReentry);
+  });
+
+  it('campo em tile que ninguém pisa não muda mecânica nenhuma', () => {
+    const { session, hero, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    // (5,5) está fora do mapa jogável; a forma não confero mapa (geometria pura), mas o herói
+    // nunca pisa ali. Recusa de passo não aplica campo — `movement` devolve resultado.
+    ruleset.applyField(session, { ...fireField, id: 'void' }, { x: 5, y: 5, z: 7 });
+    run(session, 5_000, 100);
+    expect(hero.health).toBe(1_000_000);
+  });
+
+  it('no instante de expiração o vencimento vence o tique — uma ordem só', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, { ...fireField, id: 'short', durationMs: 2_000 }, { x: 4, y: 3, z: 7 });
+    run(session, 1_600, 100);
+    const same = session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:short' && e.dueAtMs === 2_000);
+    const expire = same.find((e) => e.kind === 'field-expire');
+    const tick = same.find((e) => e.kind === 'field-tick');
+    expect(expire).toBeDefined();
+    expect(tick).toBeDefined();
+    // A prioridade do vencimento é MENOR que a do tique: no mesmo instante, o vencimento roda
+    // primeiro e o tique acha o campo removido. A ordem não depende de quem foi agendado por
+    // último — relançar reagenda o vencimento depois do tique.
+    expect(expire?.priority).toBeLessThan(tick?.priority ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('o campo vence e sai do índice', () => {
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 21_000, 100);
+    expect(ruleset.fields).toHaveLength(0);
+  });
+
+  it('campo relançado depois do último tique continua tiquetando (#334)', () => {
+    // Raio 5 cobre a rota de dez tiles inteira (x:1..4, y:1..3) — irrelevante aqui de propósito:
+    // `#enterField` aplica um tique a CADA passo aceito sobre o campo (independente do
+    // `FIELD_TICK` agendado), e um herói sempre em cima do campo tomaria dano a cada passo
+    // mesmo com o bug do #334 presente. Medir `hero.health` mediria o passo, não o tique — por
+    // isso a asserção é sobre a FILA DE EVENTOS, que `#enterField` nunca toca (ele chama
+    // `#applyConditionTick` direto, sem agendar nada).
+    const wideField: FieldSpec = {
+      id: 'wide-fire', durationMs: 1_300,
+      shape: { shape: 'circle', radius: 5, centered: 'caster' },
+      condition: {
+        key: 'wide-fire', merge: 'refresh', durationMs: 1_300,
+        effect: { kind: 'damage-over-time', amount: 10, intervalMs: 500, damageType: 'fire' },
+      },
+    };
+    const { session, ruleset } = withSpells(botConfig(), { monsters: false, health: 1_000_000 });
+    const fieldTickEvents = (): number => session.snapshot().schedule.events
+      .filter((e) => e.subject === 'f:wide-fire' && e.kind === 'field-tick').length;
+
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    // Dois tiques rodam (+500 e +1000); +1500 já passa do vencimento (+1300), então NENHUM
+    // `field-tick` fica agendado dos dois lados do bug — só muda o que fica gravado em
+    // `nextTickAtMs` (o fantasma, sem a correção).
+    run(session, 1_100, 100);
+    expect(fieldTickEvents()).toBe(0);
+
+    // Relança o MESMO id, na MESMA cadência, DEPOIS do último tique e ANTES do vencimento —
+    // exatamente a janela em que `keepTick` herdaria o fantasma. Sem a correção, `keepTick` só
+    // olha se o intervalo bate (bate) e NÃO agenda nada — o campo fica mudo pelo resto da vida
+    // nova inteira. Com a correção, `previous.nextTickAtMs` está ausente, `keepTick` é falso, e
+    // o relançamento AGENDA um `field-tick` novo.
+    ruleset.applyField(session, wideField, { x: 2, y: 2, z: 7 });
+    expect(fieldTickEvents()).toBe(1);
+  });
+
+  it('DOT e campo rendem o MESMO a 10 Hz e a 1 Hz', () => {
+    const at = (hz: number) => {
+      const { session, hero, ruleset } = withSpells(dotConfig, {
+        mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist],
+      }, 'bold');
+      ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+      run(session, 30_000, 1000 / hz);
+      return {
+        health: hero.health, kills: session.aggregates.kills,
+        xp: session.aggregates.xpGained, mana: hero.mana,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('um snapshot no meio do campo retoma com o índice e os eventos', () => {
+    const { session, ruleset } = withSpells(dotConfig, {
+      mana: 1_000, health: 1_000_000, spells: [poison], combat: [pacifist], monsters: false,
+    }, 'bold');
+    ruleset.applyField(session, fireField, { x: 4, y: 3, z: 7 });
+    run(session, 2_000, 100);
+    const snapshot = session.snapshot();
+    const loaded = buildContent(raw({
+      spells: [poison], combat: [pacifist],
+      progression: [{ ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    }));
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded) as HuntRuleset, Rng.fromSeed('spell-session'),
+    );
+    const resumedRuleset = resumed.ruleset as HuntRuleset;
+    expect(resumedRuleset.fields).toHaveLength(1);
+    const resumedHero = resumed.participants[0] as CharacterRuntime;
+    const before = resumedHero.health;
+    run(resumed, 1_000, 100);
+    expect(resumedHero.health).toBeLessThan(before);
+  });
+});
+
+describe('outcomes avançados na hunt (CMB-08)', () => {
+  // O perfil declara crítico e leech: é o que faz o golpe consumir a TERCEIRA rolagem e o
+  // atacante repor recurso. Sem `modifiers`, nada disto acontece e o v1 é preservado.
+  const critCombat = {
+    ...combat,
+    modifiers: { critical: { chance: 1, multiplier: 2 }, lifeLeech: 0.5 },
+  };
+
+  it('o crítico multiplica o resolvido e o leech repõe no atacante, com evento', () => {
+    // Desarmado 25 ×2 = 50, que é a vida do rato: um golpe, e o leech de 50 % repõe 25.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 100, combat: [critCombat],
+      monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    const before = hero.health;
+    run(session, 5_000, 100);
+
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // O recorde é o RESOLVIDO (50), não o aplicado — o rato tinha exatamente 50.
+    expect(session.aggregates.bestBasicHit).toBeGreaterThanOrEqual(50);
+    expect(hero.health).toBe(before + 25);
+    const healed = ofKind(session.drainEvents(), 'creature-healed')
+      .filter((e) => e.source === 'leech');
+    expect(healed.length).toBeGreaterThan(0);
+    expect(healed[0]).toMatchObject({ creatureId: 'hero', amount: 25 });
+  });
+
+  it('dano integralmente absorvido pela mana NÃO mata nem conta atribuição de HP', () => {
+    // Sem o escudo, um golpe de 50 mataria o herói de 1. Com mana de sobra, o HP aplicado é zero,
+    // o `creature-hit` carrega zero e nenhum dano entra na contribuição dele.
+    const { session, hero } = withSpells(botConfig(), {
+      health: 1, mana: 1_000,
+      monstersRaw: [{ ...rat, health: 100_000, attack: 50 }],
+    });
+    hero.conditions.apply({
+      key: 'mana-shield', spellId: 'magic-shield', expiresAtMs: 1_000_000,
+    });
+    run(session, 20_000, 100);
+
+    expect(hero.alive).toBe(true);
+    expect(session.ended).toBeNull();
+    expect(hero.health).toBe(1);
+    expect(hero.mana).toBeLessThan(1_000);
+    expect(hero.contribution.actorCount).toBe(0);
+
+    const hits = ofKind(session.drainEvents(), 'creature-hit')
+      .filter((e) => e.creatureId === 'hero');
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.every((h) => h.amount === 0)).toBe(true);
+  });
+
+  it('sem modificadores a hunt é a de sempre: nenhum evento de leech', () => {
+    const { session } = withSpells(botConfig(), {
+      health: 100, monstersRaw: [{ ...rat, attack: 0, health: 50 }],
+    });
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(session.drainEvents().some((e) => e.kind === 'creature-healed' && e.source === 'leech'))
+      .toBe(false);
+  });
+});
+describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () => {
+  it('huntId e difficulty refletem a hunt e a dificuldade da instância', () => {
+    const { ruleset } = start({ difficulty: 'bold' });
+    expect(ruleset.huntId).toBe('arena');
+    expect(ruleset.difficulty).toBe('bold');
+  });
+
+  it('attackTargetOf devolve o monstro ao alcance do ataque ou null', () => {
+    const { session, hero, ruleset } = start();
+    // Antes de nascer qualquer monstro: sem alvo
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+
+    // Avança para o monstro nascer colado ao herói
+    session.advanceBy(100);
+    const target = ruleset.attackTargetOf(hero);
+    expect(target).not.toBeNull();
+    expect(target?.alive).toBe(true);
+  });
+
+  it('condições temporárias têm o mesmo expiresAtMs a 10 Hz e a 1 Hz (relógio lógico, sem acumulador de tick)', () => {
+    const always = { kind: 'hp' as const, op: '<=' as const, percent: 100 };
+    const cast = (spellId: string) => ({ when: always, do: { kind: 'spell' as const, spellId } });
+    const hasteSpell = {
+      id: 'haste-test', name: 'Haste', manaCost: 60, cooldownMs: 2_000, group: 'support', groupCooldownMs: 2_000,
+      effect: { kind: 'haste' as const, speedPercent: 30, durationMs: 30_000 },
+    };
+    const at = (hz: number) => {
+      const { session, hero } = withSpells(botConfig({ support: [cast('haste-test')] }), {
+        mana: 60, spells: [...spells, hasteSpell], monsters: false,
+      });
+      run(session, 5_000, 1000 / hz);
+      const condition = hero.conditions.get('haste');
+      return {
+        nowMs: session.nowMs,
+        expiresAtMs: condition?.expiresAtMs,
+        remainingMs: condition ? condition.expiresAtMs - session.nowMs : null,
+      };
+    };
+
+    const at10Hz = at(10);
+    const at1Hz = at(1);
+
+    expect(at10Hz.nowMs).toBe(5_000);
+    expect(at1Hz.nowMs).toBe(5_000);
+    expect(at10Hz.expiresAtMs).toBe(30_000);
+    expect(at1Hz.expiresAtMs).toBe(30_000);
+    expect(at10Hz.remainingMs).toBe(25_000);
+    expect(at1Hz.remainingMs).toBe(25_000);
+  });
+});
+

@@ -8,10 +8,26 @@
 // mundo. `creature-*` é sempre mundo — e é por isso que dezenas de deltas por segundo não
 // tocam o React.
 
-import type { OutfitColors, S2CMessage } from '@draconya/protocol';
-import { appendCapped, hud } from './hud.js';
+import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
+import { appendCapped, hud, type PlayerSkills, type SkillProgress } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
+
+/**
+ * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
+ * — um registro por id de skill do conteúdo. Vazio é um nó `game` anterior à SV-04 (o `default`
+ * do protocolo): mantém o que a tela já tinha em vez de zerar as barras.
+ */
+function skillsOf(
+  skills: Readonly<Record<string, ProtocolSkillProgress>>, previous: PlayerSkills,
+): PlayerSkills {
+  if (Object.keys(skills).length === 0) return previous;
+  const of = (id: keyof PlayerSkills): SkillProgress => {
+    const progress = skills[id];
+    return progress === undefined ? previous[id] : { level: progress.level, percent: progress.percentToNext };
+  };
+  return { melee: of('melee'), distance: of('distance'), magic: of('magic') };
+}
 
 /** Por que a sessão acabou, em palavras que o jogador entende. */
 const REASON = {
@@ -50,6 +66,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     // --- mundo: nada aqui notifica ninguém ------------------------------------------------
     case 'instance-enter':
       enterInstance(message.instanceId, message.map, message.ambience ?? 'surface');
+      hud.set((state) => ({
+        ...state,
+        huntId: message.huntId ?? null,
+        difficulty: message.difficulty ?? null,
+      }));
       return;
 
     case 'ground-item-appear':
@@ -144,8 +165,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
+        // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
+        targetId: message.targetId,
         ammo: message.ammo,
         vocationId: message.vocationId,
+        speed: message.speed,
+        skills: skillsOf(message.skills, state.skills),
       }));
       return;
 
@@ -314,6 +339,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         mana: message.self.mana, maxMana: message.self.maxMana,
         level: message.self.level, xp: message.self.xp,
         vocationId: message.self.vocationId,
+        speed: message.self.speed,
+        skills: skillsOf(message.self.skills, state.skills),
         // O analisador (§16.1, FUN-83). `elapsedMs` da mensagem é o mesmo
         // `aggregates.durationMs`, então o que se guarda é o pacote de agregados e o INSTANTE
         // LOCAL em que ele chegou — é esse instante que faz o relógio da janela andar entre
@@ -329,6 +356,15 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         party: message.party ?? null,
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
+        onlinePlayers: message.onlinePlayers ?? null,
+        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats` e
+        // `active-conditions` logo depois dele, no mesmo attach (#341, SV-05). Zerar aqui é o
+        // que impede a moldura e a barra de uma sessão anterior de sobreviverem à reanexação.
+        targetId: null,
+        huntId: message.huntId ?? null,
+        difficulty: message.difficulty ?? null,
+        conditions: [],
+        conditionsReceivedAtMs: nowMs,
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
       if (message.party !== undefined) partyEntered();
@@ -345,6 +381,23 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
 
     case 'party-settlement':
       hud.set((state) => ({ ...state, lastSettlement: message }));
+      return;
+
+    case 'active-conditions':
+      hud.set((state) => ({
+        ...state,
+        conditions: message.conditions,
+        conditionsReceivedAtMs: nowMs,
+      }));
+      return;
+
+    case 'player-count':
+      // Sem `sameX`/comparação (a #343 documenta por quê: republicado a cada 30 s sem checar
+      // mudança). Aplicar direto é a única regra — não há "e se for igual" a considerar aqui.
+      hud.set((state) => ({ ...state, onlinePlayers: message.count }));
+      return;
+
+    case 'party-spending':
       return;
 
     default:

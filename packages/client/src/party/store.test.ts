@@ -7,7 +7,7 @@ import type { PartyClient, PartyView } from './api.js';
 
 const view = (over: Partial<PartyView> = {}): PartyView => ({
   id: 'party-1', leaderId: 'me', mode: 'split', huntId: null, difficulty: null,
-  members: [{ characterId: 'me', approved: false }], ...over,
+  members: [{ characterId: 'me', name: 'Eu', approved: false }], ...over,
 });
 
 function fakeClient(over: Partial<PartyClient> = {}): PartyClient {
@@ -17,6 +17,7 @@ function fakeClient(over: Partial<PartyClient> = {}): PartyClient {
     invite: async () => {},
     join: async () => view({ leaderId: 'other' }),
     leave: async () => {},
+    kick: async () => view(),
     propose: async () => view({ huntId: 'arena', difficulty: 'bold' }),
     approve: async () => view(),
     start: async () => ({ sessionId: 's1', ticket: { ticket: 't', wsUrl: 'ws://n1/?ticket=t', expiresAtMs: 1, sessionId: 's1' } }),
@@ -82,6 +83,27 @@ describe('party store', () => {
     setPartyClient(fakeClient({ create: async () => { throw new Error('Você já está numa party.'); } }));
     await partyActions.create();
     expect(party.get()).toMatchObject({ error: 'Você já está numa party.', busy: false, party: null });
+  });
+
+  it('kick calls client.kick with targetId and updates party', async () => {
+    setPartyCharacter('me');
+    const kick = vi.fn<PartyClient['kick']>().mockResolvedValue(
+      view({ members: [{ characterId: 'me', name: 'Eu', approved: false }] }),
+    );
+    setPartyClient(fakeClient({
+      create: async () => view({
+        members: [
+          { characterId: 'me', name: 'Eu', approved: false },
+          { characterId: 'target', name: 'Target', approved: false },
+        ],
+      }),
+      kick,
+    }));
+    await partyActions.create();
+    expect(party.get().party?.members).toHaveLength(2);
+    await partyActions.kick('target');
+    expect(kick).toHaveBeenCalledWith('party-1', 'me', 'target');
+    expect(party.get().party?.members).toHaveLength(1);
   });
 });
 

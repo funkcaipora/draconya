@@ -3,9 +3,9 @@ import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
 import { buildContent } from './content.js';
 import {
   BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema, botConditionSchema,
-  botLureSchema, botRingSwapSchema, botTargetingSchema,
+  botExitRuleSchema, botLureSchema, botRingSwapSchema, botTargetingSchema,
 } from './schemas.js';
-import type { BotConfig } from './schemas.js';
+import type { BotConfig, BotExitRule } from './schemas.js';
 
 /**
  * O conteúdo mínimo que a validação cruzada precisa: os limites, e os catálogos contra os
@@ -43,7 +43,7 @@ const content = buildContent({
   }],
   combat: [{
     id: 'baseline', dodgeMultiplier: 0.5,
-    armorEffectiveness: { melee: 1, magic: 0 }, minimumDamageFraction: 0.1,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
     player: {
       attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 4, dodgeChance: 0.05,
     },
@@ -293,6 +293,26 @@ describe('regras de saída têm teto (FUN-86)', () => {
   it('aceita o que cabe, e lista vazia é o padrão', () => {
     expect(validateBotConfig(config(), content)).toEqual([]);
     expect(config().exit).toEqual([]);
+  });
+
+  it('aceita out-of-capacity e combinações de tipos dentro do limite de 4 slots', () => {
+    expect(botExitRuleSchema.safeParse({ kind: 'out-of-capacity' }).success).toBe(true);
+    const todas: BotExitRule[] = [
+      { kind: 'hp-below', percent: 30 },
+      { kind: 'out-of-gold' },
+      { kind: 'party-member-lost' },
+      { kind: 'out-of-capacity' },
+    ];
+    expect(validateBotConfig(config({ exit: todas }), content)).toEqual([]);
+
+    const excesso: BotExitRule[] = [
+      ...todas,
+      { kind: 'hp-below', percent: 50 },
+    ];
+    const problems = validateBotConfig(config({ exit: excesso }), content);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('5');
+    expect(problems[0]).toContain('4');
   });
 });
 

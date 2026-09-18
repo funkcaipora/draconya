@@ -1,5 +1,8 @@
+import { compileMitigation, skillSchema } from '@draconya/content';
+import type { Combat } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from './character.js';
+import { resolveDamage } from './combat/damage.js';
 import { Rng } from './rng.js';
 import { Session } from './session.js';
 import type { EndReason, Ruleset } from './session.js';
@@ -376,5 +379,191 @@ describe('agregados e extrato por participante (#187, ADR 0027)', () => {
     const fromLegacy = Session.fromSnapshot(legacy, testRuleset(), Rng.fromSeed('x'));
     expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
     expect(fromLegacy.aggregates.kills).toBe(9);
+  });
+});
+
+describe('resolver canônico: seed, snapshot e retomada (CMB-02)', () => {
+  const combat: Combat = {
+    id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 }, minimumDamageFraction: 0.1,
+    player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
+    spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
+  };
+
+  /**
+   * Um ruleset que resolve dano DE VERDADE pelo ponto canônico. É o que prende que a ORDEM do
+   * RNG — a faixa do ataque e a rolagem de Dodge — sobrevive ao snapshot: dois processos com a
+   * mesma semente e o mesmo ponto de retomada consomem os mesmos sorteios. Se a resolução
+   * omitisse um estado (ou mudasse a ordem), os números divergiriam.
+   */
+  const damageRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      const outcome = resolveDamage(
+        { rawDamage: session.rng.integer(10, 20), source: 'basic-attack', damageType: 'physical' },
+        { armor: 5, dodgeChance: 0.5 }, 'pve', combat, session.rng,
+      );
+      session.credit(p.id, 'xpGained', outcome.resolvedDamage);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
+    },
+  });
+
+  const damageSession = (seed: string): Session => {
+    const session = new Session({
+      id: 'damage', contentVersion: 'v1', ruleset: damageRuleset(),
+      rng: Rng.fromSeed(seed), createdAtMs: 0,
+    });
+    session.enter(character());
+    return session;
+  };
+
+  it('a mesma semente rende o mesmo dano antes e depois do snapshot', () => {
+    const straight = damageSession('damage-seed');
+    for (let i = 0; i < 60; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('damage-seed');
+    for (let i = 0; i < 30; i++) interrupted.advanceBy(1000);
+    const snap = JSON.parse(JSON.stringify(interrupted.snapshot())) as ReturnType<Session['snapshot']>;
+
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 30; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(straight.getRngState());
+  });
+
+  it('cada ataque consome DOIS sorteios: a faixa e o Dodge, na mesma ordem', () => {
+    // A ordem é contrato (DT-03 do ADR 0031). Sem o estado do gerador no snapshot, o primeiro
+    // golpe retomado repetiria o sorteio anterior — o dano divergiria com a MESMA semente.
+    const straight = damageSession('dodge-seed');
+    for (let i = 0; i < 10; i++) straight.advanceBy(1000);
+
+    const interrupted = damageSession('dodge-seed');
+    for (let i = 0; i < 5; i++) interrupted.advanceBy(1000);
+    const snap = interrupted.snapshot();
+    const resumed = Session.fromSnapshot(snap, damageRuleset(), new Rng(snap.rng));
+    for (let i = 0; i < 5; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+  });
+});
+
+describe('mitigação e conteúdo congelado (CMB-03)', () => {
+  const combat: Combat = {
+    id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+    armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
+    minimumDamageFraction: 0.1,
+    player: { attackPower: 25, attackIntervalMs: 2_000, attackRange: 1, armor: 0, dodgeChance: 0, damageType: 'physical' },
+    spellPower: { levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 },
+  };
+
+  /**
+   * Resolve um golpe de FOGO contra um defensor com a resistência dada. O defensor é montado a
+   * partir do CONTEÚDO — a resistência é o que distingue duas versões de conteúdo.
+   */
+  const resistanceRuleset = (resistance: number): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter(session, character) {
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent(session, event) {
+      const p = session.participants.find((c) => c.id === event.subject);
+      if (p === undefined) return;
+      const outcome = resolveDamage(
+        { rawDamage: session.rng.integer(10, 20), source: 'basic-attack', damageType: 'fire' },
+        {
+          armor: 0, dodgeChance: 0.5,
+          mitigation: compileMitigation({ resistances: { fire: resistance }, immunities: [] }),
+        },
+        'pve', combat, session.rng,
+      );
+      session.credit(p.id, 'xpGained', outcome.resolvedDamage);
+      session.scheduleIn('attack', 350, { priority: EventPriority.Attack, subject: p.id });
+    },
+  });
+
+  const mitigationSession = (seed: string, resistance: number): Session => {
+    const session = new Session({
+      id: 'mitigation', contentVersion: 'v1', ruleset: resistanceRuleset(resistance),
+      rng: Rng.fromSeed(seed), createdAtMs: 0,
+    });
+    session.enter(character());
+    return session;
+  };
+
+  it('a mitigação do conteúdo entra no resultado e sobrevive ao snapshot com a mesma semente', () => {
+    const straight = mitigationSession('mit-seed', 0.5);
+    for (let i = 0; i < 60; i++) straight.advanceBy(1000);
+
+    const interrupted = mitigationSession('mit-seed', 0.5);
+    for (let i = 0; i < 30; i++) interrupted.advanceBy(1000);
+    const snap = JSON.parse(JSON.stringify(interrupted.snapshot())) as ReturnType<Session['snapshot']>;
+
+    const resumed = Session.fromSnapshot(snap, resistanceRuleset(0.5), new Rng(snap.rng));
+    for (let i = 0; i < 30; i++) resumed.advanceBy(1000);
+
+    expect(resumed.aggregates.xpGained).toBe(straight.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(straight.getRngState());
+  });
+
+  it('trocar a resistência do conteúdo MUDA o resultado — o conteúdo é a identidade', () => {
+    // Um deploy que mudasse a mitigação no meio da hunt produziria um resultado que ninguém
+    // simulou (invariante 7). Aqui a prova é que a mesma semente com resistência diferente
+    // rende diferente.
+    const resistant = mitigationSession('mit-seed', 0.5);
+    const vulnerable = mitigationSession('mit-seed', -0.5);
+    for (let i = 0; i < 20; i++) {
+      resistant.advanceBy(1000);
+      vulnerable.advanceBy(1000);
+    }
+    expect(vulnerable.aggregates.xpGained).toBeGreaterThan(resistant.aggregates.xpGained);
+  });
+});
+
+describe('skill é estado de personagem e sobrevive ao snapshot (CMB-05, #333)', () => {
+  const melee = skillSchema.parse({
+    id: 'melee', name: 'Melee', startingLevel: 10,
+    curve: { base: 2, factor: 1 }, gain: { on: 'melee-hit', points: 1 }, damagePerLevel: 0.5,
+  });
+
+  it('o nível ganho durante a sessão volta no restore, e o resultado segue idêntico', () => {
+    const session = new Session({
+      id: 'skills', contentVersion: 'v1', ruleset: testRuleset(),
+      rng: Rng.fromSeed('skills'), createdAtMs: 0,
+    });
+    const hero = character();
+    session.enter(hero);
+    for (let i = 0; i < 5; i++) session.advanceBy(1000);
+    // Uso é evento: dois golpes praticados fecham um nível (curva base 2, um ponto por golpe).
+    hero.skills.gain(melee, 2);
+    const levelBefore = hero.skills.levelOf(melee);
+    expect(levelBefore).toBeGreaterThan(10);
+
+    const snap = JSON.parse(JSON.stringify(session.snapshot())) as ReturnType<Session['snapshot']>;
+    const resumed = Session.fromSnapshot(snap, testRuleset(), new Rng(snap.rng));
+    const restored = resumed.participants[0] as CharacterRuntime;
+    // O nível e os pontos voltam, sem bump de formato: `skills` é opcional no estado.
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
+    expect(restored.skills.levelOf(melee)).toBe(levelBefore);
+
+    // E o resultado segue a mesma sequência: mesma semente, mesmos agregados e mesma skill.
+    for (let i = 0; i < 5; i++) {
+      session.advanceBy(1000);
+      resumed.advanceBy(1000);
+    }
+    expect(resumed.aggregates.xpGained).toBe(session.aggregates.xpGained);
+    expect(resumed.getRngState()).toEqual(session.getRngState());
+    expect(restored.skills.getState()).toEqual(hero.skills.getState());
   });
 });
