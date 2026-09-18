@@ -1,14 +1,14 @@
-// "Detalhes da caçada" v1 (#325, RC-12; régua visual em
-// `docs/kit-reference/24-modal-hunt-details.png`). Mostra nome, nível e dificuldades quando a
-// aba sabe qual hunt ela acabou de pedir. O servidor ainda não transmite essa identidade após o
-// ingresso (SV-05), então o estado de reconexão omite a tela em vez de fabricar um nome.
+// "Detalhes da caçada" completo (#325, #349, SV-13). O modal que mostra tamanhos de pull,
+// criaturas, loot possível e descrição da hunt ativa — aberto pela pill no topo da tela de
+// caçada. A identidade da hunt ativa (SV-05) chega em `hud.huntId`/`hud.difficulty`, gravados
+// por `session-state` e `instance-enter` — o servidor diz qual é, mesmo para quem reanexou
+// numa hunt já em andamento, sem depender de lembrança nenhuma desta aba do navegador.
 //
-// "Seu recorde" é uma decisão de produto permanente: XP/h e gp/h não são métricas oficiais. Os
-// demais blocos do kit entram somente quando forem verdade do servidor: monstros e loot em
-// SV-02, contagem por dificuldade em SV-19, descrição em SV-21 e vender por item em E5.
+// "Seu recorde" é uma decisão de produto permanente: XP/h e gp/h não são métricas oficiais.
 
-import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { currentHunt } from './current-hunt.js';
+import { useHudSlice } from '../state/useSlice.js';
+import type { HuntListing, ItemDefinition, MonsterListing } from '../state/hud.js';
+import { ItemSprite } from './ItemSprite.js';
 import { Button } from './ui/Button.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
@@ -21,21 +21,108 @@ const DIFFICULTY_TEXT: Record<string, string> = {
   reckless: 'Agressivo',
 };
 
+export interface PullSize {
+  readonly id: string;
+  readonly monsterCount: number;
+}
+
+/**
+ * Os tamanhos de pull com contagem de monstros (SV-19), na ordem de `hunt.difficulties` —
+ * não na ordem de `difficultyDetails`, que é só o catálogo bruto. Dificuldade sem entrada em
+ * `difficultyDetails` (nó anterior à SV-19, que manda a lista vazia) é FILTRADA: sem número,
+ * não há "Ousado · N" para mostrar aqui — o seletor de hunts é quem cai para só o nome.
+ */
+export function pullSizesOf(hunt: HuntListing): readonly PullSize[] {
+  const byId = new Map(hunt.difficultyDetails.map((detail) => [detail.id, detail] as const));
+  return hunt.difficulties
+    .map((difficultyId) => byId.get(difficultyId))
+    .filter((detail): detail is PullSize => detail !== undefined);
+}
+
+export function pullSizeLabel({ id, monsterCount }: PullSize): string {
+  return `${DIFFICULTY_TEXT[id] ?? id} · ${String(monsterCount)}`;
+}
+
+/**
+ * Os monstros da hunt, na ordem de `hunt.monsters` (SV-02). Monstro sem entrada em
+ * `catalogue.monsters` é FILTRADO — o catálogo bruto pode ter um id que o conteúdo removeu.
+ */
+export function monstersOf(
+  hunt: HuntListing, monsters: readonly MonsterListing[],
+): MonsterListing[] {
+  const byId = new Map(monsters.map((monster) => [monster.id, monster] as const));
+  return hunt.monsters
+    .map((entry) => byId.get(entry.id))
+    .filter((monster): monster is MonsterListing => monster !== undefined);
+}
+
+/**
+ * Os itens de loot possível da hunt, na ordem de `hunt.loot` (SV-02). Sem gold e sem raridade
+ * — produto decidiu que XP/h e loot rate não são métricas oficiais. Item sem entrada em
+ * `catalogue.items` é FILTRADO.
+ */
+export function lootItemsOf(
+  hunt: HuntListing, items: readonly ItemDefinition[],
+): ItemDefinition[] {
+  const byId = new Map(items.map((item) => [item.id, item] as const));
+  return hunt.loot
+    .map((entry) => byId.get(entry.itemId))
+    .filter((item): item is ItemDefinition => item !== undefined);
+}
+
+/**
+ * Sem outfit no catálogo de monstros (`catalogue.monsters[]` nunca traz um — só id e nome), o
+ * lugar do sprite segue como placeholder tracejado do kit, como a Cyclopedia já faz para o
+ * mesmo caso (`CyclopediaModal.tsx`, `EntrySprite`). Inventar um id de outfit aqui desenharia
+ * uma criatura que pode não ser a certa.
+ */
+function MonsterPlaceholderSprite() {
+  return <span className="hunt-details-monster-sprite" aria-hidden="true" />;
+}
+
+function MonsterRow({ monster }: { monster: MonsterListing }) {
+  return (
+    <div className="hunt-details-monster">
+      <MonsterPlaceholderSprite />
+      <strong>{monster.name}</strong>
+      {monster.health !== undefined && <span>{`Vida ${String(monster.health)}`}</span>}
+      {monster.experience !== undefined && <span>{`Exp ${String(monster.experience)}`}</span>}
+    </div>
+  );
+}
+
+function LootRow({ item }: { item: ItemDefinition }) {
+  return (
+    <div className="hunt-details-loot-item">
+      <span className="hunt-details-loot-sprite">
+        <ItemSprite appearanceId={item.appearanceId} name={item.name} />
+      </span>
+      <span>{item.name}</span>
+    </div>
+  );
+}
+
 /** O `Modal` só monta este corpo aberto, então não há assinatura de HUD durante a hunt inteira. */
 function HuntDetailsBody() {
   const catalogue = useHudSlice((state) => state.catalogue);
-  const known = useStoreSlice(currentHunt, (state) => state);
-  const hunt = known === null ? null : (catalogue?.hunts.find((entry) => entry.id === known.huntId) ?? null);
+  const huntId = useHudSlice((state) => state.huntId);
+  const hunt = huntId === null ? null : (catalogue?.hunts.find((entry) => entry.id === huntId) ?? null);
+
+  if (hunt === null) {
+    return (
+      <p className="hunt-details-modal-empty">
+        Não foi possível identificar a caçada atual.
+      </p>
+    );
+  }
+
+  const pulls = pullSizesOf(hunt);
+  const monsters = monstersOf(hunt, catalogue?.monsters ?? []);
+  const lootItems = lootItemsOf(hunt, catalogue?.items ?? []);
 
   return (
-    hunt === null ? (
-      <p className="hunt-details-modal-empty">
-        Esta caçada foi aberta antes desta sessão do navegador — o servidor ainda não diz qual
-        é ela (chega com a issue de protocolo SV-05). Saia e reentre pela lista de caçadas para
-        ver os detalhes desta vez.
-      </p>
-    ) : (
-      <div className="hunt-details-modal-body">
+    <div className="hunt-details-modal-grid">
+      <div className="hunt-details-col-left">
         <h2 className="hunt-details-modal-name">{hunt.name}</h2>
         <section className="hunt-details-modal-info">
           <Kicker tone="muted">Sobre esta caçada</Kicker>
@@ -46,12 +133,33 @@ function HuntDetailsBody() {
             bar={false}
           />
         </section>
-        {/* Monstros com nome/sprite dependem de SV-02; a contagem por dificuldade, de SV-19;
-            e a descrição, de SV-21. Loot possível também precisa de SV-02 e de autovenda por
-            item em E5. Nenhum desses blocos recebe placeholder: o modal só cresce quando cada
-            dado e ação forem verdade do servidor. */}
+        {pulls.length > 0 && (
+          <>
+            <Kicker tone="muted" className="hunt-details-kicker">Tamanhos de pull</Kicker>
+            <p className="hunt-details-pulls">{pulls.map(pullSizeLabel).join('   ')}</p>
+          </>
+        )}
+        {monsters.length > 0 && (
+          <>
+            <Kicker tone="muted" className="hunt-details-kicker">Criaturas</Kicker>
+            <div className="hunt-details-monsters">
+              {monsters.map((monster) => <MonsterRow key={monster.id} monster={monster} />)}
+            </div>
+          </>
+        )}
+        {hunt.description !== undefined && <p className="hunt-details-desc">{hunt.description}</p>}
       </div>
-    )
+      <div className="hunt-details-col-right">
+        {lootItems.length > 0 && (
+          <section className="hunt-details-modal-info">
+            <Kicker tone="muted">Loot possível</Kicker>
+            <div className="hunt-details-loot">
+              {lootItems.map((item) => <LootRow key={item.id} item={item} />)}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -61,7 +169,7 @@ export function HuntDetailsModal({ open, onClose }: { open: boolean; onClose: ()
       open={open}
       title="Detalhes da caçada"
       onClose={onClose}
-      width={420}
+      width={680}
       footer={(
         <Button variant="secondary" size="sm" className="hunt-details-modal-close" onClick={onClose}>
           Fechar

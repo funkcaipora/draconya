@@ -3,9 +3,40 @@ import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { WorldOverlay } from './WorldOverlay.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { PartyView } from '../state/hud.js';
+import type { Catalogue, PartyView } from '../state/hud.js';
 import { world } from '../state/world.js';
 import type { Creature } from '../state/world.js';
+
+const mockCatalogue: Catalogue = {
+  hunts: [{
+    id: 'rat-cellars',
+    name: 'Rat Cellars',
+    recommendedLevel: 1,
+    lootDrops: 2,
+    outfitIds: [],
+    difficulties: ['cautious', 'bold', 'reckless'],
+    difficultyDetails: [
+      { id: 'cautious', monsterCount: 2 },
+      { id: 'bold', monsterCount: 5 },
+      { id: 'reckless', monsterCount: 8 },
+    ],
+    monsters: [],
+    loot: [],
+  }],
+  monsters: [],
+  ammunition: [],
+  bot: {
+    vocabularyVersion: 1,
+    advancedFromLevel: 50,
+    slots: {},
+    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    spells: [],
+    supplies: [],
+  },
+  items: [],
+  vocations: [],
+  vocationLevel: 8,
+};
 
 async function render(element: ReactElement): Promise<string> {
   const { prelude } = await prerender(element);
@@ -39,7 +70,7 @@ beforeEach(() => {
   world.selfId = null;
 });
 
-describe('WorldOverlay (#327, RC-14)', () => {
+describe('WorldOverlay (#327, #348, RC-14, SV-12)', () => {
   it('shows the fixed city text outside a hunt', async () => {
     const html = await render(createElement(WorldOverlay, { hunting: false }));
 
@@ -77,7 +108,7 @@ describe('WorldOverlay (#327, RC-14)', () => {
     world.creatures.set(2, creature(2, { name: 'Rat' }));
     hud.set((state) => ({
       ...state,
-      party: party([{ characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100 }]),
+      party: party([{ characterId: 'c1', name: 'Companheiro', alive: true, healthPercent: 100, vocationId: null }]),
     }));
 
     const html = await render(createElement(WorldOverlay, { hunting: true }));
@@ -91,5 +122,34 @@ describe('WorldOverlay (#327, RC-14)', () => {
     expect(html).not.toContain('Covil');
     expect(html).not.toContain('Ousado');
     expect(html).not.toContain('Bênção');
+  });
+
+  it('shows the hunt name and difficulty when present in hud and catalogue (#348, SV-12)', async () => {
+    hud.set((state) => ({ ...state, huntId: 'rat-cellars', difficulty: 'cautious', catalogue: mockCatalogue }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+
+    expect(html).toContain('Rat Cellars · Cauteloso');
+    expect(html).toContain('world-overlay-area');
+    expect(html).toContain('0 criaturas no alcance');
+  });
+
+  it('without hud.huntId, does not render the hunt line, only the count', async () => {
+    hud.set((state) => ({ ...state, huntId: null, difficulty: 'cautious', catalogue: mockCatalogue }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+
+    expect(html).not.toContain('Rat Cellars');
+    expect(html).not.toContain('Cauteloso');
+    expect(html).toContain('0 criaturas no alcance');
+  });
+
+  it('when hud.huntId is not in the catalogue (reconnect swapped it), does not render the hunt line', async () => {
+    hud.set((state) => ({ ...state, huntId: 'unknown-hunt', difficulty: 'cautious', catalogue: mockCatalogue }));
+
+    const html = await render(createElement(WorldOverlay, { hunting: true }));
+
+    expect(html).not.toContain('Cauteloso');
+    expect(html).toContain('0 criaturas no alcance');
   });
 });

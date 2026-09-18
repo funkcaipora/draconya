@@ -709,7 +709,13 @@ body {
   font: 6.5px var(--font-mono); color: var(--text-muted); text-align: center;
 }
 .hunt-details-monster strong { font: 600 7px var(--font-mono); color: var(--parchment-1); }
-.hunt-details-monster-sprite { position: relative; width: 46px; height: 46px; }
+/* Sem outfit no catálogo de monstros (`MonsterListing` só tem id/nome), o quadrado fica
+   tracejado — o mesmo placeholder que a Cyclopedia usa para o mesmo caso (`.cyclopedia-modal
+   -card-sprite`), nunca um `OutfitSprite` com um id inventado. */
+.hunt-details-monster-sprite {
+  position: relative; width: 46px; height: 46px;
+  border: 1px dashed var(--ash-6); border-radius: 3px; background: var(--surface-slot);
+}
 .hunt-details-desc { margin: 0; font: 11px var(--font-body); color: var(--text-muted); line-height: 1.5; }
 .hunt-details-loot { display: grid; gap: 4px; max-height: 330px; overflow: auto; scrollbar-width: thin; }
 .hunt-details-loot-item {
@@ -1353,4 +1359,10 @@ body {
 
 @media (max-width: 720px) {
   .shell > .buff-bar { order: 1; position: static; padding: 4px 10px 0; z-index: auto; }
+}
+
+/* ---- Overlay: área da hunt (#348, SV-12) ------------------------------------------------- */
+.world-overlay-area {
+  color: var(--gold-4);
+  text-transform: uppercase;
 }

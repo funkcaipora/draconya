@@ -25,16 +25,26 @@ não obrigatoriamente as quatro. A formação da party (ADR 0027) é a coluna di
 os companheiros DURANTE a hunt são um painel fixo próprio na coluna esquerda (`PartyMembers`,
 DS-14).
 
-**Detalhes da caçada, durante a hunt (#325).** A pill "ⓘ Detalhes da caçada" abre um modal com o
-nome, o nível recomendado e as dificuldades da hunt ativa — a mesma regra de "level recomendado é
-conselho" vale aqui. A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por
-este `HuntsModal`, nesta aba do navegador: uma hunt sobrevive ao navegador fechado (idle-first),
-mas o servidor ainda não diz, depois que a instância já começou, qual `catalogue.hunts[]` é essa
-— reabrir o jogo no meio de uma caçada existente não traz o nome de volta, e o modal diz isso em
-vez de inventar. Monstros, loot possível e descrição aparecem no kit e ainda não têm dado no
-servidor (M15: SV-02, SV-19, SV-21); a pill "Despachar loot" do kit espera o épico E5. "Seu
-recorde" (XP/h, gp/h) nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita
-abaixo.
+**Detalhes da caçada, durante a hunt (#325, #349, SV-13).** A pill "ⓘ Detalhes da caçada" abre
+um modal de duas colunas com o nome, o nível recomendado e as dificuldades da hunt ativa — a mesma
+regra de "level recomendado é conselho" vale aqui. A identidade da hunt ativa vem do servidor
+(SV-05, #341: `session-state` e `instance-enter` trazem `huntId`/`difficulty`), não de uma
+lembrança do `HuntsModal` nesta aba — reabrir o jogo no meio de uma caçada existente, ou reanexar
+num nó diferente, também traz o nome de volta. O modal ainda omite a identidade, numa frase curta,
+nos dois casos que sobram sem resposta: um nó `game` anterior à SV-05 que não manda o campo, ou o
+catálogo (trocado por uma reconexão) sem mais aquela hunt. Tamanhos de pull com contagem
+("Ousado · 4", SV-19, #355), criaturas com vida e experiência e o loot possível — cada item uma vez,
+com sprite e nome, sem gold e sem raridade (SV-02, #338) — aparecem quando o catálogo os traz; o
+catálogo de monstros nunca traz outfit, e o lugar do sprite de cada criatura fica tracejado, como na
+Cyclopedia. A descrição (SV-21, #357, `hunt.description` no conteúdo) aparece quando a hunt tem o
+parágrafo escrito — Rat Cellars tem — e a seção some, em vez de mostrar um traço, quando não tem.
+A pill "Despachar loot" do kit espera o épico E5. "Seu recorde" (XP/h, gp/h) nunca aparece — mesma
+regra de "não mostra estimativa oficial" já descrita abaixo.
+
+**A área da hunt aparece no mundo (#327, #348, SV-12).** O overlay do canto superior mostra
+"`<nome da hunt>` · `<dificuldade>`" antes da contagem de criaturas no alcance, pela mesma
+identidade da hunt (SV-05) do parágrafo acima — e some, deixando só a contagem, nos mesmos dois
+casos em que o modal de detalhes omite o nome.
 
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
@@ -62,18 +72,6 @@ Esconder o botão transformaria um conselho em regra que ninguém escreveu.
 
 **Não existe "trocar de dificuldade".** Existe sair e existe entrar: trocar encerra a instância e
 cria outra (§14.7), então a tela oferece as duas ações que de fato acontecem.
-
-**Detalhes da caçada, durante a hunt (#325, #349, SV-13).** A pill "ⓘ Detalhes da caçada" abre um modal
-com duas colunas apresentando os detalhes da caçada ativa: nome, nível recomendado, dificuldades,
-contagens de monstros por tamanho de pull ("Cauteloso · 2", "Ousado · 5", "Agressivo · 8"), grade de
-criaturas da caçada com sprite (`OutfitSprite`), nome, vida e experiência, descrição textual da hunt se
-existir em conteúdo, e a lista de loot possível com sprite (`ItemSprite`) e nome de cada item (sem ouro,
-sem caixas de seleção como PEGAR/VENDER e sem raridade). A pill "Despachar loot" do kit espera o épico E5.
-A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por este `HuntsModal`, nesta aba
-do navegador: uma hunt sobrevive ao navegador fechado (idle-first), mas o servidor ainda não diz, depois
-que a instância já começou, qual `catalogue.hunts[]` é essa — reabrir o jogo no meio de uma caçada
-existente não traz o nome de volta, e o modal diz isso em vez de inventar. "Seu recorde" (XP/h, gp/h)
-nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita acima.
 
 O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
 fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
