@@ -109,6 +109,7 @@ fronteiras, invariantes locais e armadilhas conhecidas.
 |---|---|---|
 | [`AGENTS.md`](AGENTS.md) | O norte: os onze invariantes inegociáveis, stack, padrão de commit | vivo |
 | [`docs/technical-architecture.md`](docs/technical-architecture.md) | Arquitetura e plano do MVP em 15 épicos e 7 fases | vivo |
+| [`docs/system-architecture.md`](docs/system-architecture.md) | Visão integrada de runtime, dados, fluxo de hunt e deploy | vivo |
 | [`docs/architecture.md`](docs/architecture.md) | Restrições do motor: o que é barato, caro ou impossível | vivo |
 | [`docs/boundaries.md`](docs/boundaries.md) | Quem pode importar quem, e por quê | normativo |
 | [`docs/adr/`](docs/adr/) | Decisões técnicas com contexto, alternativas e consequências | append-only |

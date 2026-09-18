@@ -297,6 +297,25 @@ export class PartyStore {
     return this.get(id);
   }
 
+  /**
+   * O líder remove outro membro (#358, R3-08) — não é o próprio saindo, é decisão do líder. O
+   * efeito na composição é o MESMO de uma saída voluntária (desaprova a proposta corrente, porque
+   * a party mudou): `kick` só acrescenta QUEM pode pedir isso e NUNCA contra o próprio líder — para
+   * isso já existe `leave`. A validação mora aqui, e não na rota, porque as três checagens (líder,
+   * não-si-mesmo, é membro) precisam do MESMO `get()` que `leave` já faria por dentro; fazer a
+   * checagem na rota duplicaria a leitura do Redis para nada.
+   */
+  async kick(
+    id: string, leaderId: string, targetId: string,
+  ): Promise<PartyRecord | 'not-found' | 'not-leader' | 'cannot-kick-self' | 'target-not-a-member'> {
+    const party = await this.get(id);
+    if (party === null) return 'not-found';
+    if (party.leaderId !== leaderId) return 'not-leader';
+    if (targetId === leaderId) return 'cannot-kick-self';
+    if (!party.members.includes(targetId)) return 'target-not-a-member';
+    return (await this.leave(id, targetId)) ?? party;
+  }
+
   /** O líder propõe; a proposta zera as aprovações e aprova o próprio líder. */
   async propose(
     id: string, proposal: { huntId: string; difficulty: string; mode: PartyMode }, leaderId: string,

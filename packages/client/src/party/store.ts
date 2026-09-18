@@ -76,6 +76,10 @@ export const partyActions = {
     if (current !== null) await api.leave(current.id, me);
     return null;
   }),
+  kick: (targetId: string) => run((api, me) => {
+    const current = party.get().party;
+    return current === null ? Promise.resolve(null) : api.kick(current.id, me, targetId);
+  }),
   propose: (proposal: { huntId: string; difficulty: string; mode: 'split' | 'shared' }) => run((api, me) => {
     const current = party.get().party;
     return current === null ? Promise.resolve(null) : api.propose(current.id, me, proposal);

@@ -54,7 +54,8 @@ export const TEST_PROGRESSION = {
 };
 
 export const TEST_COMBAT = {
-  id: 'baseline', dodgeMultiplier: 0.5, armorEffectiveness: { melee: 1, magic: 0 },
+  id: 'baseline', compatibilityProfile: 'combat-v1', dodgeMultiplier: 0.5,
+  armorEffectiveness: { physical: 1, energy: 0, earth: 0, fire: 0, ice: 0, holy: 0, death: 0, arcane: 0 },
   minimumDamageFraction: 0.1,
   player: { attackPower: 25, attackIntervalMs: 2000, attackRange: 1, armor: 0, dodgeChance: 0 },
 };
@@ -62,6 +63,21 @@ export const TEST_COMBAT = {
 export const TEST_STAMINA = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
 /** A party de hunt (ADR 0027): a tabela real, para solo ser party de um. */
 export const TEST_PARTY = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+
+/**
+ * As famílias de arma (CMB-05) do conteúdo de teste. O conteúdo não tem skill nenhuma, então
+ * `buildContent` não confere o `skillId` — a arma bate o `attack` puro, que é o que estas
+ * fixtures sempre mediram. Quem testa escala de skill usa conteúdo com skill.
+ */
+export const TEST_WEAPON_FAMILIES = [
+  { id: 'fist', name: 'Fist', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'sword', name: 'Sword', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'axe', name: 'Axe', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'club', name: 'Club', kind: 'melee', skillId: 'melee', range: 1, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'distance', name: 'Distance', kind: 'distance', skillId: 'distance', range: 6, damageType: 'physical', resource: 'none', formula: { levelFactor: 0, spread: 0 } },
+  { id: 'wand', name: 'Wand', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+  { id: 'rod', name: 'Rod', kind: 'wand', skillId: 'magic', range: 3, damageType: 'arcane', resource: 'mana' },
+];
 
 const TEST_RAT = {
   id: 'rat', name: 'Rat', recommendedLevel: 1, health: 20, experience: 5,
@@ -101,7 +117,7 @@ export function rawTestContent(): RawContent {
   const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
-    spells: [TEST_SPELL], supplies: [TEST_SUPPLY],
+    spells: [TEST_SPELL], supplies: [TEST_SUPPLY], weaponFamilies: TEST_WEAPON_FAMILIES,
  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
  bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },

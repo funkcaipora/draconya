@@ -71,5 +71,11 @@ pnpm vitest run packages/tools
 - **Observador de GC é `{ type: 'gc' }`, nunca `{ entryTypes: ['gc'] }`.** A segunda forma é
   aceita sem reclamar e não entrega entrada nenhuma no Node 24 — o relatório dizia "0 ms de GC" e
   não media coisa alguma.
+- **O cenário do CMB-10 é MISTO e roda pelo mesmo relatório** (`SCENARIO=combat pnpm bench:hunts`,
+  ou `pnpm bench:combat`): ability em área, resistência, defesa de escudo, condição/campo e
+  modificadores, sobre 40 monstros. `combat-scenario.test.ts` o monta no CI, como o frio. O
+  personagem entra VESTIDO (arma de uma mão + escudo) e com vida enorme — sem a vida enorme ele
+  morre, a sessão encerra, e o laço medido passa a rodar sessões mortas: o µs/tick despenca para
+  zero e o número vira mentira. Ver `docs/product/combat-conformance.md`.
 
 Issues: FUN-45 (cliente de carga), FUN-46 (cenário frio).

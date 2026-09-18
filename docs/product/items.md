@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) e dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) — implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -138,9 +138,20 @@ valesse menos que o número base.
 
 Desde a #152 o combate lê também **como** a arma bate — `weapon: { kind, range, ammoFamily,
 manaPerHit, damage }` —, e o alcance passou a ser da arma: bow 6 com a munição escolhida, wand
-e rod 3 gastando mana, corpo a corpo 1. A munição não é item: é uma seleção por família
-(`select-ammo`), com a grátis por padrão e as pagas debitando gold por tiro; ver `combat.md`
-("Como cada arma bate"). Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
+e rod 3 gastando mana, corpo a corpo 1. Desde o CMB-05 (#333) a arma declara também a
+**família** (`weapon.family`: `sword`, `axe`, `club`, `distance`, `wand`, `rod`), que aponta para
+a skill e a fórmula em `packages/content/data/weapon-families/` — o ruleset não conhece nome de
+item nem vocação. `fist` é o fallback desarmado e não existe como arma. A munição não é item: é
+uma seleção por família (`select-ammo`), com a grátis por padrão e as pagas debitando gold por
+tiro; ver `combat.md` ("Famílias de arma e proficiências"). Arma de duas mãos (`twoHanded`, o bow)
+recusa escudo, e vice-versa.
+
+Desde o CMB-04 o combate lê também a **defesa** (`defense`) da peça: escudo ou arma corpo a corpo
+de uma mão bloqueia parte do golpe físico. A escolha da fonte é do inventário (`defenseSource`),
+que já conhece os slots e a incompatibilidade bow+escudo; a fórmula e a posição do sorteio estão
+em `combat.md` e no ADR 0031. Bow/twoHanded e wand/rod não têm defesa residual — declarar
+`defense` neles é recusado no boot. Não existe item de escudo no catálogo real ainda; a defesa
+entra pelas armas de uma mão (machete 9, steel axe 10, spike sword 10, provisório).
 
 ### Como o item vai e volta do banco
 
@@ -235,16 +246,39 @@ sessão encerrada encheria o Redis com cinco mil chaves dizendo "não sobrou ite
 (`draconya_loot_boxes_pending`) — uma pilha que só cresce é jogador ganhando item que não
 consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o número.
 
+## Anéis com efeito passivo (SV-16, #352)
+
+Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
+está equipado no dedo (`slot: 'finger'`), sem carga e sem duração — `charges`/`durationMs`
+continuam declarados no schema e mortos (§21.3); a durabilidade de anéis é E7, issue própria.
+
+**Energy Ring** — o dano sofrido debita da MANA antes da vida, e só o excedente vai para a vida.
+É a MESMA leitura que a condição `mana-shield` do utamo vita (Magic Shield) já faz — as duas
+convergem no mesmo lugar (`CharacterRuntime.receiveDamage`) e NÃO se somam: com o anel vestido E
+a condição ativa ao mesmo tempo, o personagem continua absorvendo o dano uma vez só.
+
+**Life Ring** — +300% da regeneração passiva BASE de vida e mana. "Base" é o ponto fixo por
+vencimento de `progression.regen` (§10.2), sem nenhum outro bônus — hoje não existe nenhum outro
+modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
+
+O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
+dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
+descrito aqui, lido do catálogo no momento do dano/regeneração, que dá sentido a essa troca.
+
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Stack máximo por item | 100 | caminho previsto: `packages/content/items` |
+| Defesa (blocking físico) da arma de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` (CMB-04) | `packages/content/data/items/*.json`, `defense` |
 | Expiração da Caixa de Loot da Sessão | 30 minutos após o fim da sessão | caminho previsto: `packages/content/items` |
 | Autovenda — tipos configuráveis (Free) | 5 | caminho previsto: `packages/content/economia` (premium) |
 | Autovenda — tipos configuráveis (Premium) | 20 | caminho previsto: `packages/content/economia` (premium) |
 | Duração de imbuement | 24h de tempo efetivo de hunt | caminho previsto: `packages/content/imbuement` |
 | Catálogo de efeitos/materiais/valores/compatibilidade de imbuement | `[ABERTO]` | caminho previsto: `packages/content/imbuement` |
+| Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
+| Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
 
 ## Em aberto
 

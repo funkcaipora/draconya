@@ -3,7 +3,8 @@ import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
-  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, toConfig, toggleRule,
+  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setIgnore, setLure, setPosture, setPrioritize,
+  setRingSwap, setTargetingPolicy, toConfig, toggleRule,
 } from './store.js';
 
 const rule = (percent: number, enabled = true) => ({
@@ -94,18 +95,54 @@ describe('a configuração em vigor chega do servidor (FUN-111)', () => {
     expect(toConfig(draftFrom(original))).toEqual(original);
   });
 
-  it('o bot AVANÇADO dá a volta também: lure e ringSwap passam opacos pelo rascunho', () => {
-    // Era a metade que faltava: a tela carregava a configuração de um level 50 sem `ringSwap`,
-    // chamava de "salvo", e o próximo "Salvar" apagava o anel que a hunt trocava. Mutação que
-    // mata: `draftFrom` sem `advanced`, ou `toConfig` sem o espalhamento.
-    const advanced = {
+  it('lure dá a volta inteira pelo rascunho como campo próprio', () => {
+    const withLure = {
       ...config(),
       lure: { min: 2, max: 4 },
-      ringSwap: { itemId: 'life-ring', equipBelow: 40, removeAbove: 70, manaFloor: 0, restorePrevious: true },
     };
-    expect(toConfig(draftFrom(advanced))).toEqual(advanced);
-    // E sem eles a chave não aparece: `undefined` numa configuração é uma chave a mais no JSON.
+    const draft = draftFrom(withLure);
+    expect(draft.lure).toEqual({ min: 2, max: 4 });
+    expect(toConfig(draft)).toEqual(withLure);
     expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('lure');
+  });
+
+  it('ringSwap dá a volta inteira pelo rascunho como campo próprio', () => {
+    const ringSwap = {
+      itemId: 'life-ring',
+      equipBelow: 40,
+      removeAbove: 70,
+      manaFloor: 10,
+      restorePrevious: true,
+    };
+    const withRingSwap = {
+      ...config(),
+      ringSwap,
+    };
+    const draft = draftFrom(withRingSwap);
+    expect(draft.ringSwap).toEqual(ringSwap);
+    expect(toConfig(draft)).toEqual(withRingSwap);
+    expect(Object.keys(toConfig(draftFrom(config())))).not.toContain('ringSwap');
+  });
+
+  it('setRingSwap atualiza o rascunho e dispara flushSave imediatamente', () => {
+    const sent: BotConfig[] = [];
+    setConfigSender((c) => { sent.push(c); return true; });
+    try {
+      const ringSwap = {
+        itemId: 'energy-ring',
+        equipBelow: 50,
+        removeAbove: 60,
+        manaFloor: 10,
+        restorePrevious: true,
+      };
+      setRingSwap(ringSwap);
+      expect(bot.get().draft.ringSwap).toEqual(ringSwap);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.ringSwap).toEqual(ringSwap);
+      expect(bot.get().save).toBe('pending');
+    } finally {
+      setConfigSender(null);
+    }
   });
 
   it('com a tela pristina, a configuração vira o rascunho, já como "salvo"', () => {
@@ -311,3 +348,54 @@ describe('as regras de saída salvam sozinhas, com o mesmo debounce (#260)', () 
     expect(bot.get().draft.exit).toEqual([{ kind: 'out-of-gold' }]);
   });
 });
+
+describe('lure e targeting salvam com debounce (SV-09, #345)', () => {
+  const sent: BotConfig[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('setLure escreve draft.lure e manda com debounce', () => {
+    setLure({ min: 3, max: 7 });
+    expect(bot.get().draft.lure).toEqual({ min: 3, max: 7 });
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.lure).toEqual({ min: 3, max: 7 });
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('setTargetingPolicy, setPrioritize, setIgnore e setPosture em sequência mandam UMA mensagem', () => {
+    setTargetingPolicy('lowest-hp');
+    vi.advanceTimersByTime(100);
+    setPrioritize(['dragon', 'dragon-lord']);
+    vi.advanceTimersByTime(100);
+    setIgnore(['rat']);
+    vi.advanceTimersByTime(100);
+    setPosture({ kind: 'keep-distance', tiles: 3 });
+    expect(sent).toHaveLength(0);
+
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.targeting).toEqual({
+      policy: 'lowest-hp',
+      prioritize: ['dragon', 'dragon-lord'],
+      ignore: ['rat'],
+      posture: { kind: 'keep-distance', tiles: 3 },
+    });
+    expect(bot.get().draft.targeting).toEqual({
+      policy: 'lowest-hp',
+      prioritize: ['dragon', 'dragon-lord'],
+      ignore: ['rat'],
+      posture: { kind: 'keep-distance', tiles: 3 },
+    });
+  });
+});
+

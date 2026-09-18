@@ -1,6 +1,6 @@
-# Mundo espacial — plano de implementação (E14 · Cliente, M16)
+# Mundo espacial — plano de implementação (E14 · Cliente, M23)
 
-**Status:** aprovado em 2026-09-17 — o brief técnico do milestone [M16 · Mundo espacial — overscan, painter order e andares](https://github.com/funkcaipora/draconya/milestone/10); a decisão de arquitetura vai para o ADR do M16 (0031, a criar em 385, com o próximo número livre do índice). As nove issues do marco apontam para cá.
+**Status:** aprovado em 2026-09-17 — o brief técnico do milestone [M23 · Mundo espacial — overscan, painter order e andares](https://github.com/funkcaipora/draconya/milestone/10); a decisão de arquitetura vai para o ADR do M23 (0033, a criar em 385, com o próximo número livre do índice). As nove issues do marco apontam para cá.
 **PRD:** `draconya-renderer-tibia-behavior-spec.md` (2026-09-16, do dono do produto; não versionado — a fonte de §18–§39 citados aqui).
 **Substitui:** o bullet "Andares" e "A ordem de desenho só é recalculada quando alguém troca de tile" de `packages/client/AGENTS.md`, quando 385 e 387 os reescreverem.
 
@@ -40,8 +40,9 @@ Auditoria do checkout (2026-09-17, `main` em `3299eb5`; reconferida em `07b3b12`
   retângulo (`pack: null`) é o que o navegador local mostra.
 - Node: `.node-version` é 24; o shell padrão tem 22. Rodar `source ~/.nvm/nvm.sh && nvm use 24`
   antes de `pnpm check`.
-- ADR mais recente antes deste marco: 0030 (fidelidade ao ui_kit). O ADR desta iniciativa é o
-  **0031**.
+- ADR mais recente antes deste marco: 0032 (o HUD renderizado é o contrato do jogo). O ADR desta
+  iniciativa é o **0033**. (O marco nasceu como "M16" e foi renumerado para M23 em 2026-09-18,
+  porque a `main` já tinha um M16 — Fidelidade ao kit — e os ADRs 0031 e 0032.)
 - Proto real (`opentibiabr/otclient`, `src/protobuf/appearances.proto`, conferido em
   2026-09-17): `dont_hide = 24`, `shift = 26`, `height = 27`, `bounding_square = 7`.
 
@@ -150,7 +151,7 @@ export function sceneZIndex(x: number, y: number, slot: number): number {
 }
 ```
 
-Justificativa a registrar (ADR 0031): a ordem por linha é EQUIVALENTE à ordem diagonal
+Justificativa a registrar (ADR 0033): a ordem por linha é EQUIVALENTE à ordem diagonal
 (`x + y`) do OTClient para qualquer par de tiles vizinhos — que é o único par em que sprites de
 64 px se sobrepõem —, e é mais barata. Máximo: `(200·10000 + 200) · 64 ≈ 1,3e8`, inteiro exato.
 O Pixi só reordena quando um `zIndex` muda (`sortDirty`), e só os filhos do `scene` da janela

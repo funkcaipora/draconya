@@ -1,5 +1,5 @@
 // O harness de teste do viewport (issue #381): prende os SEIS comportamentos de hoje, mais
-// `drawOrder`, para que as issues seguintes do M16 (que reescrevem camadas, ordem de desenho,
+// `drawOrder`, para que as issues seguintes do M23 (que reescrevem camadas, ordem de desenho,
 // prefetch e andares) provem que mudaram só o que disseram que mudariam. Os testes (8) e (9)
 // são a rede de segurança da rodada 1 de revisão desta issue: (8) prende que o harness casa
 // sprite↔id certo mesmo quando `reorder` embaralha `creatures.children` no mesmo quadro do

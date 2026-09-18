@@ -1,7 +1,8 @@
 // "Escolha uma caçada" (#259, ADR 0029 D6). A party de formação mora na coluna direita — ADR
 // 0027: propor uma hunt É escolher uma hunt. Sem abas (Treino/Quests/Arena/Bosses não existem,
-// D8), com busca só por NOME (#324 — `catalogue.hunts[]` não traz criaturas), sem "Loot
-// possível" nem grade de criaturas (D8 — `catalogue.hunts[]` não tem `monsters` nem `loot`).
+// D8), com busca só por NOME (#324). "Loot possível" e a grade de criaturas ficam fora daqui de
+// propósito (D8) — existem em "Detalhes da caçada" (`HuntDetailsModal.tsx`, #349, SV-13), a tela
+// certa para olhar uma hunt já escolhida; esta é a de ESCOLHER.
 //
 // **A lógica de seleção é pura e exportada** (`resolveSelection`, `enterHuntMessage`,
 // `attemptEnter`): `prerender` (`react-dom/static`) roda a árvore sem DOM e sem eventos, então
@@ -16,7 +17,6 @@ import { useHudSlice } from '../state/useSlice.js';
 import type { HuntListing } from '../state/hud.js';
 import { OutfitSprite } from './OutfitSprite.js';
 import { PartyPanel } from './PartyPanel.js';
-import { setCurrentHunt } from './current-hunt.js';
 import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
 import { Input } from './ui/Input.js';
@@ -28,6 +28,18 @@ const DIFFICULTY_TEXT: Record<string, string> = {
   bold: 'Ousado',
   reckless: 'Agressivo',
 };
+
+/**
+ * O rótulo do botão de pull — "Ousado · 4" como o Huntera mostra (kit: Modals.jsx:52,
+ * `{n} · {c}`; SV-19). `difficultyDetails` é PARALELO a `difficulties` — um catálogo de nó
+ * `game` anterior à SV-19 chega com a lista vazia —, então sem contagem para esta dificuldade
+ * o rótulo cai para só o nome, nunca "· undefined".
+ */
+export function pullLabel(hunt: HuntListing, difficulty: string): string {
+  const label = DIFFICULTY_TEXT[difficulty] ?? difficulty;
+  const count = hunt.difficultyDetails.find((detail) => detail.id === difficulty)?.monsterCount;
+  return count === undefined ? label : `${label} · ${String(count)}`;
+}
 
 /**
  * As hunts cujo nome contém `query`, sem diferenciar maiúsculas de minúsculas.
@@ -119,9 +131,7 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
 
   const enter = (): void => {
     const message = enterHuntMessage(selected, difficulty);
-    if (attemptEnter(message, sendIntent, onClose) && selected !== null && difficulty !== null) {
-      setCurrentHunt({ huntId: selected.id, difficulty });
-    }
+    attemptEnter(message, sendIntent, onClose);
   };
 
   return (
@@ -169,7 +179,7 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
                     {selected.difficulties.map((d) => (
                       <Button key={d} variant={d === difficulty ? 'primary' : 'secondary'} size="sm"
                         onClick={() => { setPull(d); }}>
-                        {DIFFICULTY_TEXT[d] ?? d}
+                        {pullLabel(selected, d)}
                       </Button>
                     ))}
                   </div>

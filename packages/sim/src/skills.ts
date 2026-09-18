@@ -17,6 +17,12 @@ export interface SkillState {
   readonly points: number;
 }
 
+/** Progresso até o próximo nível de uma skill: nível atual e percentual acumulado (#340, SV-04). */
+export interface SkillProgress {
+  readonly level: number;
+  readonly percentToNext: number;
+}
+
 /** `skillId` → estado. Entra no snapshot e no extrato. */
 export type SkillsState = Readonly<Record<string, SkillState>>;
 
@@ -68,6 +74,14 @@ export class Skills {
    */
   levelOf(definition: Skill): number {
     return this.#levels.get(definition.id) ?? definition.startingLevel;
+  }
+
+  progressOf(definition: Skill): SkillProgress {
+    const level = this.levelOf(definition);
+    const points = this.#points.get(definition.id) ?? 0;
+    const needed = pointsForLevel(definition, level);
+    const percentToNext = needed > 0 ? Math.floor((points / needed) * 100) : 0;
+    return { level, percentToNext: Math.min(99, percentToNext) };
   }
 
   /**

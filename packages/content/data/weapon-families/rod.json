@@ -1,0 +1,10 @@
+{
+  "id": "rod",
+  "name": "Rod",
+  "kind": "wand",
+  "skillId": "magic",
+  "range": 3,
+  "damageType": "arcane",
+  "resource": "mana",
+  "_open": "Família de conjuração (CMB-05). Sem fórmula: a arma declara a faixa fixa (`damage`) e o custo (`manaPerHit`), e a prática é a mana gasta, pela skill `magic`. O rod NÃO recebe multiplicador de weapon skill — o contrato de wand/rod é distinto do de spellPower (DT-02) e só muda com perfil novo (ADR 0031)."
+}

@@ -25,22 +25,46 @@ não obrigatoriamente as quatro. A formação da party (ADR 0027) é a coluna di
 os companheiros DURANTE a hunt são um painel fixo próprio na coluna esquerda (`PartyMembers`,
 DS-14).
 
-**Detalhes da caçada, durante a hunt (#325).** A pill "ⓘ Detalhes da caçada" abre um modal com o
-nome, o nível recomendado e as dificuldades da hunt ativa — a mesma regra de "level recomendado é
-conselho" vale aqui. A identidade da hunt ativa hoje só é conhecida quando o jogador ENTROU por
-este `HuntsModal`, nesta aba do navegador: uma hunt sobrevive ao navegador fechado (idle-first),
-mas o servidor ainda não diz, depois que a instância já começou, qual `catalogue.hunts[]` é essa
-— reabrir o jogo no meio de uma caçada existente não traz o nome de volta, e o modal diz isso em
-vez de inventar. Monstros, loot possível e descrição aparecem no kit e ainda não têm dado no
-servidor (M15: SV-02, SV-19, SV-21); a pill "Despachar loot" do kit espera o épico E5. "Seu
-recorde" (XP/h, gp/h) nunca aparece — mesma regra de "não mostra estimativa oficial" já descrita
-abaixo.
+**Detalhes da caçada, durante a hunt (#325, #349, SV-13).** A pill "ⓘ Detalhes da caçada" abre
+um modal de duas colunas com o nome, o nível recomendado e as dificuldades da hunt ativa — a mesma
+regra de "level recomendado é conselho" vale aqui. A identidade da hunt ativa vem do servidor
+(SV-05, #341: `session-state` e `instance-enter` trazem `huntId`/`difficulty`), não de uma
+lembrança do `HuntsModal` nesta aba — reabrir o jogo no meio de uma caçada existente, ou reanexar
+num nó diferente, também traz o nome de volta. O modal ainda omite a identidade, numa frase curta,
+nos dois casos que sobram sem resposta: um nó `game` anterior à SV-05 que não manda o campo, ou o
+catálogo (trocado por uma reconexão) sem mais aquela hunt. Tamanhos de pull com contagem
+("Ousado · 4", SV-19, #355), criaturas com vida e experiência e o loot possível — cada item uma vez,
+com sprite e nome, sem gold e sem raridade (SV-02, #338) — aparecem quando o catálogo os traz; o
+catálogo de monstros nunca traz outfit, e o lugar do sprite de cada criatura fica tracejado, como na
+Cyclopedia. A descrição (SV-21, #357, `hunt.description` no conteúdo) aparece quando a hunt tem o
+parágrafo escrito — Rat Cellars tem — e a seção some, em vez de mostrar um traço, quando não tem.
+A pill "Despachar loot" do kit espera o épico E5. "Seu recorde" (XP/h, gp/h) nunca aparece — mesma
+regra de "não mostra estimativa oficial" já descrita abaixo.
+
+**A área da hunt aparece no mundo (#327, #348, SV-12).** O overlay do canto superior mostra
+"`<nome da hunt>` · `<dificuldade>`" antes da contagem de criaturas no alcance, pela mesma
+identidade da hunt (SV-05) do parágrafo acima — e some, deixando só a contagem, nos mesmos dois
+casos em que o modal de detalhes omite o nome.
 
 **Level recomendado aparece; estimativa de XP/h e gold/h não.** A regra é de produto e virou
 estrutura: a mensagem `hunt-catalogue` não tem campo onde guardar a estimativa. Um comentário
 pedindo para não mandar seria esquecido; um campo que não existe não pode ser preenchido por
 engano. Um número oficial de XP/h vira a métrica pela qual toda hunt é julgada, e a partir daí só
 existe uma hunt boa — o jogo passa a ter uma escolha, não quatro.
+
+**Monstros e loot possível chegam pelo catálogo, sem raridade** (SV-02, #338). Cada hunt leva
+`monsters: [{id, name}]` — os monstros que aparecem em QUALQUER dificuldade dela, deduplicados —
+e `loot: [{itemId, name}]` — o loot possível, também deduplicado. A raridade não vem: a mecânica
+não existe (E5). Gold nunca entra em `loot`: não é item, é campo do personagem — quem quer saber
+se a hunt solta gold já tem isso em `lootDrops`. `catalogue.monsters[]` (a lista para o
+Bestiário) ganha `health` e `experience` de cada monstro — nunca XP/h nem gold/h por hora, que
+continua fora por decisão de produto (parágrafo acima).
+
+**Contagem de monstros por dificuldade chega pelo catálogo** (SV-19, #355). Cada hunt leva
+`difficultyDetails: [{ id, monsterCount }]` — a quantidade total de monstros que cada
+dificuldade mantém vivos na instância, na mesma ordem de `difficulties`. É o que o cliente usa
+para exibir "Ousado · 4" nos botões de pull e no seletor de dificuldade da party, como no
+Huntera.
 
 **Recomendação não é trava.** Abaixo do level recomendado a linha fica em âmbar e o botão
 continua lá: quem decide se a entrada vale é o servidor, e no MVP ele não recusa por level.
@@ -51,6 +75,16 @@ cria outra (§14.7), então a tela oferece as duas ações que de fato acontecem
 
 O catálogo chega **uma vez**, logo depois do `welcome` e pela fila normal — a versão de conteúdo é
 fixada na sessão (invariante 7), então ele não muda enquanto ela vive.
+
+## Saída da hunt (#360)
+
+A saída da hunt pode ocorrer de duas maneiras principais quando não decorre de morte: por **regra automática de saída** (configurada nas opções de saída do bot, como `hp-below` ou `out-of-gold`) ou por **solicitação manual** (`ruleset.requestExit(session, characterId)`).
+
+- **Contagem regressiva (`exitDelayMs`)**: Quando configurado na hunt (`exitDelayMs` em `packages/content`), tanto o disparo de uma regra automática de saída quanto a solicitação manual iniciam uma contagem regressiva (por padrão 5 segundos — 5 000 ms). Durante esse intervalo, o personagem continua no mundo e sujeito ao combate. Se `exitDelayMs` estiver ausente, a saída é imediata.
+- **Registro do evento**: O evento notável (`exit-rule`) é registrado no instante exato do disparo do gatilho (`t`), enquanto o encerramento da sessão ou a partida do participante é diferida para `t + exitDelayMs`.
+- **Múltiplos disparos**: Novas solicitações de saída durante uma contagem já em andamento são ignoradas e não reiniciam o timer.
+- **Preservação em snapshot**: Se o estado for serializado no meio da contagem regressiva, o timer agendado e o motivo de saída pendente (`pendingExit`) são preservados na retomada.
+- **Exceção para `party-member-lost`**: A regra de saída em cascata quando um membro do grupo sai ou morre (`party-member-lost`) permanece **imediata**, sem passar pelo atraso de `exitDelayMs`.
 
 ## Regras
 
@@ -377,12 +411,14 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera) | `data/hunts/*.json`, campo `monsterCount` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars `[ABERTO — valor provisório; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Texto de apresentação (`description`, só apresentação) | Rat Cellars tem; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |

@@ -1,12 +1,40 @@
 # Combate
 
-**Status:** parcial — resolução de dano (FUN-35), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92) e skills por uso (FUN-75) implementados
+**Status:** parcial — resolução de dano (FUN-35), resolver canônico e outcome v1 (CMB-02), tipos
+de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), famílias de arma e
+proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), condições
+generalizadas, dano contínuo e campos de tile (CMB-07), outcomes avançados de crítico, leech e
+mana shield (CMB-08), auditoria de apresentação de combate (CMB-09, bloqueada pela biblioteca
+parcial), conformance seedada e benchmark misto (CMB-10), motor de magias com alvo único, área e
+requisito de vocação (FUN-74, FUN-92), skills
+por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
-## Comportamento
+## Contrato de compatibilidade (ADR 0031)
 
-A matemática e o comportamento geral de combate usam o Tibia como referência funcional — fórmulas e parâmetros são tratados como conteúdo configurável, nunca como dependência de código ou catálogo proprietário. Duas regras do PRD desviam explicitamente dessa referência e valem como exceção fixa.
+A referência de combate está fixada pelo
+[ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md): **Tibia 13.32**,
+com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nunca código copiado)
+e os números observados no TibiaWiki. O perfil semântico `combat-v1` é conteúdo versionado: a
+sessão o congela na criação e não o troca no meio da hunt.
+
+Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
+**exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
+comportamento entregue.
+
+## Comportamento atual
+
+A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`. Desde o
+CMB-02 ele é o **ponto público único** de resolução — arma, magia, runa e monstro passam por
+ele — e devolve um `DamageOutcome` versionado e auditável em vez de um número solto. O perfil
+`combat-v1` aplica armadura por tipo, piso, uma rolagem de Dodge sempre consumida e arredonda no
+fim; a seção "O resolver canônico" detalha o contrato.
+
+## Compatibilidade aprovada
+
+Duas regras do PRD §12 desviam explicitamente do Tibia e valem como exceção de produto fixada no
+perfil `combat-v1` — não são hipótese nem fidelidade pendente:
 
 Primeira: ataques realizados pelo jogador sempre acertam o alvo. Não existe miss ofensivo do lado do jogador — o servidor não rola chance de acerto para o atacante, o que elimina metade da matemática de combate tradicional.
 
@@ -14,27 +42,178 @@ Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque rec
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
 
+## Lacunas
+
+Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
+correspondente:
+
+- PvP e Guild War, fora do M19.
+
 ## O que já existe
 
 `resolveDamage` em `packages/sim/src/combat/damage.ts`. Função pura a menos do RNG, que é o
 **da sessão**: semeado e determinístico (FUN-25). `Math.random()` ali tornaria "por que eu
 morri" uma pergunta sem resposta.
 
-A ordem do cálculo, e cada passo tem um porquê:
+A ordem do cálculo, e cada passo tem um porquê (a versão completa, com os estágios do CMB-03,
+está em "Resistência, vulnerabilidade e imunidade"):
 
 1. **Rola o dodge — sempre**, mesmo contra alvo com chance zero. Pular a rolagem faria a
    sequência do gerador depender de um atributo do alvo, e aí dar dodge a um monstro
    deslocaria todo o loot que vem depois, num efeito que ninguém ligaria à causa.
-2. Subtrai a armadura, com efetividade **por tipo de ataque** (hoje: vale contra corpo a
-   corpo, não vale contra magia — provisório).
-3. Aplica o **piso**: nem a armadura mais alta zera um golpe. Dano zero contra alvo pesado
+2. **Defesa/escudo** (CMB-04): com fonte elegível e tipo aprovado, uma segunda rolagem decide o
+   bloqueio; sem fonte, o estágio é identidade e não consome sorteio.
+3. Subtrai a armadura, com efetividade **por tipo de dano**.
+4. Aplica o **piso**: nem a armadura mais alta zera um golpe. Dano zero contra alvo pesado
    vira impasse silencioso, sem nada na tela dizendo o motivo.
-4. Se esquivou, corta pela metade.
-5. **Arredonda só no fim.** Arredondar antes do dodge faria 50% de 3 virar 2, e o jogador
+5. Aplica a resistência/vulnerabilidade e depois a imunidade explícita, que zera.
+6. Se esquivou, corta pela metade.
+7. **Arredonda só no fim.** Arredondar antes do dodge faria 50% de 3 virar 2, e o jogador
    veria uma esquiva que reduziu um terço.
 
 O bônus de Bestiário é **PvE-only por construção**: `resolveDamage` recebe o contexto, e o
 acréscimo só entra quando ele é `pve`. A Guild War não tem como herdá-lo por esquecimento.
+
+## O resolver canônico e o outcome v1 (CMB-02)
+
+O CMB-02 materializou o contrato do ADR 0031. A resolução deixou de devolver um número e passou
+a devolver um **outcome** que explica cada estágio, para o host e o extrato conseguirem auditar o
+dano sem recalcular nada (DT-02). O contrato é:
+
+```ts
+type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack';
+
+// O vocabulário canônico vive em `@draconya/content` e o `sim` o importa (CMB-03).
+type DamageType =
+  | 'physical' | 'energy' | 'earth' | 'fire' | 'ice' | 'holy' | 'death' | 'arcane';
+
+interface DamageIntent {
+  readonly rawDamage: number;
+  readonly source: DamageSource;
+  readonly damageType: DamageType;
+}
+
+interface DamageOutcome {
+  readonly profile: string;          // 'combat-v1' — o perfil que resolveu
+  readonly intent: DamageIntent;     // a entrada, preservada
+  readonly damageType: DamageType;
+  readonly afterDefense: number;     // depois da defesa/escudo (CMB-04)
+  readonly afterArmor: number;       // depois da armadura, ainda ANTES do piso
+  readonly armorReduction: number;   // quanto a armadura subtraiu
+  readonly minimumDamage: number;    // o piso que valeu
+  readonly afterResistance: number;  // depois do piso e da resistência, ANTES da imunidade
+  readonly immune: boolean;          // imunidade explícita ao tipo
+  readonly dodged: boolean;
+  readonly critical: boolean;        // crítico rolou e ativou (CMB-08)
+  readonly resolvedDamage: number;   // o que o ruleset aplica
+}
+```
+
+O outcome é **efêmero**: nunca vai ao cliente e nunca entra no snapshot. O ruleset continua
+aplicando só `resolvedDamage` — `receiveDamage`, atribuição, `creature-hit` e `resolveDeath` não
+mudaram. O resolver não cobra mana nem gold, não agenda evento, não escreve vida, não atribui
+dano e não decide morte.
+
+### A taxonomia de dano (CMB-03)
+
+A lista canônica é a de Tibia 13.32 — físico, energia, terra, fogo, gelo, sagrado e morte — mais
+`arcane`, que é a magia **não-elemental** (ou cujo elemento o conteúdo ainda não declarou) e
+preserva o vocabulário `melee`/`magic` do v1. A fonte única é `DAMAGE_TYPES` em
+`@draconya/content`; o `sim` importa `DamageType` e não redeclara o enum. A emenda de 2026-09-17
+no [ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md) fixa a lista e a
+origem.
+
+Tipo é separado de **origem** (`source`) e de **efeito visual** (`CreatureHit.source`): o mesmo
+elemento pode vir de fontes diferentes, e o mesmo efeito pode desenhar sem dizer qual fórmula
+resolveu (DT-01).
+
+| Produtor | `source` | `damageType` | default que preserva o v1 |
+|---|---|---|---|
+| corpo a corpo (arma ou desarmado) | `basic-attack` | `weapon.damageType` / `combat.player.damageType` | `physical` |
+| bow / munição | `basic-attack` | `ammunition.damageType` | `physical` |
+| wand / rod | `basic-attack` | `weapon.damageType` | `arcane` |
+| magia de dano | `spell` | `effect.damageType` | `arcane` |
+| runa (supply de ataque) | `rune` | `effect.damageType` | `arcane` |
+| ataque de monstro | `monster-attack` | `monster.damageType` | `physical` |
+
+Um elemento só é declarado onde o catálogo o diz — nunca inferido do NOME do item ou da magia
+(DT-03). A wand of vortex declara `energy`, o snakebite rod `earth`, a Avalanche `ice` e as
+magias cujo elemento o TibiaWiki fixa declaram o seu. Onde o elemento é genuinamente indefinido,
+o default `arcane` é o valor honesto. `physical-strike` fica em `arcane` por decisão desta
+tarefa: declarar `physical` faria a armadura passar a contar e mudaria o dano já entregue, o que
+exige perfil novo — está marcado em `_open` no arquivo.
+
+Os cinco produtores — golpe básico (com seus três modos), magia, runa e monstro — passam pelo
+MESMO `resolveDamage`; nenhum calcula dano por fora. `test('todo dano passa pelo resolver
+canônico')` em `hunt.test.ts` prende isso.
+
+### Resistência, vulnerabilidade e imunidade (CMB-03)
+
+Cada entidade pode declarar `mitigation: { resistances, immunities }` — o monstro e o
+EQUIPAMENTO (item). A resistência é uma fração por tipo em `[-1, 1)`: positiva reduz
+(`dano × (1 − r)`), negativa é vulnerabilidade e amplifica (`dano × (1 + |r|)`). `1` é recusado
+no boot porque seria imunidade disfarçada, e imunidade é **explícita** (DT-02) — declarar
+resistência e imunidade para o mesmo tipo também é recusado. O perfil é compilado no boot para
+uma tabela completa por tipo (lookup O(1)) e um `Set` de imunidade.
+
+A ordem de mitigação, congelada na emenda do ADR 0031:
+
+1. **uma rolagem de Dodge, sempre consumida, primeiro ato** (posição do RNG é contrato);
+2. defesa/escudo (CMB-04) — uma segunda rolagem, e só com fonte elegível e tipo aprovado;
+3. armadura por tipo;
+4. **piso de armadura** (`minimumDamageFraction`), DEPOIS da armadura e ANTES da resistência;
+5. resistência/vulnerabilidade por tipo;
+6. imunidade explícita — zera, e o piso não a revoga;
+7. corte do Dodge, se a rolagem ativou;
+8. arredondamento só no fim, com piso em zero.
+
+A ordem só se torna observável quando existe resistência ou imunidade: sem mitigação, todos os
+estágios novos são identidade e o resultado é **bit a bit** o do v1. `damage.test.ts` tem a
+matriz determinística — físico, elemental, vulnerável, resistente e imune — e um caso que
+reprova se o piso trocar de lugar com a resistência.
+
+### Defesa, escudo e blocking físico (CMB-04)
+
+O estágio de defesa é o que o **escudo** ou a **arma corpo a corpo de uma mão** acrescentam ao
+defensor. Ele não é a armadura: a armadura é do corpo e vale por tipo de dano; a defesa é da
+peça e vale só contra os tipos aprovados — `physical` no `combat-v1`. A fórmula e a posição do
+RNG estão congeladas na emenda do
+[ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md).
+
+- **Fonte** (`Inventory.defenseSource`, DT-01): escudo precede a arma de uma mão (DT-02), e a
+  ausência das duas é `none`. Bow/twoHanded e wand/rod não dão defesa residual. A escolha mora
+  no inventário porque é a mesma regra que já recusa bow com escudo (`hands-full`); o ruleset
+  não repete a regra de slot.
+- **Bloqueio**: com fonte e tipo aprovado, uma rolagem (`combat.defense.blockChance`) decide se
+  a peça bloqueia; o quanto bloqueia é `min(defense, poder bruto)`. Sem fonte, ou em ataque
+  elemental, o estágio é identidade e **não consome sorteio**.
+- **O bloqueio nunca zera o golpe.** O piso (`minimumDamageFraction`) é calculado sobre o poder
+  bruto, então a defesa reduz o dano mas o piso sobrevive.
+- **Shielding sobe por USO** (§9.4): uma vez por ataque físico elegível recebido — nunca por
+  tick, nunca condicionada ao HP perdido, nunca em ataque elemental. A skill multiplica a
+  defesa da peça, e é a `skillId` de `combat.defense`.
+- **Fight mode fica de fora** (DT-03). Não há seletor de postura, opcode, C2S nem UI de bloqueio
+  nesta entrega; o mecanismo é autoritativo e uma intenção futura pode escolhê-lo, mas escolher
+  a fonte é do equipamento, não do cliente.
+
+O conteúdo real declara defesa nas armas corpo a corpo de uma mão (machete, steel axe, spike
+sword) e no perfil; não existe item de escudo no catálogo ainda — o mecanismo do escudo é
+exercitado por fixture, e um escudo real entra quando houver arte conferida (invariante 6).
+
+### Perfil, boot e retomada
+
+O perfil mora no conteúdo (`combat.compatibilityProfile`, default `combat-v1` para legado e
+fixture) e entra em `Content.version`; **não** é serializado no snapshot e
+`SNAPSHOT_FORMAT_VERSION` não sobe por causa dele. Um perfil que o motor não conhece **derruba o
+boot** em `buildContent` e o despachante do resolver **lança** — não existe fallback silencioso.
+Um perfil novo exige ADR e uma nova entrada em `COMBAT_PROFILES`.
+
+### Limites do v1
+
+O perfil é ADITIVO e preserva bit a bit o resultado entregue quando o conteúdo não declara o
+estágio. Ficam **fora** do v1, por decisão, e entram sob perfil novo nas tarefas seguintes:
+chance de acerto ofensivo, crítico, leech, mana shield (CMB-08) e qualquer tela de detalhamento
+do dano. O cliente não vê o outcome.
 
 ## Ação por tempo decorrido, nunca por contagem de tick
 
@@ -81,31 +260,41 @@ reequilibrar quando existirem.
 - Dodge, quando ativa no defensor, reduz o dano recebido em 50%.
 - Dodge pode ativar contra qualquer ataque recebido, incluindo magia e ataques de boss.
 - Bônus permanentes de Bestiário valem só em PvE; não se aplicam em Guild War.
+- Escudo ou arma corpo a corpo de uma mão bloqueia parte do golpe **físico**; o bloqueio nunca
+  zera o golpe, e ataque elemental não é bloqueado nem treina shielding (CMB-04).
+- Shielding sobe uma vez por ataque físico elegível recebido, nunca por tick e nunca pelo HP
+  perdido (CMB-04).
 
 ## Parâmetros de balanceamento
 
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
 | Multiplicador de dodge | 0,5 (§12.2, decidido) | `packages/content/data/combat/baseline.json` |
-| Efetividade da armadura — corpo a corpo | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json` |
-| Efetividade da armadura — magia | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json` |
+| Efetividade da armadura — `physical` | 1 `[ABERTO — valor provisório: 1]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.physical` |
+| Efetividade da armadura — todo tipo não-físico (`energy`, `earth`, `fire`, `ice`, `holy`, `death`, `arcane`) | 0 `[ABERTO — valor provisório: 0]` | `packages/content/data/combat/baseline.json`, `armorEffectiveness.<tipo>` |
+| Resistência por tipo | ausente é 0 (identidade); intervalo `[-1, 1)` | `mitigation.resistances` de monstro e item |
 | Regeneração de vida | 1 HP/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.healthPerSecond` |
 | Regeneração de mana | 1 mana/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.manaPerSecond` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
+| Chance de bloqueio (`blockChance`) | 0,6 `[ABERTO — valor provisório: 0,6]` | `packages/content/data/combat/baseline.json`, `defense.blockChance` |
+| Tipos que o blocking mitiga | `["physical"]` (v1) | `packages/content/data/combat/baseline.json`, `defense.blockTypes` |
+| Defesa da arma corpo a corpo de uma mão | machete 9, steel axe 10, spike sword 10 `[ABERTO — spike sword provisório: 10]` | `packages/content/data/items/*.json`, `defense` |
+| Shielding — início, curva, defesa por nível | 10 / 50×1,1 / +2 % `[ABERTO — valores provisórios]` | `packages/content/data/skills/shielding.json` |
+| Modificadores avançados (`combat.modifiers`) | **ausente é neutro** (preserva o v1); quando declarado, crítico/leech são `[ABERTO — valores provisórios]` | `packages/content/data/combat/baseline.json`, `modifiers` |
 
-| Parâmetro | Valor previsto | Onde mora em packages/content |
-|---|---|---|
-| Chance de acerto do jogador (ofensivo) | 100% fixo, sem rolagem | caminho previsto: `packages/content/combate` |
-| Redução de dano quando Dodge ativa | 50% | caminho previsto: `packages/content/combate` |
-| Escopo do bônus de Bestiário | PvE-only | caminho previsto: `packages/content/bestiário` |
+As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
+perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
+não parâmetro de balanceamento. O único número entre elas é o multiplicador de Dodge, já listado
+acima em `combat/baseline.json`; as demais são estruturais.
 
 O catálogo de magias e seus números de dano/custo/cooldown pertence a `progression.md` — este arquivo cobre só a matemática geral de acerto/Dodge.
 
 ## Magia usa a MESMA resolução de dano (FUN-74)
 
-Uma magia de dano não tem matemática própria: ela chama `resolveDamage` com `kind: 'magic'`, e é
-só isso que a distingue de um golpe. A consequência é que a efetividade da armadura contra magia
-— hoje `0`, e provisória — vale por construção, e o dodge do defensor também: as duas são
+Uma magia de dano não tem matemática própria: ela chama `resolveDamage` com a intenção
+`source: 'spell'` e o `damageType` declarado no efeito (ou `arcane`, o default), e é só isso que
+a distingue de um golpe. A consequência é que a efetividade da armadura por tipo — `0` em todo
+tipo não-físico, e provisória — vale por construção, e o dodge do defensor também: as duas são
 conteúdo, e nenhuma das duas precisou ser escrita duas vezes.
 
 O que é da magia, e não do golpe, é o **portão**: level mínimo, cooldown próprio, alcance próprio
@@ -177,8 +366,9 @@ das issues por vocação (#156–#159). O que o motor ganhou:
   no mesmo instante. `castSpell` DEVOLVE a condição; quem agenda é o ruleset.
 
 O que fica de fora, por decisão: runas e conjurações, invocação e ilusão, party, utilidade, cura
-de condição e dano ao longo do tempo (não há condições de monstro), magias de escudo, elemento e
-resistência.
+de condição, magias de escudo, elemento e resistência. O dano ao longo do tempo e as condições
+de monstro, que ficavam aqui, passaram a existir com o CMB-07 (ver a seção seguinte) — o que o
+catálogo nominal ainda não traz são as magias de DOT por nome (Envenom, Curse, …).
 
 ### Requisito de vocação (§9.2)
 
@@ -214,14 +404,16 @@ O que difere da magia de ataque, e por quê:
   `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
   há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
   flag de gold por uma recusa que nunca foi sobre gold — o defeito que a #217 corrigiu.
-- **O dano é o mesmo pipeline** (`resolveDamage` com `kind: 'magic'`, `#applyHits` da hunt —
-  o mesmo que a magia usa), com atribuição e morte por alvo.
+- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e `damageType: 'arcane'`,
+  `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo.
 
 Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
 da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um
 efeito só, no tile de quem bebeu. O id do efeito da Avalanche mora em
-`appearances/baseline.json` (`supplies['avalanche-rune']`) e **não foi conferido
-visualmente** — o pacote de assets não está no repositório.
+`appearances/baseline.json` (`supplies['avalanche-rune']`, effect 41) e a QA visual dele é
+**por tile** — a auditoria de #242 está bloqueada pela biblioteca parcial (o sprite 160962 não
+tem PNG na máquina) e o id foi mantido; ver
+[`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
 Os números (preço 14 por uso, Base Power 45, raio 3, level 30, magic level 4) são
 provisórios e estão marcados em `_open` no arquivo; o preço é o da runa no NPC dividido pelas
@@ -246,8 +438,9 @@ O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bo
 
 O tiro emite um projétil (`shot` → `missile`), resolvido pela tabela de aparências no
 hospedeiro: o da munição para a flecha, o da arma (`appearances.weapons`) para wand e rod. O
-bow ocupa as duas mãos: com escudo vestido é recusado (`hands-full`), e vice-versa. Elemento
-(energia, terra) é ignorado até haver resistência por elemento no monstro.
+bow ocupa as duas mãos: com escudo vestido é recusado (`hands-full`), e vice-versa. O elemento
+da wand e do rod é declarado no conteúdo desde o CMB-03 (energia e terra) e passa a valer contra
+resistência e imunidade do monstro.
 
 | Parâmetro | Valor | Onde mora |
 |---|---|---|
@@ -256,6 +449,248 @@ bow ocupa as duas mãos: com escudo vestido é recusado (`hands-full`), e vice-v
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
 | Munição — attack e preço por tiro | arrow 25 / 0; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/*.json` |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
+
+## Famílias de arma e proficiências (CMB-05, #333)
+
+`Weapon.kind` continua sendo o DESPACHO (`melee`, `distance`, `wand`), mas a fórmula e a
+proficiência deixaram de ser genéricas: cada arma declara uma **família**, e a família é dado em
+`packages/content/data/weapon-families/`. O `sim` resolve o poder por `resolveWeaponPower` com o
+perfil da arma — sem conhecer nome de item nem vocação (DT-01).
+
+```ts
+interface WeaponProfile {
+  readonly family: WeaponFamily;      // fist | sword | axe | club | distance | wand | rod
+  readonly damageType: DamageType;
+  readonly range: number;
+  readonly power?: WeaponPowerFormula;          // base, levelFactor, skillFactor, skillStartingLevel, spread
+  readonly manaPerHit?: number;                 // wand/rod
+  readonly fixedDamage?: { min: number; max: number }; // wand/rod
+}
+
+resolveWeaponPower(profile, level, skillLevel, rng): number
+```
+
+| Família | `kind` | Skill | Fórmula / recurso |
+|---|---|---|---|
+| `fist` | melee | `melee` | fórmula; `attack`/alcance/tipo de `combat.player` (fallback sem item) |
+| `sword`, `axe`, `club` | melee | `melee` | fórmula; `base` = `attack` da arma |
+| `distance` | distance | `distance` | fórmula; `base` = `attack` da **munição**, tipo também |
+| `wand`, `rod` | wand | `magic` | **sem fórmula**: faixa fixa e `manaPerHit` da arma; pratica por mana |
+
+Quatro coisas que a estrutura garante, e não a inspeção:
+
+- **A família é coerente com o `kind`.** `buildContent` recusa família inexistente, família de
+  outro `kind`, e `fist` como arma — ela é o fallback desarmado, nunca um item.
+- **A fórmula preserva o v1 bit a bit.** `levelFactor` e `spread` são 0 no conteúdo inicial, e a
+  contribuição por nível é o `damagePerLevel` da skill apontada. `spread: 0` **não consome
+  sorteio**, então a sequência de RNG da hunt é a mesma de antes (DT-03).
+- **Wand/rod não recebem multiplicador de weapon skill.** O perfil delas não tem `power`; a
+  fórmula de arma e o `spellPower` continuam separados (DT-02), e mudar isso exige perfil novo
+  (ADR 0031).
+- **A prática é uma só por golpe, e não depende do dano final.** Imunidade, resistência alta,
+  bloqueio (CMB-04) ou alvo que morre no impacto não impedem a prática — ela sai do gatilho da
+  skill da família (`melee-hit`, `distance-hit`, `spell-cast`), nunca de um `if` por nome.
+
+O perfil é indexado no boot, junto das famílias e das skills: nenhuma varredura de catálogo por
+golpe. O `Item.weapon` compilado carrega família, tipo, alcance e fórmula, e é o que o ruleset lê.
+
+## Abilities de monstro (CMB-06, #235)
+
+O ataque único do monstro virou uma lista declarativa em `monster.abilities`. **Ausente (ou
+vazia), o boot normaliza para UMA ability básica** montada do `attack`/`attackIntervalMs`/
+`attackRange`/`damageType` de sempre — é o que preserva o rato **bit a bit**, com o mesmo sorteio
+e a mesma ordem de eventos. A normalização é do BOOT, nunca de cada golpe (DT-02): o caminho
+quente não ramifica, e duas formas de ler o ataque não divergem.
+
+```ts
+interface MonsterAbility {
+  readonly id: string;
+  readonly cadenceMs: number;
+  readonly target: { readonly range: number; readonly area?: SpellArea };  // área: `circle`
+  readonly power: { readonly min: number; readonly max: number };           // faixa, 1 rolagem
+  readonly damageType: DamageType;
+  readonly presentation?: { readonly missileKey?: string; readonly impactKey?: string };
+}
+```
+
+- **A distância deixou de ser decorativa.** O alcance de parada do passo guloso é o MAIOR entre
+  as abilities, e uma ability de alcance > 1 emite `monster-ability-cast` ANTES do golpe: o host
+  resolve `missileKey`/`impactKey` na tabela versionada e desenha projétil e impacto. O golpe de
+  uma ability não-corpo-a-corpo é `spell` (sem o sangue melee); a básica legada continua `melee`,
+  e não ganha evento nenhum a mais.
+- **A área reusa `area.ts`** (`circle` centrado no alvo ou no lançador). `wave`/`cleave`/`beam`
+  saem da DIREÇÃO do lançador, que o monstro não carrega — o boot recusa. Os alvos são colhidos
+  ANTES de qualquer dano, na ordem de ENTRADA dos participantes, e morto é pulado: a ordem é
+  contrato, como a do loot — cada alvo consome uma rolagem do `Rng` da sessão.
+- **Cada ability é um evento na fila** com subject derivado (`m:<id>:<abilityId>`), e a morte
+  cancela os subjects que o conteúdo conhece — sem varrer a fila. A básica segue em
+  `monster-attack` (`m:<id>`), então um snapshot de um nó anterior retoma durante o deploy.
+- **A arte é do host** (invariante 6). O conteúdo declara chaves semânticas, e o host as resolve
+  em `appearances.abilities`. **Chave sem linha é MUDA**: a mecânica — dano, morte, atribuição e
+  recibo — acontece igual; derrubar a apresentação esconderia que ela funcionou.
+- **`scheduledAbilities` viaja no snapshot** (opcional, sem bump de formato). Sem ele, a hunt
+  retomada reagendaria a ability que já tinha evento na fila e bateria em dobro no primeiro
+  vencimento.
+- **Fora do escopo**, por decisão (CMB-08): invocação, cura de monstro, scripts de boss e o
+  detalhamento visual do dano. Condições e campos, que ficavam aqui, entraram no CMB-07 (ver a
+  seção seguinte).
+
+O `packages/content/data/monsters/rat.json` continua sem `abilities` — é o caso legado, e é o
+teste de que a normalização preserva o resultado entregue.
+
+## Condições generalizadas, dano contínuo e campos (CMB-07, #334)
+
+O #155 criou as condições como estado temporário do PERSONAGEM com quatro chaves fixas (haste,
+postura, magic shield, cura ao longo do tempo). O CMB-07 generalizou o mecanismo: condição
+TIPADA sobre personagem **e monstro**, com DANO AO LONGO DO TEMPO (DOT) e CAMPOS por tile. Tudo
+reusa a fila lógica, o resolver canônico e a apresentação — nenhum laço por tick novo.
+
+```ts
+interface ConditionSpec {                 // declarado em content
+  readonly key: string;
+  readonly merge: 'replace' | 'refresh' | 'strongest';
+  readonly durationMs: number;
+  readonly effect: ConditionEffect;       // haste | buff | mana-shield | heal-over-time | damage-over-time
+}
+
+interface FieldSpec {                     // declarado em content
+  readonly id: string;
+  readonly durationMs: number;
+  readonly shape: SpellArea;              // a MESMA geometria da magia/ability
+  readonly condition: ConditionSpec;
+}
+```
+
+- **Alvo duplo.** O estado de runtime do #155 continua plano (compatibilidade de snapshot) e
+  ganha `targetId`, `sourceId`, `merge` e `nextTickAtMs` opcionais. O monstro carrega
+  `conditions`, e o vencimento/tique usam o mesmo sujeito (`<id>/<chave>`, com `m:<id>` no
+  monstro) — cancelar no relançamento e na morte não varre a fila.
+- **O DOT entra pelo mesmo pipeline.** Cada tique chama `resolveDamage` com um `DamageIntent`
+  tipado (`source` e `damageType`) e passa por `recordDamage` e `resolveDeath`/`session.kill`.
+  Não existe escrita direta de vida: a armadura, a resistência e a esquiva valem no tique como
+  valem no golpe. A atribuição vai para quem aplicou (`sourceId`); num campo, para o id do campo.
+- **Política de fusão declarada (DT-02).** `refresh` é o de sempre (relançar reinicia);
+  `replace` substitui; `strongest` mantém o de maior magnitude. Relançar cancela o evento antigo
+  antes do novo — e, quando o intervalo do tique é o mesmo E HÁ de fato um tique pendente,
+  REAPROVEITA esse evento em vez de cancelar e reagendar, senão a cadência coincidente empurraria
+  o tique para sempre e o DOT nunca aconteceria. O segundo requisito é o que o #334 corrigiu: um
+  `nextTickAtMs` guardado sem evento correspondente na fila (o tique que só caberia depois do
+  vencimento, e por isso não foi agendado) não é reaproveitável — reaproveitá-lo era o fantasma
+  que silenciava o DOT para sempre a partir do relançamento seguinte. Sem tique pendente,
+  `nextTickAtMs` fica AUSENTE do estado, nunca com um valor sem evento.
+- **O campo vive no ruleset, não no `Tilemap` (DT-01).** Índice por chave NUMÉRICA de tile,
+  leitura O(1); sobreposição no mesmo tile fica com o mais recente. A ENTRADA é observada só
+  depois de um passo ACEITO (DT-03): `movement` devolve resultado e nunca infringe dano, e um
+  tile recusado não aplica o campo. O campo também carrega `nextTickAtMs` opcional (#334, mesmo
+  papel do `ConditionState`) para o relançamento do mesmo id decidir se reaproveita o tique.
+- **Tique x vencimento.** No instante em que o tique do campo cai no vencimento, o VENCIMENTO
+  vence (é agendado primeiro) e o tique encontra o campo removido. É a única ordem, e é testada.
+  Alvo morto não tiqueta, e o campo é INDEPENDENTE: continua no chão até o próprio prazo.
+- **Sem arte (invariante 6).** Campo não tem `appearanceId`; a apresentação do tique reusa
+  `creature-hit` + `creature-health-changed`, e a ausência de aparência não muda a mecânica.
+- **Snapshot aditivo.** `MonsterState.conditions` e `HuntRulesetState.fields` são opcionais e o
+  `tick` antigo (sem `kind`) lê como cura. `SNAPSHOT_FORMAT_VERSION` **não sobe**.
+
+**Fora do escopo**, por decisão: campo bloqueante, novo pathfinding, dispel, invisibilidade, PvP
+e a UI detalhada de buff.
+
+## Outcomes avançados: crítico, leech e mana shield (CMB-08, #335)
+
+O CMB-02 devolvia um outcome; o CMB-04 tornou a defesa um estágio; o CMB-08 completa o resultado
+com os modificadores aprovados e torna a **absorção de mana** um estágio visível. Nada disso
+recalcula dano fora do resolver canônico, e nada entra no snapshot nem no S2C (DT-03).
+
+### A ordem, congelada na emenda do ADR 0031
+
+```text
+raw power
+  -> Dodge (1º sorteio, sempre)
+  -> defesa/escudo (2º sorteio, só com fonte elegível e tipo aprovado)
+  -> crítico (3º sorteio, só quando `modifiers.critical` é declarado)
+  -> armadura -> piso -> resistência -> imunidade
+  -> corte do Dodge -> multiplicador do crítico -> arredondamento
+```
+
+As três posições de sorteio são contrato. O crítico é o **último**: um estágio novo que precise
+de sorteio próprio entra depois dele, e mover qualquer posição exige perfil novo.
+
+### Defaults neutros: a ausência preserva o v1
+
+`combat.modifiers` é **opcional**, e a ausência é o default neutro:
+
+- **sem `modifiers`, nenhum sorteio novo é consumido** e o resultado é bit a bit o do
+  CMB-02/03/04 — a sequência de RNG inclusive. Todo conteúdo que não declara modificador segue
+  idêntico, e é o que o `damage.test.ts`/`conformance.test.ts` prendem;
+- **`critical` declarado consome UMA rolagem mesmo com `chance: 0`**, como o bloqueio do CMB-04:
+  a sequência não depende do VALOR;
+- `lifeLeech`/`manaLeech` são fração do HP aplicado e **não consomem RNG**.
+
+### Leech: base, clamp e evento
+
+- A base é o **HP efetivamente removido** (`healthDamage`), nunca o resolvido: overkill não rende
+  leech, e dano absorvido pela mana não rende leech nenhum.
+- `lifeLeechApplied`/`manaLeechApplied` são o que de fato entrou — a vida limitada ao teto, a
+  mana ao espaço livre. Atacante cheio informa zero, e o `creature-healed` de leech **não sai**:
+  o número verde não mente.
+- A fração é truncada (`floor`), nunca arredondada para cima.
+
+### Mana shield como estágio visível (DT-02)
+
+A absorção de mana saiu de `CharacterRuntime.receiveDamage` e virou um estágio de
+`applyDamageOutcome`, com `absorbedByMana` no outcome. A semântica é a de sempre: o escudo
+absorve até onde a mana alcança e **continua ativo até vencer mesmo com mana zero**. Absorção
+total dá `healthDamage` 0 — sem morte, sem contribuição de HP e sem `creature-hit` positivo.
+
+```ts
+interface AppliedDamageOutcome extends DamageOutcome {
+  readonly absorbedByMana: number;   // quanto a mana shield absorveu
+  readonly healthDamage: number;     // o que saiu da VIDA (hit e contribuição)
+  readonly lifeLeechApplied: number; // vida de fato reposta no atacante
+  readonly manaLeechApplied: number; // mana de fato reposta no atacante
+}
+```
+
+O `critical` vive no `DamageOutcome` base, porque é o resolver quem o decide. O
+`AppliedDamageOutcome` é **efêmero**: não vai ao cliente nem ao snapshot, e existe para o host e
+o extrato conseguirem auditar o golpe sem recalcular (DT-01).
+
+### Telemetria e apresentação
+
+- `creature-hit` carrega o **APLICADO** (`healthDamage`), nunca o raw nem o overkill; a
+  contribuição e o `recordDamage` usam a mesma base, então mana absorvida **não** conta como
+  dano.
+- `bestBasicHit`/`bestSpellHit` continuam guardando o **RESOLVIDO** — um golpe de 300 num rato de
+  10 foi um golpe de 300.
+- O life leech repõe vida do atacante e sai como `creature-healed` (`source: 'leech'`), que o
+  hospedeiro desenha como qualquer cura. Mana leech não tem evento enquanto não houver UI.
+- **Nenhum cliente calcula ou modifica o outcome** (DT-03): não há campo novo no protocolo nem
+  janela de breakdown. O detalhamento é CMB-10.
+
+### Escopo
+
+Os modificadores entram pelo `DamageIntent` e o CMB-08 os liga aos **ataques básicos** (corpo a
+corpo, distância e wand/rod), onde a fonte é `combat.modifiers`. Magia, runa, ability de monstro
+e DOT seguem sem modificadores — declará-los é conteúdo novo sob o mesmo contrato. Reflect,
+imbuements não aprovados, PvP e a janela de breakdown ficam fora.
+
+## Conformance e benchmark (CMB-10, #336)
+
+O contrato do ADR 0031 virou executável em dois lugares, e os dois são complementares:
+
+- **Matriz de conformance** (`packages/sim/src/combat/conformance.test.ts`, sobre o contrato
+  puro de `packages/sim/src/combat/conformance.ts`): casos com semente, plano de avanço e
+  oráculo escrito à mão, cada um rodando a 100 ms, a 1000 ms e com snapshot/retomada. Cobre
+  físico/elemental, resistência/vulnerabilidade/imunidade, defesa/escudo, famílias de arma,
+  ability de monstro, condição/DOT, campo e outcomes avançados. É o que reprova no CI quando
+  fórmula, ordem de RNG ou arredondamento mudam — sem depender da média de dano, que esconde
+  exatamente essa mudança.
+- **Benchmark misto** (`SCENARIO=combat pnpm bench:hunts`, cenário em
+  `packages/tools/src/bench/combat-scenario.ts`): compõe ability em área, resistência, defesa,
+  condição/campo e modificadores sobre 40 monstros, e imprime plataforma, Node, CPU, µs/tick por
+  instância, memória e GC. O número **não** é teto de CI: máquina lenta é contexto, não falha.
+
+O método, a máquina da medição e a interpretação da linha de base estão em
+[`combat-conformance.md`](./combat-conformance.md).
 
 ## O que o jogador vê (FUN-106, FUN-109)
 
@@ -266,9 +701,13 @@ quando houve dano, um efeito de sangue no atingido. Cura vira `creature-hit` com
 Magia vira `spell-cast` no `sim` e, pela tabela de aparências fixada na sessão, projétil do
 conjurador ao primeiro alvo e um efeito **por alvo** (ou no conjurador, quando é cura); poção
 vira efeito no tile de quem bebeu, e runa (#165) um efeito por tile da forma, como a magia em
-área. Magia sem linha na tabela é muda, nunca erro. Quais ids são
-esses mora em `packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`),
-e só ids (invariante 6).
+área. A ability de monstro (CMB-06) vira `monster-ability-cast` no `sim` e, pela tabela, um
+projétil do monstro ao alvo e um efeito de impacto por alvo/tile. Magia ou ability sem linha na
+tabela é muda, nunca erro. Quais ids são esses mora em
+`packages/content/data/appearances/baseline.json` (`spells`, `supplies`, `hits`, `abilities`), e
+só ids (invariante 6). A auditoria visual desses ids é a de
+[`combat-presentation-audit.md`](../combat-presentation-audit.md): hoje **bloqueada** pela
+biblioteca parcial — os 33 efeitos/projéteis existem no índice, mas nenhum tem PNG na máquina.
 
 Os vitais do personagem saem ao vivo: `creature-health` do personagem em todo lugar que escreve
 a vida dele (golpe, cura, poção, regeneração, level up, penalidade de morte), e `player-stats`
@@ -378,10 +817,23 @@ Os números do TibiaWiki (2026-09-12) como estão em `packages/content/data/spel
 
 ## Em aberto
 
+- `[ABERTO]` A chance de bloqueio (`combat.defense.blockChance`, provisória em 0,6) e a defesa
+  do spike sword (10) não vêm do PRD e ainda não foram medidas contra uma hunt com escudo.
 - `[ABERTO]` A conversão do Base Power (`combat.spellPower`) é nossa e provisória — ver acima.
+- `[ABERTO]` Os modificadores avançados (`combat.modifiers`: chance/multiplicador do crítico e as
+  frações de life/mana leech) não estão declarados no conteúdo real: **ausente é neutro**, e
+  ligá-los é conteúdo novo com `Content.version` novo. Os valores só entram quando medidos.
+- `[ABERTO]` As fórmulas das famílias de arma (`levelFactor` e `spread`) são provisórias e estão
+  zeradas para preservar o dano entregue (CMB-05). Ligar `spread` a um valor diferente de zero
+  muda o consumo de RNG e exige perfil novo (ADR 0031).
 - `[ABERTO]` Os números da Avalanche Rune (preço por uso, Base Power, raio, requisitos) são
-  provisórios até a leitura da infobox do TibiaWiki; o elemento gelo é ignorado até haver
-  resistência por elemento.
+  provisórios até a leitura da infobox do TibiaWiki. O elemento é `ice` desde o CMB-03.
+- `[ABERTO]` `physical-strike` é dano físico no Tibia, mas fica em `arcane` nesta versão para
+  não mudar o dano entregue (a armadura passaria a contar). Trocar para `physical` exige perfil
+  novo (ADR 0031).
+- `[ABERTO]` A conferência visual dos efeitos e projéteis de combate está bloqueada pela
+  biblioteca local parcial (47 de 4171 folhas; nenhum sprite de efeito/projétil tem PNG). Nenhum
+  id foi corrigido sem evidência — ver [`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Texto flutuante de XP e "miss"/"block"
 ficam para quando o protocolo os carregar.

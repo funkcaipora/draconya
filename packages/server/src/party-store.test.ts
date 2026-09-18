@@ -68,6 +68,35 @@ describe.runIf(available)('PartyStore', () => {
     expect(await store.get(party.id)).toBeNull();
   });
 
+  it('kick: only leader can kick others, cannot kick self or non-members, and kick resets approvals', async () => {
+    const store = new PartyStore(redis);
+    const party = await store.create('lead', 'acc-lead');
+    if (party === null) throw new Error('sem party');
+    await store.invite(party.id, 'b');
+    await store.join(party.id, 'b', 'acc-b', 4);
+    await store.invite(party.id, 'c');
+    await store.join(party.id, 'c', 'acc-c', 4);
+    await store.propose(party.id, { huntId: 'arena', difficulty: 'bold', mode: 'shared' }, 'lead');
+    await store.approve(party.id, 'b');
+
+    // Rejeições
+    expect(await store.kick('non-existent', 'lead', 'b')).toBe('not-found');
+    expect(await store.kick(party.id, 'b', 'c')).toBe('not-leader');
+    expect(await store.kick(party.id, 'lead', 'lead')).toBe('cannot-kick-self');
+    expect(await store.kick(party.id, 'lead', 'stranger')).toBe('target-not-a-member');
+
+    // Expulsão válida
+    const afterKick = await store.kick(party.id, 'lead', 'b');
+    expect(typeof afterKick).toBe('object');
+    if (typeof afterKick === 'string') throw new Error('kick falhou');
+    expect(afterKick.members).toEqual(['lead', 'c']);
+    expect(afterKick.approved).toEqual([]);
+    expect(await store.of('b')).toBeNull();
+
+    // Expulsar 'b' novamente agora dá 'target-not-a-member'
+    expect(await store.kick(party.id, 'lead', 'b')).toBe('target-not-a-member');
+  });
+
   it('started keeps one ticket per member to be taken once, and the party itself is gone', async () => {
     const store = new PartyStore(redis);
     const party = await store.create('lead', 'acc-lead');

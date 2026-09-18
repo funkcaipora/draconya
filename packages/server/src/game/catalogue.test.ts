@@ -1,8 +1,12 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildContent, placeholderAppearances } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
+import { loadContent } from '../../../content/src/load.js';
 import { buildCatalogue } from './catalogue.js';
 import { TEST_HUNT, rawTestContent, testContent } from '../testing/content.js';
 
+const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'content', 'data');
 const content = testContent();
 
 describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
@@ -24,7 +28,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       // `lootDrops` é uma CONTAGEM de drops distintos (FUN-123), não uma taxa: continua sem
       // XP/h nem gold/h.
       expect(Object.keys(hunt).sort())
-        .toEqual(['difficulties', 'id', 'lootDrops', 'name', 'outfitIds', 'recommendedLevel']);
+        .toEqual(['difficulties', 'difficultyDetails', 'id', 'loot', 'lootDrops', 'monsters', 'name', 'outfitIds', 'recommendedLevel']);
     }
   });
 
@@ -125,8 +129,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
   });
 
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {
-    // O contador chega por id; sem esta lista a tela mostraria "rat: 12" em vez de "Rat". Só
-    // id e nome: vida, ataque e XP são balanceamento que o cliente não simula (invariante 4).
+    // O contador chega por id; a tela de detalhes ganha vida e XP (SV-02, #338).
     // Mutação que mata: devolver `[]`, vazar o monstro inteiro, ou não ordenar.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const rat = raw.monsters[0] as Record<string, unknown>;
@@ -137,7 +140,12 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
 
     const { monsters } = buildCatalogue(content);
 
-    expect(monsters).toEqual([{ id: 'bat', name: 'Bat' }, { id: 'rat', name: 'Rat' }]);
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 20, experience: 5 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+    ]);
+    expect('class' in (monsters[0] ?? {})).toBe(false);
+    expect('class' in (monsters[1] ?? {})).toBe(false);
   });
 
   it('leva os marcos e o bônus do Bestiário quando o conteúdo os tem, e a chave some quando não (FUN-113)', () => {
@@ -215,4 +223,241 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(rune).toEqual({ id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 30, magicLevel: 4 } });
     expect(JSON.stringify(rune)).not.toContain('basePower');
   });
+
+  it('leva valor de venda, ataque e armadura nas definições de item (#337)', () => {
+    // A tela precisa de valor (NPC de venda), ataque (armas) e armadura (equipamentos).
+    // São atributos base fixos definidos no conteúdo.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withEquipment = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 35, value: 25, attack: 14, armor: 0, weapon: { kind: 'melee', range: 1 } },
+        { id: 'shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 15, attack: 0, armor: 15 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+      ],
+    };
+    const content = buildContent({ ...withEquipment, appearances: [placeholderAppearances(withEquipment)] });
+    const { items } = buildCatalogue(content);
+
+    expect(items.find((item) => item.id === 'sword')).toMatchObject({
+      value: 25,
+      attack: 14,
+      armor: 0,
+    });
+    expect(items.find((item) => item.id === 'shield')).toMatchObject({
+      value: 15,
+      attack: 0,
+      armor: 15,
+    });
+    expect(items.find((item) => item.id === 'cheese')).toMatchObject({
+      value: 2,
+      attack: 0,
+      armor: 0,
+    });
+  });
+
+  it('o mesmo monstro em duas dificuldades aparece UMA vez na hunt, ordenado por id (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat' };
+    const twoTiers = {
+      ...raw,
+      monsters: [bat, rat],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({ ...twoTiers, appearances: [placeholderAppearances(twoTiers)] });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.monsters).toEqual([
+      { id: 'bat', name: 'Bat' },
+      { id: 'rat', name: 'Rat' },
+    ]);
+  });
+
+  it('loot com chance 0 é excluído, e o mesmo item em múltiplos monstros aparece UMA vez, ordenado por itemId (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withItemsAndMonsters = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'bone', name: 'Bone', kind: 'other', weight: 5, value: 1, attack: 0, armor: 0 },
+        { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 2, attack: 0, armor: 0 },
+        { id: 'rare-gem', name: 'Rare Gem', kind: 'other', weight: 1, value: 100, attack: 0, armor: 0 },
+      ],
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 2, max: 2 },
+            items: [
+              { itemId: 'cheese', chance: 0.5 },
+              { itemId: 'rare-gem', chance: 0 },
+            ],
+          },
+        },
+        {
+          ...rat,
+          id: 'bat',
+          name: 'Bat',
+          loot: {
+            items: [
+              { itemId: 'cheese', chance: 0.8 },
+              { itemId: 'bone', chance: 0.3 },
+            ],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+          reckless: {
+            monsterCount: 2, respawnDelayMs: 1000,
+            composition: [{ monsterId: 'rat', weight: 1 }, { monsterId: 'bat', weight: 1 }],
+          },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withItemsAndMonsters,
+      appearances: [placeholderAppearances(withItemsAndMonsters)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.loot).toEqual([
+      { itemId: 'bone', name: 'Bone' },
+      { itemId: 'cheese', name: 'Cheese' },
+    ]);
+  });
+
+  it('gold nunca entra em loot[] (SV-02, #338)', () => {
+    // Gold não é item, é campo do personagem — quem quer saber se a hunt solta gold tem lootDrops.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const withGoldOnly = {
+      ...raw,
+      monsters: [
+        {
+          ...rat,
+          id: 'rat',
+          name: 'Rat',
+          loot: {
+            gold: { chance: 1, min: 10, max: 50 },
+            items: [],
+          },
+        },
+      ],
+      hunts: [{
+        ...TEST_HUNT,
+        difficulties: {
+          cautious: { monsterCount: 1, composition: [{ monsterId: 'rat', weight: 1 }], respawnDelayMs: 1000 },
+        },
+      }],
+    };
+    const content = buildContent({
+      ...withGoldOnly,
+      appearances: [placeholderAppearances(withGoldOnly)],
+    });
+    const arena = buildCatalogue(content).hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.lootDrops).toBe(1);
+    expect(arena?.loot).toEqual([]);
+  });
+
+  it('catalogue.monsters[] reflete todos os monstros de content.monsters com vida e XP (SV-02, #338)', () => {
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const rat = raw.monsters[0] as Record<string, unknown>;
+    const bat = { ...rat, id: 'bat', name: 'Bat', health: 15, experience: 8 };
+    const skeleton = { ...rat, id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 };
+    const content = buildContent({
+      ...raw,
+      monsters: [skeleton, rat, bat],
+      appearances: [placeholderAppearances({ ...raw, monsters: [skeleton, rat, bat] })],
+    });
+    const { monsters } = buildCatalogue(content);
+    expect(monsters).toHaveLength(3);
+    expect(monsters).toEqual([
+      { id: 'bat', name: 'Bat', health: 15, experience: 8 },
+      { id: 'rat', name: 'Rat', health: 20, experience: 5 },
+      { id: 'skeleton', name: 'Skeleton', health: 50, experience: 35 },
+    ]);
+  });
+
+  it('leva a contagem de monstros por dificuldade na mesma ordem de difficulties (SV-19, #355)', () => {
+    const { hunts } = buildCatalogue(content);
+    const arena = hunts.find((hunt) => hunt.id === 'arena');
+    expect(arena?.difficultyDetails).toEqual([
+      { id: 'cautious', monsterCount: 1 },
+    ]);
+  });
+
+  it('leva class quando o conteúdo a define (como o rat do conteúdo real com mammal) e omite a chave quando ausente (SV-20, #356)', () => {
+    const realContent = loadContent(DATA);
+    const { monsters } = buildCatalogue(realContent);
+    const rat = monsters.find((m) => m.id === 'rat');
+    expect(rat).toEqual({
+      id: 'rat',
+      name: 'Rat',
+      class: 'mammal',
+      health: 20,
+      experience: 5,
+    });
+    expect('class' in (rat ?? {})).toBe(true);
+
+    // Monstro sem class na fixture não tem a chave 'class'
+    const withoutClass = buildCatalogue(content).monsters[0];
+    expect(withoutClass).toBeDefined();
+    expect('class' in (withoutClass ?? {})).toBe(false);
+  });
+
+  it('leva description quando a hunt a define (como a rat-cellars do conteúdo real) e omite a chave quando ausente (SV-21, #357)', () => {
+    const realContent = loadContent(DATA);
+    const { hunts } = buildCatalogue(realContent);
+    const cellars = hunts.find((h) => h.id === 'rat-cellars');
+    expect(cellars?.description).toBe(
+      'Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.',
+    );
+    expect('description' in (cellars ?? {})).toBe(true);
+
+    // Hunt sem description na fixture de teste omite a chave
+    const huntWithoutDescription = buildCatalogue(content).hunts[0];
+    expect(huntWithoutDescription).toBeDefined();
+    expect('description' in (huntWithoutDescription ?? {})).toBe(false);
+  });
+
+  it('buildCatalogue includes progression matching content.progression (SV-25, #361)', () => {
+    const { progression } = buildCatalogue(content);
+    expect(progression).toEqual({
+      startingSpeed: content.progression.startingSpeed,
+      speedPerLevel: content.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: content.progression.regen.healthPerSecond,
+        manaPerSecond: content.progression.regen.manaPerSecond,
+      },
+    });
+
+    const realContent = loadContent(DATA);
+    const realCatalogue = buildCatalogue(realContent);
+    expect(realCatalogue.progression).toEqual({
+      startingSpeed: realContent.progression.startingSpeed,
+      speedPerLevel: realContent.progression.speedPerLevel,
+      regen: {
+        healthPerSecond: realContent.progression.regen.healthPerSecond,
+        manaPerSecond: realContent.progression.regen.manaPerSecond,
+      },
+    });
+  });
 });
+
+
+

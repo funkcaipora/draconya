@@ -10,7 +10,8 @@
   "effect": {
     "kind": "damage",
     "basePower": 15,
-    "range": 3
+    "range": 3,
+    "damageType": "earth"
   },
-  "_open": "Efeito corrigido para 17 (CONST_ME_HITBYPOISON) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de um respingo verde. O effect 16 anterior era CONST_ME_HITBYFIRE (chama), herdado sem conferência visual."
+  "_open": "Efeito corrigido para 17 (CONST_ME_HITBYPOISON) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de um respingo verde. O effect 16 anterior era CONST_ME_HITBYFIRE (chama), herdado do palpite anterior."
 }

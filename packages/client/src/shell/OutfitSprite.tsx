@@ -1,16 +1,16 @@
-// O sprite de um outfit de monstro, num canvas de 32 px — a mesma ideia do `ItemSprite`
-// (FUN-108), só que por `pack.outfit()` em vez de `pack.object()` (#259). Parado, olhando para
-// o sul, sem cores: é o retrato que a lista de hunts mostra antes de a criatura existir no
-// mundo. O `world/` desenha o outfit de verdade, colorido e animado, quando ela aparece — isto
-// aqui NÃO é o retrato do próprio personagem (esse é SV-14, M15, outro componente).
+// O sprite de um outfit (monstro ou personagem, SV-14 #350), num canvas de 32 px — a mesma ideia
+// do `ItemSprite` (FUN-108), só que por `pack.outfit()` em vez de `pack.object()` (#259). Parado,
+// olhando para o sul; com cores para o retrato do personagem, ou sem cores para a lista de hunts.
 
 import { useEffect, useRef, useState } from 'react';
+import type { OutfitColors } from '../assets/outfit.js';
 import { useAssetPack } from './AssetPackContext.js';
 import { fitInSquare, ITEM_SPRITE_SIZE } from './ItemSprite.js';
 
-export function OutfitSprite({ outfitId, name }: {
+export function OutfitSprite({ outfitId, name, colors }: {
   readonly outfitId: number | undefined;
   readonly name: string | undefined;
+  readonly colors?: OutfitColors;
 }) {
   const loaded = useAssetPack();
   const pack = loaded?.pack ?? null;
@@ -24,9 +24,7 @@ export function OutfitSprite({ outfitId, name }: {
       return;
     }
     let cancelled = false;
-    // Parado ('south', fase 0, `moving = false`), sem `colors`: é a base do outfit, igual ao
-    // que `warmOutfit` já aqueceu na Cidade (FUN-112) — nenhum pedido novo à rede.
-    void pack.outfit(outfitId, 'south', 0, false).then((sprite) => {
+    void pack.outfit(outfitId, 'south', 0, false, colors).then((sprite) => {
       if (cancelled) return;
       const context = target.getContext('2d');
       if (sprite === null || context === null) { setDrawn(false); return; }
@@ -41,7 +39,7 @@ export function OutfitSprite({ outfitId, name }: {
       }
     }).catch(() => { if (!cancelled) setDrawn(false); });
     return () => { cancelled = true; };
-  }, [pack, outfitId]);
+  }, [pack, outfitId, colors]);
 
   // Mesma classe do `ItemSprite` (`.item-sprite`/`.item-initial`): é o mesmo desenho de slot com
   // arte opcional, e duplicar a folha de estilo para um retângulo igual seria o único ganho de

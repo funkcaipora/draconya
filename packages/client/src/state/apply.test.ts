@@ -98,7 +98,10 @@ describe('world deltas', () => {
     expect(world.ambience).toBe('cavern');
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
@@ -121,7 +124,10 @@ describe('world deltas', () => {
     applyMessage({ type: 'ground-item-appear', id: 8, position: { x: 1, y: 2, z: 8 }, appearanceId: 5964 }, 0);
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-      self: { creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'c', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { mapId: 'rat-cellars', creatures: [], groundItems: [{ id: 9, position: { x: 3, y: 3, z: 8 }, appearanceId: 5964 }] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0 },
       notableEvents: [],
@@ -172,6 +178,7 @@ describe('as cores de outfit (FUN-104)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: { groundItems: [],
         mapId: 'rat-cellars',
@@ -309,6 +316,7 @@ describe('combat transients (FUN-106)', () => {
       self: {
         creatureId: 1, characterId: 'char-1',
         health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
@@ -344,13 +352,92 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
         ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       0,
     );
 
     expect(hud.get().health).toBe(150);
     expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies speed and skills from player-stats', () => {
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 150, maxHealth: 185, mana: 30, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 125,
+        skills: {
+          melee: { level: 12, percentToNext: 40 },
+          distance: { level: 14, percentToNext: 75 },
+          magic: { level: 4, percentToNext: 20 },
+        },
+        magicLevel: { level: 4, percentToNext: 20 },
+      },
+      0,
+    );
+
+    expect(hud.get().speed).toBe(125);
+    expect(hud.get().skills).toEqual({
+      melee: { level: 12, percent: 40 },
+      distance: { level: 14, percent: 75 },
+      magic: { level: 4, percent: 20 },
+    });
+  });
+
+  it('keeps the skills a node older than SV-04 does not send, but takes its speed', () => {
+    hud.set((state) => ({
+      ...state,
+      speed: 130,
+      skills: {
+        melee: { level: 20, percent: 50 },
+        distance: { level: 18, percent: 40 },
+        magic: { level: 8, percent: 30 },
+      },
+    }));
+
+    // O que o codec entrega de um `player-stats` sem `speed`/`skills`: os defaults do protocolo
+    // (`speed: 0`, `skills: {}`). O registro vazio é "não sei", e não zera as barras.
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      0,
+    );
+
+    expect(hud.get().health).toBe(140);
+    expect(hud.get().speed).toBe(0);
+    expect(hud.get().skills).toEqual({
+      melee: { level: 20, percent: 50 },
+      distance: { level: 18, percent: 40 },
+      magic: { level: 8, percent: 30 },
+    });
+  });
+
+  it('clears the target when player-stats says there is none', () => {
+    hud.set((state) => ({ ...state, targetId: 7 }));
+    applyMessage(
+      {
+        type: 'player-stats',
+        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
+        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
+        targetId: null,
+        ammo: { arrow: null, bolt: null }, vocationId: null,
+        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      0,
+    );
+    expect(hud.get().targetId).toBeNull();
   });
 
   it('measures latency from the round trip', () => {
@@ -378,6 +465,7 @@ describe('session-state', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
     world: { groundItems: [],
       mapId: 'rat-cellars',
@@ -484,6 +572,7 @@ describe('o analisador (FUN-83)', () => {
     self: {
       creatureId: 1, characterId: 'char-1',
       health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     },
     world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
     aggregates: {
@@ -570,7 +659,10 @@ describe('o analisador ao vivo (FUN-110)', () => {
   const attach = (): void => {
     applyMessage({
       type: 'session-state', sessionType: 'hunt', elapsedMs: 600_000,
-      self: { creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35, level: 8, xp: 4_200, vocationId: null },
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 120, maxHealth: 185, mana: 20, maxMana: 35,
+        level: 8, xp: 4_200, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
       world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
       aggregates: { durationMs: 600_000, xpGained: 900, goldGained: 300, goldSpent: 120, kills: 12, deaths: 0 },
       notableEvents: [{ atMs: 1_000, type: 'level-up' }],
@@ -623,7 +715,10 @@ describe('o analisador ao vivo (FUN-110)', () => {
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
-    self: { creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0, level: 1, xp: 0, vocationId: null },
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
     world: { groundItems: [], mapId: null, creatures: [] },
     aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
     notableEvents: [],
@@ -830,5 +925,38 @@ describe('o inventário (FUN-90)', () => {
     applyMessage(inventory({ backpack: [] }), 1_000);
 
     expect(hud.get().inventory?.backpack).toEqual([]);
+  });
+});
+
+describe('jogadores online (SV-07/SV-15, #351)', () => {
+  const sessionState = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state',
+    sessionType: 'hunt',
+    elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1',
+      health: 100, maxHealth: 100, mana: 50, maxMana: 50, level: 1, xp: 0, vocationId: null,
+      speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
+    world: { groundItems: [], mapId: 'rat-cellars', creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+    ...over,
+  } as unknown as S2CMessage);
+
+  it('player-count atualiza o total de jogadores online no HUD', () => {
+    applyMessage({ type: 'player-count', count: 1284 }, 0);
+    expect(hud.get().onlinePlayers).toBe(1284);
+  });
+
+  it('session-state com onlinePlayers define onlinePlayers', () => {
+    applyMessage(sessionState({ onlinePlayers: 42 }), 0);
+    expect(hud.get().onlinePlayers).toBe(42);
+  });
+
+  it('session-state sem onlinePlayers define onlinePlayers como null mesmo se já definido', () => {
+    hud.set((state) => ({ ...state, onlinePlayers: 100 }));
+    applyMessage(sessionState(), 0);
+    expect(hud.get().onlinePlayers).toBeNull();
   });
 });

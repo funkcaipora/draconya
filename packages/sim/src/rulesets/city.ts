@@ -4,8 +4,9 @@
 // não couber nela sem gambiarra, a interface nasceu modelada em cima de hunt, e Guild War
 // não vai caber depois.
 
-import type { Item, Progression, Tilemap } from '@draconya/content';
+import type { Item, Progression, Tilemap, Vocation } from '@draconya/content';
 import { containerRulesFor } from '../inventory.js';
+import { statsForLevel } from '../progression.js';
 import type { EndReason, Ruleset, Session } from '../session.js';
 import type { CharacterRuntime } from '../character.js';
 import type { GridPoint } from '../monster/step.js';
@@ -32,6 +33,13 @@ export interface CityRulesetOptions {
    * lugares aqui, antes de qualquer `move`. Ausente é o conteúdo de teste sem itens.
    */
   readonly containers?: { readonly items: ReadonlyMap<string, Item>; readonly progression: Progression };
+  /**
+   * As vocações do conteúdo, para repor a velocidade da tabela na entrada (SV-04, #340). A
+   * Cidade anda em passo FIXO e não a usa para andar — mas `player-stats` a mostra, e um
+   * personagem que nunca caçou chega com `speed: 0`, um número que a tabela nunca produziu.
+   * Ausente: a tabela base, sem bônus de vocação (hoje nenhuma vocação altera velocidade).
+   */
+  readonly vocations?: ReadonlyMap<string, Vocation>;
 }
 
 /**
@@ -91,6 +99,14 @@ export function createCityRuleset(options: CityRulesetOptions = {}): Ruleset {
         character.inventory.ensureContainers(
           containerRulesFor(character.inventory, options.containers.items, options.containers.progression),
         );
+        // A velocidade vem da tabela, como a hunt repõe na entrada (FUN-119): zero é "não sabe
+        // ainda", e o painel Skills mostraria "Speed 0" na praça (SV-04, #340).
+        if (character.speed <= 0) {
+          const vocation = character.vocationId === null
+            ? null
+            : options.vocations?.get(character.vocationId) ?? null;
+          character.speed = statsForLevel(character.level, vocation, options.containers.progression).speed;
+        }
       }
 
       // A colocação passa pela MESMA legalidade que um passo (FUN-69). O ponto de entrada é

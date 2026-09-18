@@ -6,9 +6,11 @@
   "weight": 16.5,
   "value": 6,
   "attack": 12,
-  "_open": "A arma com que todo personagem nasce (ADR 0026, decisão 2) e com que luta até o level 8. Attack 12 e 16,5 oz são os do TibiaWiki; o Tibia dá defense 9, que o motor não lê (não há defesa de arma).",
+  "defense": 9,
+  "_open": "A arma com que todo personagem nasce (ADR 0026, decisão 2) e com que luta até o level 8. Attack 12, defense 9 e 16,5 oz são os do TibiaWiki; a defesa é lida pelo blocking físico desde o CMB-04 (emenda do ADR 0031).",
   "weapon": {
     "kind": "melee",
+    "family": "sword",
     "range": 1
   }
 }

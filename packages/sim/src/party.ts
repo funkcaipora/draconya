@@ -32,6 +32,20 @@ export interface BagSettlement {
   readonly total: number;
 }
 
+export interface CostLootMode {
+  readonly mode: 'split' | 'shared';
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
+}
+
+export function shareCostsOf(options: CostLootMode): boolean {
+  return options.shareCosts ?? options.mode === 'shared';
+}
+
+export function splitLootOf(options: CostLootMode): boolean {
+  return options.splitLoot ?? options.mode === 'shared';
+}
+
 /** Quantas vocações DISTINTAS há entre `members`. `null` é uma delas. */
 export function uniqueVocations(members: readonly PartyMember[]): number {
   const seen = new Set<string>();

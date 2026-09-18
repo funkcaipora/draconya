@@ -1,6 +1,6 @@
 # Fidelidade ao ui_kit — plano de execução (pós-M14)
 
-**Status:** aprovado em 2026-09-16 — a decisão de arquitetura é o [ADR 0030](adr/0030-strict-fidelity-to-the-rendered-ui-kit.md);
+**Status:** executado até o M17 (M16, M17 e M15 revisado fechados em 2026-09-17/18). Em 2026-09-18 o dono pediu a imagem exatamente — o §4/M18, o §3 (P1–P5) e o §3b ("decisões permanentes contra o kit") foram substituídos pelo [ADR 0032](adr/0032-the-rendered-hud-is-the-game-contract.md) e por [hud-contract-plan.md](hud-contract-plan.md); o resto é registro histórico. A decisão de arquitetura original é o [ADR 0030](adr/0030-strict-fidelity-to-the-rendered-ui-kit.md);
 este documento é o desenho e o inventário. Substitui o §5/M15 e o §8 (Adiado) de
 [design-system-plan.md](design-system-plan.md) no que conflitarem — aquele plano continua sendo o
 registro do M14.
