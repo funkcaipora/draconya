@@ -10,7 +10,7 @@
 // carregado, que nem todo chamador tem.
 
 import type { Content } from './content.js';
-import type { BotAutomation, BotConfig, BotConfigV2 } from './schemas.js';
+import type { BotAutomation, BotConfig, BotConfigV2, ItemSlot } from './schemas.js';
 import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION_V1 } from './schemas.js';
 
 /**
@@ -146,26 +146,39 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
     });
   });
 
-  const automationItems = (automation: BotAutomation): readonly string[] => {
+  const automationItems = (automation: BotAutomation): readonly (readonly [string, ItemSlot])[] => {
     switch (automation.model) {
       case 'renew-ring':
-      case 'renew-amulet':
       case 'swap-ring':
-        return [automation.params.itemId];
+        return [[automation.params.itemId, 'finger']];
+      case 'renew-amulet':
+        return [[automation.params.itemId, 'neck']];
       case 'swap-ammo-by-targets':
-        return [automation.params.ammoA, automation.params.ammoB];
+        return [[automation.params.ammoA, 'ammo'], [automation.params.ammoB, 'ammo']];
       case 'swap-weapon-shield-by-hp':
         return [
-          automation.params.oneHanded,
-          automation.params.shield,
-          automation.params.twoHanded,
+          [automation.params.oneHanded, 'hand'],
+          [automation.params.shield, 'shield'],
+          [automation.params.twoHanded, 'hand'],
         ];
     }
   };
   config.automations.forEach((automation, index) => {
-    for (const id of automationItems(automation)) {
-      if (content.items.has(id)) continue;
-      problems.push(`automação ${index + 1} (${automation.model}): item "${id}" não existe`);
+    for (const [id, slot] of automationItems(automation)) {
+      const item = content.items.get(id);
+      if (item === undefined) {
+        problems.push(`automação ${index + 1} (${automation.model}): item "${id}" não existe`);
+        continue;
+      }
+      // Trocar o modelo sem trocar o SLOT do item é o erro que só apareceria na hunt: a
+      // automação tentaria vestir um anel no colo e o inventário recusaria em silêncio a cada
+      // ciclo. Aqui a recusa tem modelo, item e slot esperado.
+      if (item.slot !== slot) {
+        problems.push(
+          `automação ${index + 1} (${automation.model}): "${id}" não veste em "${slot}" `
+            + `(veste em "${item.slot ?? 'lugar nenhum'}")`,
+        );
+      }
     }
   });
 

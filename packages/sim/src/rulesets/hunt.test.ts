@@ -1246,7 +1246,7 @@ describe('movimento com escritor único (FUN-69)', () => {
 import type { BotAction, BotConfig, BotConfigV2, BotSlot } from '@draconya/content';
 import {
   BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
-  botConfigV2Schema, botExitRuleSchema, botRingSwapSchema, botSlotSchema, botTargetingSchema,
+  botConfigV2Schema, botExitRuleSchema, botSlotSchema, botTargetingSchema,
 } from '@draconya/content';
 
 /** O tipo de config que o ruleset aceita: v1 (migrada) ou v2 (o alvo). */
@@ -4335,15 +4335,32 @@ describe('ring swap com histerese (FUN-87, §13.8)', () => {
     progression: [anelProgression],
   }));
 
+  interface SwapRingFixture {
+    readonly equipBelow: number;
+    readonly removeAbove: number;
+    readonly manaFloor?: number;
+    readonly restorePrevious?: boolean;
+  }
+
   const comAnel = (
-    ringSwap: Record<string, unknown>,
+    swap: SwapRingFixture,
     options: { backpack?: readonly string[]; equipped?: string } = {},
   ) => {
     const loaded = anelContent();
+    const { equipBelow, removeAbove, manaFloor, restorePrevious } = swap;
     const session = createHuntSession({
       id: 'anel', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
-      botConfig: botConfig({
-        ringSwap: botRingSwapSchema.parse({ itemId: 'life-ring', ...ringSwap }),
+      botConfig: botConfigV2([], {
+        automations: [{
+          model: 'swap-ring',
+          params: {
+            itemId: 'life-ring',
+            manaFloor: manaFloor ?? 0,
+            restorePrevious: restorePrevious ?? true,
+          },
+          enter: [{ kind: 'hp', op: '<', percent: equipBelow }],
+          exit: [{ kind: 'hp', op: '>', percent: removeAbove }],
+        }],
       }),
     });
     const stats = statsForLevel(1, null, anelProgression);

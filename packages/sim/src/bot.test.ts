@@ -182,27 +182,6 @@ describe('o grupo e a ordem da barra (RP-002, AB-07)', () => {
   });
 });
 
-describe('a ponte `swap-ring` até o AB-08 (DT-04)', () => {
-  it('a automação swap-ring vira o ringSwap que o ruleset lê', () => {
-    const bot = compileBot(config([], {
-      automations: [{
-        model: 'swap-ring',
-        params: { itemId: 'life-ring', manaFloor: 30, restorePrevious: true },
-        enter: [{ kind: 'hp', op: '<', percent: 40 }],
-        exit: [{ kind: 'hp', op: '>', percent: 70 }],
-      }],
-    }), cooldownOf);
-
-    expect(bot.ringSwap).toEqual({
-      itemId: 'life-ring', equipBelow: 40, removeAbove: 70, manaFloor: 30, restorePrevious: true,
-    });
-  });
-
-  it('sem automação swap-ring não há ponte', () => {
-    expect(compileBot(config([]), cooldownOf).ringSwap).toBeUndefined();
-  });
-});
-
 describe('compilar é o que torna a avaliação barata', () => {
   it('a ação devolvida é a MESMA referência do slot compilado', () => {
     const bot = compileBot(config([spell('cure')]), cooldownOf);

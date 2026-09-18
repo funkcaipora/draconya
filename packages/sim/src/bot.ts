@@ -15,7 +15,7 @@
 // cada grupo novo.
 
 import type {
-  BotActionV2, BotConditionV2, BotConfigV2, BotExitRule, BotLure, BotOperator, BotRingSwap,
+  BotActionV2, BotConditionV2, BotConfigV2, BotExitRule, BotLure, BotOperator,
 } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { compileTargeting } from './targeting.js';
@@ -101,13 +101,6 @@ export interface CompiledBot {
    * executa precisa do mundo — a rota e o inventário —, e `bot.ts` não conhece ruleset nenhum.
    */
   readonly lure: BotLure | undefined;
-  /**
-   * Ponte v1 até o AB-08: o `swap-ring` da config v2, na forma que `#applyRingSwap` lê (DT-04).
-   *
-   * A v1 guardava `ringSwap` como campo próprio; a v2 o expressa como a automação `swap-ring`.
-   * Até o AB-08 absorver `#applyRingSwap`, esta é a tradução de uma forma para a outra.
-   */
-  readonly ringSwap: BotRingSwap | undefined;
 }
 
 /** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply e item). */
@@ -128,7 +121,7 @@ export interface BotActuator {
  * O `switch` fecha sobre `kind` UMA vez, na compilação, e o que sobra é uma closure que só faz
  * a comparação. É a diferença entre percorrer o JSON por avaliação e chamar uma função.
  */
-function compileCondition(condition: BotConditionV2): (view: BotView) => boolean {
+export function compileCondition(condition: BotConditionV2): (view: BotView) => boolean {
   switch (condition.kind) {
     case 'hp': {
       const { op, percent } = condition;
@@ -209,31 +202,6 @@ export type CooldownOfAction = (
 ) => { readonly group: string; readonly cooldownKey: string };
 
 /**
- * Traduz a automação `swap-ring` na forma que `#applyRingSwap` lê (DT-04, ponte até o AB-08).
- *
- * A v1 tinha `ringSwap` como campo; a v2 o expressa como automação. Os dois limiares vêm das
- * condições `enter`/`exit` — `hp < equipBelow` e `hp > removeAbove` —, que é como a migração as
- * escreveu. Uma automação com outra forma não vira ponte: o AB-08 a executa direto.
- */
-function ringSwapBridge(config: BotConfigV2): BotRingSwap | undefined {
-  for (const automation of config.automations) {
-    if (automation.model !== 'swap-ring') continue;
-    const enter = automation.enter[0];
-    const exit = automation.exit[0];
-    if (enter?.kind !== 'hp' || enter.op !== '<') return undefined;
-    if (exit?.kind !== 'hp' || exit.op !== '>') return undefined;
-    return {
-      itemId: automation.params.itemId,
-      equipBelow: enter.percent,
-      removeAbove: exit.percent,
-      manaFloor: automation.params.manaFloor,
-      restorePrevious: automation.params.restorePrevious,
-    };
-  }
-  return undefined;
-}
-
-/**
  * Compila a configuração v2 inteira, uma vez, na entrada da sessão.
  *
  * **Não recebe `Content`, e não deve** (FUN-81/DT-01): o grupo e a chave de cooldown de cada ação
@@ -266,6 +234,5 @@ export function compileBot(config: BotConfigV2, cooldownOf: CooldownOfAction): C
     targeting: compileTargeting(config.targeting),
     exit: config.exit,
     lure: config.lure,
-    ringSwap: ringSwapBridge(config),
   };
 }

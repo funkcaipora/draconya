@@ -58,6 +58,8 @@ import { MAX_STACK } from '../inventory.js';
 import { planRestock } from '../restock.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
+import { compileAutomations } from '../automation.js';
+import type { AutomationActuator, CompiledAutomations } from '../automation.js';
 import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
 } from '../monster/monster.js';
@@ -125,6 +127,15 @@ const EQUIP_EXPIRE = 'equip-expire';
 function equipExpirySubject(characterId: string, slot: ItemSlot): string {
   return `${characterId}:${slot}`;
 }
+
+/**
+ * O ciclo das automações do catálogo (AB-08, ADR 0032 d.9). Evento PERIÓDICO que se reagenda
+ * (como `monster-step`), nunca avaliação por tick: a 1 Hz desanexada o resultado é o mesmo da
+ * 10 Hz anexada (invariante 2, ADR 0020). O subject é o personagem; quem não habilitou
+ * automação nenhuma não agenda nada.
+ */
+const AUTOMATION = 'bot-automation';
+const AUTOMATION_INTERVAL_MS = 1_000;
 
 type ExitReason = 'manual-exit' | 'exit-rule';
 /**
@@ -521,6 +532,11 @@ interface Runner {
   bot: CompiledBot | undefined;
   /** A configuração v2 correspondente, para o snapshot. Anda junto com `bot`, sempre. */
   botConfig: BotConfigV2 | undefined;
+  /**
+   * As automações do catálogo, compiladas (AB-08). Derivadas de `botConfig`, como o `bot`:
+   * `[]` é nenhuma, e é o que faz um runner sem automação habilitada não agendar o evento.
+   */
+  automations: CompiledAutomations;
   exitRules: readonly HuntExitRule[];
   pendingExit: ExitReason | null;
   /** Por GRUPO: `true` = ENGATILHADO (nenhum evento pendente), `false` = agendado. */
@@ -901,6 +917,8 @@ export class HuntRuleset implements Ruleset {
     // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
     // nada, e os eventos por grupo só existem para quem de fato configurou.
     this.#armBot(session, character.id);
+    // As automações (AB-08) seguem a mesma regra: só quem habilitou alguma entra na fila.
+    this.#armAutomations(session, character.id);
   }
 
   /**
@@ -972,6 +990,7 @@ export class HuntRuleset implements Ruleset {
       walker: new RouteWalker(this.#options.route, state?.route),
       bot,
       botConfig: normalized,
+      automations: compileAutomations(normalized?.automations ?? []),
       exitRules: this.#composeExitRules(normalized),
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
@@ -1034,6 +1053,7 @@ export class HuntRuleset implements Ruleset {
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
       case FIELD_EXPIRE: return this.#onFieldExpire(session, event.subject);
       case EQUIP_EXPIRE: return this.#onEquipExpire(session, event.subject);
+      case AUTOMATION: return this.#onAutomation(session, event.subject);
       default:
         // Um grupo do bot venceu (AB-07): `bot:<group>`. Um evento de tipo que este ruleset não
         // conhece — inclusive `bot-<categoria>` de um snapshot v1 — é ignorado, que é a
@@ -1588,6 +1608,7 @@ export class HuntRuleset implements Ruleset {
     const normalized = migrateBotConfigV1(config);
     runner.botConfig = normalized;
     runner.bot = compileBot(normalized, this.#cooldownOf);
+    runner.automations = compileAutomations(normalized.automations);
     // Grupo NOVO (a config antiga não o tinha) nasce ENGATILHADO: `#armBot` só toca os
     // engatilhados, e sem esta linha a regra recém-configurada nunca acordaria.
     for (const group of runner.bot.groups.keys()) {
@@ -1598,7 +1619,10 @@ export class HuntRuleset implements Ruleset {
     // que já tinham evento pendente seguem com ele — a invariante "engatilhado ou agendado"
     // continua valendo do outro lado de uma troca de configuração. Um grupo que SAIU da config
     // tem `botReady` órfão, e o evento pendente dele vence sem achar slots: não faz nada.
-    if (character.alive) this.#armBot(session, character.id);
+    if (character.alive) {
+      this.#armBot(session, character.id);
+      this.#armAutomations(session, character.id);
+    }
   }
 
   /**
@@ -1737,7 +1761,7 @@ export class HuntRuleset implements Ruleset {
         this.#armBot(session, characterId);
         // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
         // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
-        this.#applyRingSwap(session, character);
+        this.#armAutomations(session, character.id);
         return;
       }
       // Recusa: o próximo slot do MESMO grupo tenta agora. Só a recusa por COOLDOWN carrega
@@ -2538,66 +2562,71 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * A máquina de estados do anel (§13.8, FUN-87).
-   *
-   *   sem anel  --(HP < equipBelow  E  mana >= manaFloor)-->  com anel
-   *   com anel  --(HP > removeAbove  OU  mana < manaFloor)-->  sem anel
-   *
-   * **Os limiares são separados, e é o ponto inteiro da issue.** Com um só, o HP oscilando em
-   * torno dele troca o anel a cada golpe — e trocar anel é uma ação por vez que o personagem
-   * não está usando para lutar. Entre `equipBelow` e `removeAbove` nada acontece, por
-   * construção: nenhum dos dois lados dispara ali.
-   *
-   * `manaFloor` desativa a máquina: um anel que custa mana não vale a mana que falta para
-   * curar. Ele derruba o anel também quando já está equipado — desativar pela metade seria
-   * gastar a mana justamente quando ela é escassa.
-   *
-   * Não faz nada com o dedo quando o jogador nunca configurou anel nenhum: quem não pediu a
-   * máquina não pode ter o dedo mexido por ela.
+   * Reavalia as automações AGORA (AB-08): dano recebido, vencimento de item, troca de
+   * configuração ou entrada na hunt. Cancela o ciclo pendente e o traz para o instante zero —
+   * o mesmo desenho de `#armBot`, e a razão é a mesma: esperar o próximo múltiplo de um relógio
+   * faria a decisão depender de quando alguém olhou.
    */
-  #applyRingSwap(session: Session, character: CharacterRuntime): void {
-    const runner = this.#runnerOf(character.id);
-    const ring = runner.bot?.ringSwap;
-    if (ring === undefined || !character.alive) return;
-
-    const hp = percentOf(character.health, character.maxHealth);
-    const mana = percentOf(character.mana, character.maxMana);
-    const wearing = character.inventory.equippedAt('finger')?.itemId === ring.itemId;
-
-    if (wearing) {
-      if (hp <= ring.removeAbove && mana >= ring.manaFloor) return;
-      this.#takeOffRing(session, character, ring.restorePrevious);
-      return;
-    }
-    if (hp >= ring.equipBelow || mana < ring.manaFloor) return;
-
-    // Guarda o que estava no dedo ANTES de trocar: `equip` devolve a peça anterior para a
-    // mochila, e sem o id guardado não há como saber qual delas era a do jogador.
-    const previous = character.inventory.equippedAt('finger');
-    let carried: CarriedItem | undefined;
-    for (const item of character.inventory.items()) {
-      if (item.itemId === ring.itemId) { carried = item; break; }
-    }
-    // Não tem o anel na mochila: nada a fazer, e nada a avisar. Perder o anel é caso normal
-    // (§21.3 gasta anel por tempo), e a máquina não pode virar erro por causa disso.
-    if (carried === undefined) return;
-    if (!character.inventory.equip(carried.instanceId, character, this.#options.items).ok) return;
-
-    runner.ringReplaced = previous?.instanceId ?? null;
-    session.record('ring-equipped', ring.itemId);
+  #armAutomations(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined || runner.automations.list.length === 0) return;
+    session.cancelEvent(AUTOMATION, characterId);
+    session.scheduleIn(AUTOMATION, 0, {
+      priority: EventPriority.Housekeeping, subject: characterId,
+    });
   }
 
-  /** Tira o anel e devolve o anterior, se o jogador pediu para restaurar (§13.8). */
-  #takeOffRing(session: Session, character: CharacterRuntime, restore: boolean): void {
-    if (!character.inventory.unequip('finger', this.#containerRules(character)).ok) return;
+  /**
+   * O ciclo periódico das automações venceu (AB-08, ADR 0032 d.9).
+   *
+   * Monta a view e o atuador UMA vez e itera o catálogo. As automações são INDEPENDENTES: uma
+   * bloqueada (item ausente) informa o motivo e NÃO interrompe as seguintes (RF-09). Quem tem
+   * automação habilitada se reagenda para o próximo ciclo; quem não tem não gera evento nenhum.
+   */
+  #onAutomation(session: Session, characterId: string): void {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return;
+    const character = findById(session.participants, characterId);
+    if (character !== null && character.alive) {
+      const view = this.#botViewOf(character);
+      const actuator = this.#automationActuator(character);
+      for (const automation of runner.automations.list) {
+        const outcome = automation.run(view, actuator);
+        if (outcome.kind === 'applied') {
+          session.record(outcome.event, outcome.detail);
+        } else if (outcome.kind === 'blocked') {
+          session.record(
+            'automation-blocked', `${automation.model}:${outcome.reason}:${outcome.itemId}`,
+          );
+        }
+      }
+    }
+    if (runner.automations.list.length > 0) {
+      session.scheduleIn(AUTOMATION, AUTOMATION_INTERVAL_MS, {
+        priority: EventPriority.Housekeeping, subject: characterId,
+      });
+    }
+  }
+
+  /**
+   * O que uma automação pode fazer com o inventário. Fecha sobre o personagem e o catálogo de
+   * itens; NENHUM opcode é emitido — a escrita é `character.inventory.equip/unequip` direto,
+   * dentro do evento da própria sessão (invariantes 4 e 9).
+   */
+  #automationActuator(character: CharacterRuntime): AutomationActuator {
     const runner = this.#runnerOf(character.id);
-    const previous = runner.ringReplaced;
-    runner.ringReplaced = null;
-    session.record('ring-removed', '');
-    if (!restore || previous === null) return;
-    // Falhar aqui é o anel anterior ter sumido no meio da hunt. O dedo fica vazio, que é o
-    // estado honesto — e é o mesmo que `restorePrevious: false` pede de propósito.
-    character.inventory.equip(previous, character, this.#options.items);
+    const rules = this.#containerRules(character);
+    const items = this.#options.items;
+    return {
+      equippedItemId: (slot) => character.inventory.equippedAt(slot)?.itemId ?? null,
+      equippedInstanceId: (slot) => character.inventory.equippedAt(slot)?.instanceId ?? null,
+      carriedItem: (itemId) => character.inventory.findStack(itemId),
+      slotOf: (itemId) => items.get(itemId)?.slot ?? null,
+      equip: (instanceId) => character.inventory.equip(instanceId, character, items).ok,
+      unequip: (slot) => character.inventory.unequip(slot, rules).ok,
+      rememberRing: (instanceId) => { runner.ringReplaced = instanceId; },
+      previousRing: () => runner.ringReplaced,
+    };
   }
 
   /**
@@ -2657,6 +2686,8 @@ export class HuntRuleset implements Ruleset {
     character.inventory.destroy(slot);
     session.record('item-expired', equipped.itemId);
     session.emit({ kind: 'equipment-changed', characterId });
+    // O slot esvaziou: a renovação (AB-08) acontece no MESMO despacho, via `#armAutomations`.
+    this.#armAutomations(session, characterId);
   }
 
   /**
@@ -2915,8 +2946,9 @@ export class HuntRuleset implements Ruleset {
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
     this.#armBot(session, character.id);
-    // E o anel defensivo (§13.8): este é o instante em que ele existe para servir.
-    this.#applyRingSwap(session, character);
+    // E as automações defensivas (§13.8, AB-08): este é o instante em que o anel existe para
+    // servir, e é a antecipação que faz o swap acontecer no golpe, não no próximo ciclo.
+    this.#armAutomations(session, character.id);
     if (character.health > 0) return;
 
     // `receiveDamage` já marcou `alive = false`; `kill` é o que conta a morte no extrato e
@@ -3878,19 +3910,6 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = false;
     this.#world.reset([...this.#monsters, ...session.participants]);
   }
-}
-
-/**
- * Percentual inteiro, com o zero protegido — `maxMana` zero é o personagem que ainda não tem
- * mana, não uma divisão por zero.
- *
- * Mesma conta que `bot.ts` faz para as condições, e é de propósito: os dois lados do bot
- * comparam percentual, e um deles usando outra fórmula faria "abaixo de 30%" querer dizer duas
- * coisas diferentes na mesma configuração.
- */
-function percentOf(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return (current / max) * 100;
 }
 
 /**
