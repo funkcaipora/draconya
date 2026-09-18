@@ -1,18 +1,51 @@
 # Combate
 
-**Status:** parcial — resolução de dano (FUN-35), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92) e skills por uso (FUN-75) implementados
+**Status:** parcial — resolução de dano (FUN-35), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92), skills por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
 
-## Comportamento
+## Contrato de compatibilidade (ADR 0031)
 
-A matemática e o comportamento geral de combate usam o Tibia como referência funcional — fórmulas e parâmetros são tratados como conteúdo configurável, nunca como dependência de código ou catálogo proprietário. Duas regras do PRD desviam explicitamente dessa referência e valem como exceção fixa.
+A referência de combate está fixada pelo
+[ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md): **Tibia 13.32**,
+com o mecanismo lido de TFS/Canary (GPL v2 — só mecanismo e caso de borda, nunca código copiado)
+e os números observados no TibiaWiki. O perfil semântico `combat-v1` é conteúdo versionado: a
+sessão o congela na criação e não o troca no meio da hunt.
+
+Este documento separa três coisas: o que está **entregue** (comportamento atual), o que é
+**exceção de produto aprovada** e o que ainda é **lacuna**. Nenhuma hipótese entra como
+comportamento entregue.
+
+## Comportamento atual
+
+A resolução de dano entregue é `resolveDamage` em `packages/sim/src/combat/damage.ts`, detalhada
+em "O que já existe". Hoje ela só conhece os tipos `melee` e `magic`, aplica armadura por tipo,
+piso, uma rolagem de Dodge sempre consumida e arredonda no fim.
+
+## Compatibilidade aprovada
+
+Duas regras do PRD §12 desviam explicitamente do Tibia e valem como exceção de produto fixada no
+perfil `combat-v1` — não são hipótese nem fidelidade pendente:
 
 Primeira: ataques realizados pelo jogador sempre acertam o alvo. Não existe miss ofensivo do lado do jogador — o servidor não rola chance de acerto para o atacante, o que elimina metade da matemática de combate tradicional.
 
 Segunda: existe o atributo Dodge no defensor. Quando o Dodge ativa, o ataque recebido causa metade do dano que causaria normalmente. Isso vale contra qualquer tipo de ataque recebido — incluindo magia e ataques de boss —, não apenas contra combate corpo a corpo. A chance de Dodge é percentual e pode vir de fontes como bônus permanentes de Bestiário.
 
 Bônus permanentes obtidos via Bestiário são válidos apenas em PvE. O PvP (Guild War) não herda automaticamente essas vantagens de farm.
+
+## Lacunas
+
+Ainda não entregues; cada uma será implementada sob o contrato do ADR 0031, com o perfil
+correspondente:
+
+- defesa e escudo (CMB-04);
+- resistência e imunidade por tipo de dano (CMB-03);
+- tipos de dano e elemento além de `melee`/`magic` (CMB-03);
+- famílias de arma e proficiências (CMB-05);
+- abilities de monstro além da faixa de ataque (CMB-06);
+- condições generalizadas e dano contínuo (CMB-07);
+- outcomes: crítico, leech e mana shield (CMB-08);
+- PvP e Guild War, fora do M19.
 
 ## O que já existe
 
@@ -93,11 +126,10 @@ reequilibrar quando existirem.
 | Regeneração de mana | 1 mana/s `[ABERTO — valor provisório: 1]` | `packages/content/data/progression/baseline.json`, `regen.manaPerSecond` |
 | Piso de dano, como fração do ataque | 0,1 `[ABERTO — valor provisório: 0,1]` | `packages/content/data/combat/baseline.json` |
 
-| Parâmetro | Valor previsto | Onde mora em packages/content |
-|---|---|---|
-| Chance de acerto do jogador (ofensivo) | 100% fixo, sem rolagem | caminho previsto: `packages/content/combate` |
-| Redução de dano quando Dodge ativa | 50% | caminho previsto: `packages/content/combate` |
-| Escopo do bônus de Bestiário | PvE-only | caminho previsto: `packages/content/bestiário` |
+As exceções de produto — always-hit, Dodge e o escopo PvE-only do Bestiário — são contrato do
+perfil `combat-v1` ([ADR 0031](../adr/0031-contrato-de-compatibilidade-de-combate-e-migracao.md)),
+não parâmetro de balanceamento. O único número entre elas é o multiplicador de Dodge, já listado
+acima em `combat/baseline.json`; as demais são estruturais.
 
 O catálogo de magias e seus números de dano/custo/cooldown pertence a `progression.md` — este arquivo cobre só a matemática geral de acerto/Dodge.
 
