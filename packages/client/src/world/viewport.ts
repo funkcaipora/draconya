@@ -287,7 +287,7 @@ export async function mountViewport(
   }
 
   /**
-   * Aquece as folhas da janela de RENDER (FUN-121; M16): sem isto Thais abria em retângulos
+   * Aquece as folhas da janela de RENDER (FUN-121; M23): sem isto Thais abria em retângulos
    * pelos segundos que a primeira folha de cada chão leva no Worker. A janela de render, e
    * não a visível, porque é ela que `paintTerrain` pede ao livro no quadro seguinte.
    */
@@ -311,7 +311,7 @@ export async function mountViewport(
   }
 
   function paintTerrain(center: { x: number; y: number; z: number }): void {
-    // A janela de RENDER (M16): três tiles além de cada borda visível já estão pintados, e é
+    // A janela de RENDER (M23): três tiles além de cada borda visível já estão pintados, e é
     // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
     // tela, que é o tempo que a folha tem para sair do Worker. A chave abaixo muda quando ESTA
     // janela muda, exatamente como antes mudava com a visível: uma vez por tile cruzado.

@@ -70,7 +70,7 @@ export function cameraOrigin(target: Point, view: Viewport): { x: number; y: num
 }
 
 /**
- * Tiles desenhados além da borda visível, em cada direção (PRD do M16, §10.5). Três é o que o
+ * Tiles desenhados além da borda visível, em cada direção (PRD do M23, §10.5). Três é o que o
  * MapView do OTClient desenha além da dimensão visível; é a distância entre "entrou na janela
  * pintada" e "entrou na tela", e portanto o tempo que a folha tem para sair do Worker.
  */

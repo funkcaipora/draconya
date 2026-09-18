@@ -119,7 +119,7 @@ describe('viewport (issue #381)', () => {
     expect(viewport.placeholderClears()).toBe(2);
   });
 
-  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `renderTiles` (M16/#382: era `visibleTiles`)', async () => {
+  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `renderTiles` (M23/#382: era `visibleTiles`)', async () => {
     const scene = sceneOf({
       width: 40, height: 40, floors: [7], fill: { 7: { ground: GRASS, items: [] } },
     });
