@@ -178,6 +178,8 @@ export const C2S_SCHEMAS = {
 export const PartyState = z.object({
   leaderId: z.string().min(1),
   mode: z.enum(['split', 'shared']),
+  shareCosts: z.boolean().optional(),
+  splitLoot: z.boolean().optional(),
   members: z.array(z.object({
     characterId: z.string().min(1),
     name: z.string().min(1),

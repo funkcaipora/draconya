@@ -678,6 +678,26 @@ describe('party presentation messages (#196, #339, SV-03)', () => {
     expect(decodeS2C(encodeS2C(message))).toEqual([message]);
   });
 
+  it('round trips party-state with shareCosts and splitLoot (#359)', () => {
+    const message: S2CMessage = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'split',
+      shareCosts: true,
+      splitLoot: false,
+      members: [
+        {
+          characterId: 'p1',
+          name: 'Alice',
+          alive: true,
+          healthPercent: 100,
+          vocationId: 'knight',
+        },
+      ],
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+
   it('decodes older party-state without vocationId, level, or manaPercent as vocationId: null, level: undefined, manaPercent: undefined', () => {
     const older = {
       type: 'party-state',

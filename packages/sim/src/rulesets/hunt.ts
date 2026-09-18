@@ -36,7 +36,7 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import { settleBag, xpShare } from '../party.js';
+import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
@@ -340,6 +340,8 @@ export type PartyMode = 'split' | 'shared';
 export interface PartyOptions {
   readonly leaderId: string;
   readonly mode: PartyMode;
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
 }
 
 export interface HuntRulesetState {
@@ -564,7 +566,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#options = options;
     this.#party = options.partyOptions;
-    if (this.#party?.mode === 'shared') this.#bag = { gold: 0, items: [], capacity: 0 };
+    if (this.#party !== undefined && splitLootOf(this.#party)) this.#bag = { gold: 0, items: [], capacity: 0 };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -641,7 +643,7 @@ export class HuntRuleset implements Ruleset {
    * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
    */
   partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
-    if (this.#party?.mode !== 'shared' || this.#bag === null) return undefined;
+    if (this.#party === undefined || !splitLootOf(this.#party) || this.#bag === null) return undefined;
     const presentIds = session.participants.map((p) => p.id);
     return settleBag(this.#bag, presentIds, this.#options.items).shares;
   }
@@ -1108,7 +1110,7 @@ export class HuntRuleset implements Ruleset {
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
     this.#party = restored.partyOptions;
     this.#bag = restored.partyBag === undefined
-      ? (this.#party?.mode === 'shared' ? { gold: 0, items: [], capacity: 0 } : null)
+      ? (this.#party !== undefined && splitLootOf(this.#party) ? { gold: 0, items: [], capacity: 0 } : null)
       : { gold: restored.partyBag.gold, items: [...restored.partyBag.items], capacity: restored.partyBag.capacity };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
@@ -1759,7 +1761,7 @@ export class HuntRuleset implements Ruleset {
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
-    const shared = this.#bag !== null && session.participants.length > 1;
+    const shared = this.#party !== undefined && shareCostsOf(this.#party) && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
@@ -2659,7 +2661,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#party === undefined || session.participants.length < 2) {
       return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
     }
-    if (this.#party.mode === 'shared') return null;
+    if (splitLootOf(this.#party)) return null;
     if (eligible.length === 0) return null;
     return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
   }

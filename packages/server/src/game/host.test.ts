@@ -4479,7 +4479,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
   };
-  function partyHunt(options?: { mode?: 'shared' | 'split' }) {
+  function partyHunt(options?: { mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean }) {
     const mode = options?.mode ?? 'shared';
     const raw = rawTestContent();
     const content = buildContent({
@@ -4503,7 +4503,12 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
         if (shared === null) {
           shared = createHuntSession({
             id: 'party-hunt', content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
-            partyOptions: { leaderId: 'lead', mode },
+            partyOptions: {
+              leaderId: 'lead',
+              mode,
+              ...(options?.shareCosts !== undefined ? { shareCosts: options.shareCosts } : {}),
+              ...(options?.splitLoot !== undefined ? { splitLoot: options.splitLoot } : {}),
+            },
           });
           shared.enter(member('lead'));
           shared.enter(member('b'));
@@ -4533,7 +4538,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const stateOf = (socket: FakeSocket) => socket.received().find((m) => m.type === 'session-state');
     const leadState = stateOf(lead.socket);
     if (leadState?.type !== 'session-state') throw new Error('sem session-state');
-    expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared' });
+    expect(leadState.party).toMatchObject({ leaderId: 'lead', mode: 'shared', shareCosts: true, splitLoot: true });
     expect(leadState.party?.members.map((m) => [m.characterId, m.alive, m.healthPercent, m.vocationId, m.level, m.manaPercent])).toEqual([
       ['lead', true, 100, null, 1, 0],
       ['b', true, 100, null, 1, 0],
@@ -4646,6 +4651,29 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
     expect(partyStatesOf(lead.socket).length).toBe(3);
+  });
+
+  it('#partyBlock populates shareCosts and splitLoot with defaults and explicit overrides (#359)', () => {
+    // 1. Default split -> shareCosts: false, splitLoot: false
+    const splitHunt = partyHunt({ mode: 'split' });
+    const splitLead = attach(splitHunt.host, 'lead');
+    const splitState = splitLead.socket.received().find((m) => m.type === 'session-state');
+    if (splitState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(splitState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: false });
+
+    // 2. Combination C -> shareCosts: true, splitLoot: false
+    const combC = partyHunt({ mode: 'split', shareCosts: true, splitLoot: false });
+    const combCLead = attach(combC.host, 'lead');
+    const combCState = combCLead.socket.received().find((m) => m.type === 'session-state');
+    if (combCState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(combCState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: true, splitLoot: false });
+
+    // 3. Combination D -> shareCosts: false, splitLoot: true
+    const combD = partyHunt({ mode: 'split', shareCosts: false, splitLoot: true });
+    const combDLead = attach(combD.host, 'lead');
+    const combDState = combDLead.socket.received().find((m) => m.type === 'session-state');
+    if (combDState?.type !== 'session-state') throw new Error('sem session-state');
+    expect(combDState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: true });
   });
 
   it('broadcasts party-spending to all viewers on spending or bag change, and previews settlement in shared mode', () => {

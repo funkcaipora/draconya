@@ -4704,6 +4704,132 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
   });
 });
 
+describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
+  const sword = { id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 10, weapon: { kind: 'melee', range: 1 } };
+  const rich = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
+  const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
+  const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
+    monsters: [rich], items: [...items, sword], supplies: [potion],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...over,
+  }));
+  const member = (id: string, gold: number, capacity = 1_000, health?: number) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold, goldDelta: 0, alive: true, cooldowns: {}, capacity,
+    });
+  };
+  const drinkAlways = botConfig({ potion: [{ when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'supply', supplyId: 'health-potion' } }] });
+  const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
+
+  it('combination C (shareCosts: true, splitLoot: false): shares supply costs in real-time, no party bag, loot goes to drawn member', () => {
+    const session = createHuntSession({
+      id: 'comb-c', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
+      botConfigs: { u: drinkAlways },
+    });
+    session.enter(member('u', 100, 1_000, 10));
+    session.enter(member('a', 100));
+    session.enter(member('b', 100));
+    session.enter(member('c', 100));
+
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.getState().partyBag).toBeUndefined();
+
+    run(session, 1_500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(uses * 5);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(uses * 3);
+    expect(session.aggregates.goldSpent).toBe(uses * 14);
+
+    expect(ruleset.getState().partyBag).toBeUndefined();
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    const totalGained = ['u', 'a', 'b', 'c'].reduce((sum, id) => sum + session.aggregatesOf(id).goldGained, 0);
+    expect(totalGained).toBe(session.aggregates.goldGained);
+  });
+
+  it('combination D (shareCosts: false, splitLoot: true): each pays own supply, loot goes to party bag and splits on settlement', () => {
+    const session = createHuntSession({
+      id: 'comb-d', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'u', mode: 'split', shareCosts: false, splitLoot: true },
+      botConfigs: { u: drinkAlways },
+    });
+    session.enter(member('u', 100, 1_000, 10));
+    session.enter(member('a', 100));
+    session.enter(member('b', 100));
+    session.enter(member('c', 100));
+
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.getState().partyBag).toBeDefined();
+
+    run(session, 1_500, 100);
+    const uses = session.aggregatesOf('u').suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(uses * 14);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(0);
+
+    const bag = ruleset.getState().partyBag;
+    expect(bag).toBeDefined();
+    expect(bag!.gold + bag!.items.length).toBeGreaterThan(0);
+
+    session.end('manual-exit');
+    const settlement = session.drainEvents().find((e) => e.kind === 'party-settlement');
+    expect(settlement).toBeDefined();
+  });
+
+  it('1 Hz == 10 Hz in combination C (shareCosts: true, splitLoot: false)', () => {
+    const at = (hz: number) => {
+      const session = createHuntSession({
+        id: 'c-hz', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
+        botConfigs: { u: drinkAlways },
+      });
+      session.enter(member('u', 100, 1_000, 10));
+      session.enter(member('a', 100));
+      run(session, 20_000, 1000 / hz);
+      return {
+        kills: session.aggregates.kills,
+        goldGained: session.aggregates.goldGained,
+        goldSpentU: spent(session, 'u'),
+        goldSpentA: spent(session, 'a'),
+        uGained: session.aggregatesOf('u').goldGained,
+        aGained: session.aggregatesOf('a').goldGained,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('1 Hz == 10 Hz in combination D (shareCosts: false, splitLoot: true)', () => {
+    const at = (hz: number) => {
+      const session = createHuntSession({
+        id: 'd-hz', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+        partyOptions: { leaderId: 'u', mode: 'split', shareCosts: false, splitLoot: true },
+        botConfigs: { u: drinkAlways },
+      });
+      session.enter(member('u', 100, 1_000, 10));
+      session.enter(member('a', 100));
+      run(session, 20_000, 1000 / hz);
+      const bag = (session.ruleset as HuntRuleset).getState().partyBag;
+      return {
+        kills: session.aggregates.kills,
+        bagGold: bag?.gold,
+        bagItems: bag?.items,
+        goldSpentU: spent(session, 'u'),
+        goldSpentA: spent(session, 'a'),
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
+
 describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   // Ratos que batem forte num membro de 1 HP: ele morre no primeiro golpe e SAI com o próprio
   // extrato; os outros ficam. Regra `party-member-lost` em quem a configurou: cascata.

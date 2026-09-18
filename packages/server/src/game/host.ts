@@ -20,7 +20,7 @@ import type {
 import type { C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
-import { containerRulesFor } from '@draconya/sim';
+import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
   CarriedItem, CharacterRuntime, ConditionKind, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
   InventoryState, Place, VocationRefusal,
@@ -2028,6 +2028,8 @@ export class SessionHost {
       party: {
         leaderId,
         mode: party.mode,
+        shareCosts: shareCostsOf(party),
+        splitLoot: splitLootOf(party),
         members: hosted.session.participants.map((member) => ({
           characterId: member.id,
           name: this.#nameByCharacter.get(member.id) ?? member.id,
