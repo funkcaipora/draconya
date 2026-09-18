@@ -109,7 +109,8 @@ morte encerra, loot é do matador sem sorteio.
 servidor→cliente). Durante a hunt a coluna esquerda mostra os companheiros com HP, num painel
 fixo (`PartyMembers`, #259); em `shared`, a bolsa aparece como a janela flutuante "Party loot"
 (`PartyLootWindow`, #316) sobre o mundo, aberta por padrão durante a hunt e alternável pelo ▣
-do cabeçalho da party; o analisador é por personagem (`analyzer.md`).
+do cabeçalho da party; a engrenagem ⚙ do mesmo cabeçalho reabre a formação e as ações da party
+durante a hunt, no modal "Gerenciar party" (#320); o analisador é por personagem (`analyzer.md`).
 
 ## Regras
 

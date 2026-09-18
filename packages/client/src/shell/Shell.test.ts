@@ -142,4 +142,11 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'city' } }));
     expect(await render()).not.toContain('vendido e dividido ao fim');
   });
+
+  // #320: a engrenagem do painel da party abre o modal "Gerenciar party".
+  it('wires the party gear to the Manage party modal', async () => {
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('onManage={() => { setPartyModalOpen(true); }}');
+    expect(source).toContain('{partyModalOpen && (');
+  });
 });

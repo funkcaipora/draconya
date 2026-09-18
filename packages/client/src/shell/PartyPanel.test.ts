@@ -101,7 +101,7 @@ describe('PartyPanel', () => {
       { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0 },
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers, {
-      partyLootOpen: true, onToggleLoot: () => {},
+      partyLootOpen: true, onToggleLoot: () => {}, onManage: () => {},
     }));
     const html = await new Response(prelude).text();
     expect(html).toContain('Party · 3');
@@ -119,7 +119,7 @@ describe('PartyPanel', () => {
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100 },
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers, {
-      partyLootOpen: true, onToggleLoot: () => {},
+      partyLootOpen: true, onToggleLoot: () => {}, onManage: () => {},
     }));
     const html = await new Response(prelude).text();
     expect(html).toContain('Dividido');
