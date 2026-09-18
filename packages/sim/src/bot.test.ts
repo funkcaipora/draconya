@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BotConfig, Content } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1, botConfigSchema } from '@draconya/content';
 import { compileBot } from './bot.js';
 import type { BotView } from './bot.js';
 import { CharacterRuntime } from './character.js';
@@ -24,7 +24,7 @@ const config = (over: Partial<BotConfig> = {}): BotConfig =>
   // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
   // que é trabalho que o parse já faz — e do jeito que a produção faz.
   botConfigSchema.parse({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });
@@ -148,7 +148,7 @@ describe('o interruptor por regra (#162)', () => {
     // Mutação que mata: `compileBot` ignorar `enabled` (a primeira cura dispararia), ou tratar
     // ausente como desligada (a segunda nunca dispararia).
     const config = botConfigSchema.parse({
-      version: BOT_VOCABULARY_VERSION,
+      version: BOT_VOCABULARY_VERSION_V1,
       heal: [
         { enabled: false, when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'off' } },
         { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'on' } },

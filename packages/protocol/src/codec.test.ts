@@ -175,9 +175,7 @@ describe('catalogue item stats (#337)', () => {
       vocationLevel: 0,
       bot: {
         vocabularyVersion: 1,
-        advancedFromLevel: 50,
         slots: {},
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [],
         supplies: [],
       },
@@ -218,9 +216,7 @@ describe('catalogue item stats (#337)', () => {
       hunts: [],
       bot: {
         vocabularyVersion: 1,
-        advancedFromLevel: 50,
         slots: {},
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [],
         supplies: [],
       },

@@ -1,9 +1,9 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_ADVANCED_POLICY, TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA, testContent,
 } from '../testing/content.js';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1 } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
@@ -34,7 +34,7 @@ describe('party session factory (#195, ADR 0027)', () => {
     members: [
       { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: totalXpForLevel(10, TEST_PROGRESSION as Progression), gold: 30 } },
       // Um bot válido e um que o vocabulário recusa: só o válido compila.
-      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: totalXpForLevel(12, TEST_PROGRESSION as Progression), botConfig: { version: BOT_VOCABULARY_VERSION, heal: [], potion: [], attack: [], rune: [], support: [] } } },
+      { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: totalXpForLevel(12, TEST_PROGRESSION as Progression), botConfig: { version: BOT_VOCABULARY_VERSION_V1, heal: [], potion: [], attack: [], rune: [], support: [] } } },
       { characterId: 'p3', accountId: 'a3', initialCharacter: { level: 1, xp: 0, botConfig: { version: 999 } } },
     ],
   };
@@ -96,8 +96,7 @@ describe('session restorer', () => {
     const empty = buildContent({ monsters: [], hunts: [], vocations: [],
       progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
       // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-      bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000,
-        advancedFromLevel: 50,
+      bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }] });
     expect(createSessionRestorer(empty)(hunt().snapshot())).toBeNull();
   });
@@ -435,7 +434,7 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
   const content = testContent();
   const accept = createBotConfigValidator(content);
   const base = (over: Record<string, unknown> = {}) => ({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });
@@ -481,46 +480,12 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     if (!decision.ok) expect(decision.reason).toContain('heal');
   });
 
-  it('o GATE de level: recurso avançado abaixo do 50 é recusado, dizendo qual', () => {
-    // §13.2. "Seu bot exige level 50" sem dizer o quê deixa o jogador procurando qual das
-    // trinta regras dele é a culpada.
-    const avancada = base({ targeting: { policy: TEST_ADVANCED_POLICY } });
-    const recusado = accept(avancada, 49);
-    expect(recusado.ok).toBe(false);
-    if (!recusado.ok) {
-      expect(recusado.reason).toContain('50');
-      expect(recusado.reason).toContain(TEST_ADVANCED_POLICY);
-    }
-
-    expect(accept(avancada, 50).ok).toBe(true);
-  });
-
-  it('o gate não atrapalha quem não usa nada avançado', () => {
-    expect(accept(base({ targeting: { policy: 'nearest' } }), 1).ok).toBe(true);
-  });
-
-  it('o lure é avançado por NOME, e o gate o recusa abaixo do 50 (FUN-87)', () => {
-    // Diferente da política de alvo acima: `lure` não está em `advancedOnly` nenhum. O §13.2
-    // cita lure e ring swap como o que o bot avançado tem, então o gate os conhece por nome —
-    // e este teste é o que impede alguém de "simplificar" isso para dentro da lista de
-    // conteúdo, onde o recorte ainda é [ABERTO].
-    const recusado = accept(base({ lure: { min: 2, max: 5 } }), 49);
-    expect(recusado.ok).toBe(false);
-    if (!recusado.ok) {
-      expect(recusado.reason).toContain('50');
-      expect(recusado.reason).toContain('lure');
-    }
-
-    expect(accept(base({ lure: { min: 2, max: 5 } }), 50).ok).toBe(true);
-  });
-
-  it('o conteúdo REAL não gateia nada — o recorte do §13.2 ainda é [ABERTO]', () => {
-    // Este teste é o comentário virando obrigação. No dia em que alguém preencher
-    // `advancedOnly` em `bot/baseline.json`, ele falha — e a mudança tem de ser deliberada,
-    // com o PRD tendo decidido, em vez de um palpite que trava o recurso para todo mundo
-    // abaixo do level 50.
-    expect(content.bot.advancedOnly.conditions).toEqual([]);
-    expect(content.bot.advancedOnly.postures).toEqual([]);
+  it('não existe mais gate de level: avançado vale desde o level 1 (AB-03, ADR 0032 d.4)', () => {
+    // O §13.2 exigia level 50 para o bot avançado; o ADR 0032 d.4 revogou o gate. A asserção
+    // abaixo é o que impede alguém de reintroduzi-lo por engano.
+    expect(accept(base({ targeting: { policy: 'lowest-hp' } }), 1).ok).toBe(true);
+    expect(accept(base({ lure: { min: 2, max: 5 } }), 1).ok).toBe(true);
+    expect(accept(base(), 1).ok).toBe(true);
   });
 });
 

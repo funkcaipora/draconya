@@ -156,7 +156,6 @@ export function RuleEditor({ category, index, initial, vocabulary, level, vocati
           size="md"
           value={rule.when.kind}
           options={BOT_CONDITION_KINDS
-            .filter((kind) => !vocabulary.advancedOnly.conditions.includes(kind) || level >= vocabulary.advancedFromLevel)
             .map((kind) => ({ value: kind, label: CONDITION_TEXT[kind] ?? kind }))}
           onChange={(value) => { setRule({ ...rule, when: blankCondition(value) }); }}
         />

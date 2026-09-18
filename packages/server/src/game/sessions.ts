@@ -12,7 +12,7 @@ import {
 import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
-import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
+import { botConfigSchema, validateBotConfig } from '@draconya/content';
 import type { BotConfig, Content } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
@@ -390,13 +390,15 @@ function huntFor(
  * vocabulário para rotear uma mensagem, e dar a ele o conteúdo todo seria dar acesso a
  * balanceamento a quem cuida de socket. É a mesma forma do `settleProgress` que o `api` recebe.
  *
- * As três checagens, na ordem em que custam a descobrir:
+ * As duas checagens, na ordem em que custam a descobrir:
  *
  *   1. **forma** — `botConfigSchema` recusa condição fora do vocabulário, operador que não
  *      existe, percentual fora de 0–100;
  *   2. **conteúdo** — slots, versão de vocabulário e referência cruzada de magia, supply e
- *      monstro, tudo contra o `content` deste nó;
- *   3. **level** — §13.2: o bot avançado abre no 50, e o recorte é dado (`advancedOnly`).
+ *      monstro, tudo contra o `content` deste nó.
+ *
+ * O gate de level do §13.2 foi revogado no AB-03 (ADR 0032 d.4): o `level` continua na
+ * assinatura porque o host o carrega, mas não recusa mais nada.
  *
  * A recusa devolve TEXTO, não booleano, porque ele vai direto para o jogador num
  * `system-message`. "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir
@@ -409,7 +411,7 @@ export type BotConfigDecision =
 export function createBotConfigValidator(
   content: Content,
 ): (raw: unknown, level: number) => BotConfigDecision {
-  return (raw, level) => {
+  return (raw, _level) => {
     const parsed = botConfigSchema.safeParse(raw);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
@@ -426,14 +428,6 @@ export function createBotConfigValidator(
       return { ok: false, reason: problems[0] as string };
     }
 
-    const advanced = advancedFeaturesUsed(parsed.data, content.bot);
-    if (advanced.length > 0 && level < content.bot.advancedFromLevel) {
-      return {
-        ok: false,
-        reason: `bot avançado exige level ${content.bot.advancedFromLevel}: `
-          + advanced.join(', '),
-      };
-    }
     return { ok: true, config: parsed.data };
   };
 }

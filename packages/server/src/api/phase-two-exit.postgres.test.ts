@@ -29,7 +29,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
 import { buildContent, botConfigSchema, placeholderAppearances } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1 } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
 import { AuthService } from '../auth/service.js';
 import { RedisAuthSessionStore } from '../auth/sessions.js';
@@ -386,7 +386,7 @@ afterAll(async () => {
  * nunca exercitaria o gasto de gold — que é metade do §44.3.
  */
 const BOT_CONFIG = {
-  version: BOT_VOCABULARY_VERSION,
+  version: BOT_VOCABULARY_VERSION_V1,
   heal: [{
     when: { kind: 'hp', op: '<=', percent: 90 },
     do: { kind: 'spell', spellId: 'heal' },

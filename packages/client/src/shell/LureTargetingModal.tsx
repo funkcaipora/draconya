@@ -38,7 +38,6 @@ function monsterName(monsters: readonly MonsterListing[], id: string): string {
 
 export function LureTargetingModal({ onClose }: { onClose: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);
-  const level = useHudSlice((state) => state.level);
   const lure = useStoreSlice(bot, (state) => state.draft.lure) ?? DEFAULT_LURE;
   const targeting = useStoreSlice(bot, (state) => state.draft.targeting);
   const [lastDistance, setLastDistance] = useState(
@@ -46,8 +45,6 @@ export function LureTargetingModal({ onClose }: { onClose: () => void }) {
   );
 
   if (catalogue === null) return null;
-  const advancedFromLevel = catalogue.bot.advancedFromLevel;
-  const locked = level < advancedFromLevel;
   const bad = lure.max < lure.min;
   const monsters = catalogue.monsters;
   const available = (except: readonly string[]): readonly MonsterListing[] =>
@@ -59,7 +56,7 @@ export function LureTargetingModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       title="Lure e alvo"
       width={620}
-      meta={`Bot avançado · LV ${String(advancedFromLevel)}+`}
+      meta="Bot avançado"
       footer={
         <>
           <span className="lure-footer-hint">
@@ -74,11 +71,6 @@ export function LureTargetingModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      {locked && (
-        <p className="lure-locked">
-          {`Bot avançado a partir do level ${String(advancedFromLevel)}. A configuração fica salva; o servidor recusa até lá.`}
-        </p>
-      )}
       <div className="lure-columns">
         <section className="lure-box">
           <Kicker tone="muted">Lure dinâmico</Kicker>

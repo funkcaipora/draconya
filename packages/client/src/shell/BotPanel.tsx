@@ -124,19 +124,17 @@ function Category({ category, vocabulary, vocationId, onEdit }: {
   );
 }
 
-function AdvancedSection({ ringSwap, items, advanced, onEditRingSwap }: {
+function AdvancedSection({ ringSwap, items, onEditRingSwap }: {
   ringSwap: BotConfig['ringSwap'] | undefined;
   items: readonly ItemDefinition[];
-  advanced: boolean;
   onEditRingSwap: () => void;
 }) {
   return (
     <section className="bot-advanced">
       <header className="bot-advanced-head">
         <strong>Configurações avançadas</strong>
-        <span className="bot-advanced-level">LV 50+</span>
       </header>
-      <div className={`bot-advanced-row${advanced ? '' : ' bot-advanced-row-locked'}`}>
+      <div className="bot-advanced-row">
         <span className="bot-advanced-row-text">
           <b>Ring swap</b>
           <small>{ringSwapSummary(ringSwap, items)}</small>
@@ -190,17 +188,11 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
   }
   const vocabulary = catalogue.bot;
   const vocationNames = new Map(catalogue.vocations.map((vocation) => [vocation.id, vocation.name]));
-  const advanced = level >= vocabulary.advancedFromLevel;
   const fingerItems = catalogue.items.filter((item) => item.slot === 'finger');
 
   return (
     <>
       <Panel dock title="Bot" collapsed={collapsed} className="bot-panel" {...panelProps}>
-        {!advanced && (
-          // §13.2: o gate é por level, e quem recusa é o servidor. Dizer POR QUÊ aqui evita
-          // que o jogador descubra montando uma configuração inteira e levando um não.
-          <p className="quiet">{`Bot avançado a partir do level ${String(vocabulary.advancedFromLevel)}.`}</p>
-        )}
         <Button variant="secondary" size="sm" block onClick={() => { setLureOpen(true); }}>
           ⌖ Lure e alvo
         </Button>
@@ -211,7 +203,6 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
           <AdvancedSection
             ringSwap={draftRingSwap}
             items={fingerItems}
-            advanced={advanced}
             onEditRingSwap={() => { setRingSwapOpen(true); }}
           />
         )}
@@ -228,8 +219,6 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
         <RingSwapModal
           initial={draftRingSwap ?? defaultRingSwap(fingerItems) ?? undefined}
           items={fingerItems}
-          level={level}
-          advancedFromLevel={vocabulary.advancedFromLevel}
           onClose={() => { setRingSwapOpen(false); }}
         />
       )}

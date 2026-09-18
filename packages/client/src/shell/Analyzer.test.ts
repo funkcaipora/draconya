@@ -34,8 +34,7 @@ const catalogue: Catalogue = {
   monsters: [{ id: 'rat', name: 'Rato' }],
   ammunition: [], vocations: [], vocationLevel: 8,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],
   },
   items: [],

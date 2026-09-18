@@ -10,9 +10,8 @@
 // carregado, que nem todo chamador tem.
 
 import type { Content } from './content.js';
-import type { BotCategory, BotLimits } from './schemas.js';
-import type { BotConfig } from './schemas.js';
-import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION } from './schemas.js';
+import type { BotAutomation, BotConfig, BotConfigV2 } from './schemas.js';
+import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION_V1 } from './schemas.js';
 
 /**
  * Os problemas encontrados, em português e nomeando a categoria e o índice do slot.
@@ -27,10 +26,10 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
 
   // A versão vem primeiro e não interrompe: uma configuração de vocabulário antigo pode ter
   // outros problemas, e listá-los todos de uma vez poupa o jogador de descobrir um por vez.
-  if (config.version !== BOT_VOCABULARY_VERSION) {
+  if (config.version !== BOT_VOCABULARY_VERSION_V1) {
     problems.push(
       `configuração na versão ${config.version} de vocabulário; este servidor entende `
-        + `${BOT_VOCABULARY_VERSION}`,
+        + `${BOT_VOCABULARY_VERSION_V1}`,
     );
   }
 
@@ -122,45 +121,70 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
 }
 
 /**
- * Quais recursos do bot AVANÇADO esta configuração usa (§13.2, FUN-81).
+ * O juiz do vocabulário v2 (AB-03).
  *
- * Lista vazia é "cabe no bot básico". Devolve NOMES, não um booleano, pela mesma razão que
- * `validateBotConfig` devolve motivos: "seu bot exige level 50" sem dizer o quê deixa o
- * jogador procurando qual das trinta regras dele é a culpada.
+ * Espelha a v1, trocando categoria por conjunto/slot e validando a ação contra `content.items`
+ * (consumível) e `content.spells`. As automações são conferidas por id de item — nunca por
+ * sprite (invariante 6). `targeting`, `exit` e `lure` repetem a validação da v1.
  *
- * Separada de `validateBotConfig` de propósito: aquela responde "esta configuração é válida",
- * que não depende de quem a salvou; esta responde "este PERSONAGEM pode usá-la", que depende
- * do level. Juntar as duas obrigaria toda validação a carregar um level, inclusive as que
- * acontecem sem personagem nenhum na mão.
+ * A faixa morta do `swap-ring` é a relação `enter`/`exit` de HP; como no v1, o schema não a
+ * consegue checar sozinho — quem valida é o motor do AB-07. Aqui a referência é só existência.
  */
-export function advancedFeaturesUsed(config: BotConfig, limits: BotLimits): string[] {
-  const { advancedOnly } = limits;
-  const used = new Set<string>();
+export function validateBotConfigV2(config: BotConfigV2, content: Content): string[] {
+  const problems: string[] = [];
 
-  // Lure e ring swap são avançados **por nome no §13.2**, e por isso não passam pela lista de
-  // `advancedOnly`: o PRD os cita como o que o bot avançado tem. A lista existe para o recorte
-  // que o PRD NÃO decidiu — e ela continua vazia por isso (FUN-81).
-  //
-  // A diferença importa: aqui seguir a especificação é fixar em código; lá seria inventar
-  // balanceamento e disfarçá-lo de implementação.
-  if (config.lure !== undefined) used.add('lure dinâmico');
-  if (config.ringSwap !== undefined) used.add('troca de anel');
+  config.sets.forEach((set, setIndex) => {
+    set.slots.forEach((slot, slotIndex) => {
+      if (slot === null) return;
+      const where = `conjunto ${setIndex + 1}, slot ${slotIndex + 1}`;
+      if (slot.do.kind === 'spell' && !content.spells.has(slot.do.spellId)) {
+        problems.push(`${where}: magia "${slot.do.spellId}" não existe`);
+      }
+      if (slot.do.kind === 'item' && !content.items.has(slot.do.itemId)) {
+        problems.push(`${where}: item "${slot.do.itemId}" não existe`);
+      }
+    });
+  });
 
-  for (const category of BOT_CATEGORIES) {
-    for (const rule of config[category]) {
-      if (advancedOnly.conditions.includes(rule.when.kind)) used.add(`condição "${rule.when.kind}"`);
+  const automationItems = (automation: BotAutomation): readonly string[] => {
+    switch (automation.model) {
+      case 'renew-ring':
+      case 'renew-amulet':
+      case 'swap-ring':
+        return [automation.params.itemId];
+      case 'swap-ammo-by-targets':
+        return [automation.params.ammoA, automation.params.ammoB];
+      case 'swap-weapon-shield-by-hp':
+        return [
+          automation.params.oneHanded,
+          automation.params.shield,
+          automation.params.twoHanded,
+        ];
+    }
+  };
+  config.automations.forEach((automation, index) => {
+    for (const id of automationItems(automation)) {
+      if (content.items.has(id)) continue;
+      problems.push(`automação ${index + 1} (${automation.model}): item "${id}" não existe`);
+    }
+  });
+
+  // Targeting (FUN-85): ids de MONSTRO, conferidos contra o catálogo inteiro — a configuração
+  // é do personagem e sobrevive à troca de hunt.
+  for (const [field, ids] of [
+    ['prioritize', config.targeting.prioritize],
+    ['ignore', config.targeting.ignore],
+  ] as const) {
+    for (const id of ids) {
+      if (content.monsters.has(id)) continue;
+      problems.push(`targeting.${field}: monstro "${id}" não existe`);
     }
   }
-  if (advancedOnly.targetPolicies.includes(config.targeting.policy)) {
-    used.add(`alvo "${config.targeting.policy}"`);
-  }
-  if (advancedOnly.postures.includes(config.targeting.posture.kind)) {
-    used.add(`postura "${config.targeting.posture.kind}"`);
-  }
-  return [...used];
-}
 
-/** Quantas regras cabem numa categoria, para o cliente desenhar os slots vazios. */
-export function slotsFor(category: BotCategory, limits: BotLimits): number {
-  return limits.slots[category];
+  // Regra de saída também tem teto (FUN-86), e o teto continua vindo do conteúdo.
+  if (config.exit.length > content.bot.slots.exit) {
+    problems.push(`${config.exit.length} regras de saída e só ${content.bot.slots.exit} slots`);
+  }
+
+  return problems;
 }

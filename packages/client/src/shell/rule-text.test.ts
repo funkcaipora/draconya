@@ -5,8 +5,7 @@ import type { BotVocabulary } from '../state/hud.js';
 // A linha compacta do painel (#162) diz o que a regra faz sem id cru.
 
 const vocabulary: BotVocabulary = {
-  vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-  advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+  vocabularyVersion: 1, slots: {},
   spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' }],
   supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {} }],
 };

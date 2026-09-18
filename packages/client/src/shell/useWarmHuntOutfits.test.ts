@@ -6,9 +6,7 @@ const catalogue = (hunts: Array<{ id: string; outfitIds: number[] }>) => ({
   monsters: [],
   ammunition: [], vocations: [], vocationLevel: 8,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
     spells: [], supplies: [],
   },
   items: [],

@@ -266,9 +266,8 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     type: 'catalogue',
     hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], ...hunt }],
     bot: {
-      vocabularyVersion: 1, advancedFromLevel: 50,
+      vocabularyVersion: 1,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-      advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
       spells: [], supplies: [],
     },
     items: [],
@@ -372,9 +371,8 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
+        vocabularyVersion: 1,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [], supplies: [],
       },
       items: [],
@@ -398,9 +396,8 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
+        vocabularyVersion: 1,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [], supplies: [],
       },
       items: [],
@@ -425,9 +422,8 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
+        vocabularyVersion: 1,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [], supplies: [],
       },
       items: [],
@@ -451,9 +447,8 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
+        vocabularyVersion: 1,
         slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
         spells: [], supplies: [],
       },
       items: [],
@@ -529,7 +524,7 @@ describe('vocation choice (#154)', () => {
     expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
     const catalogue = S2C_SCHEMAS.catalogue.parse({
       hunts: [], items: [],
-      bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+      bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
     });
     expect(catalogue.vocations).toEqual([]);
     expect(catalogue.vocationLevel).toBe(0);

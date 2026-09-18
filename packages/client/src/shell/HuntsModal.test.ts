@@ -29,7 +29,7 @@ const hunts: HuntListing[] = [
 
 const catalogue: Catalogue = {
   hunts, monsters: [], ammunition: [],
-  bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+  bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
   items: [], vocations: [], vocationLevel: 8,
 };
 

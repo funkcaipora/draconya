@@ -19,8 +19,7 @@ async function render(): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
   items: [{ id: 'steel-axe', name: 'Steel Axe', appearanceId: 3264, weight: 41, slot: 'hand', twoHanded: false }],

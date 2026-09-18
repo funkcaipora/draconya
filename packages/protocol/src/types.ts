@@ -513,13 +513,7 @@ export const S2C_SCHEMAS = {
      */
     bot: z.object({
       vocabularyVersion: z.number().int().positive(),
-      advancedFromLevel: z.number().int().positive(),
       slots: z.record(z.string(), z.number().int().nonnegative()),
-      advancedOnly: z.object({
-        conditions: z.array(z.string()),
-        targetPolicies: z.array(z.string()),
-        postures: z.array(z.string()),
-      }),
       spells: z.array(z.object({
         id: z.string().min(1),
         name: z.string().min(1),

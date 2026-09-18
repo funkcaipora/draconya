@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BOT_VOCABULARY_VERSION } from '@draconya/content';
+import { BOT_VOCABULARY_VERSION_V1 } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
@@ -36,7 +36,7 @@ describe('o rascunho do bot (FUN-89)', () => {
   it('manda a versão do vocabulário que este cliente entende', () => {
     // Configuração é dado PERSISTIDO: um vocabulário que muda sem número quebra a regra de
     // quem a salvou, em silêncio.
-    expect(toConfig(emptyDraft()).version).toBe(BOT_VOCABULARY_VERSION);
+    expect(toConfig(emptyDraft()).version).toBe(BOT_VOCABULARY_VERSION_V1);
   });
 });
 

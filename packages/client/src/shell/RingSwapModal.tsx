@@ -19,11 +19,9 @@ function clampPercent(raw: number): number {
 
 type RingSwapConfig = NonNullable<BotConfig['ringSwap']>;
 
-export function RingSwapModal({ initial, items, level, advancedFromLevel, onClose }: {
+export function RingSwapModal({ initial, items, onClose }: {
   initial: BotConfig['ringSwap'] | undefined;
   items: readonly ItemDefinition[];
-  level: number;
-  advancedFromLevel: number;
   onClose: () => void;
 }) {
   const rings = fingerRings(items);
@@ -32,7 +30,6 @@ export function RingSwapModal({ initial, items, level, advancedFromLevel, onClos
       itemId: rings[0]?.id ?? '', equipBelow: 50, removeAbove: 60, manaFloor: 10, restorePrevious: true,
     },
   );
-  const locked = level < advancedFromLevel;
   const bad = ring.removeAbove <= ring.equipBelow;
   const selected = rings.find((item) => item.id === ring.itemId);
 
@@ -42,7 +39,7 @@ export function RingSwapModal({ initial, items, level, advancedFromLevel, onClos
       onClose={onClose}
       title="Ring swap"
       width={520}
-      meta={`Bot avançado · LV ${String(advancedFromLevel)}+`}
+      meta="Bot avançado"
       footer={
         <>
           <span className="ring-swap-hint">
@@ -66,11 +63,6 @@ export function RingSwapModal({ initial, items, level, advancedFromLevel, onClos
         </>
       }
     >
-      {locked && (
-        <p className="system-warning ring-swap-locked" role="alert">
-          {`Bot avançado a partir do level ${String(advancedFromLevel)}. A configuração fica salva; o servidor recusa até lá.`}
-        </p>
-      )}
       <div className="ring-swap-header">
         <Slot
           size={36} kind="item" dashed

@@ -215,7 +215,7 @@ const raw = (over: Partial<RawContent> = {}): RawContent => {
     stamina: [stamina], party: [party], spells, skills, weaponFamilies,
     items: [...items, ...consumables],
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [map], routes: [route], ...over,
   };
@@ -1231,7 +1231,7 @@ describe('movimento com escritor único (FUN-69)', () => {
 
 import type { BotAction, BotConfig } from '@draconya/content';
 import {
-  BOT_VOCABULARY_VERSION, botConfigSchema, botExitRuleSchema, botRingSwapSchema,
+  BOT_VOCABULARY_VERSION_V1, botConfigSchema, botExitRuleSchema, botRingSwapSchema,
   botTargetingSchema,
 } from '@draconya/content';
 
@@ -1240,7 +1240,7 @@ const botConfig = (over: Partial<BotConfig> = {}): BotConfig =>
   // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
   // que é trabalho que o parse já faz — e do jeito que a produção faz.
   botConfigSchema.parse({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });

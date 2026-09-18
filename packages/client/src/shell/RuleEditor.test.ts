@@ -11,9 +11,7 @@ import type { BotCategory, BotRule } from '@draconya/content';
 // dele; quem recusa é o servidor, a tela só evita configurar o que vai levar "não".
 
 const vocabulary: BotVocabulary = {
-  vocabularyVersion: 1, advancedFromLevel: 50,
-  slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-  advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+  vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
   spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' }],
   supplies: [
     { id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {} },

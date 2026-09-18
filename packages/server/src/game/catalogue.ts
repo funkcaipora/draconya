@@ -42,13 +42,7 @@ export function buildCatalogue(content: Content): Catalogue {
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
-      advancedFromLevel: content.bot.advancedFromLevel,
       slots: { ...content.bot.slots },
-      advancedOnly: {
-        conditions: [...content.bot.advancedOnly.conditions],
-        targetPolicies: [...content.bot.advancedOnly.targetPolicies],
-        postures: [...content.bot.advancedOnly.postures],
-      },
       spells: [...content.spells.values()].map((spell) => ({
         id: spell.id,
         name: spell.name,

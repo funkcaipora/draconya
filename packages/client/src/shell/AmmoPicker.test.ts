@@ -17,7 +17,7 @@ const ammunition: Catalogue['ammunition'] = [
 ];
 const catalogue: Catalogue = {
   hunts: [], monsters: [], items: [], vocations: [], vocationLevel: 8, ammunition,
-  bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+  bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
 };
 
 beforeEach(() => {

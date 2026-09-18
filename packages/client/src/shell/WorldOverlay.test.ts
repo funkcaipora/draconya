@@ -27,9 +27,7 @@ const mockCatalogue: Catalogue = {
   ammunition: [],
   bot: {
     vocabularyVersion: 1,
-    advancedFromLevel: 50,
     slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [],
     supplies: [],
   },

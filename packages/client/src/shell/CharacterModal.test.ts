@@ -17,8 +17,7 @@ const CATALOGUE_WITH_BESTIARY = {
   vocationLevel: 8,
   bestiary: BESTIARY,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
 } as unknown as Catalogue;

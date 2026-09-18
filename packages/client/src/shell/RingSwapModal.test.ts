@@ -14,8 +14,6 @@ async function render(props: Partial<Parameters<typeof RingSwapModal>[0]> = {}):
   const fullProps = {
     initial: undefined,
     items,
-    level: 55,
-    advancedFromLevel: 50,
     onClose: () => {},
     ...props,
   };
@@ -27,7 +25,7 @@ describe('RingSwapModal', () => {
   it('renders modal title, meta, buttons and diagram', async () => {
     const html = await render();
     expect(html).toContain('Ring swap');
-    expect(html).toContain('Bot avançado · LV 50+');
+    expect(html).toContain('Bot avançado');
     expect(html).toContain('Cancelar');
     expect(html).toContain('Salvar');
     expect(html).toContain('sem anel');
@@ -75,14 +73,9 @@ describe('RingSwapModal', () => {
     expect(good).not.toContain('sem faixa morta');
   });
 
-  it('shows level gate warning only when level < advancedFromLevel', async () => {
-    const locked = await render({ level: 30, advancedFromLevel: 50 });
-    expect(locked).toContain('ring-swap-locked');
-    expect(locked).toContain('role="alert"');
-    expect(locked).toContain('Bot avançado a partir do level 50. A configuração fica salva; o servidor recusa até lá.');
-
-    const unlocked = await render({ level: 50, advancedFromLevel: 50 });
-    expect(unlocked).not.toContain('ring-swap-locked');
-    expect(unlocked).not.toContain('o servidor recusa até lá');
+  it('não tem mais gate de level: nenhum aviso de recusa (AB-03)', async () => {
+    const html = await render();
+    expect(html).not.toContain('ring-swap-locked');
+    expect(html).not.toContain('o servidor recusa até lá');
   });
 });

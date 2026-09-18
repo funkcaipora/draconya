@@ -19,13 +19,11 @@ async function render(props: { collapsed?: boolean } = {}): Promise<string> {
 const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [], items: [], vocations: [], vocationLevel: 8,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50,
-    // `heal` no teto (2 regras para 2 slots): prova que "+ regra" some quando a categoria
+    vocabularyVersion: 1, // `heal` no teto (2 regras para 2 slots): prova que "+ regra" some quando a categoria
     // enche. `potion` continua com folga (0/4): prova que "+ regra" aparece com folga. As
     // outras três ficam em 0/0 (sem slot algum) para o único "+ regra" da tela ser o de `potion`
     // — isolando a asserção de contagem sem depender de quais ações cada categoria oferece.
     slots: { heal: 2, potion: 4, attack: 0, rune: 0, support: 0 },
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' }],
     supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {} }],
   },
@@ -116,10 +114,10 @@ describe('BotPanel', () => {
 
     const htmlWithRings = await render();
     expect(htmlWithRings).toContain('Configurações avançadas');
-    expect(htmlWithRings).toContain('LV 50+');
     expect(htmlWithRings).toContain('Ring swap');
     expect(htmlWithRings).toContain('Nenhum anel configurado');
-    expect(htmlWithRings).toContain('bot-advanced-row-locked'); // level 10 < 50
+    // Sem gate de level (AB-03): a linha não tem mais o estado "bloqueada".
+    expect(htmlWithRings).not.toContain('bot-advanced-row-locked');
   });
 
   it('shows ring swap summary text in AdvancedSection when configured', async () => {
@@ -151,8 +149,8 @@ describe('BotPanel', () => {
     expect(source).toContain('onClose={() => { setRingSwapOpen(false); }}');
   });
 
-  it('renders "⌖ Lure e alvo" button even when level < advancedFromLevel and wires opening modal', async () => {
-    hud.set((state) => ({ ...state, level: 10 })); // below advancedFromLevel (50)
+  it('renders "⌖ Lure e alvo" button and wires opening modal', async () => {
+    hud.set((state) => ({ ...state, level: 10 }));
     const html = await render();
     expect(html).toContain('⌖ Lure e alvo');
 

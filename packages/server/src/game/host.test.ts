@@ -4,7 +4,7 @@ import {
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  BOT_VOCABULARY_VERSION, botConfigSchema, buildContent, compileItem, itemSchema, placeholderAppearances,
+  BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem, itemSchema, placeholderAppearances,
 } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
@@ -3324,7 +3324,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
   const staminaMinute = (staminaMs: number) => Math.floor(staminaMs / 60_000);
 
   const rules = (over: Partial<BotConfig>): BotConfig => botConfigSchema.parse({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });

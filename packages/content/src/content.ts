@@ -25,7 +25,7 @@ import type {
   Vocation, Weapon, WeaponFamily, WeaponFamilyDefinition, WeaponKind, WeaponPowerFormula, WeaponProfile,
 } from './schemas.js';
 import { packProblems } from './pack.js';
-import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
+import { validateBotConfig, validateBotConfigV2 } from './bot.js';
 
 export interface Content {
   /**
@@ -1074,13 +1074,19 @@ export function buildContent(raw: RawContent): Content {
   // personagem criado: o conteúdo é quem errou.
   const defaultConfig = content.bot.defaultConfig;
   if (defaultConfig !== undefined) {
-    // O gate de level é do jogador (§13.2); o padrão nasce no level 1, então é o nível 1 que
-    // ele tem de passar — regra avançada no padrão seria personagem recusado ao entrar.
-    const rejected = [
-      ...validateBotConfig(defaultConfig, content),
-      ...advancedFeaturesUsed(defaultConfig, content.bot)
-        .map((feature) => `usa recurso do bot avançado (${feature}), e o personagem nasce no level 1`),
-    ].map((problem) => `bot/baseline.json defaultConfig: ${problem}`);
+    const rejected = validateBotConfig(defaultConfig, content)
+      .map((problem) => `bot/baseline.json defaultConfig: ${problem}`);
+    if (rejected.length > 0) throw new ContentError(rejected);
+  }
+
+  // As baselines v2 por vocação (ADR 0032 d.4) passam pelo juiz v2, que cruza item e magia
+  // contra o catálogo. É dado de onboarding: id que não existe reprova o boot, não o primeiro
+  // personagem criado.
+  const defaultConfigByVocation = content.bot.defaultConfigByVocation;
+  if (defaultConfigByVocation !== undefined) {
+    const rejected = Object.entries(defaultConfigByVocation).flatMap(([vocationId, config]) =>
+      validateBotConfigV2(config, content)
+        .map((problem) => `bot/baseline.json defaultConfigByVocation.${vocationId}: ${problem}`));
     if (rejected.length > 0) throw new ContentError(rejected);
   }
 

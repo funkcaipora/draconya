@@ -1,8 +1,7 @@
 {
   "id": "baseline",
-  "vocabularyVersion": 1,
+  "vocabularyVersion": 2,
   "categoryCooldownMs": 1000,
-  "advancedFromLevel": 50,
   "targetSearchRadius": 8,
   "slots": {"heal": 3, "potion": 4, "attack": 10, "rune": 10, "support": 10, "exit": 4},
   "defaultConfig": {
@@ -21,5 +20,111 @@
     "exit": [],
     "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}}
   },
-  "_open": "O subconjunto do bot BÁSICO (até o level 49) continua [ABERTO] no PRD §13.2. O vocabulário aqui é o completo; o recorte do básico entra por dado, não por código. targetSearchRadius (8 tiles) é provisório: é o quanto o bot enxerga ao decidir para onde ir, e o número certo depende do tamanho das hunts reais. defaultConfig (FUN-114) é o bot com que todo personagem nasce — cura a 70 %, poção de vida a 40 %, Golpe Arcano com alvo ao alcance — e os limiares são ponto de partida, não balanceamento decidido."
+  "defaultConfigByVocation": {
+    "knight": {
+      "version": 2,
+      "activeSet": 0,
+      "sets": [
+        {"slots": [
+          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "item", "itemId": "health-potion"}, "when": [{"kind": "hp", "op": "<=", "percent": 40}]},
+          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        ]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}
+      ],
+      "automations": [
+        {
+          "model": "swap-weapon-shield-by-hp",
+          "params": {"oneHanded": "steel-axe", "shield": "wooden-shield", "twoHanded": "spike-sword"},
+          "enter": [{"kind": "hp", "op": "<", "percent": 30}],
+          "exit": [{"kind": "hp", "op": ">", "percent": 60}]
+        }
+      ],
+      "stance": "balanced",
+      "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}},
+      "exit": []
+    },
+    "paladin": {
+      "version": 2,
+      "activeSet": 0,
+      "sets": [
+        {"slots": [
+          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "item", "itemId": "health-potion"}, "when": [{"kind": "hp", "op": "<=", "percent": 40}]},
+          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        ]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}
+      ],
+      "automations": [
+        {
+          "model": "swap-ammo-by-targets",
+          "params": {"ammoA": "burst-arrow", "ammoB": "arrow"},
+          "enter": [{"kind": "targets", "op": ">=", "count": 3}],
+          "exit": [{"kind": "targets", "op": "<", "count": 3}]
+        }
+      ],
+      "stance": "balanced",
+      "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}},
+      "exit": []
+    },
+    "sorcerer": {
+      "version": 2,
+      "activeSet": 0,
+      "sets": [
+        {"slots": [
+          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "item", "itemId": "mana-potion"}, "when": [{"kind": "mana", "op": "<=", "percent": 40}]},
+          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        ]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}
+      ],
+      "automations": [
+        {
+          "model": "renew-ring",
+          "params": {"itemId": "energy-ring"},
+          "enter": [{"kind": "hp", "op": "<", "percent": 40}],
+          "exit": [{"kind": "hp", "op": ">", "percent": 70}]
+        }
+      ],
+      "stance": "balanced",
+      "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}},
+      "exit": []
+    },
+    "druid": {
+      "version": 2,
+      "activeSet": 0,
+      "sets": [
+        {"slots": [
+          {"do": {"kind": "spell", "spellId": "heal"}, "when": [{"kind": "hp", "op": "<=", "percent": 70}]},
+          {"do": {"kind": "item", "itemId": "mana-potion"}, "when": [{"kind": "mana", "op": "<=", "percent": 40}]},
+          {"do": {"kind": "spell", "spellId": "strike"}, "when": [{"kind": "targets", "op": ">=", "count": 1}]},
+          null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+        ]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]},
+        {"slots": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}
+      ],
+      "automations": [
+        {
+          "model": "renew-amulet",
+          "params": {"itemId": "glacier-amulet"},
+          "enter": [{"kind": "targets", "op": ">=", "count": 2}],
+          "exit": [{"kind": "targets", "op": "<", "count": 2}]
+        }
+      ],
+      "stance": "balanced",
+      "targeting": {"policy": "nearest", "prioritize": [], "ignore": [], "posture": {"kind": "stand"}},
+      "exit": []
+    }
+  },
+  "_open": "O gate de level do bot avançado foi revogado (ADR 0032 d.4): tudo vale desde o level 1. Os limiares de HP/alvos das automações (cavaleiro 30/60 %, paladino 3 alvos, sorcerer/druid 40/70 %) são ponto de partida, não balanceamento decidido. `categoryCooldownMs` e `slots` por categoria continuam aqui porque o motor v1 ainda os lê, e saem no AB-07 (DT-06)."
 }

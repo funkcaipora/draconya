@@ -69,7 +69,7 @@ const base = (over: Partial<RawContent> = {}): RawContent => {
     progression: [baseline], combat: [combat], stamina: [stamina], party: [party],
     skills, weaponFamilies,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     ...over,
   };
@@ -661,12 +661,31 @@ describe('o bot com que o personagem nasce (FUN-114)', () => {
     targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' } },
     ...over,
   });
+  const emptySets = () => Array.from({ length: 4 }, () => ({
+    slots: Array.from({ length: 24 }, () => null),
+  }));
   const withDefault = (over: Record<string, unknown> = {}) => base({
     spells: [spell],
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-      advancedOnly: { targetPolicies: ['lowest-hp'] },
       defaultConfig: config(over) }],
+  });
+  const withVocationBaseline = (spellId: string) => base({
+    spells: [spell],
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+      defaultConfigByVocation: {
+        knight: {
+          version: 2, activeSet: 0, automations: [], stance: 'balanced',
+          targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' } },
+          exit: [],
+          sets: emptySets().map((set, index) => (index === 0
+            ? { slots: set.slots.map((_, slot) => (slot === 0
+              ? { do: { kind: 'spell', spellId }, when: [] }
+              : null)) }
+            : set)),
+        },
+      } }],
   });
 
   it('é OPCIONAL, e quando existe sai montada em `content.bot.defaultConfig`', () => {
@@ -683,10 +702,13 @@ describe('o bot com que o personagem nasce (FUN-114)', () => {
     }))).toThrow(/defaultConfig: categoria "heal", slot 1: magia "cura-que-nao-existe" não existe/);
   });
 
-  it('e não pode usar recurso do bot avançado: o personagem nasce no level 1', () => {
-    expect(() => buildContent(withDefault({
-      targeting: { policy: 'lowest-hp', prioritize: [], ignore: [], posture: { kind: 'stand' } },
-    }))).toThrow(/defaultConfig: usa recurso do bot avançado \(alvo "lowest-hp"\)/);
+  it('as baselines v2 por vocação passam pelo juiz v2, nomeando conjunto e slot', () => {
+    // Mutação que mata: não validar `defaultConfigByVocation` — o kit de nascimento da vocação
+    // apontaria magia inexistente e o defeito só apareceria no primeiro personagem criado.
+    expect(buildContent(withVocationBaseline('heal')).bot.defaultConfigByVocation?.knight)
+      .toBeDefined();
+    expect(() => buildContent(withVocationBaseline('cura-que-nao-existe')))
+      .toThrow(/defaultConfigByVocation\.knight: conjunto 1, slot 1: magia "cura-que-nao-existe" não existe/);
   });
 });
 

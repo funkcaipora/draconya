@@ -167,9 +167,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     const { bot } = buildCatalogue(content);
 
     expect(bot.vocabularyVersion).toBe(content.bot.vocabularyVersion);
-    expect(bot.advancedFromLevel).toBe(content.bot.advancedFromLevel);
     expect(bot.slots).toEqual(content.bot.slots);
-    expect(bot.advancedOnly.targetPolicies).toEqual(content.bot.advancedOnly.targetPolicies);
   });
 
   it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais', () => {

@@ -7,7 +7,7 @@
 // Store própria pela mesma razão que a conta tem a dela (ADR 0007): editar o bot é uma sessão
 // inteira de digitação, e o HP mexendo no meio não pode redesenhar um campo de texto.
 
-import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
+import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION_V1, botConfigSchema } from '@draconya/content';
 import type { BotCategory, BotConfig, BotPosture, BotRule, BotTargetPolicy } from '@draconya/content';
 import { createStore } from '../state/hud.js';
 import { DEFAULT_HP_BELOW_PERCENT, setHpBelowPercent, toggleExitRule } from './exit-rules.js';
@@ -79,7 +79,7 @@ export const bot = createStore<BotState>(INITIAL_BOT);
  */
 export function toConfig(draft: BotDraft): BotConfig {
   return {
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     targeting: draft.targeting,
     exit: draft.exit,
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),

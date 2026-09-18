@@ -97,15 +97,6 @@ export const TEST_SUPPLY = {
 };
 
 /**
- * O recorte do bot avançado neste conteúdo de teste é `lowest-hp` (FUN-81).
- *
- * O conteúdo REAL tem a lista vazia — o §13.2 não decidiu o recorte, e inventá-lo em
- * `bot/baseline.json` seria decidir balanceamento disfarçado de implementação. Aqui ela é
- * preenchida de propósito: o gate é mecanismo, e mecanismo se testa com dado de teste.
- */
-export const TEST_ADVANCED_POLICY = 'lowest-hp';
-
-/**
  * O conteúdo de teste ANTES de virar `Content`, para quem precisa trocar uma peça.
  *
  * Existe porque o mapa de Cidade daqui é 6×6, e num mapa desse tamanho todo mundo está a dois
@@ -119,10 +110,10 @@ export function rawTestContent(): RawContent {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
     spells: [TEST_SPELL], items: [TEST_SUPPLY], weaponFamilies: TEST_WEAPON_FAMILIES,
- // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
- bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { targetPolicies: [TEST_ADVANCED_POLICY] } }],
+  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta. O gate de
+  // level saiu no AB-03; aqui o vocabulário é o v2.
+  bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
+    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
     city: { mapId: 'city', stepDurationMs: 500 },
   };

@@ -93,7 +93,7 @@ const raw = (over: Partial<RawContent> = {}): RawContent => {
     monsters: [rat], hunts: [hunt], vocations: [], progression: [progression], combat: [combat],
     stamina: [stamina], party: [party], spells: [], skills, weaponFamilies,
     items: [...items, ...ammunition],
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [map], routes: [route], ...over,
   };

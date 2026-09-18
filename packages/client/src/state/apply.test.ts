@@ -761,9 +761,7 @@ describe('a derivada por hora (FUN-83, §16.1)', () => {
 
 describe('o catálogo (FUN-79, FUN-89)', () => {
   const vocabulary = {
-    vocabularyVersion: 1, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
     spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal' }],
     supplies: [{ id: 'hp', name: 'Poção', price: 45, effect: 'heal' }],
   };

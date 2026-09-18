@@ -19,9 +19,7 @@ const catalogue: Catalogue = {
   vocationLevel: 8,
   bot: {
     vocabularyVersion: 1,
-    advancedFromLevel: 50,
     slots: { heal: 2, potion: 4, attack: 2, rune: 2, support: 2 },
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [],
     supplies: [],
   },
@@ -44,11 +42,11 @@ describe('LureTargetingModal', () => {
     expect(html).toBe('');
   });
 
-  it('renders modal 620px "Lure e alvo" with level meta, policies, postures, buttons, and hint', async () => {
+  it('renders modal 620px "Lure e alvo" with policies, postures, buttons, and hint', async () => {
     const html = await render();
     expect(html).toContain('Lure e alvo');
     expect(html).toContain('width:620px');
-    expect(html).toContain('Bot avançado · LV 50+');
+    expect(html).toContain('Bot avançado');
     expect(html).toContain('Mais próximo');
     expect(html).toContain('Menor HP');
     expect(html).toContain('Maior HP');
@@ -62,16 +60,11 @@ describe('LureTargetingModal', () => {
     expect(html).toContain('Salvar');
   });
 
-  it('shows locked banner only when level < advancedFromLevel', async () => {
-    hud.set((state) => ({ ...state, level: 30 }));
-    const locked = await render();
-    expect(locked).toContain('lure-locked');
-    expect(locked).toContain('Bot avançado a partir do level 50. A configuração fica salva; o servidor recusa até lá.');
-
-    hud.set((state) => ({ ...state, level: 50 }));
-    const unlocked = await render();
-    expect(unlocked).not.toContain('lure-locked');
-    expect(unlocked).not.toContain('o servidor recusa até lá');
+  it('não tem mais gate de level: nenhum aviso de recusa abaixo do 50 (AB-03)', async () => {
+    hud.set((state) => ({ ...state, level: 10 }));
+    const html = await render();
+    expect(html).not.toContain('lure-locked');
+    expect(html).not.toContain('o servidor recusa até lá');
   });
 
   it('validates hysteresis warning only when max < min (accepts max === min)', async () => {

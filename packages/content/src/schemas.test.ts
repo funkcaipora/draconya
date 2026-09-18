@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { huntSchema, itemSchema } from './schemas.js';
+import { botConditionSchema, botConfigV2Schema, botSetSchema, huntSchema, itemSchema } from './schemas.js';
 
 describe('huntSchema (#360)', () => {
   const validHunt = {
@@ -75,5 +75,52 @@ describe('itemSchema — consumível exige a forma inteira (AB-01)', () => {
     expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
     expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
     expect(() => itemSchema.parse({ ...ring, effect: { kind: 'heal', amount: 1 } })).toThrow();
+  });
+});
+
+describe('o vocabulário v2 do bot (AB-03, ADR 0032)', () => {
+  const emptySlots = (): (unknown)[] => Array.from({ length: 24 }, () => null);
+  const set = (slots = emptySlots()) => ({ slots });
+  const config = (sets: unknown[] = [set(), set(), set(), set()]) => ({ version: 2, sets });
+
+  it('aceita quatro conjuntos de 24 slots, e recusa 3 ou 25', () => {
+    expect(botConfigV2Schema.safeParse(config()).success).toBe(true);
+    expect(botConfigV2Schema.safeParse(config([set(), set(), set()])).success).toBe(false);
+    expect(botConfigV2Schema.safeParse(config([{ slots: [...emptySlots(), null] }, set(), set(), set()]))
+      .success).toBe(false);
+  });
+
+  it('recusa tecla repetida no conjunto com o path do slot, e recusa F13', () => {
+    const duplicated = set([
+      { do: { kind: 'spell', spellId: 'heal' }, when: [], hotkey: '1' },
+      { do: { kind: 'spell', spellId: 'heal' }, when: [], hotkey: '1' },
+      ...emptySlots().slice(2),
+    ]);
+    const bad = botSetSchema.safeParse(duplicated);
+    expect(bad.success).toBe(false);
+    if (!bad.success) {
+      expect(bad.error.issues[0]?.path).toEqual(['slots', 1, 'hotkey']);
+    }
+
+    const f13 = set([
+      { do: { kind: 'spell', spellId: 'heal' }, when: [], hotkey: 'F13' },
+      ...emptySlots().slice(1),
+    ]);
+    expect(botSetSchema.safeParse(f13).success).toBe(false);
+  });
+
+  it('aceita `condition` (efeito presente/ausente) e recusa reposição em slot de magia', () => {
+    expect(botConditionSchema.safeParse({ kind: 'condition', conditionId: 'haste', present: false })
+      .success).toBe(true);
+
+    const restockOnSpell = set([
+      { do: { kind: 'spell', spellId: 'heal' }, when: [], restock: { batch: 1, min: 0 } },
+      ...emptySlots().slice(1),
+    ]);
+    const bad = botSetSchema.safeParse(restockOnSpell);
+    expect(bad.success).toBe(false);
+    if (!bad.success) {
+      expect(bad.error.issues[0]?.path).toEqual(['slots', 0, 'restock']);
+    }
   });
 });
