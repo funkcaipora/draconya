@@ -380,6 +380,30 @@ describe('agregados e extrato por participante (#187, ADR 0027)', () => {
     expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
     expect(fromLegacy.aggregates.kills).toBe(9);
   });
+
+  it('o snapshot restaura as compras e o ledgerSeq sem reemitir seq (#419)', () => {
+    const session = sessionWith('a');
+    session.recordPurchase({
+      characterId: 'a', itemId: 'health-potion', quantity: 5, unitPrice: 45, total: 225,
+    });
+
+    const snap = session.snapshot();
+    expect(snap.purchases).toEqual([
+      { seq: 1, characterId: 'a', itemId: 'health-potion', quantity: 5, unitPrice: 45, total: 225 },
+    ]);
+
+    const restored = Session.fromSnapshot(snap, testRuleset(), Rng.fromSeed('x'));
+    expect(restored.purchases).toEqual(session.purchases);
+    // O contador volta junto: a próxima compra pega o seq 2, e nunca reusa o 1.
+    expect(restored.ledgerSeq).toBe(1);
+    expect(restored.recordPurchase({
+      characterId: 'a', itemId: 'mana-potion', quantity: 1, unitPrice: 50, total: 50,
+    }).seq).toBe(2);
+
+    // Snapshot anterior ao #419: ausente é nenhuma compra, e não sobe o formato.
+    const { purchases: _dropped, ...legacy } = snap;
+    expect(Session.fromSnapshot(legacy, testRuleset(), Rng.fromSeed('x')).purchases).toEqual([]);
+  });
 });
 
 describe('resolver canônico: seed, snapshot e retomada (CMB-02)', () => {

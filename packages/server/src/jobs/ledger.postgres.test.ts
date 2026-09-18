@@ -121,6 +121,20 @@ describe('credit of a receipt', () => {
   it('is gained minus spent', () => {
     expect(creditOf(receiptOf('s', 'c') as SessionReceipt)).toBe(380);
   });
+
+  it('adds the purchased total back, so the session row carries the net WITHOUT the purchases (#419)', () => {
+    // As compras têm linha própria com o valor. Sem somá-las de volta aqui, a linha do extrato
+    // contaria o gasto duas vezes; somando todas as linhas da sessão, o total continua
+    // `goldGained - goldSpent`.
+    const receipt = {
+      ...receiptOf('s', 'c'),
+      purchases: [
+        { seq: 1, characterId: 'c', itemId: 'health-potion', quantity: 1, unitPrice: 45, total: 45 },
+        { seq: 2, characterId: 'c', itemId: 'mana-potion', quantity: 1, unitPrice: 45, total: 45 },
+      ],
+    } as unknown as SessionReceipt;
+    expect(creditOf(receipt)).toBe(380 + 90);
+  });
 });
 
 describe.runIf(ready)('receipts to the ledger', () => {
@@ -487,6 +501,63 @@ describe.runIf(ready)('a coluna `gold` bate com o ledger (FUN-57)', () => {
 
     expect((await characterRow(database, characterId)).gold)
       .not.toBe(await foldLedger(database, characterId));
+  });
+
+  it('com compras por lote, cada uma tem linha própria e a coluna continua batendo (#419)', async () => {
+    // O que este teste prende: (a) uma linha `purchase` por compra, com `(session_id, seq)`;
+    // (b) a linha do extrato leva o líquido SEM as compras, e a soma do ledger continua
+    // `goldGained - goldSpent`; (c) retry do mesmo extrato não duplica; (d) a coluna
+    // `characters.gold` é a projeção dobrada no piso.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const aggs = (goldGained: number, goldSpent: number) => ({
+      durationMs: 1_000, xpGained: 0, goldGained, goldSpent,
+      kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+    });
+
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      aggregates: aggs(500, 0),
+    }));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const sessionId = randomUUID();
+    const purchases = [
+      { seq: 1, characterId, itemId: 'health-potion', quantity: 1, unitPrice: 45, total: 45 },
+      { seq: 2, characterId, itemId: 'mana-potion', quantity: 1, unitPrice: 45, total: 45 },
+    ];
+    const purchased = receiptOf(sessionId, characterId, {
+      seq: 3, purchases, aggregates: aggs(0, 90),
+    });
+    await receipts.save(purchased);
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const rows = await database.database.db
+      .select({ type: ledger.type, seq: ledger.seq, delta: ledger.delta })
+      .from(ledger)
+      .where(eq(ledger.sessionId, sessionId))
+      .orderBy(asc(ledger.seq));
+    expect(rows.map((row) => [row.type, row.seq, row.delta])).toEqual([
+      ['purchase', 1, -45],
+      ['purchase', 2, -45],
+      ['session-drain', 3, 0],
+    ]);
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(3);
+    expect((await characterRow(database, characterId)).gold).toBe(410);
+    expect((await characterRow(database, characterId)).gold)
+      .toBe(await foldLedger(database, characterId));
+
+    // Retry do MESMO extrato: a chave única recusa cada linha e nada muda.
+    await receipts.save(purchased);
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(3);
+    expect((await characterRow(database, characterId)).gold).toBe(410);
   });
 });
 

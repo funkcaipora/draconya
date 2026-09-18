@@ -141,6 +141,23 @@ describe.runIf(available)('pending receipts of one character (FUN-56)', () => {
     expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('ammo');
   });
 
+  it('carries the purchase entries through Redis and back, and one without stays without (#419)', async () => {
+    // Lista de PERMISSÃO, como as skills: sem a linha em `parseReceipt` as compras somem no
+    // caminho de volta sem erro nenhum, e o ledger perde o lançamento `purchase`.
+    const store = new ReceiptStore(redis);
+    const characterId = randomUUID();
+    const purchases = [
+      { seq: 1, characterId, itemId: 'health-potion', quantity: 5, unitPrice: 45, total: 225 },
+    ];
+    await store.save(receiptOf(randomUUID(), characterId, { purchases }));
+    await store.save(receiptOf(randomUUID(), characterId, { seq: 2 }));
+
+    const found = await store.pendingFor(characterId);
+
+    expect(found.find((receipt) => receipt.seq === 1)?.purchases).toEqual(purchases);
+    expect(found.find((receipt) => receipt.seq === 2)).not.toHaveProperty('purchases');
+  });
+
   it('keeps the index out of the sweep, which scans by key prefix', async () => {
     // `receipts:char:` e `receipt:` são prefixos distintos DE PROPÓSITO. Nomear o índice
     // `receipt:char:{id}` o poria dentro do `MATCH` da varredura, e um SET no lugar de um

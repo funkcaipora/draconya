@@ -6,6 +6,7 @@ import { resolveDamage } from '../combat/damage.js';
 import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
+import { containerRulesFor } from '../inventory.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -1483,7 +1484,7 @@ const withSpells = (
     gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
   });
   session.enter(hero);
-  return { session, hero, ruleset: session.ruleset as HuntRuleset };
+  return { session, hero, ruleset: session.ruleset as HuntRuleset, content: loaded };
 };
 
 const healRule = (percent: number) => ({
@@ -1680,6 +1681,151 @@ describe('supply (FUN-77)', () => {
     expect(session.aggregates.goldSpent).toBeGreaterThan(0);
     // Nunca gastou mais do que ganhou: o saldo não fica negativo em nenhum instante.
     expect(hero.gold + hero.goldDelta).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// --- estoque e reposição por item (#419) -------------------------------------------------------
+
+/** O item de teste com `min: 0`: usar não dispara compra, e o teste mede só o consumo. */
+const potionNoRestock = { ...consumables[0], restock: { batch: 5, min: 0 } };
+
+const itemRule = (itemId: string, percent = 100) => ({
+  when: { kind: 'hp' as const, op: '<=' as const, percent },
+  do: { kind: 'item' as const, itemId },
+});
+
+/** Põe uma pilha no inventário JÁ na sessão: `ensureContainers` rodou no `onEnter`. */
+const seedStack = (
+  hero: CharacterRuntime, content: Content, itemId: string, quantity: number,
+): void => {
+  const added = hero.inventory.add(
+    { instanceId: `seed:${itemId}`, itemId, quantity },
+    content.items, hero, containerRulesFor(hero.inventory, content.items, content.progression),
+  );
+  expect(added.ok).toBe(true);
+};
+
+describe('estoque e reposição por item (#419)', () => {
+  it('usar o consumível decrementa a pilha e aplica o efeito, sem debitar gold no uso (RF-01)', () => {
+    // A pilha é a fonte do consumo; o gold só sai na COMPRA do lote. Se o uso ainda debitásse,
+    // o saldo cairia duas vezes pelo mesmo consumível.
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({ potion: [itemRule('health-potion')] }),
+      { health: 1_000, gold: 500, items: [potionNoRestock], monsters: false },
+    );
+    seedStack(hero, loaded, 'health-potion', 5);
+
+    session.advanceBy(50);
+
+    expect(hero.inventory.quantityOf('health-potion')).toBe(4);
+    expect(hero.health).toBe(1_080);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
+    expect(session.aggregates.suppliesUsed).toBe(1);
+  });
+
+  it('cruzar o min compra um lote, e o valor entra no goldSpent (RF-02, RF-05)', () => {
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({ potion: [itemRule('health-potion')] }),
+      { health: 1_000, gold: 10_000, monsters: false },
+    );
+    seedStack(hero, loaded, 'health-potion', 10);
+
+    session.advanceBy(50);
+
+    // 10 → usa 1 → 9 < 10 → compra 50: a pilha volta com 59.
+    expect(hero.inventory.quantityOf('health-potion')).toBe(59);
+    expect(session.purchases).toHaveLength(1);
+    expect(session.purchases[0]).toMatchObject({
+      characterId: 'hero', itemId: 'health-potion', quantity: 50, unitPrice: 45, total: 2_250,
+    });
+    expect(session.purchases[0]?.seq).toBeGreaterThan(0);
+    expect(session.aggregates.goldSpent).toBe(2_250);
+    expect(hero.goldDelta).toBe(-2_250);
+  });
+
+  it('entrar na hunt com a pilha abaixo do min dispara a PRIMEIRA compra (RF-02)', () => {
+    // Condição que nunca vale (hp <= 0): o teste isola a compra da ENTRADA do uso.
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({ potion: [itemRule('health-potion', 0)] }),
+      { health: 1_000, gold: 10_000, monsters: false },
+    );
+    seedStack(hero, loaded, 'health-potion', 5);
+
+    session.advanceBy(50);
+
+    expect(session.purchases).toHaveLength(1);
+    expect(hero.inventory.quantityOf('health-potion')).toBe(55);
+  });
+
+  it('a compra é limitada pelo SALDO e nunca o deixa negativo (RF-04)', () => {
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({ potion: [itemRule('health-potion')] }),
+      { health: 1_000, gold: 90, monsters: false },
+    );
+    seedStack(hero, loaded, 'health-potion', 10);
+
+    session.advanceBy(50);
+
+    // 90 / 45 = 2 unidades; o saldo fecha em zero e não fica negativo.
+    expect(session.purchases).toHaveLength(1);
+    expect(session.purchases[0]).toMatchObject({ quantity: 2, total: 90 });
+    expect(hero.gold + hero.goldDelta).toBe(0);
+    expect(hero.inventory.quantityOf('health-potion')).toBe(11);
+  });
+
+  it('saldo zero com a pilha abaixo do min: nenhuma compra e a hunt encerra por out-of-gold (RF-08)', () => {
+    const { session, hero, content: loaded } = withSpells(
+      botConfig({
+        potion: [itemRule('health-potion')],
+        exit: [botExitRuleSchema.parse({ kind: 'out-of-gold' })],
+      }),
+      { health: 1_000, gold: 0, monsters: false },
+    );
+    seedStack(hero, loaded, 'health-potion', 10);
+
+    run(session, 1_000, 100);
+
+    expect(session.purchases).toHaveLength(0);
+    expect(session.ended).toBe('exit-rule');
+  });
+
+  it('a compra é evento da fila: 10 Hz e 1 Hz produzem as MESMAS compras (RF-06)', () => {
+    // O defeito que o ADR 0020 tornou estrutural: qualquer decisão de compra fora da fila
+    // diverge entre taxas. A lista de compras é comparada inteira — `seq`, item, quantidade e
+    // preço —, e o cenário precisa ter COMPRADO, senão um empate de zeros passaria por
+    // equivalência sem provar nada.
+    const completo = botConfig({
+      heal: [healRule(90)],
+      potion: [{
+        when: { kind: 'mana', op: '<=', percent: 40 },
+        do: { kind: 'item', itemId: 'mana-potion' },
+      }],
+      attack: [{
+        when: { kind: 'targets', op: '>=', count: 1 },
+        do: { kind: 'spell', spellId: 'strike' },
+      }],
+    });
+
+    const at = (stepMs: number) => {
+      const { session, hero, content: loaded } = withSpells(completo, { health: 2_000, gold: 100_000 });
+      seedStack(hero, loaded, 'mana-potion', 20);
+      run(session, 120_000, stepMs);
+      return {
+        purchases: session.purchases.map((p) => ({
+          seq: p.seq, itemId: p.itemId, quantity: p.quantity, unitPrice: p.unitPrice,
+        })),
+        goldSpent: session.aggregates.goldSpent,
+        goldDelta: hero.goldDelta,
+        mana: hero.mana,
+        kills: session.aggregates.kills,
+      };
+    };
+
+    const rapido = at(100);
+    expect(at(1_000)).toEqual(rapido);
+    expect(rapido.purchases.length).toBeGreaterThan(0);
+    expect(rapido.kills).toBeGreaterThan(0);
   });
 });
 

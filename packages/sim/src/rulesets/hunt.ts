@@ -25,7 +25,7 @@ import type {
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
-import { NOT_IN_CATALOG, balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
+import { NOT_IN_CATALOG, applyConsumableEffect, balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
 import type { CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
@@ -48,6 +48,8 @@ import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
+import { MAX_STACK } from '../inventory.js';
+import { planRestock } from '../restock.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
@@ -101,6 +103,12 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
+/**
+ * A reposição por lote (#419, ADR 0032 decisão 6). Evento da fila — nunca decisão por tick
+ * (invariante 2): vence ao entrar na hunt e quando uma pilha cruza o `min`. O subject é o
+ * personagem; é ele quem compra.
+ */
+const RESTOCK = 'restock';
 
 type ExitReason = 'manual-exit' | 'exit-rule';
 /**
@@ -512,6 +520,19 @@ export interface RunnerState {
   readonly pendingExit?: ExitReason;
 }
 
+/**
+ * Um consumível configurado pelo bot e o que a reposição precisa saber dele (#419): o preço e
+ * o peso vêm do CATÁLOGO (conteúdo), o lote e o mínimo do `restock` do item — o override por
+ * slot é do vocabulário v2 (AB-07), e é aqui, num lugar só, que ele entra quando existir.
+ */
+interface ConfiguredConsumable {
+  readonly itemId: string;
+  readonly price: number;
+  readonly weight: number;
+  readonly batch: number;
+  readonly min: number;
+}
+
 export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
@@ -818,6 +839,13 @@ export class HuntRuleset implements Ruleset {
     // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
     // orça só existem para quem de fato configurou.
     this.#armBot(session, character.id);
+    // Entrar na hunt dispara a PRIMEIRA compra pela mesma regra do uso (#419): sem isto, a
+    // hunt idle-first de 18 h ficaria sem poção assim que a pilha inicial acabasse.
+    if (this.#configuredConsumables(runner).length > 0) {
+      session.scheduleIn(RESTOCK, 0, {
+        priority: EventPriority.Housekeeping, subject: character.id,
+      });
+    }
   }
 
   /**
@@ -927,6 +955,7 @@ export class HuntRuleset implements Ruleset {
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
+      case RESTOCK: return this.#onRestock(session, event.subject);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
@@ -1630,9 +1659,9 @@ export class HuntRuleset implements Ruleset {
     switch (action.kind) {
       case 'spell': return this.#castSpell(session, character, action.spellId);
       case 'supply': return this.#useSupply(session, character, action.supplyId);
-      // Catálogo de ITEM é M8. `validateBotConfig` já recusa a regra na entrada; aqui a
-      // resposta é não fazer nada, que é o que "sem catálogo" significa.
-      case 'item': return NOT_IN_CATALOG;
+      // O item consumível substitui o supply no vocabulário v2 (AB-03): usar decrementa a
+      // pilha e a reposição por lote (#419) repõe quando ela cruza o `min`.
+      case 'item': return this.#useConsumableItem(session, character, action.itemId);
     }
   }
 
@@ -2153,6 +2182,136 @@ export class HuntRuleset implements Ruleset {
       }
     }
     return result;
+  }
+
+  /**
+   * Os consumíveis que o bot configurou (#419), deduplicados por item e resolvidos no
+   * catálogo. É o ÚNICO ponto que lê o `restock` — o override por slot do vocabulário v2
+   * (AB-07) entra aqui quando existir, sem tocar no resto.
+   *
+   * Item sem `price` ou sem `restock` é ignorado: nunca se compra por item que o conteúdo não
+   * precificou, e o vocabulário v1 aceita `item` no schema.
+   */
+  #configuredConsumables(runner: Runner): readonly ConfiguredConsumable[] {
+    const config = runner.botConfig;
+    if (config === undefined) return [];
+    const out: ConfiguredConsumable[] = [];
+    const seen = new Set<string>();
+    for (const category of BOT_CATEGORIES) {
+      for (const rule of config[category]) {
+        if (rule.enabled === false || rule.do.kind !== 'item') continue;
+        const itemId = rule.do.itemId;
+        if (seen.has(itemId)) continue;
+        const item = this.#options.items.get(itemId);
+        if (item?.kind !== 'consumable') continue;
+        if (item.price === undefined || item.restock === undefined) continue;
+        seen.add(itemId);
+        out.push({
+          itemId, price: item.price, weight: item.weight,
+          batch: item.restock.batch, min: item.restock.min,
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Usa um consumível ITEM (#419): aplica o efeito, decrementa a pilha em 1 e, se ela cruzar o
+   * `min`, agenda a reposição. Sem débito de gold no uso — o gold saiu na compra do lote, pelo
+   * ledger (ADR 0032 decisão 6).
+   */
+  #useConsumableItem(
+    session: Session, character: CharacterRuntime, itemId: string,
+  ): CastResult {
+    const definition = this.#options.items.get(itemId);
+    if (definition?.kind !== 'consumable') return NOT_IN_CATALOG;
+    const stack = character.inventory.findStack(itemId);
+    if (stack === null) return { ok: false, reason: 'not-enough-gold', retryInMs: 0 };
+
+    const effect = definition.effect;
+    const aim = effect?.kind === 'damage'
+      ? this.#aimFor(character, effect.range, effect.area)
+      : null;
+    // Efeito PRIMEIRO, decremento depois — como `useSupply` confere antes de pagar. Consumir
+    // uma poção de cura recusada seria perdê-la sem repor nada.
+    const result = applyConsumableEffect(
+      character, definition, aim, this.#options.combat, session.rng, this.#runeScaling(character),
+    );
+    if (!result.ok) return result;
+
+    character.inventory.removeOne(stack.instanceId);
+    session.credit(character.id, 'suppliesUsed', 1);
+    session.emit({
+      kind: 'supply-used', characterId: character.id, supplyId: definition.id,
+      position: this.#at(character),
+      targets: aim === null
+        ? NO_SPELL_TARGETS
+        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
+      tiles: aim === null ? NO_TILES : [...this.#aimTiles],
+    });
+    if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
+    else this.#applyHits(session, character, result.hits);
+
+    const configured = this.#configuredConsumables(this.#runnerOf(character.id))
+      .find((entry) => entry.itemId === itemId);
+    if (configured !== undefined && character.inventory.quantityOf(itemId) < configured.min) {
+      session.scheduleIn(RESTOCK, 0, {
+        priority: EventPriority.Housekeeping, subject: character.id,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Repõe os consumíveis que cruzaram o `min` (#419), um lote por item, limitado por
+   * capacidade, teto de pilha e saldo. Evento da fila — a 1 Hz desanexada o resultado é o
+   * mesmo da 10 Hz anexada, e é o que o teste de equivalência prende.
+   *
+   * O dinheiro NUNCA sai por item que não entrou: se o `add` recusar, a compra é desfeita.
+   */
+  #onRestock(session: Session, characterId: string): void {
+    const character = findById(session.participants, characterId);
+    if (character === null || !character.alive) return;
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return;
+
+    for (const configured of this.#configuredConsumables(runner)) {
+      const current = character.inventory.quantityOf(configured.itemId);
+      const plan = planRestock(configured.itemId, {
+        current,
+        min: configured.min,
+        batch: configured.batch,
+        price: configured.price,
+        weight: configured.weight,
+        freeCapacity: character.capacity - character.inventory.weight(this.#options.items),
+        freeStack: MAX_STACK - current,
+        balance: balanceOf(character),
+      });
+      if (plan === null) continue;
+
+      const purchase = session.recordPurchase({
+        characterId, itemId: plan.itemId, quantity: plan.quantity,
+        unitPrice: plan.unitPrice, total: plan.total,
+      });
+      character.goldDelta -= plan.total;
+      session.credit(characterId, 'goldSpent', plan.total);
+
+      // O id é DETERMINÍSTICO e deriva do `seq`: reprocessar o extrato insere a mesma
+      // instância, como o loot (`sessionId:n`).
+      const carried: CarriedItem = {
+        instanceId: `${session.id}:${characterId}:buy:${purchase.seq}`,
+        itemId: plan.itemId, quantity: plan.quantity, origin: 'market',
+      };
+      const added = character.inventory.add(
+        carried, this.#options.items, character, this.#containerRules(character),
+      );
+      if (!added.ok) {
+        // Não cabe: o dinheiro não pode sair por item que não entrou.
+        session.undoPurchase(purchase);
+        character.goldDelta += plan.total;
+        session.credit(characterId, 'goldSpent', -plan.total);
+      }
+    }
   }
 
   /**

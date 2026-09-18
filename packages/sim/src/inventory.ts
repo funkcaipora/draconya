@@ -23,7 +23,7 @@
 
 import { DAMAGE_TYPES } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageType, Item, ItemSlot, Progression, RingEffect,
+  CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
 } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
@@ -39,8 +39,11 @@ export interface CarriedItem {
   /**
    * De onde veio (§25.3, #154). Ausente é `'loot'` — o snapshot anterior a #154 não tem a
    * chave, e tudo o que existia antes caiu de monstro. É o `origin` da linha de `item_instance`.
+   *
+   * Alargado de `'loot' | 'vocation-choice'` para `ItemOrigin` no #419: a pilha comprada pelo
+   * bot entra como `'market'`, e o valor é do conteúdo (`schemas.ts`), não desta task.
    */
-  readonly origin?: 'loot' | 'vocation-choice';
+  readonly origin?: ItemOrigin;
 }
 
 export type ContainerName = 'backpack' | 'satchel';
@@ -243,6 +246,46 @@ export class Inventory {
   /** Apara `null` do fim, linha a linha, até o tamanho inicial — nunca abaixo dele. */
   #trim(target: (CarriedItem | null)[], initial: number): void {
     while (target.length > initial && target[target.length - 1] === null) target.pop();
+  }
+
+  /**
+   * A primeira pilha deste item nos containers, ou `null` (#419). Mochila primeiro — é a
+   * mesma ordem de `items()` e a que o jogador vê.
+   */
+  findStack(itemId: string): CarriedItem | null {
+    for (const item of this.items()) if (item.itemId === itemId) return item;
+    return null;
+  }
+
+  /** Quantas unidades deste item estão nos containers, somando as pilhas (#419). */
+  quantityOf(itemId: string): number {
+    let total = 0;
+    for (const item of this.items()) if (item.itemId === itemId) total += item.quantity;
+    return total;
+  }
+
+  /**
+   * Tira UMA unidade da pilha identificada por `instanceId` (#419). Em zero, a instância sai e
+   * a linha vazia do fim é aparada; acima disso, a pilha só encolhe.
+   *
+   * Devolve o que sobrou da instância, ou `null` se ela não estava lá. O item NUNCA é recriado
+   * com id novo: a identidade é o que carrega a proveniência.
+   */
+  removeOne(instanceId: string): CarriedItem | null {
+    for (const [target, initial] of [[this.#backpack, this.#initial.backpack], [this.#satchel, this.#initial.satchel]] as const) {
+      const index = target.findIndex((carried) => carried?.instanceId === instanceId);
+      if (index < 0) continue;
+      const carried = target[index] as CarriedItem;
+      if (carried.quantity > 1) {
+        const left = { ...carried, quantity: carried.quantity - 1 };
+        target[index] = left;
+        return left;
+      }
+      target[index] = null;
+      this.#trim(target, initial);
+      return null;
+    }
+    return null;
   }
 
   /**

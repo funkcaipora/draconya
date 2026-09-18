@@ -14,7 +14,7 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import type { Combat, CompiledMitigation, Spell, Supply } from '@draconya/content';
+import type { Combat, CompiledMitigation, Item, Spell, Supply } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -413,6 +413,69 @@ export function useSupply(
       damage: 0,
       hits: NO_HITS,
       goldSpent: supply.price,
+    };
+}
+
+/**
+ * Aplica o efeito de um consumível ITEM (#419, ADR 0032 decisão 6), sem `Purse` e sem gold.
+ *
+ * É o irmão de `useSupply`: a ordem das recusas da runa é a mesma — requisitos, alvo, alcance
+ * e só então o efeito —, e o que some é o débito. Quem consome a pilha é o ruleset, depois de
+ * o efeito ter sido aceito: consumir primeiro perderia a poção de uma cura recusada.
+ *
+ * `blessing` é recusada: o `sim` v1 não a executa, e devolver `not-in-catalog` é a mesma
+ * degradação de uma magia que sumiu do conteúdo.
+ */
+export function applyConsumableEffect(
+  user: CharacterRuntime,
+  item: Item,
+  aim: SpellAim | null = null,
+  combat?: Combat,
+  rng?: Rng,
+  scaling?: SpellScaling,
+): CastResult {
+  const effect = item.effect;
+  if (effect === undefined || effect.kind === 'blessing') return NOT_IN_CATALOG;
+
+  if (effect.kind === 'damage') {
+    if (item.requires.level !== undefined && user.level < item.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (item.requires.magicLevel !== undefined && (scaling?.skillLevel ?? 0) < item.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
+    if (aim.distance > effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
+    if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
+    const hits: number[] = [];
+    let total = 0;
+    for (let i = 0; i < aim.targets.length; i += 1) {
+      const target = aim.targets[i] as SpellTarget;
+      // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia.
+      const { min, max } = spellPowerRange(effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
+      const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
+      const result = resolveDamage(
+        { rawDamage: power, source: 'rune', damageType: effect.damageType },
+        { armor: target.armor, dodgeChance: target.dodgeChance, mitigation: target.mitigation },
+        'pve', combat, rng,
+      );
+      hits.push(result.resolvedDamage);
+      total += result.resolvedDamage;
+    }
+    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: 0 };
+  }
+
+  return effect.kind === 'heal'
+    ? {
+      ok: true,
+      healed: restore(user, 'health', effect.amount),
+      manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
+    }
+    : {
+      ok: true,
+      healed: 0,
+      manaRestored: restore(user, 'mana', effect.amount),
+      damage: 0, hits: NO_HITS, goldSpent: 0,
     };
 }
 
