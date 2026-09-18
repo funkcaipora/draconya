@@ -362,3 +362,10 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `creature-hit` e a contribuição usam `healthDamage`; `bestBasicHit`/`bestSpellHit` continuam
   com o RESOLVIDO. O `AppliedDamageOutcome` é efêmero: não entra no snapshot nem no S2C, e não
   há campo de protocolo nem UI de breakdown (DT-03).
+- **A conformance de combate é ORÁCULO explícito, nunca snapshot da implementação** (CMB-10,
+  #336). `combat/conformance.test.ts` prende fórmula, ordem de RNG e arredondamento com dados
+  escritos à mão, cada caso a 100 ms, a 1000 ms e com snapshot/retomada; o `RngState` é
+  comparado entre as três, nunca copiado para o oráculo — ele não é número que se lê, é
+  propriedade de equivalência. `combat/conformance.ts` é a comparação PURA; o cenário misto do
+  benchmark vive em `tools` e a interpretação da linha de base em
+  `docs/product/combat-conformance.md`.

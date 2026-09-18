@@ -5,7 +5,8 @@ de dano e mitigação (CMB-03), defesa, escudo e blocking físico (CMB-04), fam�
 proficiências (CMB-05), abilities de monstro e apresentação tipada (CMB-06), condições
 generalizadas, dano contínuo e campos de tile (CMB-07), outcomes avançados de crítico, leech e
 mana shield (CMB-08), auditoria de apresentação de combate (CMB-09, bloqueada pela biblioteca
-parcial), motor de magias com alvo único, área e requisito de vocação (FUN-74, FUN-92), skills
+parcial), conformance seedada e benchmark misto (CMB-10), motor de magias com alvo único, área e
+requisito de vocação (FUN-74, FUN-92), skills
 por uso (FUN-75) e contrato de compatibilidade de combate (ADR 0031) implementados
 **PRD:** §12
 **Épico:** E2
@@ -665,6 +666,25 @@ Os modificadores entram pelo `DamageIntent` e o CMB-08 os liga aos **ataques bá
 corpo, distância e wand/rod), onde a fonte é `combat.modifiers`. Magia, runa, ability de monstro
 e DOT seguem sem modificadores — declará-los é conteúdo novo sob o mesmo contrato. Reflect,
 imbuements não aprovados, PvP e a janela de breakdown ficam fora.
+
+## Conformance e benchmark (CMB-10, #336)
+
+O contrato do ADR 0031 virou executável em dois lugares, e os dois são complementares:
+
+- **Matriz de conformance** (`packages/sim/src/combat/conformance.test.ts`, sobre o contrato
+  puro de `packages/sim/src/combat/conformance.ts`): casos com semente, plano de avanço e
+  oráculo escrito à mão, cada um rodando a 100 ms, a 1000 ms e com snapshot/retomada. Cobre
+  físico/elemental, resistência/vulnerabilidade/imunidade, defesa/escudo, famílias de arma,
+  ability de monstro, condição/DOT, campo e outcomes avançados. É o que reprova no CI quando
+  fórmula, ordem de RNG ou arredondamento mudam — sem depender da média de dano, que esconde
+  exatamente essa mudança.
+- **Benchmark misto** (`SCENARIO=combat pnpm bench:hunts`, cenário em
+  `packages/tools/src/bench/combat-scenario.ts`): compõe ability em área, resistência, defesa,
+  condição/campo e modificadores sobre 40 monstros, e imprime plataforma, Node, CPU, µs/tick por
+  instância, memória e GC. O número **não** é teto de CI: máquina lenta é contexto, não falha.
+
+O método, a máquina da medição e a interpretação da linha de base estão em
+[`combat-conformance.md`](./combat-conformance.md).
 
 ## O que o jogador vê (FUN-106, FUN-109)
 
