@@ -47,13 +47,13 @@ function creature(id: number, over: Partial<Creature> = {}): Creature {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
   ],

@@ -75,7 +75,7 @@ mundo em canvas. Nada nela toca `world`.
 
 **É um `Panel dock` FIXO desde #258 (D6).** Antes, a barra do topo montava e desmontava a janela
 inteira (`{open.analyzer && <Analyzer />}`); agora ela está sempre montada na coluna da direita,
-como `BotPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
+como `AutomationsPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
 remove. **Nasce aberta** (FUN-115; o §16.1 dizia minimizada): quem decide se o corpo aparece é a
 barra do topo, e uma janela que abre minimizada é uma janela que abre vazia. Minimizada, o tempo
 de sessão fica na barra de título (`meta` do `Panel`). Ao encerrar ela reabre sozinha — um

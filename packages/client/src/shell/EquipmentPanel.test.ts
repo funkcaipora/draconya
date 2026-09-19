@@ -24,19 +24,18 @@ const catalogue: Catalogue = {
   hunts: [],
   monsters: [],
   vocations: [], vocationLevel: 8,
-  ammunition: [
-    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447, requires: {} },
-    { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
-  ],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
   items: [
     { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
     { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null, twoHanded: false },
     { id: 'bow', name: 'Bow', appearanceId: 3350, weight: 31, slot: 'hand', twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+  ],
+  ammunition: [
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 3447, requires: {} },
+    { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
   ],
 };
 
@@ -126,7 +125,7 @@ describe('o slot equipado (FUN-108)', () => {
       ...state,
       catalogue,
       inventory: inventory({
-        equipped: { ammo: { instanceId: 'i9', itemId: 'gold-coin', quantity: 40 } },
+        equipped: { back: { instanceId: 'i9', itemId: 'gold-coin', quantity: 40 } },
       }),
     }));
 
@@ -158,24 +157,27 @@ describe('a coluna da direita (#161)', () => {
     expect(html).not.toContain('1.234');
   });
 
-  it('com um bow na mão, o escudo vira o seletor de munição — a grátis quando não há escolha, a escolhida quando há', async () => {
-    // Mutação que mata: ignorar `weapon.kind` (o escudo continua slot), ou mostrar a escolhida
-    // com `ammo.arrow` nulo em vez de cair na grátis.
+  it('com um bow na mão, o escudo vira o seletor de munição; sem seleção mostra só "Munição"', async () => {
+    // Mutação que mata: ignorar `weapon.kind` (o escudo continua slot), ou mostrar uma munição
+    // "grátis" que não existe mais (a escolha é sempre explícita e debita gold).
     hud.set((state) => ({
       ...state, catalogue,
       inventory: inventory({ equipped: { hand: { instanceId: 'b1', itemId: 'bow', quantity: 1 } } }),
     }));
-    const free = await render();
-    // #218: o seletor é o slot ESCUDO (`slot-shield`) com o contorno tracejado próprio
-    // (`slot-ammo-picker`); a classe `slot-ammo` continua sendo só do slot `ammo` de verdade.
-    expect(free).toContain('class="slot-shield"');
-    expect(free).toContain('slot-ammo-picker');
-    expect(free).toContain('class="slot-ammo"');
-    expect(free).toContain('munição: Arrow · grátis');
-    expect(free).not.toContain('Escudo (vazio)');
+    const none = await render();
+    expect(none).toContain('class="slot-shield"');
+    expect(none).toContain('slot-ammo-picker');
+    expect(none).toContain('munição: Munição');
+    expect(none).not.toContain('Escudo (vazio)');
+    expect(none).not.toContain('grátis');
+    // O slot `ammo` do corpo continua genérico (vazio).
+    expect(none).toContain('class="slot-ammo"');
+    expect(none).toContain('Munição (vazio)');
+
     hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
     const chosen = await render();
     expect(chosen).toContain('munição: Sniper Arrow · 5 gold/tiro');
+
     // Sem bow, o escudo é um slot.
     hud.set((state) => ({ ...state, inventory: inventory() }));
     expect(await render()).toContain('Escudo (vazio)');

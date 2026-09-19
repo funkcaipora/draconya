@@ -1,4 +1,4 @@
-// O rascunho da configuração do bot, e o que o servidor disse dela (FUN-89).
+// O rascunho da configuração do bot, e o que o servidor disse dela (FUN-89, AB-10).
 //
 // **Salvar é uma INTENÇÃO.** O estado "salvo" só vira verdade quando o servidor confirma — e uma
 // recusa NÃO descarta o que o jogador escreveu. Descartar seria a pior resposta possível a
@@ -6,9 +6,16 @@
 //
 // Store própria pela mesma razão que a conta tem a dela (ADR 0007): editar o bot é uma sessão
 // inteira de digitação, e o HP mexendo no meio não pode redesenhar um campo de texto.
+//
+// **Vocabulário v2 (AB-03/#418, ADR 0032 d.1).** As cinco categorias do bot v1 saíram: a barra
+// de ações é a configuração, e ela é `sets[4] × slots[24]` com `activeSet`, `stance` e as
+// automações. O rascunho lê a MESMA configuração que o servidor grava (ADR 0021), então migrar
+// aqui foi obrigatório para a barra e o motor não divergirem sobre o que um slot significa.
 
-import { BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
-import type { BotCategory, BotConfig, BotPosture, BotRule, BotTargetPolicy } from '@draconya/content';
+import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema } from '@draconya/content';
+import type {
+  BotAutomation, BotConfigV2, BotPosture, BotSlot, BotStance, BotTargetPolicy, BotTargeting,
+} from '@draconya/content';
 import { createStore } from '../state/hud.js';
 import { DEFAULT_HP_BELOW_PERCENT, setHpBelowPercent, toggleExitRule } from './exit-rules.js';
 import type { ExitRuleKind } from './exit-rules.js';
@@ -22,15 +29,20 @@ export type SaveState =
   | 'refused';
 
 export interface BotDraft {
-  readonly rules: Readonly<Record<BotCategory, readonly BotRule[]>>;
-  readonly exit: BotConfig['exit'];
-  readonly targeting: BotConfig['targeting'];
+  /** Os quatro conjuntos (loadouts) de 24 slots — a configuração inteira (ADR 0032 d.1/d.4). */
+  readonly sets: BotConfigV2['sets'];
+  /** Qual conjunto a barra desenha e o `use-slot` dispara. */
+  readonly activeSet: BotConfigV2['activeSet'];
+  /** A postura de combate (offensive/balanced/defensive). */
+  readonly stance: BotStance;
+  readonly automations: BotConfigV2['automations'];
+  readonly targeting: BotTargeting;
+  readonly exit: BotConfigV2['exit'];
   /**
-   * O lure dinâmico (SV-09, §13.8): agora EDITÁVEL — histerese min/max. `undefined` até o
-   * jogador tocar (é assim que o bot básico continua sem lure algum).
+   * O lure dinâmico (SV-09, §13.8): histerese min/max. `undefined` até o jogador tocar — é
+   * assim que o bot básico continua sem lure algum.
    */
-  readonly lure?: BotConfig['lure'];
-  readonly ringSwap?: BotConfig['ringSwap'];
+  readonly lure?: BotConfigV2['lure'];
 }
 
 export interface BotState {
@@ -47,20 +59,22 @@ export interface BotState {
   readonly touched: boolean;
 }
 
-/** Um rascunho vazio: cinco categorias sem regra nenhuma. */
+/** Quatro conjuntos de 24 posições vazias, mais o `targeting`/`stance` de sempre. */
 export function emptyDraft(): BotDraft {
-  const rules = Object.fromEntries(
-    BOT_CATEGORIES.map((category) => [category, [] as readonly BotRule[]]),
-  ) as Record<BotCategory, readonly BotRule[]>;
   return {
-    rules,
-    exit: [],
+    sets: Array.from({ length: BOT_SET_COUNT }, () => ({
+      slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null as BotSlot | null),
+    })),
+    activeSet: 0,
+    stance: 'balanced',
+    automations: [],
     targeting: {
       policy: 'nearest',
       prioritize: [],
       ignore: [],
       posture: { kind: 'stand' },
     },
+    exit: [],
     lure: undefined,
   };
 }
@@ -77,17 +91,17 @@ export const bot = createStore<BotState>(INITIAL_BOT);
  * A ORDEM dos slots É a prioridade (§13.4): o primeiro de cima é o que executa. Por isso a
  * lista viaja como está — reordenar aqui mudaria o comportamento sem o jogador ter pedido.
  */
-export function toConfig(draft: BotDraft): BotConfig {
+export function toConfig(draft: BotDraft): BotConfigV2 {
   return {
     version: BOT_VOCABULARY_VERSION,
+    activeSet: draft.activeSet,
+    sets: draft.sets,
+    automations: draft.automations,
+    stance: draft.stance,
     targeting: draft.targeting,
     exit: draft.exit,
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),
-    ...(draft.ringSwap === undefined ? {} : { ringSwap: draft.ringSwap }),
-    ...Object.fromEntries(
-      BOT_CATEGORIES.map((category) => [category, draft.rules[category]]),
-    ),
-  } as BotConfig;
+  };
 }
 
 /** O servidor respondeu (FUN-89). O rascunho FICA em qualquer um dos dois casos. */
@@ -109,16 +123,16 @@ export function edit(produce: (draft: BotDraft) => BotDraft): void {
   }));
 }
 
-/** Quanto tempo o painel espera antes de mandar (#162): dois toques seguidos viram UMA mensagem. */
+/** Quanto tempo a barra espera antes de mandar (#162): dois toques seguidos viram UMA mensagem. */
 export const SAVE_DEBOUNCE_MS = 300;
 
-/** Quem manda a configuração. Injetável: o painel liga ao socket, o teste anota. */
-export type ConfigSender = (config: BotConfig) => boolean;
+/** Quem manda a configuração. Injetável: a barra liga ao socket, o teste anota. */
+export type ConfigSender = (config: BotConfigV2) => boolean;
 
 let sender: ConfigSender | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** O painel liga o socket aqui uma vez; a store não importa `net/` (ADR 0007 — o socket fica fora do render). */
+/** A barra liga o socket aqui uma vez; a store não importa `net/` (ADR 0007 — o socket fica fora do render). */
 export function setConfigSender(next: ConfigSender | null): void {
   sender = next;
 }
@@ -147,41 +161,79 @@ export function flushSave(): void {
   }
 }
 
-/** Liga ou desliga uma regra (#162) e salva. A regra fica no slot; só sai da avaliação. */
-export function toggleRule(category: BotCategory, index: number): void {
-  edit((draft) => ({
-    ...draft,
-    rules: {
-      ...draft.rules,
-      [category]: draft.rules[category].map((rule, i) => (i === index ? { ...rule, enabled: rule.enabled === false } : rule)),
-    },
-  }));
+/** Troca o conjunto ATIVO (CONJUNTO da barra, ADR 0032 d.4) e salva com debounce. */
+export function setActiveSet(id: number): void {
+  edit((draft) => ({ ...draft, activeSet: id }));
   scheduleSave();
 }
 
-/** Move uma regra uma posição (#162): reordenar é configurar, e salva. */
-export function moveRule(category: BotCategory, index: number, by: number): void {
+/**
+ * Liga/desliga a chave "automática" de UM slot do conjunto ativo (Shift+clique, UC-BAR-005) e
+ * salva com debounce. Slot vazio não tem o que desligar: a intenção é ignorada.
+ */
+export function setSlotAuto(slot: number, auto: boolean): void {
   edit((draft) => {
-    const list = [...draft.rules[category]];
-    const to = index + by;
-    if (to < 0 || to >= list.length) return draft;
-    const [moved] = list.splice(index, 1);
-    if (moved !== undefined) list.splice(to, 0, moved);
-    return { ...draft, rules: { ...draft.rules, [category]: list } };
+    const set = draft.sets[draft.activeSet];
+    const entry = set?.slots[slot];
+    if (set === undefined || entry === null || entry === undefined) return draft;
+    const slots = set.slots.map((current, index) => (index === slot ? { ...entry, auto } : current));
+    const sets = draft.sets.map((current, index) => (index === draft.activeSet ? { slots } : current));
+    return { ...draft, sets };
   });
   scheduleSave();
 }
 
-/** Tira uma regra (#162) e salva. */
-export function removeRule(category: BotCategory, index: number): void {
+/**
+ * Grava UM slot do conjunto e manda `bot-config` AGORA (o "Salvar" do `ActionConfigModal`,
+ * AB-11/#426). Diferente do interruptor/`setSlotAuto`, que salva com debounce: o modal tem um
+ * botão de Salvar explícito, e o jogador espera a intenção sair no clique. `null` limpa o slot.
+ */
+export function setSlot(set: number, index: number, slot: BotSlot | null): void {
   edit((draft) => ({
     ...draft,
-    rules: { ...draft.rules, [category]: draft.rules[category].filter((_, i) => i !== index) },
+    sets: draft.sets.map((current, i) => (i === set
+      ? { slots: current.slots.map((entry, j) => (j === index ? slot : entry)) }
+      : current)),
+  }));
+  flushSave();
+}
+
+/**
+ * Grava UMA automação e manda `bot-config` AGORA (o "Salvar" do `AutomationConfigModal`,
+ * AB-12/#427). `null` acrescenta; um índice substitui a linha — o mesmo caminho de intenção do
+ * `setSlot` (invariante 4), e o servidor decide se a configuração vale.
+ */
+export function putAutomation(index: number | null, automation: BotAutomation): void {
+  edit((draft) => ({
+    ...draft,
+    automations: index === null
+      ? [...draft.automations, automation]
+      : draft.automations.map((current, i) => (i === index ? automation : current)),
+  }));
+  flushSave();
+}
+
+/** Liga/desliga a automação e salva com debounce — o interruptor da linha (DT-04). */
+export function toggleAutomation(index: number): void {
+  edit((draft) => ({
+    ...draft,
+    automations: draft.automations.map((current, i) => (i === index
+      ? { ...current, enabled: current.enabled === false }
+      : current)),
   }));
   scheduleSave();
 }
 
-/** Liga, desliga ou reescreve uma regra de saída (#260) e salva — o mesmo debounce do interruptor de regra. */
+/** Remove a automação e salva com debounce — o × da linha. A configuração sai junto. */
+export function removeAutomation(index: number): void {
+  edit((draft) => ({
+    ...draft,
+    automations: draft.automations.filter((_, i) => i !== index),
+  }));
+  scheduleSave();
+}
+
+/** Liga, desliga ou reescreve uma regra de saída (#260) e salva — o mesmo debounce do conjunto. */
 export function setExitRule(kind: ExitRuleKind, on: boolean, percent = DEFAULT_HP_BELOW_PERCENT): void {
   edit((draft) => ({ ...draft, exit: toggleExitRule(draft.exit, kind, on, percent) }));
   scheduleSave();
@@ -193,44 +245,24 @@ export function setExitHpBelowPercent(percent: number): void {
   scheduleSave();
 }
 
-/** Escreve (ou acrescenta, com `index === null`) uma regra inteira (#162) e salva agora: é o "Salvar" do editor. */
-export function putRule(category: BotCategory, index: number | null, rule: BotRule): void {
-  edit((draft) => ({
-    ...draft,
-    rules: {
-      ...draft.rules,
-      [category]: index === null
-        ? [...draft.rules[category], rule]
-        : draft.rules[category].map((r, i) => (i === index ? rule : r)),
-    },
-  }));
-  flushSave();
-}
-
 /**
  * O inverso de `toConfig`: a configuração como o servidor a guarda, de volta a rascunho — e a
- * volta inteira, `lure` e `ringSwap` inclusive, para `toConfig(draftFrom(c))` ser `c`.
+ * volta inteira, `lure` inclusive, para `toConfig(draftFrom(c))` ser `c`.
  */
-export function draftFrom(config: BotConfig): BotDraft {
-  const rules = {} as Record<BotCategory, readonly BotRule[]>;
-  for (const category of BOT_CATEGORIES) rules[category] = config[category];
+export function draftFrom(config: BotConfigV2): BotDraft {
   return {
-    rules,
-    exit: config.exit,
+    sets: config.sets,
+    activeSet: config.activeSet,
+    stance: config.stance,
+    automations: config.automations,
     targeting: config.targeting,
+    exit: config.exit,
     ...(config.lure === undefined ? {} : { lure: config.lure }),
-    ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
   };
 }
 
-/** Salva a configuração de ring swap (#353, SV-17) e manda na hora (é o "Salvar" do modal). */
-export function setRingSwap(ringSwap: BotConfig['ringSwap']): void {
-  edit((draft) => ({ ...draft, ringSwap }));
-  flushSave();
-}
-
 /** Edita o lure dinâmico (SV-09, §13.8) e salva com debounce. `undefined` volta o bot a não usar lure. */
-export function setLure(lure: BotConfig['lure']): void {
+export function setLure(lure: BotConfigV2['lure']): void {
   edit((draft) => ({ ...draft, lure }));
   scheduleSave();
 }
@@ -270,7 +302,7 @@ export function setPosture(posture: BotPosture): void {
  * ignorada, e a tela continua como estava.
  */
 export function loadConfig(raw: unknown): void {
-  const parsed = botConfigSchema.safeParse(raw);
+  const parsed = botConfigV2Schema.safeParse(raw);
   if (!parsed.success) return;
   bot.set((state) => {
     if (state.touched && state.save !== 'saved') return state;

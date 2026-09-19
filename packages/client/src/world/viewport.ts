@@ -28,8 +28,8 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, prefetchTiles, renderTiles, sameWindow, tilesEntering, toScreen, viewFor, zoomFor,
-  type TileWindow,
+  TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
+  zoomFor, type TileWindow,
 } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
@@ -46,6 +46,7 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
+import { pickCreature } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
@@ -68,6 +69,8 @@ const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
 const COLOR_HEALTH_FRAME = 0x000000;
+/** A moldura do alvo (ADR 0032 decisão 15): vermelha sobre a criatura que o servidor marcou. */
+const TARGET_FRAME_COLOR = 0xd64848;
 /** Efeito e projétil sem quadro: um clarão e um ponto, para se ver que houve. */
 const COLOR_EFFECT_FALLBACK = 0xf2d26b;
 const COLOR_MISSILE_FALLBACK = 0xe8e8f0;
@@ -120,7 +123,7 @@ interface Warmed {
 }
 
 /**
- * As três camadas de UM andar, com os pools presos a elas (ADR 0033). `ground` e `top` seguem a
+ * As três camadas de UM andar, com os pools presos a elas (ADR 0034). `ground` e `top` seguem a
  * ordem de inserção; `scene` tem `sortableChildren` e ordena parede, objeto alto e criatura por
  * `zIndex = sceneZIndex(x, y, slot)` (`world/depth.ts`, puro). O `fallback` é filho 0 de
  * `ground`: a grade lisa e os retângulos de reserva daquele andar.
@@ -166,6 +169,13 @@ export interface ViewportHandle {
    * ritmo, sem o laço do Pixi disparar renderização React.
    */
   getFps(): number;
+  /**
+   * A criatura desenhada sob um ponto do canvas (px do cliente), ou `null`. É a leitura do
+   * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
+   */
+  creatureAt(clientX: number, clientY: number): number | null;
+  /** O alvo do servidor; desenha a moldura vermelha sobre a criatura de `id`. */
+  setTargetId(id: number | null): void;
   destroy(): void;
 }
 
@@ -214,7 +224,7 @@ export async function mountViewport(
 
   // A raiz dos andares anda com a janela (o que `terrain` fazia); efeitos e overlay continuam
   // absolutos, por cima de todos os andares. Cada andar tem `ground` → `scene` → `top`
-  // (ADR 0033): parede, objeto alto e criatura no MESMO `scene`, ordenados por `zIndex`.
+  // (ADR 0034): parede, objeto alto e criatura no MESMO `scene`, ordenados por `zIndex`.
   const floorsRoot = new Container();
   const effects = new Container();
   const overlay = new Container();
@@ -284,7 +294,7 @@ export async function mountViewport(
   /**
    * As flags, o padrão e a DIMENSÃO que a pilha precisa, pelo pacote de agora — `NO_FLAGS` e
    * `{1, 1}` sem pacote. A camada `scene` que sai daqui é desenhada no `scene` do andar dela,
-   * com `zIndex` espacial desde 385 (ADR 0033).
+   * com `zIndex` espacial desde 385 (ADR 0034).
    */
   const objectInfo: ObjectInfo = {
     flagsOf: (id) => pack?.objectFlags(id) ?? NO_FLAGS,
@@ -309,6 +319,18 @@ export async function mountViewport(
   const effectSprites = new Map<number, EffectEntry>();
   const missileSprites = new Map<number, Sprite>();
   const textLabels = new Map<number, Text>();
+
+  /**
+   * A moldura do alvo (ADR 0032 decisão 15). O alvo chega por `setTargetId`, chamado pelo
+   * `useEffect` do shell a cada mudança (raro) — o canvas segue fora do React (ADR 0007). Só
+   * redesenha quando o alvo OU o retângulo de tela dele muda, como a barra de vida já faz.
+   */
+  let targetId: number | null = null;
+  const targetFrame = new Graphics();
+  targetFrame.roundPixels = true;
+  overlay.addChild(targetFrame);
+  let drawnTarget: number | null = null;
+  let drawnTargetRect = '';
 
   function target(): { x: number; y: number; z: number } {
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
@@ -679,6 +701,8 @@ export async function mountViewport(
     // pool, sem ser destruído — volta ao entrar sem `addChild` nem textura nova.
     const window = renderTiles(center, view);
     const drawn = new Set(scene === null ? [floor] : floorsBelow(scene.floors, floor));
+    /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
+    let targetRect: string | null = null;
 
     for (const creature of world.creatures.values()) {
       seen.add(creature.id);
@@ -733,6 +757,11 @@ export async function mountViewport(
         sprite.height = texture.height;
         sprite.x = local.x + TILE - texture.width;
         sprite.y = local.y + TILE - texture.height;
+        // A moldura do alvo (#428) usa o retângulo de TELA do sprite — o sprite mora no
+        // container do andar, que anda com a janela; a moldura mora no `overlay` global.
+        if (creature.id === targetId) {
+          targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
+        }
         continue;
       }
       // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
@@ -743,6 +772,9 @@ export async function mountViewport(
       sprite.x = local.x + 3;
       sprite.y = local.y + 3;
       sprite.tint = shade(creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
+      if (creature.id === targetId) {
+        targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
+      }
     }
 
     for (const [id, sprite] of sprites) {
@@ -754,6 +786,18 @@ export async function mountViewport(
         gone.bar.destroy();
         gone.label.destroy();
         overlays.delete(id);
+      }
+    }
+    // A moldura só é redesenhada quando o alvo ou o retângulo dele muda; criatura que sumiu
+    // (`targetRect === null`) limpa a moldura no quadro seguinte.
+    const rect = targetRect ?? '';
+    if (rect !== drawnTargetRect || targetId !== drawnTarget) {
+      drawnTarget = targetId;
+      drawnTargetRect = rect;
+      targetFrame.clear();
+      if (targetRect !== null) {
+        const [x, y, width, height] = targetRect.split(',').map(Number) as [number, number, number, number];
+        targetFrame.rect(x, y, width, height).stroke({ width: 1, color: TARGET_FRAME_COLOR });
       }
     }
   }
@@ -999,6 +1043,25 @@ export async function mountViewport(
     getFps() {
       return fps.read();
     },
+    creatureAt(clientX, clientY) {
+      // O canvas é escalado pelo stage (zoom inteiro); `tileAtScreen` trabalha em pixels de tile.
+      // O tile é o PISO da inversa: o sprite do tile `tx` ocupa `[tx, tx + 1)`, e arredondar
+      // deixaria metade de cada criatura sem clique.
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = tileAtScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return pickCreature(
+        world.creatures.values(),
+        { x: at.x, y: at.y, z: Math.round(center.z) },
+        performance.now(),
+      );
+    },
+    setTargetId(id) {
+      targetId = id;
+    },
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();
       sprites.clear();
@@ -1026,6 +1089,7 @@ export async function mountViewport(
       }
       floorLayers.clear();
       floorsRoot.destroy();
+      targetFrame.destroy();
       overlay.destroy();
       book.clear();
       app.destroy(true, { children: true });

@@ -380,6 +380,17 @@ describe('agregados e extrato por participante (#187, ADR 0027)', () => {
     expect(fromLegacy.aggregatesOf('a').kills).toBe(9);
     expect(fromLegacy.aggregates.kills).toBe(9);
   });
+
+  it('o snapshot preserva o ledgerSeq sem reemitir seq (#419)', () => {
+    const session = sessionWith('a');
+    // Consome um `seq` emitindo um extrato de participante que sai.
+    session.leave('a', 'manual-exit');
+
+    const snap = session.snapshot();
+    const restored = Session.fromSnapshot(snap, testRuleset(), Rng.fromSeed('x'));
+    // O contador volta junto: a próxima emissão pega o seq 2, e nunca reusa o 1.
+    expect(restored.ledgerSeq).toBe(1);
+  });
 });
 
 describe('resolver canônico: seed, snapshot e retomada (CMB-02)', () => {
