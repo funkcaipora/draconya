@@ -59,4 +59,23 @@ describe('Slot', () => {
     expect(html).toContain('aria-label="Sword"');
     expect(html).toContain('draggable="true"');
   });
+
+  it('com ícone E rótulo, os dois aparecem no mesmo slot (RF-04)', async () => {
+    // O `icon ?? label` engolia o rótulo quando havia sprite; o kit (UH 150) mostra os dois.
+    const html = await render({
+      size: 26,
+      icon: createElement('span', { className: 'sprite-marker' }),
+      label: 'UH',
+      count: 150,
+    });
+    expect(html).toContain('sprite-marker');
+    expect(html).toContain('>UH<');
+    expect(html).toContain('ui-slot-count">150');
+  });
+
+  it('com ícone e SEM rótulo, nenhum rótulo é inventado', async () => {
+    const html = await render({ size: 26, icon: createElement('span', { className: 'sprite-marker' }) });
+    expect(html).toContain('sprite-marker');
+    expect(html).not.toContain('ui-slot-label');
+  });
 });

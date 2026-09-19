@@ -104,6 +104,8 @@ export function ContainerWindow({ container, collapsed = false, onToggle }: {
                       if (intent !== null) sendIntent(intent);
                     }}
                     icon={<ItemSprite appearanceId={definition?.appearanceId} name={name} />}
+                    // `exactOptionalPropertyTypes`: só entra a prop quando o conteúdo a declara.
+                    {...(definition?.shortLabel === undefined ? {} : { label: definition.shortLabel })}
                     count={item.quantity}
                   />
                 </li>

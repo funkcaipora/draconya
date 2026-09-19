@@ -32,13 +32,13 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
 const catalogue: Catalogue = {
   hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], difficultyDetails: [], outfitIds: [], lootDrops: 0, monsters: [], loot: [] }],
   monsters: [{ id: 'rat', name: 'Rato' }],
-  ammunition: [], vocations: [], vocationLevel: 8,
+  vocations: [], vocationLevel: 8,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],
+    vocabularyVersion: 1, slots: {},
+    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', group: 'potion', requires: {} }],
   },
   items: [],
+  ammunition: [],
   bestiary: { milestones: [10_000], xpBonusPercentPerMilestone: 1 },
 };
 
