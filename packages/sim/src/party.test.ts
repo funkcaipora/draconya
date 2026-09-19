@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Item, PartyConfig } from '@draconya/content';
 import {
-  autoSellLimit, settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpPool, xpShare,
+  autoSellLimit, bagValue, reserveProportionally, settleEntries, shareCostsOf, splitEqually,
+  splitLootOf, uniqueVocations, xpPool, xpShare,
 } from './party.js';
-import type { BagEntry, GoldEntry, PartyBagState, PartyMember } from './party.js';
+import type { BagEntry, GoldEntry, MemberCapacity, PartyBagState, PartyMember } from './party.js';
 
 // As contas da party (#189, ADR 0027), por tabela. O que se prende aqui é a fórmula do
 // `docs/party-hunt-plan.md` §3.3 — e que nada consome RNG nem sai de inteiro.
@@ -97,7 +98,7 @@ describe('settleEntries', () => {
   const carried = (itemId: string, quantity = 1, instanceId = `s:${itemId}`) =>
     ({ instanceId, itemId, quantity });
   const bag = (gold: GoldEntry[], items: BagEntry[], capacity = 400): PartyBagState =>
-    ({ gold, items, capacity });
+    ({ gold, items, capacity, overweight: false });
 
   it('autovenda: 30 gold entre 4 presentes → 8/8/7/7 (resto na ordem de entrada)', () => {
     const settled = settleEntries(
@@ -148,6 +149,82 @@ describe('settleEntries', () => {
     expect([...settled.shares.values()].reduce((sum, gold) => sum + gold, 0)).toBe(27);
     expect(state.gold).toHaveLength(1);
     expect(state.items).toHaveLength(1);
+  });
+});
+
+describe('reserveProportionally (#396, plano §3)', () => {
+  const cap = (id: string, available: number): MemberCapacity => ({ id, available });
+
+  it('R_i = W × B_i / ΣB sobre a capacidade DISPONÍVEL (§12.1)', () => {
+    // A 1 000, B 500, bolsa 300 → A 200, B 100 (20 % cada).
+    const two = reserveProportionally(300, [cap('a', 1_000), cap('b', 500)]);
+    expect(two.get('a')).toBe(200);
+    expect(two.get('b')).toBe(100);
+
+    // Três: 1 000 / 500 / 250, bolsa 700 → 400 / 200 / 100 (40 % cada).
+    const three = reserveProportionally(700, [cap('a', 1_000), cap('b', 500), cap('c', 250)]);
+    expect(three.get('a')).toBe(400);
+    expect(three.get('b')).toBe(200);
+    expect(three.get('c')).toBe(100);
+    expect([...three.values()].reduce((sum, n) => sum + n, 0)).toBe(700);
+  });
+
+  it('em OVERWEIGHT cada um reserva no máximo a própria disponível, nunca o peso da bolsa', () => {
+    const over = reserveProportionally(2_000, [cap('a', 1_000), cap('b', 500)]);
+    expect(over.get('a')).toBe(1_000);
+    expect(over.get('b')).toBe(500);
+    // Σ reservas = Σ disponível, o excedente fica sem reserva de ninguém (§14).
+    expect([...over.values()].reduce((sum, n) => sum + n, 0)).toBe(1_500);
+  });
+
+  it('disponível 0 (ou negativa) não gera reserva negativa nem NaN', () => {
+    const zero = reserveProportionally(100, [cap('a', 0), cap('b', -50)]);
+    expect([...zero.values()]).toEqual([0, 0]);
+    for (const value of zero.values()) expect(Number.isFinite(value)).toBe(true);
+
+    const empty = reserveProportionally(100, []);
+    expect(empty.size).toBe(0);
+  });
+
+  it('peso 0 (ou negativo) reserva 0 para todos', () => {
+    expect([...reserveProportionally(0, [cap('a', 1_000), cap('b', 500)]).values()]).toEqual([0, 0]);
+    expect([...reserveProportionally(-5, [cap('a', 1_000)]).values()]).toEqual([0]);
+  });
+});
+
+describe('bagValue (#396, PRD §10)', () => {
+  const item = (id: string, value: number): Item =>
+    ({ id, name: id, kind: 'other', weight: 1, value, stackable: true } as unknown as Item);
+  const catalog = new Map<string, Item>([
+    ['sword', item('sword', 10)],
+    ['cheese', item('cheese', 0)],
+  ]);
+  const carried = (itemId: string, quantity = 1) => ({ instanceId: `s:${itemId}`, itemId, quantity });
+
+  it('soma o gold da bolsa com value × quantity dos itens', () => {
+    const state: PartyBagState = {
+      gold: [{ amount: 7, eligible: ['a'] }],
+      items: [
+        { item: carried('sword', 2), eligible: ['a'] },
+        { item: carried('cheese', 3), eligible: ['a'] },
+      ],
+      capacity: 0,
+      overweight: false,
+    };
+    expect(bagValue(state, catalog)).toBe(27);
+  });
+
+  it('item com value 0 — ou fora do catálogo — não entra na conta', () => {
+    const state: PartyBagState = {
+      gold: [],
+      items: [
+        { item: carried('cheese', 5), eligible: ['a'] },
+        { item: carried('ghost', 1), eligible: ['a'] },
+      ],
+      capacity: 0,
+      overweight: false,
+    };
+    expect(bagValue(state, catalog)).toBe(0);
   });
 });
 

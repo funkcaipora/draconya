@@ -32,7 +32,7 @@ import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../cond
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
-import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
+import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
@@ -45,11 +45,12 @@ import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
 import {
-  autoSellLimit, settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpShare,
+  autoSellLimit, bagValue, reserveProportionally, settleEntries, shareCostsOf, splitEqually,
+  splitLootOf, uniqueVocations, xpShare,
 } from '../party.js';
-import type { PartyBagState } from '../party.js';
+import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
-import type { CarriedItem, ContainerRules } from '../inventory.js';
+import type { CarriedItem, ContainerRules, Wearer } from '../inventory.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot } from '../bot.js';
 import {
@@ -655,6 +656,19 @@ interface Runner {
   warnedNoGold: boolean;
 }
 
+/**
+ * A reserva morde a mochila sem tocar em `inventory.ts` (§11, #396): um `Wearer` com a
+ * capacidade PESSOAL já descontada do que a party reservou. Objeto NOVO — nunca escreve
+ * `character.capacity` (invariante 9), e `Inventory.add` continua vendo o dono real depois.
+ */
+function withReservedCapacity(character: CharacterRuntime, reserved: number): Wearer {
+  return {
+    level: character.level,
+    vocationId: character.vocationId,
+    capacity: Math.max(0, character.capacity - reserved),
+  };
+}
+
 /** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
 export interface RunnerState {
   readonly route: RouteState;
@@ -678,10 +692,11 @@ export class HuntRuleset implements Ruleset {
   /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
   #party: PartyOptions | undefined;
   /**
-   * A bolsa do modo compartilhado (#192, ADR 0027 decisão 5): todo loot cai aqui, com
-   * capacidade igual à soma das capacidades dos presentes; o excedente vai para a caixa de
-   * loot do líder. `#bagWeight` é derivado e recalculado na retomada; `#bagSeq` dá o id das
-   * instâncias (`sessionId:bag:n`), que precisam ser únicas na sessão.
+   * A bolsa do modo compartilhado (#192, ADR 0027 decisão 5; #396): todo loot cai aqui, com
+   * capacidade igual à soma das capacidades DISPONÍVEIS dos presentes; em OVERWEIGHT o item com
+   * peso que não cabe fica no cadáver — não vai para a caixa do líder. `#bagWeight` é derivado e
+   * recalculado na retomada; `#bagSeq` dá o id das instâncias (`sessionId:bag:n`), que precisam
+   * ser únicas na sessão.
    */
   #bag: PartyBagState | null = null;
   #bagWeight = 0;
@@ -789,7 +804,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#options = options;
     this.#party = normalizePartyOptions(options.partyOptions);
-    if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0 };
+    if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -913,7 +928,7 @@ export class HuntRuleset implements Ruleset {
     // Ligar: nasce vazia, igual ao construtor. Desligar: liquida com quem está presente AGORA
     // vendendo entrada por entrada (#395) e descarta. Nada se perde: vira gold ou vai para o
     // líder (`value: 0`, `unsold` de `settleEntries`).
-    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: [], items: [], capacity: 0 };
+    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     if (!next.splitLoot && party.splitLoot && this.#bag !== null) {
       this.#settle(session, session.participants, 'toggle');
       this.#bag = null;
@@ -922,6 +937,9 @@ export class HuntRuleset implements Ruleset {
     party.splitLoot = next.splitLoot;
     party.collect = next.collect;
     party.autoSell = next.autoSell;
+    // `configureParty` é um dos gatilhos do §13: ligar/desligar `splitLoot` muda o conjunto de
+    // reservas, e mudar a lista de coleta/venda muda o que entra — rebalanceia e emite.
+    this.#rebalanceBag(session);
     return { ok: true };
   }
 
@@ -938,13 +956,7 @@ export class HuntRuleset implements Ruleset {
     const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     const unique = uniqueVocations(present);
     const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
-    const bagValue = this.#bag === null
-      ? 0
-      : this.#bag.gold.reduce((sum, entry) => sum + entry.amount, 0)
-        + this.#bag.items.reduce(
-          (sum, entry) => sum + (this.#options.items.get(entry.item.itemId)?.value ?? 0) * entry.item.quantity,
-          0,
-        );
+    const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
     // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
     // tipo é opcional por causa das fixtures antigas de `RawContent`.
     const limit = autoSellLimit(
@@ -957,7 +969,7 @@ export class HuntRuleset implements Ruleset {
       members: session.participants.map((p) => p.id),
       uniqueVocations: unique,
       xpPoolPercent,
-      bagValue,
+      bagValue: value,
       bagWeight: this.#bagWeight,
       autoSell: { configured: party.autoSell.length, limit },
     };
@@ -1061,6 +1073,9 @@ export class HuntRuleset implements Ruleset {
     // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
     // orça só existem para quem de fato configurou.
     this.#armBot(session, character.id);
+    // `onEnter` é gatilho do §13: quem entra muda a capacidade disponível (e a reserva) dos
+    // outros. Depois de tudo montado, para o participante novo já contar.
+    this.#rebalanceBag(session);
   }
 
   /**
@@ -1404,6 +1419,7 @@ export class HuntRuleset implements Ruleset {
           gold: [...this.#bag.gold],
           items: this.#bag.items.map((entry) => ({ item: entry.item, eligible: [...entry.eligible] })),
           capacity: this.#bag.capacity,
+          overweight: this.#bag.overweight,
         },
       }),
     };
@@ -1429,6 +1445,10 @@ export class HuntRuleset implements Ruleset {
       // vêm junto, pela mesma razão.
       this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined));
     }
+    // A reserva é DERIVADA e não vai no snapshot (DT-02): o primeiro rebalanceamento depois de
+    // retomar sai daqui, quando os participantes já existem. Chamá-lo em `restore` quebraria
+    // porque lá `session.participants` ainda está vazio.
+    if (this.#bag !== null) this.#rebalanceBag(session);
   }
 
   restore(state: unknown): void {
@@ -1478,12 +1498,14 @@ export class HuntRuleset implements Ruleset {
     // em voo não perder nem confiscar o que já estava na bolsa.
     const restoredBag = restored.partyBag as unknown;
     this.#bag = restoredBag === undefined
-      ? (this.#party?.splitLoot ? { gold: [], items: [], capacity: 0 } : null)
+      ? (this.#party?.splitLoot ? { gold: [], items: [], capacity: 0, overweight: false } : null)
       : isLegacyBag(restoredBag)
         ? {
             gold: restoredBag.gold > 0 ? [{ amount: restoredBag.gold, eligible: [] }] : [],
             items: restoredBag.items.map((item) => ({ item, eligible: [] })),
             capacity: restoredBag.capacity,
+            // Snapshot anterior ao #396: sem a flag, o primeiro rebalanceamento a recalcula.
+            overweight: false,
           }
         : {
             gold: [...(restoredBag as PartyBagState).gold],
@@ -1491,6 +1513,8 @@ export class HuntRuleset implements Ruleset {
               (entry) => ({ item: entry.item, eligible: [...entry.eligible] }),
             ),
             capacity: (restoredBag as PartyBagState).capacity,
+            // Opcional na leitura: snapshot anterior ao #396 não tem a chave.
+            overweight: (restoredBag as PartyBagState).overweight ?? false,
           };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
@@ -3311,8 +3335,9 @@ export class HuntRuleset implements Ruleset {
         // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
         const presentAtDrop = session.participants.map((p) => p.id);
         if (loot.gold > 0) this.#bag.gold.push({ amount: loot.gold, eligible: presentAtDrop });
+        // `#deliverToBag` rebalanceia e emite SEMPRE (mesmo sem itens: o gold muda o `value`),
+        // então o `#emitBag` que existia aqui para o drop de gold puro sumiu (DT-03).
         this.#deliverToBag(session, loot.items);
-        if (loot.gold > 0 && loot.items.length === 0) this.#emitBag(session);
       }
     } else if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
@@ -3425,6 +3450,9 @@ export class HuntRuleset implements Ruleset {
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
         // anuncia nada, então "até a reanexação".
         this.#emitCharacterHealth(session, member);
+        // Level up REESCREVE `capacity` pela tabela (`retarget`, progression.ts): é gatilho do
+        // §13 — a disponível do membro cresce, e as reservas mudam com ela.
+        this.#rebalanceBag(session);
       }
       // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
@@ -3503,20 +3531,28 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O loot cai na bolsa (#192): pelo peso, contra a capacidade somada; o que não cabe vai
-   * para a caixa de loot do LÍDER (§21.6). `itemsLooted` conta para todo presente — "quantos
-   * itens caíram" é a pergunta do §16.1, e caíram para a party (DT-03).
+   * O loot cai na bolsa (#192, #396): pelo PESO, contra a capacidade DISPONÍVEL somada
+   * (`capacity − inventory.weight`), não a total — bolsa e mochila contavam a mesma capacidade
+   * duas vezes. `itemsLooted` conta para todo presente — "quantos itens caíram" é a pergunta do
+   * §16.1, e caíram para a party (DT-03) —, mas SÓ o que de fato é coletado.
    *
    * A lista de COLETA filtra DEPOIS de `rollLoot` (§7, D2): zero RNG a mais (FUN-63), e o item
    * fora da lista fica no cadáver — sem `itemsLooted`, sem caixa de ninguém. A VENDA AUTOMÁTICA
    * é um subconjunto lógico da coleta: o item vendável nunca pesa nem entra na bolsa, vira gold
    * na hora dividido pelos presentes no abate (§8, D2/§16.1).
+   *
+   * Em OVERWEIGHT (§14, DT-01) um item com `weight > 0` que não cabe NÃO é coletado: fica no
+   * cadáver — nem bolsa, nem caixa do líder (a caixa é coletar com outro destinatário). Item de
+   * peso `0` sempre entra, gold sempre entra, autovenda sempre vende.
    */
   #deliverToBag(session: Session, items: readonly LootItem[]): void {
     const bag = this.#bag;
     const party = this.#party;
-    if (bag === null || party === undefined || items.length === 0) return;
-    const leader = this.#leader(session);
+    if (bag === null || party === undefined) return;
+    // A capacidade DISPONÍVEL é lida uma vez por abate: itens de um mesmo drop só aumentam
+    // `#bagWeight`, então o teto não muda no meio do laço.
+    const totalAvailable = this.#availableCapacities(session)
+      .reduce((sum, m) => sum + m.available, 0);
     // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
     // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
     const presentAtDrop = session.participants.map((p) => p.id);
@@ -3555,43 +3591,74 @@ export class HuntRuleset implements Ruleset {
         continue;
       }
 
+      const weight = definition.weight * rolled.quantity;
+      // OVERWEIGHT (§14): item com peso que não cabe não é coletado — fica no cadáver, sem
+      // virar instância, sem contar `itemsLooted`, sem caixa de ninguém. Peso `0` sempre passa.
+      if (weight > 0 && this.#bagWeight + weight > totalAvailable) continue;
+
       const carried: CarriedItem = {
         instanceId: `${session.id}:bag:${String(this.#bagSeq++)}`,
         itemId: rolled.itemId, quantity: rolled.quantity,
       };
+      bag.items.push({ item: carried, eligible: presentAtDrop });
+      this.#bagWeight += weight;
       for (const p of session.participants) session.credit(p.id, 'itemsLooted', carried.quantity);
-      const weight = definition.weight * carried.quantity;
-      // Capacidade somada — INTOCADA nesta task; reserva proporcional e OVERWEIGHT são do #396.
-      if (this.#bagWeight + weight <= this.#bagCapacity(session)) {
-        bag.items.push({ item: carried, eligible: presentAtDrop });
-        this.#bagWeight += weight;
-        continue;
-      }
-      leader?.lootBox.push(carried);
     }
-    this.#emitBag(session);
+    // `#rebalanceBag` é o ÚNICO emissor de `party-bag-changed` (DT-03) e roda mesmo com `items`
+    // vazio, porque um drop só de gold muda o `value` da bolsa.
+    this.#rebalanceBag(session);
+  }
+
+  /** A capacidade DISPONÍVEL de cada presente: `max(0, capacity − inventory.weight)` (§12, D4). */
+  #availableCapacities(session: Session): MemberCapacity[] {
+    return session.participants.map((p) => ({
+      id: p.id,
+      available: Math.max(0, p.capacity - p.inventory.weight(this.#options.items)),
+    }));
   }
 
   /**
-   * A capacidade da bolsa é a SOMA das capacidades dos presentes, calculada na hora: cresce
-   * com quem entra, cai com quem sai — e acompanha o level up, que reescreve `capacity`
-   * pela tabela. Guardar um número e somar/subtrair divergia no primeiro level up.
+   * O ÚNICO ponto que recalcula disponível/reservas/OVERWEIGHT e emite `party-bag-changed`
+   * (§11-§15, #396). Chamado só nos gatilhos do §13: `onEnter`, `onLeave` (via `#settle`),
+   * `#deliverToBag`, `#deliverLoot`, level up que reescreve `capacity`, `#settle`, autovenda
+   * (dentro de `#deliverToBag`) e `configureParty`. NUNCA por tick — é o que faz 1 Hz e 10 Hz
+   * rebalancearem no mesmo evento lógico, não no mesmo instante de relógio (invariante 2).
    */
-  #bagCapacity(session: Session): number {
-    let total = 0;
-    for (const p of session.participants) total += p.capacity;
-    if (this.#bag !== null) this.#bag.capacity = total;
-    return total;
+  #rebalanceBag(session: Session): void {
+    const bag = this.#bag;
+    if (bag === null) return;
+    const members = this.#availableCapacities(session);
+    const totalAvailable = members.reduce((sum, m) => sum + m.available, 0);
+    const reservedById = reserveProportionally(this.#bagWeight, members);
+    const reservations = members.map((m) => ({
+      characterId: m.id, reserved: reservedById.get(m.id) ?? 0, available: m.available,
+    }));
+    // OVERWEIGHT: a bolsa está CHEIA — não há mais espaço para item com peso. O ADR escreve
+    // `W > ΣB`, mas como só se adiciona o que cabe, `W` nunca ultrapassa `ΣB` por drop; a
+    // igualdade é o estado de "cheio" do plano §3 (bolsa 1 500 com disponível 1 500), e é o que
+    // o gatilho de recusa enxerga. Bolsa vazia (peso 0) NUNCA é OVERWEIGHT, mesmo com ΣB = 0.
+    const overweight = this.#bagWeight > 0 && this.#bagWeight >= totalAvailable;
+    // Uma linha por TRANSIÇÃO: comparar com o valor JÁ PERSISTIDO em `bag.overweight` é o que
+    // evita um `party-overweight` falso logo depois de um `onResume` (DT-02/§7).
+    if (overweight !== bag.overweight) {
+      session.record('party-overweight', overweight ? 'on' : 'off');
+    }
+    bag.overweight = overweight;
+    bag.capacity = totalAvailable;
+    this.#emitBag(session, reservations);
   }
 
-  #emitBag(session: Session): void {
+  #emitBag(session: Session, reservations: PartyBagChanged['reservations'] = []): void {
     const bag = this.#bag;
     if (bag === null) return;
     session.emit({
       kind: 'party-bag-changed',
       gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
       items: bag.items.map((entry) => entry.item),
-      weight: this.#bagWeight, capacity: this.#bagCapacity(session),
+      weight: this.#bagWeight, capacity: bag.capacity,
+      value: bagValue(bag, this.#options.items),
+      overweight: bag.overweight,
+      reservations,
     });
   }
 
@@ -3608,7 +3675,11 @@ export class HuntRuleset implements Ruleset {
   ): void {
     const bag = this.#bag;
     if (bag === null || present.length === 0) return;
-    if (bag.gold.length === 0 && bag.items.length === 0) return;
+    if (bag.gold.length === 0 && bag.items.length === 0) {
+      // Nada a vender, mas a composição pode ter mudado (saída): rebalanceia mesmo assim.
+      this.#rebalanceBag(session);
+      return;
+    }
     const { shares, unsold, total } = settleEntries(bag, present.map((p) => p.id), this.#options.items);
     for (const member of present) {
       const gold = shares.get(member.id) ?? 0;
@@ -3616,10 +3687,17 @@ export class HuntRuleset implements Ruleset {
       member.goldDelta += gold;
       session.credit(member.id, 'goldGained', gold);
     }
+    // A bolsa foi VENDIDA: a reserva que ela impunha à mochila cai junto, ANTES de devolver o
+    // que não vendeu. Senão a própria reserva recusaria o item que a bolsa guardava — o líder
+    // recebe os `unsold` com a capacidade cheia (RF-05: "settlement libera a reserva").
+    bag.gold = [];
+    bag.items.length = 0;
+    this.#bagWeight = 0;
     const leader = this.#leader(session) ?? present[0];
     if (leader !== undefined) {
+      const wearer = withReservedCapacity(leader, 0);
       for (const item of unsold) {
-        if (leader.inventory.add(item, this.#options.items, leader, this.#containerRules(leader)).ok) continue;
+        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
         leader.lootBox.push(item);
       }
     }
@@ -3628,10 +3706,7 @@ export class HuntRuleset implements Ruleset {
       kind: 'party-settlement', total, reason,
       shares: present.map((p) => ({ characterId: p.id, gold: shares.get(p.id) ?? 0 })),
     });
-    bag.gold = [];
-    bag.items.length = 0;
-    this.#bagWeight = 0;
-    this.#emitBag(session);
+    this.#rebalanceBag(session);
   }
 
   /**
@@ -3666,6 +3741,14 @@ export class HuntRuleset implements Ruleset {
   #deliverLoot(
     session: Session, character: CharacterRuntime, items: readonly LootItem[],
   ): void {
+    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
+    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
+    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
+    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
     for (const rolled of items) {
       // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
       // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
@@ -3688,7 +3771,7 @@ export class HuntRuleset implements Ruleset {
       // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
       session.credit(character.id, 'itemsLooted', carried.quantity);
 
-      if (character.inventory.add(carried, this.#options.items, character, this.#containerRules(character)).ok) continue;
+      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
 
       // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
       // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
@@ -3702,6 +3785,9 @@ export class HuntRuleset implements Ruleset {
       // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    this.#rebalanceBag(session);
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
