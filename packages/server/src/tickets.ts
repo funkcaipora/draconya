@@ -44,6 +44,11 @@ export interface PartyTicket {
   readonly splitLoot: boolean;
   readonly huntId: string;
   readonly difficulty: string;
+  /**
+   * `true`: ticket de ENTRADA numa hunt já em curso (#402, ADR 0033 D7) — `members` tem
+   * exatamente UM, e o `game` chama `session.enter` na sessão hospedada em vez de criá-la.
+   */
+  readonly join?: true;
   /** Na ordem de entrada: é a ordem em que a sessão os recebe. */
   readonly members: ReadonlyArray<{
     readonly characterId: string;
@@ -507,11 +512,14 @@ function parsePartyTicket(value: unknown): PartyTicket | undefined {
   // a MESMA tabela do snapshot antigo — 'shared' liga os dois eixos, 'split' desliga os dois.
   const hasAxes = typeof raw['shareCosts'] === 'boolean' || typeof raw['splitLoot'] === 'boolean';
   const hasMode = raw['mode'] === 'split' || raw['mode'] === 'shared';
+  // O ticket de ENTRADA (#402) é o único caso de um membro só: o recém-chegado entra numa hunt
+  // que já existe, e o bloco da party não carrega os N de novo.
+  const join = raw['join'] === true;
   if (
     typeof raw['sessionId'] !== 'string' || typeof raw['leaderId'] !== 'string'
     || (!hasAxes && !hasMode)
     || typeof raw['huntId'] !== 'string' || typeof raw['difficulty'] !== 'string'
-    || !Array.isArray(raw['members']) || raw['members'].length < 2
+    || !Array.isArray(raw['members']) || raw['members'].length < (join ? 1 : 2)
   ) {
     return undefined;
   }
@@ -530,6 +538,7 @@ function parsePartyTicket(value: unknown): PartyTicket | undefined {
   return {
     sessionId: raw['sessionId'], leaderId: raw['leaderId'], shareCosts, splitLoot,
     huntId: raw['huntId'], difficulty: raw['difficulty'], members,
+    ...(join ? { join: true as const } : {}),
   };
 }
 

@@ -1,5 +1,5 @@
 import {
-  CharacterRuntime, HuntRuleset, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -4556,6 +4556,102 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
     const state = socket.received().find((m) => m.type === 'session-state');
     if (state?.type !== 'session-state') throw new Error('sem session-state');
     expect(state.world.creatures.map((c) => c.name).sort()).toEqual(['Ana', 'Bia']);
+  });
+});
+
+describe('a entrada numa sessão em curso (#402, ADR 0033 D7)', () => {
+  // A party já criou a hunt com dois donos; o terceiro chega por um ticket `join: true` para o
+  // MESMO `sessionId`. O host admite (`session.enter`) sem criar uma segunda hunt, e recusa
+  // tipado quando a sessão não está neste nó, quando a versão divergiu ou quando lotou.
+  function lateJoin(over: { contentVersion?: string; fullAt?: number } = {}) {
+    const registered: string[] = [];
+    let created = 0;
+    const cap = over.fullAt;
+    const ruleset: Ruleset = {
+      type: 'hunt',
+      hz: () => 1,
+      onEnter: (session) => {
+        if (cap !== undefined && session.participants.length > cap) {
+          throw new PartyFullError('arena', cap);
+        }
+      },
+      onEvent: () => {},
+      onCreatureDied: () => {},
+      onEnd: () => {},
+    };
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: over.contentVersion ?? 'v-test', logger,
+      directory: {
+        register: async (characterId: string) => { registered.push(characterId); return true; },
+        succeed: async () => true, release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+      } as unknown as SessionDirectory,
+      createSession: (characterId, _initial, ticket) => {
+        created += 1;
+        const session = new Session({ id: ticket?.sessionId ?? `s-${characterId}`, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0 });
+        for (const member of ticket?.members ?? [{ characterId }]) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+      createParticipant: (characterId) => new CharacterRuntime({
+        id: characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+        level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+      }),
+    });
+    return { host, registered, created: () => created };
+  }
+
+  const base = {
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0 } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0 } },
+    ],
+  };
+  const joiner = {
+    ...base, join: true as const,
+    members: [{ characterId: 'c', accountId: 'acc-c', initialCharacter: { level: 8, xp: 0 } }],
+  };
+
+  it('admits the newcomer into the hosted session without creating a second hunt (RF-09)', async () => {
+    // Mutação que mata: `#prepare` criando uma sessão nova para o ticket de join — a segunda
+    // hunt com um `sessionId` diferente, e o jogador sozinho onde deveria estar a party.
+    const { host, registered, created } = lateJoin();
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    expect(created()).toBe(1);
+    const before = host.sessionFor('a')?.participants.length ?? 0;
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: true });
+    expect(created()).toBe(1);
+    expect(host.sessionFor('c')?.id).toBe('s-party');
+    expect(host.sessionFor('c')?.participants.length).toBe(before + 1);
+    expect(registered).toContain('c');
+  });
+
+  it('refuses a session that is not hosted here (RF-10)', async () => {
+    const { host } = lateJoin();
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'session-not-here' });
+  });
+
+  it('refuses a content-version mismatch before admitting (RF-10)', async () => {
+    const { host } = lateJoin({ contentVersion: 'v-other' });
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'content-version' });
+  });
+
+  it('propagates the sim cap as `party-full` without leaving a ghost participant (RF-10)', async () => {
+    const { host } = lateJoin({ fullAt: 2 });
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    const participants = host.sessionFor('a')?.participants.length;
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'party-full' });
+    expect(host.sessionFor('a')?.participants.length).toBe(participants);
+    expect(host.sessionFor('c')).toBeUndefined();
   });
 });
 

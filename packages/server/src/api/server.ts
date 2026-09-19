@@ -28,6 +28,8 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly locateSession?: (
     characterId: string,
   ) => Promise<{ sessionId: string; type: string } | null>;
+  /** O diretório de sessões: a LOTACÃO VIVA do `/join` em curso (#402) e o nó do líder. */
+  readonly directory?: PartyRouteDependencies['directory'];
   /** A party antes da hunt (#195): o formulário em Redis e os limites do conteúdo. */
   readonly party?: PartyRouteDependencies['party'];
   readonly partyLimits?: PartyRouteDependencies['limits'];
@@ -153,10 +155,11 @@ export function buildApi(
   const partyLimits = dependencies.partyLimits;
   const locateSession = dependencies.locateSession;
   const settleProgress = dependencies.settleProgress;
+  const directory = dependencies.directory;
   if (
     tickets !== undefined && party !== undefined && partyLimits !== undefined
     && auth !== undefined && repository !== undefined && locateSession !== undefined
-    && settleProgress !== undefined
+    && settleProgress !== undefined && directory !== undefined
   ) {
     registerPartyRoutes(app, {
       party,
@@ -167,6 +170,7 @@ export function buildApi(
       listItemInstances: repository.listItemInstances.bind(repository),
       settleProgress,
       locateSession,
+      directory,
       limits: partyLimits,
       ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
     });

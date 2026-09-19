@@ -97,21 +97,70 @@ describe.runIf(available)('PartyStore', () => {
     expect(await store.kick(party.id, 'lead', 'b')).toBe('target-not-a-member');
   });
 
-  it('started keeps one ticket per member to be taken once, and the party itself is gone', async () => {
+  it('started keeps one ticket per member to be taken once, and the party itself SURVIVES as hunting', async () => {
     const store = new PartyStore(redis);
     const party = await store.create('lead', 'acc-lead');
     if (party === null) throw new Error('sem party');
     await store.invite(party.id, 'b');
     await store.join(party.id, 'b', 'acc-b', 4);
     const ticket = (characterId: string) => ({ ticket: `t-${characterId}`, wsUrl: 'ws://x', expiresAtMs: 9, sessionId: 's1' });
-    await store.started(party.id, { lead: ticket('lead'), b: ticket('b') }, 30_000);
-    expect(await store.get(party.id)).toBeNull();
+    await store.started(party.id, 's1', 'v1', { lead: ticket('lead'), b: ticket('b') }, 30_000);
+    // RF-01: a party não some — vira `hunting` com o `sessionId` e a versão de conteúdo.
+    expect(await store.get(party.id)).toMatchObject({
+      id: party.id, leaderId: 'lead', state: 'hunting', sessionId: 's1', contentVersion: 'v1',
+    });
     expect(await store.takeTicket('b')).toEqual(ticket('b'));
     expect(await store.takeTicket('b')).toBeNull();
-    expect(await store.of('b')).toBeNull();
+    // O ponteiro `by-char` FICA: é ele que faz `/mine` continuar respondendo `hunting`.
+    expect((await store.of('b'))?.state).toBe('hunting');
     expect(await store.takeTicket('lead')).toEqual(ticket('lead'));
-    // E os dois estão livres para uma party nova.
-    expect(await store.create('b', 'acc-b')).not.toBeNull();
+    // E os dois continuam ocupados por ESTA party (não podem formar outra enquanto `hunting`).
+    expect(await store.create('b', 'acc-b')).toBeNull();
+  });
+
+  it('publish/unpublish drive the rooms index; stale rooms are pruned on read', async () => {
+    const store = new PartyStore(redis);
+    const party = await store.create('lead', 'acc-lead');
+    if (party === null) throw new Error('sem party');
+    await store.publish(party.id, 5, 20);
+    expect((await store.get(party.id))?.published).toBe(true);
+    expect((await store.get(party.id))).toMatchObject({ minLevel: 5, maxLevel: 20 });
+    expect((await store.rooms()).map((p) => p.id)).toContain(party.id);
+    await store.unpublish(party.id);
+    expect(await store.rooms()).toEqual([]);
+    // Sala cujo registro sumiu (TTL) sai do SET na leitura, e não fica para sempre.
+    await store.publish(party.id, 1, 99);
+    await redis.del(`party:${party.id}`);
+    expect(await store.rooms()).toEqual([]);
+    expect(await redis.smembers('party:rooms')).toEqual([]);
+  });
+
+  it('invite writes the reverse index, decline clears both, and invitesOf prunes expired invites', async () => {
+    const store = new PartyStore(redis);
+    const party = await store.create('lead', 'acc-lead');
+    if (party === null) throw new Error('sem party');
+    await store.invite(party.id, 'b');
+    expect(await store.isInvited(party.id, 'b')).toBe(true);
+    expect(await store.invitesOf('b')).toEqual([party.id]);
+    await store.decline(party.id, 'b');
+    expect(await store.isInvited(party.id, 'b')).toBe(false);
+    expect(await store.invitesOf('b')).toEqual([]);
+    // Convite que expirou (chave apagada) some do índice reverso na leitura, sem erro.
+    await store.invite(party.id, 'c');
+    await redis.del(`party:${party.id}:invites`);
+    expect(await store.invitesOf('c')).toEqual([]);
+    expect(await redis.smembers('party:invited:c')).toEqual([]);
+  });
+
+  it('prune removes only the departed member from the ZSET', async () => {
+    const store = new PartyStore(redis);
+    const party = await store.create('lead', 'acc-lead');
+    if (party === null) throw new Error('sem party');
+    await store.invite(party.id, 'b');
+    await store.join(party.id, 'b', 'acc-b', 4);
+    await store.started(party.id, 's1', 'v1', {}, 30_000);
+    await store.prune(party.id, 'b');
+    expect((await store.get(party.id))?.members).toEqual(['lead']);
   });
 
   it('remove frees every member', async () => {
