@@ -1,4 +1,4 @@
-# 0033 — Cena espacial por andar: parede, objeto alto e criatura no mesmo container, ordenados por `zIndex`
+# 0034 — Cena espacial por andar: parede, objeto alto e criatura no mesmo container, ordenados por `zIndex`
 
 **Status:** aceito
 **Data:** 2026-09-19
@@ -81,7 +81,7 @@ visibilidade de andares (#387) é decidir quais `FloorLayers` anexar e com que `
 mais difícil: um objeto de `scene` mal classificado agora COBRE a criatura, então a classificação
 de #384 passa a ter efeito visível — a ordem de desenho deixa de ser silenciosa. O que precisa
 mudar: `packages/client/AGENTS.md`, dois bullets; `docs/spatial-world-plan.md` (o ADR passa de
-"a criar" a aceito); `docs/adr/README.md` ganha a linha 0033. `camera.ts` perde
+"a criar" a aceito); `docs/adr/README.md` ganha a linha 0034. `camera.ts` perde
 `compareDrawOrder`, que ninguém mais usa.
 
 ## Invariantes afetados

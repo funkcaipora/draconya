@@ -17,13 +17,13 @@ async function render(): Promise<string> {
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
   items: [{ id: 'steel-axe', name: 'Steel Axe', appearanceId: 3264, weight: 41, slot: 'hand', twoHanded: false }],
+  ammunition: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
     { id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20, startingWeaponItemId: 'bow' },
