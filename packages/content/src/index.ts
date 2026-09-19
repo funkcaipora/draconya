@@ -8,3 +8,6 @@ export * from './map.js';
 export * from './content.js';
 export * from './pack.js';
 export * from './bot.js';
+export * from './bot-migration.js';
+export * from './bot-automation.js';
+export * from './spell-power.js';

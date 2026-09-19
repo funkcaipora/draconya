@@ -55,6 +55,8 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   for (const [id, object] of Object.entries(appearances.items)) {
     check(`items.${id}`, 'object', object);
   }
+  // A munição é abstrata (ADR 0026 d.3): a tabela guarda o ícone e o projétil, e os dois são
+  // conferidos contra o pacote.
   for (const [id, ammo] of Object.entries(appearances.ammunition)) {
     check(`ammunition.${id}.icon`, 'object', ammo.icon);
     check(`ammunition.${id}.missile`, 'missile', ammo.missile);

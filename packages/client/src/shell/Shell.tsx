@@ -17,8 +17,10 @@
 // com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
 // CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
+import { sendIntent } from '../net/current.js';
+import { setConfigSender } from '../bot/store.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
@@ -30,11 +32,12 @@ import { Analyzer } from './Analyzer.js';
 import { CyclopediaModal } from './CyclopediaModal.js';
 import { HuntsModal } from './HuntsModal.js';
 import { HuntActions } from './HuntActions.js';
+import { ActionBar } from './ActionBar.js';
 import { PartyMembers } from './PartyMembers.js';
 import { PartyLootWindow } from './PartyBag.js';
 import { PartyModal } from './PartyModal.js';
-import { BotPanel } from './BotPanel.js';
 import { SkillsPanel } from './SkillsPanel.js';
+import { AutomationsPanel } from './AutomationsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
@@ -64,7 +67,7 @@ const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   // nasce aberto empurraria uma decisão antes de a tela aparecer, e janela fixa é quem nasce
   // aberta (DT-02 de #259). A pill "Escolher caçada"/"Sair da caçada" (`HuntActions`) é quem
   // fica sempre visível, fora das colunas.
-  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, chat: false,
+  hunts: false, inventory: true, analyzer: true, bestiary: false, chat: false,
 };
 
 export function Shell() {
@@ -93,6 +96,13 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
+  // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
+  // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.
+  useEffect(() => {
+    setConfigSender((config) => sendIntent({ type: 'bot-config', config }));
+    return () => { setConfigSender(null); };
+  }, []);
   // Quem está numa hunt vê "Sair da caçada"; quem está na Cidade vê "Escolher caçada". O
   // `sessionType` do analisador é o que o servidor disse por último — o cliente não adivinha
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
@@ -120,13 +130,13 @@ export function Shell() {
         <BuffBar />
         <TopBar open={open} toggle={toggle} chatBadge={chatBadge} />
         <div className="windows windows-left" aria-label="janelas à esquerda">
-          {/* O bot é FIXO à esquerda (#162, ADR 0026 d.7 — o vBot no `getLeftPanel()`): sempre
-              montado; o próprio cabeçalho do Panel minimiza (RC-09/#322 — não há mais ícone
-              "Bot" na barra do topo), nunca remove. A edição fina abre por cima. */}
-          <BotPanel collapsed={!open.bot} onToggle={() => { toggle('bot'); }} />
           {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
               cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills"). */}
           <SkillsPanel />
+          {/* Automações é FIXO à esquerda (AB-12/#427, ADR 0032 d.9): montado na Cidade e na
+              caçada, sem condição de `hunting` — como o painel v1 era, e minimizável pelo próprio
+              cabeçalho. A configuração é editável em qualquer lugar; a execução é da hunt. */}
+          <AutomationsPanel />
           {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
               Skills, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
               menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
@@ -176,11 +186,15 @@ export function Shell() {
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
             quando `vocationId` chega — quem decide se ela existe é o estado, não a barra. */}
         <VocationChoice />
-        {/* As pills de caçada (#259, D3/D6): centralizadas sobre o mundo, no rodapé — a faixa
-            de 124 px do handoff que as hospedaria não entra neste marco (D5), então o mundo a
-            ocupa e as pills flutuam direto sobre ele. O modal abre pelo MESMO `open.hunts` que a
-            pill aciona, ou pelo ícone "Hunts" do topo — os dois só alternam a mesma fatia. */}
+        {/* As pills de caçada (#259, D3/D6): centralizadas sobre o mundo, ACIMA da barra de
+            ações desde o AB-10 (`bottom: calc(var(--actionbar-h) + 6px)`). O modal abre pelo
+            MESMO `open.hunts` que a pill aciona, ou pelo ícone "Hunts" do topo — os dois só
+            alternam a mesma fatia. */}
         <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
+        {/* A barra de ações 2 × 12 na fileira de 124 px (AB-10, ADR 0032 d.1–5): montada na
+            Cidade e na caçada, como o kit. É a configuração do bot E o disparo manual — a
+            tecla manda `use-slot`, o conjunto/alvo e o Shift+clique mandam `bot-config`. */}
+        <ActionBar />
         {open.hunts && <HuntsModal hunting={hunting} onClose={() => { toggle('hunts'); }} />}
         {open.character && <CharacterModal onClose={() => { toggle('character'); }} />}
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel

@@ -3,7 +3,7 @@
 // A #381 prendeu os SEIS comportamentos de então (camadas, criatura, parede/arco, repintura por
 // janela, grade de reserva, elevação) para que as issues seguintes do M23 provassem que mudaram
 // só o que disseram. A #385 troca os cinco containers por `floorsRoot` → `ground`/`scene`/`top`
-// por andar (ADR 0033), põe parede, objeto alto e criatura no MESMO `scene` com `zIndex`
+// por andar (ADR 0034), põe parede, objeto alto e criatura no MESMO `scene` com `zIndex`
 // espacial, e é o que a seção 11 desta issue prende. A #382 (janela de render) e a #383
 // (prefetch contínuo) seguem nos blocos próprios.
 //
@@ -18,7 +18,7 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Sprite, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { prefetchTiles, renderTiles, visibleTiles, viewFor } from './camera.js';
+import { prefetchTiles, renderTiles, visibleTiles, viewFor, zoomFor } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import { veilTint } from './floors.js';
 import type { Scene, TileStack } from './scene.js';
@@ -625,7 +625,9 @@ describe('viewport: walking tile e displacement de outfit (issue #386)', () => {
     await viewport.tick(0);
     await viewport.tick(16);
 
-    const overlay = viewport.layers().overlay.children;
+    // `overlay.children[0]` é o `targetFrame` da seleção de alvo (#428); os pares barra/nome
+    // das criaturas começam depois dele.
+    const overlay = viewport.layers().overlay.children.slice(1);
     const bar1 = overlay[0] as Container;
     const label1 = overlay[1] as Container;
     const bar2 = overlay[2] as Container;
@@ -957,11 +959,11 @@ describe('viewport: prefetch contínuo (issue #383)', () => {
     const { art, viewport } = await mountWarmed();
     const before = art.warmedObjects.length;
 
-    viewport.resize(640, 480); // zoom 1, vista 18×14
+    viewport.resize(640, 480); // sem teto (#415): a vista é o que cabe no canvas (20×15 a zoom 1)
     await viewport.tick(16);
 
     expect(art.warmedObjects.length).toBe(before + 1);
-    const window = prefetchTiles(CENTER, { widthTiles: 18, heightTiles: 14 });
+    const window = prefetchTiles(CENTER, viewFor(640, 480, zoomFor(640, 480)));
     expect(new Set(art.warmedObjects[before])).toEqual(columnIds(window, 7));
   });
 
@@ -1050,7 +1052,8 @@ describe('viewport: visibilidade de andares (issue #387)', () => {
     await viewport.tick(1250);
     expect(roof.alpha).toBe(0);
     expect(roof.visible).toBe(false);
-    const overlay = viewport.layers().overlay.children;
+    // `overlay.children[0]` é o `targetFrame` (#428); barra e nome de B vêm depois dele.
+    const overlay = viewport.layers().overlay.children.slice(1);
     expect(viewport.creatureSprite(2)?.visible).toBe(false);
     expect((overlay[2] as Container).visible).toBe(false);
     expect((overlay[3] as Container).visible).toBe(false);

@@ -17,6 +17,7 @@
 // escopo client-only do M14.
 
 import { useEffect, useState } from 'react';
+import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
@@ -113,16 +114,22 @@ export function BattlePanel() {
         : (
           <ul className="battle-list">
             {rows.map((row) => (
-              <li
-                key={row.id}
-                className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
-              >
-                <span className="battle-icon" aria-hidden="true" />
-                <span className="battle-name">{row.name}</span>
-                <span className="battle-percent">{`${String(row.percent)}%`}</span>
-                <span className={`battle-bar battle-bar-${battleTone(row.percent)}`} aria-label={`HP de ${row.name}`}>
-                  <span className="battle-bar-fill" style={{ width: `${String(row.percent)}%` }} />
-                </span>
+              <li key={row.id}>
+                <button
+                  type="button"
+                  className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
+                  onClick={() => {
+                    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido.
+                    sendIntent({ type: 'select-target', creatureId: row.id });
+                  }}
+                >
+                  <span className="battle-icon" aria-hidden="true" />
+                  <span className="battle-name">{row.name}</span>
+                  <span className="battle-percent">{`${String(row.percent)}%`}</span>
+                  <span className={`battle-bar battle-bar-${battleTone(row.percent)}`} aria-label={`HP de ${row.name}`}>
+                    <span className="battle-bar-fill" style={{ width: `${String(row.percent)}%` }} />
+                  </span>
+                </button>
               </li>
             ))}
           </ul>

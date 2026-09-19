@@ -266,12 +266,16 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     type: 'catalogue',
     hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], ...hunt }],
     bot: {
-      vocabularyVersion: 1, advancedFromLevel: 50,
-      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-      advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-      spells: [], supplies: [],
+      vocabularyVersion: 2,
+      setCount: 4,
+      slotsPerSet: 24,
+      setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+      hotkeys: ['1'],
+      groups: [],
+      spells: [],
+      automations: [], supplies: [],
     },
-    items: [],
+    items: [], ammunition: [],
   } as unknown as S2CMessage);
 
   it('round trips the outfit ids, and an older node without them decodes to an EMPTY list', () => {
@@ -282,10 +286,9 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     // `monsters` também tem default (FUN-113), e `lootDrops` (FUN-123): o que volta é a
     // mensagem com os dois preenchidos.
     const decodedWithIds = decodeS2C(encodeS2C(withIds)) as Array<{ hunts: Array<Record<string, unknown>> }> | null;
-    // E `ammunition` (#152): um nó anterior manda sem, e o seletor lista nada.
     // E `vocations`/`vocationLevel` (#154): sem eles o diálogo da vocação não abre.
     expect(decodedWithIds).toEqual([{
-      ...withIds, monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+      ...withIds, monsters: [], vocations: [], vocationLevel: 0,
       hunts: (withIds as unknown as { hunts: Array<Record<string, unknown>> }).hunts.map((hunt) => ({
         ...hunt, difficultyDetails: [], lootDrops: 0, monsters: [], loot: [],
       })),
@@ -372,17 +375,20 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
     };
     const full = {
       ...base,
       monsters: [{ id: 'rat', name: 'Rat' }],
-      ammunition: [],
       vocations: [],
       vocationLevel: 8,
       bestiary: { milestones: [10_000, 25_000], xpBonusPercentPerMilestone: 1 },
@@ -398,12 +404,16 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
     } as unknown as S2CMessage;
     const decoded = decodeS2C(encodeS2C(base)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
@@ -425,12 +435,16 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }],
     } as unknown as S2CMessage;
     const decoded = decodeS2C(encodeS2C(withClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
@@ -451,14 +465,17 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1, advancedFromLevel: 50,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [],
-      ammunition: [],
       vocations: [],
       vocationLevel: 8,
     };
@@ -510,8 +527,9 @@ describe('the bestiary (FUN-113, §18)', () => {
 
 describe('vocation choice (#154)', () => {
   it('is intention only: the client names the vocation, and the opcode is 15', () => {
-    // O 14 foi do `select-ammo` (#152); a ADR 0026 registra o 15. Mutação que mata: trocar
-    // por 14 (duplicado) ou apagar a linha (o schema fica órfão e o teste estrutural reprova).
+    // O 14 é do `select-ammo` (#152); a ADR 0026 registra o 15. Mutação que mata: trocar por
+    // 14 (duplicado) ou apagar a linha (o schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER['select-ammo']).toBe(14);
     expect(CLIENT_TO_SERVER['choose-vocation']).toBe(15);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight' }).success).toBe(true);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: '' }).success).toBe(false);
@@ -528,8 +546,12 @@ describe('vocation choice (#154)', () => {
     expect(stats.vocationId).toBeNull();
     expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
     const catalogue = S2C_SCHEMAS.catalogue.parse({
-      hunts: [], items: [],
-      bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+      hunts: [], items: [], ammunition: [],
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
+        spells: [], automations: [], supplies: [],
+      },
     });
     expect(catalogue.vocations).toEqual([]);
     expect(catalogue.vocationLevel).toBe(0);
@@ -542,7 +564,8 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     health: 150, maxHealth: 150, mana: 20, maxMana: 20,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
     targetId: null,
-    ammo: { arrow: null, bolt: null }, vocationId: 'knight',
+    ammo: { arrow: null, bolt: null },
+    vocationId: 'knight',
     speed: 292,
     skills: {
       melee: { level: 15, percentToNext: 45 },
@@ -561,12 +584,13 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
       type: 'player-stats',
       health: 100, maxHealth: 100, mana: 50, maxMana: 50,
       level: 1, xp: 0, capacity: 400, gold: 0, staminaMs: 1000,
-      ammo: { arrow: null, bolt: null }, vocationId: null,
+      vocationId: null,
     };
     const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
     expect(decoded).toEqual([{
       ...rawOlderNode,
       targetId: null,
+      ammo: { arrow: null, bolt: null },
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
@@ -889,3 +913,59 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
 });
 
 
+
+describe('slot intents and state (AB-09)', () => {
+  it('adds C2S 17/18 and S2C 30/31, and 14 is select-ammo again', () => {
+    // Invariante 5: os números vivem só aqui. O 14 voltou a ser `select-ammo` (#152) na
+    // reversão do modelo de munição; não há mais opcode queimado no C2S.
+    expect(CLIENT_TO_SERVER['use-slot']).toBe(17);
+    expect(CLIENT_TO_SERVER['select-target']).toBe(18);
+    expect(SERVER_TO_CLIENT['slot-state']).toBe(30);
+    expect(SERVER_TO_CLIENT['slot-result']).toBe(31);
+    expect(CLIENT_TO_SERVER['select-ammo']).toBe(14);
+    expect(BURNED_OPCODES_C2S).not.toContain(14);
+  });
+
+  it('select-ammo is intention only: the client names the ammo, the server gates the level', () => {
+    expect(C2S_SCHEMAS['select-ammo'].safeParse({ ammoId: 'sniper-arrow' }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-ammo'].safeParse({ ammoId: '' }).success).toBe(false);
+  });
+
+  it('is intention only: { set, slot } and { creatureId }, nothing resolved', () => {
+    // Invariante 4: o cliente diz QUAL slot e QUAL criatura; elegibilidade, dano, loot e
+    // posição são do servidor. O teto do fio repete o conteúdo (3 conjuntos − 1, 24 slots − 1).
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 0, slot: 23 }).success).toBe(true);
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 4, slot: 0 }).success).toBe(false);
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 0, slot: 24 }).success).toBe(false);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 7 }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: -1 }).success).toBe(false);
+  });
+
+  it('round trips slot-state and slot-result through the codec', () => {
+    const state: S2CMessage = {
+      type: 'slot-state',
+      slots: [
+        { set: 0, slot: 0, state: 'ready', remainingMs: 0 },
+        { set: 0, slot: 1, state: 'cooldown', remainingMs: 1500, reason: 'on-cooldown' },
+        { set: 0, slot: 2, state: 'blocked', remainingMs: 0, reason: 'not-enough-item' },
+        { set: 0, slot: 3, state: 'empty', remainingMs: 0 },
+      ],
+    };
+    const result: S2CMessage = {
+      type: 'slot-result', set: 0, slot: 1, ok: false, reason: 'Ainda em cooldown.',
+    };
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+    expect(decodeS2C(encodeS2C(result))).toEqual([result]);
+  });
+
+  it('rejects a slot-state outside the bar and an unknown state', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 24, state: 'ready', remainingMs: 0 }],
+    } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 0, state: 'quebrado', remainingMs: 0 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+});
