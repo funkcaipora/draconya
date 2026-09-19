@@ -4686,6 +4686,13 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     // Attach inicial leva party embutida no session-state; nenhum party-state isolado foi enviado
     expect(partyStatesOf(lead.socket).length).toBe(0);
 
+    // O `onEnter` emite `party-state` em TODA entrada com party (#397): a formação inicial
+    // (lead + b) deixa eventos na fila, entregues no primeiro ciclo. Consome-os para medir só
+    // as mudanças ao vivo, que é o assunto deste teste.
+    runFor(100);
+    const baseline = partyStatesOf(lead.socket).length;
+    expect(baseline).toBeGreaterThan(0);
+
     const s = session();
     if (!s) throw new Error('sem session');
     const memberB = s.participants.find((p) => p.id === 'b');
@@ -4696,8 +4703,8 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     memberB.mana = 100;
     runFor(100);
     let states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(1);
-    expect(states[0]).toMatchObject({
+    expect(states.length).toBe(baseline + 1);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', manaPercent: 100 }),
@@ -4706,15 +4713,15 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(1);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 1);
 
     // 2. Modificar level dispara mais 1 party-state
     memberB.level = 2;
     memberB.xp = totalXpForLevel(2, TEST_PROGRESSION as Progression);
     runFor(100);
     states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(2);
-    expect(states[1]).toMatchObject({
+    expect(states.length).toBe(baseline + 2);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', level: 2 }),
@@ -4723,14 +4730,14 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(2);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 2);
 
     // 3. Modificar vocação dispara mais 1 party-state
     memberB.vocationId = 'knight';
     runFor(100);
     states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(3);
-    expect(states[2]).toMatchObject({
+    expect(states.length).toBe(baseline + 3);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', vocationId: 'knight' }),
@@ -4739,7 +4746,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(3);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 3);
   });
 
   it('#partyBlock populates shareCosts and splitLoot with defaults and explicit overrides (#359)', () => {

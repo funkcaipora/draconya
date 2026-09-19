@@ -944,6 +944,20 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O premium de quem entrou DEPOIS da construção da sessão (#397). `#394` grava
+   * `premiumByCharacter` na criação; isto é o único jeito de escrevê-lo para um joiner — sem
+   * checagem de líder, porque premium é fato sobre o PRÓPRIO personagem, não configuração da
+   * party. Ausência de party é no-op: solo não tem `premiumByCharacter`.
+   */
+  setMemberPremium(session: Session, characterId: string, premium: boolean): void {
+    if (this.#party === undefined) return;
+    this.#party = {
+      ...this.#party,
+      premiumByCharacter: { ...this.#party.premiumByCharacter, [characterId]: premium },
+    };
+  }
+
+  /**
    * O bloco PARTY dos Detalhes da Caçada (§32, ADR 0033 decisão 11). Getter PURO, sem `emit()`:
    * o host o chama por ciclo, como `partySpendingPreview` (DT-03). `undefined` fora de party.
    *
@@ -998,6 +1012,14 @@ export class HuntRuleset implements Ruleset {
   }
 
   onEnter(session: Session, character: CharacterRuntime): void {
+    // Recusa o (maxMembers + 1)-ésimo (§22, #397) ANTES de qualquer efeito colateral — criar o
+    // runner, resetar a ocupação do mundo — para que a reversão em `Session.enter` não precise
+    // desfazer nada além do próprio push. `character` já está em `session.participants`
+    // (empurrado por `Session.enter` antes de chamar `onEnter`): por isso o teste é `>`, não
+    // `>=`, contra o limite do CONTEÚDO da party (#392), não um valor fixo da issue.
+    if (this.#party !== undefined && session.participants.length > this.#options.party.maxMembers) {
+      throw new PartyFullError(this.#options.hunt.id, this.#options.party.maxMembers);
+    }
     // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
     // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
     // o primeiro a entrar.
@@ -1073,6 +1095,12 @@ export class HuntRuleset implements Ruleset {
     // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
     // orça só existem para quem de fato configurou.
     this.#armBot(session, character.id);
+    // Só depois de tudo pronto (runner armado, posição válida): quem já está OLHANDO a sessão
+    // precisa saber que a lotação mudou, e a bolsa precisa recalcular reserva por membro — um
+    // join em curso muda `ΣB` (#396) do mesmo jeito que uma saída muda. O aviso é incondicional
+    // em party (#397, DT-05): numa hunt tranquila o próximo evento de party pode nunca chegar
+    // antes do fim, e os outros presentes precisam ver o novo membro agora.
+    if (this.#party !== undefined) this.#emitPartyState(session);
     // `onEnter` é gatilho do §13: quem entra muda a capacidade disponível (e a reserva) dos
     // outros. Depois de tudo montado, para o participante novo já contar.
     this.#rebalanceBag(session);
@@ -3758,8 +3786,11 @@ export class HuntRuleset implements Ruleset {
 
       // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
       // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
-      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre.
-      const instanceId = session.participants.length > 1
+      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
+      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
+      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
+      // de solo colidiria com o de quem entrar depois.
+      const instanceId = this.#party !== undefined
         ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
         : `${session.id}:${String(character.lootSeq++)}`;
       const carried: CarriedItem = {
@@ -4004,6 +4035,22 @@ export class HuntUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'HuntUnavailableError';
+  }
+}
+
+/**
+ * `onEnter` recusa join além do limite do conteúdo (#397, §22): TIPADO, ao contrário do
+ * `throw new Error` de colocação (linha 1033) — aquele é falha de CONTEÚDO (o primeiro tile da
+ * rota não existe; nunca deveria acontecer em produção); este é um caminho ESPERADO em toda
+ * hunt de party madura, e o hospedeiro precisa distingui-lo para recusar o ticket em vez de
+ * derrubar a sessão.
+ */
+export class PartyFullError extends Error {
+  readonly maxMembers: number;
+  constructor(huntId: string, maxMembers: number) {
+    super(`party da hunt "${huntId}" já tem ${String(maxMembers)} membros (limite do conteúdo)`);
+    this.name = 'PartyFullError';
+    this.maxMembers = maxMembers;
   }
 }
 

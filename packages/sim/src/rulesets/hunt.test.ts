@@ -12,7 +12,7 @@ import { Rng } from '../rng.js';
 import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
-  HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
+  HuntRuleset, PartyFullError, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
 import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 
@@ -4695,8 +4695,11 @@ describe('modo split — o loot vai para um membro sorteado (#191, ADR 0027 deci
     const loot = lootOf(session, 'hero');
     expect(session.aggregates.kills).toBeGreaterThan(5);
     expect(loot).toEqual(lootOf(hunt([member('hero')], false), 'hero'));
-    // A party de UM, com `partyOptions`, também não sorteia: é o mesmo solo.
-    expect(lootOf(hunt([member('hero')], true), 'hero')).toEqual(loot);
+    // A party de UM, com `partyOptions`, também não sorteia: é o mesmo solo. O id da instância
+    // muda de formato por DT-03 (party sempre leva o dono), então o que se compara é o loot.
+    expect(lootOf(hunt([member('hero')], true), 'hero')).toMatchObject({
+      gold: loot.gold, items: loot.items,
+    });
   });
 
   it('split with three members: everyone receives something, the dead one nothing, and the gold adds up', () => {
@@ -5560,6 +5563,170 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
   });
 });
 
+describe('entrada em hunt em curso (#397, ADR 0033 decisão 6)', () => {
+  const eightTable = {
+    '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
+  };
+  const loadedEight = () => content({
+    party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: eightTable }],
+  });
+  const fat = { ...rat, experience: 100, health: 30 };
+  const loadedFat = () => content({ monsters: [fat] });
+  const rich = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'sword', chance: 1, min: 1, max: 1 }] },
+  };
+  const loadedRich = () => content({ monsters: [rich] });
+  const member = (id: string, capacity = 1_000) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity,
+    });
+  };
+  const makeParty = (
+    over: { content?: Content; mode?: 'split' | 'shared'; leader?: string } = {},
+  ) => {
+    const session = createHuntSession({
+      id: 'live-join', content: over.content ?? content(), huntId: 'arena', difficulty: 'bold',
+      createdAtMs: 0,
+      partyOptions: { leaderId: over.leader ?? 'lead', mode: over.mode ?? 'split' },
+    });
+    return { session, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  it('recusa o (maxMembers + 1)-ésimo com PartyFullError, sem tocar nos que já estão', () => {
+    // Mutação que mata: checar `>=` em vez de `>` — o oitavo membro seria recusado.
+    const { session, ruleset } = makeParty({ content: loadedEight(), leader: 'm0' });
+    const ids = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7'];
+    for (const id of ids) session.enter(member(id));
+
+    let caught: unknown;
+    try {
+      session.enter(member('m8'));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(PartyFullError);
+    expect((caught as PartyFullError).maxMembers).toBe(8);
+    // A sessão PRÉ-EXISTENTE ficou intacta: lotação, runners e posições.
+    expect(session.participants.map((p) => p.id)).toEqual(ids);
+    for (const id of ids) {
+      expect(ruleset.routeIndexOf(id)).toBeGreaterThanOrEqual(0);
+      expect(session.participants.find((p) => p.id === id)?.alive).toBe(true);
+    }
+    // E `joinedAtMs` não guardou o recusado.
+    expect(Object.keys(session.snapshot().joinedAtMs ?? {})).toEqual(ids);
+  });
+
+  it('emite party-state em TODA entrada com party — inclusive a primeira', () => {
+    const { session } = makeParty();
+    session.enter(member('a'));
+    const first = session.drainEvents().filter((e) => e.kind === 'party-state');
+    expect(first).toHaveLength(1);
+    expect(first[0]?.kind === 'party-state' && first[0].members.map((m) => m.characterId)).toEqual(['a']);
+
+    session.enter(member('b'));
+    session.drainEvents();
+    session.enter(member('c'));
+    const states = session.drainEvents().filter((e) => e.kind === 'party-state');
+    expect(states).toHaveLength(1);
+    expect(states[0]?.kind === 'party-state' && states[0].members.map((m) => m.characterId))
+      .toEqual(['a', 'b', 'c']);
+  });
+
+  it('rebalanceia a bolsa na entrada: party-bag-changed com a reserva do novo membro', () => {
+    const { session, ruleset } = makeParty({ content: loadedRich(), mode: 'shared', leader: 'lead' });
+    session.enter(member('lead'));
+    session.enter(member('b'));
+    run(session, 8_000, 100);
+    expect(ruleset.getState().partyBag?.items.length ?? 0).toBeGreaterThan(0);
+    session.drainEvents();
+
+    session.enter(member('c'));
+    const bags = session.drainEvents().filter((e) => e.kind === 'party-bag-changed');
+    expect(bags.length).toBeGreaterThan(0);
+    const last = bags.at(-1);
+    if (last?.kind !== 'party-bag-changed') throw new Error('sem party-bag-changed');
+    expect(last.reservations.map((r) => r.characterId)).toEqual(['lead', 'b', 'c']);
+    // A capacidade é a Σ das DISPONÍVEIS dos três presentes, recalculada na entrada.
+    const catalog = loadedRich().items;
+    const available = session.participants.reduce(
+      (n, p) => n + Math.max(0, p.capacity - p.inventory.weight(catalog)), 0,
+    );
+    expect(last.capacity).toBe(available);
+  });
+
+  it('o extrato de quem entrou tarde NÃO leva os level ups dos outros; o de quem já estava leva', () => {
+    const { session } = makeParty({ content: loadedFat() });
+    session.enter(member('a'));
+    session.enter(member('b'));
+    run(session, 60_000, 100);
+    const levelUp = session.notableEvents.find((e) => e.type === 'level-up');
+    expect(levelUp).toBeDefined();
+
+    session.enter(member('late'));
+    const lateDeparture = session.leave('late', 'manual-exit');
+    expect(lateDeparture?.receipt.notableEvents.map((e) => e.type)).not.toContain('level-up');
+
+    const bDeparture = session.leave('b', 'manual-exit');
+    expect(bDeparture?.receipt.notableEvents.map((e) => e.type)).toContain('level-up');
+  });
+
+  it('em party o instanceId leva o dono no meio mesmo com um só presente no drop (DT-03)', () => {
+    const { session } = makeParty({ content: content({ monsters: [ratWithDrop] }), leader: 'lead' });
+    session.enter(member('lead'));
+    session.enter(member('b'));
+    run(session, 5_000, 100);
+    session.leave('b', 'manual-exit');
+    run(session, 20_000, 100);
+
+    const lead = session.participants.find((p) => p.id === 'lead');
+    const dropped = [...(lead?.inventory.items() ?? [])].filter((i) => i.itemId === 'sword');
+    expect(dropped.length).toBeGreaterThan(0);
+    expect(dropped[0]?.instanceId).toContain(`${session.id}:lead:`);
+  });
+
+  it('setMemberPremium grava o premium de um NÃO-líder, e é no-op em solo', () => {
+    const { session, ruleset } = makeParty({ leader: 'lead' });
+    session.enter(member('lead'));
+    session.enter(member('b'));
+    expect(() => ruleset.setMemberPremium(session, 'b', true)).not.toThrow();
+    expect(ruleset.party?.premiumByCharacter['b']).toBe(true);
+    expect(ruleset.party?.leaderId).toBe('lead');
+
+    const solo = createHuntSession({
+      id: 'solo-premium', content: content(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    solo.enter(member('solo'));
+    const soloRuleset = solo.ruleset as HuntRuleset;
+    expect(() => soloRuleset.setMemberPremium(solo, 'solo', true)).not.toThrow();
+    expect(soloRuleset.party).toBeUndefined();
+  });
+
+  it('1 Hz == 10 Hz com join no meio da hunt', () => {
+    const at = (hz: number) => {
+      const step = 1000 / hz;
+      const { session } = makeParty();
+      session.enter(member('a'));
+      session.enter(member('b'));
+      run(session, 5_000, step);
+      session.enter(member('c'));
+      run(session, 15_000, step);
+      return {
+        aggregates: { ...session.aggregates },
+        rng: session.getRngState(),
+        a: session.aggregatesOf('a').kills,
+        c: session.aggregatesOf('c').kills,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+});
+
 describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   // Ratos que batem forte num membro de 1 HP: ele morre no primeiro golpe e SAI com o próprio
   // extrato; os outros ficam. Regra `party-member-lost` em quem a configurou: cascata.
@@ -5609,10 +5776,21 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   });
 
   it('party-member-lost cascades in entry order; whoever lacks the rule stays', () => {
-    const session = party(
-      [member('frail', 1), member('lead'), member('b'), member('c'), member('d')],
-      { b: exitOnLoss, c: exitOnLoss },
-    );
+    // Cinco membros exigem um limite de conteúdo maior que o baseline de teste (4): desde o
+    // #397 o `onEnter` recusa acima de `maxMembers`, e este cenário é legal em party de 8.
+    const roomy = content({
+      monsters: [killer],
+      party: [{ id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: {
+        '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
+      } }],
+    });
+    const session = createHuntSession({
+      id: 'leave-session-five', content: roomy, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: 'lead', mode: 'split' }, botConfigs: { b: exitOnLoss, c: exitOnLoss },
+    });
+    for (const m of [member('frail', 1), member('lead'), member('b'), member('c'), member('d')]) {
+      session.enter(m);
+    }
     run(session, 30_000, 100);
     const events = left(session);
     expect(events.map((e) => (e.kind === 'member-left' ? [e.characterId, e.reason] : null))).toEqual([
