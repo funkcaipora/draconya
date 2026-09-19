@@ -469,6 +469,16 @@ export class Session {
   }
 
   /**
+   * O instante LÓGICO em que `characterId` entrou na sessão (#397, D7). `undefined` para quem
+   * não é participante — e para um snapshot anterior ao #397, que não gravou o campo. É a leitura
+   * que o hospedeiro faz para montar `party-state.members[].joinedAtMs` (D12): sem ela, o
+   * `joinedAtMs` ficaria preso no snapshot e nunca chegaria ao fio.
+   */
+  joinedAtMsOf(characterId: string): number | undefined {
+    return this.#joinedAtMs.get(characterId);
+  }
+
+  /**
    * Os agregados DESTE participante (#187). Cria zerado na primeira leitura — um personagem que
    * entra numa sessão em curso começa do zero, inclusive em `durationMs`.
    */

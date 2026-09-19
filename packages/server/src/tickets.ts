@@ -35,7 +35,13 @@ export interface TicketClaim {
 export interface PartyTicket {
   readonly sessionId: string;
   readonly leaderId: string;
-  readonly mode: 'split' | 'shared';
+  /**
+   * Os dois eixos do líder (ADR 0033 D1), no lugar de `mode`. O `mode` continua aceito na
+   * LEITURA por um deploy em rolagem (`parsePartyTicket`) — um `api` antigo ainda o emite, e a
+   * migração é a mesma do snapshot: `'shared'` liga os dois, `'split'` desliga os dois.
+   */
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
   readonly huntId: string;
   readonly difficulty: string;
   /** Na ordem de entrada: é a ordem em que a sessão os recebe. */
@@ -137,6 +143,16 @@ export interface InitialCharacter {
    * `already-chosen` no `sim` não impede, mas o `coalesce` do `jobs` impede de gravar duas.
    */
   readonly vocation?: string;
+  /**
+   * Premium do personagem (ADR 0033 D3), já resolvido contra o relógio pelo `api` — a sessão
+   * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
+   * LÍDER e a penalidade de morte de cada membro.
+   *
+   * O PRD fala da "conta do líder"; o contrato persistido é por personagem
+   * (`characters.premium_until`, ADR 0014 — não se renomeia). Ausente é Free, ou ticket de um
+   * `api` antigo — nunca ticket recusado (regra do Bestiário).
+   */
+  readonly premium?: boolean;
 }
 
 export interface IssuedTicket {
@@ -487,14 +503,20 @@ function parsePartyTicket(value: unknown): PartyTicket | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'object' || value === null) return undefined;
   const raw = value as Record<string, unknown>;
+  // Compat de um deploy (D1): um `api` ainda não atualizado manda `mode`; a leitura migra com
+  // a MESMA tabela do snapshot antigo — 'shared' liga os dois eixos, 'split' desliga os dois.
+  const hasAxes = typeof raw['shareCosts'] === 'boolean' || typeof raw['splitLoot'] === 'boolean';
+  const hasMode = raw['mode'] === 'split' || raw['mode'] === 'shared';
   if (
     typeof raw['sessionId'] !== 'string' || typeof raw['leaderId'] !== 'string'
-    || (raw['mode'] !== 'split' && raw['mode'] !== 'shared')
+    || (!hasAxes && !hasMode)
     || typeof raw['huntId'] !== 'string' || typeof raw['difficulty'] !== 'string'
     || !Array.isArray(raw['members']) || raw['members'].length < 2
   ) {
     return undefined;
   }
+  const shareCosts = typeof raw['shareCosts'] === 'boolean' ? raw['shareCosts'] : raw['mode'] === 'shared';
+  const splitLoot = typeof raw['splitLoot'] === 'boolean' ? raw['splitLoot'] : raw['mode'] === 'shared';
   const members: PartyTicket['members'][number][] = [];
   for (const entry of raw['members'] as unknown[]) {
     if (typeof entry !== 'object' || entry === null) return undefined;
@@ -506,7 +528,7 @@ function parsePartyTicket(value: unknown): PartyTicket | undefined {
     members.push({ characterId: member['characterId'], accountId: member['accountId'], initialCharacter });
   }
   return {
-    sessionId: raw['sessionId'], leaderId: raw['leaderId'], mode: raw['mode'],
+    sessionId: raw['sessionId'], leaderId: raw['leaderId'], shareCosts, splitLoot,
     huntId: raw['huntId'], difficulty: raw['difficulty'], members,
   };
 }
@@ -570,6 +592,9 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
+    // O Premium (ADR 0033 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
+    // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
+    ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
   };
 }
 

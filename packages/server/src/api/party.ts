@@ -48,8 +48,18 @@ const Kick = z.object({ targetId: z.string().min(1).max(128) });
 const Propose = z.object({
   huntId: z.string().min(1).max(128),
   difficulty: z.string().min(1).max(64),
-  mode: z.enum(['split', 'shared']),
-});
+  /**
+   * O `mode` legado de um cliente anterior ao #400; os dois eixos são o formato novo
+   * (ADR 0033 D1). Um dos dois tem de vir: o `mode` sozinho migra para os eixos, e os eixos
+   * sozinhos derivam o `mode` — as duas formas produzem o mesmo ticket.
+   */
+  mode: z.enum(['split', 'shared']).optional(),
+  shareCosts: z.boolean().optional(),
+  splitLoot: z.boolean().optional(),
+}).refine(
+  (value) => value.mode !== undefined || value.shareCosts !== undefined || value.splitLoot !== undefined,
+  { message: 'informe mode ou os dois eixos' },
+);
 const Selected = z.object({ characterId: z.string().min(1).max(128) });
 
 const STATUS: Record<IssueFailure, number> = {
@@ -62,7 +72,8 @@ async function view(
   party: PartyRecord,
   getCharacter: PartyRouteDependencies['getCharacter'],
 ): Promise<{
-  id: string; leaderId: string; mode: PartyRecord['mode']; huntId: string | null;
+  id: string; leaderId: string; mode: PartyRecord['mode']; shareCosts: boolean; splitLoot: boolean;
+  huntId: string | null;
   difficulty: string | null;
   members: Array<{ characterId: string; name: string; approved: boolean }>;
 }> {
@@ -74,8 +85,9 @@ async function view(
     return { characterId, name: character?.name ?? characterId, approved: party.approved.includes(characterId) };
   }));
   return {
-    id: party.id, leaderId: party.leaderId, mode: party.mode, huntId: party.huntId,
-    difficulty: party.difficulty, members,
+    id: party.id, leaderId: party.leaderId, mode: party.mode,
+    shareCosts: party.shareCosts, splitLoot: party.splitLoot,
+    huntId: party.huntId, difficulty: party.difficulty, members,
   };
 }
 
@@ -217,7 +229,16 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     const difficulties = deps.limits.difficultiesOf(proposal.data.huntId);
     if (difficulties === null) return reply.code(400).send({ error: 'unknown-hunt' });
     if (!difficulties.includes(proposal.data.difficulty)) return reply.code(400).send({ error: 'unknown-difficulty' });
-    await deps.party.propose(party.id, proposal.data, me.characterId);
+    // Os dois eixos são a verdade (D1); `mode` é derivado no que faltar. Um cliente anterior
+    // ao #400 só manda `mode`, e ele migra pela mesma tabela do snapshot.
+    const shareCosts = proposal.data.shareCosts ?? proposal.data.mode === 'shared';
+    const splitLoot = proposal.data.splitLoot ?? proposal.data.mode === 'shared';
+    const mode = proposal.data.mode ?? (shareCosts && splitLoot ? 'shared' : 'split');
+    await deps.party.propose(
+      party.id,
+      { huntId: proposal.data.huntId, difficulty: proposal.data.difficulty, mode, shareCosts, splitLoot },
+      me.characterId,
+    );
     const updated = await deps.party.get(party.id);
     return reply.send(updated === null ? { ok: true } : await view(updated, deps.getCharacter));
   });
@@ -298,8 +319,12 @@ export function registerPartyRoutes(app: FastifyInstance, deps: PartyRouteDepend
     if (!resolution.ok) return reply.code(STATUS[resolution.reason]).send({ error: resolution.reason });
 
     const sessionId = randomUUID();
-    const ticket: PartyTicket = {
-      sessionId, leaderId: party.leaderId, mode: party.mode,
+    // `mode` continua no ticket como espelho derivado (D1): um nó `game` anterior ao #400 só o
+    // lê, e o `parsePartyTicket` do nó novo migra o mesmo par. O tipo é o `PartyTicket` (que já
+    // carrega os dois eixos) mais o espelho, e a assinatura de `issue` aceita o superconjunto.
+    const ticket: PartyTicket & { mode: PartyRecord['mode'] } = {
+      sessionId, leaderId: party.leaderId,
+      shareCosts: party.shareCosts, splitLoot: party.splitLoot, mode: party.mode,
       huntId: party.huntId, difficulty: party.difficulty, members,
     };
     const issued: Array<{ characterId: string; accountId: string; value: IssuedTicket }> = [];

@@ -182,7 +182,11 @@ export function createCitySessionFactory(
 function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
   const accept = createBotConfigValidator(content);
   const botConfigs: Record<string, BotConfig> = {};
+  const premiumByCharacter: Record<string, boolean> = {};
   for (const member of party.members) {
+    // O Premium do personagem (ADR 0033 D3) entra no estado da party: o limite de venda é do
+    // LÍDER, mas a penalidade de morte é de quem morre. Ausente no ticket é Free.
+    premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
     const raw = member.initialCharacter.botConfig;
     if (raw === undefined) continue;
     const decision = accept(raw, member.initialCharacter.level);
@@ -194,7 +198,12 @@ function partyHuntFor(content: Content, party: PartyTicket, now: () => number): 
     huntId: party.huntId,
     difficulty: party.difficulty as HuntDifficultyName,
     createdAtMs: now(),
-    partyOptions: { leaderId: party.leaderId, mode: party.mode },
+    partyOptions: {
+      leaderId: party.leaderId,
+      // Coleta/venda nascem vazias — o líder configura depois de entrar, por `party-settings`.
+      settings: { shareCosts: party.shareCosts, splitLoot: party.splitLoot, collect: null, autoSell: [] },
+      premiumByCharacter,
+    },
     botConfigs,
   });
   for (const member of party.members) {

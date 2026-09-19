@@ -4503,7 +4503,7 @@ describe('a party no hospedeiro: um extrato por membro, saída por dentro do sim
 
 describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com os N, os seguintes se anexam', () => {
   const party = {
-    sessionId: 's-party', leaderId: 'a', mode: 'split' as const, huntId: 'arena', difficulty: 'cautious',
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
     members: [
       { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
       { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
@@ -4568,14 +4568,25 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
   };
-  function partyHunt(options?: { mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean }) {
+  const richWithLoot = {
+    ...rich,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
+  function partyHunt(options?: {
+    mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean; lootItems?: boolean;
+  }) {
     const mode = options?.mode ?? 'shared';
-    const raw = rawTestContent();
-    const content = buildContent({
-      ...raw,
-      monsters: [rich],
+    const raw = {
+      ...rawTestContent(),
+      ...(options?.lootItems === true
+        ? { items: [{ id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 30, attack: 1 }] }
+        : {}),
+      monsters: [options?.lootItems === true ? richWithLoot : rich],
       progression: [{ ...TEST_PROGRESSION, startingMana: 0 }],
-    });
+    };
+    // A aparência é DERIVADA (FUN-94): o item novo precisa da linha, e `rawTestContent` já
+    // rodou `placeholderAppearances` sem ele — rederivar é o que evita o `ContentError`.
+    const content = buildContent({ ...raw, appearances: [placeholderAppearances(raw)] });
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const member = (id: string) => new CharacterRuntime({
@@ -4633,7 +4644,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
       ['b', true, 100, null, 1, 0],
     ]);
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
-    expect(leadState.partyBag).toEqual({ gold: 0, items: [], weight: 0, capacity: capacity() });
+    expect(leadState.partyBag).toMatchObject({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
     // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números.
     session()?.credit('lead', 'xpGained', 7);
@@ -4669,6 +4680,9 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     if (settlement?.type !== 'party-settlement') throw new Error('sem party-settlement');
     expect(settlement.total).toBe(lastBag.gold);
     expect(settlement.shares.map((s) => s.characterId).sort()).toEqual(['b', 'lead']);
+    // O motivo viaja desde o `sim` (#400, RF-05): a saída é `leave`.
+    expect(settlement.reason).toBe('leave');
+    expect(settlement.itemId).toBeUndefined();
     const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
     if (state?.type !== 'party-state') throw new Error('sem party-state');
     expect(state.members.map((m) => [m.characterId, m.vocationId, m.level, m.manaPercent])).toEqual([
@@ -4772,6 +4786,105 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(combDState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: true });
   });
 
+  it('o líder muda os eixos por party-settings, e o party-state seguinte reflete (#400, RF-01)', () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    // Partida em `shared`: os dois eixos ligados. O líder desliga os dois.
+    host.handle(lead.viewer, { type: 'party-settings', shareCosts: false, splitLoot: false });
+    runFor(100);
+    const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
+    if (state?.type !== 'party-state') throw new Error('sem party-state');
+    expect(state.settings).toEqual({ shareCosts: false, splitLoot: false });
+    expect(state.shareCosts).toBe(false);
+    expect(state.splitLoot).toBe(false);
+    expect(state.mode).toBe('split');
+  });
+
+  it('quem não é líder recebe system-message e a party não muda (#400, RF-02)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+    const ruleset = session()?.ruleset as HuntRuleset;
+    const antes = ruleset.party?.shareCosts;
+    host.handle(b.viewer, { type: 'party-settings', shareCosts: false });
+    runFor(100);
+    const warning = b.socket.received().find((m) => m.type === 'system-message');
+    expect(warning).toMatchObject({ type: 'system-message', level: 'warning' });
+    expect(ruleset.party?.shareCosts).toBe(antes);
+    expect(lead.socket.received().some((m) => m.type === 'system-message')).toBe(false);
+  });
+
+  it('#partyBlock monta party-state/party-bag v2 do ruleset — settings, loot, connected, value, overweight, reservations, eligible (#400, RF-03)', () => {
+    const { host, runFor, session } = partyHunt({ lootItems: true });
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(20_000);
+    // O `session-state` de `b` foi montado DEPOIS de os dois anexarem: é onde `connected` já
+    // enxerga os dois (o de `lead` nasceu antes de `b` chegar).
+    const state = b.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('sem session-state');
+    expect(state.party?.settings).toEqual({ shareCosts: true, splitLoot: true });
+    expect(state.party?.loot).toEqual({ collect: null, autoSell: [], autoSellLimit: 5, leaderPremium: false });
+    expect(state.party?.members.map((m) => [m.characterId, m.connected])).toEqual([['lead', true], ['b', true]]);
+    // `joinedAtMs` chega ao fio pelo acessor `Session.joinedAtMsOf` (#397, D12) — quem entrou
+    // pela porta normal da sessão tem o instante lógico da entrada.
+    for (const member of state.party?.members ?? []) {
+      expect(member.joinedAtMs).toEqual(expect.any(Number));
+    }
+
+    const bagMessage = lead.socket.received().filter((m) => m.type === 'party-bag').at(-1);
+    if (bagMessage?.type !== 'party-bag') throw new Error('sem party-bag');
+    // Nada é somado no host: peso/valor vêm do `partySummary`, OVERWEIGHT/reservas do `sim`.
+    const simSummary = (session()?.ruleset as HuntRuleset).partySummary(session() as Session);
+    expect(bagMessage.value).toBe(simSummary?.bagValue);
+    expect(bagMessage.value).toBeGreaterThan(0);
+    expect(bagMessage.overweight).toBe(false);
+    expect(bagMessage.reservations?.map((r) => r.characterId)).toEqual(['lead', 'b']);
+    const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
+    expect(bag?.items.length ?? 0).toBeGreaterThan(0);
+    expect(bagMessage.items[0]?.eligible).toEqual(['lead', 'b']);
+  });
+
+  it('analyzer.party e session-state.partySummary aparecem só com party (#400, RF-04)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    const state = lead.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('sem session-state');
+    expect(state.partySummary).toMatchObject({
+      players: 2, uniqueVocations: 1, xpPercent: 125, shareCosts: true, splitLoot: true,
+      autoSell: { used: 0, limit: 5 },
+    });
+
+    session()?.credit('lead', 'xpGained', 7);
+    session()?.credit('lead', 'suppliesUsed', 2);
+    runFor(200);
+    const analyzer = lead.socket.received().filter((m) => m.type === 'analyzer').at(-1);
+    if (analyzer?.type !== 'analyzer') throw new Error('sem analyzer');
+    expect(analyzer.party?.players).toBe(2);
+    expect(analyzer.party?.totalXp).toBeGreaterThanOrEqual(7);
+    expect(analyzer.party?.totalSupplies).toBeGreaterThanOrEqual(2);
+  });
+
+  it('party-settlement repassa reason e itemId do sim (#400, RF-05)', () => {
+    const { host, runFor } = partyHunt({ lootItems: true });
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-settings', autoSell: ['loot-sword'] });
+    runFor(20_000);
+    const autoSell = lead.socket.received()
+      .filter((m) => m.type === 'party-settlement')
+      .find((m) => m.reason === 'auto-sell');
+    expect(autoSell).toMatchObject({
+      type: 'party-settlement', reason: 'auto-sell', itemId: 'loot-sword',
+    });
+  });
+
   it('broadcasts party-spending to all viewers on spending or bag change, and previews settlement in shared mode', () => {
     const { host, runFor, session } = partyHunt();
     const lead = attach(host, 'lead');
@@ -4867,12 +4980,20 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const soloState = soloSocket.received().find((m) => m.type === 'session-state');
     if (soloState?.type !== 'session-state') throw new Error('sem session-state');
     expect(soloState.partySpending).toBeUndefined();
+    // Solo não tem `party` nem `partySummary` (#400, RF-04): D8, campo de sistema inexistente
+    // é omitido, nunca um zero fabricado.
+    expect(soloState.party).toBeUndefined();
+    expect(soloState.partySummary).toBeUndefined();
 
     for (let t = 0; t < 300; t += 100) { now += 100; soloHost.cycle(); }
     soloHost.flush();
 
     const spendingMessages = soloSocket.received().filter((m) => m.type === 'party-spending');
     expect(spendingMessages).toHaveLength(0);
+    // E nenhum `analyzer` leva a seção PARTY em solo.
+    for (const analyzer of soloSocket.received().filter((m) => m.type === 'analyzer')) {
+      expect(analyzer).not.toHaveProperty('party');
+    }
   });
 });
 

@@ -242,6 +242,28 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('vocation');
   });
 
+  it('deriva o Premium do personagem de `premiumUntil`, contra o relógio (#400, D3)', async () => {
+    // O `api` resolve a data e o `game` lê só o boolean (a sessão nunca compara datas). Ativo
+    // vira `premium: true`; `null` ou vencido vira AUSENTE — que a sessão trata como Free.
+    const issuedWith = async (premiumUntil: Date | null) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, premiumUntil })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith(new Date(Date.now() + 60_000))).toMatchObject({ premium: true });
+    expect(await issuedWith(null)).not.toHaveProperty('premium');
+    expect(await issuedWith(new Date(Date.now() - 60_000))).not.toHaveProperty('premium');
+  });
+
   it('reconstrói os containers pela posição gravada; a linha sem posição entra no primeiro lugar livre (#160)', async () => {
     // Mutação que mata: ignorar `container`/`slotIndex` (tudo cairia na lista plana), ou
     // perder a linha antiga em vez de encaixá-la.
