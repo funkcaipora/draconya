@@ -27,7 +27,15 @@ export class Container {
   alpha = 1;
   visible = true;
   tint = 0xffffff;
-  zIndex = 0;
+  /**
+   * Quantas vezes `zIndex` foi escrito. O viewport só reescreve na TROCA de walking tile
+   * (#386, DT-05): reescrever todo quadro marcaria `sortDirty` e reordenaria 60 vezes por
+   * segundo à toa. O contador é a única forma de observar "não escreveu igual".
+   */
+  zIndexWrites = 0;
+  #zIndex = 0;
+  get zIndex(): number { return this.#zIndex; }
+  set zIndex(value: number) { this.#zIndex = value; this.zIndexWrites += 1; }
   sortableChildren = false;
   label = '';
   roundPixels = false;

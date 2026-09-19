@@ -49,6 +49,7 @@ import { paintOf } from './outfit-colors.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
+import { NO_DISPLACEMENT, walkingTile } from './walking-tile.js';
 
 export type { MapTiles } from './scene.js';
 
@@ -58,7 +59,8 @@ export type { MapTiles } from './scene.js';
  * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
  */
 export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize'
-  | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'>;
+  | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'
+  | 'outfitDisplacement'>;
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
@@ -299,6 +301,13 @@ export async function mountViewport(
    * constante, que é o caso NORMAL do jogo, não a exceção.
    */
   const sprites = new Map<number, Sprite>();
+  /**
+   * O `zIndex` de criatura escrito por último, pelo id. O walking tile só muda uma vez por
+   * passo, então comparar com este número evita reescrever o `zIndex` a cada quadro — o Pixi
+   * marca `sortDirty` a cada escrita, e reordenar 60 vezes por segundo é refazer o mesmo
+   * trabalho. Limpo junto de `sprites`.
+   */
+  const walkingTiles = new Map<number, number>();
   /** Barra e nome, pelo mesmo id. Nascem e morrem junto do sprite. */
   const overlays = new Map<number, CreatureOverlay>();
   /**
@@ -711,9 +720,25 @@ export async function mountViewport(
       head.label.visible = !outside;
       if (outside) continue;
 
-      // Tile ARREDONDADO nesta issue; 386 troca por `walkingTile(...)`. O `zIndex` muda no meio
-      // do passo — é aí que a criatura passa para trás ou para a frente da parede.
-      sprite.zIndex = sceneZIndex(Math.round(position.x), Math.round(position.y), CREATURE_SLOT);
+      // Onde a criatura ESTÁ (interpolado) e a que tile ela PERTENCE para a ordem — que não
+      // são o mesmo tile durante metade do passo. `logical` é o destino do passo em curso: é
+      // em volta dele que o OTClient procura, e é ele que a criatura parada devolve.
+      const art = pack;
+      const displacement = art === null
+        ? NO_DISPLACEMENT
+        : art.outfitDisplacement(creature.appearanceId);
+      const tile = walkingTile({
+        position,
+        logical: creature.step?.to ?? creature.position,
+        displacement,
+      });
+      // Deslocado pelo andar, como `sx`/`sy`: a ordem é pela posição de TELA (FUN-121). O
+      // `zIndex` é escrito SÓ quando o walking tile muda — uma vez por passo, nunca por quadro.
+      const order = sceneZIndex(tile.x + below, tile.y + below, CREATURE_SLOT);
+      if (walkingTiles.get(creature.id) !== order) {
+        walkingTiles.set(creature.id, order);
+        sprite.zIndex = order;
+      }
 
       const screen = toScreen({ x: sx, y: sy }, center, view);
       // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
@@ -731,8 +756,8 @@ export async function mountViewport(
         // transbordar para cima e para a esquerda, ancorado no canto inferior direito do tile.
         sprite.width = texture.width;
         sprite.height = texture.height;
-        sprite.x = local.x + TILE - texture.width;
-        sprite.y = local.y + TILE - texture.height;
+        sprite.x = local.x + TILE - texture.width - displacement.x;
+        sprite.y = local.y + TILE - texture.height - displacement.y;
         continue;
       }
       // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
@@ -749,6 +774,7 @@ export async function mountViewport(
       if (seen.has(id)) continue;
       sprite.destroy();
       sprites.delete(id);
+      walkingTiles.delete(id);
       const gone = overlays.get(id);
       if (gone !== undefined) {
         gone.bar.destroy();
@@ -1002,6 +1028,7 @@ export async function mountViewport(
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();
       sprites.clear();
+      walkingTiles.clear();
       for (const top of overlays.values()) {
         top.bar.destroy();
         top.label.destroy();
