@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { creatureTile, pickCreature } from './pick.js';
+import { tileAtScreen } from './camera.js';
 import type { Creature } from '../state/world.js';
 
 // A escolha da criatura sob o cursor (AB-13, #428). PURO: a regra é testável sem Pixi e sem
@@ -76,5 +77,16 @@ describe('pickCreature', () => {
     expect(pickCreature([moving], tile(1, 1), 0)).toBe(1);
     expect(pickCreature([moving], tile(2, 1), 500)).toBe(1);
     expect(pickCreature([moving], tile(2, 1), 0)).toBeNull();
+  });
+
+  it('um pixel na metade direita/inferior do tile ainda acerta a criatura (#420)', () => {
+    // Câmera em x=10, vista de 18 (origem 1.5 em x, 3.5 em y): o tile 10 ocupa 272–304 em x e
+    // 208–240 em y. O pixel (290, 232) está na metade direita/inferior — o clique antigo
+    // arredondava para o tile 11 e devolvia `null`.
+    const rat = creature(1, { position: { x: 10, y: 10, z: 7 } });
+    const view = { widthTiles: 18, heightTiles: 14 };
+    const tile = tileAtScreen({ x: 290, y: 232 }, { x: 10, y: 10, z: 7 }, view);
+    expect(tile).toEqual({ x: 10, y: 10 });
+    expect(pickCreature([rat], { ...tile, z: 7 }, 0)).toBe(1);
   });
 });

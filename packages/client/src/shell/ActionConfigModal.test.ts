@@ -107,6 +107,12 @@ describe('ActionConfigModal — slot vazio (RF-09)', () => {
     expect(html).toContain('Escolha uma ação.');
     expect(html).toMatch(/disabled[^>]*>Salvar/);
   });
+
+  it('slot preenchido oferece Limpar; o vazio não tem o que limpar (#420)', async () => {
+    withSlot(0, spellSlot());
+    expect(await render(0)).toContain('Limpar');
+    expect(await render(6)).not.toContain('Limpar');
+  });
 });
 
 describe('ActionConfigModal — condições em E (RF-04)', () => {

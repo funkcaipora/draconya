@@ -140,11 +140,12 @@ describe('ActionBar — "Salva automaticamente" reflete o estado (RF-10)', () =>
 describe('ActionBar — a fiação é presa por fonte (RF-05..RF-07)', () => {
   it('a barra manda bot-config (CONJUNTO/ALVO) e lê event.shiftKey para desligar o automático', async () => {
     const source = await readFile(new URL('./ActionBar.tsx', import.meta.url), 'utf8');
-    expect(source).toContain("type: 'bot-config'");
     expect(source).toContain('setActiveSet');
     expect(source).toContain('setTargetingPolicy');
     expect(source).toContain('setSlotAuto');
     expect(source).toContain('event.shiftKey');
+    // O remetente é da `Shell` (dono único do singleton): a barra não o instala nem o limpa.
+    expect(source).not.toContain('setConfigSender');
   });
 
   it('o hook de teclado manda use-slot com o conjunto ativo', async () => {

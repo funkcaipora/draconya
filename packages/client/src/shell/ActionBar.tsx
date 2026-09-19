@@ -6,15 +6,15 @@
 // A barra NÃO calcula elegibilidade, não consome estoque e não decide cooldown (invariante 4):
 // cooldown/bloqueio vêm do `slot-state`, e a recusa da tecla do `slot-result`. Suprimento é
 // abstrato (sem pilha nem contagem). O cliente só manda intenção — a tecla manda `use-slot`,
-// CONJUNTO/ALVO e o Shift+clique mandam `bot-config`.
+// CONJUNTO/ALVO e o Shift+clique mandam `bot-config`. O remetente desse `bot-config` é instalado
+// UMA vez pela `Shell` (dono único do singleton da store), não por esta barra.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BOT_SLOTS_PER_SET } from '@draconya/content';
 import type { BotTargetPolicy } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { sendIntent } from '../net/current.js';
 import {
-  bot, setActiveSet, setConfigSender, setSlotAuto, setTargetingPolicy,
+  bot, setActiveSet, setSlotAuto, setTargetingPolicy,
 } from '../bot/store.js';
 import { world } from '../state/world.js';
 import { Slot } from './ui/Slot.js';
@@ -44,14 +44,6 @@ export function ActionBar() {
 
   // A tecla é do CLIENTE e só manda intenção; o hook lê a store no disparo, nunca no render.
   useActionKeys();
-
-  // A store não importa `net/` (ADR 0007: o socket fica fora do render); a barra liga o remetente
-  // ao montar — é ela quem edita o bot desde o AB-10. Intenção (invariante 4): CONJUNTO, ALVO e
-  // Shift+clique mandam `bot-config`, e quem decide se vale é o servidor.
-  useEffect(() => {
-    setConfigSender((config) => sendIntent({ type: 'bot-config', config }));
-    return () => { setConfigSender(null); };
-  }, []);
 
   // Um alvo vivo só existe se o servidor disse qual é; o nome vem do mundo na MESMA renderização
   // que a fatia `targetId` já dispara — o mundo não avisa ninguém (ADR 0007), e não precisa.

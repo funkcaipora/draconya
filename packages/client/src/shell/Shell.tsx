@@ -17,8 +17,10 @@
 // com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
 // CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
+import { sendIntent } from '../net/current.js';
+import { setConfigSender } from '../bot/store.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
@@ -94,6 +96,13 @@ export function Shell() {
   useWarmHuntOutfits(loaded?.pack ?? null);
   // Setas e WASD andam (FUN-122): a janela inteira ouve, o canvas não tem foco.
   useWalkKeys();
+  // A store do bot não importa `net/` (ADR 0007): a casca instala o remetente UMA vez. Antes a
+  // `ActionBar` e o `AutomationsPanel` instalavam cada um o mesmo singleton, e o unmount de um
+  // zerava o remetente do outro; um painel condicional bastaria para quebrar todo Salvar.
+  useEffect(() => {
+    setConfigSender((config) => sendIntent({ type: 'bot-config', config }));
+    return () => { setConfigSender(null); };
+  }, []);
   // Quem está numa hunt vê "Sair da caçada"; quem está na Cidade vê "Escolher caçada". O
   // `sessionType` do analisador é o que o servidor disse por último — o cliente não adivinha
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).

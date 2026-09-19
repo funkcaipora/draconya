@@ -3,17 +3,16 @@
 // resumo gerado dos parâmetros, ⚙ e × — e o "+ Adicionar" que abre o catálogo de modelos.
 //
 // **Montado na Cidade e na caçada** (ADR 0032 d.5): não há condição de `hunting`, como o painel v1
-// v1 era. O estado quente do rascunho vive na store fora do React (ADR 0007), e é o painel quem
-// injeta o remetente ao montar — a store não importa `net/`.
+// v1 era. O estado quente do rascunho vive na store fora do React (ADR 0007); o remetente de
+// `bot-config` é instalado UMA vez pela `Shell` (dono único do singleton), nunca por este painel.
 //
 // O cliente só manda intenção (invariante 4): toggle/× agendam `bot-config` com debounce, e o
 // Salvar do modal manda na hora. Nada aqui calcula elegibilidade, estoque ou alvo.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { BotAutomation } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { sendIntent } from '../net/current.js';
-import { bot, removeAutomation, setConfigSender, toggleAutomation } from '../bot/store.js';
+import { bot, removeAutomation, toggleAutomation } from '../bot/store.js';
 import { automationSummary, blankAutomation } from '../bot/automation-text.js';
 import { Panel } from './ui/Panel.js';
 import { Switch } from './ui/Switch.js';
@@ -39,12 +38,6 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<{ index: number | null; initial: BotAutomation } | null>(null);
-
-  // A store não importa `net/` (ADR 0007): o painel liga o remetente ao montar.
-  useEffect(() => {
-    setConfigSender((config) => sendIntent({ type: 'bot-config', config }));
-    return () => { setConfigSender(null); };
-  }, []);
 
   const panelProps = {
     collapsed: isCollapsed,

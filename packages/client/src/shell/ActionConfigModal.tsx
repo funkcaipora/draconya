@@ -117,6 +117,13 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
             A ação dispara sozinha enquanto ligada · o atalho continua manual
           </span>
           <span className="action-config-actions">
+            {slot !== null && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { setSlot(set, index, null); onClose(); }}
+              >Limpar</Button>
+            )}
             <Button variant="secondary" size="sm" onClick={onClose}>Cancelar</Button>
             <Button
               variant="primary"

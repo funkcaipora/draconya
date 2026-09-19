@@ -27,7 +27,7 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, compareDrawOrder, fromScreen, toScreen, viewFor, visibleTiles, zoomFor,
+  TILE, compareDrawOrder, tileAtScreen, toScreen, viewFor, visibleTiles, zoomFor,
 } from './camera.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
@@ -933,16 +933,18 @@ export async function mountViewport(
       return fps.read();
     },
     creatureAt(clientX, clientY) {
-      // O canvas é escalado pelo stage (zoom inteiro); `fromScreen` trabalha em pixels de tile.
+      // O canvas é escalado pelo stage (zoom inteiro); `tileAtScreen` trabalha em pixels de tile.
+      // O tile é o PISO da inversa: o sprite do tile `tx` ocupa `[tx, tx + 1)`, e arredondar
+      // deixaria metade de cada criatura sem clique.
       const bounds = app.canvas.getBoundingClientRect();
       const center = target();
-      const at = fromScreen(
+      const at = tileAtScreen(
         { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
         center, view,
       );
       return pickCreature(
         world.creatures.values(),
-        { x: Math.round(at.x), y: Math.round(at.y), z: Math.round(center.z) },
+        { x: at.x, y: at.y, z: Math.round(center.z) },
         performance.now(),
       );
     },

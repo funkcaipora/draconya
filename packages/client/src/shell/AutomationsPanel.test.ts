@@ -105,12 +105,13 @@ describe('AutomationsPanel — vale o tempo todo (RF-13, ADR 0032 d.5)', () => {
 });
 
 describe('AutomationsPanel — a fiação (RF-08)', () => {
-  it('liga o remetente e chama as ações da store e os dois modais', async () => {
+  it('chama as ações da store e os dois modais', async () => {
     const source = await readFile(new URL('./AutomationsPanel.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('setConfigSender');
     expect(source).toContain('toggleAutomation');
     expect(source).toContain('removeAutomation');
     expect(source).toContain('AddAutomationModal');
     expect(source).toContain('AutomationConfigModal');
+    // O remetente é da `Shell` (dono único do singleton): o painel não o instala nem o limpa.
+    expect(source).not.toContain('setConfigSender');
   });
 });

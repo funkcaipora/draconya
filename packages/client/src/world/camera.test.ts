@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, fromScreen, toScreen, viewFor, visibleTiles, zoomFor, TILE,
+  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, fromScreen, tileAtScreen, toScreen, viewFor, visibleTiles, zoomFor, TILE,
 } from './camera.js';
 
 const view = { widthTiles: 18, heightTiles: 14 };
@@ -46,6 +46,16 @@ describe('camera', () => {
       expect(back.x).toBeCloseTo(point.x);
       expect(back.y).toBeCloseTo(point.y);
     }
+  });
+
+  it('quantiza o tile pelo PISO, não pelo arredondamento (#420)', () => {
+    // Câmera em x=10, vista de 18: origem.x = 1.5; o tile 10 ocupa os pixels 272–304. O pixel
+    // 290 (metade DIREITA) dá 290/32 + 1.5 = 10.56 — o tile é o 10. Com `round` a metade direita
+    // de cada sprite cai no tile seguinte e o clique erra a criatura.
+    // Em y, origem = 3.5: o tile 10 ocupa 208–240; o pixel 232 (metade INFERIOR) dá 10.75.
+    expect(tileAtScreen({ x: 290, y: 232 }, at(10, 10), view)).toEqual({ x: 10, y: 10 });
+    // E a metade esquerda/superior continua sendo o mesmo tile.
+    expect(tileAtScreen({ x: 273, y: 209 }, at(10, 10), view)).toEqual({ x: 10, y: 10 });
   });
 });
 
