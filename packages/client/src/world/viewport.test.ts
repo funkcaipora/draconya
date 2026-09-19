@@ -30,6 +30,9 @@ const ARCH = 106;
 const CRATE = 103;
 const RAT = 21;
 const DOG = 22;
+/** O outfit COM `shift` (8, 8) e o mesmo em 64×64: o walking tile e o deslocamento (#386). */
+const SHIFTED = 23;
+const BIG_SHIFTED = 24;
 
 const CATALOG: SyntheticCatalog = {
   [GRASS]: { kind: 'object' },
@@ -38,6 +41,8 @@ const CATALOG: SyntheticCatalog = {
   [CRATE]: { kind: 'object', flags: { elevation: 8 } },
   [RAT]: { kind: 'outfit' },
   [DOG]: { kind: 'outfit' },
+  [SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 } },
+  [BIG_SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 }, size: { width: 2, height: 2 } },
 };
 
 beforeEach(resetWorld);
@@ -462,6 +467,238 @@ describe('viewport: cena espacial por andar (issue #385)', () => {
     expect(spriteWith(layers.scene, art.bitmapOf('object:102:0:0'))).toBe(placeholder);
   });
 });
+
+/**
+ * O walking tile e o displacement de outfit (issue #386, §11): a ordem da criatura na
+ * `spatialScene` passa a ser a do tile que contém o canto inferior direito do corpo, decidido
+ * pelo OTClient — troca aos 50 % para leste/sul e aos 75 % para norte/oeste —, e o sprite é
+ * desenhado `−displacement`, enquanto barra e nome ficam no tile.
+ *
+ * **Correção orquestrada sobre a spec:** a spec comparava o `zIndex` a `spatialOrder(x, y)`.
+ * Desde #385 a cena usa `sceneZIndex(x, y, slot)`; a criatura é o slot `CREATURE_SLOT` do tile,
+ * então as asserções usam `sceneZIndex(..., CREATURE_SLOT)`. Onde a spec prendia a ordem contra
+ * uma parede, a parede fica no mesmo eixo de comparação do `spatialOrder` real (anti-diagonal
+ * `x + y`, e `x` dentro dela), não no `y · R + x` que a spec supunha.
+ */
+describe('viewport: walking tile e displacement de outfit (issue #386)', () => {
+  it('RF-02: norte troca de ordem aos 75 % — a criatura passa de frente para trás da parede', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    // A parede fica a nordeste do destino, no MESMO `x + y` dele e um `x` à frente: com a
+    // anti-diagonal real, é o que faz a criatura cruzar a ordem ao CHEGAR no destino.
+    const scene = fieldScene(20, 20, [7], { '2,0,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 1, z: 7 }, SHIFTED);
+    viewport.step(1, { x: 1, y: 2, z: 7 }, { x: 1, y: 1, z: 7 }, 1000, 400);
+    await viewport.tick(1000);
+    await viewport.tick(1000); // a textura da parede chega neste segundo quadro
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0')) as Sprite;
+    const orderAt = async (atMs: number): Promise<{ creature: number; wall: number }> => {
+      await viewport.tick(atMs);
+      const creature = viewport.creatureSprite(1) as Sprite;
+      return { creature: creature.zIndex, wall: wall.zIndex };
+    };
+
+    // A origem do passo é o tile de baixo (1, 2); o destino (1, 1) chega só aos 75 %.
+    for (const p of [0, 0.25, 0.5]) {
+      const at = await orderAt(1000 + p * 400);
+      expect(at.creature).toBeGreaterThan(at.wall);
+    }
+    for (const p of [0.75, 1]) {
+      const at = await orderAt(1000 + p * 400);
+      expect(at.creature).toBeLessThan(at.wall);
+    }
+    expect(viewport.creatureSprite(1)?.zIndex).toBe(sceneZIndex(1, 1, CREATURE_SLOT));
+  });
+
+  it('RF-02: sul troca aos 50 % — o inverso', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '2,0,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 2, z: 7 }, SHIFTED);
+    viewport.step(1, { x: 1, y: 1, z: 7 }, { x: 1, y: 2, z: 7 }, 1000, 400);
+    await viewport.tick(1000);
+    await viewport.tick(1000);
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0')) as Sprite;
+    const orderAt = async (atMs: number): Promise<{ creature: number; wall: number }> => {
+      await viewport.tick(atMs);
+      const creature = viewport.creatureSprite(1) as Sprite;
+      return { creature: creature.zIndex, wall: wall.zIndex };
+    };
+
+    for (const p of [0, 0.25]) {
+      const at = await orderAt(1000 + p * 400);
+      expect(at.creature).toBeLessThan(at.wall);
+    }
+    for (const p of [0.5, 0.75, 1]) {
+      const at = await orderAt(1000 + p * 400);
+      expect(at.creature).toBeGreaterThan(at.wall);
+    }
+  });
+
+  it('RF-02: leste troca aos 50 %, e uma parede ao sul fica sempre à frente', async () => {
+    // A nota da §7: com a anti-diagonal, um passo para leste NÃO cruza uma parede de outra
+    // linha — o que o `x` do walking tile decide é a ordem contra a MESMA linha. O teste prende
+    // o `zIndex` ao tile (não à posição fracionária) e a parede ao sul sempre à frente.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '1,2,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 1, z: 7 }, SHIFTED);
+    viewport.step(1, { x: 0, y: 1, z: 7 }, { x: 1, y: 1, z: 7 }, 1000, 400);
+    await viewport.tick(1000);
+    await viewport.tick(1000);
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0')) as Sprite;
+    const orderAt = async (atMs: number): Promise<{ creature: number; wall: number }> => {
+      await viewport.tick(atMs);
+      const creature = viewport.creatureSprite(1) as Sprite;
+      return { creature: creature.zIndex, wall: wall.zIndex };
+    };
+
+    const early = await orderAt(1000);
+    expect(early.creature).toBe(sceneZIndex(0, 1, CREATURE_SLOT));
+    expect(early.creature).toBeLessThan(early.wall);
+    await orderAt(1100);
+    expect((viewport.creatureSprite(1) as Sprite).zIndex).toBe(sceneZIndex(0, 1, CREATURE_SLOT));
+    const late = await orderAt(1200);
+    expect(late.creature).toBe(sceneZIndex(1, 1, CREATURE_SLOT));
+    expect(late.creature).toBeLessThan(late.wall);
+    await orderAt(1400);
+    expect(late.creature).toBeLessThan(late.wall);
+  });
+
+  it('RF-02/DT-05: o `zIndex` é escrito UMA vez por troca, não a cada quadro', async () => {
+    // Contar atribuições ao longo de 20 quadros de um passo: a inicial e a troca, exatamente 2.
+    // `zIndex` por quadro marcaria `sortDirty` 20 vezes. Mutação que mata: tirar o `Map` que
+    // compara a ordem (`walkingTiles`) e escrever sempre.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 2, z: 7 }, SHIFTED);
+    viewport.step(1, { x: 1, y: 1, z: 7 }, { x: 1, y: 2, z: 7 }, 1000, 400);
+
+    await viewport.tick(1000); // nasce o sprite e o `zIndex` inicial é escrito
+    const sprite = viewport.creatureSprite(1) as Sprite;
+    for (let i = 1; i <= 20; i++) await viewport.tick(1000 + i * 20);
+
+    expect(sprite.zIndexWrites).toBe(2);
+  });
+
+  it('RF-04: o sprite é desenhado `displacement` px acima e à esquerda da âncora', async () => {
+    // Duas criaturas no MESMO tile: a de outfit com shift fica 8 px acima e à esquerda da que
+    // não tem. Mutação que mata: `+ displacement` (sinal trocado), ou esquecer o `y`.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 1, z: 7 }, SHIFTED);
+    viewport.spawn(2, { x: 1, y: 1, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const shifted = viewport.creatureSprite(1) as Sprite;
+    const plain = viewport.creatureSprite(2) as Sprite;
+    expect(shifted.x).toBe(plain.x - 8);
+    expect(shifted.y).toBe(plain.y - 8);
+  });
+
+  it('RF-05: barra e nome continuam no tile — o displacement NÃO vaza para o overlay', async () => {
+    // `paintOverlay` recebe o `lifted` SEM displacement: um quadro de 64 px já obriga a barra a
+    // não ancorar no sprite, e o shift só agravaria. Mutação que mata: passar `lifted − disp`.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 1, z: 7 }, SHIFTED);
+    viewport.spawn(2, { x: 1, y: 1, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    // `overlay.children[0]` é o `targetFrame` da seleção de alvo (#428); os pares barra/nome
+    // das criaturas começam depois dele.
+    const overlay = viewport.layers().overlay.children.slice(1);
+    const bar1 = overlay[0] as Container;
+    const label1 = overlay[1] as Container;
+    const bar2 = overlay[2] as Container;
+    const label2 = overlay[3] as Container;
+    expect(bar1.x).toBe(bar2.x);
+    expect(bar1.y).toBe(bar2.y);
+    expect(label1.x).toBe(label2.x);
+    expect(label1.y).toBe(label2.y);
+  });
+
+  it('RF-06/DT-04: um quadro 64×64 produz a MESMA sequência de walking tile do 32×32', async () => {
+    // Não há parâmetro de tamanho: a âncora inferior direita torna o canto independente do
+    // quadro. Mutação que mata: somar/subtrair `texture.height` no walking tile.
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 1, y: 1, z: 7 }, SHIFTED);
+    viewport.spawn(2, { x: 5, y: 1, z: 7 }, BIG_SHIFTED);
+    viewport.step(1, { x: 1, y: 2, z: 7 }, { x: 1, y: 1, z: 7 }, 1000, 400);
+    viewport.step(2, { x: 5, y: 2, z: 7 }, { x: 5, y: 1, z: 7 }, 1000, 400);
+    await viewport.tick(1000);
+    await viewport.tick(1000);
+
+    const sequence = async (id: number): Promise<number[]> => {
+      const values: number[] = [];
+      for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+        await viewport.tick(1000 + p * 400);
+        values.push((viewport.creatureSprite(id) as Sprite).zIndex);
+      }
+      return values;
+    };
+    const small = await sequence(1);
+    const big = await sequence(2);
+    // Cada um com o PRÓPRIO tile: a forma da transição (origem até 50 %, destino depois) é a
+    // mesma; o tamanho do quadro não entrou na conta.
+    expect(small).toEqual([
+      sceneZIndex(1, 2, CREATURE_SLOT), sceneZIndex(1, 2, CREATURE_SLOT),
+      sceneZIndex(1, 2, CREATURE_SLOT), sceneZIndex(1, 1, CREATURE_SLOT),
+      sceneZIndex(1, 1, CREATURE_SLOT),
+    ]);
+    expect(big).toEqual([
+      sceneZIndex(5, 2, CREATURE_SLOT), sceneZIndex(5, 2, CREATURE_SLOT),
+      sceneZIndex(5, 2, CREATURE_SLOT), sceneZIndex(5, 1, CREATURE_SLOT),
+      sceneZIndex(5, 1, CREATURE_SLOT),
+    ]);
+  });
+
+  it('sem pacote, o walking tile vale igual e o retângulo fica no tile', async () => {
+    // `pack === null` é `NO_DISPLACEMENT`; a regra do walking tile não depende de arte, e o
+    // retângulo de degradação representa o TILE, nunca o corpo deslocado (DT-06).
+    const clock = testClock();
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, clock });
+    viewport.spawnSelf(1, { x: 1, y: 2, z: 7 }, 0);
+    viewport.step(1, { x: 1, y: 2, z: 7 }, { x: 1, y: 1, z: 7 }, 1000, 400);
+
+    const sequence: number[] = [];
+    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+      await viewport.tick(1000 + p * 400);
+      sequence.push((viewport.creatureSprite(1) as Sprite).zIndex);
+    }
+    // Sem displacement, norte troca só no ÚLTIMO pixel (31/32): origem até 75 %, destino em 1.
+    expect(sequence).toEqual([
+      sceneZIndex(1, 2, CREATURE_SLOT), sceneZIndex(1, 2, CREATURE_SLOT),
+      sceneZIndex(1, 2, CREATURE_SLOT), sceneZIndex(1, 2, CREATURE_SLOT),
+      sceneZIndex(1, 1, CREATURE_SLOT),
+    ]);
+    const sprite = viewport.creatureSprite(1) as Sprite;
+    expect(sprite.texture).toBe(Texture.WHITE);
+    expect(sprite.width).toBe(26);
+  });
+});
+
 
 /**
  * A janela de RENDER (issue #382, §11 da spec): o viewport passa a pintar e aquecer

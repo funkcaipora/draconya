@@ -9,6 +9,7 @@ import type { Sprite as Bitmap } from '../../assets/bitmap-budget.js';
 import type { Direction } from '../../assets/pack.js';
 import type { OutfitColors } from '../../assets/outfit.js';
 import type { WorldArt } from '../viewport.js'; // `import type`: não puxa pixi.js
+import { NO_DISPLACEMENT, type Displacement } from '../walking-tile.js';
 
 export type SyntheticKind = 'object' | 'outfit' | 'effect' | 'missile';
 
@@ -24,6 +25,8 @@ export interface SyntheticAppearance {
   readonly frames?: number | { readonly idle: number; readonly walking: number };
   /** Durações das fases (efeito), em ms; `[]` por padrão → o viewport usa `FALLBACK_EFFECT_PHASES`. */
   readonly phases?: readonly number[];
+  /** O `shift` do outfit (#386), em px; ausente é `NO_DISPLACEMENT`. */
+  readonly displacement?: Displacement;
 }
 
 export type SyntheticCatalog = Readonly<Record<number, SyntheticAppearance>>;
@@ -87,6 +90,10 @@ export class SyntheticArt implements WorldArt {
   framesOf(outfitId: number, moving: boolean): number {
     const frames = this.#catalog[outfitId]?.frames ?? 1;
     return typeof frames === 'number' ? frames : moving ? frames.walking : frames.idle;
+  }
+
+  outfitDisplacement(outfitId: number): Displacement {
+    return this.#catalog[outfitId]?.displacement ?? NO_DISPLACEMENT;
   }
 
   effect(effectId: number, phase: number): Promise<Bitmap | null> {

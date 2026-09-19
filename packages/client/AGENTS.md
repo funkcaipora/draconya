@@ -330,6 +330,15 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `setPack`). A folga de dois tiles entre a janela de render e a de prefetch é o tempo que uma
   folha tem para sair do Worker antes de ser desenhada — é o que tira o retângulo de reserva da
   borda da tela.
+- **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
+  puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
+  inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit
+  (`AssetPack.outfitDisplacement`) — a regra do `updateWalkingTile()` do OTClient, em números,
+  nunca código: para leste/sul a troca é aos 50 % com o displacement de 8 px que os outfits
+  têm, para norte/oeste aos 75 %, sempre dentro do 3×3 em volta do destino. O sprite é
+  desenhado `displacement` px acima e à esquerda da âncora; **barra e nome ficam no tile**.
+  Sprite de 64×64 não muda nada: a âncora é o mesmo canto. Parada, a criatura é do próprio
+  tile, seja qual for o displacement.
 - **Setas e WASD andam, e a repetição da tecla presa é do CLIENTE** (`shell/walk-keys.ts`,
   puro; `shell/useWalkKeys.ts`, a casca; FUN-122). Só as quatro cardeais, a última tecla
   pressionada vence, nunca diagonal — o que o Huntera faz. O hook ouve a JANELA (o canvas
@@ -365,9 +374,10 @@ pnpm tsx scripts/make-sheet-fixture.ts
 - **A ordem de desenho é um número por objeto, e o Pixi só reordena quando um `zIndex` muda.**
   Não há varredura de ordenação por quadro nem reordenação de filho por índice: o `scene` de cada
   andar tem `sortableChildren`, e o Pixi ordena os filhos uma vez por render quando algum entrou
-  ou trocou de `zIndex` (`sortDirty`). O zIndex da criatura sai do tile arredondado da posição
-  interpolada — muda no meio do passo, e é aí que ela passa para trás ou para a frente da parede
-  (386 troca o arredondamento pelo walking tile do OTClient).
+  ou trocou de `zIndex` (`sortDirty`). O zIndex da criatura sai do WALKING TILE (386) — muda no
+  meio do passo, e é aí que ela passa para trás ou para a frente da parede. A troca é **uma por
+  passo**, não reordenação por quadro: acontece aos 50 % para leste/sul e aos 75 % para
+  norte/oeste, e só quando o tile muda é que o `zIndex` é escrito.
 - **Reconectar é REANEXAR** (`net/connection.ts`). Não recarrega a página, não recria
   personagem e **não limpa o store**: pede ticket novo e volta para a mesma sessão, que nunca
   parou de rodar. A tela continua mostrando a última coisa verdadeira até o `session-state`
