@@ -49,19 +49,24 @@ export const CONDITION_KIND_LABELS: Readonly<Record<BotConditionKindV2, string>>
   condition: 'Condição',
 };
 
-/** Os quatro comparadores do §13.3, na forma que a tela lê. */
+/**
+ * Os quatro comparadores do §13.3, por EXTENSO (#437, RF-07/DT-05, régua da imagem #435): a
+ * única tabela — `ConditionList`, o resumo das automações e o rótulo "Alvos" leem todos daqui,
+ * em vez de duas fontes divergindo em símbolo (`<`, `<=`, `>`, `>=`) como antes.
+ */
 export const OPERATOR_OPTIONS: ReadonlyArray<{ readonly value: BotOperator; readonly label: string }> = [
-  { value: '<', label: '<' },
-  { value: '<=', label: '≤' },
-  { value: '>', label: '>' },
-  { value: '>=', label: '≥' },
+  { value: '<', label: 'menor que' },
+  { value: '<=', label: 'menor ou igual a' },
+  { value: '>', label: 'maior que' },
+  { value: '>=', label: 'maior ou igual a' },
 ];
 
-const OPERATOR_LABELS: Readonly<Record<BotOperator, string>> = {
-  '<': '<', '<=': '≤', '>': '>', '>=': '≥',
-};
+/** O rótulo por extenso de um operador, ou o próprio valor quando (nunca deveria) não constar. */
+export function operatorLabel(op: BotOperator): string {
+  return OPERATOR_OPTIONS.find((option) => option.value === op)?.label ?? op;
+}
 
-/** Os limites de um valor de condição: percentual 0–100; contagem de alvos ≥ 0. */
+/** Os limites de um valor de condição: percentual 0–100; contagem de alvos a partir de 0. */
 export function conditionBounds(kind: BotConditionKindV2): { readonly min: number; readonly max: number | null } {
   return kind === 'targets' || kind === 'condition' ? { min: 0, max: null } : { min: 0, max: 100 };
 }
@@ -73,13 +78,13 @@ export function conditionValue(condition: BotConditionV2): number {
   return condition.percent;
 }
 
-/** A condição em uma frase ("Nº de alvos ≥ 2", "Mana ≥ 20 %"), como o jogador a lê. */
+/** A condição em uma frase ("Nº de alvos maior ou igual a 2", "Mana maior ou igual a 20 %"). */
 export function conditionText(condition: BotConditionV2): string {
   if (condition.kind === 'condition') {
     return `Condição ${condition.present ? 'ativa' : 'inativa'}`;
   }
   const suffix = condition.kind === 'targets' ? '' : ' %';
-  return `${CONDITION_KIND_LABELS[condition.kind]} ${OPERATOR_LABELS[condition.op]} ${String(conditionValue(condition))}${suffix}`;
+  return `${CONDITION_KIND_LABELS[condition.kind]} ${operatorLabel(condition.op)} ${String(conditionValue(condition))}${suffix}`;
 }
 
 /** Uma condição nova, já com valor no meio da faixa (ou 1 alvo, quando não há teto). */

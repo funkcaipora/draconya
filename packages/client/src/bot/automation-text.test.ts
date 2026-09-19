@@ -47,24 +47,25 @@ const weaponShield: BotAutomation = {
   exit: [{ kind: 'hp', op: '>', percent: 80 }],
 };
 
-describe('conditionSummary — a forma humana da condição', () => {
-  it('escreve HP, mana, alvos e vida do alvo com o glifo do comparador', () => {
-    expect(conditionSummary({ kind: 'hp', op: '<', percent: 50 })).toBe('HP < 50 %');
-    expect(conditionSummary({ kind: 'mana', op: '>=', percent: 20 })).toBe('Mana ≥ 20 %');
-    expect(conditionSummary({ kind: 'targets', op: '>=', count: 3 })).toBe('≥ 3 alvos');
-    expect(conditionSummary({ kind: 'target-hp', op: '>', percent: 30 })).toBe('Vida do alvo > 30 %');
+describe('conditionSummary — a forma humana da condição, por extenso (#437, RF-07)', () => {
+  it('escreve HP, mana, alvos e vida do alvo com o operador por extenso', () => {
+    expect(conditionSummary({ kind: 'hp', op: '<', percent: 50 })).toBe('HP menor que 50 %');
+    expect(conditionSummary({ kind: 'mana', op: '>=', percent: 20 })).toBe('Mana maior ou igual a 20 %');
+    expect(conditionSummary({ kind: 'targets', op: '>=', count: 3 })).toBe('alvos maior ou igual a 3');
+    expect(conditionSummary({ kind: 'target-hp', op: '>', percent: 30 }))
+      .toBe('Vida do alvo maior que 30 %');
   });
 });
 
 describe('automationSummary — derivado dos parâmetros (RF-03)', () => {
   it('swap-ammo-by-targets resolve a MUNIÇÃO pelo catálogo, não por texto fixo', () => {
     expect(automationSummary(ammoAutomation, ITEMS, AMMUNITION))
-      .toBe('≥ 3 alvos → Burst Arrow · senão Arrow');
+      .toBe('alvos maior ou igual a 3 → Burst Arrow · senão Arrow');
   });
 
   it('swap-weapon-shield-by-hp mostra o set defensivo e o ofensivo', () => {
     expect(automationSummary(weaponShield, ITEMS, AMMUNITION))
-      .toBe('HP < 50 % → Escudo + Steel Axe · HP > 80 % → Spike Sword');
+      .toBe('HP menor que 50 % → Escudo + Steel Axe · HP maior que 80 % → Spike Sword');
   });
 
   it('trocar a munição muda o resumo; id fora do catálogo sai cru, nunca inventado', () => {

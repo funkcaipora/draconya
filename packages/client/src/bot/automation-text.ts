@@ -12,21 +12,21 @@
 
 import type { BotAutomation, BotAutomationModel, BotConditionV2 } from '@draconya/content';
 import type { AmmoDefinition, ItemDefinition } from '../state/hud.js';
-import { OPERATOR_OPTIONS } from './action-config.js';
+import { operatorLabel } from './action-config.js';
 
-/** O glifo de cada comparador, a mesma fonte que o `ConditionList` usa. */
-const OPERATOR_LABEL: Readonly<Record<string, string>> = Object.fromEntries(
-  OPERATOR_OPTIONS.map((option) => [option.value, option.label]),
-);
-
-/** A forma humana de uma condição v2: "HP < 50 %", "≥ 3 alvos", "sem haste". */
+/**
+ * A forma humana de uma condição v2, por EXTENSO (#437, RF-07/DT-05): "HP menor que 50 %",
+ * "alvos maior ou igual a 3", "sem haste". O sujeito vem ANTES do operador em `targets`
+ * ("alvos maior ou igual a 3"), diferente de HP/Mana/vida do alvo ("HP menor que 50 %") — é a
+ * ordem que soa natural nos dois casos.
+ */
 export function conditionSummary(condition: BotConditionV2): string {
   if (condition.kind === 'condition') {
     if (condition.conditionId === '') return 'Condição';
     return condition.present ? `sem ${condition.conditionId}` : `com ${condition.conditionId}`;
   }
-  const op = OPERATOR_LABEL[condition.op] ?? condition.op;
-  if (condition.kind === 'targets') return `${op} ${String(condition.count)} alvos`;
+  const op = operatorLabel(condition.op);
+  if (condition.kind === 'targets') return `alvos ${op} ${String(condition.count)}`;
   const label = condition.kind === 'hp' ? 'HP' : condition.kind === 'mana' ? 'Mana' : 'Vida do alvo';
   return `${label} ${op} ${String(condition.percent)} %`;
 }

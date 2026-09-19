@@ -80,13 +80,13 @@ describe('AutomationConfigModal — renew-ring (RF-10)', () => {
 });
 
 describe('AutomationConfigModal — swap-ammo-by-targets (captura 37)', () => {
-  it('tem os dois lados da troca, a munição do catálogo e o ALVOS ≥', async () => {
+  it('tem os dois lados da troca, a munição do catálogo e o rótulo por extenso (#437)', async () => {
     const html = await render(ammo);
     expect(html).toContain('MUITOS ALVOS');
     expect(html).toContain('POUCOS ALVOS');
     expect(html).toContain('Burst Arrow');
     expect(html).toContain('Arrow');
-    expect(html).toContain('ALVOS ≥');
+    expect(html).toContain('Alvos maior ou igual a');
   });
 });
 
