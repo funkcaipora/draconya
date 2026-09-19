@@ -15,7 +15,7 @@ import type { AppearanceFlags } from './appearances.js';
 import type { AppearanceCatalogue, FrameGroup } from './appearances.js';
 import { SheetCache, sheetKey } from './cache.js';
 import type { SheetStore } from './cache.js';
-import { readCatalog } from './catalog.js';
+import { readCatalog, sheetFor } from './catalog.js';
 import type { Catalog } from './catalog.js';
 import { OutfitComposer } from './outfit.js';
 import type { OutfitColors } from './outfit.js';
@@ -38,6 +38,12 @@ const OUTFIT_BUDGET_BYTES = 16 * 1024 * 1024;
 /** A camada do desenho e a do template de cor, na ordem em que o pacote as guarda. */
 const LAYER_BASE = 0;
 const LAYER_TEMPLATE = 1;
+
+/**
+ * Lado de um tile em pixels. LOCAL de propósito: `assets/` não importa de `world/` (ciclo com
+ * `keys.ts`), e a dimensão em TILES do objeto sai da folha dividida por este número.
+ */
+const TILE_PX = 32;
 
 /**
  * As quatro direções, na ordem em que o pacote as guarda dentro de `patternWidth`.
@@ -281,6 +287,24 @@ export class AssetPack {
    */
   objectFlags(appearanceId: number): AppearanceFlags {
     return this.#appearances.object.get(appearanceId)?.flags ?? NO_FLAGS;
+  }
+
+  /**
+   * A dimensão de um objeto em TILES, pela folha em que mora o PRIMEIRO sprite dele — é a
+   * geometria que o catálogo já declara por `spritetype` (`SPRITE_TYPES`), então não custa
+   * baixar nada. `{1, 1}` para id desconhecido, grupo sem sprite ou id fora de qualquer folha.
+   * É a RESERVA da classificação (`world/tile-stack.ts`): o objeto sem flag que ainda assim
+   * mede mais de um tile transborda para o tile de cima e o da esquerda.
+   */
+  objectSize(appearanceId: number): { width: number; height: number } {
+    const group = this.#appearances.object.get(appearanceId)?.frameGroups[0];
+    const first = group?.spriteIds[0];
+    if (first === undefined) return { width: 1, height: 1 };
+    // A folha do PRIMEIRO sprite: todo quadro de um grupo mora em folhas do mesmo `spritetype`
+    // — o pacote não mistura 32 e 64 num objeto —, então um id basta, e a busca é binária.
+    const sheet = sheetFor(this.#catalog, first);
+    if (sheet === null) return { width: 1, height: 1 };
+    return { width: sheet.width / TILE_PX, height: sheet.height / TILE_PX };
   }
 
   /**

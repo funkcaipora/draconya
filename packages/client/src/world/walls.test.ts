@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { buildTilemap, isBlocked, tilemapSchema, type Tilemap } from '@draconya/content';
+import { NO_FLAGS } from '../assets/appearances.js';
+import { sceneFromTilemap } from './scene.js';
+import { drawTile } from './tile-stack.js';
 import { wallPiece, wallsOf, type WallPiece } from './walls.js';
 
 /** Um predicado a partir de uma lista de tiles de parede — o mapa reduzido ao que importa. */
@@ -181,5 +184,32 @@ describe('a regra sobre a adega de teste — a antiga rat-cellars (FUN-105)', ()
     expect(count).toEqual({ vertical: 27, horizontal: 27, corner: 3, pole: 3 });
     expect(corners).toEqual(['5,5', '7,7', '9,9']);
     expect(poles).toEqual(['0,0', '2,2', '4,4']);
+  });
+});
+
+describe('a peça do mapa autorado à mão sai `scene` pelo mesmo pintor (M23, D3)', () => {
+  // A cena sintética (`sceneFromTilemap`) e o mapa importado atravessam o MESMO `drawTile`.
+  // A peça de parede é `bottom`+`unpass` no pacote, então a classificação a manda para
+  // `scene` como manda a parede do mapa importado — não há caso especial para mapa autorado.
+  const room = buildTilemap({ id: 'room', z: 7, grid: ['####', '#..#', '####'] });
+  const scene = sceneFromTilemap(room, {
+    floor: 355, wall: { vertical: 1, horizontal: 2, corner: 3, pole: 4 },
+  });
+  const info = {
+    flagsOf: (id: number) => (id >= 1 && id <= 4
+      ? { ...NO_FLAGS, bottom: true, unpass: true }
+      : NO_FLAGS),
+    patternOf: () => ({ width: 1, height: 1 }),
+    sizeOf: () => ({ width: 1, height: 1 }),
+  };
+
+  it('o canto e o poste saem `scene`, com o id que `wallPiece` escolheu', () => {
+    const corner = drawTile(scene.tileAt(3, 2, 7)!, 3, 2, info);
+    expect(corner.objects).toHaveLength(1);
+    expect(corner.objects[0]).toMatchObject({ appearanceId: 3, layer: 'scene', sceneSlot: 0 });
+
+    const pole = drawTile(scene.tileAt(0, 0, 7)!, 0, 0, info);
+    expect(pole.objects).toHaveLength(1);
+    expect(pole.objects[0]).toMatchObject({ appearanceId: 4, layer: 'scene', sceneSlot: 0 });
   });
 });
