@@ -1,6 +1,7 @@
 {
   "id": "magic-shield-sorcerer",
   "name": "Magic Shield",
+  "description": "O dano recebido consome mana em vez de vida, por 180 segundos.",
   "vocationId": "sorcerer",
   "minLevel": 14,
   "manaCost": 50,

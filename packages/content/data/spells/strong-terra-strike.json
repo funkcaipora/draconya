@@ -1,6 +1,7 @@
 {
   "id": "strong-terra-strike",
   "name": "Strong Terra Strike",
+  "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 70,
   "manaCost": 60,

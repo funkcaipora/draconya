@@ -1,6 +1,7 @@
 {
   "id": "charge",
   "name": "Charge",
+  "description": "Aumenta a sua velocidade de movimento em 90% por 5 segundos.",
   "vocationId": "knight",
   "minLevel": 25,
   "manaCost": 100,

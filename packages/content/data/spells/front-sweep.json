@@ -1,6 +1,7 @@
 {
   "id": "front-sweep",
   "name": "Front Sweep",
+  "description": "Causa dano mágico nos três tiles à sua frente.",
   "vocationId": "knight",
   "minLevel": 70,
   "manaCost": 200,

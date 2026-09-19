@@ -1,6 +1,7 @@
 {
   "id": "intense-healing-druid",
   "name": "Intense Healing",
+  "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 20,
   "manaCost": 70,

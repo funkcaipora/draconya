@@ -1,6 +1,7 @@
 {
   "id": "ethereal-barrage",
   "name": "Ethereal Barrage",
+  "description": "Causa dano mágico numa área de 3x3 ao redor do alvo.",
   "vocationId": "paladin",
   "minLevel": 60,
   "manaCost": 135,

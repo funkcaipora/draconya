@@ -1,6 +1,7 @@
 {
   "id": "terra-wave",
   "name": "Terra Wave",
+  "description": "Lança uma onda de terra à sua frente.",
   "vocationId": "druid",
   "minLevel": 38,
   "manaCost": 170,

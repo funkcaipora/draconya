@@ -1,6 +1,7 @@
 {
   "id": "energy-strike-druid",
   "name": "Energy Strike",
+  "description": "Lança um raio de energia no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 12,
   "manaCost": 20,

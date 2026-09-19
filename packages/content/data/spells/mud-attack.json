@@ -1,6 +1,7 @@
 {
   "id": "mud-attack",
   "name": "Mud Attack",
+  "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 1,
   "manaCost": 6,

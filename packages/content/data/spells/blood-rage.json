@@ -1,6 +1,7 @@
 {
   "id": "blood-rage",
   "name": "Blood Rage",
+  "description": "Aumenta o dano corpo a corpo causado em 25% e o dano recebido em 15%, por 10 segundos.",
   "vocationId": "knight",
   "minLevel": 20,
   "manaCost": 20,

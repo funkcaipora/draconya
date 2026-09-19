@@ -1,6 +1,7 @@
 {
   "id": "mass-healing",
   "name": "Mass Healing",
+  "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 36,
   "manaCost": 150,

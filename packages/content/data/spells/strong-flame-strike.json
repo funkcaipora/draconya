@@ -1,6 +1,7 @@
 {
   "id": "strong-flame-strike",
   "name": "Strong Flame Strike",
+  "description": "Lança um raio de fogo no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 70,
   "manaCost": 60,

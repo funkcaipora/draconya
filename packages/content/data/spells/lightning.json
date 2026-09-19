@@ -1,6 +1,7 @@
 {
   "id": "lightning",
   "name": "Lightning",
+  "description": "Lança um raio de energia no alvo, causando dano numa área de 3x3 ao redor dele.",
   "vocationId": "sorcerer",
   "minLevel": 55,
   "manaCost": 60,

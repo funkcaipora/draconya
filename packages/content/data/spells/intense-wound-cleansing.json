@@ -1,6 +1,7 @@
 {
   "id": "intense-wound-cleansing",
   "name": "Intense Wound Cleansing",
+  "description": "Cura você.",
   "vocationId": "knight",
   "minLevel": 80,
   "manaCost": 200,

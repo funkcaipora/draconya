@@ -1,6 +1,7 @@
 {
   "id": "bruise-bane",
   "name": "Bruise Bane",
+  "description": "Cura você.",
   "vocationId": "knight",
   "minLevel": 1,
   "manaCost": 10,

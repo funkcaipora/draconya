@@ -1,6 +1,7 @@
 {
   "id": "scorch",
   "name": "Scorch",
+  "description": "Lança uma onda de fogo à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 1,
   "manaCost": 8,

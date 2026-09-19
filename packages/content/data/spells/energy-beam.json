@@ -1,6 +1,7 @@
 {
   "id": "energy-beam",
   "name": "Energy Beam",
+  "description": "Lança um raio de energia numa linha reta à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 23,
   "manaCost": 40,

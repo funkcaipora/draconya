@@ -1,6 +1,7 @@
 {
   "id": "magic-patch-sorcerer",
   "name": "Magic Patch",
+  "description": "Cura você.",
   "vocationId": "sorcerer",
   "minLevel": 1,
   "manaCost": 6,

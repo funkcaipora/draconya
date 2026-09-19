@@ -1,6 +1,7 @@
 {
   "id": "divine-defiance",
   "name": "Divine Defiance",
+  "description": "Reduz o dano que você recebe em 12%, por 10 segundos.",
   "vocationId": "paladin",
   "minLevel": 20,
   "manaCost": 250,

@@ -1,6 +1,7 @@
 {
   "id": "terra-strike-sorcerer",
   "name": "Terra Strike",
+  "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 13,
   "manaCost": 20,

@@ -1,6 +1,7 @@
 {
   "id": "ice-strike-sorcerer",
   "name": "Ice Strike",
+  "description": "Lança um raio de gelo no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 8,
   "manaCost": 20,

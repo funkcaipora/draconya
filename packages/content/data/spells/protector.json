@@ -1,6 +1,7 @@
 {
   "id": "protector",
   "name": "Protector",
+  "description": "Reduz o dano que você causa e recebe em 15%, por 10 segundos.",
   "vocationId": "knight",
   "minLevel": 20,
   "manaCost": 20,
