@@ -437,6 +437,47 @@ quando `import.meta.env.DEV` é verdadeiro — em produção `window.__draconya`
 o cleanup da montagem o apaga. Serve para responder com NÚMERO a "houve regressão de FPS?" e
 "algum tile entrou sem textura?" em vez de olhar a tela.
 
+### Regressão visual do mundo espacial (M23, #389)
+
+`src/world/scenarios.test.ts` prende dez DECISÕES do renderer — camada, `zIndex`/ordem, alpha,
+instante do pedido de textura, contador —, não pixels, sobre o harness de #381 e a arte sintética
+com latência. O nome de cada `describe` é o do PRD (§39, CA-01 a CA-08):
+
+- `01-walk-open-field` — a textura entra 3 tiles (overscan) antes da tela e é aquecida 5 antes;
+  nenhum retângulo de reserva na área visível depois do primeiro segundo.
+- `02-walk-next-to-horizontal-wall` — criatura ao norte da parede desenha antes; ao sul, depois;
+  o walking tile troca ao cruzar a abertura.
+- `03-walk-next-to-vertical-wall` — idem no eixo x.
+- `04-walk-around-column` — norte/oeste atrás; sul/leste na frente (anti-diagonal, #385).
+- `05-walk-around-large-object` — a árvore de 2×2 é `scene`, não `ground`.
+- `06-enter-building` — o andar de cima some numa rampa de 250 ms (1 → ~0,5 → 0) ao entrar.
+- `07-exit-building` — e volta na mesma rampa (0 → ~0,5 → 1), sem sair de [0, 1].
+- `08-change-floor` — trocar de andar reparenta o sprite e aquece os ids do andar novo.
+- `09-elevation-object` — o parcel sobe a criatura 0, −2, −4, −6, −8 px, sem mexer no `zIndex`.
+- `10-fast-continuous-walk` — 31 aquecimentos (1 + 1 por passo), só a coluna nova, sem pedido
+  repetido, 31 repinturas.
+
+**Por que não há baseline de PNG.** O pacote de arte (`things/`) não é versionado e não está em
+CI; um teste que só rodasse com ele seria desligado no primeiro PR vermelho. Baseline de pixels
+fica como dívida declarada (PRD §39). O critério de aceite HUMANO do milestone é o roteiro
+abaixo, com sprites reais, quando `things/` existir.
+
+**Roteiro manual (com `THINGS_DIR`/`pnpm dev`).** `pnpm assets:fetch:1098` popula `things/`;
+suba o `pnpm dev` e olhe cada cenário na tela do mundo:
+
+| Cenário | Mapa / posição | O que olhar |
+|---|---|---|
+| 01 campo aberto | Thais, rua 7, ande 30 tiles em linha reta | o chão nunca vira retângulo na área visível; a arte aparece já na borda |
+| 02 parede horizontal | Thais, ao lado de um muro de leste-oeste | passar por cima/sob o muro: a criatura some atrás quando está ao norte, na frente quando ao sul |
+| 03 parede vertical | Thais, ao lado de um muro de norte-sul | idem, no eixo x; na abertura a troca é no meio do passo |
+| 04 coluna | qualquer pilar/estátua | contornar o pilar: a ordem norte/oeste vs sul/leste não pisca |
+| 05 objeto grande | uma árvore de 2×2 | a copa cobre a criatura ao sul; a criatura cobre a base quando está ao norte |
+| 06 entrar em casa | qualquer casa de telhado | ao entrar o telhado esmaece ~250 ms e some; o personagem continua visível |
+| 07 sair de casa | a mesma casa | ao sair o telhado volta em ~250 ms, sem piscar |
+| 08 trocar de andar | uma escada/bueiro | o chão do andar antigo sai da tela; o sprite segue para o andar novo |
+| 09 elevação | um `parcel`/caixote de 8 px | a criatura sobe suave ao pisar, sem saltar, e não troca de profundidade |
+| 10 caminhada rápida | Thais, andando sem parar | sem engasgo nem retângulo na borda; `renderStats().terrainRepaints` acompanha o passo |
+
 ## Armadilhas conhecidas
 
 - **`packages/client/tsconfig.json` EXCLUI `*.test.ts`**, e isso é de propósito: o cliente é
