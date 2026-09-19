@@ -26,6 +26,12 @@ export interface BotDraft {
   readonly exit: BotConfig['exit'];
   readonly targeting: BotConfig['targeting'];
   /**
+   * Quem seguir na party (#406, ADR 0033 d.9). Campo SEPARADO da postura —
+   * `targeting.posture.follow` continua "persegue o monstro". `undefined` só antes do primeiro
+   * `loadConfig`; o schema tem default `{ kind: 'none' }`, então `toConfig` sempre manda algo.
+   */
+  readonly follow?: BotConfig['follow'];
+  /**
    * O lure dinâmico (SV-09, §13.8): agora EDITÁVEL — histerese min/max. `undefined` até o
    * jogador tocar (é assim que o bot básico continua sem lure algum).
    */
@@ -61,6 +67,7 @@ export function emptyDraft(): BotDraft {
       ignore: [],
       posture: { kind: 'stand' },
     },
+    follow: { kind: 'none' },
     lure: undefined,
   };
 }
@@ -82,6 +89,7 @@ export function toConfig(draft: BotDraft): BotConfig {
     version: BOT_VOCABULARY_VERSION,
     targeting: draft.targeting,
     exit: draft.exit,
+    follow: draft.follow ?? { kind: 'none' },
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),
     ...(draft.ringSwap === undefined ? {} : { ringSwap: draft.ringSwap }),
     ...Object.fromEntries(
@@ -218,9 +226,16 @@ export function draftFrom(config: BotConfig): BotDraft {
     rules,
     exit: config.exit,
     targeting: config.targeting,
+    follow: config.follow,
     ...(config.lure === undefined ? {} : { lure: config.lure }),
     ...(config.ringSwap === undefined ? {} : { ringSwap: config.ringSwap }),
   };
+}
+
+/** Troca quem o bot segue (#406, ADR 0033 d.9) e salva com debounce — mesmo padrão de `setPosture`. */
+export function setFollow(follow: BotConfig['follow']): void {
+  edit((draft) => ({ ...draft, follow }));
+  scheduleSave();
 }
 
 /** Salva a configuração de ring swap (#353, SV-17) e manda na hora (é o "Salvar" do modal). */

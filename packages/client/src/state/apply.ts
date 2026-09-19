@@ -364,6 +364,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         party: message.party ?? null,
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
+        // O Follow (#406) volta a `null` na reanexação: o servidor o reenvia no attach, e até
+        // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
+        followState: null,
         onlinePlayers: message.onlinePlayers ?? null,
         // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats` e
         // `active-conditions` logo depois dele, no mesmo attach (#341, SV-05). Zerar aqui é o
@@ -412,8 +415,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'follow-state':
-      // O Follow do bot (#393) chega aqui; a UI que o desenha é do M20 (#404–#406). O `case`
-      // existe para a mensagem nova não quebrar o `never` — a mesma porta de `party-spending`.
+      // O estado do Follow do bot (#406, ADR 0033 d.9). É um PUSH do servidor, não a resposta de
+      // uma intenção: mora no `hud` (como `party`/`active-conditions`), e a tela só o espelha —
+      // nunca decide sozinha que o follow parou (DT-01).
+      hud.set((state) => ({ ...state, followState: message }));
       return;
 
     default:

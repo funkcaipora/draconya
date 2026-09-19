@@ -3,7 +3,7 @@ import { BOT_VOCABULARY_VERSION } from '@draconya/content';
 import type { BotConfig } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig, moveRule, putRule,
-  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setIgnore, setLure, setPosture, setPrioritize,
+  removeRule, setConfigSender, setExitHpBelowPercent, setExitRule, setFollow, setIgnore, setLure, setPosture, setPrioritize,
   setRingSwap, setTargetingPolicy, toConfig, toggleRule,
 } from './store.js';
 
@@ -396,6 +396,59 @@ describe('lure e targeting salvam com debounce (SV-09, #345)', () => {
       ignore: ['rat'],
       posture: { kind: 'keep-distance', tiles: 3 },
     });
+  });
+});
+
+describe('o follow de membro (#406, ADR 0033 d.9)', () => {
+  const sent: BotConfig[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    vi.useFakeTimers();
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => {
+    setConfigSender(null);
+    vi.useRealTimers();
+  });
+
+  it('emptyDraft nasce com follow none', () => {
+    expect(emptyDraft().follow).toEqual({ kind: 'none' });
+  });
+
+  it('toConfig SEMPRE manda follow, mesmo num rascunho sem o campo', () => {
+    // Mutação que mata: omitir `follow` no `toConfig` — o rascunho salvo antes do #406 não tem
+    // o campo, e o contrato quebraria em silêncio (o servidor tem default, mas o cliente não
+    // deve depender disso).
+    const withoutFollow = {
+      rules: emptyDraft().rules,
+      exit: emptyDraft().exit,
+      targeting: emptyDraft().targeting,
+    };
+    expect(toConfig(withoutFollow).follow).toEqual({ kind: 'none' });
+  });
+
+  it('follow dá a volta inteira pelo rascunho', () => {
+    const follow = { kind: 'member' as const, characterId: 'char-2' };
+    const draft = draftFrom({ ...toConfig(emptyDraft()), follow });
+    expect(draft.follow).toEqual(follow);
+    expect(toConfig(draft).follow).toEqual(follow);
+  });
+
+  it('setFollow escreve o rascunho e salva com debounce', () => {
+    setFollow({ kind: 'leader' });
+    expect(bot.get().draft.follow).toEqual({ kind: 'leader' });
+    expect(sent).toHaveLength(0);
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.follow).toEqual({ kind: 'leader' });
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('setFollow({ kind: "member" }) manda o characterId', () => {
+    setFollow({ kind: 'member', characterId: 'char-7' });
+    vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+    expect(sent[0]?.follow).toEqual({ kind: 'member', characterId: 'char-7' });
   });
 });
 

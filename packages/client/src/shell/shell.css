@@ -888,6 +888,22 @@ body {
    CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
    ações. */
 .rule-editor-row { display: grid; grid-template-columns: 1.2fr 0.6fr 0.8fr; gap: 6px; align-items: end; }
+/* O alvo da cura/suporte (#406, §26-30): só aparece quando a ação aceita amigo. */
+.rule-editor-target {
+  display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px;
+  padding: 6px 8px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
+}
+.rule-editor-target fieldset {
+  display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; border: 0;
+}
+.rule-editor-target legend {
+  padding: 0; font: 500 7px var(--font-mono); color: var(--gold-4); letter-spacing: .14em;
+}
+.rule-editor-target label {
+  display: flex; align-items: center; gap: 6px;
+  font: 8.5px var(--font-mono); color: var(--parchment-2); cursor: pointer;
+}
+.rule-editor-target input[type='radio'] { accent-color: var(--gold-4); }
 .rule-editor-divider {
   display: flex; align-items: center; gap: 8px; margin: 10px 0 6px;
 }

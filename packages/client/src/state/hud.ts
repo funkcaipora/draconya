@@ -92,6 +92,13 @@ export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
  */
 export type PartySpendingView = Readonly<S2CProps<'party-spending'>>;
 /**
+ * O estado do Follow do PRÓPRIO personagem (#406, ADR 0033 d.9/§25.1). `null` até o primeiro
+ * `follow-state` desta sessão, ou depois de reanexar sem a mensagem ter chegado de novo ainda —
+ * a tela não mostra "interrompido" nesse vazio, só quando o SERVIDOR disse que sim (D8: o
+ * cliente não fabrica o que o servidor não mandou).
+ */
+export type FollowStateView = Readonly<S2CProps<'follow-state'>>;
+/**
  * A seção PARTY do analisador (§32, ADR 0033 d.11) — o mesmo bloco de `analyzer.party` e de
  * `session-state.partySummary`. Ausente é solo, ou nó `game` anterior ao #400: nunca "0
  * jogadores" (D8).
@@ -221,6 +228,11 @@ export interface HudState {
    * analisador só aparece quando este pacote existe, nunca com um valor inventado.
    */
   readonly partySpending: PartySpendingView | null;
+  /**
+   * O Follow do PRÓPRIO personagem (#406, ADR 0033 d.9/§25.1). `null` até o servidor mandar
+   * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
+   */
+  readonly followState: FollowStateView | null;
 
   readonly targetId: number | null;
   readonly conditions: readonly ActiveCondition[];
@@ -257,6 +269,7 @@ export const INITIAL_HUD: HudState = {
   partyBag: null,
   lastSettlement: null,
   partySpending: null,
+  followState: null,
   targetId: null,
   conditions: [],
   conditionsReceivedAtMs: 0,

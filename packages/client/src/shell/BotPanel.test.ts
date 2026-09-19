@@ -162,3 +162,82 @@ describe('BotPanel', () => {
     expect(source).toContain('onClose={() => { setLureOpen(false); }}');
   });
 });
+
+describe('Follow de membro (#406, ADR 0033 d.9/§24-25.1)', () => {
+  const member = (characterId: string, name: string) => ({
+    characterId, name, alive: true, healthPercent: 100, vocationId: null,
+  });
+  const party = (members: ReturnType<typeof member>[]) => ({
+    leaderId: members[0]?.characterId ?? 'p1', mode: 'split' as const, members,
+  });
+
+  it('RF-01: fora de party o Select "Follow" não aparece', async () => {
+    const html = await render();
+    expect(html).not.toContain('>Follow<');
+    expect(html).not.toContain('Líder da Party');
+  });
+
+  it('RF-01: em party lista Nenhum, Líder e cada membro pelo nome', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru'), member('p3', 'Cid')]),
+    }));
+    const html = await render();
+    expect(html).toContain('>Follow<');
+    expect(html).toContain('Nenhum');
+    expect(html).toContain('Líder da Party');
+    for (const name of ['Ana', 'Bru', 'Cid']) expect(html).toContain(name);
+  });
+
+  it('DT-04: o próprio personagem não entra na lista de membros', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'p1',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru')]),
+    }));
+    const html = await render();
+    expect(html).toContain('Bru');
+    // "Ana" só apareceria se a opção do próprio fosse oferecida de novo (o `none` já é isso).
+    expect(html).not.toContain('>Ana<');
+  });
+
+  it('RF-03: a lista é AO VIVO — um novo `party-state` muda as opções sem remontar', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru')]),
+    }));
+    expect(await render()).toContain('Bru');
+
+    hud.set((state) => ({ ...state, party: party([member('p3', 'Cid')]) }));
+    const html = await render();
+    expect(html).toContain('Cid');
+    expect(html).not.toContain('Bru');
+  });
+
+  it('RF-04: `followState.active === false` mostra o texto exato do §25.1; `null` não mostra nada', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana')]),
+    }));
+    // Sem o servidor ter dito nada, a tela NÃO inventa "interrompido" (D8).
+    expect(await render()).not.toContain('Follow interrompido');
+
+    hud.set((state) => ({
+      ...state,
+      followState: { active: false, targetId: 'p1', reason: 'dead' },
+    }));
+    expect(await render()).toContain('Follow interrompido — alvo indisponível.');
+
+    hud.set((state) => ({ ...state, followState: { active: true, targetId: 'p1' } }));
+    expect(await render()).not.toContain('Follow interrompido');
+  });
+
+  it('RF-02: escolher uma opção chama `setFollow` (o painel agenda o bot-config)', async () => {
+    const source = await readFile(new URL('./BotPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('setFollow(');
+    expect(source).toContain("{ kind: 'member', characterId: value }");
+  });
+});

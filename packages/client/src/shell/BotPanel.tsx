@@ -24,7 +24,7 @@ import { BOT_CATEGORIES } from '@draconya/content';
 import type { BotCategory, BotConfig, BotRule } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { sendIntent } from '../net/current.js';
-import { bot, moveRule, removeRule, setConfigSender, toggleRule } from '../bot/store.js';
+import { bot, moveRule, removeRule, setConfigSender, setFollow, toggleRule } from '../bot/store.js';
 import type { BotVocabulary, ItemDefinition } from '../state/hud.js';
 import { defaultRingSwap, ringSwapSummary } from '../bot/ring-swap.js';
 import { RingSwapModal } from './RingSwapModal.js';
@@ -35,6 +35,7 @@ import { Panel } from './ui/Panel.js';
 import { Switch } from './ui/Switch.js';
 import { IconButton } from './ui/IconButton.js';
 import { Button } from './ui/Button.js';
+import { Select } from './ui/Select.js';
 
 // `export`: o RuleEditor monta o título do Modal ("Editar regra · Cura") com o mesmo mapa —
 // duas cópias do mesmo BotCategory → string divergiriam no primeiro nome novo (DT-06).
@@ -163,6 +164,12 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
   const [ringSwapOpen, setRingSwapOpen] = useState(false);
   const [lureOpen, setLureOpen] = useState(false);
   const draftRingSwap = useStoreSlice(bot, (state) => state.draft.ringSwap);
+  // O Follow (#406): a lista de membros vem AO VIVO do `party-state`, sem cópia local — o
+  // jogador que entra ou sai da party muda as opções sem passo intermediário (RF-03).
+  const party = useHudSlice((state) => state.party);
+  const me = useHudSlice((state) => state.characterId);
+  const followState = useHudSlice((state) => state.followState);
+  const follow = useStoreSlice(bot, (state) => state.draft.follow) ?? { kind: 'none' as const };
 
   // A store não importa `net/` (ADR 0007: o socket fica fora do render); o painel liga o
   // remetente ao montar. Intenção (invariante 4): o cliente manda a configuração, e quem
@@ -204,6 +211,36 @@ export function BotPanel({ collapsed = false, onToggle }: { collapsed?: boolean;
         <Button variant="secondary" size="sm" block onClick={() => { setLureOpen(true); }}>
           ⌖ Lure e alvo
         </Button>
+        {/* O Follow de membro (#406, §24): só existe quem seguir dentro de uma party. A lista é
+            ao vivo do `party-state`; fora de party o rascunho mantém `none` e nada aparece. */}
+        {party !== null && (
+          <>
+            <Select
+              label="Follow"
+              size="sm"
+              value={follow.kind === 'member' ? follow.characterId : follow.kind}
+              options={[
+                { value: 'none', label: 'Nenhum' },
+                { value: 'leader', label: 'Líder da Party' },
+                ...party.members
+                  .filter((member) => member.characterId !== me)
+                  .map((member) => ({ value: member.characterId, label: member.name })),
+              ]}
+              onChange={(value) => {
+                setFollow(
+                  value === 'none' || value === 'leader'
+                    ? { kind: value }
+                    : { kind: 'member', characterId: value },
+                );
+              }}
+            />
+            {/* §25.1: o aviso só aparece quando o SERVIDOR disse que o follow parou — nunca um
+                palpite local (`followState === null` é silêncio, não "interrompido"). */}
+            {followState?.active === false && (
+              <p className="system-warning">Follow interrompido — alvo indisponível.</p>
+            )}
+          </>
+        )}
         {BOT_CATEGORIES.map((category) => (
           <Category key={category} category={category} vocabulary={vocabulary} vocationId={vocationId} onEdit={setEditing} />
         ))}

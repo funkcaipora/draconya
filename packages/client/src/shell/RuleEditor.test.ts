@@ -1,8 +1,9 @@
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
-import { describe, expect, it } from 'vitest';
-import { RuleEditor, blankRule, spellsFor, suppliesFor } from './RuleEditor.js';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { RuleEditor, actionAcceptsFriend, blankRule, spellsFor, suppliesFor, withAction } from './RuleEditor.js';
 import type { BotVocabulary } from '../state/hud.js';
+import { INITIAL_HUD, hud } from '../state/hud.js';
 import { botConfigSchema } from '@draconya/content';
 import type { BotCategory, BotRule } from '@draconya/content';
 
@@ -152,5 +153,115 @@ describe('RuleEditor', () => {
     expect(html).toContain('Flame Strike · attack (20 mana)');
     expect(html).toContain('A regra usa Flame Strike, que não é da sua vocação.');
     expect(html).toMatch(/data-action-id="flame-strike-druid"[^>]*disabled=""/);
+  });
+});
+
+describe('Alvo da cura/suporte (#406, §26-30, ADR 0033 d.10)', () => {
+  const friendVocabulary: BotVocabulary = {
+    ...vocabulary,
+    spells: [
+      { id: 'exura-sio', name: 'Exura Sio', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing', targets: 'friend' },
+      { id: 'exura', name: 'Exura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing', targets: 'self' },
+    ],
+    supplies: [
+      { id: 'health-potion', name: 'Poção de Vida', price: 45, effect: 'heal', requires: {}, targets: 'friend' },
+      { id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 1 }, targets: 'friend' },
+    ],
+  };
+
+  const ruleWith = (doAction: BotRule['do'], target?: BotRule['target']): BotRule => ({
+    enabled: true,
+    when: { kind: 'hp', op: '<=', percent: 50 },
+    do: doAction,
+    ...(target === undefined ? {} : { target }),
+  });
+
+  beforeEach(() => { hud.set(() => INITIAL_HUD); });
+
+  it('RF-05: `actionAcceptsFriend` só deixa passar cura/poção/suporte com `targets: friend`', () => {
+    // Mutação que mata: liberar o seletor em attack/rune, ou oferecê-lo sem o catálogo marcar.
+    expect(actionAcceptsFriend('heal', { targets: 'friend' })).toBe(true);
+    expect(actionAcceptsFriend('potion', { targets: 'friend' })).toBe(true);
+    expect(actionAcceptsFriend('support', { targets: 'friend' })).toBe(true);
+    expect(actionAcceptsFriend('attack', { targets: 'friend' })).toBe(false);
+    expect(actionAcceptsFriend('rune', { targets: 'friend' })).toBe(false);
+    expect(actionAcceptsFriend('heal', { targets: 'self' })).toBe(false);
+    expect(actionAcceptsFriend('heal', undefined)).toBe(false);
+    expect(actionAcceptsFriend('heal', {})).toBe(false);
+  });
+
+  it('RF-05: o radio "Alvo" aparece em heal com ação friend, com as três opções', async () => {
+    const html = await render('heal', 10, {
+      vocabulary: friendVocabulary,
+      initial: ruleWith({ kind: 'spell', spellId: 'exura-sio' }),
+    });
+    expect(html).toContain('<legend>Alvo</legend>');
+    expect(html).toContain('Eu');
+    expect(html).toContain('Membro da Party com menor vida');
+    expect(html).toContain('Membro específico');
+  });
+
+  it('RF-05: some quando a ação selecionada é self-only', async () => {
+    const html = await render('heal', 10, {
+      vocabulary: friendVocabulary,
+      initial: ruleWith({ kind: 'spell', spellId: 'exura' }),
+    });
+    expect(html).not.toContain('<legend>Alvo</legend>');
+  });
+
+  it('RF-05: nunca aparece em attack, mesmo com `targets: friend` no catálogo', async () => {
+    const html = await render('attack', 10, {
+      vocabulary: friendVocabulary,
+      initial: ruleWith({ kind: 'spell', spellId: 'exura-sio' }),
+    });
+    expect(html).not.toContain('<legend>Alvo</legend>');
+  });
+
+  it('RF-05: nunca aparece em rune, mesmo com supply friend', async () => {
+    const html = await render('rune', 10, {
+      vocabulary: friendVocabulary,
+      initial: ruleWith({ kind: 'supply', supplyId: 'avalanche-rune' }),
+    });
+    expect(html).not.toContain('<legend>Alvo</legend>');
+  });
+
+  it('RF-06: "Membro específico" abre um Select com a party ao vivo, sem o próprio', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: {
+        leaderId: 'p1', mode: 'split',
+        members: [
+          { characterId: 'p1', name: 'Ana', alive: true, healthPercent: 100, vocationId: null },
+          { characterId: 'p2', name: 'Bru', alive: true, healthPercent: 80, vocationId: null },
+        ],
+      },
+    }));
+    const html = await render('heal', 10, {
+      vocabulary: friendVocabulary,
+      initial: ruleWith({ kind: 'spell', spellId: 'exura-sio' }, { kind: 'member', characterId: 'p2' }),
+    });
+    expect(html).toContain('Bru');
+    expect(html).toContain('Ana');
+    // O Select do membro aparece além do radio — a opção selecionada é 'p2'.
+    expect(html).toMatch(/<option[^>]*value="p2"[^>]*selected/);
+  });
+
+  it('RF-07/DT-03: trocar a ação amigo→self zera `target`; self→amigo mantém "Eu"', () => {
+    // Mutação que mata: manter o alvo antigo escondido — salvaria o que o jogador não escolheu.
+    const friend = { kind: 'spell' as const, spellId: 'exura-sio' };
+    const self = { kind: 'spell' as const, spellId: 'exura' };
+
+    expect(withAction(ruleWith(friend, { kind: 'member', characterId: 'p2' }), self, false).target)
+      .toEqual({ kind: 'self' });
+    expect(withAction(ruleWith(friend, { kind: 'lowest-hp-member' }), self, false).target)
+      .toEqual({ kind: 'self' });
+
+    // self→amigo: o alvo continua "Eu" (o default), nunca um membro que não foi escolhido.
+    expect(withAction(ruleWith(self, { kind: 'self' }), friend, true).target).toEqual({ kind: 'self' });
+    expect(withAction(ruleWith(self), friend, true).target).toEqual({ kind: 'self' });
+    // amigo→amigo: a escolha do jogador sobrevive.
+    expect(withAction(ruleWith(friend, { kind: 'member', characterId: 'p2' }), friend, true).target)
+      .toEqual({ kind: 'member', characterId: 'p2' });
   });
 });
