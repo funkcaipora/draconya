@@ -14,6 +14,7 @@ import type { CharacterRouteOptions } from './characters.js';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
 import { registerPartyRoutes } from './party.js';
 import type { PartyRouteDependencies } from './party.js';
+import { registerFriendRoutes } from './friends.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
@@ -168,6 +169,20 @@ export function buildApi(
       locateSession,
       limits: partyLimits,
       ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
+    });
+  }
+
+  // Amigos (§21, ADR 0031 decisão 6) precisa de auth, repositório e do diretório para o
+  // online/onde; sem qualquer um deles não existe — mesma guarda do bloco de party acima.
+  if (auth !== undefined && repository !== undefined && locateSession !== undefined) {
+    registerFriendRoutes(app, {
+      authenticate: auth.authenticate.bind(auth),
+      ownsCharacter: repository.ownsCharacter.bind(repository),
+      getCharacterByName: repository.getCharacterByName.bind(repository),
+      addFriend: repository.addFriend.bind(repository),
+      listFriends: repository.listFriends.bind(repository),
+      removeFriend: repository.removeFriend.bind(repository),
+      locateSession,
     });
   }
 
