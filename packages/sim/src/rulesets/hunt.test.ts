@@ -212,7 +212,7 @@ const content = (over: Partial<RawContent> = {}): Content => buildContent(raw(ov
 const character = (
   over: Partial<{
     health: number; staminaMs: number; skills: SkillsState; inventory: InventoryState;
-    bestiary: BestiaryState;
+    bestiary: BestiaryState; gold: number;
   }> = {},
 ): CharacterRuntime => {
   const stats = statsForLevel(1, null, progression as Progression);
@@ -221,6 +221,7 @@ const character = (
     health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
     mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
     staminaMs: over.staminaMs ?? stamina.maxMs, staminaUpdatedAtMs: 0,
+    gold: over.gold ?? 0,
     goldDelta: 0, alive: true, cooldowns: {},
     capacity: 1_000,
     ...(over.skills === undefined ? {} : { skills: over.skills }),
@@ -238,7 +239,7 @@ interface Started {
 function start(
   options: { difficulty?: 'cautious' | 'bold'; exitRules?: readonly HuntExitRule[];
     health?: number; staminaMs?: number; loaded?: Content; skills?: SkillsState;
-    inventory?: InventoryState; bestiary?: BestiaryState } = {},
+    inventory?: InventoryState; bestiary?: BestiaryState; gold?: number } = {},
 ): Started {
   const session = createHuntSession({
     id: 'session-1',
@@ -249,6 +250,7 @@ function start(
     ...(options.exitRules === undefined ? {} : { exitRules: options.exitRules }),
   });
   const hero = character({
+    ...(options.gold === undefined ? {} : { gold: options.gold }),
     ...(options.health === undefined ? {} : { health: options.health }),
     ...(options.staminaMs === undefined ? {} : { staminaMs: options.staminaMs }),
     ...(options.skills === undefined ? {} : { skills: options.skills }),
@@ -5826,4 +5828,88 @@ describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () 
     expect(at1Hz.remainingMs).toBe(25_000);
   });
 });
+
+describe('auto-target e lançamento automático de runa à distância (#345)', () => {
+  it('no momento em que um monstro aparece na tela (raio <= 8), o target é definido para ele', () => {
+    const { session, hero, ruleset } = start();
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+
+    session.advanceBy(100);
+    const target = ruleset.attackTargetOf(hero);
+    expect(target).not.toBeNull();
+    expect(target?.alive).toBe(true);
+    expect(ruleset.monsters).toContain(target);
+  });
+
+  it('se houver mais de 1 monstro na tela, o target é o mais próximo (nearest)', () => {
+    const { session, hero, ruleset } = start({ difficulty: 'bold' });
+    session.advanceBy(100);
+    expect(ruleset.monsters.length).toBeGreaterThan(1);
+
+    const target = ruleset.attackTargetOf(hero);
+    expect(target).not.toBeNull();
+
+    const targetDist = Math.max(
+      Math.abs(hero.position.x - target!.position.x),
+      Math.abs(hero.position.y - target!.position.y),
+    );
+    for (const m of ruleset.monsters) {
+      if (!m.alive) continue;
+      const d = Math.max(
+        Math.abs(hero.position.x - m.position.x),
+        Math.abs(hero.position.y - m.position.y),
+      );
+      expect(targetDist).toBeLessThanOrEqual(d);
+    }
+  });
+
+  it('lança a runa no alvo assim que ele entra no range (até 8 quadrados), mesmo com arma melee (range 1)', () => {
+    const rune = {
+      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+      requires: { level: 30, magicLevel: 0 },
+      effect: { kind: 'damage', basePower: 400, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
+    };
+    const { session, hero } = withSpells(botConfig({
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    }), { gold: 1000, supplies: [rune], health: 5000 }, 'bold');
+
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+
+    run(session, 5000, 100);
+    const uses = session.aggregates.suppliesUsed;
+    expect(uses).toBeGreaterThan(0);
+    expect(session.aggregates.goldSpent).toBe(uses * 14);
+
+    const events = session.drainEvents().filter((e) => e.kind === 'supply-used');
+    expect(events.length).toBe(uses);
+    expect((events[0] as any).supplyId).toBe('avalanche-rune');
+  });
+
+  it('quando o alvo morre, o auto-target seleciona o próximo mais próximo', () => {
+    const { session, hero, ruleset } = start({ difficulty: 'bold' });
+    session.advanceBy(100);
+    const firstTarget = ruleset.attackTargetOf(hero);
+    expect(firstTarget).not.toBeNull();
+
+    firstTarget!.health = 0;
+    session.advanceBy(100);
+
+    const nextTarget = ruleset.attackTargetOf(hero);
+    expect(nextTarget).not.toBeNull();
+    expect(nextTarget?.id).not.toBe(firstTarget!.id);
+    expect(nextTarget?.alive).toBe(true);
+  });
+
+  it('o alvo selecionado persiste no snapshot do runner', () => {
+    const { session, hero, ruleset } = start();
+    session.advanceBy(100);
+    const target = ruleset.attackTargetOf(hero);
+    expect(target).not.toBeNull();
+
+    const state = ruleset.getState();
+    expect(state.runners?.[hero.id]?.selectedTargetId).toBe(target!.id);
+  });
+});
+
 

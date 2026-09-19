@@ -180,6 +180,7 @@ function runnerState(runner: Runner): RunnerState {
     warnedNoGold: runner.warnedNoGold,
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
+    ...(runner.selectedTargetId === null ? {} : { selectedTargetId: runner.selectedTargetId }),
   };
 }
 
@@ -496,6 +497,8 @@ interface Runner {
   warnedExhausted: boolean;
   warnedFullBackpack: boolean;
   warnedNoGold: boolean;
+  /** O alvo persistente selecionado (auto-target). `null` = sem alvo. */
+  selectedTargetId: number | null;
 }
 
 /** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
@@ -510,6 +513,7 @@ export interface RunnerState {
   readonly warnedNoGold: boolean;
   readonly botConfig?: BotConfig;
   readonly pendingExit?: ExitReason;
+  readonly selectedTargetId?: number | null;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -676,7 +680,7 @@ export class HuntRuleset implements Ruleset {
   }
 
   attackTargetOf(character: CharacterRuntime): MonsterRuntime | null {
-    return this.#attackTarget(character);
+    return this.#selectedTarget(character) ?? this.#attackTarget(character);
   }
 
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
@@ -817,6 +821,7 @@ export class HuntRuleset implements Ruleset {
     // Só categoria COM regra entra na fila (FUN-84). Um personagem sem bot configurado — que
     // é todo mundo até a FUN-81 — não agenda nada, e os cinco eventos por segundo que a issue
     // orça só existem para quem de fato configurou.
+    this.#autoSelectTarget(session, character);
     this.#armBot(session, character.id);
   }
 
@@ -892,6 +897,7 @@ export class HuntRuleset implements Ruleset {
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
+      selectedTargetId: state?.selectedTargetId ?? null,
     };
     for (const category of state?.botScheduled ?? []) runner.botReady[category] = false;
     return runner;
@@ -1308,7 +1314,10 @@ export class HuntRuleset implements Ruleset {
     }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
     // um que o tem ao alcance (#203).
-    for (const character of session.participants) this.#armPlayerAttack(session, character);
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+    }
   }
 
   /**
@@ -1334,6 +1343,8 @@ export class HuntRuleset implements Ruleset {
     // resultado para quem fica e adianta o de quem anda para chão mais lento; por isso o
     // reagendamento fica no fim, com o que de fato aconteceu.
     const stepped = this.#playerStep(session, character);
+    this.#autoSelectTarget(session, character);
+    this.#armBot(session, character.id);
     const cadence = stepped !== null && stepped.ok
       ? stepped.durationMs
       : movementDuration(this.#world, character, character.position, character.position);
@@ -1426,7 +1437,7 @@ export class HuntRuleset implements Ruleset {
     const posture = targetingOf(runner).posture;
     if (posture.kind === 'stand') return false;
 
-    const target = this.#approachTarget(character);
+    const target = this.#selectedTarget(character) ?? this.#approachTarget(character);
     if (target === null) return false;
 
     const from = character.position;
@@ -1474,7 +1485,10 @@ export class HuntRuleset implements Ruleset {
     // Categoria que ganhou regra agora precisa acordar. `#armBot` só toca as ENGATILHADAS, e
     // as que já tinham evento pendente seguem com ele — a invariante "engatilhada ou agendada"
     // continua valendo do outro lado de uma troca de configuração.
-    if (character.alive) this.#armBot(session, character.id);
+    if (character.alive) {
+      this.#autoSelectTarget(session, character);
+      this.#armBot(session, character.id);
+    }
   }
 
   /**
@@ -1492,6 +1506,8 @@ export class HuntRuleset implements Ruleset {
     if (this.#occupancyStale) this.#rebuildOccupancy(session);
     const result = this.#step(session, character, { ...to, z: character.position.z }, characterId);
     if (result.ok) {
+      this.#autoSelectTarget(session, character);
+      this.#armBot(session, character.id);
       session.cancelEvent(PLAYER_STEP, characterId);
       session.scheduleIn(PLAYER_STEP, result.durationMs, {
         priority: EventPriority.Movement, subject: characterId,
@@ -1584,7 +1600,7 @@ export class HuntRuleset implements Ruleset {
     const bot = runner.bot;
     if (bot === undefined || !character.alive) return;
 
-    const action = bot.select(category, this.#botViewOf(character));
+    const action = bot.select(category, this.#botViewOf(character, category));
     if (action === null) return;
 
     const external = this.#options.actuator;
@@ -1768,7 +1784,11 @@ export class HuntRuleset implements Ruleset {
       return this.#aim;
     }
 
-    const primary = selectTarget(this.#targetingOf(character), this.#monsters, character.position, range ?? 1);
+    const selected = this.#selectedTarget(character);
+    const maxDist = range ?? 1;
+    const primary = selected !== null && selected.alive && distance(character.position, selected.position) <= maxDist
+      ? selected
+      : selectTarget(this.#targetingOf(character), this.#monsters, character.position, maxDist);
     if (primary === null) return null;
     this.#collect(primary);
 
@@ -2208,14 +2228,66 @@ export class HuntRuleset implements Ruleset {
     return targetingOf(this.#runners.get(character.id));
   }
 
+  #maxRuneRange(character: CharacterRuntime): number {
+    const runner = this.#runners.get(character.id);
+    const rules = runner?.botConfig?.rune;
+    let maxRange = 0;
+    if (rules !== undefined) {
+      for (const rule of rules) {
+        if (rule.enabled === false) continue;
+        if (rule.do.kind === 'supply') {
+          const supply = this.#options.supplies.get(rule.do.supplyId);
+          if (supply?.effect.kind === 'damage') {
+            const r = supply.effect.range ?? 8;
+            if (r > maxRange) maxRange = r;
+          }
+        }
+      }
+    }
+    return maxRange > 0 ? maxRange : 8;
+  }
+
+  #maxSpellRange(character: CharacterRuntime): number {
+    const runner = this.#runners.get(character.id);
+    const rules = runner?.botConfig?.attack;
+    let maxRange = 0;
+    if (rules !== undefined) {
+      for (const rule of rules) {
+        if (rule.enabled === false) continue;
+        if (rule.do.kind === 'spell') {
+          const spell = this.#options.spells.get(rule.do.spellId);
+          if (spell?.effect.kind === 'damage' || spell?.effect.kind === 'damage-over-time') {
+            const r = spell.effect.range ?? 1;
+            if (r > maxRange) maxRange = r;
+          }
+        }
+      }
+    }
+    return maxRange > 0 ? maxRange : this.#attackRangeOf(character);
+  }
+
   /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
-  #botViewOf(character: CharacterRuntime): BotView {
-    const target = this.#attackTarget(character);
+  #botViewOf(character: CharacterRuntime, category?: BotCategory): BotView {
+    const range = category === 'rune'
+      ? this.#maxRuneRange(character)
+      : category === 'attack'
+        ? this.#maxSpellRange(character)
+        : this.#attackRangeOf(character);
+
+    const target = this.#selectedTarget(character);
+    const inRangeTarget = target !== null && distance(character.position, target.position) <= range
+      ? target
+      : (category === 'rune' || category === 'attack'
+          ? selectTarget(this.#targetingOf(character), this.#monsters, character.position, range)
+          : this.#attackTarget(character));
+
     this.#botView.self = character;
-    this.#botView.targetCount = this.#targetsInReach(character);
-    this.#botView.target = target === null
+    this.#botView.targetCount = countTargets(
+      this.#targetingOf(character), this.#monsters, character.position, range,
+    );
+    this.#botView.target = inRangeTarget === null
       ? null
-      : { health: target.health, maxHealth: this.#maxHealthOf(target) };
+      : { health: inRangeTarget.health, maxHealth: this.#maxHealthOf(inRangeTarget) };
     return this.#botView;
   }
 
@@ -2373,6 +2445,11 @@ export class HuntRuleset implements Ruleset {
     // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
     // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
     this.#armMonsterAbilities(session, monster, definition, target);
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+      this.#armBot(session, character.id);
+    }
   }
 
   /**
@@ -3067,6 +3144,13 @@ export class HuntRuleset implements Ruleset {
     }
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+    for (const character of session.participants) {
+      const runner = this.#runners.get(character.id);
+      if (runner?.selectedTargetId === monster.id) {
+        runner.selectedTargetId = null;
+        this.#autoSelectTarget(session, character);
+      }
+    }
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
     session.emit({ kind: 'creature-vanished', creatureId: subject });
@@ -3393,14 +3477,56 @@ export class HuntRuleset implements Ruleset {
     };
   }
 
+  #monsterById(id: number): MonsterRuntime | null {
+    return this.#monsterBySubject.get(monsterSubject(id)) ?? null;
+  }
+
+  /** O alvo persistente selecionado pelo jogador/auto-target, se válido, vivo e na tela. */
+  #selectedTarget(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.selectedTargetId === null) return null;
+    const monster = this.#monsterById(runner.selectedTargetId);
+    if (monster === null || !monster.alive) {
+      runner.selectedTargetId = null;
+      return null;
+    }
+    const maxDistance = this.#options.targetSearchRadius ?? 8;
+    if (distance(character.position, monster.position) > maxDistance) {
+      runner.selectedTargetId = null;
+      return null;
+    }
+    return monster;
+  }
+
   /**
-   * Em quem bater AGORA: o melhor alvo dentro do alcance da arma (FUN-85).
+   * Auto-target: seleciona o melhor alvo na tela segundo a política do jogador (ex: mais próximo).
+   */
+  #autoSelectTarget(session: Session, character: CharacterRuntime): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || !character.alive) return;
+
+    const best = this.#approachTarget(character);
+    const next = best?.id ?? null;
+    if (next === runner.selectedTargetId) return;
+    runner.selectedTargetId = next;
+    if (next !== null) {
+      this.#armBot(session, character.id);
+      this.#armPlayerAttack(session, character);
+    }
+  }
+
+  /**
+   * Em quem bater AGORA: o alvo selecionado se estiver ao alcance da arma, ou o melhor alvo no alcance (FUN-85).
    *
    * Era `#nearestMonster`, e a política era o motor. Agora ela vem da configuração — e
    * `nearest` continua sendo o padrão, então uma hunt sem bot se comporta exatamente como
    * antes. O desempate segue estável, e é `selectTarget` que o garante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
+    const selected = this.#selectedTarget(character);
+    if (selected !== null && distance(character.position, selected.position) <= this.#attackRangeOf(character)) {
+      return selected;
+    }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
     );

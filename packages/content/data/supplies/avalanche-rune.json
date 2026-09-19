@@ -9,7 +9,7 @@
   "effect": {
     "kind": "damage",
     "basePower": 45,
-    "range": 4,
+    "range": 8,
     "damageType": "ice",
     "area": {
       "shape": "circle",

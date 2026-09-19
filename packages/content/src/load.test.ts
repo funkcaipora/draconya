@@ -303,7 +303,7 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     expect(rune).toMatchObject({
       price: 14,
       requires: { level: 30, magicLevel: 4 },
-      effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
+      effect: { kind: 'damage', basePower: 45, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
     expect(content.supplies.get('health-potion')?.requires).toEqual({});
   });
