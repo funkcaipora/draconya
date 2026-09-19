@@ -157,6 +157,7 @@ async function applyProgression(
       gold: characters.gold,
       skills: characters.skills,
       bestiary: characters.bestiary,
+      ammo: characters.ammo,
       staminaUpdatedAt: characters.staminaUpdatedAt,
     })
     .from(characters)
@@ -209,6 +210,10 @@ async function applyProgression(
       ),
     };
 
+  // A munição escolhida (#152): preferência, última escrita vence. Extrato SEM o campo não toca
+  // na coluna — é a Cidade, ou um nó antigo, e a escolha continua a de antes.
+  const ammo = receipt.ammo === undefined ? {} : { ammo: receipt.ammo };
+
   // O que caiu e coube (FUN-88). ANTES do equipamento, porque uma peça que caiu nesta sessão
   // e foi equipada nela precisa existir como linha para o layout ter o que apontar.
   if (receipt.acquired !== undefined && receipt.acquired.length > 0) {
@@ -252,6 +257,7 @@ async function applyProgression(
       gold,
       ...skills,
       ...bestiary,
+      ...ammo,
       // A vocação (#154, ADR 0026 decisão 1): escrita UMA vez. `coalesce` mantém o que já
       // está na linha — um extrato fora de ordem com outra vocação não sobrescreve.
       ...(receipt.vocation === undefined

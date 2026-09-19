@@ -225,12 +225,15 @@ const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
  * ele vira o motivo que o tooltip do slot mostra (AB-10). Traduzir no cliente espalharia a
  * mesma explicação por dois lugares.
  */
-const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
+const SLOT_REFUSAL: Readonly<Record<SlotRefusal | 'not-enough-gold', string>> = {
   'empty-slot': 'Este slot está vazio.',
   'wrong-set': 'Este conjunto não é o ativo — a barra mudou.',
   'disabled': 'Este slot está desligado.',
   'not-in-catalog': 'Essa ação não pode ser usada agora.',
   'not-enough-mana': 'Mana insuficiente.',
+  'not-enough-gold': 'Gold insuficiente.',
+  // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
+  // uso, e o que falta ali é gold, não item.
   'not-enough-item': 'Você não tem o item.',
   'no-target': 'Nenhum alvo ao alcance.',
   'out-of-range': 'O alvo está fora de alcance.',
@@ -653,6 +656,12 @@ interface HostedSession {
    */
   readonly sentSlotState: Map<string, string>;
   /**
+   * O instante do último cálculo de `slotStates` desta sessão (AB-09). O gatilho por assinatura
+   * já evita o envio, mas o CÁLCULO — 24 slots e uma varredura de alvos por slot de dano — roda
+   * a cada ciclo; sem esta marca, uma party de dois faria 200 varreduras/s para descartar tudo.
+   */
+  slotStateAtMs: number;
+  /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
    * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
@@ -703,6 +712,16 @@ const PLAYER_COUNT_INTERVAL_MS = 30_000;
  * e não depende deste intervalo.
  */
 const SNAPSHOT_INTERVAL_MS = 10_000;
+
+/**
+ * Cada quanto o estado dos slots é recalculado no ciclo (AB-09, #420).
+ *
+ * A assinatura já evita o ENVIO quando nada muda, mas o cálculo de 24 `SlotState` — com uma
+ * varredura de alvos por slot de dano — rodava a 10 Hz por personagem observado. A 2 Hz o
+ * cliente continua animando o prazo localmente e a transição de cooldown chega em até 500 ms,
+ * que é o mesmo atraso que ele já tolera entre a entrega e o vencimento.
+ */
+const SLOT_STATE_INTERVAL_MS = 500;
 
 /**
  * Quanto tempo uma sessão de REPOUSO fica de pé sem ninguém olhando (FUN-52).
@@ -1309,9 +1328,12 @@ export class SessionHost {
       ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
     });
     if (!outcome.ok || hosted === undefined) return;
-    // A ação mudou pilha, mana ou vida: o estado novo sai na hora — a Cidade não tem ciclo, e
-    // na hunt o ciclo seguinte não pode depender de o inventário ter mudado.
-    this.#sendInventory(viewer.characterId);
+    // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
+    // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
+    hosted.slotStateAtMs = 0;
+    // Supply e magia não tocam o inventário (o modelo abstrato debita gold no uso): o que muda
+    // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
+    // `equipment-changed` como caminho próprio.
     const character = this.#participantOf(hosted, viewer.characterId);
     const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(viewer.characterId, stats);
@@ -1433,6 +1455,7 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: AMMO_REFUSAL[result.reason] });
       return;
     }
+    hosted.dirty.add(character.id);
     const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
@@ -1666,7 +1689,7 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
-      this.#presentSlotState(hosted);
+      this.#presentSlotState(hosted, nowMs);
       this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
@@ -2086,9 +2109,14 @@ export class SessionHost {
    * mandaria um `slot-state` por ciclo a 10 Hz — a banda inteira para dizer que um cooldown
    * andou. O cliente anima o prazo a partir do instante da entrega. Sem visualizador não se
    * compara nada (invariante 3); o `sim` já resolveu o estado de qualquer jeito.
+   *
+   * O cálculo é throttled a `SLOT_STATE_INTERVAL_MS` (#420): a assinatura evita o envio, mas
+   * não a varredura de alvos que produz o estado.
    */
-  #presentSlotState(hosted: HostedSession): void {
+  #presentSlotState(hosted: HostedSession, nowMs: number): void {
     if (hosted.viewers.size === 0) return;
+    if (nowMs - hosted.slotStateAtMs < SLOT_STATE_INTERVAL_MS) return;
+    hosted.slotStateAtMs = nowMs;
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     if (ruleset.slotStates === undefined) return;
     for (const character of hosted.session.participants) {
@@ -2589,6 +2617,7 @@ export class SessionHost {
       sentParty: null,
       sentConditions: new Map(),
       sentSlotState: new Map(),
+      slotStateAtMs: 0,
       sentSpending: null,
     };
     this.#sessions.set(next.id, successor);
@@ -2861,6 +2890,9 @@ export class SessionHost {
       // E o Bestiário (FUN-113), pela mesma razão: abate que não chega ao banco é abate que
       // some no próximo logout, e o marco 10 000 nunca chegaria.
       ...(owner === undefined ? {} : { bestiary: owner.bestiary.getState() }),
+      // E a munição escolhida (#152): preferência do jogador, que voltaria à grátis a cada
+      // login se ficasse só na sessão.
+      ...(owner === undefined || owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       // E a vocação (#154): escrita UMA vez pelo `jobs`, nunca daqui (ADR 0026 decisão 1).
       ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
       // E o que ele está vestindo (FUN-82). Item não muda de dono dentro da hunt; o que muda é
@@ -2925,6 +2957,7 @@ export class SessionHost {
       aggregates: EMPTY_AGGREGATES,
       notableEvents: [],
       ...(owner.vocationId === null ? {} : { vocation: owner.vocationId }),
+      ...(owner.ammo.size === 0 ? {} : { ammo: Object.fromEntries(owner.ammo) }),
       equipment: equipmentOf(owner),
       layout: layoutOfState(owner.inventory.getState()),
       acquired: acquiredBy(owner, hosted.session.id),
@@ -3240,6 +3273,7 @@ export class SessionHost {
         // absolutos e monotônicos, e o ledger funde pelo maior: um snapshot velho não rebaixa.
         ...(owner?.skills === undefined ? {} : { skills: owner.skills }),
         ...(owner?.bestiary === undefined ? {} : { bestiary: owner.bestiary }),
+        ...(owner?.ammo === undefined ? {} : { ammo: owner.ammo }),
         // E a vocação, o equipamento e o que a sessão criou (#154): era o buraco desta função
         // — um item equipado numa sessão irrestaurável se perdia, e a arma de vocação com ele.
         ...(owner?.vocationId === undefined || owner.vocationId === null ? {} : { vocation: owner.vocationId }),
@@ -3288,6 +3322,7 @@ export class SessionHost {
       sentParty: null,
       sentConditions: new Map(),
       sentSlotState: new Map(),
+      slotStateAtMs: 0,
       sentSpending: null,
     };
     this.#sessions.set(session.id, hosted);

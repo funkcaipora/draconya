@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OutfitColors } from '@draconya/protocol';
 import type { BestiaryState } from '@draconya/sim';
-import { isBestiaryState } from '../tickets.js';
+import { isAmmoSelection, isBestiaryState } from '../tickets.js';
 import type { InitialCharacter, IssueFailure, TicketService } from '../tickets.js';
 import type { CharacterRecord, GameRepository } from '../db/repository.js';
 
@@ -200,6 +200,8 @@ export function initialCharacterOf(
     // Validado AQUI como as cores: a linha é `jsonb` sem CHECK, e uma contagem corrompida
     // vira ausente — a sessão parte de `{}` — em vez de trancar o login.
     ...bestiaryOf(character.bestiary),
+    // E a munição escolhida (#152), pela mesma régua do Bestiário: torta vira ausente.
+    ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
     // E o inventário, porque a arma equipada decide o dano (FUN-82). A consulta usa o

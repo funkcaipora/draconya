@@ -26,6 +26,7 @@ const character = (id: string, accountId: string): CharacterRecord => ({
   id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
+  ammo: null,
   createdAt: new Date(),
 });
 

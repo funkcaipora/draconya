@@ -185,7 +185,7 @@ export function buildCatalogue(content: Content): Catalogue {
 
 /**
  * Os grupos de cooldown do conteúdo (AB-09, ADR 0032 d.2): a união de `spell.group` e
- * `item.group`, em ordem estável. É o vocabulário que o editor do AB-11 oferece, e é o que o
+ * `supply.group`, em ordem estável. É o vocabulário que o editor do AB-11 oferece, e é o que o
  * motor de grupos usa para priorizar dentro de cada livro.
  */
 function groupsOf(content: Content): string[] {

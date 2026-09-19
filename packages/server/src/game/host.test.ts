@@ -7,7 +7,7 @@ import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
   itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
-import type { Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -74,6 +74,7 @@ function buildHost(
     // desse tipo é o que `exactOptionalPropertyTypes` recusa.
     acceptBotConfig?: NonNullable<SessionHostOptions['acceptBotConfig']>;
     itemCatalog?: NonNullable<SessionHostOptions['itemCatalog']>;
+    ammunitionCatalog?: NonNullable<SessionHostOptions['ammunitionCatalog']>;
     vocations?: NonNullable<SessionHostOptions['vocations']>;
     vocationLevel?: number;
     progression?: NonNullable<SessionHostOptions['progression']>;
@@ -4107,6 +4108,63 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
       .filter((h) => h.id === withoutTable.heroId && h.kind === 'spell');
     expect(hitsWithout.length).toBeGreaterThan(0);
     expect(withoutTable.hero().health).toBeLessThan(withoutTable.maxHealth);
+  });
+});
+
+describe('a munição escolhida pelo socket (#152, ADR 0026 decisão 4)', () => {
+  const SNIPER: Ammunition = {
+    id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5,
+    damageType: 'physical', requires: { level: 20 }, appearanceId: 7364, missileId: 22,
+  };
+  const ammunition = new Map([[SNIPER.id, SNIPER]]);
+  const warnings = (socket: FakeSocket) =>
+    socket.received().filter((m) => m.type === 'system-message');
+
+  const atLevel = (level: number) => {
+    const { ruleset } = countingRuleset();
+    const { host, sessions } = buildHost(ruleset, { ammunitionCatalog: ammunition, level });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'p1');
+    host.flush();
+    const before = socket.received().length;
+    const hero = sessions[0]?.participants[0] as CharacterRuntime;
+    return { host, viewer, socket, hero, before };
+  };
+
+  it('escolhe, e a resposta é player-stats com a munição nova — não uma mensagem', () => {
+    // O seletor no slot do escudo precisa ver a escolha refletida; na Cidade não há ciclo que
+    // compare os vitais, então o sucesso manda `player-stats` na hora.
+    const { host, viewer, socket, hero, before } = atLevel(20);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'sniper-arrow' });
+    host.flush();
+
+    expect(hero.ammo.get('arrow')).toBe('sniper-arrow');
+    expect(warnings(socket)).toHaveLength(0);
+    const stats = socket.received().slice(before).filter((m) => m.type === 'player-stats');
+    const last = stats.at(-1);
+    expect(last?.type === 'player-stats' && last.ammo).toEqual({ arrow: 'sniper-arrow', bolt: null });
+  });
+
+  it('recusa por level com o MOTIVO, e a escolha anterior fica', () => {
+    const { host, viewer, socket, hero } = atLevel(19);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'sniper-arrow' });
+    host.flush();
+
+    expect(hero.ammo.get('arrow')).toBeUndefined();
+    const warning = warnings(socket)[0];
+    expect(warning?.type === 'system-message' && warning.text).toContain('level');
+  });
+
+  it('munição que o conteúdo não conhece é recusada, sem tocar em nada', () => {
+    const { host, viewer, socket, hero } = atLevel(20);
+
+    host.handle(viewer, { type: 'select-ammo', ammoId: 'flecha-de-brinquedo' });
+    host.flush();
+
+    expect(hero.ammo.size).toBe(0);
+    expect(warnings(socket)).toHaveLength(1);
   });
 });
 

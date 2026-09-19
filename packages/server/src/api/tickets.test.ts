@@ -8,6 +8,7 @@ const CHARACTER: CharacterRecord = {
   id: 'p1', accountId: 'a1', name: 'Hero', vocation: null, level: 1, xp: 0, gold: 0,
   capacity: 400, premiumUntil: null, staminaMs: 86400000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
+  ammo: null,
   createdAt: new Date(),
 };
 
@@ -195,6 +196,29 @@ describe('POST /api/tickets', () => {
     expect(await issuedWith(null)).not.toHaveProperty('bestiary');
     expect(await issuedWith({ rat: -1 })).not.toHaveProperty('bestiary');
     expect(await issuedWith([10_000])).not.toHaveProperty('bestiary');
+  });
+
+  it('leva a munição escolhida quando a linha tem uma válida, e descarta a torta (#152)', async () => {
+    // A mesma régua do Bestiário: uma escolha torta vira ausente — a sessão atira a grátis —,
+    // nunca login recusado por causa de uma preferência.
+    const issuedWith = async (ammo: unknown) => {
+      const issue = vi.fn(async (..._args: unknown[]) => ISSUED);
+      const response = await post(build({
+        tickets: { issue } as never,
+        withOwnedCharacter: (async (
+          _accountId: string,
+          _characterId: string,
+          operation: (character: typeof CHARACTER) => unknown,
+        ) => operation({ ...CHARACTER, ammo })) as never,
+      }), { characterId: 'p1' });
+      expect(response.statusCode).toBe(200);
+      return issue.mock.calls[0]?.[2] as Record<string, unknown> | undefined;
+    };
+
+    expect(await issuedWith({ arrow: 'sniper-arrow' })).toMatchObject({ ammo: { arrow: 'sniper-arrow' } });
+    expect(await issuedWith(null)).not.toHaveProperty('ammo');
+    expect(await issuedWith({ arrow: 7 })).not.toHaveProperty('ammo');
+    expect(await issuedWith(['arrow'])).not.toHaveProperty('ammo');
   });
 
   it('leva a vocação da linha, e a ausência quando ainda não há uma (#154)', async () => {
