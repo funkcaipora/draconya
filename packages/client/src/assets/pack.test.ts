@@ -27,6 +27,7 @@ import {
 const CATALOG = [
   { type: 'appearances', file: 'app.dat' },
   { type: 'sprite', file: 'folha.bmp.lzma', spritetype: 0, firstspriteid: 1, lastspriteid: 288 },
+  { type: 'sprite', file: 'grande.bmp.lzma', spritetype: 3, firstspriteid: 300, lastspriteid: 335 },
 ];
 
 /** Uma faixa de ids consecutivos, para escrever `frameGroup` de 96 quadros sem digitá-los. */
@@ -41,6 +42,9 @@ const ids = (from: number, count: number) => Array.from({ length: count }, (_, i
 const DAT = encodeAppearances({
   object: [
     appearance({ id: 357, frameGroups: [frameGroup({ spriteIds: [10] })] }),
+    // Um objeto grande: o primeiro sprite mora na folha de `spritetype` 3 (64×64), e a
+    // `objectSize` tem que sair em TILES — `{2, 2}`, não `{64, 64}`.
+    appearance({ id: 358, frameGroups: [frameGroup({ spriteIds: [300] })] }),
     // 4×2 e não 4×4 como a grama real: largura e altura DIFERENTES, para um teste poder
     // distinguir "trocou os dois" de "acertou".
     appearance({
@@ -241,6 +245,20 @@ describe('AssetPack (FUN-23)', () => {
     expect(pack.objectPattern(355)).toEqual({ width: 4, height: 2 });
     expect(pack.objectPattern(357)).toEqual({ width: 1, height: 1 });
     expect(pack.objectPattern(99_999)).toEqual({ width: 1, height: 1 });
+  });
+
+  it('`objectSize` sai em TILES, pela folha em que mora o PRIMEIRO sprite (M23, D3)', async () => {
+    // A dimensão é a RESERVA da classificação de camada: um objeto passável sem flag que mede
+    // mais de um tile transborda para o vizinho e precisa de ordem espacial. Ela vem da
+    // geometria que o catálogo já declara por `spritetype` — 0 é 32×32, 3 é 64×64 —, então é
+    // síncrona e não baixa folha nenhuma.
+    // Mutação que mata: devolver pixels (`{64, 64}`), ou procurar a folha errada por `<` no
+    // lugar de `<=` na faixa; ou id desconhecido lançando em vez de `{1, 1}`.
+    const { pack, baixadas } = await build();
+    expect(pack.objectSize(358)).toEqual({ width: 2, height: 2 });
+    expect(pack.objectSize(357)).toEqual({ width: 1, height: 1 });
+    expect(pack.objectSize(99_999)).toEqual({ width: 1, height: 1 });
+    expect(baixadas).toEqual(['catalog-content.json', 'app.dat']);
   });
 
   it('`outfit` com cores sai PINTADO: o vermelho do template multiplica a cor do corpo', async () => {

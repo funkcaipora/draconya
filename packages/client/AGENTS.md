@@ -287,7 +287,13 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `loadScene`) quando o laço de quadro nota `world.mapId` mudar — o `world` não avisa ninguém
   (ADR 0007). As regras, lidas no OTClient (MIT — formato e regra, nunca código): **ordem**
   chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top` (num container
-  ACIMA das criaturas: o arco cobre quem passa); **elevação** `height.elevation` acumula pelos
+  ACIMA das criaturas: o arco cobre quem passa); **camada** (`layerOf`): chão e `clip` são
+  `ground`; `bottom`, `unpass`/`unsight` e o que mede mais de um tile — a dimensão da folha do
+  catálogo, consultada só como RESERVA, nunca antes das flags — são `scene`; `top` é `top`. A
+  partir do primeiro `scene` do tile, todo item não-`top` que vem depois também é `scene` — o
+  quadro pendurado na parede é parte dela e, sozinho, seria chão. Até a 385, `scene` ainda é
+  desenhado no container do TERRENO: o container espacial e o `zIndex` são de lá, e classificar
+  não muda a tela. **elevação** `height.elevation` acumula pelos
   itens com teto de 24 px e sobe o que vem depois — e a criatura — para cima e para a
   esquerda, `top` ignora; **shift** desloca o próprio item; **padrão** por `(x % w, y % h)`,
   por CONTAGEM para o empilhável que veio com contagem E tem o padrão de 4×2 da tabela (1–4
