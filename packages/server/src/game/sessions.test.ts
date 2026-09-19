@@ -3,7 +3,7 @@ import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/
 import {
   TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA, testContent,
 } from '../testing/content.js';
-import { BOT_VOCABULARY_VERSION_V1 } from '@draconya/content';
+import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigV2Schema } from '@draconya/content';
 import type { Progression } from '@draconya/content';
 import type { HuntRuleset, Session, SessionSnapshot } from '@draconya/sim';
 import { describe, expect, it } from 'vitest';
@@ -430,7 +430,7 @@ describe('a versão de conteúdo é fixada na sessão (FUN-55)', () => {
   });
 });
 
-describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
+describe('aceitar ou recusar a configuração do bot (FUN-81, AB-09)', () => {
   const content = testContent();
   const accept = createBotConfigValidator(content);
   const base = (over: Record<string, unknown> = {}) => ({
@@ -439,25 +439,60 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     ...over,
   });
 
-  it('aceita uma configuração válida e devolve a versão PARSEADA, com defaults', () => {
-    // Devolver o parseado, e não o cru, é o que garante que quem compila recebe `targeting` e
-    // `exit` preenchidos — o cliente não precisa mandar campo que ele não usa.
-    const decision = accept(base(), 1);
+  const emptySets = () => Array.from({ length: BOT_SET_COUNT }, () => ({
+    slots: Array.from({ length: BOT_SLOTS_PER_SET }, () => null),
+  }));
+
+  it('migra a v1 para a v2, com defaults materializados (RF-12)', () => {
+    // A config v1 do Postgres entra como v2: quem a converte é `migrateBotConfigV1` (AB-03),
+    // chamada pelo juiz único. Sem isto, a coluna v1 nunca vira v2 e toda entrada repete a
+    // migração — o portão de versão que esta task fecha.
+    const decision = accept(base({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'heal' },
+      }],
+    }), 1);
+
     expect(decision.ok).toBe(true);
     if (decision.ok) {
-      expect(decision.config.targeting.policy).toBe('nearest');
-      expect(decision.config.exit).toEqual([]);
+      expect(decision.config.version).toBe(BOT_VOCABULARY_VERSION);
+      expect(decision.config.activeSet).toBe(0);
+      expect(decision.config.stance).toBe('balanced');
+      expect(decision.config.automations).toEqual([]);
+      // A regra da v1 virou o slot 1 do conjunto 0, com `when` em lista e `auto` ligado.
+      const slot = decision.config.sets[0]?.slots[0];
+      expect(slot).toMatchObject({ do: { kind: 'spell', spellId: 'heal' }, auto: true });
     }
   });
 
-  it('recusa forma fora do vocabulário, dizendo ONDE', () => {
-    // "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir de configurar
-    // o bot. O caminho do campo vai no texto porque ele vai direto para o jogador.
-    const decision = accept(base({
-      heal: [{ when: { kind: 'gold', op: '<', amount: 100 }, do: { kind: 'spell', spellId: 'heal' } }],
-    }), 1);
+  it('deixa a v2 passar INTACTA — idempotência (RF-13)', () => {
+    // Migrar duas vezes não pode apagar `sets`: o curto-circuito de `version === 2` vem antes
+    // do parse v1, que descartaria o v2 em silêncio (o v1 não conhece `sets`).
+    const v2 = botConfigV2Schema.parse({
+      version: BOT_VOCABULARY_VERSION, activeSet: 1, sets: emptySets(), stance: 'offensive',
+    });
+    const decision = accept(v2, 1);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.config).toEqual(v2);
+  });
+
+  it('recusa versão desconhecida com motivo (RF-13)', () => {
+    // O portão de versão. `migrateBotConfigV1` aceitaria um v1 bem formado com número errado;
+    // é aqui que o servidor recusa antes de migrar.
+    const decision = accept({ version: 99, heal: [], potion: [], attack: [], rune: [], support: [] }, 1);
     expect(decision.ok).toBe(false);
-    if (!decision.ok) expect(decision.reason).toContain('heal');
+    if (!decision.ok) expect(decision.reason).toContain('99');
+  });
+
+  it('materializa os defaults dos campos novos da v2 (RF-14)', () => {
+    // Config v2 parcial parseia: `activeSet`, `stance` e `automations` têm default, e um
+    // cliente/nó que não os manda não é recusado.
+    const parsed = botConfigV2Schema.parse({ version: BOT_VOCABULARY_VERSION, sets: emptySets() });
+    expect(parsed.activeSet).toBe(0);
+    expect(parsed.stance).toBe('balanced');
+    expect(parsed.automations).toEqual([]);
+    expect(parsed.targeting.policy).toBe('nearest');
   });
 
   it('recusa magia que não existe no catálogo DESTE nó', () => {
@@ -471,19 +506,10 @@ describe('aceitar ou recusar a configuração do bot (FUN-81)', () => {
     if (!decision.ok) expect(decision.reason).toContain('nao-existe');
   });
 
-  it('recusa mais regras que slots', () => {
-    const regra = {
-      when: { kind: 'hp', op: '<=', percent: 50 }, do: { kind: 'spell', spellId: 'heal' },
-    };
-    const decision = accept(base({ heal: [regra, regra, regra, regra] }), 1);
-    expect(decision.ok).toBe(false);
-    if (!decision.ok) expect(decision.reason).toContain('heal');
-  });
-
   it('não existe mais gate de level: avançado vale desde o level 1 (AB-03, ADR 0032 d.4)', () => {
     // O §13.2 exigia level 50 para o bot avançado; o ADR 0032 d.4 revogou o gate. A asserção
     // abaixo é o que impede alguém de reintroduzi-lo por engano.
-    expect(accept(base({ targeting: { policy: 'lowest-hp' } }), 1).ok).toBe(true);
+    expect(accept(base({ targeting: { policy: 'follow' } }), 1).ok).toBe(true);
     expect(accept(base({ lure: { min: 2, max: 5 } }), 1).ok).toBe(true);
     expect(accept(base(), 1).ok).toBe(true);
   });

@@ -28,7 +28,7 @@ import { Redis } from 'ioredis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeS2C, encodeC2S } from '@draconya/protocol';
 import type { S2CMessage } from '@draconya/protocol';
-import { buildContent, botConfigSchema, placeholderAppearances } from '@draconya/content';
+import { buildContent, botConfigSchema, migrateBotConfigV1, placeholderAppearances } from '@draconya/content';
 import { BOT_VOCABULARY_VERSION_V1 } from '@draconya/content';
 import type { RawContent } from '@draconya/content';
 import { AuthService } from '../auth/service.js';
@@ -658,6 +658,9 @@ describe.runIf(ready)('persistência do bot entre processos (#263, ADR 0028)', (
   const HEAL = botConfigSchema.parse({ ...EMPTY, heal: [
     { when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } },
   ] });
+  // O que a v1 VIRA ao passar pelo socket (AB-09): a partir do #424 o `game` migra e grava a
+  // v2, então é a v2 que o Postgres e o `session-state` carregam.
+  const HEAL_V2 = migrateBotConfigV1(HEAL);
   let options: { database: ReturnType<typeof db>; botConfigs: BotConfigStore; logger: typeof logger };
   let characterId: string;
   let accountId: string;
@@ -818,9 +821,11 @@ describe.runIf(ready)('persistência do bot entre processos (#263, ADR 0028)', (
     await startNode('bot-node-two');
     const reconnected = await connect(cookie, playerId);
     reconnected.send({ type: 'session-attach' });
+    // A v1 enviada pelo socket é migrada e PERSISTIDA como v2 (AB-09, DT-07): o que a admissão
+    // leva ao banco e o que a tela recebe de volta é o vocabulário novo.
     expect(await reconnected.waitForNext('session-state'))
-      .toEqual(expect.objectContaining({ botConfig: HEAL }));
-    expect((await repository.getCharacter(owner, playerId))?.botConfig).toEqual(HEAL);
+      .toEqual(expect.objectContaining({ botConfig: HEAL_V2 }));
+    expect((await repository.getCharacter(owner, playerId))?.botConfig).toEqual(HEAL_V2);
     expect(await botConfigs.load(playerId)).toBeNull();
     reconnected.close();
   }, 30_000);

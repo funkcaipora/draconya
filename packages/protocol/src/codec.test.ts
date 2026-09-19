@@ -173,10 +173,14 @@ describe('catalogue item stats (#337)', () => {
       vocations: [],
       vocationLevel: 0,
       bot: {
-        vocabularyVersion: 1,
-        slots: {},
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
         spells: [],
-        supplies: [],
+        automations: [],
       },
       items: [
         {
@@ -214,10 +218,14 @@ describe('catalogue item stats (#337)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1,
-        slots: {},
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
         spells: [],
-        supplies: [],
+        automations: [],
       },
       items: [
         {

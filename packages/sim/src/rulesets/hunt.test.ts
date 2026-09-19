@@ -7,6 +7,7 @@ import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { containerRulesFor } from '../inventory.js';
+import { resolveDeath } from '../death.js';
 import { huntListings } from '../hunt/catalogue.js';
 import { statsForLevel, totalXpForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -6301,5 +6302,169 @@ describe('carga e duração do equipamento (#421, ADR 0032 d.8)', () => {
     expect(resumedHero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
     resumed.advanceBy(1);
     expect(resumedHero.inventory.equippedAt('finger')).toBeNull();
+  });
+});
+
+// --- disparo manual, estado dos slots e alvo escolhido (AB-09) -------------------------------
+
+const spellSlot = (spellId: string, over: Partial<BotSlot> = {}) => ({
+  do: { kind: 'spell' as const, spellId }, ...over,
+});
+
+describe('disparo manual de slot (AB-09, ADR 0032 d.3)', () => {
+  it('ignora `when`: o manual dispara com a condição falsa, o automático não (RF-01)', () => {
+    const config = botConfigV2([
+      { do: { kind: 'item', itemId: 'health-potion' }, when: [{ kind: 'hp', op: '<=', percent: 0 }] },
+    ]);
+    // Manual: a condição é falsa (vida cheia) e a ação sai mesmo assim.
+    const manual = withSpells(config, { health: 1_000, items: [potionNoRestock], monsters: false });
+    seedStack(manual.hero, manual.content, 'health-potion', 5);
+    expect(manual.ruleset.useSlot(manual.session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(manual.hero.inventory.quantityOf('health-potion')).toBe(4);
+
+    // O MESMO slot pelo automático não dispara: `when` vale para o bot, não para a tecla.
+    const auto = withSpells(config, { health: 1_000, items: [potionNoRestock], monsters: false });
+    seedStack(auto.hero, auto.content, 'health-potion', 5);
+    auto.session.advanceBy(50);
+    expect(auto.hero.inventory.quantityOf('health-potion')).toBe(5);
+  });
+
+  it('`auto:false` não impede o manual; `enabled:false` recusa (RF-03, DT-04)', () => {
+    const manualOnly = withSpells(botConfigV2([
+      { do: { kind: 'item', itemId: 'health-potion' }, auto: false },
+    ]), { health: 1_000, items: [potionNoRestock], monsters: false });
+    seedStack(manualOnly.hero, manualOnly.content, 'health-potion', 5);
+    expect(manualOnly.ruleset.useSlot(manualOnly.session, 'hero', 0, 0)).toEqual({ ok: true });
+
+    const disabled = withSpells(botConfigV2([
+      { do: { kind: 'item', itemId: 'health-potion' }, enabled: false },
+    ]), { health: 1_000, items: [potionNoRestock], monsters: false });
+    seedStack(disabled.hero, disabled.content, 'health-potion', 5);
+    expect(disabled.ruleset.useSlot(disabled.session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'disabled', retryInMs: 0 });
+    expect(disabled.hero.inventory.quantityOf('health-potion')).toBe(5);
+  });
+
+  it('`set` defasado é recusa, não "usa o ativo" (RF-04, DT-03)', () => {
+    const { session, ruleset } = withSpells(botConfigV2([
+      { do: { kind: 'item', itemId: 'health-potion' } },
+    ]), { health: 1_000, items: [potionNoRestock], monsters: false });
+    expect(ruleset.useSlot(session, 'hero', 1, 0))
+      .toEqual({ ok: false, reason: 'wrong-set', retryInMs: 0 });
+  });
+
+  it('slot vazio e ação sem mana recusam, e NÃO iniciam cooldown (RF-02)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([
+      null,
+      spellSlot('heal'),
+    ]), { health: 1_000, mana: 0, monsters: false });
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'empty-slot', retryInMs: 0 });
+    expect(ruleset.useSlot(session, 'hero', 0, 1))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+    // A ação que não aconteceu não pode consumir o livro: a mana sai por último.
+    expect(hero.cooldowns.remainingMs('spell:heal', session.nowMs)).toBe(0);
+  });
+
+  it('com mana, o manual executa a magia e devolve ok (RF-02)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([
+      spellSlot('heal'),
+    ]), { health: 100, mana: 200, monsters: false });
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(hero.health).toBe(160);
+    expect(hero.mana).toBe(180);
+  });
+
+  it('o manual não depende da taxa: 10 Hz e 1 Hz dão o mesmo estado (ADR 0020)', () => {
+    const config = botConfigV2([spellSlot('heal')]);
+    const run = (stepMs: number) => {
+      const { session, hero, ruleset } = withSpells(config, { health: 100, mana: 200, monsters: false });
+      ruleset.useSlot(session, 'hero', 0, 0);
+      for (let t = 0; t < 5_000; t += stepMs) session.advanceBy(stepMs);
+      return {
+        health: hero.health,
+        mana: hero.mana,
+        cooldown: hero.cooldowns.remainingMs('spell:heal', session.nowMs),
+      };
+    };
+    expect(run(100)).toEqual(run(1_000));
+  });
+});
+
+describe('estado dos slots (AB-09, UC-BAR-003)', () => {
+  it('traz 24 entradas do conjunto ativo, com empty/blocked/cooldown e remainingMs (RF-07)', () => {
+    const config = botConfigV2([
+      null,
+      { do: { kind: 'item', itemId: 'health-potion' } },
+      spellSlot('heal'),
+    ]);
+    const { session, hero, ruleset, content: loaded } = withSpells(config, {
+      health: 1_000, mana: 200, items: [potionNoRestock], monsters: false,
+    });
+
+    // Sem pilha: bloqueado; magia pronta; slot vazio.
+    const before = ruleset.slotStates(session, hero);
+    expect(before).toHaveLength(24);
+    expect(before[0]).toMatchObject({ set: 0, slot: 0, state: 'empty' });
+    expect(before[1]).toMatchObject({ state: 'blocked', reason: 'not-enough-item' });
+    expect(before[2]).toMatchObject({ state: 'ready' });
+
+    // NÃO muta: o estado dos slots é apresentação, e o inventário continua igual.
+    expect(hero.inventory.quantityOf('health-potion')).toBe(0);
+    seedStack(hero, loaded, 'health-potion', 5);
+    expect(ruleset.slotStates(session, hero)[1]).toMatchObject({ state: 'ready' });
+
+    // Executa a magia: o slot passa a cooldown com o prazo do livro.
+    expect(ruleset.useSlot(session, 'hero', 0, 2)).toEqual({ ok: true });
+    const after = ruleset.slotStates(session, hero);
+    expect(after[2]).toMatchObject({ state: 'cooldown' });
+    expect((after[2] as { remainingMs: number }).remainingMs).toBe(1_000);
+  });
+
+  it('o motivo de slotStates coincide com o de useSlot (DT-08)', () => {
+    // As duas contas são independentes de propósito: uma executa, a outra espelha. Este teste
+    // é a salvaguarda contra elas divergirem.
+    const noMana = withSpells(botConfigV2([spellSlot('heal')]), {
+      health: 1_000, mana: 0, monsters: false,
+    });
+    const stateNoMana = noMana.ruleset.slotStates(noMana.session, noMana.hero)[0]!;
+    const outcomeNoMana = noMana.ruleset.useSlot(noMana.session, 'hero', 0, 0);
+    expect(outcomeNoMana.ok).toBe(false);
+    if (!outcomeNoMana.ok) expect(stateNoMana.reason).toBe(outcomeNoMana.reason);
+
+    const noStack = withSpells(botConfigV2([
+      { do: { kind: 'item', itemId: 'health-potion' } },
+    ]), { health: 1_000, items: [potionNoRestock], monsters: false });
+    const stateNoStack = noStack.ruleset.slotStates(noStack.session, noStack.hero)[0]!;
+    const outcomeNoStack = noStack.ruleset.useSlot(noStack.session, 'hero', 0, 0);
+    expect(outcomeNoStack.ok).toBe(false);
+    if (!outcomeNoStack.ok) expect(stateNoStack.reason).toBe(outcomeNoStack.reason);
+  });
+});
+
+describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
+  it('sobrepõe a política enquanto vive; a morte cai no mais próximo (RF-05/RF-06)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    // Um tique para os três ratos nascerem.
+    session.advanceBy(1);
+    const [a, b] = [...ruleset.monsters] as [typeof ruleset.monsters[0], typeof ruleset.monsters[0]];
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    // Os dois ao alcance (Chebyshev 1), um de cada lado: a política sozinha escolheria o
+    // primeiro na ordem de nascimento; o escolhido sobrepõe.
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x, y: hero.position.y + 1 };
+
+    expect(ruleset.chooseTarget(session, 'hero', a.subject)).toBe(true);
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(a.subject);
+
+    // A morre: `chosenTarget` é limpo e o alvo efetivo cai no mais próximo (b).
+    a.receiveDamage(a.health);
+    resolveDeath(session, { kind: 'monster', monster: a });
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+
+    // Id morto/desconhecido é ignorado.
+    expect(ruleset.chooseTarget(session, 'hero', a.subject)).toBe(false);
+    expect(ruleset.chooseTarget(session, 'hero', 'm:nao-existe')).toBe(false);
   });
 });

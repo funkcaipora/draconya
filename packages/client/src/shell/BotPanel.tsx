@@ -84,7 +84,7 @@ function Category({ category, vocabulary, vocationId, onEdit }: {
 }) {
   const rules = useStoreSlice(bot, (state) => state.draft.rules[category]);
   const [open, setOpen] = useState(true);
-  const slots = vocabulary.slots[category] ?? 0;
+  const slots = vocabulary.slots?.[category] ?? 0;
   const fresh = blankRule(category, vocabulary, vocationId);
 
   return (

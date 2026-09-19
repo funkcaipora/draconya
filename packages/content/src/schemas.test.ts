@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botConditionSchema, botConfigV2Schema, botSetSchema, huntSchema, itemSchema } from './schemas.js';
+import { botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema } from './schemas.js';
 
 describe('huntSchema (#360)', () => {
   const validHunt = {
@@ -122,5 +122,15 @@ describe('o vocabulário v2 do bot (AB-03, ADR 0032)', () => {
     if (!bad.success) {
       expect(bad.error.issues[0]?.path).toEqual(['slots', 0, 'restock']);
     }
+  });
+});
+
+describe('a política de alvo `follow` (AB-09, ADR 0032 d.5)', () => {
+  it('aceita `follow` e recusa string fora da lista', () => {
+    // O dropdown ALVO expõe `follow` — "o alvo que o jogador escolheu" —, e a política é
+    // conteúdo: uma string que o compilador não conhece não pode entrar.
+    expect(botTargetPolicySchema.parse('follow')).toBe('follow');
+    expect(botTargetPolicySchema.safeParse('nearest').success).toBe(true);
+    expect(botTargetPolicySchema.safeParse('mais-forte').success).toBe(false);
   });
 });

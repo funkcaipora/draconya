@@ -17,10 +17,11 @@
 // disputa por spawn, e é isso que permite a hunt rodar sozinha, com o navegador fechado.
 
 import {
-  BASIC_ABILITY_ID, BOT_VOCABULARY_VERSION, ITEM_SLOTS, isBlocked, migrateBotConfigV1,
+  BASIC_ABILITY_ID, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, ITEM_SLOTS, isBlocked,
+  migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, BotAction, BotConfig, BotConfigV2, BotExitRule, Combat,
+  AmmoFamily, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
   Monster, MonsterAbility, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
@@ -32,7 +33,7 @@ import {
   NOT_IN_CATALOG, applyConsumableEffect, balanceOf, castSpell, groupCooldownKey,
   itemCooldownKey, ownPurse, spellCooldownKey, useSupply,
 } from '../casting.js';
-import type { CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
+import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
 import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../conditions.js';
 import type { NormalizedTick } from '../conditions.js';
@@ -179,6 +180,62 @@ const BOT_GROUP_PREFIX = 'bot:';
  * `migrateBotConfigV1` a normaliza no boundary. A união some no AB-09.
  */
 type BotConfigInput = BotConfigV2 | BotConfig;
+
+/**
+ * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
+ * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
+ *
+ * `not-in-catalog` cobre magia/item inexistente e também os requisitos que o manual não passa
+ * (level, vocação, magic level): são a mesma resposta para a tela, "essa ação não sai agora".
+ */
+export type SlotRefusal =
+  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog'
+  | 'not-enough-mana' | 'not-enough-item' | 'no-target' | 'out-of-range'
+  | 'on-cooldown' | 'group-cooldown';
+
+/** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
+export type SlotOutcome =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: SlotRefusal; readonly retryInMs: number };
+
+/**
+ * O estado de UM slot do conjunto ativo (AB-09, UC-BAR-003). É APRESENTAÇÃO: espelha a mesma
+ * elegibilidade de `#perform` sem mutar nada, e a contagem de consumível NÃO entra aqui — ela é
+ * do `inventory` (invariante 4).
+ */
+export interface SlotState {
+  readonly set: number;
+  readonly slot: number;
+  readonly state: 'ready' | 'cooldown' | 'blocked' | 'empty';
+  readonly remainingMs: number;
+  readonly reason?: SlotRefusal;
+}
+
+/**
+ * Traduz a recusa do atuador para a recusa do slot. É a salvaguarda de DT-08: `slotStates`
+ * calcula o mesmo motivo por outro caminho, e o teste prende que os dois coincidem.
+ */
+function refusalOf(result: CastRefused): SlotRefusal {
+  switch (result.reason) {
+    case 'not-in-catalog':
+    case 'level-too-low':
+    case 'wrong-vocation':
+    case 'magic-level-too-low':
+      return 'not-in-catalog';
+    case 'on-cooldown': return 'on-cooldown';
+    case 'group-cooldown': return 'group-cooldown';
+    case 'no-target': return 'no-target';
+    case 'out-of-range': return 'out-of-range';
+    case 'not-enough-mana': return 'not-enough-mana';
+    // O consumível v2 recusa por `not-enough-gold` quando não há pilha (não há débito no uso).
+    case 'not-enough-gold': return 'not-enough-item';
+  }
+}
+
+/** A recusa do manual, montada num lugar só. */
+function refuse(reason: SlotRefusal, retryInMs: number): SlotOutcome {
+  return { ok: false, reason, retryInMs };
+}
 
 /**
  * De quanto em quanto tempo as regras de saída são avaliadas.
@@ -543,6 +600,12 @@ interface Runner {
   readonly botReady: Record<string, boolean>;
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
   playerAttackReady: boolean;
+  /**
+   * O alvo ESCOLHIDO pelo jogador (AB-09, ADR 0032 d.5), por subject do monstro (`m:<id>`).
+   * Estado QUENTE transitório: não entra no snapshot — o alvo é reconstruído do clique e cai
+   * em `nearest` se ausente (o precedente de `luring`/`ringReplaced`).
+   */
+  chosenTarget: string | null;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
   running: boolean;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
@@ -761,6 +824,82 @@ export class HuntRuleset implements Ruleset {
 
   attackTargetOf(character: CharacterRuntime): MonsterRuntime | null {
     return this.#attackTarget(character);
+  }
+
+  /**
+   * Dispara um slot do conjunto ATIVO na hora, ignorando `when` e `auto` (AB-09, ADR 0032 d.3).
+   *
+   * Manual é manual: a elegibilidade natural é a mesma do bot (`#perform`), mas a condição do
+   * slot e a chave automática NÃO valem — o jogador apertou a tecla. `enabled: false` continua
+   * valendo (desligado é explícito). O `set` defasado é recusa, não "usa o ativo": o cliente
+   * disparou por uma barra que mudou (DT-03).
+   *
+   * Cooldown é conferido ANTES de executar, e a ação que não aconteceu não inicia cooldown
+   * nenhum — a ordem da elegibilidade é o ponto caro aqui.
+   */
+  useSlot(session: Session, characterId: string, set: number, slotIndex: number): SlotOutcome {
+    const character = findById(session.participants, characterId);
+    const runner = this.#runners.get(characterId);
+    if (character === null || !character.alive || runner === undefined) {
+      return refuse('not-in-catalog', 0);
+    }
+    const config = runner.botConfig;
+    if (config === undefined) return refuse('empty-slot', 0);
+    if (set !== config.activeSet) return refuse('wrong-set', 0);
+    const entry = config.sets[set]?.slots[slotIndex];
+    if (entry === null || entry === undefined) return refuse('empty-slot', 0);
+    if (entry.enabled === false) return refuse('disabled', 0);
+
+    const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+    if (wait > 0) return refuse('on-cooldown', wait);
+
+    const result = this.#perform(session, character, entry.do);
+    if (!result.ok) return refuse(refusalOf(result), result.retryInMs);
+    // A ação SAIU: o ciclo automático passa a respeitar o cooldown que ela acabou de iniciar.
+    this.#armBot(session, characterId);
+    return { ok: true };
+  }
+
+  /**
+   * O estado dos slots do conjunto ATIVO (AB-09), para o `slot-state`. PURO: não muta nada e
+   * não consome RNG — é a apresentação da mesma elegibilidade que `useSlot` executaria.
+   */
+  slotStates(session: Session, character: CharacterRuntime): readonly SlotState[] {
+    const config = this.#runners.get(character.id)?.botConfig;
+    const set = config?.activeSet ?? 0;
+    const out: SlotState[] = [];
+    for (let slot = 0; slot < BOT_SLOTS_PER_SET; slot += 1) {
+      const entry = config?.sets[set]?.slots[slot] ?? null;
+      if (entry === null) {
+        out.push({ set, slot, state: 'empty', remainingMs: 0 });
+        continue;
+      }
+      if (entry.enabled === false) {
+        out.push({ set, slot, state: 'blocked', remainingMs: 0, reason: 'disabled' });
+        continue;
+      }
+      const wait = this.#cooldownWaitOf(character, entry.do, session.nowMs);
+      if (wait > 0) {
+        out.push({ set, slot, state: 'cooldown', remainingMs: wait, reason: 'on-cooldown' });
+        continue;
+      }
+      out.push(this.#naturalStateOf(set, slot, character, entry.do));
+    }
+    return out;
+  }
+
+  /**
+   * O jogador escolheu um alvo clicando (AB-09, ADR 0032 d.5). `false` se não é monstro vivo —
+   * o host ignora em silêncio, como o `walk` recusado. O override vale para qualquer política e
+   * sobrepõe a busca enquanto o alvo vive (DT-05).
+   */
+  chooseTarget(session: Session, characterId: string, subject: string): boolean {
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return false;
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return false;
+    runner.chosenTarget = subject;
+    return true;
   }
 
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
@@ -995,6 +1134,7 @@ export class HuntRuleset implements Ruleset {
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
       playerAttackReady: state?.playerAttackReady ?? true,
+      chosenTarget: null,
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
@@ -2503,6 +2643,77 @@ export class HuntRuleset implements Ruleset {
     return targetingOf(this.#runners.get(character.id));
   }
 
+  /**
+   * Quanto falta para o livro individual E o de grupo liberarem — o MAIOR dos dois (AB-07/AB-09).
+   * O par sai de `#cooldownOf`, resolvido do conteúdo: a magia de grupo tranca `group:<g>`, e a
+   * ação sem grupo cai no livro próprio. Zero é "pode executar".
+   */
+  #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
+    const { cooldownKey, group } = this.#cooldownOf(action);
+    return Math.max(
+      character.cooldowns.remainingMs(cooldownKey, nowMs),
+      character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
+    );
+  }
+
+  /**
+   * O estado NATURAL de um slot que já passou por `enabled` e cooldown: `ready`, ou `blocked`
+   * com o mesmo motivo que `#perform` daria (DT-08). Espelha as fontes — catálogo, mana, pilha
+   * do `Inventory` e alvo — sem executar e sem consumir sorteio.
+   */
+  #naturalStateOf(
+    set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
+  ): SlotState {
+    const blocked = (reason: SlotRefusal): SlotState =>
+      ({ set, slot, state: 'blocked', remainingMs: 0, reason });
+
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      if (spell === undefined) return blocked('not-in-catalog');
+      if (character.level < spell.minLevel) return blocked('not-in-catalog');
+      if (spell.vocationId !== undefined && character.vocationId !== spell.vocationId) {
+        return blocked('not-in-catalog');
+      }
+      if (character.mana < spell.manaCost) return blocked('not-enough-mana');
+      if (this.#needsTarget(spell.effect)) {
+        const range = 'range' in spell.effect ? spell.effect.range : undefined;
+        if (this.#targetInRange(character, range) === null) return blocked('no-target');
+      }
+      return { set, slot, state: 'ready', remainingMs: 0 };
+    }
+
+    const item = this.#options.items.get(action.itemId);
+    if (item?.kind !== 'consumable') return blocked('not-in-catalog');
+    const effect = item.effect;
+    if (effect === undefined || effect.kind === 'blessing') return blocked('not-in-catalog');
+    if (character.inventory.findStack(action.itemId) === null) return blocked('not-enough-item');
+    if (item.requires.level !== undefined && character.level < item.requires.level) {
+      return blocked('not-in-catalog');
+    }
+    if (effect.kind === 'damage') {
+      const magic = this.#options.skills.get('magic');
+      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      if (item.requires.magicLevel !== undefined && magicLevel < item.requires.magicLevel) {
+        return blocked('not-in-catalog');
+      }
+      if (this.#targetInRange(character, effect.range) === null) return blocked('no-target');
+    }
+    return { set, slot, state: 'ready', remainingMs: 0 };
+  }
+
+  /** O efeito exige alvo? Forma que sai do LANÇADOR não exige (onda, cleave, explosão em volta). */
+  #needsTarget(effect: { readonly kind: string; readonly area?: SpellArea | undefined }): boolean {
+    if (effect.kind !== 'damage' && effect.kind !== 'damage-over-time') return false;
+    return effect.area === undefined || !isSelfOrigin(effect.area);
+  }
+
+  /** O melhor alvo dentro de `range`, para o espelho de elegibilidade. Não muta nada. */
+  #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
+    return selectTarget(
+      this.#targetingOf(character), this.#monsters, character.position, range ?? 1,
+    );
+  }
+
   /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
   #botViewOf(character: CharacterRuntime): BotView {
     const target = this.#attackTarget(character);
@@ -3488,6 +3699,11 @@ export class HuntRuleset implements Ruleset {
       session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
     }
     this.#monsterBySubject.delete(subject);
+    // O alvo ESCOLHIDO morreu: o override é limpo e o alvo efetivo cai na política — `nearest`
+    // por padrão (AB-09, ADR 0032 d.5). Sem isto, o escolhido apontaria para um subject morto.
+    for (const runner of this.#runners.values()) {
+      if (runner.chosenTarget === subject) runner.chosenTarget = null;
+    }
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
@@ -3816,16 +4032,46 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Em quem bater AGORA: o melhor alvo dentro do alcance da arma (FUN-85).
+   * Em quem bater AGORA: o alvo ESCOLHIDO pelo jogador, se vivo e ao alcance (AB-09, ADR 0032
+   * d.5); senão o melhor da política dentro do alcance da arma (FUN-85).
    *
    * Era `#nearestMonster`, e a política era o motor. Agora ela vem da configuração — e
    * `nearest` continua sendo o padrão, então uma hunt sem bot se comporta exatamente como
    * antes. O desempate segue estável, e é `selectTarget` que o garante.
+   *
+   * Escolhido FORA do alcance devolve `null` em vez de cair na política: quem mandou seguir um
+   * alvo não quer bater em outro no caminho — quem o leva até lá é `#approachTarget`, na
+   * postura `follow` (ADR 0032 d.5).
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
+    const chosen = this.#chosenMonsterOf(character);
+    if (chosen !== null) {
+      return distance(character.position, chosen.position) <= this.#attackRangeOf(character)
+        ? chosen
+        : null;
+    }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
     );
+  }
+
+  /**
+   * O alvo ESCOLHIDO vivo, dentro do raio de busca; senão limpa e devolve `null` (AB-09). O
+   * getter também limpa se o monstro sumiu — cinto e suspensório como o `#luring`.
+   */
+  #chosenMonsterOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.chosenTarget === null) return null;
+    const monster = this.#monsterBySubject.get(runner.chosenTarget);
+    if (monster === undefined || !monster.alive) {
+      runner.chosenTarget = null;
+      return null;
+    }
+    if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
+      runner.chosenTarget = null;
+      return null;
+    }
+    return monster;
   }
 
   /**
@@ -3839,13 +4085,16 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Atrás de quem ANDAR: o melhor alvo dentro do raio de visão.
+   * Atrás de quem ANDAR: o alvo escolhido primeiro (para "seguir" fora do alcance), senão o
+   * melhor dentro do raio de visão.
    *
    * Só é consultado quando a postura não é `stand`. Separar dos dois é o que destravou esta
    * issue: enquanto a busca parava no alcance da arma, "seguir o alvo" não tinha como ser
    * expresso — quem já está ao alcance não precisa ser seguido.
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
+    const chosen = this.#chosenMonsterOf(character);
+    if (chosen !== null) return chosen;
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );

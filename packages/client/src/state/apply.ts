@@ -397,6 +397,13 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'party-spending':
       return;
 
+    // `slot-state` e `slot-result` (AB-09): o contrato já chega no fio, mas a barra de ações é
+    // o AB-10. Até lá são IGNORADAS aqui — não há estado de HUD para elas ainda. O `case`
+    // existe para o `never` do `default` continuar sendo a trava de mensagem nova sem destino.
+    case 'slot-state':
+    case 'slot-result':
+      return;
+
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
       // ser silenciosamente ignorada em produção.

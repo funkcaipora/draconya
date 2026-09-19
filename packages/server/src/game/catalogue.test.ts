@@ -159,13 +159,31 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
   });
 
-  it('leva o vocabulário do bot, e é ele que a tela oferece', () => {
+  it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
-    // configura o que o bot recusa — e descobre pelo extrato que não fecha.
+    // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o
+    // v1: saem `slots` por categoria e `supplies`; entram conjuntos, teclas, grupos e modelos.
     const { bot } = buildCatalogue(content);
 
     expect(bot.vocabularyVersion).toBe(content.bot.vocabularyVersion);
-    expect(bot.slots).toEqual(content.bot.slots);
+    expect(bot.setCount).toBe(4);
+    expect(bot.slotsPerSet).toBe(24);
+    expect(bot.setNames.length).toBe(4);
+    expect(bot.hotkeys).toContain('1');
+    expect(bot.automations.map((automation) => automation.model)).toEqual([
+      'renew-ring', 'renew-amulet', 'swap-ammo-by-targets', 'swap-weapon-shield-by-hp', 'swap-ring',
+    ]);
+    expect(bot).not.toHaveProperty('slots');
+    expect(bot).not.toHaveProperty('supplies');
+    expect(bot).not.toHaveProperty('advancedFromLevel');
+    expect(bot).not.toHaveProperty('advancedOnly');
+  });
+
+  it('leva os grupos de cooldown do conteúdo, unindo magia e consumível (AB-09)', () => {
+    // O editor do AB-11 oferece exatamente estes grupos; o motor de grupos usa os mesmos. A
+    // magia de teste não declara grupo, então só o consumível contribui aqui.
+    const { bot } = buildCatalogue(content);
+    expect(bot.groups).toEqual(['potion']);
   });
 
   it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais', () => {
@@ -189,18 +207,18 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('vocationId' in (semVocacao ?? {})).toBe(true);
   });
 
-  it('o supply leva o PREÇO, e é o único número de balanceamento aqui', () => {
-    // O jogador configura "beber poção abaixo de 40% de HP" olhando quanto ela custa por hora
-    // de hunt. Sem o preço, a decisão que a tela existe para apoiar não pode ser tomada.
-    const { bot } = buildCatalogue(content);
-    const supply = bot.supplies[0];
+  it('o consumível leva kind, price, group e restock no items[] (AB-09, RF-11)', () => {
+    // O editor de ação do AB-11 filtra por `kind` e mostra o preço de compra e a reposição. A
+    // poção é ITEM desde a AB-01: ela não está mais em `bot.supplies`, e sim em `items[]`.
+    const { items } = buildCatalogue(content);
+    const potion = items.find((item) => item.id === 'health-potion');
 
-    expect(supply).toBeDefined();
-    expect(Object.keys(supply ?? {}).sort()).toEqual(['effect', 'id', 'name', 'price', 'requires']);
-    expect(supply?.price).toBeGreaterThan(0);
+    expect(potion).toMatchObject({
+      kind: 'consumable', group: 'potion', price: 45, restock: { batch: 50, min: 10 },
+    });
   });
 
-  it('a runa leva os requisitos — level e magic level — e nunca o Base Power (#165)', () => {
+  it('a runa leva kind/group/restock e os requisitos — e nunca o Base Power (#165, AB-09)', () => {
     // A tela desabilita a runa abaixo do level, como faz com magia; o BP e a conversão são
     // balanceamento (invariante 4) e ficam fora.
     const { appearances: _placeholder, ...raw } = rawTestContent();
@@ -216,9 +234,9 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
         },
       ],
     };
-    const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
-    const rune = bot.supplies.find((s) => s.id === 'avalanche-rune');
-    expect(rune).toEqual({ id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 30, magicLevel: 4 } });
+    const { items } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
+    const rune = items.find((item) => item.id === 'avalanche-rune');
+    expect(rune).toMatchObject({ kind: 'consumable', price: 14, group: 'attack', restock: { batch: 20, min: 5 } });
     expect(JSON.stringify(rune)).not.toContain('basePower');
   });
 

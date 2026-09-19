@@ -517,6 +517,12 @@ export const itemSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   /**
+   * O rótulo curto da barra/Mochila (AB-13, #424). Opcional: só o item que precisa de uma
+   * forma abreviada o declara, e a tela cai no `name` quando ele falta. É APRESENTAÇÃO de
+   * texto, não arte (invariante 6).
+   */
+  shortLabel: z.string().min(1).optional(),
+  /**
    * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
    * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `ammo` é a
    * munição como ITEM empilhável (ADR 0032, decisão 7), com `ammunition` obrigatório.
@@ -1546,7 +1552,7 @@ export const botActionV2Schema = z.discriminatedUnion('kind', [
  * que está quase morto" e "bata no mais gordo primeiro" são estratégias diferentes, e escolher
  * entre elas é do jogador.
  */
-export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp']);
+export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp', 'follow']);
 
 /**
  * Como o personagem se POSICIONA em relação ao alvo (§13.6).

@@ -4,6 +4,7 @@ import {
   BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema, botSlotSchema,
 } from '@draconya/content';
 import { compileBot } from './bot.js';
+import { compileTargeting, selectTarget } from './targeting.js';
 import type { BotView, CooldownOfAction } from './bot.js';
 import { CharacterRuntime } from './character.js';
 
@@ -198,5 +199,19 @@ describe('compilar é o que torna a avaliação barata', () => {
     expect(when?.(v)).toBe(true);
     v.self = hero(90);
     expect(when?.(v)).toBe(false);
+  });
+});
+
+describe('a política `follow` cai na comparação `nearest` (AB-09, ADR 0032 d.5)', () => {
+  const monsters = [
+    { monsterId: 'longe', health: 100, alive: true, position: { x: 5, y: 0 } },
+    { monsterId: 'perto', health: 100, alive: true, position: { x: 1, y: 0 } },
+  ];
+
+  it('sem alvo escolhido, `follow` desempata pelo mais próximo — o fallback prometido', () => {
+    const targeting = compileTargeting({
+      policy: 'follow', prioritize: [], ignore: [], posture: { kind: 'stand' },
+    });
+    expect(selectTarget(targeting, monsters, { x: 0, y: 0 }, 8)?.monsterId).toBe('perto');
   });
 });

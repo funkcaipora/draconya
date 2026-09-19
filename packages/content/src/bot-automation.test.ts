@@ -9,8 +9,9 @@ import { validateBotConfigV2 } from './bot.js';
 import { buildContent, placeholderAppearances } from './content.js';
 import type { RawContent } from './content.js';
 import {
-  BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema,
+  BOT_AUTOMATION_MODELS, BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema,
 } from './schemas.js';
+import { BOT_AUTOMATION_CATALOGUE } from './bot-automation.js';
 import type { BotConfigV2 } from './schemas.js';
 
 const base: RawContent = {
@@ -144,5 +145,18 @@ describe('validateBotConfigV2 confere o slot de cada id de automação (AB-08)',
     ]), content);
     expect(problems[0]).toContain('nao-existe');
     expect(problems[0]).toContain('não existe');
+  });
+});
+
+describe('BOT_AUTOMATION_CATALOGUE descreve os cinco modelos (AB-09)', () => {
+  it('cobre todo modelo do vocabulário, com rótulo e parâmetros', () => {
+    // Um modelo novo sem descritor sumiria do painel do AB-12 em silêncio: o teste prende a
+    // cobertura, e o catálogo é o que a tela oferece.
+    expect(BOT_AUTOMATION_CATALOGUE.map((descriptor) => descriptor.model))
+      .toEqual([...BOT_AUTOMATION_MODELS]);
+    for (const descriptor of BOT_AUTOMATION_CATALOGUE) {
+      expect(descriptor.label.length).toBeGreaterThan(0);
+      expect(descriptor.params.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -67,9 +67,37 @@ export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
  * A hunt vem sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe
  * no protocolo. Ver o comentário de `catalogue` lá.
  */
-export type Catalogue = S2CProps<'catalogue'>;
+export type Catalogue = Omit<S2CProps<'catalogue'>, 'bot'> & { bot: BotVocabulary };
 export type HuntListing = Catalogue['hunts'][number];
-export type BotVocabulary = Catalogue['bot'];
+/**
+ * O vocabulário do bot no cliente.
+ *
+ * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09, mas quem os lê é a tela
+ * nova do AB-10/AB-11 — por isso são OPCIONAIS aqui até lá. `slots` e `supplies` são o
+ * vocabulário v1 que o `BotPanel`/`RuleEditor` antigos ainda leem, e que o catálogo v2 NÃO
+ * manda mais (RF-10): a UI antiga degrada para vazio até o AB-11 aposentá-la.
+ */
+export interface LegacyBotSupply {
+  readonly id: string;
+  readonly name: string;
+  readonly price: number;
+  readonly effect: string;
+  readonly requires: { readonly level?: number; readonly magicLevel?: number };
+}
+export interface BotVocabulary {
+  readonly vocabularyVersion: number;
+  readonly spells: S2CProps<'catalogue'>['bot']['spells'];
+  /** Vocabulário v2 (AB-09): a barra e os painéis novos leem; opcionais até o AB-10. */
+  readonly setCount?: number;
+  readonly slotsPerSet?: number;
+  readonly setNames?: readonly string[];
+  readonly hotkeys?: readonly string[];
+  readonly groups?: readonly string[];
+  readonly automations?: S2CProps<'catalogue'>['bot']['automations'];
+  /** Vocabulário v1 aposentado no AB-11. */
+  readonly slots?: Readonly<Record<string, number>>;
+  readonly supplies?: readonly LegacyBotSupply[];
+}
 export type ItemDefinition = Catalogue['items'][number];
 export type MonsterListing = Catalogue['monsters'][number];
 /** Os marcos e o bônus por marco (§18). Ausente do catálogo: o servidor não tem Bestiário. */

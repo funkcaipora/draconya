@@ -17,6 +17,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
+ * A detecção de "já é v2", compartilhada com o `server` (#424): o host precisa dela para saber
+ * se uma config que veio no ticket é dado NOVO a persistir (v1 migrada) ou já o vocabulário
+ * atual (v2 intacta). Uma segunda definição divergiria na primeira mudança de versão.
+ */
+export function isBotConfigV2(raw: unknown): boolean {
+  return isRecord(raw) && raw['version'] === BOT_VOCABULARY_VERSION;
+}
+
+/**
  * Converte uma configuração v1 salva para o vocabulário v2, de forma determinística.
  *
  * A ordem da migração é cura → poções → ataque → runas → suporte (a ordem de `BOT_CATEGORIES`),
@@ -29,7 +38,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
   // Idempotência ANTES do parse v1: o v1 não conhece `sets`, e o objeto v1 descartaria o v2 em
   // silêncio (zod remove chave desconhecida por padrão), produzindo uma config vazia.
-  if (isRecord(raw) && raw['version'] === BOT_VOCABULARY_VERSION) {
+  if (isBotConfigV2(raw)) {
     return botConfigV2Schema.parse(raw);
   }
 

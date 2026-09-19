@@ -266,9 +266,14 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
     type: 'catalogue',
     hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], ...hunt }],
     bot: {
-      vocabularyVersion: 1,
-      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-      spells: [], supplies: [],
+      vocabularyVersion: 2,
+      setCount: 4,
+      slotsPerSet: 24,
+      setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+      hotkeys: ['1'],
+      groups: [],
+      spells: [],
+      automations: [],
     },
     items: [],
   } as unknown as S2CMessage);
@@ -370,9 +375,14 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [],
       },
       items: [],
     };
@@ -394,9 +404,14 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [],
       },
       items: [],
       monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
@@ -420,9 +435,14 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [],
       },
       items: [],
       monsters: [{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }],
@@ -445,9 +465,14 @@ describe('the bestiary (FUN-113, §18)', () => {
       type: 'catalogue',
       hunts: [],
       bot: {
-        vocabularyVersion: 1,
-        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-        spells: [], supplies: [],
+        vocabularyVersion: 2,
+        setCount: 4,
+        slotsPerSet: 24,
+        setNames: ['Energia', 'Fogo', 'Gelo', 'Sagrado'],
+        hotkeys: ['1'],
+        groups: [],
+        spells: [],
+        automations: [],
       },
       items: [],
       monsters: [],
@@ -523,7 +548,11 @@ describe('vocation choice (#154)', () => {
     expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
     const catalogue = S2C_SCHEMAS.catalogue.parse({
       hunts: [], items: [],
-      bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
+      bot: {
+        vocabularyVersion: 2,
+        setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
+        spells: [], automations: [],
+      },
     });
     expect(catalogue.vocations).toEqual([]);
     expect(catalogue.vocationLevel).toBe(0);
@@ -882,3 +911,54 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
 });
 
 
+
+describe('slot intents and state (AB-09)', () => {
+  it('adds C2S 17/18 and S2C 30/31, without recycling the burned 14', () => {
+    // Invariante 5: os números vivem só aqui. O 14 está queimado desde o #420 (era o
+    // `select-ammo`) e esta task não o reintroduz.
+    expect(CLIENT_TO_SERVER['use-slot']).toBe(17);
+    expect(CLIENT_TO_SERVER['select-target']).toBe(18);
+    expect(SERVER_TO_CLIENT['slot-state']).toBe(30);
+    expect(SERVER_TO_CLIENT['slot-result']).toBe(31);
+    expect(BURNED_OPCODES_C2S).toContain(14);
+    expect(OPCODE_TO_NAME_C2S.has(14)).toBe(false);
+  });
+
+  it('is intention only: { set, slot } and { creatureId }, nothing resolved', () => {
+    // Invariante 4: o cliente diz QUAL slot e QUAL criatura; elegibilidade, dano, loot e
+    // posição são do servidor. O teto do fio repete o conteúdo (3 conjuntos − 1, 24 slots − 1).
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 0, slot: 23 }).success).toBe(true);
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 4, slot: 0 }).success).toBe(false);
+    expect(C2S_SCHEMAS['use-slot'].safeParse({ set: 0, slot: 24 }).success).toBe(false);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 7 }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: -1 }).success).toBe(false);
+  });
+
+  it('round trips slot-state and slot-result through the codec', () => {
+    const state: S2CMessage = {
+      type: 'slot-state',
+      slots: [
+        { set: 0, slot: 0, state: 'ready', remainingMs: 0 },
+        { set: 0, slot: 1, state: 'cooldown', remainingMs: 1500, reason: 'on-cooldown' },
+        { set: 0, slot: 2, state: 'blocked', remainingMs: 0, reason: 'not-enough-item' },
+        { set: 0, slot: 3, state: 'empty', remainingMs: 0 },
+      ],
+    };
+    const result: S2CMessage = {
+      type: 'slot-result', set: 0, slot: 1, ok: false, reason: 'Ainda em cooldown.',
+    };
+    expect(decodeS2C(encodeS2C(state))).toEqual([state]);
+    expect(decodeS2C(encodeS2C(result))).toEqual([result]);
+  });
+
+  it('rejects a slot-state outside the bar and an unknown state', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 24, state: 'ready', remainingMs: 0 }],
+    } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 0, state: 'quebrado', remainingMs: 0 }],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+});

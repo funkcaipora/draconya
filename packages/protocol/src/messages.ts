@@ -23,6 +23,16 @@ export const CLIENT_TO_SERVER = {
   'choose-vocation': 15,
   /** Mover um item entre lugares (#160, ADR 0026 decisão 6). */
   'move-item': 16,
+  /**
+   * Disparo manual de um slot da barra (AB-09, ADR 0032 d.3). INTENÇÃO: o cliente diz QUAL
+   * slot; elegibilidade, estoque, mana, cooldown e recusa são do servidor (invariante 4).
+   */
+  'use-slot': 17,
+  /**
+   * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
+   * criatura pelo id numérico do servidor; quem decide se é alvo válido é o servidor.
+   */
+  'select-target': 18,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -124,6 +134,15 @@ export const SERVER_TO_CLIENT = {
    * só `party-bag`/`party-state`/`party-settlement` fazem hoje.
    */
   'party-spending': 29,
+  /**
+   * O estado de cada slot do conjunto ATIVO (AB-09, ADR 0032 d.3). Só S2C: a CONTAGEM não vem
+   * aqui — ela é do `inventory` (invariante 4, o servidor manda o número, não a regra). Sai no
+   * attach e quando o par `(state, reason)` de algum slot muda; o `remainingMs` é o instante da
+   * entrega, e o cliente anima o cooldown localmente.
+   */
+  'slot-state': 30,
+  /** A resposta ao `use-slot` (AB-09, ADR 0032 d.3): `ok:false` carrega o motivo para o tooltip. */
+  'slot-result': 31,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

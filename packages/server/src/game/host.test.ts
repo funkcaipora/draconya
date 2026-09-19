@@ -4,7 +4,8 @@ import {
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem, itemSchema, placeholderAppearances,
+  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
+  itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
 import type { Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
@@ -16,7 +17,7 @@ import { SessionHost } from './host.js';
 import type { SessionHostOptions } from './host.js';
 import type { GameMetrics } from './metrics.js';
 import { FakeSocket } from './testing.js';
-import { CityShard, createCitySessionFactory, createSessionBuilder } from './sessions.js';
+import { CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder } from './sessions.js';
 import { buildCatalogue } from './catalogue.js';
 import {
   TEST_COMBAT, TEST_HUNT, TEST_MAP, TEST_PROGRESSION, TEST_ROUTE, TEST_WEAPON_FAMILIES, rawTestContent,
@@ -5351,5 +5352,179 @@ describe('o equipamento que o sim muda sozinho chega ao cliente (#421)', () => {
     expect(last?.type === 'inventory' && 'neck' in last.equipped).toBe(false);
     const session = host.sessionFor('hero');
     expect(session?.participants[0]?.inventory.equippedAt('neck')).toBeNull();
+  });
+});
+
+describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
+  /**
+   * Um host cuja sessão é uma HUNT DE VERDADE, com o `HuntRuleset` do `sim` e o conteúdo de
+   * teste. Os outros testes usam ruleset de contagem ou a Cidade, que não têm slot nenhum.
+   */
+  function realHunt(tanky = false, monsters = true) {
+    const raw = rawTestContent();
+    const shaped = {
+      ...raw,
+      // Sem spawn, a hunt não mata nada — e um abate reescreve os máximos pela TABELA
+      // (`retarget`), cujo `startingMana` de teste é zero. É o que o teste de slot-state
+      // precisa: o slot observado sem o bot gastá-lo e sem a tabela zerar a mana.
+      ...(monsters ? {} : {
+        routes: (raw.routes as Array<Record<string, unknown>>).map((route) => ({
+          ...route, spawnPoints: [],
+        })),
+      }),
+      ...(tanky ? {
+        monsters: (raw.monsters as Array<Record<string, unknown>>).map((m) =>
+          m['id'] === 'rat' ? { ...m, health: 100_000 } : m),
+      } : {}),
+    };
+    const content = buildContent(shaped as RawContent);
+    let now = 0;
+    const saved: Array<{ characterId: string; config: unknown }> = [];
+    const sessions: Session[] = [];
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      now: () => now,
+      monsterCatalog: content.monsters,
+      itemCatalog: content.items,
+      progression: content.progression,
+      skillCatalog: content.skills,
+      acceptBotConfig: createBotConfigValidator(content),
+      saveBotConfig: async (characterId, config) => { saved.push({ characterId, config }); },
+      createSession: (characterId) => {
+        const session = createHuntSession({
+          id: `hunt-${characterId}`, content, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+        });
+        session.enter(new CharacterRuntime({
+          id: characterId, position: { x: 1, y: 1, z: 7 },
+          health: 1_200, maxHealth: 1_200, mana: 50, maxMana: 50,
+          level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+        }));
+        sessions.push(session);
+        return session;
+      },
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+    const runFor = (ms: number, step = 100) => {
+      for (let t = 0; t < ms; t += step) { now += step; host.cycle(); }
+      host.flush();
+    };
+    const send = async (message: Parameters<typeof host.handle>[1]) => {
+      host.handle(viewer, message);
+      // `#configureBot` é assíncrono (grava a pendência): o ack só sai depois do await.
+      await Promise.resolve();
+      host.flush();
+    };
+    return { host, socket, viewer, runFor, send, saved, content, sessions };
+  }
+
+  const healConfig = {
+    version: 1,
+    heal: [{
+      when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'heal' },
+    }],
+    potion: [], attack: [], rune: [], support: [],
+  };
+
+  /** A mesma magia, mas fora do automático: o teste observa o slot pronto sem o bot gastá-lo. */
+  const manualHealConfig = () => {
+    const config = migrateBotConfigV1(healConfig);
+    config.sets[0]!.slots[0] = { ...config.sets[0]!.slots[0]!, auto: false };
+    return config;
+  };
+
+  it('na Cidade (ruleset sem `useSlot`) responde ok:false com motivo, nunca em silêncio (RF-02)', async () => {
+    const content = testContent();
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      createSession: createCitySessionFactory(content),
+    });
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, 'hero');
+
+    host.handle(viewer, { type: 'use-slot', set: 0, slot: 0 });
+    host.flush();
+
+    expect(socket.received()).toContainEqual({
+      type: 'slot-result', set: 0, slot: 0, ok: false, reason: 'Você não está numa caçada.',
+    });
+  });
+
+  it('em hunt, com mana, executa e devolve ok:true mais player-stats (RF-02)', async () => {
+    const { socket, send } = realHunt();
+    await send({ type: 'bot-config', config: healConfig });
+    await send({ type: 'use-slot', set: 0, slot: 0 });
+
+    expect(socket.received()).toContainEqual({ type: 'slot-result', set: 0, slot: 0, ok: true });
+    // A ação mudou mana: o `player-stats` sai na hora, sem esperar o ciclo.
+    const stats = socket.received().filter((m) => m.type === 'player-stats').at(-1);
+    expect(stats?.type === 'player-stats' && stats.mana).toBe(30);
+  });
+
+  it('select-target muda o player-stats.targetId; id inválido não muda nada (RF-05)', async () => {
+    const { host, socket, viewer, runFor, send } = realHunt(true);
+    // Um tique para o rato nascer, e o estado completo para descobrir o id numérico dele.
+    runFor(200);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    const state = socket.received().filter((m) => m.type === 'session-state').at(-1);
+    if (state?.type !== 'session-state') throw new Error('não veio session-state');
+    const rat = state.world.creatures.find((c) => c.name === 'Rat');
+    expect(rat).toBeDefined();
+    const ratId = rat?.id as number;
+
+    await send({ type: 'select-target', creatureId: ratId });
+    const chosen = socket.received().filter((m) => m.type === 'player-stats').at(-1);
+    expect(chosen?.type === 'player-stats' && chosen.targetId).toBe(ratId);
+
+    // Id inventado é ignorado em silêncio: nenhum `player-stats` novo.
+    const before = socket.received().filter((m) => m.type === 'player-stats').length;
+    await send({ type: 'select-target', creatureId: 999_999 });
+    expect(socket.received().filter((m) => m.type === 'player-stats')).toHaveLength(before);
+  });
+
+  it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {
+    const { socket, runFor, send } = realHunt(false, false);
+    await send({ type: 'bot-config', config: manualHealConfig() });
+
+    runFor(500);
+    const primeiro = socket.received().filter((m) => m.type === 'slot-state');
+    expect(primeiro).toHaveLength(1);
+    // 24 entradas do conjunto ativo (RF-07), com a magia pronta.
+    expect((primeiro[0] as { slots: unknown[] }).slots).toHaveLength(24);
+
+    // N ciclos sem mudança não geram banda: o `remainingMs` não é gatilho.
+    runFor(500);
+    expect(socket.received().filter((m) => m.type === 'slot-state')).toHaveLength(1);
+
+    // A magia sai e o slot entra em cooldown: um novo `slot-state`.
+    await send({ type: 'use-slot', set: 0, slot: 0 });
+    runFor(200);
+    const segundo = socket.received().filter((m) => m.type === 'slot-state');
+    expect(segundo).toHaveLength(2);
+    const slots = (segundo[1] as { slots: Array<{ state: string; remainingMs: number }> }).slots;
+    expect(slots[0]).toMatchObject({ state: 'cooldown' });
+    expect(slots[0]?.remainingMs).toBeGreaterThan(0);
+  });
+
+  it('ticket v1 entra migrado e é PERSISTIDO como v2; ticket v2 não é regravado (RF-12, DT-07)', async () => {
+    const content = testContent();
+    const saved: unknown[] = [];
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: content.version, logger,
+      acceptBotConfig: createBotConfigValidator(content),
+      saveBotConfig: async (_id, config) => { saved.push(config); },
+      createSession: createCitySessionFactory(content),
+    });
+
+    // v1 no ticket: o `game` migra e grava a v2 pelo caminho write-behind do ADR 0028.
+    await host.prepare('p1', { level: 8, xp: 0, botConfig: healConfig }, 'a1');
+    expect(saved).toHaveLength(1);
+    expect((saved[0] as { version: number }).version).toBe(BOT_VOCABULARY_VERSION);
+
+    // v2 no ticket: já é o vocabulário atual, não há dado novo a persistir.
+    const v2 = migrateBotConfigV1(healConfig);
+    await host.prepare('p2', { level: 8, xp: 0, botConfig: v2 }, 'a2');
+    expect(saved).toHaveLength(1);
   });
 });

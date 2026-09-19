@@ -11,7 +11,7 @@ import { BOT_CONDITION_KINDS } from '@draconya/content';
 import type { BotCategory, BotCondition, BotRule } from '@draconya/content';
 import { bot, putRule } from '../bot/store.js';
 import { useStoreSlice } from '../state/useSlice.js';
-import type { BotVocabulary } from '../state/hud.js';
+import type { BotVocabulary, LegacyBotSupply } from '../state/hud.js';
 import { CONDITION_TEXT } from './rule-text.js';
 import { CATEGORY_TEXT } from './BotPanel.js';
 import { Modal } from './ui/Modal.js';
@@ -35,9 +35,9 @@ export function blankCondition(kind: string): BotCondition {
  * é supply de dano — a divisão é pelo `effect` do catálogo, não por lista de ids —, e o resto
  * é magia. `null` é magia.
  */
-export function suppliesFor(category: BotCategory, vocabulary: BotVocabulary): BotVocabulary['supplies'] | null {
-  if (category === 'potion') return vocabulary.supplies.filter((supply) => supply.effect !== 'damage');
-  if (category === 'rune') return vocabulary.supplies.filter((supply) => supply.effect === 'damage');
+export function suppliesFor(category: BotCategory, vocabulary: BotVocabulary): readonly LegacyBotSupply[] | null {
+  if (category === 'potion') return (vocabulary.supplies ?? []).filter((supply) => supply.effect !== 'damage');
+  if (category === 'rune') return (vocabulary.supplies ?? []).filter((supply) => supply.effect === 'damage');
   return null;
 }
 
@@ -127,7 +127,7 @@ export function RuleEditor({ category, index, initial, vocabulary, level, vocati
   // A meta "slot N/M" (RF-06): N é a posição 1-based (a nova entra no FIM da categoria — mesma
   // regra de sempre, §13.4); M é o teto do catálogo, igual ao "n/slots" do cabeçalho da Category.
   const rules = useStoreSlice(bot, (state) => state.draft.rules[category]);
-  const slots = vocabulary.slots[category] ?? 0;
+  const slots = vocabulary.slots?.[category] ?? 0;
   const slotNumber = (index ?? rules.length) + 1;
 
   return (

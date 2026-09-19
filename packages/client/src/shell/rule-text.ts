@@ -32,7 +32,7 @@ export function actionText(action: BotAction, vocabulary: BotVocabulary): string
     return vocabulary.spells.find((spell) => spell.id === action.spellId)?.name ?? action.spellId;
   }
   if (action.kind === 'supply') {
-    return vocabulary.supplies.find((supply) => supply.id === action.supplyId)?.name ?? action.supplyId;
+    return (vocabulary.supplies ?? []).find((supply) => supply.id === action.supplyId)?.name ?? action.supplyId;
   }
   return action.itemId;
 }
