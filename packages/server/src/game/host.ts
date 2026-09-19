@@ -1606,6 +1606,11 @@ export class SessionHost {
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
           continue;
+        case 'follow-state':
+          // O `sim` já produz o evento (#398); serializá-lo no fio é o #401. Até lá ele é
+          // consumido sem mensagem — a união precisa ser tratada, e ignorar é a opção que
+          // não inventa protocolo.
+          continue;
         case 'creature-moved':
           break;
       }
@@ -2027,6 +2032,9 @@ export class SessionHost {
         message = { type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })) };
         break;
       case 'member-left':
+        return;
+      case 'follow-state':
+        // Roteado no fio pelo #401; aqui a união precisa estar fechada.
         return;
     }
     for (const viewer of hosted.viewers) viewer.send(message);

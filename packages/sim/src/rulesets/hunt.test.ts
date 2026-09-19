@@ -4577,6 +4577,242 @@ describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
   });
 });
 
+describe('follow de membro (§D10, #398)', () => {
+  // O follow substitui a ROTA, não o combate: passo guloso até ficar adjacente (distância 1,
+  // Chebyshev), parado quando já está. Para o alvo ficar PARADO no teste, o passo dele é
+  // cancelado da fila (`stand`) — quem o seguidor persegue é um membro que não anda.
+  const followContent = (over: Partial<RawContent> = {}): Content => buildContent(raw({
+    routes: [{ ...route, spawnPoints: [] }],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...over,
+  }));
+
+  const member = (id: string): CharacterRuntime => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+
+  const chebyshev = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
+    Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+  /** Anda um membro à mão, um tile por vez, até `to` — a ocupação do mundo acompanha. */
+  const walkTo = (session: Session, ruleset: HuntRuleset, id: string, to: { x: number; y: number }): void => {
+    const c = session.participants.find((p) => p.id === id);
+    if (c === undefined) throw new Error(`sem participante ${id}`);
+    let guard = 0;
+    while ((c.position.x !== to.x || c.position.y !== to.y) && guard++ < 20) {
+      const dx = Math.sign(to.x - c.position.x);
+      const dy = Math.sign(to.y - c.position.y);
+      const result = ruleset.requestMove(session, id, { x: c.position.x + dx, y: c.position.y + dy });
+      if (!result.ok) throw new Error(`requestMove recusou: ${result.reason}`);
+    }
+  };
+
+  /** Trava o membro no tile: o passo dele não vence mais. */
+  const stand = (session: Session, id: string): void => { session.cancelEvent('player-step', id); };
+
+  const followSession = (over: {
+    botConfigs?: Record<string, BotConfig>;
+    partyOptions?: PartyOptionsInput;
+    content?: Content;
+  } = {}) => {
+    const session = createHuntSession({
+      id: 'follow-session', content: over.content ?? followContent(),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
+      ...(over.partyOptions === undefined ? {} : { partyOptions: over.partyOptions }),
+    });
+    return { session, ruleset: session.ruleset as HuntRuleset };
+  };
+
+  const followStates = (session: Session) => session.drainEvents()
+    .filter((e): e is Extract<DomainEvent, { kind: 'follow-state' }> => e.kind === 'follow-state');
+
+  it('member: atravessa o corredor até ficar adjacente e para — 1 Hz == 10 Hz', () => {
+    const scenario = (hz: number) => {
+      const { session, ruleset } = followSession({
+        botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      });
+      session.enter(member('a'));
+      session.enter(member('b'));
+      walkTo(session, ruleset, 'b', { x: 4, y: 1 });
+      stand(session, 'b');
+
+      run(session, 5_000, 1000 / hz);
+
+      const a = session.participants.find((p) => p.id === 'a');
+      const b = session.participants.find((p) => p.id === 'b');
+      if (a === undefined || b === undefined) throw new Error('a sessão perdeu um membro');
+      return { a: { ...a.position }, b: { ...b.position }, states: followStates(session) };
+    };
+
+    const rapido = scenario(10);
+    expect(rapido.b).toEqual({ x: 4, y: 1, z: 7 });
+    // Parou em (3,1): adjacente a (4,1), sem tentar pisar em cima do alvo.
+    expect(rapido.a).toEqual({ x: 3, y: 1, z: 7 });
+    // Nunca interrompeu: transição para um estado que já era o ativo não emite.
+    expect(rapido.states).toHaveLength(0);
+    expect(scenario(1)).toEqual(rapido);
+  });
+
+  it('combate continua com o follow ativo, sem interromper o follow', () => {
+    // O rato da fixture nasce em (4,2), adjacente ao alvo parado em (4,1). O seguidor chega a
+    // (3,1) e bate sem soltar o follow — o combate, não o follow, decide parar para bater.
+    const { session, ruleset } = followSession({
+      content: content(),
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+    });
+    session.enter(member('a'));
+    session.enter(member('b'));
+    walkTo(session, ruleset, 'b', { x: 4, y: 1 });
+    stand(session, 'b');
+
+    run(session, 10_000, 100);
+
+    const a = session.participants.find((p) => p.id === 'a');
+    const b = session.participants.find((p) => p.id === 'b');
+    if (a === undefined || b === undefined) throw new Error('a sessão perdeu um membro');
+    expect(session.aggregatesOf('a').bestBasicHit).toBeGreaterThan(0);
+    // Nenhuma interrupção falsa por causa do combate: `follow-state` só sai em transição.
+    expect(followStates(session).filter((e) => !e.active)).toHaveLength(0);
+    expect(chebyshev(a.position, b.position)).toBe(1);
+  });
+
+  it('alvo morto: interrompe UMA vez com reason dead e o seguidor volta à rota', () => {
+    const { session, ruleset } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    const a = member('a');
+    const b = member('b');
+    session.enter(a);
+    session.enter(b);
+    walkTo(session, ruleset, 'b', { x: 4, y: 1 });
+    stand(session, 'b');
+
+    session.kill(b);
+
+    const first = followStates(session);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ characterId: 'a', active: false, targetId: 'b', reason: 'dead' });
+
+    // 50 vencimentos depois, ainda é o MESMO único evento, e `a` anda a rota — nunca escolhe
+    // outro alvo sozinho (§25.1).
+    run(session, 5_000, 100);
+    expect(followStates(session)).toHaveLength(0);
+    expect(route.tiles.some((t) => t.x === a.position.x && t.y === a.position.y)).toBe(true);
+  });
+
+  it('alvo que sai vivo: mesmo evento com reason left', () => {
+    const { session } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    session.enter(member('a'));
+    session.enter(member('b'));
+
+    session.leave('b', 'manual-exit');
+
+    // `character.alive` é lido ANTES de `Session.leave` remover o participante: é o que separa
+    // 'left' de 'dead'.
+    expect(followStates(session)).toEqual([
+      expect.objectContaining({ characterId: 'a', active: false, targetId: 'b', reason: 'left' }),
+    ]);
+  });
+
+  it('alvo fora do raio: unreachable uma vez, e retoma quando volta ao alcance', () => {
+    const radius2 = followContent({
+      bot: [{
+        id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+        slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 }, targetSearchRadius: 2,
+      }],
+    });
+    const { session, ruleset } = followSession({
+      content: radius2,
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+    });
+    const a = member('a');
+    const b = member('b');
+    session.enter(a);
+    session.enter(b);
+    walkTo(session, ruleset, 'b', { x: 4, y: 1 });
+    stand(session, 'b');
+
+    // (1,1) → (4,1) é distância 3, acima do raio 2: interrompe na primeira avaliação.
+    session.advanceBy(100);
+    expect(followStates(session)).toEqual([
+      expect.objectContaining({ active: false, targetId: 'b', reason: 'unreachable' }),
+    ]);
+
+    // "Temporariamente inacessível": volta a ficar ao lado — retoma.
+    walkTo(session, ruleset, 'b', { x: a.position.x, y: a.position.y === 1 ? 2 : 1 });
+    stand(session, 'b');
+    run(session, 1_000, 100);
+
+    const resumed = followStates(session);
+    expect(resumed).toHaveLength(1);
+    expect(resumed[0]).toMatchObject({ active: true, targetId: 'b' });
+  });
+
+  it('leader: a troca de líder muda o alvo do follow sem reconfigurar o bot', () => {
+    const { session, ruleset } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'leader' } }) },
+      partyOptions: { leaderId: 'L', mode: 'split' },
+    });
+    const c = member('c');
+    const lead = member('L');
+    const a = member('a');
+    session.enter(c);
+    // `c` é o mais antigo e fica parado num canto; ao sair o líder, a liderança cai nele.
+    walkTo(session, ruleset, 'c', { x: 4, y: 1 });
+    stand(session, 'c');
+    session.enter(lead);
+    stand(session, 'L');
+    session.enter(a);
+
+    session.leave('L', 'manual-exit');
+    run(session, 5_000, 100);
+
+    const states = followStates(session);
+    expect(states.some((e) => !e.active && e.targetId === 'L' && e.reason === 'left')).toBe(true);
+    expect(states.filter((e) => e.active).at(-1)?.targetId).toBe('c');
+    const aa = session.participants.find((p) => p.id === 'a');
+    if (aa === undefined) throw new Error('a sessão perdeu o seguidor');
+    expect(chebyshev(aa.position, { x: 4, y: 1 })).toBe(1);
+  });
+
+  it('followInterrupted sobrevive ao snapshot, e some quando false', () => {
+    const { session, ruleset } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    session.enter(member('a'));
+    session.enter(member('b'));
+    session.kill(session.participants.find((p) => p.id === 'b') as CharacterRuntime);
+
+    expect(ruleset.getState().runners?.['a']?.followInterrupted).toBe(true);
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, followContent()) as HuntRuleset, Rng.fromSeed('x'),
+    );
+    expect((restored.ruleset as HuntRuleset).getState().runners?.['a']?.followInterrupted).toBe(true);
+  });
+
+  it('sem interrupção, followInterrupted nem aparece no estado serializado', () => {
+    const { session, ruleset } = followSession({});
+    session.enter(member('a'));
+    const runners = ruleset.getState().runners ?? {};
+    expect('followInterrupted' in (runners['a'] ?? {})).toBe(false);
+  });
+});
+
 describe('XP em party (#190, ADR 0027 decisão 3)', () => {
   // Rato de 100 XP, para a tabela do plano (§3.3) ler direto: 4 únicas → 50 cada; 2 knights →
   // 62; knight + sem vocação → 75; 4 únicas com um morto → 58 para os três vivos. E o abate
