@@ -1,6 +1,6 @@
 # 0032 — A imagem decide: o HUD renderizado do kit é o contrato do jogo, não só da tela
 
-**Status:** aceito
+**Status:** aceito; emendado pelo [ADR 0033](0033-action-catalogue-carries-display-numbers.md) (régua do `ActionConfigModal`)
 **Data:** 2026-09-18
 **Contexto técnico:** `packages/content` (suprimentos e munição abstratos, moedas, cargas,
 vocabulário v2 do bot, postura, skills por família, soul, loja), `packages/sim` (motor de slots,

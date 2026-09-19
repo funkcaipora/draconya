@@ -153,9 +153,9 @@ automático do slot.
 
 ### AB-11 · ActionConfigModal
 **Objetivo:** configurar um slot — ação do catálogo (magia ou suprimento), condições em E, tecla,
-chave automática — no modal do kit.
+chave automática — no modal cuja régua é a imagem de referência `docs/kit-reference/41-modal-action-config-reference.png` (issue #435), ADR 0033.
 **Critério de aceite:**
-- Igual à captura 34 (`NumField` = `Input` numérico pequeno); salvar envia `bot-config`.
+- Fiel à imagem de referência (`NumField` = `Input` numérico pequeno); salvar envia `bot-config`.
 - Tecla já usada no conjunto é recusada com mensagem; valor fora de faixa bloqueia o salvar.
 - Testes por `prerender` cobrindo slot vazio, slot de magia e slot de suprimento.
 
