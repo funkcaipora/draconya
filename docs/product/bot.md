@@ -1,9 +1,9 @@
 # Bot
 
 **Status:** parcial — vocabulário v2 (`sets[4] × slots[24]`, AB-03), motor por grupo de cooldown
-(AB-07), automações (AB-08), estoque com reposição por lote (AB-04), intenções `use-slot`/
-`select-target` e migração v1→v2 (AB-09), barra de ações e painel de Automações (AB-10…AB-13)
-implementados; postura (`stance`) e moedas são M21/M22
+(AB-07), automações (AB-08), suprimento abstrato com gold no uso (AB-04), intenções `use-slot`/
+`select-target`/`select-ammo` e migração v1→v2 (AB-09), barra de ações e painel de Automações
+(AB-10…AB-13) implementados; postura (`stance`) e moedas são M21/M22
 **PRD:** §13, §43.3
 **Épico:** E4
 
@@ -12,16 +12,16 @@ implementados; postura (`stance`) e moedas são M21/M22
 A automação é parte oficial do produto e roda inteiramente no servidor — o jogador configura a
 **barra de ações**, e a hunt continua funcionando com o navegador fechado. A configuração é o
 **vocabulário v2** (ADR 0032 decisão 1): quatro **conjuntos** (loadouts) de 24 slots cada, um
-deles ativo. Cada slot guarda uma ação — magia (`spell`) ou item consumível (`item`) —, uma lista
-de condições ligadas por **E**, a tecla de atalho, a chave "automática" e a reposição por lote.
-Não existe trava de level: tudo vale desde o level 1 (ADR 0032 decisão 4).
+deles ativo. Cada slot guarda uma ação — magia (`spell`) ou suprimento (`supply`) —, uma lista
+de condições ligadas por **E**, a tecla de atalho e a chave "automática". Não existe trava de
+level: tudo vale desde o level 1 (ADR 0032 decisão 4).
 
 O motor não tem mais categorias independentes. A **ordem do slot é a prioridade** (fileira 1 da
 esquerda para a direita, depois a fileira 2) e a **cadência é o grupo de cooldown do conteúdo**
-(`attack`/`healing`/`support` para magia, mais `potion` e `attack` para item). A cada grupo
-pronto, os slots ligados são tentados em ordem; o primeiro que consegue executar tranca o grupo
-pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
-estoque, sem alvo, ou em cooldown individual.
+(`attack`/`healing`/`support` para magia, mais `potion` para poção e `attack` para runa). A cada
+grupo pronto, os slots ligados são tentados em ordem; o primeiro que consegue executar tranca o
+grupo pelo cooldown dele, e quem não consegue agora é **pulado no mesmo ciclo** — sem mana, sem
+gold, sem alvo, ou em cooldown individual.
 
 O jogador também administra targeting: mirar no alvo mais próximo, no de menor ou maior HP, ou
 no alvo que ele escolheu clicando no mundo; priorizar ou ignorar criaturas específicas; e a
@@ -33,17 +33,17 @@ de **entrada em OU** e de **saída em E**.
 
 Por fim, quatro regras de saída configuráveis encerram a hunt: HP abaixo de um percentual, gold
 zerado, membro da party perdido e capacidade estourada. Sem a regra de gold, o personagem fica na
-hunt sem estoque e sem gold para repor, e pode morrer.
+hunt sem gold para pagar o próximo supply e pode morrer.
 
 ## Regras
 
 - Vocabulário v2: `sets[4] × slots[24]`, `activeSet` (0–3), `hotkey` opcional e única dentro do
-  conjunto, `auto` (ausente é ligada) e `restock { batch, min }` opcional.
+  conjunto e `auto` (ausente é ligada).
 - Sem categorias e sem prioridade global: a ordem do slot é a prioridade, e o cooldown é o
   **grupo do conteúdo** da ação.
 - Condições: `hp`, `mana`, `targets`, `target-hp` e `condition` (efeito ativo/ausente), com
   operadores `<`, `<=`, `>`, `>=`. `when` vazio é elegível sempre.
-- Ações: `spell` e `item` (consumível). O token `supply` do v1 não existe mais.
+- Ações: `spell` e `supply`. O token `item` do v1 não existe mais.
 - A tecla dispara `use-slot` na hora, ignorando `when` e `auto`; `enabled: false` continua
   valendo, e `auto: false` tira o slot do ciclo automático sem desligar a tecla.
 - Sem trava de level (ADR 0032 d.4).
@@ -53,8 +53,8 @@ hunt sem estoque e sem gold para repor, e pode morrer.
   id de monstro; postura `stand` (padrão), `follow`, `keep-distance`.
 - Regras de saída: `hp-below`, `out-of-gold`, `party-member-lost`, `out-of-capacity`, com teto de
   4 slots em `bot/baseline.json`.
-- Consumível usado decrementa a pilha; abaixo do `min`, o bot repõe `batch` ao preço do conteúdo
-  por um lançamento `purchase` no ledger.
+- Usar um supply debita o `price` do gold na hora (`useSupply`); o saldo nunca fica negativo, e a
+  garantia é a ordem — o débito é recusado antes, não corrigido depois.
 - Personagem sem configuração não agenda nada.
 
 ## O vocabulário, por inteiro (AB-03, ADR 0032 d.1)
@@ -88,20 +88,22 @@ dispara, e é a armadilha que faz o jogador achar que configurou cura e não ter
 | `kind` | Campo | Catálogo |
 |---|---|---|
 | `spell` | `spellId` | `packages/content/data/spells/*.json` (FUN-74) |
-| `item` | `itemId` | `packages/content/data/items/*.json` — consumível (`kind: 'consumable'`) |
+| `supply` | `supplyId` | `packages/content/data/supplies/*.json` (FUN-77) — poção e runa |
 
-O token `supply` da v1 saiu com o AB-01/AB-03 (ADR 0032 d.6): poção, runa e carga de bênção são
-itens empilháveis, e a ação usa o `itemId` direto (ver `items.md`).
+O token `item` da v1 saiu com o AB-03 (ADR 0032 d.6): poção e runa voltaram a ser **suprimento
+abstrato**, com `price`, `effect`, `requires` e `group` em `data/supplies/`, e o gold é debitado
+no uso (ver `economy.md`). A carga de bênção continua item `kind: 'consumable'`, mas quem a
+consome é a TP-03 (M22), não o bot.
 
 Toda regra pode carregar `enabled: false` (#162): fica no slot, sai da avaliação. Ausente é
 ligada. `auto: false` é outra coisa — o slot não entra no ciclo automático, mas a tecla continua
 disparando.
 
 A referência cruzada acontece na **validação**, nunca na execução: `validateBotConfigV2` confere
-cada `spellId` e `itemId` contra o catálogo e devolve o problema com o conjunto e o número do
+cada `spellId` e `supplyId` contra o catálogo e devolve o problema com o conjunto e o número do
 slot. Uma regra que aponta magia inexistente e só falha ao ser disparada é o bot que para de
 curar sem explicação — o formato exato que este vocabulário existe para impedir. A validação
-também recusa tecla repetida dentro do conjunto e `restock` em slot de magia.
+também recusa tecla repetida dentro do conjunto.
 
 ### Exemplo
 
@@ -114,9 +116,9 @@ também recusa tecla repetida dentro do conjunto e `restock` em slot de magia.
       { "do": { "kind": "spell", "spellId": "heal" },
         "when": [{ "kind": "hp", "op": "<=", "percent": 30 }],
         "hotkey": "1", "auto": true },
-      { "do": { "kind": "item", "itemId": "mana-potion" },
+      { "do": { "kind": "supply", "supplyId": "mana-potion" },
         "when": [{ "kind": "mana", "op": "<", "percent": 20 }],
-        "hotkey": "2", "auto": true, "restock": { "batch": 50, "min": 10 } },
+        "hotkey": "2", "auto": true },
       null, null, null, null, null, null, null, null, null, null, null, null,
       null, null, null, null, null, null, null, null, null
     ] },
@@ -138,8 +140,8 @@ também recusa tecla repetida dentro do conjunto e `restock` em slot de magia.
   `defaultConfig` v1 legado, as baselines v2 por vocação e o cooldown de fallback
   (`categoryCooldownMs`, ainda lido pelo motor v2 como o intervalo padrão de um grupo sem
   cooldown próprio).
-- Os **grupos de cooldown** vêm de `spell.group` (`data/spells/*.json`) e `item.group`
-  (`data/items/*.json`).
+- Os **grupos de cooldown** vêm de `spell.group` (`data/spells/*.json`) e `supply.group`
+  (`data/supplies/*.json`).
 
 ## Como a regra vira decisão (FUN-80, AB-07)
 
@@ -185,7 +187,7 @@ nada. Reavaliar é imediato quando o personagem **leva dano** ou quando uma aç�
 mana ou gold — esperar o próximo múltiplo de um relógio para curar quem está caindo custa a vida
 do personagem.
 
-**Atuador que recusa por falta não consome o cooldown.** Sem mana, sem item, sem alvo ou fora de
+**Atuador que recusa por falta não consome o cooldown.** Sem mana, sem gold, sem alvo ou fora de
 alcance, a ação não aconteceu e o **próximo slot do mesmo grupo tenta agora**. A recusa por
 **cooldown** é a exceção: ela carrega o prazo (`retryInMs`) e o grupo é reagendado para o
 vencimento do livro que trancou — cooldown melhora com o tempo, e um grupo engatilhado por isso
@@ -204,9 +206,9 @@ por cooldown.
 | Teclas válidas | 1–9, 0, F1–F12 (22 para 24 slots) | `packages/content/src/schemas.ts`, `BOT_HOTKEYS` |
 | Cooldown de fallback de um grupo | 1 s | `packages/content/data/bot/baseline.json`, `categoryCooldownMs` |
 | Grupo de cooldown por magia | `attack` / `healing` / `support` | `packages/content/data/spells/*.json`, campo `group` |
-| Grupo de cooldown por item | `potion` / `attack` / `support` | `packages/content/data/items/*.json`, campo `group` |
-| Reposição por item — lote / mínimo | poção de vida 50 / 10; poção de mana 50 / 10; avalanche 20 / 5; bênção 1 / 0; arrow 100 / 20 `[ABERTO — provisório]` | `packages/content/data/items/*.json`, campo `restock`; override por slot em `bot_config` |
-| Preço de compra do consumível | poção de vida 45; poção de mana 50; avalanche 14; bênção 0; arrow 1 `[ABERTO — provisório]` | `packages/content/data/items/*.json`, campo `price` |
+| Grupo de cooldown por supply | `potion` / `attack` | `packages/content/data/supplies/*.json`, campo `group` |
+| Preço do supply (gold no uso) | poção de vida 45; poção de mana 50; avalanche 14 `[ABERTO — provisório]` | `packages/content/data/supplies/*.json`, campo `price` |
+| Preço do tiro de munição | arrow 1; burst arrow 3; sniper arrow 5; onyx arrow 7 `[ABERTO — provisório]` | `packages/content/data/ammunition/*.json`, campo `price` |
 | Raio de busca de alvo | 8 tiles | `packages/content/data/bot/baseline.json`, `targetSearchRadius` |
 | Teto de regras de saída | 4 | `packages/content/data/bot/baseline.json`, `slots.exit` |
 | Baseline v2 por vocação (slots + automações) | cavaleiro: arma/escudo por vida; paladino: munição por alvos; sorcerer: renovar anel; druid: renovar colar `[ABERTO — provisório]` | `packages/content/data/bot/baseline.json`, `defaultConfigByVocation` |
@@ -246,23 +248,21 @@ cavaleiro: arma/escudo por vida). `defaultConfigByVocation` está em
 gravando `content.bot.defaultConfig` (v1, genérico), migrado para v2 na entrada. As baselines v2
 por vocação ainda não são consumidas pelo `server`.
 
-**Reposição de munição exige a munição num slot de item.** `#configuredConsumables` lê os slots
-do conjunto ativo; a munição só entra na reposição se um slot tiver `do.itemId` apontando para
-ela (a ação em si é inerte: o `sim` não "usa" munição por slot — quem a consome é a arma). O
-`defaultConfigByVocation` do paladino declara só a automação `swap-ammo-by-targets`, então um
-paladino novo só repõe munição se o jogador puser a flecha num slot.
+**A migração v1→v2 mapeia o token `supply` para `supply`.** A configuração v1 salva (suprimento
+abstrato) volta a apontar para `supplyId` em `data/supplies/`, e as baselines v2 por vocação também
+usam `supply`. O token `item` do vocabulário intermediário (AB-01/AB-03) não existe mais.
 
-## Histórico: decidido (ADR 0026), substituído pelo ADR 0032
+## Histórico: decidido (ADR 0026), incorporado pelo ADR 0032
 
 - **A tela vira um painel fixo na coluna da esquerda** (decisão 7). O painel v1 (`BotPanel`/
   `RuleEditor`) foi **aposentado no M18**: a barra de ações é a configuração, e o painel de
   Automações a substitui. `enabled` opcional e ausente é ligada continua valendo.
-- **A categoria `rune` ganha o que lançar** (decisão 8) — **substituída pelo ADR 0032 d.6**: a
-  Avalanche é item consumível de `data/items/avalanche-rune.json`, e a ação `item` a lança.
-- **Munição é seleção, não item** (decisão 3) — **substituída pelo ADR 0032 d.7**: flecha e
-  virote são itens empilháveis no slot `ammo`.
+- **A categoria `rune` ganha o que lançar** (decisão 8): a Avalanche é o suprimento
+  `avalanche-rune` de `data/supplies/`, e a ação `supply` a lança, com o gold debitado no uso.
+- **Munição é seleção, não item** (decisão 3): flecha e virote são selecionadas por família, com
+  `price` por tiro e level gate; o slot do Escudo mostra a escolhida e o `AmmoPicker` a troca.
 
-## Quem executa: magia e item (FUN-74, AB-01, AB-04)
+## Quem executa: magia e suprimento (FUN-74, AB-04)
 
 O atuador embutido é a **própria hunt**, e não uma classe à parte. Tudo o que ele precisa já está
 lá: o alvo mais próximo, o RNG semeado da sessão, o relógio lógico e o pipeline de morte. Uma
@@ -274,10 +274,9 @@ O que ele faz, por tipo de ação:
 |---|---|---|
 | `spell` com efeito `heal` | repõe HP do lançador, debita mana, inicia o cooldown da magia | level, vocação, cooldown, mana |
 | `spell` com efeito `damage` | resolve o dano por `resolveDamage` com `kind: 'magic'`, aplica no alvo e **atribui** (`recordDamage`) | level, vocação, cooldown, sem alvo, fora de alcance, mana |
-| `item` consumível `heal`/`mana` | repõe HP ou mana e **decrementa a pilha** — sem débito de gold no uso | sem estoque |
-| `item` consumível `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **decrementa a pilha** | level, magic level, sem alvo, fora de alcance, sem estoque |
+| `supply` `heal`/`mana` | repõe HP ou mana e **debita `price` do gold** no ato | sem gold |
+| `supply` `damage` (runa) | mira como a magia em área, escala pelo magic level, aplica pelo mesmo `#applyHits` e **debita `price` do gold** | level, magic level, sem alvo, fora de alcance, sem gold |
 | `item` com efeito `blessing` | nada — quem o executa é a TP-03 (M22) | sempre |
-| `item` de munição | nada — quem consome a munição é a arma, por tiro | sempre |
 
 Três coisas que não podem mudar sem pensar duas vezes:
 
@@ -291,22 +290,18 @@ Três coisas que não podem mudar sem pensar duas vezes:
   duas vezes.
 
 O saldo que a sessão enxerga é **o gold de entrada mais o delta da sessão**: o loot desta hunt já
-dá para virar poção sem passar pelo banco. O saldo nunca fica negativo, e a garantia é a ordem —
-a compra é recusada antes, não corrigida depois.
+dá para pagar a próxima poção sem passar pelo banco. O saldo nunca fica negativo, e a garantia é a
+ordem — o débito é recusado antes, não corrigido depois.
 
-### A reposição por lote (AB-04, ADR 0032 d.6)
+### O débito no uso (AB-04, ADR 0032 d.6)
 
-`#configuredConsumables` lê os slots do conjunto ativo e monta a lista de itens com `price` e
-`restock` (o override do slot vence o default do item). Quando a pilha cai **abaixo do `min`**,
-o `sim` agenda um evento de reposição; `planRestock` calcula o lote com **quatro tetos, o menor
-manda**: o `batch`, o que a capacidade livre aguenta, o que a pilha aceita (`MAX_STACK`) e o que
-o saldo paga. `price <= 0` ou saldo zero não compram.
+`useSupply` debita o `price` do supply do saldo do personagem no ato (`gold + goldDelta`) e leva o
+gasto a `aggregates.goldSpent`. **Não há estoque a conferir nem lote a comprar:** o limitador é o
+saldo. A recusa é `not-enough-gold`, e ela vem antes de qualquer efeito — sem gold, a poção não
+cura e o gold não sai. Sem gold para o próximo uso, vale a regra de saída "acabar o gold".
 
-A compra é um lançamento `purchase` no ledger, com `(session_id, seq)` único (invariante 10); a
-instância comprada nasce com id determinístico `${sessionId}:${characterId}:buy:${seq}`, como o
-loot. O dinheiro **nunca sai por item que não entrou**: se o `add` recusar por capacidade, a
-compra é desfeita (`undoPurchase`) e o `goldSpent` é estornado. **Entrar na hunt dispara a
-primeira compra pela mesma regra.**
+O tiro de munição segue a mesma ordem: `#ammoFor` recusa sem saldo que cubra o `price`, e o débito
+sai no `#strike`. Não existe munição grátis nem pilha de reserva.
 
 ## Alvo e postura (FUN-85)
 
@@ -391,7 +386,7 @@ Cinco coisas que não podem mudar sem pensar duas vezes:
 
 O extrato registra **qual** regra disparou, e `hp-below` carrega o percentual no id
 (`hp-below-30`). Sem a regra `out-of-gold`, gold zerado **não** encerra: o personagem fica, não
-tem estoque para repor e pode morrer.
+consegue pagar o próximo supply nem o próximo tiro e pode morrer.
 
 ### Onde o predicado é compilado, e por quê ali
 
@@ -486,13 +481,14 @@ item e slot esperado.
 
 ## Intenções e migração (AB-09, ADR 0032 d.1/d.3/d.5)
 
-O cliente só manda **intenção** (invariante 4): quem decide elegibilidade, consome estoque, gasta
+O cliente só manda **intenção** (invariante 4): quem decide elegibilidade, debita gold, gasta
 mana e inicia cooldown é o servidor.
 
 | Mensagem | Direção | O que carrega |
 |---|---|---|
 | `use-slot` | C2S | `{ set, slot }` — dispara o slot na hora; `set` defasado é recusa (`wrong-set`) |
 | `select-target` | C2S | `{ creatureId }` — escolhe o alvo clicando no mundo/Batalha |
+| `select-ammo` | C2S | `{ ammoId }` — escolhe a munição da família; o servidor valida `requires.level` e responde em `player-stats.ammo` |
 | `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras |
 | `slot-result` | S2C | a resposta ao `use-slot`: `ok` e, quando falso, o motivo para o tooltip |
 
@@ -511,7 +507,7 @@ A configuração v1 salva é convertida para v2 de forma **determinística e ide
 - as categorias entram em sequência (conjunto 1 primeiro) na ordem cura → poções → ataque →
   runas → suporte, preservando `enabled` e a ordem interna de cada categoria;
 - `when` (condição única) vira `when: [ … ]` (lista E de um) e `auto: true`;
-- o token de supply da v1 vira `itemId` (o AB-01 deu aos consumíveis o mesmo id como item);
+- o token de supply da v1 vira `supplyId` (o suprimento abstrato voltou a `data/supplies/`);
 - as teclas entram em sequência (1–9, 0, F1–F12) e reiniciam a cada conjunto; 22 teclas para 24
   slots, então os dois últimos ficam sem;
 - o excedente acima de 24 regras continua no conjunto 2, na mesma ordem — nada é descartado;
@@ -527,15 +523,15 @@ vocabulário. Ela é montada na Cidade e na caçada: a configuração é editáv
 a execução é do servidor. Ao lado dela, os seletores **CONJUNTO** (os quatro loadouts com nomes
 fixos) e **ALVO** (a política), e o botão **⌖ LURE · FOLLOW** com a legenda do lure e da postura.
 
-**Nada na tela tem lista de opções em código.** Conjuntos, slots, teclas, grupos, magias, itens e
-modelos de automação vêm do `catalogue`. Se os dois divergirem sobre o que existe, o jogador
-configura o que o bot recusa — e descobre isso pelo extrato que não fecha, não por uma mensagem
-de erro.
+**Nada na tela tem lista de opções em código.** Conjuntos, slots, teclas, grupos, magias, itens,
+suprimentos e modelos de automação vêm do `catalogue`. Se os dois divergirem sobre o que existe, o
+jogador configura o que o bot recusa — e descobre isso pelo extrato que não fecha, não por uma
+mensagem de erro.
 
-**A contagem não é calculada no cliente**: a pilha vem do `inventory`, o cooldown e o bloqueio do
-`slot-state`, e a recusa da tecla do `slot-result`.
+**Nada de estado do bot é calculado no cliente**: o cooldown e o bloqueio vêm do `slot-state`, e a
+recusa da tecla do `slot-result`. A munição selecionada vem do `player-stats.ammo`.
 
-**O clique simples abre o `ActionConfigModal`** (ação, condições, tecla, `auto` e `restock`);
+**O clique simples abre o `ActionConfigModal`** (ação, condições, tecla e `auto`);
 **Shift+clique desliga o automático** (`auto: false`) — o atalho continua manual. O
 `AutomationsPanel` lista uma linha por automação do rascunho (interruptor, nome, resumo dos
 parâmetros, ⚙ e ×), com "+ Adicionar" abrindo o catálogo de modelos; os modais
@@ -553,5 +549,6 @@ pedido.
 `bot-config-result` — tipado, e não uma frase num `system-message`. Uma recusa **não descarta** o
 que o jogador escreveu, e mudar depois de salvar tira o "salvo" da tela.
 
-O painel Bot v1 e o seletor de munição sobre o Escudo foram aposentados no mesmo marco que
-entregou a barra e o `AutomationsPanel`.
+O painel Bot v1 foi aposentado no mesmo marco que entregou a barra e o `AutomationsPanel`. A
+munição voltou a ser abstrata: com bow/crossbow na mão, o slot do Escudo vira o `AmmoPicker` (a
+seleção por família, com preço por tiro e level gate).

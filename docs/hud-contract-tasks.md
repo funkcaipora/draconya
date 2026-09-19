@@ -19,65 +19,69 @@ captura do modal citada — comparação lado a lado é revisão humana do orque
 Milestone [M18 · Barra de ações, estoque e automações](https://github.com/funkcaipora/draconya/milestone/8) ·
 épico `E4 · Bot server-side` (AB-01/02: `E5 · Economia de sessão`). Cadeia empilhada, na ordem.
 
-### AB-01 · Consumíveis como itens
-**Objetivo:** poção, runa e carga de bênção passam a ser itens empilháveis do catálogo — com peso,
-valor, preço, grupo de cooldown e default de reposição — e o catálogo `supplies/` deixa de existir.
+### AB-01 · Suprimentos abstratos
+**Objetivo:** poção e runa voltam a ser suprimento abstrato do catálogo — `price`, `effect`,
+`requires` e `group` — e o gold é debitado no uso; a carga de bênção segue como o único item
+`consumable`, não-empilhável.
 **Critério de aceite:**
-- `packages/content/data/items/` tem os consumíveis atuais (health potion, mana potion, avalanche
-  rune) e a carga de bênção com `kind: 'consumable'`, `stackable`, `weight`, `value`, `price`,
-  `group` e `restock { batch, min }`; o schema recusa consumível sem `restock` ou sem `group`.
-- `supplies/` foi removido e nenhum pacote importa nem referencia `supplyId`.
-- A baseline de bot de cada vocação só referencia itens do catálogo; `pnpm check` verde.
-- `docs/product/items.md` lista os consumíveis e onde cada parâmetro mora.
+- `packages/content/data/supplies/` tem `health-potion`, `mana-potion` e `avalanche-rune` com
+  `price`, `effect`, `requires` e `group`; `content.supplies` é o catálogo.
+- `items/health-potion.json`, `mana-potion.json` e `avalanche-rune.json` foram removidos; a
+  `blessing-charge` continua item `kind: 'consumable'`, sem `restock` nem `group` obrigatórios.
+- A baseline de bot de cada vocação só referencia suprimentos do catálogo; `pnpm check` verde.
+- `docs/product/items.md` lista os suprimentos e onde cada parâmetro mora.
 
-### AB-02 · Munição, colar e escudo como itens
-**Objetivo:** flecha e virote viram itens empilháveis com `slot: 'ammo'`; entram o primeiro colar
-que gasta por carga e o primeiro escudo real; o catálogo `ammunition/` deixa de existir.
+### AB-02 · Munição abstrata, colar e escudo
+**Objetivo:** flecha e virote voltam ao catálogo abstrato `ammunition/`, com família, `attack`,
+`price` e level gate; entram o primeiro colar que gasta por carga e o primeiro escudo real.
 **Critério de aceite:**
-- Itens `arrow`, `burst-arrow`, `sniper-arrow` e `onyx-arrow` com `slot: 'ammo'`, família (`arrow`
-  / `bolt`), `attack`, `weight`, `price` e `restock`; `arrow` tem preço maior que zero.
+- `packages/content/data/ammunition/` tem `arrow`, `burst-arrow`, `sniper-arrow` e `onyx-arrow`
+  com família (`arrow`/`bolt`), `attack`, `price` (> 0) e `requires.level`; `content.ammunition` é
+  o catálogo.
 - Um colar com `slot: 'neck'`, `charges` e proteção elemental; um escudo com `defense` — ambos
   equipáveis pelo kit inicial de teste.
-- `ammunition/` foi removido; o schema recusa munição sem família; `pnpm check` verde.
+- `items/*-arrow.json` foram removidos; o projétil fica em `appearances.ammunition`; `pnpm check`
+  verde.
 
 ### AB-03 · Vocabulário v2 do bot
 **Objetivo:** a configuração do bot passa a ser quatro conjuntos de 24 slots (ação, condições em
-E, tecla, chave automática, reposição), conjunto ativo, cinco automações de catálogo (entrada em
+E, tecla, chave automática), conjunto ativo, cinco automações de catálogo (entrada em
 OU, saída em E) e postura — sem trava de level — com migração determinística da v1.
 **Critério de aceite:**
 - `BOT_VOCABULARY_VERSION = 2`; o schema tem `sets[4].slots[24]`, `activeSet`, `automations[]`
   (`renew-ring`, `renew-amulet`, `swap-ammo-by-targets`, `swap-weapon-shield-by-hp`, `swap-ring`),
   `stance`; as condições são `hp`, `mana`, `targets`, `target-hp` e `condition`.
+- A ação do slot é `spell` (`spellId`) ou `supply` (`supplyId`); `validateBotConfigV2` cruza os
+  dois contra os catálogos.
 - Tecla é uma de `1–9`, `0`, `F1–F12`, única dentro do conjunto; o schema recusa duplicata.
 - `advancedFromLevel` e `advancedOnly` não existem mais no conteúdo nem no catálogo.
 - `migrateBotConfigV1` é pura e idempotente, testada com toda baseline v1 do repositório: regras
   entram no conjunto 1 na ordem cura → poções → ataque → runas → suporte, preservando `enabled`,
-  condição e ordem; `ringSwap` vira a automação `swap-ring`; `exit`, `lure` e `targeting` passam
+  condição e ordem; o token `supply` v1 vira `supplyId`; `ringSwap` vira a automação `swap-ring`;
+  `exit`, `lure` e `targeting` passam
   intactos.
 - Baseline v2 por vocação com as automações que fazem sentido ligadas (paladino: munição por
   alvos; cavaleiro: arma/escudo por vida).
 
-### AB-04 · Estoque e reposição por lote
-**Objetivo:** usar um consumível decrementa a pilha; quando ela cai abaixo do mínimo e há gold, o
-bot compra um lote pelo ledger, limitado pela capacidade livre; entrar na hunt dispara a primeira
-compra pela mesma regra.
+### AB-04 · Gold no uso
+**Objetivo:** usar um suprimento debita o `price` do gold no ato, via `useSupply`; não há pilha a
+decrementar nem lote a comprar.
 **Critério de aceite:**
-- Teste de hunt com poção configurada: a contagem cai a cada uso; ao cruzar `min`, uma linha
-  `purchase` com `(session_id, seq)` aparece no ledger e a pilha sobe `batch` — ou o que couber na
-  capacidade; retry da mesma linha não duplica.
-- Sem gold para o lote, nada é comprado e a regra de saída "acabar o gold" encerra a hunt.
-- `Aggregates.goldSpent` soma as compras; nenhuma compra é decidida por tick (é evento da fila) e
-  a sessão a 1 Hz desanexada produz o mesmo ledger.
+- Teste de hunt com poção configurada: cada uso debita o `price` do saldo e soma
+  `Aggregates.goldSpent`; retry do extrato não duplica (invariante 10).
+- Sem gold, a ação é recusada (`not-enough-gold`) e a regra de saída "acabar o gold" encerra a hunt.
+- Nenhum débito é decidido por tick (é evento da fila) e a sessão a 1 Hz desanexada produz o mesmo
+  extrato.
 
-### AB-05 · Munição no slot
-**Objetivo:** cada tiro consome uma unidade da pilha equipada no slot `ammo`; sem pilha, o bot
-puxa a próxima da mochila; sem munição, o tiro não sai; o seletor por família (`select-ammo`) e o
-fallback para a flecha grátis deixam de existir.
+### AB-05 · Munição por família
+**Objetivo:** a escolha é por família (opcode 14 `select-ammo`), validada por `requires.level` no
+servidor e publicada em `player-stats.ammo { arrow, bolt }`; cada tiro debita o `price` do gold.
 **Critério de aceite:**
-- Testes: pilha de 100 no slot cai a cada tiro; ao zerar, a próxima pilha da mochila é equipada;
-  sem nenhuma, o bot pula o ataque à distância e o slot informa "sem munição".
-- Opcode 14 (`select-ammo`) removido das duas tabelas e do cliente; snapshot com `ammo` por
-  família migra para item no slot sem perder a escolha.
+- Testes: o `select-ammo` de uma munição liberada muda `player-stats.ammo`; uma acima do level é
+  recusada com motivo; sem saldo que cubra o preço, o tiro não sai (nem `shot`, nem dano).
+- A ausência de uma família cai na básica da família (a primeira em ordem de id), que também é
+  paga; não existe fallback grátis.
+- Snapshot com `ammo` por família é preservado na retomada.
 
 ### AB-06 · Cargas e duração
 **Objetivo:** anel equipado vence por tempo, colar por carga; o item é destruído ao esgotar e o
@@ -111,16 +115,16 @@ próprios de equipar, desequipar e trocar munição (o bot não passa pelos opco
 - O mecanismo `#applyRingSwap` v1 foi absorvido por `swap-ring` e não existe em separado.
 
 ### AB-09 · Protocolo e servidor v2
-**Objetivo:** intenções `use-slot` e `select-target`, estado dos slots para o cliente, catálogo
+**Objetivo:** intenções `use-slot`, `select-target` e `select-ammo`, estado dos slots para o
+cliente, catálogo
 v2 e o portão de versão com migração ao carregar o personagem.
 **Critério de aceite:**
 - `use-slot { set, slot }` executa a ação se elegível, ignorando as condições do slot; fora de
   hunt ou inelegível responde `slot-result { ok: false, reason }`.
 - `select-target { creatureId }` muda o alvo e `player-stats.targetId` reflete; alvo morto cai em
-  `nearest`.
-- `slot-state` traz, por slot, pronto / cooldown restante / motivo de bloqueio; a contagem vem do
-  `inventory` já existente.
-- `catalogue` v2 leva itens consumíveis, grupos, teclas válidas e modelos de automação, sem
+  `nearest`. `select-ammo { ammoId }` muda a munição da família e `player-stats.ammo` reflete.
+- `slot-state` traz, por slot, pronto / cooldown restante / motivo de bloqueio.
+- `catalogue` v2 leva suprimentos, munição, grupos, teclas válidas e modelos de automação, sem
   `advancedFromLevel`.
 - Personagem com configuração v1 no Postgres entra com a v2 migrada e persistida pelo caminho do
   ADR 0028; campos novos são opcionais com default; testes do `server` cobrem os dois lados.
@@ -137,7 +141,7 @@ legenda, montada na Cidade e na caçada; a tecla dispara `use-slot`; Shift+cliqu
 automático do slot.
 **Critério de aceite:**
 - Geometria do kit (`minmax(0,1fr) 124px`); slots de 36 px com rótulo curto, tecla, cor do
-  elemento, contagem (do `inventory`) e cooldown (de `slot-state`); slot sem dado é vazio — nada
+  elemento e cooldown (de `slot-state`); slot sem dado é vazio — nada
   inventado; sem estado "LV 50+".
 - Tecla envia `use-slot`; a recusa aparece no tooltip com o motivo do servidor.
 - CONJUNTO troca `activeSet` e ALVO troca a política pela `bot-config`; "Salva automaticamente"
@@ -148,12 +152,12 @@ automático do slot.
 - Testes por `prerender`; comparação com `kit-reference/10-hud-hunt.png` aprovada.
 
 ### AB-11 · ActionConfigModal
-**Objetivo:** configurar um slot — ação do catálogo, condições em E, tecla, chave automática,
-"Levar/Repor" — no modal do kit.
+**Objetivo:** configurar um slot — ação do catálogo (magia ou suprimento), condições em E, tecla,
+chave automática — no modal do kit.
 **Critério de aceite:**
 - Igual à captura 34 (`NumField` = `Input` numérico pequeno); salvar envia `bot-config`.
 - Tecla já usada no conjunto é recusada com mensagem; valor fora de faixa bloqueia o salvar.
-- Testes por `prerender` cobrindo slot vazio, slot de magia e slot de item.
+- Testes por `prerender` cobrindo slot vazio, slot de magia e slot de suprimento.
 
 ### AB-12 · Automações — painel e modais
 **Objetivo:** o painel AUTOMAÇÕES com as linhas do kit e "+ Adicionar", os modais de catálogo e
@@ -167,20 +171,23 @@ botão "Lure e alvo" e da seção "Configurações avançadas".
 - Testes por `prerender`; comparação com a captura 10 aprovada.
 
 ### AB-13 · Coluna direita e alvo
-**Objetivo:** slot de munição com pilha no set, Mochila com rótulo e contagem, clique na Batalha
+**Objetivo:** `AmmoPicker` sobre o Escudo com bow/crossbow, Mochila com rótulo e contagem, clique
+na Batalha
 ou no mundo escolhe o alvo, moldura vermelha sobre a criatura alvo.
 **Critério de aceite:**
-- O seletor sobre o Escudo foi removido; o slot Munição mostra a pilha equipada e a contagem.
+- Com bow/crossbow equipado, o slot do Escudo mostra a munição escolhida e o clique abre o
+  `AmmoPicker` com as opções da família liberadas pelo nível; sem pilha nem contagem.
 - Item com rótulo curto mostra rótulo + contagem na Mochila (o `Slot` já suporta).
 - Clique na linha da Batalha ou na criatura envia `select-target`; a moldura no canvas segue
   `targetId`.
 - Testes por `prerender` e do overlay; comparação com a captura 10 aprovada.
 
 ### AB-14 · Documentação de produto do M18
-**Objetivo:** `docs/product` descreve o bot v2, o estoque, a munição e as cargas como existem.
+**Objetivo:** `docs/product` descreve o bot v2, o suprimento abstrato, a munição e as cargas como
+existem.
 **Critério de aceite:**
-- `bot.md` (slots, conjuntos, automações, `use-slot`, migração), `items.md`, `economy.md` (§20.1
-  revertido, reposição por lote), `hunt.md` e os `AGENTS.md` afetados atualizados; `docs-check`
+- `bot.md` (slots, conjuntos, automações, `use-slot`, migração), `items.md`, `economy.md` (§20.1,
+  gold no uso), `hunt.md` e os `AGENTS.md` afetados atualizados; `docs-check`
   verde; nenhuma menção a categorias v1 ou level 50 fora de contexto histórico.
 
 ---
@@ -243,8 +250,8 @@ munição do paladino é o primeiro consumidor.
 **Critério de aceite:**
 - `soul`/`maxSoul` (100; 200 com Premium); regenera 1 a cada 240 s (120 s com Premium) por evento
   da fila.
-- Magia com custo `soul` é recusada sem soul suficiente; a conjuração cria uma pilha de flechas
-  na mochila e debita soul.
+- Magia com custo `soul` é recusada sem soul suficiente; a conjuração de munição do paladino é o
+  primeiro consumidor e debita soul.
 - `player-stats` leva `soul` e `maxSoul`.
 
 ### CO-07 · Painel Skills completo

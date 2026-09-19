@@ -227,14 +227,13 @@ O `effect` é uma união discriminada por `kind`, fechada como o vocabulário do
 razão: o `sim` só executa o que conhece, e uma magia com efeito desconhecido é recusada no boot
 em vez de virar um slot morto que ninguém explica.
 
-**Consumível É item** (AB-01, ADR 0032 decisão 6). Poção, runa e carga de bênção vivem em
-`items/*.json` com `kind: 'consumable'`, `stackable`, peso, `value`, `price` de COMPRA, `group` e
-`restock { batch, min }`; o catálogo abstrato de supply deixou de existir. O vocabulário v2 do bot
-(AB-03) aposentou o token v1 do supply: a ação do slot é `item` com `itemId`, e `validateBotConfigV2`
-cruza `spellId`/`itemId` contra os catálogos. A projeção `content.supplies`, derivada dos itens de
-`heal`/`mana`/`damage`, **sobrevive como compatibilidade v1** — é o que `validateBotConfig` (v1)
-cruza com a config salva (`defaultConfig`) até a limpeza da v1. A reposição por lote é a AB-04
-(#419) e o motor por grupo é a AB-07 (#422).
+**Suprimento é abstrato** (AB-01, ADR 0032 d.6). Poção e runa vivem em `supplies/*.json` com
+`price`, `effect`, `requires` e `group`; o uso debita gold direto (`useSupply`), sem pilha e sem
+reposição. O vocabulário v2 do bot (AB-03) usa o token `supply` com `supplyId`, e
+`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. A carga de bênção é a única
+exceção: segue item `kind: 'consumable'` **não-empilhável** em `items/blessing-charge.json`, sem
+`restock` nem `group` obrigatórios, e quem a consome é a TP-03 (M22). O motor por grupo é a AB-07
+(#422).
 
 ## Skills (FUN-75)
 
@@ -302,22 +301,19 @@ até o level 8: o personagem nasce sem vocação.
 
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 
-**Munição é item** (ADR 0032, decisão 7 — a decisão 3 do ADR 0026 está revogada): flecha e
-virote são itens empilháveis de `kind: 'ammo'`, `slot: 'ammo'`, com `ammunition.family`
-(`arrow`/`bolt`), `attack`, `weight`, `value`, `price` e `restock`. O `attack` do tiro é o do
-item, e o `ammunition.damageType` (default `physical`) é o do tiro. `buildContent` recusa
-munição sem `ammunition` ou fora do slot `ammo`, `ammunition` em item que não é munição, e arma
-de distância cuja `ammoFamily` não tem item de munição no catálogo. O catálogo
-`ammunition/*.json` deixou de existir.
+**Munição é abstrata** (ADR 0032 d.7; a decisão 3 do ADR 0026 volta a valer): flecha e virote
+vivem em `ammunition/*.json` com `family` (`arrow`/`bolt`), `attack`, `price` (> 0 — sem fallback
+grátis) e `requires.level`. O `attack` e o `damageType` (default `physical`) do tiro são da
+munição, e cada tiro debita o `price` do gold. `buildContent` recusa arma de distância cuja
+`ammoFamily` não tem munição no catálogo.
 
-A aparência: o **ícone** é `appearances.items[id]`, como todo item; `appearances.ammunition[id]`
-guarda só o **projétil** (`missile`). Não duplicar o ícone — duas verdades para o mesmo número
+A aparência: o projétil fica em `appearances.ammunition[id]` (`missile`), e o ícone do
+`AmmoPicker` vem da mesma tabela. Não duplicar o ícone — duas verdades para o mesmo número
 (DT-03). Os projéteis do pacote 13.32: arrow 3, burst arrow 4, sniper arrow 22, onyx arrow 23.
 
-A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com o opcode queimado do
-seletor por família, o fallback grátis e `characters.ammo`: a escolha é o item no slot `ammo`, e o
-`sim` lê `attack`/`ammunition` do próprio item. Não existe mais munição grátis por família, e a
-`arrow` tem `price > 0` (ponto de partida 1, provisório). O primeiro colar (`glacier-amulet`,
+A seleção é por família pelo opcode 14 `select-ammo`, validada por `requires.level` no servidor e
+publicada em `player-stats.ammo { arrow, bolt }`; a ausência de uma família cai na básica da
+família (a primeira em ordem de id), que também é paga. O primeiro colar (`glacier-amulet`,
 `kind: 'amulet'`, `slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real
 (`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
 carga é a AB-06 (#421).

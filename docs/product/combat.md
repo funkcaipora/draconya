@@ -379,25 +379,21 @@ evento por segundo para redescobrir a mesma coisa.
 O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
 inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
-### Runa é supply de ataque (#165, ADR 0026 decisão 8) — **revista pelo ADR 0032 d.6**
+### Runa é supply de ataque (#165, ADR 0026 decisão 8)
 
-> Histórico: esta seção descreve a runa como supply abstrato que debitava gold por uso. O ADR
-> 0032 decisão 6 tornou a runa um **item consumível empilhável** (`data/items/avalanche-rune.json`),
-> consumido da pilha e reposto por lote; o restante da mecânica de dano abaixo continua válido.
-> A leitura vigente está em `items.md` e `bot.md`.
-
-A runa **não é magia**: é consumível de ataque. A Avalanche Rune
-(`packages/content/data/items/avalanche-rune.json`) é a primeira: efeito
+A runa **não é magia**: é suprimento de ataque. A Avalanche Rune
+(`packages/content/data/supplies/avalanche-rune.json`) é a primeira: efeito
 `damage`, Base Power próprio, alcance 4 e círculo de raio 3 no alvo, e um bloco `requires`
-(`level`, `magicLevel`) que a poção não tem.
+(`level`, `magicLevel`) que a poção não tem. O `price` é debitado do gold **no uso**, por
+`useSupply`, como qualquer suprimento (ADR 0032 d.6).
 
 O que difere da magia de ataque, e por quê:
 
 - **Escala sempre pelo magic level**, em toda vocação. Magia escala pela skill que a vocação
   declara (`spellSkill`, §"Magias do catálogo"); runa é do magic level no Tibia, e knight de
   magic level 2 usando Avalanche é a cena real — bate fraco, mas bate.
-- **Sem cooldown próprio.** A cadência é a da categoria `rune` do bot (1 s). Não há grupo de
-  magia envolvido: runa não tranca `attack` nem é trancada por ele.
+- **Cooldown por grupo do conteúdo.** A runa declara `group: attack`; a cadência é a do motor v2,
+  e a runa não tranca nem é trancada pelo cooldown individual de uma magia.
 - **A ordem das recusas**: `level-too-low` → `magic-level-too-low` → `no-target` →
   `out-of-range` → `not-enough-gold`. O gold é conferido **depois** da mira, pela mesma razão
   que a mana da magia sai por último: recusar antes de saber se há alvo é debitar sem lançar.
@@ -430,14 +426,13 @@ O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bo
 `weapon.kind`:
 
 - **`melee`** — o `attack` do item pela skill corpo a corpo, como sempre.
-- **`distance`** — o bow atira a **munição EQUIPADA no slot `ammo`** da família dele
-  (`ammoFamily`). O dano é o `attack` do item de munição pela skill `distance` (sobe por tiro), e
-  o tipo é o `ammunition.damageType` dele. Cada tiro consome UMA unidade da pilha; ao zerar, o bot
-  puxa a próxima pilha da MESMA família da mochila (mochila antes da bolsa), e sem nenhuma o tiro
-  NÃO sai — nem projétil, nem dano. **Sem fallback grátis e sem débito de gold por tiro** (AB-05,
-  #420): a `arrow` tem preço e lote como qualquer consumível, e a reposição é por lote pelo
-  ledger (ADR 0032 d.6). O seletor por família sobre o Escudo e a projeção de compatibilidade
-  foram aposentados; a escolha é o item no slot.
+- **`distance`** — o bow atira a **munição escolhida da família dele** (`ammoFamily`), pelo
+  opcode 14 `select-ammo` (ou a básica da família, a primeira em ordem de id). O dano é o `attack`
+  da munição pela skill `distance` (sobe por tiro), e o tipo é o `damageType` dela. Cada tiro
+  **debita o `price` da munição do gold** (ADR 0032 d.7); sem saldo que cubra o preço, o tiro NÃO
+  sai — nem projétil, nem dano. **Sem pilha e sem fallback grátis**: a `arrow` tem preço por tiro
+  e level gate. Com bow/crossbow na mão, o slot do Escudo mostra a munição escolhida e o clique
+  abre o `AmmoPicker`.
 - **`wand`** — wand e rod gastam `manaPerHit` por golpe, causam dano **mágico** por faixa fixa
   (`damage.min..max`, uma rolagem do `Rng` da sessão por golpe, como o loot) e rendem magia
   pela mana gasta, como uma magia. Sem mana, o golpe não sai: fica para o intervalo seguinte.
@@ -454,7 +449,7 @@ resistência e imunidade do monstro.
 | Bow — alcance | 6 | `packages/content/data/items/bow.json`, `weapon.range` |
 | Wand of vortex — alcance, mana por golpe, dano | 3 / 2 / 8–18 | `packages/content/data/items/wand-of-vortex.json` |
 | Snakebite rod — alcance, mana por golpe, dano | 3 / 1 / 8–18 | `packages/content/data/items/snakebite-rod.json` |
-| Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/items/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (itens desde a AB-02; o projétil fica em `appearances.ammunition`) |
+| Munição — attack e preço | arrow 25 / 1 `[ABERTO — attack e preço provisórios]`; burst arrow 27 / 3 `[ABERTO — attack e preço provisórios]`; sniper arrow 28 / 5 `[ABERTO — valor provisório: 5]`; onyx arrow 38 / 7 `[ABERTO — valor provisório: 7]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json` (o projétil fica em `appearances.ammunition`) |
 | Distância — início, curva, dano por nível | 10 / 50×1,1 / +2% `[ABERTO — valores provisórios]` | `packages/content/data/skills/distance.json` |
 
 ## Famílias de arma e proficiências (CMB-05, #333)

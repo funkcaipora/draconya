@@ -497,19 +497,19 @@ não se compara nada; o `sim` conta de qualquer jeito (invariante 3). O catálog
 `monsters: [{ id, name }]` em ordem de id e `bestiary: { milestones, xpBonusPercentPerMilestone }`
 só quando o conteúdo tem — o de teste não tem, e a chave fica AUSENTE, não `undefined`.
 
-## A munição é item no slot; a coluna `characters.ammo` é dado morto (#152, #420)
+## A munição é abstrata e escolhida por família (#152, #420)
 
-A munição escolhida por família foi **revogada** (ADR 0032 decisão 7, AB-05): a escolha é o item
-equipado no slot `ammo`, o `sim` a consome por tiro, e o opcode queimado do seletor por família
-(opcode 14) e o campo `player-stats.ammo`/`catalogue.ammunition` não existem mais. O ticket não
-carrega `ammo`, o extrato não tem `SessionReceipt.ammo`, e o ledger não lê nem escreve
-`characters.ammo` — a coluna `jsonb` continua na tabela como **dado morto** até uma issue de
-limpeza (ADR 0014: descartar dado persistido exige tratamento explícito, e um `DROP` em deploy em
-rolagem apagaria a preferência de quem ainda não migrou). Equipar a pilha usa `move-item`/`equip`,
-que já marcam o shard como `dirty` e viajam no layout do inventário. O projétil do tiro (`shot`)
-continua resolvido em `#presentCombat` pela tabela: `appearances.ammunition[ammoId].missile` para
-a flecha (o `ammoId` é o id do ITEM), `appearances.weapons[itemId].missile` para wand e rod; sem
-linha, o tiro é mudo.
+A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pelo opcode 14
+`select-ammo`, com `requires.level` conferido em `#requestSelectAmmo` e o sucesso publicado em
+`player-stats.ammo { arrow, bolt }`; a recusa vira `system-message`, como a de equipar. O
+catálogo (`catalogue.ammunition`) e `server.ammunition` levam família, `attack`, `price`,
+`appearanceId` e `requires.level`. O ticket não carrega `ammo`, o extrato não tem
+`SessionReceipt.ammo`, e o ledger não lê nem escreve `characters.ammo` — a coluna `jsonb`
+continua na tabela como **dado morto** até uma issue de limpeza (ADR 0014: descartar dado
+persistido exige tratamento explícito). A escolha viaja no snapshot da sessão, não no banco. O
+projétil do tiro (`shot`) é resolvido em `#presentCombat` pela tabela:
+`appearances.ammunition[ammoId].missile` para a flecha, `appearances.weapons[itemId].missile`
+para wand e rod; sem linha, o tiro é mudo.
 
 ## A vocação é escrita UMA vez, pelo `jobs`; e o shard grava um extrato de ESTADO (#154)
 

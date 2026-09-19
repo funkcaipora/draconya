@@ -263,15 +263,16 @@ registra **qual** delas encerrou, com o percentual no id quando é de HP. O ence
 tem que dizer a verdade sobre isso. Ver [`bot.md`](./bot.md) para o vocabulário.
 
 **Gold zerado NÃO encerra a hunt sozinho** (§20.3). Sem a regra `out-of-gold`, o personagem fica,
-não consegue repor o estoque de consumível e pode morrer — e a primeira recusa por falta vira uma
-linha no extrato, uma só. Com a regra, ele sai antes. A diferença entre os dois comportamentos é
-uma linha na configuração, e é assim de propósito.
+não consegue pagar o próximo supply nem o próximo tiro e pode morrer — e a primeira recusa por
+falta vira uma linha no extrato, uma só. Com a regra, ele sai antes. A diferença entre os dois
+comportamentos é uma linha na configuração, e é assim de propósito.
 
-**O estoque se repõe sozinho** (AB-04, ADR 0032 d.6). Quando a pilha de um consumível cai abaixo do
-`min` e há gold, o bot compra um lote pelo ledger — e **entrar na hunt dispara a primeira compra
-pela mesma regra**. A compra é um evento da fila (invariante 2), então a hunt desanexada a 1 Hz
-compra no mesmo instante lógico que a anexada a 10 Hz. Ver [`items.md`](./items.md) e
-[`economy.md`](./economy.md).
+**O consumo debita gold no ato** (AB-04, ADR 0032 d.6/d.7). Usar um supply chama `useSupply`, que
+debita o `price` do saldo e leva o gasto a `aggregates.goldSpent`; cada tiro de arma de distância
+debita o `price` da munição escolhida da família. Não há pilha a repor nem lote a comprar — o
+limitador é o saldo. O débito é um evento no caminho da ação (invariante 2), então a hunt
+desanexada a 1 Hz debita no mesmo instante lógico que a anexada a 10 Hz. Ver
+[`items.md`](./items.md) e [`economy.md`](./economy.md).
 
 **Trocar de dificuldade encerra e cria outra** (§14.7). Não existe alteração dinâmica: mudar a
 densidade no meio deixaria monstros da densidade antiga vivos ao lado dos novos, e o jogador

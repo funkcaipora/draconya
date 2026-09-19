@@ -140,10 +140,10 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
   pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
   O settlement (`#settle`) roda no `onLeave` COM quem sai e no `onEnd`, antes de a `Session`
-  emitir os extratos — é o que põe o gold neles. O consumível do vocabulário v2 é **item**: usar
-  decrementa a pilha e a reposição (`#onRestock`) compra o lote pelo ledger, com `purchase` por
-  personagem — não há rateio do uso. A `Purse`/`useSupply` de `casting.ts` continua só para o
-  caminho v1 do supply, que a migração v1→v2 aposenta.
+  emitir os extratos — é o que põe o gold neles. O supply do vocabulário v2 é **abstrato**: usar
+  debita o `price` do gold no ato (`useSupply`, `casting.ts`), sem pilha e sem reposição. Em solo
+  a `Purse` é o saldo do próprio usuário; no modo compartilhado é o rateio entre os presentes, e a
+  bolsa credita `goldSpent` a cada um pelo que pagou — o extrato de cada membro sai equalizado.
 - **Em party, morrer e disparar regra de saída são `leave`, e a cascata roda DEPOIS do extrato
   de quem saiu** (#193). `#depart` chama `session.leave` — que roda `onLeave` (settlement) e SÓ
   ENTÃO emite o extrato — e emite `member-left` com o extrato e o personagem, porque o
@@ -170,7 +170,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
-- **Magia e item RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem item, em cooldown, fora
+- **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
   de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
   regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
   que faz o grupo do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
@@ -297,19 +297,16 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
   `scheduledAbilities` (opcional no snapshot, sem bump).
 - **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
-  munição no slot desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
+  munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
   lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
-  `#strike` despacha pelo `weapon.kind`: `melee` como sempre; `distance` atira a MUNIÇÃO EQUIPADA
-  no slot `ammo` (ADR 0032 decisão 7): `#equippedAmmo` devolve a pilha e a definição do ITEM
-  (`kind: 'ammo'`, família batendo com a da arma), e o `attack`/`damageType` do tiro são os do
-  item pela skill `distance`. **Sem pilha da família o tiro NÃO sai** — nem `shot`, nem dano —, e
-  não existe mais fallback grátis nem débito de gold por tiro; a `arrow` tem preço e lote como
-  qualquer consumível. Resolvido o golpe, `#strike` consome UMA unidade com
-  `Inventory.consumeEquipped('ammo')` e, ao zerar, `#pullNextAmmo` equipa a próxima pilha da
-  mesma família (mochila antes da bolsa). O legado `CharacterState.ammo` (família → id) é LIDO uma
-  vez por `#migrateLegacyAmmo` em `onEnter`/`onResume`, que equipa a pilha do item escolhido se
-  ela existe e limpa o legado; `getState` não o emite, sem bump de formato. `#configuredConsumables`
-  aceita `kind: 'ammo'`, então a reposição por lote (AB-04) também compra munição. `wand` gasta
+  `#strike` despacha pelo `weapon.kind`: `melee` como sempre; `distance` atira a munição
+  ESCOLHIDA da família (ADR 0032 decisão 7): `#ammoFor` devolve a `Ammunition` do `character.ammo`
+  (ou a básica da família, a primeira em ordem de id), e o `attack`/`damageType` do tiro são os
+  dela pela skill `distance`. **Não existe munição grátis:** sem saldo que cubra o `price`, o tiro
+  NÃO sai — nem `shot`, nem dano. Resolvido o golpe, `#strike` debita o `price` no personagem e em
+  `aggregates.goldSpent`, e emite `shot` com o `ammoId`. A escolha é por família, via
+  `CharacterRuntime.selectAmmo`, que valida `requires.level`; o `select-ammo` do host a leva a
+  `player-stats.ammo`. `wand` gasta
   `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
   rolagem por golpe — contrato como o loot) e rende `spell-cast` pela mana. **O poder sai de
   `resolveWeaponPower` com o PERFIL da arma** (`WeaponProfile`: família, tipo, alcance, `power` ou
