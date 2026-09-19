@@ -4811,6 +4811,42 @@ describe('follow de membro (§D10, #398)', () => {
     const runners = ruleset.getState().runners ?? {};
     expect('followInterrupted' in (runners['a'] ?? {})).toBe(false);
   });
+
+  it('followStateOf devolve a verdade atual, e undefined sem follow configurado (#401)', () => {
+    const { session, ruleset } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    session.enter(member('a'));
+    session.enter(member('b'));
+
+    // Ativo e sem evento ainda: o alvo vem da própria configuração.
+    expect(ruleset.followStateOf('a')).toEqual({ active: true, targetId: 'b' });
+    // Sem follow configurado: nada a corrigir no attach.
+    expect(ruleset.followStateOf('b')).toBeUndefined();
+
+    session.kill(session.participants.find((p) => p.id === 'b') as CharacterRuntime);
+    expect(ruleset.followStateOf('a')).toEqual({ active: false, targetId: 'b', reason: 'dead' });
+  });
+
+  it('a interrupção atual do followStateOf sobrevive ao snapshot (#401)', () => {
+    const { session, ruleset } = followSession({
+      botConfigs: { a: botConfig({ follow: { kind: 'member', characterId: 'b' } }) },
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    session.enter(member('a'));
+    session.enter(member('b'));
+    session.kill(session.participants.find((p) => p.id === 'b') as CharacterRuntime);
+    expect(ruleset.followStateOf('a')).toEqual({ active: false, targetId: 'b', reason: 'dead' });
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, followContent()) as HuntRuleset, Rng.fromSeed('x'),
+    );
+    expect((restored.ruleset as HuntRuleset).followStateOf('a')).toEqual({
+      active: false, targetId: 'b', reason: 'dead',
+    });
+  });
 });
 
 describe('XP em party (#190, ADR 0027 decisão 3)', () => {

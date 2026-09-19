@@ -4997,6 +4997,108 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
   });
 });
 
+describe('o follow-state no fio (#401, ADR 0033 decisão 9)', () => {
+  // O ruleset de teste é MÍNIMO, como o da "party no hospedeiro": expõe `followStateOf` (o
+  // contrato que a #398 entrega) e emite o evento pelo mesmo `session.scheduleIn` do
+  // `member-left`. Sem `HuntRuleset` de verdade — a mecânica de Follow é da #398.
+  type FollowSnapshot = { active: boolean; targetId: string; reason?: 'dead' | 'left' | 'unreachable' };
+  const INTERRUPT = 'interrupt-follow';
+  function followRuleset(current: Record<string, FollowSnapshot | undefined>) {
+    return {
+      type: 'hunt', hz: () => 10,
+      onEnter: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+      onEvent: (session: Session, event: { kind: string }) => {
+        if (event.kind !== INTERRUPT) return;
+        for (const [characterId, state] of Object.entries(current)) {
+          if (state !== undefined) session.emit({ kind: 'follow-state', characterId, ...state });
+        }
+      },
+      followStateOf: (characterId: string) => current[characterId],
+    } as unknown as Ruleset;
+  }
+  const member = (id: string) => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+  function followHost() {
+    let now = 0;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+    } as unknown as SessionDirectory;
+    const receipts = { save: async () => {} } as unknown as ReceiptStore;
+    const current: Record<string, FollowSnapshot | undefined> = { a: undefined, b: undefined };
+    const ruleset = followRuleset(current);
+    let shared: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, now: () => now, receipts, directory,
+      createSession: (characterId) => {
+        if (shared === null) {
+          shared = new Session({ id: 's-follow', contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('f'), createdAtMs: 0 });
+          shared.enter(member('a'));
+          shared.enter(member('b'));
+        }
+        if (shared.participants.every((p) => p.id !== characterId)) shared.enter(member(characterId));
+        return shared;
+      },
+    });
+    const runFor = (ms: number) => { for (let t = 0; t < ms; t += 100) { now += 100; host.cycle(); } host.flush(); };
+    return { host, current, runFor, session: () => shared as Session | null };
+  }
+  const attach = (host: SessionHost, characterId: string) => {
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, characterId);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    return { socket, viewer };
+  };
+
+  it('chega SÓ a quem olha o personagem do evento, nunca aos outros da sessão (RF-01)', async () => {
+    const { host, current, runFor, session } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    await host.prepare('b', undefined, 'acc-b');
+    const a = attach(host, 'a');
+    const b = attach(host, 'b');
+    // Nada de follow no attach: os dois começam sem interrupção.
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+    expect(b.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+
+    current.a = { active: false, targetId: 'b', reason: 'unreachable' };
+    session()?.scheduleIn(INTERRUPT, 100, { priority: 0 });
+    runFor(200);
+
+    // Mutação que mata: reusar `#presentParty` (broadcast) — `b` também receberia.
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toEqual([
+      { type: 'follow-state', active: false, targetId: 'b', reason: 'unreachable' },
+    ]);
+    expect(b.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+  });
+
+  it('quem reconecta durante uma interrupção sem visualizador recebe o estado atual (RF-02)', async () => {
+    const { host, current, runFor, session } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    // Interrompe enquanto NINGUÉM olha: o evento é drenado e descartado, mas a verdade fica.
+    current.a = { active: false, targetId: 'b', reason: 'dead' };
+    session()?.scheduleIn(INTERRUPT, 100, { priority: 0 });
+    runFor(200);
+
+    // Mutação que mata: só entregar pelo evento drenado — o attach não traria nada.
+    const a = attach(host, 'a');
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toEqual([
+      { type: 'follow-state', active: false, targetId: 'b', reason: 'dead' },
+    ]);
+  });
+
+  it('quem reconecta com o Follow ativo NÃO recebe follow-state redundante (RF-03)', async () => {
+    const { host, current } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    current.a = { active: true, targetId: 'b' };
+    // Mutação que mata: mandar sempre no attach — aqui apareceria uma mensagem `active: true`.
+    const a = attach(host, 'a');
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+  });
+});
+
 describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
   const ofType = <T extends S2CMessage['type']>(messages: readonly S2CMessage[], type: T) =>
     messages.filter((m): m is Extract<S2CMessage, { type: T }> => m.type === type);
