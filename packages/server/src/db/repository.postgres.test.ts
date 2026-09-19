@@ -144,6 +144,26 @@ describe.runIf(databaseAvailable)('PostgreSQL game repository', () => {
     })).rejects.toThrow();
   });
 
+  it('acha o personagem pelo nome com a MESMA normalização do índice único (#403)', async () => {
+    // DT-04: um nome já é único no jogo inteiro por `lower(normalize(name, NFC))`, e a busca
+    // usa exatamente essa regra — não `ilike`. Duplicar a comparação com outra forma arriscaria
+    // "José" e "jose" responderem personagens diferentes num lugar e o mesmo no outro.
+    const account = await repository.ensureAccount({
+      externalAuthId: 'user_find_name', email: 'find-name@example.com',
+    });
+    const created = await repository.createCharacter(account.id, 'José');
+    // Maiúscula/minúscula e forma canônica: 'josé', 'JOSÉ' e o 'José' decomposto (NFC) acham
+    // a mesma linha.
+    expect((await repository.getCharacterByName('josé'))?.id).toBe(created.id);
+    expect((await repository.getCharacterByName('JOSÉ'))?.id).toBe(created.id);
+    expect((await repository.getCharacterByName('Jose\u0301'))?.id).toBe(created.id);
+    expect(await repository.getCharacterByName('Ninguém')).toBeNull();
+
+    // Soft-deleted some da busca, como some de `getCharacter`/`listCharacters`.
+    await repository.softDeleteCharacter(account.id, created.id);
+    expect(await repository.getCharacterByName('josé')).toBeNull();
+  });
+
   it('does not transfer an email between different external identities', async () => {
     const original = await repository.ensureAccount({
       externalAuthId: 'user_original',

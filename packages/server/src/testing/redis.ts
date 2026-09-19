@@ -7,7 +7,7 @@
 //
 // Um índice de banco por arquivo resolve sem serializar a suíte inteira. Índices em uso:
 //
-//   0  livre (é o banco do desenvolvimento local)
+//   0  api/friends.postgres.test.ts
 //   1  directory.test.ts
 //   2  tickets.test.ts
 //   3  auth/sessions.test.ts
@@ -23,6 +23,11 @@
 //  13  api/party.test.ts
 //  14  api/party-exit.postgres.test.ts
 //  15  api/matchmaking.test.ts
+//
+// A spec da #403 reservou o índice 18 (16 do #407, 17 do #402/#400), mas este Redis de teste
+// — e o `redis:7-alpine` do CI — têm só os bancos 0 a 15: `SELECT 18` é `ERR DB index is out
+// of range`, e o teste cairia no banco 0 em silêncio. Enquanto ninguém subir `--databases` na
+// infraestrutura, o único índice livre é o 0, e é ele que `friends.postgres.test.ts` usa.
 //
 // Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
 // arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;

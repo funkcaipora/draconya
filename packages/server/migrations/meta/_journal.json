@@ -57,6 +57,13 @@
       "when": 1789600000000,
       "tag": "0007_160-item-position",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0008_403-friends",
+      "breakpoints": true
     }
   ]
 }

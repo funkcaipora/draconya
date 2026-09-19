@@ -173,6 +173,36 @@ export const characters = pgTable(
   }),
 );
 
+/**
+ * Amigos é o mínimo do §21 (ADR 0031 decisão 6): adicionar por nome, listar com online/onde,
+ * remover. Direção única — A ter B como amigo não implica B ter A. Sem pedido nem bloqueio: o
+ * kit desenha as abas, e elas esperam o épico social.
+ *
+ * `id` próprio, e não a chave composta `(character_id, friend_character_id)`: a linha é uma
+ * entidade (tem `created_at`), e o índice único faz o papel de trava contra o duplo clique.
+ * Nenhum `accountId`: ele é do personagem, não da amizade — quem precisa dele junta com
+ * `character` na leitura, que é o que `listFriends` faz.
+ */
+export const friends = pgTable(
+  'friend',
+  {
+    id: text('id').primaryKey(),
+    characterId: text('character_id').notNull().references(() => characters.id),
+    friendCharacterId: text('friend_character_id').notNull().references(() => characters.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Retry de "adicionar" nunca duplica a linha — o índice é a trava, não uma checagem
+    // otimista antes do insert.
+    uniqueIndex('friend_pair_unique').on(table.characterId, table.friendCharacterId),
+    // O acesso real é "os amigos DESTE personagem" — sem índice, listar varre a tabela inteira.
+    index('friend_character').on(table.characterId),
+    // Amizade consigo mesmo é estado sem sentido; o banco recusa mesmo que um caminho novo
+    // de escrita esqueça a checagem de código.
+    check('friend_not_self', sql`${table.characterId} <> ${table.friendCharacterId}`),
+  ],
+);
+
 // Ledger append-only. `UNIQUE (session_id, seq)` é o que garante que retry nunca
 // duplica (invariante 10, ADR 0006) — e é também a trilha de auditoria do §40.
 export const ledger = pgTable(
