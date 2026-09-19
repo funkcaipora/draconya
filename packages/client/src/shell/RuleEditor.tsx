@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { BOT_CONDITION_KINDS } from '@draconya/content';
 import type { BotCategory, BotCondition, BotRule } from '@draconya/content';
 import { bot, putRule } from '../bot/store.js';
-import { useStoreSlice } from '../state/useSlice.js';
+import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import type { BotVocabulary } from '../state/hud.js';
 import { CONDITION_TEXT } from './rule-text.js';
 import { CATEGORY_TEXT } from './BotPanel.js';
@@ -65,6 +65,33 @@ function conditionValue(condition: BotCondition): number {
 
 function withValue(condition: BotCondition, value: number): BotCondition {
   return 'percent' in condition ? { ...condition, percent: value } : { ...condition, count: value };
+}
+
+/**
+ * Só cura/poção/suporte podem mirar outra pessoa, e só quando o catálogo marcou a ação como
+ * `targets: 'friend'` (#406, §26-30, DT-02). A mesma regra de slots/`advancedOnly`: a tela
+ * nunca oferece o que o servidor recusaria — e nunca inventa um alvo amigo que o conteúdo não
+ * declarou.
+ */
+export function actionAcceptsFriend(
+  category: BotCategory,
+  entry: { readonly targets?: 'self' | 'friend' | undefined } | undefined,
+): boolean {
+  return (category === 'heal' || category === 'potion' || category === 'support')
+    && entry?.targets === 'friend';
+}
+
+/**
+ * A regra depois de escolher uma ação (#406, RF-07/DT-03): o `do` novo e o alvo ZERADO quando a
+ * ação não aceita amigo. Manter um `target: { kind: 'member' }` invisível na tela salvaria uma
+ * configuração que o jogador não vê nem escolheu para aquela ação.
+ */
+export function withAction(rule: BotRule, doAction: BotRule['do'], acceptsFriend: boolean): BotRule {
+  return {
+    ...rule,
+    do: doAction,
+    target: acceptsFriend ? (rule.target ?? { kind: 'self' }) : { kind: 'self' },
+  };
 }
 
 function spellActions(
@@ -130,6 +157,22 @@ export function RuleEditor({ category, index, initial, vocabulary, level, vocati
   const slots = vocabulary.slots[category] ?? 0;
   const slotNumber = (index ?? rules.length) + 1;
 
+  // O alvo da regra (#406, §26-30, ADR 0033 d.10). Só a tela de cura/poção/suporte oferece o
+  // seletor, e só quando a AÇÃO escolhida aceita amigo no catálogo (`targets: 'friend'`) — a
+  // mesma regra que já vale para slots/`advancedOnly`: nada é oferecido em código (DT-02).
+  // A lista de membros vem ao vivo do `party-state`, sem cópia local (RF-06).
+  const party = useHudSlice((state) => state.party);
+  const me = useHudSlice((state) => state.characterId);
+  const selectedEntry = supplies !== null
+    ? supplies.find((supply) => supply.id === actionId)
+    : availableSpells.find((spell) => spell.id === actionId);
+  const acceptsFriend = actionAcceptsFriend(category, selectedEntry);
+  const target = rule.target ?? { kind: 'self' as const };
+
+  function setTarget(next: NonNullable<BotRule['target']>): void {
+    setRule({ ...rule, target: next });
+  }
+
   return (
     <Modal
       open
@@ -176,6 +219,56 @@ export function RuleEditor({ category, index, initial, vocabulary, level, vocati
         />
       </div>
       <div className="rule-editor-divider"><span>→ AÇÃO</span></div>
+      {acceptsFriend && (
+        <div className="rule-editor-target">
+          <fieldset>
+            <legend>Alvo</legend>
+            <label>
+              <input
+                type="radio"
+                name="rule-target"
+                checked={target.kind === 'self'}
+                onChange={() => { setTarget({ kind: 'self' }); }}
+              />
+              Eu
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="rule-target"
+                checked={target.kind === 'lowest-hp-member'}
+                onChange={() => { setTarget({ kind: 'lowest-hp-member' }); }}
+              />
+              Membro da Party com menor vida
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="rule-target"
+                checked={target.kind === 'member'}
+                onChange={() => {
+                  const first = party?.members.find((member) => member.characterId !== me);
+                  if (first !== undefined) setTarget({ kind: 'member', characterId: first.characterId });
+                }}
+              />
+              Membro específico
+            </label>
+          </fieldset>
+          {/* §30: a lista só existe com a party viva; o `characterId` é do rascunho, e quem
+              valida se ele ainda é membro é o servidor — a tela não some com a escolha antes do
+              Salvar (caso de borda do §7). */}
+          {target.kind === 'member' && party !== null && (
+            <Select
+              size="sm"
+              value={target.characterId}
+              options={party.members
+                .filter((member) => member.characterId !== me)
+                .map((member) => ({ value: member.characterId, label: member.name }))}
+              onChange={(characterId) => { setTarget({ kind: 'member', characterId }); }}
+            />
+          )}
+        </div>
+      )}
       {legacySpell !== undefined && legacySpell.vocationId !== null && (
         <p className="system-warning rule-editor-warning" role="alert">
           {`A regra usa ${legacySpell.name}, que não é da sua vocação.`}
@@ -190,10 +283,17 @@ export function RuleEditor({ category, index, initial, vocabulary, level, vocati
             disabled={action.locked}
             className={`rule-action${action.id === actionId ? ' rule-action-selected' : ''}`}
             onClick={() => {
-              setRule({
-                ...rule,
-                do: supplies !== null ? { kind: 'supply', supplyId: action.id } : { kind: 'spell', spellId: action.id },
-              });
+              // RF-07/DT-03: trocar para uma ação que NÃO aceita amigo zera o alvo — a decisão
+              // mora em `withAction`, pura e testada; aqui só se acha a entrada do catálogo.
+              const nextEntry = supplies !== null
+                ? supplies.find((supply) => supply.id === action.id)
+                : [...(legacySpell === undefined ? [] : [legacySpell]), ...availableSpells]
+                  .find((spell) => spell.id === action.id);
+              setRule(withAction(
+                rule,
+                supplies !== null ? { kind: 'supply', supplyId: action.id } : { kind: 'spell', spellId: action.id },
+                actionAcceptsFriend(category, nextEntry),
+              ));
             }}
           >
             {action.label}

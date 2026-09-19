@@ -776,6 +776,44 @@ describe('a party v2 no estado (#405, ADR 0033)', () => {
   });
 });
 
+describe('o follow-state do bot (#406, ADR 0033 d.9)', () => {
+  it('grava a mensagem INTEIRA em `state.followState`', () => {
+    // Mutação que mata: descartar o `follow-state` (era `return;` antes desta issue) — a tela
+    // nunca saberia que o follow parou.
+    expect(hud.get().followState).toBeNull();
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'unreachable' }, 0);
+    expect(hud.get().followState).toMatchObject({ active: false, targetId: 'p2', reason: 'unreachable' });
+  });
+
+  it('`active: true` substitui o estado anterior — o follow retomou', () => {
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'dead' }, 0);
+    applyMessage({ type: 'follow-state', active: true, targetId: 'p2' }, 1);
+    expect(hud.get().followState).toMatchObject({ active: true, targetId: 'p2' });
+  });
+
+  it('é PUSH do servidor: mora no `hud`, não no `bot` (DT-01)', () => {
+    const before = bot.get().save;
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'left' }, 0);
+    expect(hud.get().followState).not.toBeNull();
+    expect(bot.get().save).toBe(before);
+  });
+
+  it('session-state limpa o follow-state: a reanexação não mostra o "interrompido" antigo (§7)', () => {
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'dead' }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { groundItems: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 1);
+    expect(hud.get().followState).toBeNull();
+  });
+});
+
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
