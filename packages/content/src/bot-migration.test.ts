@@ -93,7 +93,7 @@ describe('migrateBotConfigV1 (AB-03, ADR 0032 d.1)', () => {
         expect(slot?.when).toEqual([raw.when]);
         expect(slot?.enabled).toBe(raw.enabled);
         const action = raw.do as { kind: string; spellId?: string; supplyId?: string };
-        expect(slot?.do.kind).toBe(action.kind === 'supply' ? 'item' : action.kind);
+        expect(slot?.do.kind).toBe(action.kind);
       });
     }
   });
@@ -122,9 +122,9 @@ describe('migrateBotConfigV1 (AB-03, ADR 0032 d.1)', () => {
     expect(raw).toEqual(before);
   });
 
-  it('supply vira item com o mesmo id (contrato com o AB-01)', () => {
+  it('supply continua supply com o mesmo id (o suprimento voltou a ser abstrato)', () => {
     const migrated = migrateBotConfigV1(v1({ potion: [supply('health-potion')] }));
-    expect(migrated.sets[0]?.slots[0]?.do).toEqual({ kind: 'item', itemId: 'health-potion' });
+    expect(migrated.sets[0]?.slots[0]?.do).toEqual({ kind: 'supply', supplyId: 'health-potion' });
   });
 
   it('ringSwap vira a automação swap-ring com histerese e params preservados', () => {

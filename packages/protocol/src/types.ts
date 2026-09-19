@@ -155,6 +155,12 @@ export const C2S_SCHEMAS = {
    */
   unequip: z.object({ slot: z.string().min(1) }),
   /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). INTENÇÃO: o cliente diz QUAL munição, e
+   * quem decide se o level basta é o servidor (invariante 4). A escolha aparece de volta em
+   * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
+   */
+  'select-ammo': z.object({ ammoId: z.string().min(1) }),
+  /**
    * Escolher a vocação (#154, ADR 0026 decisão 1). INTENÇÃO: o cliente diz QUAL, e quem decide
    * se o level basta e se ainda não há uma é o servidor (invariante 4). Sucesso é
    * `player-stats.vocationId` mais `inventory`; recusa é `system-message`, como equipar.
@@ -536,8 +542,8 @@ export const S2C_SCHEMAS = {
      *
      * O v2 substitui o vocabulário v1: saem o gate de level, o record de slots por categoria e
      * a lista de supply; entram a contagem e os nomes dos conjuntos, as teclas válidas, os
-     * grupos de cooldown do conteúdo e os modelos de automação. As magias e os consumíveis vêm
-     * de `items[]` — a poção é item desde a AB-01.
+     * grupos de cooldown do conteúdo e os modelos de automação. As magias vêm de `spells[]` e
+     * os suprimentos abstratos de `supplies[]` — a poção voltou a ser supply (gold no uso).
      */
     bot: z.object({
       vocabularyVersion: z.number().int().positive(),
@@ -548,7 +554,7 @@ export const S2C_SCHEMAS = {
       setNames: z.array(z.string().min(1)),
       /** As teclas válidas (1–9, 0, F1–F12) — a tela não tem a lista em código (UC-BAR). */
       hotkeys: z.array(z.string().min(1)),
-      /** Os grupos de cooldown do conteúdo (união de `spell.group` e `item.group`). */
+      /** Os grupos de cooldown do conteúdo (união de `spell.group` e `supply.group`). */
       groups: z.array(z.string().min(1)),
       spells: z.array(z.object({
         id: z.string().min(1),
@@ -561,6 +567,22 @@ export const S2C_SCHEMAS = {
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
       })),
+      /**
+       * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa não são itens — usar
+       * debita gold. O `price` e o `group` são o que a tela mostra para escolher.
+       */
+      supplies: z.array(z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        price: z.number().int().nonnegative(),
+        effect: z.string().min(1),
+        group: z.string().min(1),
+        /** Level e magic level exigidos (#165) — para a tela não oferecer o que o servidor recusa. */
+        requires: z.object({
+          level: z.number().int().positive().optional(),
+          magicLevel: z.number().int().nonnegative().optional(),
+        }).default({}),
+      })).default([]),
       /** Os cinco modelos de automação e os parâmetros de cada um (AB-12). */
       automations: z.array(z.object({
         model: z.enum(BOT_AUTOMATION_MODELS),
@@ -595,9 +617,9 @@ export const S2C_SCHEMAS = {
       attack: z.number().int().nonnegative().optional(),
       armor: z.number().int().nonnegative().optional(),
       /**
-       * O tipo de item (AB-09): `consumable`, `ammo`, `weapon`… O editor de ação do AB-11
-       * filtra por ele. Opcional sem default, como `value`/`attack`/`armor`: um nó anterior
-       * manda sem, e o cliente trata ausência como "não filtrável".
+       * O tipo de item (AB-09): `weapon`, `armor`, `shield`… O editor de ação do AB-11 filtra
+       * por ele. Opcional sem default, como `value`/`attack`/`armor`: um nó anterior manda sem,
+       * e o cliente trata ausência como "não filtrável".
        */
       kind: z.string().min(1).optional(),
       /**
@@ -605,20 +627,10 @@ export const S2C_SCHEMAS = {
        * tem; ausente, a tela cai no `name`.
        */
       shortLabel: z.string().min(1).optional(),
-      /** O grupo de cooldown do consumível (AB-09) — o mesmo vocabulário de `bot.groups`. */
-      group: z.string().min(1).optional(),
-      /** O preço de COMPRA do consumível (AB-09). `value` continua o de venda. */
-      price: z.number().int().nonnegative().optional(),
-      /** Lote e mínimo da reposição por lote (AB-09). */
-      restock: z.object({
-        batch: z.number().int().positive(),
-        min: z.number().int().nonnegative(),
-      }).optional(),
       /**
        * Como a arma bate (#152): o tipo e o alcance, para o tooltip. `ammoFamily` diz de que
-       * família é a munição que a arma dispara — o slot `ammo` do set a usa (AB-13). Mana por
-       * golpe e faixa de dano ficam de fora — são balanceamento que o cliente não simula
-       * (invariante 4).
+       * família é a munição que a arma dispara — o seletor de munição a usa. Mana por golpe e
+       * faixa de dano ficam de fora — são balanceamento que o cliente não simula (invariante 4).
        */
       weapon: z.object({
         kind: z.string().min(1),
@@ -626,6 +638,20 @@ export const S2C_SCHEMAS = {
         ammoFamily: z.string().min(1).optional(),
       }).optional(),
     })),
+    /**
+     * A munição abstrata que existe (#152, ADR 0026 d.3): o seletor no slot do escudo lista a
+     * família do bow, com o preço por tiro — o único número de balanceamento aqui, pela mesma
+     * razão do preço do supply: é o que o jogador olha para escolher. `default([])`: nó anterior.
+     */
+    ammunition: z.array(z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      family: z.string().min(1),
+      attack: z.number().int().nonnegative(),
+      price: z.number().int().nonnegative(),
+      appearanceId: z.number().int().positive(),
+      requires: z.object({ level: z.number().int().positive().optional() }),
+    })).default([]),
     /**
      * As vocações (#154), para o diálogo do level da escolha. Os três ganhos por level
      * aparecem porque são o que o jogador olha para escolher — como o preço do supply. A arma
@@ -699,6 +725,13 @@ export const S2C_SCHEMAS = {
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
     targetId: z.number().int().nonnegative().nullable().default(null),
+    /**
+     * A munição escolhida por família (#152, ADR 0026 decisão 3), a forma do Huntera
+     * (`ammo-selection`): `null` é "nenhuma escolhida". `default`: um nó `game` anterior manda
+     * sem, e o cliente não mostra seleção.
+     */
+    ammo: z.object({ arrow: z.string().nullable(), bolt: z.string().nullable() })
+      .default({ arrow: null, bolt: null }),
     /** A vocação (#154). `null` é "ainda não escolheu". `default(null)`: nó anterior manda sem. */
     vocationId: z.string().nullable().default(null),
     speed: z.number().int().nonnegative().default(0),

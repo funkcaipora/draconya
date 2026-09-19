@@ -19,7 +19,13 @@ export const CLIENT_TO_SERVER = {
   'bot-config': 11,
   equip: 12,
   unequip: 13,
-  /** Escolher a vocação (#154, ADR 0026 decisão 1). 15: o 14 está queimado (era o `select-ammo`). */
+  /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). INTENÇÃO: o cliente diz QUAL munição, e
+   * quem decide se o level basta é o servidor (invariante 4). A escolha aparece de volta em
+   * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
+   */
+  'select-ammo': 14,
+  /** Escolher a vocação (#154, ADR 0026 decisão 1). 15: o 14 é do `select-ammo` (#152). */
   'choose-vocation': 15,
   /** Mover um item entre lugares (#160, ADR 0026 decisão 6). */
   'move-item': 16,
@@ -146,7 +152,7 @@ export const SERVER_TO_CLIENT = {
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */
-export const BURNED_OPCODES_C2S: readonly number[] = [14];
+export const BURNED_OPCODES_C2S: readonly number[] = [];
 export const BURNED_OPCODES_S2C: readonly number[] = [];
 
 export type C2SName = keyof typeof CLIENT_TO_SERVER;

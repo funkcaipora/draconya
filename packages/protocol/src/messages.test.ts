@@ -273,9 +273,9 @@ describe('the hunt catalogue carries the monster outfits to warm (FUN-112)', () 
       hotkeys: ['1'],
       groups: [],
       spells: [],
-      automations: [],
+      automations: [], supplies: [],
     },
-    items: [],
+    items: [], ammunition: [],
   } as unknown as S2CMessage);
 
   it('round trips the outfit ids, and an older node without them decodes to an EMPTY list', () => {
@@ -382,9 +382,9 @@ describe('the bestiary (FUN-113, §18)', () => {
         hotkeys: ['1'],
         groups: [],
         spells: [],
-        automations: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
     };
     const full = {
       ...base,
@@ -411,9 +411,9 @@ describe('the bestiary (FUN-113, §18)', () => {
         hotkeys: ['1'],
         groups: [],
         spells: [],
-        automations: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [{ id: 'rat', name: 'Rat', health: 20, experience: 5 }],
     } as unknown as S2CMessage;
     const decoded = decodeS2C(encodeS2C(base)) as Array<{ monsters: Array<{ id: string; name: string; health?: number; experience?: number }> }> | null;
@@ -442,9 +442,9 @@ describe('the bestiary (FUN-113, §18)', () => {
         hotkeys: ['1'],
         groups: [],
         spells: [],
-        automations: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [{ id: 'rat', name: 'Rat', class: 'mammal', health: 20, experience: 5 }],
     } as unknown as S2CMessage;
     const decoded = decodeS2C(encodeS2C(withClass)) as Array<{ monsters: Array<{ id: string; name: string; class?: string; health?: number; experience?: number }> }> | null;
@@ -472,9 +472,9 @@ describe('the bestiary (FUN-113, §18)', () => {
         hotkeys: ['1'],
         groups: [],
         spells: [],
-        automations: [],
+        automations: [], supplies: [],
       },
-      items: [],
+      items: [], ammunition: [],
       monsters: [],
       vocations: [],
       vocationLevel: 8,
@@ -527,10 +527,9 @@ describe('the bestiary (FUN-113, §18)', () => {
 
 describe('vocation choice (#154)', () => {
   it('is intention only: the client names the vocation, and the opcode is 15', () => {
-    // O 14 está QUEIMADO (era o `select-ammo`, #152); a ADR 0026 registra o 15. Mutação que
-    // mata: reciclar o 14 (duplicado) ou apagar a linha (o schema fica órfão).
-    expect(BURNED_OPCODES_C2S).toContain(14);
-    expect(OPCODE_TO_NAME_C2S.has(14)).toBe(false);
+    // O 14 é do `select-ammo` (#152); a ADR 0026 registra o 15. Mutação que mata: trocar por
+    // 14 (duplicado) ou apagar a linha (o schema fica órfão e o teste estrutural reprova).
+    expect(CLIENT_TO_SERVER['select-ammo']).toBe(14);
     expect(CLIENT_TO_SERVER['choose-vocation']).toBe(15);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: 'knight' }).success).toBe(true);
     expect(C2S_SCHEMAS['choose-vocation'].safeParse({ vocationId: '' }).success).toBe(false);
@@ -547,11 +546,11 @@ describe('vocation choice (#154)', () => {
     expect(stats.vocationId).toBeNull();
     expect(S2C_SCHEMAS['player-stats'].parse({ ...stats, vocationId: 'knight' }).vocationId).toBe('knight');
     const catalogue = S2C_SCHEMAS.catalogue.parse({
-      hunts: [], items: [],
+      hunts: [], items: [], ammunition: [],
       bot: {
         vocabularyVersion: 2,
         setCount: 4, slotsPerSet: 24, setNames: [], hotkeys: [], groups: [],
-        spells: [], automations: [],
+        spells: [], automations: [], supplies: [],
       },
     });
     expect(catalogue.vocations).toEqual([]);
@@ -565,6 +564,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     health: 150, maxHealth: 150, mana: 20, maxMana: 20,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
     targetId: null,
+    ammo: { arrow: null, bolt: null },
     vocationId: 'knight',
     speed: 292,
     skills: {
@@ -590,6 +590,7 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     expect(decoded).toEqual([{
       ...rawOlderNode,
       targetId: null,
+      ammo: { arrow: null, bolt: null },
       speed: 0,
       skills: {},
       magicLevel: { level: 0, percentToNext: 0 },
@@ -891,6 +892,7 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
       gold: 50,
       staminaMs: 50000,
       targetId: 42,
+      ammo: { arrow: null, bolt: null },
       vocationId: 'knight',
       speed: 250,
       skills: {},
@@ -913,15 +915,20 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
 
 
 describe('slot intents and state (AB-09)', () => {
-  it('adds C2S 17/18 and S2C 30/31, without recycling the burned 14', () => {
-    // Invariante 5: os números vivem só aqui. O 14 está queimado desde o #420 (era o
-    // `select-ammo`) e esta task não o reintroduz.
+  it('adds C2S 17/18 and S2C 30/31, and 14 is select-ammo again', () => {
+    // Invariante 5: os números vivem só aqui. O 14 voltou a ser `select-ammo` (#152) na
+    // reversão do modelo de munição; não há mais opcode queimado no C2S.
     expect(CLIENT_TO_SERVER['use-slot']).toBe(17);
     expect(CLIENT_TO_SERVER['select-target']).toBe(18);
     expect(SERVER_TO_CLIENT['slot-state']).toBe(30);
     expect(SERVER_TO_CLIENT['slot-result']).toBe(31);
-    expect(BURNED_OPCODES_C2S).toContain(14);
-    expect(OPCODE_TO_NAME_C2S.has(14)).toBe(false);
+    expect(CLIENT_TO_SERVER['select-ammo']).toBe(14);
+    expect(BURNED_OPCODES_C2S).not.toContain(14);
+  });
+
+  it('select-ammo is intention only: the client names the ammo, the server gates the level', () => {
+    expect(C2S_SCHEMAS['select-ammo'].safeParse({ ammoId: 'sniper-arrow' }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-ammo'].safeParse({ ammoId: '' }).success).toBe(false);
   });
 
   it('is intention only: { set, slot } and { creatureId }, nothing resolved', () => {

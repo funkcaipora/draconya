@@ -50,20 +50,16 @@ const base: RawContent = {
   items: [
     { id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger', weight: 1, value: 0, armor: 2 },
     { id: 'glacier-amulet', name: 'Glacier Amulet', kind: 'amulet', slot: 'neck', weight: 5, value: 0 },
-    {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', weight: 0.1, value: 0, stackable: true,
-      attack: 20, price: 1, restock: { batch: 100, min: 0 }, ammunition: { family: 'arrow' },
-    },
-    {
-      id: 'burst-arrow', name: 'Burst Arrow', kind: 'ammo', slot: 'ammo', weight: 0.1, value: 0, stackable: true,
-      attack: 25, price: 1, restock: { batch: 100, min: 0 }, ammunition: { family: 'arrow' },
-    },
     { id: 'spike-sword', name: 'Spike Sword', kind: 'weapon', slot: 'hand', weight: 50, value: 0, attack: 24 },
     { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 5 },
     {
       id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', twoHanded: true, weight: 31, value: 0,
       weapon: { kind: 'distance', family: 'distance', range: 6, ammoFamily: 'arrow' },
     },
+  ],
+  ammunition: [
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 1 },
+    { id: 'burst-arrow', name: 'Burst Arrow', family: 'arrow', attack: 25, price: 1 },
   ],
 };
 
@@ -109,25 +105,25 @@ describe('validateBotConfigV2 confere o slot de cada id de automação (AB-08)',
     expect(problems[0]).toContain('neck');
   });
 
-  it('recusa munição fora do slot ammo', () => {
+  it('recusa munição que não existe no catálogo de munição', () => {
     const problems = validateBotConfigV2(config([
       { model: 'swap-ammo-by-targets', params: { ammoA: 'life-ring', ammoB: 'arrow' } },
     ]), content);
     expect(problems[0]).toContain('swap-ammo-by-targets');
     expect(problems[0]).toContain('life-ring');
-    expect(problems[0]).toContain('ammo');
+    expect(problems[0]).toContain('munição');
   });
 
   it('recusa escudo que não é escudo e arma que não é de mão', () => {
     const problems = validateBotConfigV2(config([
       {
         model: 'swap-weapon-shield-by-hp',
-        params: { oneHanded: 'life-ring', shield: 'arrow', twoHanded: 'bow' },
+        params: { oneHanded: 'life-ring', shield: 'glacier-amulet', twoHanded: 'bow' },
       },
     ]), content);
     expect(problems.some((problem) => problem.includes('"life-ring"') && problem.includes('hand')))
       .toBe(true);
-    expect(problems.some((problem) => problem.includes('"arrow"') && problem.includes('shield')))
+    expect(problems.some((problem) => problem.includes('"glacier-amulet"') && problem.includes('shield')))
       .toBe(true);
   });
 

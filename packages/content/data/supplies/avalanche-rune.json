@@ -1,0 +1,22 @@
+{
+  "id": "avalanche-rune",
+  "name": "Avalanche Rune",
+  "price": 14,
+  "group": "attack",
+  "requires": {
+    "level": 30,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 45,
+    "range": 4,
+    "damageType": "ice",
+    "area": {
+      "shape": "circle",
+      "radius": 3,
+      "centered": "target"
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso): level 30, magic level 4, 4 cargas (TibiaWiki, conferir ao gravar); o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45) e o raio (3, a área da Great Fireball) também são provisórios até a leitura da infobox; elemento gelo declarado no efeito desde o CMB-03. Aparência: efeito (effect 41, o mesmo de ice-wave) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, QA por tile pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

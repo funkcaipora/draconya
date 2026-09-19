@@ -37,44 +37,43 @@ describe('huntSchema (#360)', () => {
   });
 });
 
-describe('itemSchema — consumível exige a forma inteira (AB-01)', () => {
+describe('itemSchema — o consumível é só a blessing-charge (ADR 0026 d.3)', () => {
   const consumable = {
-    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
-    stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
-    restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
+    id: 'blessing-charge', name: 'Carga de Bênção', kind: 'consumable',
+    stackable: false, weight: 1, value: 0, effect: { kind: 'blessing' },
   };
 
-  it('aceita o consumível completo, e o roundtrip é estável', () => {
+  it('aceita o consumível sem group, sem restock, sem price e sem empilhar', () => {
+    // O suprimento virou abstrato: só a bênção (M22) permanece como item consumível, e ela
+    // não tem preço, grupo nem reposição. Mutação que mata: exigir `stackable`/`group`.
     const parsed = itemSchema.parse(consumable);
     expect(parsed.kind).toBe('consumable');
+    expect(parsed.stackable).toBe(false);
     expect(itemSchema.parse(parsed)).toEqual(parsed);
   });
 
-  it('recusa consumível sem `group`, sem `restock`, sem `price` ou sem `effect`', () => {
-    // As quatro lacunas que a `superRefine` existe para pegar: um schema de campo opcional
-    // aceitaria todas, e o item chegaria ao runtime sem o que a reposição e o motor leem.
-    const { group: _group, ...semGroup } = consumable;
-    const { restock: _restock, ...semRestock } = consumable;
-    const { price: _price, ...semPrice } = consumable;
+  it('recusa consumível sem `effect`', () => {
     const { effect: _effect, ...semEffect } = consumable;
-    expect(() => itemSchema.parse(semGroup)).toThrow(/group/);
-    expect(() => itemSchema.parse(semRestock)).toThrow(/restock/);
-    expect(() => itemSchema.parse(semPrice)).toThrow(/price/);
     expect(() => itemSchema.parse(semEffect)).toThrow(/effect/);
   });
 
-  it('recusa consumível que não empilha', () => {
-    expect(() => itemSchema.parse({ ...consumable, stackable: false })).toThrow(/stackable/);
-  });
-
-  it('recusa `group`/`restock`/`price`/`effect` fora de `kind: consumable`', () => {
+  it('recusa `effect` fora de `kind: consumable`', () => {
     // Zod descartaria em silêncio se o schema fosse aberto: o arquivo pareceria certo e o
     // campo não iria a lugar nenhum.
     const ring = { id: 'life-ring', name: 'Life Ring', kind: 'ring', weight: 1, value: 0 };
-    expect(() => itemSchema.parse({ ...ring, restock: { batch: 1, min: 0 } })).toThrow();
-    expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
-    expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
     expect(() => itemSchema.parse({ ...ring, effect: { kind: 'heal', amount: 1 } })).toThrow();
+  });
+
+  it('não existe mais `kind: ammo` nem os campos de consumível/ammo no item', () => {
+    const ammo = {
+      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
+      weight: 0.7, value: 0, attack: 25, price: 1, ammunition: { family: 'arrow' },
+    };
+    expect(() => itemSchema.parse(ammo)).toThrow();
+    const ring = { id: 'life-ring', name: 'Life Ring', kind: 'ring', weight: 1, value: 0 };
+    expect(() => itemSchema.parse({ ...ring, price: 10 })).toThrow();
+    expect(() => itemSchema.parse({ ...ring, group: 'potion' })).toThrow();
+    expect(() => itemSchema.parse({ ...ring, restock: { batch: 1, min: 0 } })).toThrow();
   });
 });
 
@@ -109,19 +108,16 @@ describe('o vocabulário v2 do bot (AB-03, ADR 0032)', () => {
     expect(botSetSchema.safeParse(f13).success).toBe(false);
   });
 
-  it('aceita `condition` (efeito presente/ausente) e recusa reposição em slot de magia', () => {
+  it('aceita `condition` (efeito presente/ausente) e o slot de `supply`', () => {
     expect(botConditionSchema.safeParse({ kind: 'condition', conditionId: 'haste', present: false })
       .success).toBe(true);
 
-    const restockOnSpell = set([
-      { do: { kind: 'spell', spellId: 'heal' }, when: [], restock: { batch: 1, min: 0 } },
+    // A ação de slot v2 é `spell | supply`; o `item` de slot saiu (ADR 0026 d.3).
+    const supplySlot = set([
+      { do: { kind: 'supply', supplyId: 'health-potion' }, when: [] },
       ...emptySlots().slice(1),
     ]);
-    const bad = botSetSchema.safeParse(restockOnSpell);
-    expect(bad.success).toBe(false);
-    if (!bad.success) {
-      expect(bad.error.issues[0]?.path).toEqual(['slots', 0, 'restock']);
-    }
+    expect(botSetSchema.safeParse(supplySlot).success).toBe(true);
   });
 });
 

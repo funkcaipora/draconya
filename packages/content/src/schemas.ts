@@ -145,11 +145,13 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
-   * `id de item de munição → { missile }` (ADR 0032, decisão 7). O projétil do tiro; o ÍCONE é
-   * `appearances.items[id]`, como todo item — o slot de equipamento e a mochila desenham por
-   * `appearanceId`, e duplicar o ícone criaria duas verdades para o mesmo número (DT-03).
+   * `id de munição → { icon, missile }` (#152, ADR 0026 decisão 3). A munição é ABSTRATA, não
+   * item: o seletor do slot do escudo lista a família do bow, e o tiro é o projétil. O ícone é
+   * `icon` (não há mais `appearances.items[id]` para a munição) e `missile` é o projétil — a
+   * linha tem dois números, e `resolveAmmunition` confere os dois lados.
    */
   ammunition: z.record(z.string().min(1), z.object({
+    icon: appearanceId,
     missile: appearanceId,
   })).default({}),
   /**
@@ -524,11 +526,12 @@ export const itemSchema = z.strictObject({
   shortLabel: z.string().min(1).optional(),
   /**
    * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
-   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `ammo` é a
-   * munição como ITEM empilhável (ADR 0032, decisão 7), com `ammunition` obrigatório.
+   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `consumable`
+   * é o único tipo que sobrevive ao modelo abstrato (a `blessing-charge`, M22): poção, runa e
+   * munição NÃO são itens — são `supply`/`ammunition`, uma seleção que debita gold no uso/tiro.
    */
   kind: z.enum([
-    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable', 'ammo',
+    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable',
   ]),
   slot: z.enum(ITEM_SLOTS).optional(),
   /**
@@ -556,8 +559,8 @@ export const itemSchema = z.strictObject({
    */
   value: z.number().int().nonnegative(),
   /**
-   * Empilha na mesma linha de inventário? Queijo empilha; espada não. Munição É item e
-   * empilha (ADR 0032, decisão 7) — `buildContent` recusa `kind: 'ammo'` sem este campo.
+   * Empilha na mesma linha de inventário? Queijo empilha; espada não. A `blessing-charge` NÃO
+   * empilha — é carga única, e o schema não impõe mais `stackable: true` a consumível.
    */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
@@ -579,7 +582,7 @@ export const itemSchema = z.strictObject({
   requires: z.object({
     level: z.number().int().positive().optional(),
     vocationId: z.string().min(1).optional(),
-    /** O `magicLevel` da runa (#165). Só consumível de dano o usa. */
+    /** O `magicLevel` da runa (#165). Hoje só o supply de dano o usa. */
     magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
   /**
@@ -599,56 +602,99 @@ export const itemSchema = z.strictObject({
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
-  /**
-   * A MUNIÇÃO (ADR 0032, decisão 7). Obrigatório em `kind: 'ammo'` e proibido fora dela —
-   * `buildContent` confere, como faz com `weapon` e `initialSlots`. `family` é a mesma
-   * `AMMO_FAMILIES` do `weapon.ammoFamily` da arma de distância; `damageType` é o do tiro.
-   * O `attack` do tiro é o `attack` do próprio item.
-   */
-  ammunition: z.strictObject({
-    family: z.enum(AMMO_FAMILIES),
-    damageType: z.enum(DAMAGE_TYPES).default('physical'),
-  }).optional(),
-  /**
-   * Preço de COMPRA (reposição por lote, ADR 0032 d.6). Consumível e munição — a flecha tem
-   * preço e lote como qualquer suprimento (ADR 0032 d.7); `value` é o de venda. Declarado e
-   * não executado nesta task — a AB-04 (#419) repõe pelo ledger.
-   */
-  price: z.number().int().nonnegative().optional(),
-  /** Grupo de cooldown do conteúdo (ADR 0032 d.2). Só consumível; o motor v1 o ignora (AB-07). */
-  group: z.enum(CONSUMABLE_GROUPS).optional(),
-  /** Lote e mínimo da reposição idle-first (ADR 0032 d.6). Declarado; a AB-04 o executa. */
-  restock: z.object({
-    batch: z.number().int().positive(),
-    min: z.number().int().nonnegative(),
-  }).optional(),
-  /** O efeito do consumível (ADR 0032 d.6). Só em `kind: 'consumable'`. */
+  /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
   effect: consumableEffectSchema.optional(),
   _open: z.string().optional(),
 }).superRefine((item, ctx) => {
   // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
-  // outro. Zod descartaria um `restock` num anel em silêncio se o schema fosse aberto.
+  // outro. Um `effect` num anel seria descartado em silêncio se o schema fosse aberto.
   if (item.kind === 'consumable') {
-    if (!item.stackable) ctx.addIssue({ code: 'custom', message: 'consumível precisa de `stackable: true`' });
-    if (item.group === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `group`' });
-    if (item.restock === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `restock`' });
-    if (item.price === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `price`' });
     if (item.effect === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `effect`' });
-  } else if (item.kind === 'ammo') {
-    // A munição também tem `price` e `restock` (ADR 0032 d.7): o que NÃO é dela é `group` e
-    // `effect`, que são do consumível.
-    if (item.group !== undefined || item.effect !== undefined) {
-      ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `group`/`effect`' });
-    }
-  } else if (item.group !== undefined || item.restock !== undefined
-    || item.price !== undefined || item.effect !== undefined) {
-    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` ou `ammo` tem `group`/`restock`/`price`/`effect`' });
+  } else if (item.effect !== undefined) {
+    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `effect`' });
   }
 });
 
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
+/**
+ * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
+ * direto, no ato. Por isso supply tem preço e `group` de cooldown, e não tem peso, slot nem
+ * instância. O `effect` é a união discriminada por `kind`, fechada como o vocabulário do bot:
+ * o `sim` só executa o que conhece. `group` é o grupo de cooldown do motor v2 (poção → `potion`,
+ * runa de ataque → `attack`).
+ */
+export const supplySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
+  price: z.number().int().nonnegative(),
+  /** Grupo de cooldown do motor v2 (ADR 0032 d.2). O mesmo vocabulário de `spell.group`. */
+  group: z.enum(CONSUMABLE_GROUPS),
+  effect: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+    z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+    /**
+     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
+     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
+     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
+     */
+    z.object({
+      kind: z.literal('damage'),
+      basePower: z.number().int().positive(),
+      range: z.number().int().positive(),
+      area: z.object({
+        shape: z.literal('circle'),
+        radius: z.number().int().positive(),
+        centered: z.literal('target').default('target'),
+      }),
+      /**
+       * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
+       * Avalanche é gelo, e o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+    }),
+  ]),
+  /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+    magicLevel: z.number().int().nonnegative().optional(),
+  }).default(() => ({})),
+  _open: z.string().optional(),
+});
+
+export type Supply = z.infer<typeof supplySchema>;
+
+/**
+ * Munição (ADR 0026, decisão 3 — o modelo do Huntera). NÃO é item: não tem peso, pilha nem
+ * instância. É uma SELEÇÃO por família, mostrada no slot do escudo com o bow na mão; cada tiro
+ * debita `price` do gold do personagem. O `attack` do tiro é este `attack` pela skill de
+ * distância — o bow não tem attack próprio. Estrito, como o item, e pela mesma razão:
+ * `appearanceId` escrito aqui por hábito iria para lugar nenhum em silêncio.
+ */
+export const ammunitionSchema = z.strictObject({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  family: z.enum(AMMO_FAMILIES),
+  /** O dano do tiro é este `attack` pela skill de distância — o bow não tem attack próprio. */
+  attack: z.number().int().nonnegative(),
+  /** O tipo de dano do tiro (CMB-03). Ausente é `physical`, o default que preserva o v1. */
+  damageType: z.enum(DAMAGE_TYPES).default('physical'),
+  /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
+  price: z.number().int().positive(),
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+  }).default(() => ({})),
+  _open: z.string().optional(),
+});
+
+export type AmmunitionDefinition = z.infer<typeof ammunitionSchema>;
+/** A munição pronta para uso: `appearanceId` é o ícone, `missileId` o projétil, ambos do boot. */
+export type Ammunition = AmmunitionDefinition & {
+  readonly appearanceId: number;
+  readonly missileId: number;
+};
 
 /**
  * O item pronto para uso, com a aparência já resolvida por `buildContent`.
@@ -1535,13 +1581,17 @@ export const botActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
 ]);
 
-/** A ação da v1, com `supply` — o catálogo `supplies/` saiu no AB-01, mas a config salva o tem. */
+/** A ação da v1, com `supply`, `spell` e `item` — a config salva ainda a usa até o AB-07. */
 export const botActionV1Schema = botActionSchema;
 
-/** A ação da v2: `spell` ou `item` consumível; o token `supplyId` saiu com o AB-01/AB-03. */
+/**
+ * A ação da v2: `spell` ou `supply`. O suprimento voltou a ser ABSTRATO (gold no uso), então o
+ * token `supplyId` volta ao vocabulário; o `item` de slot saiu — item de equipamento é das
+ * automações, não de um slot da barra.
+ */
 export const botActionV2Schema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('spell'), spellId: z.string().min(1) }),
-  z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
+  z.object({ kind: z.literal('supply'), supplyId: z.string().min(1) }),
 ]);
 
 /**
@@ -1718,12 +1768,6 @@ export const botRuleSchema = botRuleV1Schema;
 export const BOT_CATEGORIES = ['heal', 'potion', 'attack', 'rune', 'support'] as const;
 export type BotCategory = (typeof BOT_CATEGORIES)[number];
 
-/** Reposição por lote (ADR 0032 d.6). Ausente no slot herda o default do item no catálogo. */
-export const botRestockSchema = z.object({
-  batch: z.number().int().positive(),
-  min: z.number().int().nonnegative(),
-});
-
 /**
  * Um slot da barra. `do` só existe quando o slot está ocupado; `null` é slot vazio (a barra
  * desenha os 24 sempre, AB-10). `when` vazio é ação sem condição — elegível sempre (RG-007).
@@ -1731,13 +1775,12 @@ export const botRestockSchema = z.object({
 export const botSlotSchema = z.object({
   /** Ausente é ligada — mantém a v1. */
   enabled: z.boolean().optional(),
-  /** `spell` | `item` (o token `supply` saiu com o AB-01). */
+  /** `spell` | `supply` (o suprimento voltou a ser abstrato; o `item` de slot saiu). */
   do: botActionV2Schema,
   /** E entre elas (RG-006). */
   when: z.array(botConditionSchema).default([]),
   hotkey: botHotkeySchema.optional(),
   auto: z.boolean().default(true),
-  restock: botRestockSchema.optional(),
 });
 export type BotSlot = z.infer<typeof botSlotSchema>;
 
@@ -1756,14 +1799,6 @@ export const botSetSchema = z.object({
         });
       }
       seen.add(slot.hotkey);
-    }
-    // Fora do ramo da tecla de propósito: reposição em slot de magia é recusada mesmo sem
-    // hotkey, senão a validação sumiria para quem não mapeou tecla.
-    if (slot.restock !== undefined && slot.do.kind !== 'item') {
-      ctx.addIssue({
-        code: 'custom', path: ['slots', index, 'restock'],
-        message: `slot ${index + 1}: reposição só faz sentido em slot de item`,
-      });
     }
   });
 });
@@ -2048,19 +2083,6 @@ export const spellSchema = z.object({
   ]),
   _open: z.string().optional(),
 });
-
-/**
- * A projeção do item consumível para o atuador v1 (FUN-77), DEPRECIADA. Existe só para a
- * config v1 salva continuar válida até a AB-03 (#418) migrá-la. `blessing` fica de fora: o
- * `sim` v1 não a executa. Sai junto com o token `supplyId` na AB-03.
- */
-export type Supply = {
-  readonly id: string;
-  readonly name: string;
-  readonly price: number;
-  readonly effect: Extract<ConsumableEffect, { kind: 'heal' | 'mana' | 'damage' }>;
-  readonly requires: { readonly level?: number; readonly magicLevel?: number };
-};
 
 export type Spell = z.infer<typeof spellSchema>;
 

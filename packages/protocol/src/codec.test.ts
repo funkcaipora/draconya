@@ -181,7 +181,9 @@ describe('catalogue item stats (#337)', () => {
         groups: [],
         spells: [],
         automations: [],
+        supplies: [],
       },
+      ammunition: [],
       items: [
         {
           id: 'spike-sword',

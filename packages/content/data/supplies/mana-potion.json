@@ -1,0 +1,8 @@
+{
+  "id": "mana-potion",
+  "name": "Poção de Mana",
+  "price": 50,
+  "group": "potion",
+  "effect": { "kind": "mana", "amount": 100 },
+  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2. Não é valor final."
+}

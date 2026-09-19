@@ -32,8 +32,8 @@ export function isBotConfigV2(raw: unknown): boolean {
  * preservando `enabled`, a condição e a ordem interna de cada categoria. O excedente acima de
  * 24 regras continua no conjunto 2, na mesma ordem: nada é descartado (DT-04).
  *
- * `supplyId` vira `itemId` porque o AB-01 transformou os supplies em itens com o mesmo id — é um
- * contrato entre as duas tasks, não uma suposição local. `ringSwap` vira a automação `swap-ring`.
+ * `supplyId` permanece `supplyId` — o suprimento voltou a ser ABSTRATO (gold no uso, ADR 0026
+ * d.3), e a v1 já usava o mesmo token. `ringSwap` vira a automação `swap-ring`.
  */
 export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
   // Idempotência ANTES do parse v1: o v1 não conhece `sets`, e o objeto v1 descartaria o v2 em
@@ -49,11 +49,16 @@ export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
   const flat: BotSlot[] = [];
   for (const category of BOT_CATEGORIES) {
     for (const rule of v1[category]) {
+      // A v2 só tem `spell` e `supply`. O `supply` v1 vira `supply` v2 (o suprimento voltou a
+      // ser abstrato); um `item` v1 — que só existiu no vocabulário M18 — vira `supply` pelo
+      // mesmo id, porque os consumíveis daquele modelo tinham o id do suprimento. Item de
+      // equipamento nunca foi ação de slot válida (o atuador não existe), e o juiz v2 recusa.
+      const action = rule.do.kind === 'item'
+        ? { kind: 'supply' as const, supplyId: rule.do.itemId }
+        : rule.do;
       flat.push(botSlotSchema.parse({
         ...(rule.enabled === undefined ? {} : { enabled: rule.enabled }),
-        do: rule.do.kind === 'supply'
-          ? { kind: 'item', itemId: rule.do.supplyId }
-          : rule.do,
+        do: action,
         when: [rule.when],       // a condição única da v1 vira a lista E de um
         auto: true,              // a chave automática nasce ligada (o manual é o extra)
       }));

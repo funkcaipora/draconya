@@ -32,7 +32,7 @@ const content = buildContent({
   // Aparência derivada (FUN-94): este arquivo valida regra de bot, não arte.
   appearances: [{
     id: 'baseline', pack: 'placeholder',
-    monsters: { rat: 1, wolf: 2 }, items: { 'spike-sword': 3, 'life-ring': 4, 'health-potion': 5 },
+    monsters: { rat: 1, wolf: 2 }, items: { 'spike-sword': 3, 'life-ring': 4 },
   }],
   progression: [{
     id: 'baseline', startingHealth: 150, startingMana: 60, startingCapacity: 400,
@@ -59,12 +59,11 @@ const content = buildContent({
     id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
     effect: { kind: 'heal', amount: 60 },
   }],
+  supplies: [{
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+    effect: { kind: 'heal', amount: 80 },
+  }],
   items: [
-    {
-      id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
-      stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
-      restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
-    },
     {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
       slot: 'hand', weight: 50, value: 0, attack: 24,
@@ -382,7 +381,7 @@ describe('o juiz do vocabulário v2 (AB-03)', () => {
     ...over,
   });
 
-  it('recusa magia e item inexistentes nomeando conjunto e slot', () => {
+  it('recusa magia e supply inexistentes nomeando conjunto e slot', () => {
     const badSpell = v2({
       sets: [
         set([{ do: { kind: 'spell', spellId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(1)]),
@@ -392,13 +391,13 @@ describe('o juiz do vocabulário v2 (AB-03)', () => {
     expect(validateBotConfigV2(badSpell, content)[0]).toContain('conjunto 1, slot 1');
     expect(validateBotConfigV2(badSpell, content)[0]).toContain('nao-existe');
 
-    const badItem = v2({
+    const badSupply = v2({
       sets: [
-        set([null, { do: { kind: 'item', itemId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(2)]),
+        set([null, { do: { kind: 'supply', supplyId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(2)]),
         set(), set(), set(),
       ],
     });
-    expect(validateBotConfigV2(badItem, content)[0]).toContain('conjunto 1, slot 2');
+    expect(validateBotConfigV2(badSupply, content)[0]).toContain('conjunto 1, slot 2');
   });
 
   it('aceita o que existe, e confere as automações contra o catálogo', () => {

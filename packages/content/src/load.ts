@@ -31,6 +31,10 @@ export function loadContent(dir: string): Content {
     bestiary: readJsonDir(join(dir, 'bestiary')),
     bot: readJsonDir(join(dir, 'bot')),
     spells: readJsonDir(join(dir, 'spells')),
+    // Suprimentos e munição ABSTRATOS (ADR 0026 d.3): poção, runa e flecha não são itens — o
+    // uso/tiro debita gold, e o catálogo vive em pasta própria.
+    supplies: readJsonDir(join(dir, 'supplies')),
+    ammunition: readJsonDir(join(dir, 'ammunition')),
     skills: readJsonDir(join(dir, 'skills')),
     items: readJsonDir(join(dir, 'items')),
     // As famílias de arma (CMB-05): alcance, tipo, recurso, fórmula e a skill que as escala —

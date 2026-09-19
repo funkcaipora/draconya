@@ -140,8 +140,8 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
       if (slot.do.kind === 'spell' && !content.spells.has(slot.do.spellId)) {
         problems.push(`${where}: magia "${slot.do.spellId}" não existe`);
       }
-      if (slot.do.kind === 'item' && !content.items.has(slot.do.itemId)) {
-        problems.push(`${where}: item "${slot.do.itemId}" não existe`);
+      if (slot.do.kind === 'supply' && !content.supplies.has(slot.do.supplyId)) {
+        problems.push(`${where}: supply "${slot.do.supplyId}" não existe`);
       }
     });
   });
@@ -153,8 +153,10 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
         return [[automation.params.itemId, 'finger']];
       case 'renew-amulet':
         return [[automation.params.itemId, 'neck']];
+      // A munição é abstrata (ADR 0026 d.3): `swap-ammo-by-targets` aponta ids do catálogo de
+      // munição, conferidos à parte — não são itens e não têm slot de equipamento.
       case 'swap-ammo-by-targets':
-        return [[automation.params.ammoA, 'ammo'], [automation.params.ammoB, 'ammo']];
+        return [];
       case 'swap-weapon-shield-by-hp':
         return [
           [automation.params.oneHanded, 'hand'],
@@ -164,6 +166,15 @@ export function validateBotConfigV2(config: BotConfigV2, content: Content): stri
     }
   };
   config.automations.forEach((automation, index) => {
+    // A troca de munição aponta o catálogo de MUNIÇÃO, e a referência é só existência — a
+    // família é decidida no motor, não na configuração.
+    if (automation.model === 'swap-ammo-by-targets') {
+      for (const id of [automation.params.ammoA, automation.params.ammoB]) {
+        if (!content.ammunition.has(id)) {
+          problems.push(`automação ${index + 1} (${automation.model}): munição "${id}" não existe`);
+        }
+      }
+    }
     for (const [id, slot] of automationItems(automation)) {
       const item = content.items.get(id);
       if (item === undefined) {

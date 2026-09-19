@@ -2,12 +2,9 @@
   "id": "blessing-charge",
   "name": "Carga de Bênção",
   "kind": "consumable",
-  "stackable": true,
+  "stackable": false,
   "weight": 1,
   "value": 0,
-  "price": 0,
-  "group": "support",
-  "restock": { "batch": 1, "min": 0 },
   "effect": { "kind": "blessing" },
-  "_open": "Consumível da AB-01 (ADR 0032 d.6): a Loja (TP-02, M22) entrega a carga; o bot não a compra, por isso price 0 e restock 1/0. Peso e valor são provisórios, e o efeito `blessing` só passa a ser executado na TP-03 (M22) — o `sim` v1 o recusa e a projeção `content.supplies` o exclui. Aparência 3155 (objeto do pacote 1332) ainda sem PNG na biblioteca local parcial."
+  "_open": "Único item `consumable` que permanece (suprimento virou abstrato, gold no uso). A Loja (TP-02, M22) entrega a carga; o bot não a compra, por isso não há preço, grupo de cooldown nem reposição. Peso e valor são provisórios, e o efeito `blessing` só passa a ser executado na TP-03 (M22). Aparência 3155 (objeto do pacote 1332) ainda sem PNG na biblioteca local parcial."
 }

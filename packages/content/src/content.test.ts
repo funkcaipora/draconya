@@ -910,9 +910,8 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     effect: { kind: 'heal', amount: 60 },
   };
   const potion = {
-    id: 'health-potion', name: 'Poção de Vida', kind: 'consumable',
-    stackable: true, weight: 2.7, value: 0, price: 45, group: 'potion',
-    restock: { batch: 50, min: 10 }, effect: { kind: 'heal', amount: 80 },
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+    effect: { kind: 'heal', amount: 80 },
   };
   // Uma magia de DANO, porque é ela que tem projétil: o teste de `missile` precisa de uma
   // magia que exista no catálogo, senão a linha órfã é recusada antes de o tipo do campo
@@ -925,10 +924,10 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
   // no bloco da FUN-94, porque é dela que o teste fala.
   const tabela = (over: Record<string, unknown> = {}) => [{
     id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 },
-    items: { 'health-potion': 266 }, ...over,
+    items: {}, ...over,
   }];
   const withCatalogue = (over: Partial<RawContent> = {}): RawContent =>
-    base({ spells: [heal], items: [potion], ...over });
+    base({ spells: [heal], supplies: [potion], ...over });
 
   it('exposes effect and missile by spell id, and the effect by supply id', () => {
     // Só ids (invariante 6): quem sabe que 13 é "magic blue" é o pacote, nunca este arquivo.
@@ -1180,55 +1179,34 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     expect(() => buildContent(base({ items: [capacete] }))).toThrow(/twoHanded/);
   });
 
-  it('munição é item: `kind: ammo` exige slot "ammo" e `ammunition`, e é empilhável (RF-02)', () => {
-    const flecha = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-    };
-    expect(buildContent(base({ items: [flecha] })).items.get('arrow')?.kind).toBe('ammo');
-    // Sem `ammunition` e com slot errado: as duas formas de munição quebrada.
-    expect(() => buildContent(base({ items: [{ ...flecha, ammunition: undefined }] })))
-      .toThrow(/munição precisa de slot "ammo" e de "ammunition"/);
-    expect(() => buildContent(base({ items: [{ ...flecha, slot: 'hand' }] })))
-      .toThrow(/munição precisa de slot "ammo" e de "ammunition"/);
-    expect(() => buildContent(base({ items: [{ ...flecha, stackable: false }] })))
-      .toThrow(/munição é empilhável/);
+  it('a munição é ABSTRATA: família, attack e price > 0, sem item nem pilha (ADR 0026 d.3)', () => {
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
+    const content = buildContent(base({ ammunition: [flecha] }));
+    expect(content.ammunition.get('arrow')?.attack).toBe(25);
+    expect(content.ammunition.get('arrow')?.price).toBe(1);
+    // A aparência guarda ícone e projétil, os dois resolvidos no boot.
+    expect(content.ammunition.get('arrow')?.appearanceId).toBe(1);
+    expect(content.ammunition.get('arrow')?.missileId).toBe(1);
+    // Sem item: a flecha não está no catálogo de itens.
+    expect(content.items.has('arrow')).toBe(false);
+    // Não existe munição grátis: `price` > 0 é exigido, sem fallback.
+    expect(() => buildContent(base({ ammunition: [{ ...flecha, price: 0 }] })))
+      .toThrow(ContentError);
   });
 
-  it('`ammunition` só faz sentido em munição', () => {
-    const comFamilia = { ...espada, ammunition: { family: 'arrow' } };
-    expect(() => buildContent(base({ items: [comFamilia] })))
-      .toThrow(/"ammunition" só faz sentido em munição/);
-  });
-
-  it('a munição é item com `price` próprio; a projeção `content.ammunition` NÃO existe (RF-06)', () => {
-    const flecha = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 1, ammunition: { family: 'arrow' },
-    };
-    const content = buildContent(base({ items: [flecha] }));
-    expect(content.items.get('arrow')?.price).toBe(1);
-    expect(content).not.toHaveProperty('ammunition');
-    // O ícone NÃO se duplica na tabela: é `appearances.items[id]`, como todo item (DT-03).
-    expect(content.appearances?.ammunition['arrow']).toEqual({ missile: 1 });
-  });
-
-  it('a munição sem projétil e a linha órfã em appearances.ammunition são recusadas', () => {
-    const flecha = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-    };
-    const raw = base({ items: [flecha] });
-    const semProjetil = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
-    expect(() => buildContent(semProjetil)).toThrow(/não tem projétil/);
+  it('a munição sem aparência e a linha órfã em appearances.ammunition são recusadas', () => {
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
+    const raw = base({ ammunition: [flecha] });
+    const semAparencia = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
+    expect(() => buildContent(semAparencia)).toThrow(/não tem aparência/);
     const orfa = {
       ...raw,
       appearances: [{
         ...placeholderAppearances(raw),
-        ammunition: { arrow: { missile: 1 }, bolt: { missile: 2 } },
+        ammunition: { bolt: { icon: 1, missile: 2 } },
       }],
     };
-    expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia "bolt", que não é um item de munição/);
+    expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia munição "bolt", que não existe no conteúdo/);
   });
 
   it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
@@ -1237,15 +1215,12 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
       kind: 'melee', family: 'sword', range: 1, damageType: 'physical',
       power: { base: 10, levelFactor: 0, skillFactor: 0, skillStartingLevel: 10, spread: 0 },
     });
-    const flecha = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-    };
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
-    expect(buildContent(base({ items: [arco, flecha] })).items.get('bow')?.weapon?.range).toBe(6);
+    expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
     // Distância sem família, e família sem munição no catálogo, são as duas formas de um bow que
     // não atira nada.
-    expect(() => buildContent(base({ items: [{ ...arco, weapon: { kind: 'distance', range: 6 } }, flecha] }))).toThrow(/precisa de "ammoFamily"/);
+    expect(() => buildContent(base({ items: [{ ...arco, weapon: { kind: 'distance', range: 6 } }], ammunition: [flecha] }))).toThrow(/precisa de "ammoFamily"/);
     expect(() => buildContent(base({ items: [arco] }))).toThrow(/não tem munição no catálogo/);
     const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
     expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.manaPerHit).toBe(2);
@@ -1267,37 +1242,17 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), weapons: { helmet: { missile: 5 } } }] };
     expect(() => buildContent(orfa)).toThrow(/appearances.weapons mapeia "helmet"/);
   });
-
-  it('não existe mais munição grátis por família: uma munição paga passa o boot (RF-06)', () => {
-    const paga = {
-      id: 'onyx-arrow', name: 'Onyx Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.8, value: 0, attack: 38, price: 7, ammunition: { family: 'arrow' },
-    };
-    // O fallback grátis saiu (ADR 0032 d.7): nada exige uma munição de preço zero.
-    expect(buildContent(base({ items: [paga] })).items.get('onyx-arrow')?.price).toBe(7);
-  });
-
-  it('a aparência NÃO mora no item de munição: escrevê-la ali é recusado', () => {
-    const comAparencia = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' }, appearanceId: 3447,
-    };
-    expect(() => buildContent(base({ items: [comAparencia] }))).toThrow(ContentError);
-  });
 });
 
 describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
-  const flecha = {
-    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-  };
+  const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
   const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
 
   it('a arma SEM família recebe o default do `kind`: melee→sword, distance→distance, wand→wand', () => {
     // A normalização preserva o conteúdo anterior ao CMB-05 e a fixture (DT-03). O real declara.
     expect(buildContent(base({ items: [espada] })).items.get('sword')?.weapon?.family).toBe('sword');
-    const bow = buildContent(base({ items: [arco, flecha] })).items.get('bow')?.weapon;
+    const bow = buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon;
     expect(bow?.family).toBe('distance');
     const varinha = { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } };
     expect(buildContent(base({ items: [varinha] })).items.get('wand')?.weapon?.family).toBe('wand');
@@ -1313,7 +1268,7 @@ describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   it('recusa família incoerente com o `kind` da arma', () => {
     // Uma `sword` de distância é a família certa para a fórmula errada.
     const incoerente = { ...arco, weapon: { kind: 'distance', family: 'sword', range: 6, ammoFamily: 'arrow' } };
-    expect(() => buildContent(base({ items: [incoerente, flecha] })))
+    expect(() => buildContent(base({ items: [incoerente], ammunition: [flecha] })))
       .toThrow(/família "sword" é "melee", e a arma é "distance"/);
   });
 
@@ -1408,12 +1363,9 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
   it('recusa arma de duas mãos com escudo: o kit não passa por `equip`, então a regra das mãos vale aqui', () => {
     const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0 };
-    const arrow = {
-      id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-      weight: 0.7, value: 0, attack: 25, price: 0, ammunition: { family: 'arrow' },
-    };
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const withArmory = (startingKit: unknown) =>
-      base({ items: [bow, shield, arrow], progression: [{ ...baseline, startingKit }] });
+      base({ items: [bow, shield], ammunition: [arrow], progression: [{ ...baseline, startingKit }] });
     expect(() => buildContent(withArmory([
       { itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' },
     ]))).toThrow(/duas mãos e escudo/);

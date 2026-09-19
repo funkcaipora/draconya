@@ -1,0 +1,9 @@
+{
+  "id": "sniper-arrow",
+  "name": "Sniper Arrow",
+  "family": "arrow",
+  "attack": 28,
+  "price": 5,
+  "requires": { "level": 20 },
+  "_open": "Munição abstrata (gold no tiro, sem pilha): attack 28 e level 20 são do TibiaWiki; o preço 5 por tiro é provisório. Aparência: ícone 7364 e projétil (missile 22) auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}
