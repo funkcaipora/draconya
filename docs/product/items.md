@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **consumíveis como itens** (AB-01) e a **munição, o primeiro colar e o primeiro escudo como itens** (AB-02) implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **consumíveis como itens** (AB-01), a **munição, o primeiro colar e o primeiro escudo como itens** (AB-02), a **munição no slot `ammo`** (AB-05) e as **cargas e a duração vivas no `sim`** (AB-06) implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -83,10 +83,10 @@ de eventos (ver "Duração e carga do equipamento", abaixo).
 
 Poção, runa e carga de bênção deixaram de ser um catálogo abstrato e passaram a ser **itens do
 catálogo `items/`**: empilháveis, com peso, `value`, `price` (preço de COMPRA, para a reposição
-por lote), `group` (grupo de cooldown) e `restock { batch, min }`. O catálogo
-`packages/content/data/supplies/` deixou de existir. Usar ainda debita gold por uso — o consumo
-da pilha e a reposição por lote são a AB-04 (#419), e o motor por grupo é a AB-07 (#422); aqui
-`group` e `restock` são **declarados**, não executados.
+por lote), `group` (grupo de cooldown) e `restock { batch, min }`. O catálogo abstrato de supply
+deixou de existir. **Usar decrementa a pilha** — não há débito de gold por uso — e a **reposição
+por lote** (AB-04, #419) compra `batch` ao preço do item pelo ledger quando a pilha cruza o
+`min`; o motor por grupo é a AB-07 (#422). Ver "Duração e carga do equipamento" e `economy.md`.
 
 | Item | Efeito | `group` | `restock` (lote/mínimo) | `price` | Arquivo |
 |---|---|---|---|---|---|
@@ -95,22 +95,17 @@ da pilha e a reposição por lote são a AB-04 (#419), e o motor por grupo é a 
 | `avalanche-rune` | `damage` gelo, BP 45, raio 3, `requires { level: 30, magicLevel: 4 }` | `attack` | 20 / 5 | 14 | `data/items/avalanche-rune.json` |
 | `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `support` | 1 / 0 | 0 | `data/items/blessing-charge.json` |
 
-`content.supplies` continua existindo como **projeção de compatibilidade v1**, derivada dos itens
-consumíveis de `heal`/`mana`/`damage` — a carga de bênção fica de fora porque o `sim` v1 não a
-executa. É temporária: sai quando a AB-03 (#418) migrar a config v1 para o vocabulário v2 e
-aposentar o token `supplyId`. A aparência de EFEITO continua em
-`data/appearances/baseline.json` (seção `supplies`), conferida de um lado só (FUN-109); o ÍCONE
-do item vive na seção `items` da mesma tabela.
+A aparência de EFEITO continua em `data/appearances/baseline.json` (seção `supplies`), conferida
+de um lado só (FUN-109); o ÍCONE do item vive na seção `items` da mesma tabela.
 
-### Munição, colar e escudo como itens (AB-02, ADR 0032 decisão 7)
+### Munição, colar e escudo como itens (AB-02, AB-05, ADR 0032 decisão 7)
 
-Flecha e virote deixaram de ser um catálogo à parte (`data/ammunition/`, removido) e passaram a
-ser **itens empilháveis** de `kind: 'ammo'`, `slot: 'ammo'`, com `ammunition.family` (`arrow`/
-`bolt`), `attack`, `weight`, `value`, `price` e `restock`. O `attack` do tiro é o do item; o
-ícone é o `appearanceId` do item (`appearances.items[id]`), e `appearances.ammunition[id]` guarda
-só o **projétil** (`missile`). `buildContent` recusa munição sem `ammunition` ou fora do slot
-`ammo`, `ammunition` fora de munição, e arma de distância cuja `ammoFamily` não tem item de
-munição no catálogo.
+Flecha e virote deixaram de ser um catálogo à parte e passaram a ser **itens empilháveis** de
+`kind: 'ammo'`, `slot: 'ammo'`, com `ammunition.family` (`arrow`/`bolt`), `attack`, `weight`,
+`value`, `price` e `restock`. O `attack` do tiro é o do item; o ícone é o `appearanceId` do item
+(`appearances.items[id]`), e `appearances.ammunition[id]` guarda só o **projétil** (`missile`).
+`buildContent` recusa munição sem `ammunition` ou fora do slot `ammo`, `ammunition` fora de
+munição, e arma de distância cuja `ammoFamily` não tem item de munição no catálogo.
 
 | Item | `family` | `attack` | `price` | `requires` | Arquivo |
 |---|---|---|---|---|---|
@@ -122,9 +117,10 @@ munição no catálogo.
 O primeiro **colar** (`glacier-amulet`, `kind: 'amulet'`, `slot: 'neck'`, `charges: 20`,
 resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: 'shield'`,
 `slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar foi ligado na
-AB-06 (#421). A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`
-e o fallback grátis: a escolha é o item no slot `ammo`, e a `arrow` deixou de ser infinita e grátis
-(`price > 0`, ponto de partida 1, provisório).
+AB-06 (#421). A projeção de compatibilidade da munição por família foi **aposentada** na AB-05
+(#420), junto com o seletor sobre o Escudo e o fallback grátis: a escolha é o item no slot
+`ammo`, e a `arrow` deixou de ser infinita e grátis (`price > 0`, ponto de partida 1,
+provisório).
 
 ## Inventário e equipamento (FUN-82)
 
@@ -192,8 +188,8 @@ a skill e a fórmula em `packages/content/data/weapon-families/` — o ruleset n
 item nem vocação. `fist` é o fallback desarmado e não existe como arma. **A munição é item**
 (AB-02, ADR 0032 d.7): flecha e virote são `kind: 'ammo'`, `slot: 'ammo'`, empilháveis, e cada
 tiro consome uma unidade da pilha EQUIPADA; ao zerar, o bot puxa a próxima pilha da mesma família
-da mochila, e sem nenhuma o tiro não sai. O seletor por família (`select-ammo`) e a projeção
-`content.ammunition` foram aposentados na AB-05 (#420). Ver "Munição, colar e escudo como itens"
+da mochila, e sem nenhuma o tiro não sai. O seletor por família sobre o Escudo e a projeção de
+compatibilidade foram aposentados na AB-05 (#420). Ver "Munição, colar e escudo como itens"
 abaixo. Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e vice-versa.
 
 Desde o CMB-04 o combate lê também a **defesa** (`defense`) da peça: escudo ou arma corpo a corpo
@@ -236,8 +232,8 @@ minimiza as três juntas (só o cabeçalho fica), nunca removidas.
 
 **O slot `ammo` é genérico** desde a AB-05 (#420): a munição é item empilhável no slot (ADR 0032
 d.7), desenhada pelo caminho comum de `EquipmentPanel` com a pilha e a contagem. O seletor sobre o
-Escudo (`AmmoPicker`) e o opcode `select-ammo` foram removidos, junto com o fallback grátis e a
-projeção `content.ammunition`; equipar a pilha usa `move-item`/`equip`, que já são intenção.
+Escudo foi removido, junto com o fallback grátis e a projeção de compatibilidade; equipar a
+pilha usa `move-item`/`equip`, que já são intenção.
 
 **Arrastar e clicar.** Arrastar (HTML5, nativo) de lugar para lugar manda `move-item`, de lugar
 para slot manda `equip`, de slot para lugar manda `move-item` com `from: { slot }`; o
@@ -378,16 +374,16 @@ linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora
 - **Munição é seleção, não item** (decisão 3, o Huntera) — **revogada pela AB-02 (ADR 0032
   decisão 7) e fechada pela AB-05 (#420)**: flecha e virote são itens empilháveis de
   `kind: 'ammo'` no slot `ammo`, com peso, pilha, `price` e `restock`; o seletor por família
-  (`select-ammo`), a projeção `content.ammunition` e o fallback grátis foram aposentados, e cada
+  sobre o Escudo, a projeção de compatibilidade e o fallback grátis foram aposentados, e cada
   tiro consome uma unidade da pilha equipada. Issues #151, #152, #161, #417, #420.
 - **Mochila e bolsa elásticas** (decisão 6): a mochila é o item no slot `back`, a bolsa é fixa
   do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
   peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o
   que não cabe no peso. Sem bolsa dentro de mochila. Issues #160, #161.
 - **Runa é consumível de ataque** (decisão 8, revista pela AB-01): a Avalanche é a primeira, com
-  `requires { level, magicLevel }` e `price` de compra; a categoria `rune` do bot a lança. Desde a
-  AB-01 ela é item empilhável de `data/items/avalanche-rune.json`, e a projeção v1 a expõe como
-  supply de dano até a AB-03 (#418). Issue #165.
+  `requires { level, magicLevel }` e `price` de compra; o bot a lança por um slot de ação `item`.
+  Desde a AB-01 ela é item empilhável de `data/items/avalanche-rune.json`, e a projeção v1 que a
+  expunha como supply de dano saiu com a AB-03 (#418). Issue #165.
 
 ## A tela (FUN-90)
 
@@ -430,15 +426,13 @@ entrada da mochila (`instanceId`, `itemId`, `quantity`), o cliente resolve a def
 dentro. O extrato que vai ao ledger continua `slot → instanceId`, porque o banco só precisa
 saber onde cada linha está.
 
-### A action bar não entrou, e por quê
+### A action bar entrou no M18 (AB-10, ADR 0032 d.1–d.3)
 
-A FUN-90 pedia "slots com hotkey que disparam a ação como intenção". **Não existe magia manual**:
-o protocolo não tem `cast`, o servidor não tem caminho para ela, e quem lança é o bot. Combate
-manual é o motor da F4 (E10).
-
-Uma barra sem o que disparar seria decoração, e inventar o opcode com o servidor mudo do outro
-lado é contrato antes do uso — o erro que a DT-07 nomeia. Ela entra quando houver o que ela
-dispare.
+A FUN-90 pedia "slots com hotkey que disparam a ação como intenção", e a barra 2 × 12 entrou no
+M18 como a configuração do bot **e** a superfície de disparo manual: a tecla manda `use-slot`, e
+o servidor decide elegibilidade, estoque, mana e cooldown (invariante 4). O disparo manual
+substitui o que a FUN-90 chamava de "magia manual" — o opcode `cast` não existe, e quem lança
+continua sendo o servidor. Ver `bot.md` §"A tela".
 - **§21.5 fala em slots fixos; aqui o lugar é elástico** (#160, ADR 0026 decisão 6). Mochila de
   20 e bolsa de 10 são o tamanho INICIAL, e crescem por linha enquanto houver capacidade — decisão
   do usuário: "o lugar não é limite, o peso é". A Caixa de Loot fica só para o que não cabe no

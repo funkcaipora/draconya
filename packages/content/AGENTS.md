@@ -229,11 +229,12 @@ em vez de virar um slot morto que ninguém explica.
 
 **Consumível É item** (AB-01, ADR 0032 decisão 6). Poção, runa e carga de bênção vivem em
 `items/*.json` com `kind: 'consumable'`, `stackable`, peso, `value`, `price` de COMPRA, `group` e
-`restock { batch, min }`; a pasta `data/supplies/` deixou de existir. `content.supplies` sobrevive
-como **projeção de compatibilidade v1**, derivada dos itens de `heal`/`mana`/`damage` (a bênção
-fica de fora: o `sim` v1 não a executa), e é temporária — sai na AB-03 (#418), dona do vocabulário
-v2 e da migração que aposenta o token `supplyId`. Até lá `validateBotConfig` cruza `supplyId`
-contra a projeção; `itemId` continua recusado por falta de atuador.
+`restock { batch, min }`; o catálogo abstrato de supply deixou de existir. O vocabulário v2 do bot
+(AB-03) aposentou o token v1 do supply: a ação do slot é `item` com `itemId`, e `validateBotConfigV2`
+cruza `spellId`/`itemId` contra os catálogos. A projeção `content.supplies`, derivada dos itens de
+`heal`/`mana`/`damage`, **sobrevive como compatibilidade v1** — é o que `validateBotConfig` (v1)
+cruza com a config salva (`defaultConfig`) até a limpeza da v1. A reposição por lote é a AB-04
+(#419) e o motor por grupo é a AB-07 (#422).
 
 ## Skills (FUN-75)
 
@@ -259,8 +260,9 @@ instância — junto com a pergunta "por que a minha é pior".
 `loot.items` do monstro é conferido contra este catálogo. Antes ele era recusado por princípio
 porque catálogo não existia; agora o que decide é a referência existir.
 
-`charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
-para o catálogo não mudar quando a mecânica existir.
+`charges` e `durationMs` são mecanismos vivos desde a AB-06 (#421, ADR 0032 d.8): o `sim` gasta a
+carga do colar no golpe elemental que ele protege e agenda o vencimento do item de duração na fila
+de eventos, destruindo o item ao esgotar.
 
 **`defense` é da peça e só nas combinações aprovadas** (CMB-04, emenda do ADR 0031): escudo, ou
 arma corpo a corpo de uma mão. Bow/twoHanded e wand/rod não têm defesa residual, e `buildContent`
@@ -312,10 +314,10 @@ A aparência: o **ícone** é `appearances.items[id]`, como todo item; `appearan
 guarda só o **projétil** (`missile`). Não duplicar o ícone — duas verdades para o mesmo número
 (DT-03). Os projéteis do pacote 13.32: arrow 3, burst arrow 4, sniper arrow 22, onyx arrow 23.
 
-A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com `select-ammo`, o
-fallback grátis e `characters.ammo`: a escolha é o item no slot `ammo`, e o `sim` lê `attack`/
-`ammunition` do próprio item. Não existe mais munição grátis por família, e a `arrow` tem
-`price > 0` (ponto de partida 1, provisório). O primeiro colar (`glacier-amulet`,
+A projeção `content.ammunition` foi **aposentada** na AB-05 (#420), junto com o opcode queimado do
+seletor por família, o fallback grátis e `characters.ammo`: a escolha é o item no slot `ammo`, e o
+`sim` lê `attack`/`ammunition` do próprio item. Não existe mais munição grátis por família, e a
+`arrow` tem `price > 0` (ponto de partida 1, provisório). O primeiro colar (`glacier-amulet`,
 `kind: 'amulet'`, `slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real
 (`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
 carga é a AB-06 (#421).

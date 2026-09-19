@@ -140,10 +140,10 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
   pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
   O settlement (`#settle`) roda no `onLeave` COM quem sai e no `onEnd`, antes de a `Session`
-  emitir os extratos — é o que põe o gold neles. O rateio do supply é uma `Purse` (`casting.ts`):
-  `useSupply` confere `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de
-  um (`ownPurse`) é o solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de
-  cada um, o resto do usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou.
+  emitir os extratos — é o que põe o gold neles. O consumível do vocabulário v2 é **item**: usar
+  decrementa a pilha e a reposição (`#onRestock`) compra o lote pelo ledger, com `purchase` por
+  personagem — não há rateio do uso. A `Purse`/`useSupply` de `casting.ts` continua só para o
+  caminho v1 do supply, que a migração v1→v2 aposenta.
 - **Em party, morrer e disparar regra de saída são `leave`, e a cascata roda DEPOIS do extrato
   de quem saiu** (#193). `#depart` chama `session.leave` — que roda `onLeave` (settlement) e SÓ
   ENTÃO emite o extrato — e emite `member-left` com o extrato e o personagem, porque o
@@ -170,10 +170,10 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **A postura anda pelo `#step`, como todo mundo.** `movement.ts` segue sendo o único escritor de
   posição (FUN-69) e `pnpm source-policy` reprova o contrário. Recuar é `fleeStep`, que é o passo
   guloso com a ameaça espelhada — não um segundo algoritmo de desvio.
-- **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
+- **Magia e item RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem item, em cooldown, fora
   de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
   regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
-  que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
+  que faz o grupo do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
 - **Inventário é POSICIONAL, e `Inventory` não conhece conteúdo** (`inventory.ts`, #160). Mochila
@@ -233,7 +233,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
   `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
 - **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
-  rota, bot compilado, categorias engatilhadas, lure, anel, golpe engatilhado e os três avisos
+  rota, bot compilado, grupos engatilhados, lure, anel, golpe engatilhado e os três avisos
   são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e
   `#runnerOf` encontra o seu. Spawn e regras de saída são da INSTÂNCIA e entram na fila com o
   primeiro a entrar — o segundo não os dobra. O segundo entra por `placeNear` (tile é

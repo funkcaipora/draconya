@@ -489,9 +489,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   à mesma sessão (ADR 0001): o que se perde é o clique, não o estado.
 - **O catálogo de hunts SUBSTITUI a lista, nunca acumula.** Reconectar reenvia a mesma lista, e
   concatenar daria hunts duplicadas a cada queda de rede.
-- **A UI do bot não tem lista de opções em código** (FUN-89). Categorias, slots, magias e
-  supplies vêm do catálogo (`state/hud.ts`, `catalogue`). Divergir do servidor faz o jogador
-  configurar o que o bot recusa — e descobrir pelo extrato que não fecha.
+- **A UI do bot não tem lista de opções em código** (AB-10…AB-13). Conjuntos, slots, teclas,
+  grupos de cooldown, magias, itens e modelos de automação vêm do catálogo (`state/hud.ts`,
+  `catalogue`). Divergir do servidor faz o jogador configurar o que o bot recusa — e descobrir
+  pelo extrato que não fecha.
 - **Salvar é intenção, e a recusa NÃO descarta o rascunho.** Apagar o que o jogador escreveu é a
   pior resposta a "corrija isto". `bot-config-result` é tipado justamente para a tela não ter de
   casar com o texto de um `system-message`.
@@ -508,20 +509,19 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
   RC-09/#322 — antes era um ícone na barra do topo), nunca remove. O slot `ammo` é genérico
   desde a AB-05 (#420): a munição é item empilhável no slot, e o seletor por família sobre o
-  Escudo (`AmmoPicker`) foi removido. Arrastar é DnD
+  Escudo foi removido. Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,
-  minimizável pelo próprio cabeçalho (RC-09/#322 — antes era a barra do topo; `collapsed` esconde
-  tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
-  (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
-  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
-  o remetente por `setConfigSender` ao montar.
+  lugar de origem. **A barra de ações 2 × 12 é a configuração do bot desde o M18** (AB-10…AB-13):
+  montada na Cidade e na caçada, com o `ActionConfigModal` para editar o slot e o
+  `AutomationsPanel` para as cinco automações. O interruptor salva sozinho — `bot/store.ts`
+  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), a barra injeta
+  o remetente por `setConfigSender` ao montar. O painel Bot v1 foi aposentado no mesmo marco.
 - **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`SkillsPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, ao lado de `AutomationsPanel`/`SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
   (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`. "Party loot" (#316) é uma janela
@@ -551,9 +551,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   os cinco ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
   Chat — nunca
   emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
-  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
-  faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
-  marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
+  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até a
+  fileira inferior de 124 px, que é a **barra de ações** entregue no M18 (AB-10, ADR 0032 d.1–5;
+  o D5 do ADR 0029 a adiava). A geografia continua a mesma de sempre, só a moldura mudou de pele.
   Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que
   abre minimizada é janela que abre vazia. **Hunts é EXCEÇÃO desde #259** (ADR 0029 D6): não é
   mais uma seção da coluna, é o `HuntsModal` — modal sob demanda, fechado por padrão

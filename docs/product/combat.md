@@ -379,11 +379,15 @@ evento por segundo para redescobrir a mesma coisa.
 O personagem nasce **sem** vocação e escolhe no level 8 (§7.4), então uma magia com requisito é
 inacessível até lá por construção, sem nenhuma regra escrita em outro lugar.
 
-### Runa é supply de ataque (#165, ADR 0026 decisão 8)
+### Runa é supply de ataque (#165, ADR 0026 decisão 8) — **revista pelo ADR 0032 d.6**
 
-A runa **não é magia**: é supply — debita gold por uso, como a poção, sem item físico no
-inventário (§20.1) — e é o que a categoria `rune` do bot lança. A Avalanche Rune
-(`packages/content/data/supplies/avalanche-rune.json`) é a primeira: supply com efeito
+> Histórico: esta seção descreve a runa como supply abstrato que debitava gold por uso. O ADR
+> 0032 decisão 6 tornou a runa um **item consumível empilhável** (`data/items/avalanche-rune.json`),
+> consumido da pilha e reposto por lote; o restante da mecânica de dano abaixo continua válido.
+> A leitura vigente está em `items.md` e `bot.md`.
+
+A runa **não é magia**: é consumível de ataque. A Avalanche Rune
+(`packages/content/data/items/avalanche-rune.json`) é a primeira: efeito
 `damage`, Base Power próprio, alcance 4 e círculo de raio 3 no alvo, e um bloco `requires`
 (`level`, `magicLevel`) que a poção não tem.
 
@@ -399,7 +403,7 @@ O que difere da magia de ataque, e por quê:
   que a mana da magia sai por último: recusar antes de saber se há alvo é debitar sem lançar.
 - **Só `not-enough-gold` vira linha no extrato** (#217), o aviso único de `§20.3`. As outras
   quatro recusas são silenciosas — a mesma mudez que `castSpell` já dá à magia: `level-too-low`
-  e `magic-level-too-low` o `BotPanel` já tranca na configuração (a única forma de aparecer é
+  e `magic-level-too-low` a validação da configuração já recusa (a única forma de aparecer é
   um level-down depois de configurada, e mesmo assim não é pergunta de gold); `no-target` e
   `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
   há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
@@ -432,7 +436,7 @@ O alcance é da **arma**, não do personagem: `weapon.range` do item na mão (bo
   puxa a próxima pilha da MESMA família da mochila (mochila antes da bolsa), e sem nenhuma o tiro
   NÃO sai — nem projétil, nem dano. **Sem fallback grátis e sem débito de gold por tiro** (AB-05,
   #420): a `arrow` tem preço e lote como qualquer consumível, e a reposição é por lote pelo
-  ledger (ADR 0032 d.6). O seletor por família (`select-ammo`) e a projeção `content.ammunition`
+  ledger (ADR 0032 d.6). O seletor por família sobre o Escudo e a projeção de compatibilidade
   foram aposentados; a escolha é o item no slot.
 - **`wand`** — wand e rod gastam `manaPerHit` por golpe, causam dano **mágico** por faixa fixa
   (`damage.min..max`, uma rolagem do `Rng` da sessão por golpe, como o loot) e rendem magia
