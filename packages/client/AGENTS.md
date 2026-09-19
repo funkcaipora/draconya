@@ -429,6 +429,15 @@ O teste de desempenho que importa — com 40 criaturas se movendo, os commits do
 próximos de zero — é medido no `apply.test.ts` uma camada abaixo: commit só acontece se alguém
 for avisado, então o teste conta AVISOS, e o número esperado é zero, não "baixo".
 
+**As métricas do renderer (M23 §40) se leem no console, em desenvolvimento.** Com o `pnpm dev`
+rodando e a tela do mundo montada, `window.__draconya.renderStats()` devolve a fotografia dos
+contadores de `ViewportHandle.stats()` — `renderedTiles`, `prefetchedIds`, `sceneSprites`,
+`textureHits`, `textureMisses`, `terrainRepaints`, `frames` e `lastFrameMs`. É leitura sob
+demanda: `stats()` não dispara render nem escreve no `world` (ADR 0007), e o global só existe
+quando `import.meta.env.DEV` é verdadeiro — em produção `window.__draconya` nunca é escrito, e
+o cleanup da montagem o apaga. Serve para responder com NÚMERO a "houve regressão de FPS?" e
+"algum tile entrou sem textura?" em vez de olhar a tela.
+
 ## Armadilhas conhecidas
 
 - **`packages/client/tsconfig.json` EXCLUI `*.test.ts`**, e isso é de propósito: o cliente é

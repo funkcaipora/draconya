@@ -163,6 +163,29 @@ export interface ViewportOptions {
   readonly now?: () => number;
 }
 
+/**
+ * A fotografia dos contadores de desenvolvimento do renderer (M23 §40, D8). Tudo é leitura:
+ * `stats()` não dispara render nem escreve no `world` (ADR 0007), e quem lê lê no próprio ritmo.
+ */
+export interface ViewportStats {
+  /** Tiles com pilha pintados na última repintura, somando todos os andares. */
+  readonly renderedTiles: number;
+  /** Ids acumulados passados a `warmObjects` desde a montagem. */
+  readonly prefetchedIds: number;
+  /** Filhos visíveis somados dos `scene` de todos os andares visíveis. */
+  readonly sceneSprites: number;
+  /** `TextureBook.get` que devolveu uma `Texture`. */
+  readonly textureHits: number;
+  /** `TextureBook.get` que disparou um pedido. */
+  readonly textureMisses: number;
+  /** Quantas vezes o terreno foi repintado. */
+  readonly terrainRepaints: number;
+  /** Quantos quadros o ticker rodou. */
+  readonly frames: number;
+  /** Duração do último ticker, medida com o `now()` injetado. */
+  readonly lastFrameMs: number;
+}
+
 export interface ViewportHandle {
   /** Troca a cena desenhada. O caminho normal é o `loadScene`; isto é para quem já a tem. */
   setScene(scene: Scene | null): void;
@@ -179,6 +202,8 @@ export interface ViewportHandle {
    * ritmo, sem o laço do Pixi disparar renderização React.
    */
   getFps(): number;
+  /** Fotografia dos contadores agora. Leitura sob demanda; nunca dispara render (ADR 0007). */
+  stats(): ViewportStats;
   /**
    * A criatura desenhada sob um ponto do canvas (px do cliente), ou `null`. É a leitura do
    * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
@@ -287,6 +312,15 @@ export async function mountViewport(
   // Última janela desenhada. O terreno só é redesenhado quando ela muda — redesenhar a cada
   // quadro é o desperdício óbvio, e num mapa grande é o que come o orçamento de quadro.
   let painted = '';
+  /**
+   * Contadores de desenvolvimento (M23 §40, D8). Somados no lugar em que a coisa acontece —
+   * custam o que um `+= 1` custa — e lidos sob demanda por `stats()`, nunca por quadro.
+   */
+  let terrainRepaints = 0;
+  let renderedTiles = 0;
+  let prefetchedIds = 0;
+  let frames = 0;
+  let lastFrameMs = 0;
   /**
    * A última janela de prefetch aquecida, com a cena e o andar dela. `null` é "aqueça tudo":
    * é o que cena nova, pacote novo, andar novo e `resize` fazem. Comparar quatro inteiros por
@@ -491,7 +525,10 @@ export async function mountViewport(
     const ids = idsIn(scene, tiles, floors);
     // Tile fora do mapa (borda) não vira pedido: `warmObjects([])` seria uma promessa por
     // quadro de borda, e o teste conta chamadas.
-    if (ids.size > 0) void art.warmObjects(ids);
+    if (ids.size > 0) {
+      prefetchedIds += ids.size;
+      void art.warmObjects(ids);
+    }
   }
 
   /**
@@ -550,6 +587,11 @@ export async function mountViewport(
     const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
     if (key === painted) return;
     painted = key;
+    terrainRepaints += 1;
+    // Tiles com pilha pintados NESTA repintura, somando todos os andares: a métrica de
+    // desenvolvimento (M23 §40) responde "quantos tiles o terreno desenhou", e o `+= 1` fica
+    // no mesmo lugar em que o tile é pintado.
+    let paintedTiles = 0;
 
     // Os itens do chão por tile, para entrarem na pilha como itens comuns — o mais recente por
     // cima. São poucos (cadáveres com prazo), e a varredura é só na repintura.
@@ -668,6 +710,7 @@ export async function mountViewport(
         for (let sx = window.minX; sx <= window.maxX; sx++) {
           const stack = stackAt(sx - offset, sy - offset, z);
           if (stack === null) continue;
+          paintedTiles += 1;
           const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
           const elevation = paintStack(stack, sx - offset, sy - offset, offset, local, true, layers);
           if (offset === 0 && elevation > 0) elevations.set(`${sx},${sy},${z}`, elevation);
@@ -681,6 +724,8 @@ export async function mountViewport(
         for (let i = used[layer]; i < pools[layer].length; i++) (pools[layer][i] as Sprite).visible = false;
       }
     }
+    // Só no FIM: uma repintura interrompida nunca deixa um número parcial.
+    renderedTiles = paintedTiles;
   }
 
   /** O quadro de uma criatura agora: direção, fase e parado/andando saem do passo dela. */
@@ -1106,7 +1151,8 @@ export async function mountViewport(
 
   app.ticker.add(() => {
     fps.record(app.ticker.deltaMS);
-    const nowMs = now();
+    const startedAt = now();
+    const nowMs = startedAt;
     // A troca de cena é notada AQUI (FUN-121): o `instance-enter` põe o `mapId` no `world`, o
     // `world` não avisa ninguém (ADR 0007), e o laço de quadro é quem olha. A resposta que
     // chegar depois de outro pedido é de outro mapa, e é descartada.
@@ -1150,6 +1196,8 @@ export async function mountViewport(
     paintEffects(center, nowMs);
     paintMissiles(center, nowMs);
     paintTexts(center, nowMs);
+    frames += 1;
+    lastFrameMs = now() - startedAt;
   });
 
   return {
@@ -1182,6 +1230,25 @@ export async function mountViewport(
     },
     getFps() {
       return fps.read();
+    },
+    stats() {
+      // A varredura dos filhos acontece SÓ quando alguém chama `stats()` (DT-01), nunca por
+      // quadro: uma métrica lida no máximo uma vez por segundo não paga 60 Hz de varredura.
+      let sceneSprites = 0;
+      for (const layers of floorLayers.values()) {
+        if (!layers.root.visible) continue;
+        for (const child of layers.scene.children) if (child.visible) sceneSprites += 1;
+      }
+      return {
+        renderedTiles,
+        prefetchedIds,
+        sceneSprites,
+        textureHits: book.hits,
+        textureMisses: book.misses,
+        terrainRepaints,
+        frames,
+        lastFrameMs,
+      };
     },
     creatureAt(clientX, clientY) {
       // O canvas é escalado pelo stage (zoom inteiro); `tileAtScreen` trabalha em pixels de tile.

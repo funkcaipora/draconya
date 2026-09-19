@@ -1172,3 +1172,133 @@ describe('viewport: visibilidade de andares (issue #387)', () => {
     expect(roots[0]?.visible).toBe(true);
   });
 });
+
+/**
+ * As métricas de desenvolvimento do renderer (issue #388, §11): `ViewportHandle.stats()`
+ * fotografa os contadores — tiles pintados na última repintura, ids aquecidos, sprites da cena,
+ * acertos/falhas do livro, repinturas, quadros e duração do último ticker. Tudo é leitura sob
+ * demanda; o laço não avisa ninguém (ADR 0007).
+ */
+describe('viewport: métricas de desenvolvimento (issue #388)', () => {
+  /** O chão `1000 + x` no andar 7 e `2000 + x` no 6 — a coluna vira id, para M4. */
+  function prefetchField(): Scene {
+    const tiles: Record<string, TileStack> = {};
+    for (const z of [6, 7]) {
+      for (let y = 0; y < 40; y++) {
+        for (let x = 0; x < 80; x++) {
+          tiles[`${x},${y},${z}`] = { ground: (z === 6 ? 2000 : 1000) + x, items: [] };
+        }
+      }
+    }
+    return sceneOf({ width: 80, height: 40, floors: [6, 7], tiles });
+  }
+
+  it('M1 — renderedTiles conta os tiles com pilha da janela de render', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(30, 30, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock, width: 128, height: 96 });
+    viewport.spawnSelf(1, { x: 10.5, y: 10, z: 7 }, 0);
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const window = renderTiles({ x: 10.5, y: 10, z: 7 }, viewFor(128, 96, 1));
+    const expected = (window.maxX - window.minX + 1) * (window.maxY - window.minY + 1);
+    expect(expected).toBe(90);
+    expect(viewport.handle.stats().renderedTiles).toBe(expected);
+  });
+
+  it('M2 — terrainRepaints conta repinturas, não quadros', async () => {
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+
+    for (let i = 0; i < 10; i++) await viewport.tick(i * 16);
+    expect(viewport.handle.stats().terrainRepaints).toBe(1);
+
+    viewport.moveSelfTo({ x: 11, y: 10, z: 7 });
+    await viewport.tick(200);
+    expect(viewport.handle.stats().terrainRepaints).toBe(2);
+  });
+
+  it('M3 — miss no primeiro quadro; depois da arte chegar, hit e nenhum miss novo', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now, latencyMs: 100 });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+
+    await viewport.tick(0);
+    const first = viewport.handle.stats();
+    expect(first.textureHits).toBe(0);
+    expect(first.textureMisses).toBe(new Set(art.requests.map((r) => r.key)).size);
+    expect(first.textureMisses).toBeGreaterThan(0);
+
+    art.flush();
+    await viewport.tick(16);
+    const after = viewport.handle.stats();
+    expect(after.textureHits).toBeGreaterThan(0);
+    expect(after.textureMisses).toBe(first.textureMisses);
+  });
+
+  it('M4 — prefetchedIds acumula o tamanho de cada Set passado a warmObjects', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt({}, { now: clock.now });
+    const viewport = await mountTestViewport({ clock, width: 1024, height: 768 });
+    viewport.spawnSelf(1, { x: 20, y: 18, z: 7 }, 0);
+    viewport.handle.setPack(art);
+    viewport.handle.setScene(prefetchField());
+
+    await viewport.tick(0);
+    const first = art.warmedObjects[0]?.length ?? 0;
+    expect(first).toBeGreaterThan(0);
+    expect(viewport.handle.stats().prefetchedIds).toBe(first);
+
+    // Um tile a leste: a janela de prefetch anda uma coluna, e só ela é somada.
+    viewport.moveSelfTo({ x: 21, y: 18, z: 7 });
+    await viewport.tick(16);
+    const second = art.warmedObjects[1]?.length ?? 0;
+    expect(second).toBeGreaterThan(0);
+    expect(viewport.handle.stats().prefetchedIds).toBe(first + second);
+  });
+
+  it('M5 — sceneSprites conta os filhos visíveis dos `scene` dos andares visíveis', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(40, 40, [7], { '15,15,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    // Sem self, a câmera fica no centro do mapa (19,5, 19,5); a janela de render cobre x 8..31.
+    viewport.spawn(2, { x: 16, y: 15, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    expect(viewport.handle.stats().sceneSprites).toBe(2); // parede + criatura
+
+    viewport.step(2, { x: 16, y: 15, z: 7 }, { x: 2, y: 2, z: 7 }, 16, 0);
+    await viewport.tick(32);
+    expect(viewport.handle.stats().sceneSprites).toBe(1); // só a parede
+  });
+
+  it('M6 — lastFrameMs mede o ticker com o `now()` injetado; frames conta os quadros', async () => {
+    // Relógio que soma 3 ms a cada leitura: `lastFrameMs` é a diferença entre a primeira e a
+    // última chamada do quadro, então nunca é 0 — medir com `performance.now()` daria 0 aqui.
+    let ms = 0;
+    const clock = {
+      now: (): number => (ms += 3),
+      set: (next: number): void => { ms = next; },
+    };
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+
+    await viewport.tick(0);
+    await viewport.tick(16);
+    await viewport.tick(32);
+
+    const stats = viewport.handle.stats();
+    expect(stats.frames).toBe(3);
+    expect(stats.lastFrameMs).toBeGreaterThanOrEqual(3);
+  });
+});
+
