@@ -7,14 +7,14 @@ import type { BestiaryState } from '../bestiary.js';
 import type { SkillsState } from '../skills.js';
 import type { InventoryState } from '../inventory.js';
 import { huntListings } from '../hunt/catalogue.js';
-import { statsForLevel, totalXpForLevel } from '../progression.js';
+import { statsForLevel, totalXpForLevel, xpToCompleteLevel } from '../progression.js';
 import { Rng } from '../rng.js';
-import { MAX_PENDING_DOMAIN_EVENTS, Session } from '../session.js';
+import { MAX_PENDING_DOMAIN_EVENTS, SNAPSHOT_FORMAT_VERSION, Session } from '../session.js';
 import type { DomainEvent, SessionSnapshot } from '../session.js';
 import {
   HuntRuleset, changeDifficulty, compileExitRules, createHuntSession, huntRulesetFromSnapshot,
 } from './hunt.js';
-import type { HuntExitRule, HuntView } from './hunt.js';
+import type { HuntExitRule, HuntView, PartyOptionsInput } from './hunt.js';
 
 // O resolver canônico é ENVOLVIDO, não substituído (CMB-02): o `vi.fn` delega para a
 // implementação real, então todo o resto do arquivo roda idêntico — e o bloco do pipeline no
@@ -4917,6 +4917,35 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('snapshot legado com mode migra para os dois eixos, sem bump (#394)', () => {
+    const { session } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 5_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    (snapshot.ruleset as { partyOptions?: unknown }).partyOptions = { leaderId: 'lead', mode: 'shared' };
+    // O snapshot legado não tinha `partyBag`; com `splitLoot` migrado para `true`, ele nasce vazio.
+    delete (snapshot.ruleset as { partyBag?: unknown }).partyBag;
+    const restored = Session.fromSnapshot(snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('legacy'));
+    const ruleset = restored.ruleset as HuntRuleset;
+    expect(ruleset.party?.shareCosts).toBe(true);
+    expect(ruleset.party?.splitLoot).toBe(true);
+    expect(ruleset.party?.collect).toBeNull();
+    expect(ruleset.party?.autoSell).toEqual([]);
+    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+    // Sem bump: o formato continua 3.
+    expect(SNAPSHOT_FORMAT_VERSION).toBe(3);
+  });
+
+  it('snapshot legado com shareCosts explícito vence o mode (#394)', () => {
+    const { session } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 5_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    (snapshot.ruleset as { partyOptions?: unknown }).partyOptions = { leaderId: 'lead', mode: 'shared', shareCosts: false, splitLoot: true };
+    const restored = Session.fromSnapshot(snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('legacy-2'));
+    const party = (restored.ruleset as HuntRuleset).party;
+    expect(party?.shareCosts).toBe(false);
+    expect(party?.splitLoot).toBe(true);
+  });
+
   it('1 Hz == 10 Hz in shared', () => {
     const at = (hz: number) => {
       const { session, ruleset } = shared([member('lead', 50, 1_000, 10), member('b', 50)], { botConfigs: { lead: drinkAlways } });
@@ -5053,6 +5082,225 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
   });
 });
 
+describe('a party como estado mutável: configureParty, eixos e munição no rateio (#394)', () => {
+  // Rato com gold 3 e uma espada (value 10): cada abate rende gold e item, para exercitar a
+  // bolsa nos dois sentidos. Sem regeneração para o teste medir só o que ele quer.
+  const sword = { id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 30, value: 10, weapon: { kind: 'melee', range: 1 } };
+  const rich = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
+  const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
+    monsters: [rich], items: [...items, sword],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    ...over,
+  }));
+  const member = (
+    id: string,
+    over: Partial<{
+      gold: number; capacity: number; health: number; vocationId: string | null;
+      inventory: InventoryState; ammo: Readonly<Partial<Record<'arrow', string>>>;
+    }> = {},
+  ) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: over.health ?? stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: over.vocationId ?? null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: over.gold ?? 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: over.capacity ?? 1_000,
+      ...(over.inventory === undefined ? {} : { inventory: over.inventory }),
+      ...(over.ammo === undefined ? {} : { ammo: over.ammo }),
+    });
+  };
+  const make = (
+    members: readonly CharacterRuntime[],
+    over: { partyOptions?: PartyOptionsInput; content?: Content; botConfigs?: Record<string, BotConfig> } = {},
+  ) => {
+    const session = createHuntSession({
+      id: 'mutable-party', content: over.content ?? loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: over.partyOptions ?? { leaderId: members[0]?.id ?? '', mode: 'split' },
+      ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
+    });
+    for (const m of members) session.enter(m);
+    return { session, ruleset: session.ruleset as HuntRuleset };
+  };
+  const spent = (session: Session, id: string) => session.aggregatesOf(id).goldSpent;
+
+  it('configureParty recusa quem não é o líder — e uma sessão solo não tem líder', () => {
+    const { session, ruleset } = make([member('lead'), member('b')], { partyOptions: { leaderId: 'lead', mode: 'split' } });
+    expect(ruleset.configureParty(session, { shareCosts: true }, 'b')).toEqual({ ok: false, reason: 'not-leader' });
+    expect(ruleset.party?.shareCosts).toBe(false);
+    expect(ruleset.party?.splitLoot).toBe(false);
+
+    const solo = createHuntSession({ id: 'solo-config', content: loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
+    solo.enter(member('solo'));
+    expect((solo.ruleset as HuntRuleset).configureParty(solo, { shareCosts: true }, 'solo'))
+      .toEqual({ ok: false, reason: 'not-leader' });
+  });
+
+  it('valida o catálogo ANTES de mutar: id fora e item de value 0 rejeitam o patch inteiro', () => {
+    const { session, ruleset } = make([member('lead'), member('b')], {
+      partyOptions: { leaderId: 'lead', settings: { shareCosts: false, splitLoot: false, collect: null, autoSell: [] } },
+    });
+    expect(ruleset.configureParty(session, { collect: ['ghost'] }, 'lead'))
+      .toEqual({ ok: false, reason: 'unknown-item', itemId: 'ghost' });
+    expect(ruleset.configureParty(session, { autoSell: ['ghost'] }, 'lead'))
+      .toEqual({ ok: false, reason: 'unknown-item', itemId: 'ghost' });
+    // `life-ring` existe no catálogo com `value: 0` — vender por zero sumiria com o item.
+    expect(ruleset.configureParty(session, { autoSell: ['life-ring'] }, 'lead'))
+      .toEqual({ ok: false, reason: 'unsellable-item', itemId: 'life-ring' });
+    // O patch inteiro foi rejeitado: nada mudou.
+    expect(ruleset.party?.collect).toBeNull();
+    expect(ruleset.party?.autoSell).toEqual([]);
+    expect(ruleset.party?.splitLoot).toBe(false);
+  });
+
+  it('um patch parcial preserva os eixos não enviados e guarda collect/autoSell', () => {
+    const { session, ruleset } = make([member('lead'), member('b')], {
+      partyOptions: { leaderId: 'lead', mode: 'split', shareCosts: true, splitLoot: false },
+    });
+    expect(ruleset.configureParty(session, { autoSell: ['loot-sword'] }, 'lead')).toEqual({ ok: true });
+    expect(ruleset.party?.shareCosts).toBe(true);
+    expect(ruleset.party?.splitLoot).toBe(false);
+    expect(ruleset.party?.autoSell).toEqual(['loot-sword']);
+    expect(ruleset.configureParty(session, { collect: ['loot-sword'] }, 'lead')).toEqual({ ok: true });
+    expect(ruleset.party?.autoSell).toEqual(['loot-sword']);
+    expect(ruleset.party?.collect).toEqual(['loot-sword']);
+  });
+
+  it('ligar splitLoot nasce a bolsa vazia; desligar liquida e nada se perde', () => {
+    const { session, ruleset } = make([member('lead'), member('b')]);
+    expect(ruleset.getState().partyBag).toBeUndefined();
+    expect(ruleset.configureParty(session, { splitLoot: true }, 'lead')).toEqual({ ok: true });
+    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+
+    run(session, 20_000, 100);
+    const before = ruleset.getState().partyBag;
+    expect((before?.items.length ?? 0)).toBeGreaterThan(0);
+    const bagValue = (before?.gold ?? 0)
+      + (before?.items ?? []).reduce((n, i) => n + (loaded().items.get(i.itemId)?.value ?? 0) * i.quantity, 0);
+    const gained = session.aggregates.goldGained;
+
+    expect(ruleset.configureParty(session, { splitLoot: false }, 'lead')).toEqual({ ok: true });
+    expect(ruleset.getState().partyBag).toBeUndefined();
+    // O valor da bolsa virou gold da sessão no settlement — nenhum item some.
+    expect(session.aggregates.goldGained).toBe(gained + bagValue);
+  });
+
+  it('a munição paga entra no rateio: 5 gold entre 4 presentes → 1 de cada e 2 do atirador', () => {
+    const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
+    const arrows = [
+      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 0 },
+      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5, requires: { level: 1 } },
+    ];
+    // Monstro que não morre e não bate: o teste mede só os tiros.
+    const tank = { ...rat, health: 1_000_000, attack: 0, experience: 0, loot: { gold: { chance: 0, min: 1, max: 1 }, items: [] } };
+    const ammoContent = buildContent(raw({
+      monsters: [tank], items: [...items, bow], ammunition: arrows,
+      progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+    }));
+    const armed: InventoryState = { backpack: [], equipped: { hand: { instanceId: 'i-bow', itemId: 'bow', quantity: 1 } } };
+    const shooter = member('u', { gold: 1_000, inventory: armed, ammo: { arrow: 'sniper-arrow' } });
+    const { session } = make([shooter, member('a', { gold: 1_000 }), member('b', { gold: 1_000 }), member('c', { gold: 1_000 })], {
+      content: ammoContent,
+      partyOptions: { leaderId: 'u', mode: 'split', shareCosts: true, splitLoot: false },
+    });
+    run(session, 4_000, 100);
+    const paid = session.drainEvents().filter((e) => e.kind === 'shot' && e.ammoId === 'sniper-arrow').length;
+    expect(paid).toBeGreaterThan(0);
+    expect(spent(session, 'u')).toBe(paid * 2);
+    for (const id of ['a', 'b', 'c']) expect(spent(session, id)).toBe(paid * 1);
+    expect(session.aggregates.goldSpent).toBe(paid * 5);
+  });
+
+  it('a penalidade de morte lê o Premium do morto: 54 % contra 60 %', () => {
+    const killer = { ...rat, health: 1_000_000, attack: 50, attackRange: 1, experience: 0 };
+    const deadly = content({ monsters: [killer] });
+    const stats = statsForLevel(10, null, progression as Progression);
+    const dying = (id: string) => new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: 1, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 10, xp: totalXpForLevel(10, progression as Progression), vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+    const { session } = make([dying('premium'), dying('free'), member('survivor', { health: 100_000 })], {
+      content: deadly,
+      partyOptions: {
+        leaderId: 'premium',
+        settings: { shareCosts: false, splitLoot: false, collect: null, autoSell: [] },
+        premiumByCharacter: { premium: true },
+      },
+    });
+    run(session, 30_000, 100);
+    const departures = session.drainEvents().filter((e) => e.kind === 'member-left');
+    const xpOf = (id: string): number => {
+      const event = departures.find((e) => e.kind === 'member-left' && e.characterId === id);
+      if (event?.kind !== 'member-left') throw new Error(`sem member-left de ${id}`);
+      return event.departure.receipt.aggregates.xpGained;
+    };
+    const xpToComplete = xpToCompleteLevel(10, progression as Progression);
+    expect(xpOf('premium')).toBe(-Math.round(0.54 * xpToComplete));
+    expect(xpOf('free')).toBe(-Math.round(0.6 * xpToComplete));
+  });
+
+  it('1 Hz == 10 Hz alternando os dois eixos no meio da corrida', () => {
+    const at = (hz: number) => {
+      const step = 1000 / hz;
+      const { session, ruleset } = make([member('lead', { gold: 200 }), member('b', { gold: 200 })], {
+        partyOptions: { leaderId: 'lead', settings: { shareCosts: false, splitLoot: false, collect: null, autoSell: [] } },
+      });
+      run(session, 10_000, step);
+      ruleset.configureParty(session, { shareCosts: true, splitLoot: true }, 'lead');
+      run(session, 10_000, step);
+      ruleset.configureParty(session, { shareCosts: false, splitLoot: false }, 'lead');
+      run(session, 10_000, step);
+      return {
+        bag: ruleset.getState().partyBag,
+        goldGained: session.aggregates.goldGained,
+        leadGained: session.aggregatesOf('lead').goldGained,
+        bGained: session.aggregatesOf('b').goldGained,
+        kills: session.aggregates.kills,
+      };
+    };
+    expect(at(1)).toEqual(at(10));
+  });
+
+  it('partySummary devolve undefined fora de party e o bloco §32 dentro', () => {
+    const vocations = ['knight', 'druid'].map((id) => ({
+      id, name: id, healthPerLevel: 10, manaPerLevel: 10, capacityPerLevel: 10,
+    }));
+    const withVocations = loaded({ vocations });
+    const solo = createHuntSession({ id: 'solo-summary', content: withVocations, huntId: 'arena', difficulty: 'bold', createdAtMs: 0 });
+    solo.enter(member('solo'));
+    expect((solo.ruleset as HuntRuleset).partySummary(solo)).toBeUndefined();
+
+    const { session, ruleset } = make(
+      [member('lead', { vocationId: 'knight' }), member('b', { vocationId: 'druid' })],
+      {
+        content: withVocations,
+        partyOptions: {
+          leaderId: 'lead',
+          settings: { shareCosts: true, splitLoot: true, collect: null, autoSell: ['loot-sword', 'life-ring'] },
+          premiumByCharacter: { lead: true },
+        },
+      },
+    );
+    expect(ruleset.partySummary(session)).toEqual({
+      leaderId: 'lead',
+      shareCosts: true,
+      splitLoot: true,
+      members: ['lead', 'b'],
+      uniqueVocations: 2,
+      xpPoolPercent: 150,
+      bagValue: 0,
+      bagWeight: 0,
+      autoSell: { configured: 2, limit: 20 },
+    });
+  });
+});
+
 describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
   // Ratos que batem forte num membro de 1 HP: ele morre no primeiro golpe e SAI com o próprio
   // extrato; os outros ficam. Regra `party-member-lost` em quem a configurou: cascata.
@@ -5149,6 +5397,17 @@ describe('sair e morrer em party (#193, ADR 0027 decisão 7)', () => {
     if (last?.kind !== 'party-state') throw new Error('sem party-state');
     expect(last.leaderId).toBe('b');
     expect(last.members.map((m) => m.characterId)).toEqual(['b', 'c']);
+  });
+
+  it('a liderança reescreve o campo REAL do ruleset e grava leader-changed (#394)', () => {
+    // O teste acima passa pelo fallback de leitura de `#leader`; este prende o campo `leaderId`
+    // de fato reescrito, que é o que o #394 acrescenta.
+    const session = party([member('lead', 1), member('b'), member('c')]);
+    run(session, 30_000, 100);
+    expect((session.ruleset as HuntRuleset).party?.leaderId).toBe('b');
+    expect(session.notableEvents.filter((e) => e.type === 'leader-changed')).toEqual([
+      expect.objectContaining({ type: 'leader-changed', detail: 'b' }),
+    ]);
   });
 
   it('the last one to leave ends the session with their reason, and no receipt is emitted twice', () => {

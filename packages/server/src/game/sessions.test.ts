@@ -46,7 +46,10 @@ describe('party session factory (#195, ADR 0027)', () => {
     expect(session.ruleset.type).toBe('hunt');
     expect(session.participants.map((p) => [p.id, p.level, p.gold])).toEqual([['p1', 10, 30], ['p2', 12, 0], ['p3', 1, 0]]);
     const ruleset = session.ruleset as HuntRuleset;
-    expect(ruleset.party).toEqual({ leaderId: 'p1', mode: 'shared' });
+    expect(ruleset.party).toEqual({
+      leaderId: 'p1', mode: 'shared', shareCosts: true, splitLoot: true,
+      collect: null, autoSell: [], premiumByCharacter: {},
+    });
     expect(Object.keys(ruleset.getState().runners ?? {}).sort()).toEqual(['p1', 'p2', 'p3']);
     expect(ruleset.getState().runners?.['p2']?.botConfig).toBeDefined();
     expect(ruleset.getState().runners?.['p3']?.botConfig).toBeUndefined();

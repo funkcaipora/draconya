@@ -7,8 +7,10 @@ import type { PartyMember } from './party.js';
 // `docs/party-hunt-plan.md` §3.3 — e que nada consome RNG nem sai de inteiro.
 
 const config: PartyConfig = {
-  id: 'baseline', maxMembers: 4, matchmakingLevelRange: 0,
-  xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 },
+  id: 'baseline', maxMembers: 8, matchmakingLevelRange: 0,
+  xpPoolPercentByUniqueVocations: {
+    '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200,
+  },
 };
 
 const m = (id: string, vocationId: string | null = null): PartyMember => ({ id, vocationId });
@@ -57,6 +59,16 @@ describe('xpShare — a tabela do plano (§3.3), monstro de 100 XP', () => {
     // Mutação que mata: `eligible.length < 1` — o solo passaria a ler a linha "1" e render 125.
     expect(xpPool(100, [k('a')], { ...config, xpPoolPercentByUniqueVocations: { '1': 999 } })).toBe(100);
     expect(xpPool(100, [k('a'), d('b')], { ...config, xpPoolPercentByUniqueVocations: { '1': 125 } })).toBe(100);
+  });
+
+  it('a tabela vai até 8, e o teto de 200 % se mantém', () => {
+    // #392/#394: `maxMembers` é 8 e a tabela ganha "5".."8" = 200. Oito vocações únicas
+    // (o teto do conteúdo real é 5, mas a tabela aceita até 8 chaves) não passam de 200 %.
+    const eight = ['knight', 'druid', 'sorcerer', 'paladin', 'monk', 'a', 'b', 'c']
+      .map((vocation, index) => m(`m${String(index)}`, vocation));
+    expect(xpPool(100, eight, config)).toBe(200);
+    expect(xpShare(100, eight, config)).toBe(25);
+    expect(xpPool(100, [k('a'), d('b'), s('c'), p('d'), m('e', 'monk')], config)).toBe(200);
   });
 });
 
