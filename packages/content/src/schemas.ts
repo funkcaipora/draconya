@@ -628,6 +628,12 @@ export type ItemDefinition = z.infer<typeof itemSchema>;
 export const supplySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * O texto de apresentação do suprimento (#436, ADR 0033), em português — o que o
+   * `ActionConfigModal` mostra abaixo dos números. Opcional: a sub-issue das descrições
+   * preenche os arquivos reais; sem o campo, o cliente cai no fallback fixo por Tipo.
+   */
+  description: z.string().min(1).optional(),
   /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
   price: z.number().int().nonnegative(),
   /** Grupo de cooldown do motor v2 (ADR 0032 d.2). O mesmo vocabulário de `spell.group`. */
@@ -2000,6 +2006,12 @@ export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as
 export const spellSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * O texto de apresentação da magia (#436, ADR 0033), em português — o que o
+   * `ActionConfigModal` mostra abaixo dos números. Opcional: a sub-issue das descrições
+   * preenche os 78 arquivos reais; sem o campo, o cliente cai no fallback fixo por Tipo.
+   */
+  description: z.string().min(1).optional(),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
   manaCost: z.number().int().nonnegative(),
   /** O cooldown DA MAGIA. Evento na fila, nunca acumulador (ADR 0020). */
