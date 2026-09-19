@@ -44,7 +44,7 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
+import { settleBag, shareCostsOf, splitLootOf, uniqueVocations, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
@@ -359,7 +359,7 @@ export interface HuntRulesetOptions {
    */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** A party desta instância (#191, ADR 0027). Ausente é solo. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Cooldown de cada categoria, do conteúdo (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
@@ -390,12 +390,147 @@ type ConditionTarget = CharacterRuntime | MonsterRuntime;
 /** Como a party divide loot e custo (ADR 0027 decisão 5). */
 export type PartyMode = 'split' | 'shared';
 
-/** A party desta instância (#191). Ausente é solo. FIXADA na sessão e no snapshot. */
+/**
+ * Os dois eixos do líder, mais a config de loot (§4, §5, ADR 0033 decisão 1).
+ *
+ * Vive ao lado dos campos achatados de `PartyOptions` para quem preferir o bloco — a migração
+ * de `{ settings }` preenche os mesmos eixos. `collect`/`autoSell` só são lidos por `partySummary`
+ * nesta issue; o filtro e a venda de fato são do #395.
+ */
+export interface PartySettings {
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  /** `null` = coletar tudo. Filtro de fato é do #395. */
+  readonly collect: readonly string[] | null;
+  /** Ordem configurada; só os `limit` primeiros valem (aplicação de fato é do #395). */
+  readonly autoSell: readonly string[];
+}
+
+/**
+ * A party desta instância (#191). Ausente é solo. MUTÁVEL desde o #394 — antes era fixada na
+ * sessão; o líder muda por `configureParty`.
+ *
+ * `mode` continua como espelho LEGADO (o `host` o lê até o #400): nasce da combinação dos dois
+ * eixos e não é reescrito por `configureParty` — quem manda é `shareCosts`/`splitLoot`.
+ */
 export interface PartyOptions {
+  leaderId: string;
+  readonly mode: PartyMode;
+  shareCosts: boolean;
+  splitLoot: boolean;
+  collect: readonly string[] | null;
+  autoSell: readonly string[];
+  premiumByCharacter: Record<string, boolean>;
+}
+
+/**
+ * O que `HuntRulesetOptions`/`HuntSessionOptions`/`HuntRulesetState.partyOptions` aceitam: o
+ * formato novo (`PartyOptions`, achatado), o bloco `{ settings }` do desenho, OU o legado que
+ * `packages/server` ainda constrói com `mode` até o #400 modernizar o ticket.
+ */
+export type PartyOptionsInput =
+  | PartyOptions
+  | {
+      readonly leaderId: string;
+      readonly settings: PartySettings;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    }
+  | {
+      readonly leaderId: string;
+      readonly mode: PartyMode;
+      readonly shareCosts?: boolean;
+      readonly splitLoot?: boolean;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    };
+
+export type ConfigurePartyResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' }
+  | { readonly ok: false; readonly reason: 'unknown-item'; readonly itemId: string }
+  | { readonly ok: false; readonly reason: 'unsellable-item'; readonly itemId: string };
+
+export interface PartySettingsPatch {
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
+  readonly collect?: readonly string[] | null;
+  readonly autoSell?: readonly string[];
+}
+
+/** O bloco PARTY dos Detalhes da Caçada (§32, ADR 0033 decisão 11). */
+export interface PartySummary {
   readonly leaderId: string;
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  readonly members: readonly string[];
+  readonly uniqueVocations: number;
+  readonly xpPoolPercent: number;
+  readonly bagValue: number;
+  readonly bagWeight: number;
+  readonly autoSell: { readonly configured: number; readonly limit: number };
+}
+
+/** Migra o formato legado (`mode` + eixos opcionais) para os campos do `PartyOptions`. */
+function partySettingsFromLegacy(input: {
   readonly mode: PartyMode;
   readonly shareCosts?: boolean;
   readonly splitLoot?: boolean;
+}): PartySettings {
+  return {
+    shareCosts: shareCostsOf(input),
+    splitLoot: splitLootOf(input),
+    collect: null,
+    autoSell: [],
+  };
+}
+
+/**
+ * Uma função só migra as duas entradas (construção E snapshot): o formato novo achatado, o
+ * bloco `{ settings }` ou o legado `{ mode }`. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
+ */
+function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptions | undefined {
+  if (input === undefined) return undefined;
+  const premiumByCharacter = { ...(input.premiumByCharacter ?? {}) };
+  const settings = (input as { readonly settings?: PartySettings }).settings;
+  if (settings !== undefined) {
+    return {
+      leaderId: input.leaderId,
+      mode: settings.shareCosts && settings.splitLoot ? 'shared' : 'split',
+      shareCosts: settings.shareCosts,
+      splitLoot: settings.splitLoot,
+      collect: settings.collect,
+      autoSell: [...settings.autoSell],
+      premiumByCharacter,
+    };
+  }
+  const flat = input as Partial<PartyOptions>;
+  if (flat.collect !== undefined || flat.autoSell !== undefined) {
+    // Já é o `PartyOptions` achatado — cópia, para o snapshot não compartilhar referência.
+    return {
+      leaderId: input.leaderId,
+      mode: (input as { readonly mode: PartyMode }).mode,
+      shareCosts: flat.shareCosts === true,
+      splitLoot: flat.splitLoot === true,
+      collect: flat.collect ?? null,
+      autoSell: [...(flat.autoSell ?? [])],
+      premiumByCharacter,
+    };
+  }
+  const legacy = input as {
+    readonly leaderId: string;
+    readonly mode: PartyMode;
+    readonly shareCosts?: boolean;
+    readonly splitLoot?: boolean;
+  };
+  const migrated = partySettingsFromLegacy(legacy);
+  return {
+    leaderId: legacy.leaderId,
+    mode: legacy.mode,
+    shareCosts: migrated.shareCosts,
+    splitLoot: migrated.splitLoot,
+    collect: migrated.collect,
+    autoSell: [...migrated.autoSell],
+    premiumByCharacter,
+  };
 }
 
 export interface HuntRulesetState {
@@ -446,9 +581,9 @@ export interface HuntRulesetState {
    * lidos quando esta chave falta: é o snapshot anterior, de um dono só, sem bump.
    */
   readonly runners?: Readonly<Record<string, RunnerState>>;
-  /** A party, fixada (#191). Ausente é solo — inclusive todo snapshot anterior ao M13. */
-  readonly partyOptions?: PartyOptions;
-  /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.mode === 'shared'`. */
+  /** A party (#191): achatada no formato novo, ou o legado `{mode}` de um snapshot anterior. */
+  readonly partyOptions?: PartyOptionsInput;
+  /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.splitLoot`. */
   readonly partyBag?: PartyBagState;
   /**
    * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
@@ -631,8 +766,8 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
-    this.#party = options.partyOptions;
-    if (this.#party !== undefined && splitLootOf(this.#party)) this.#bag = { gold: 0, items: [], capacity: 0 };
+    this.#party = normalizePartyOptions(options.partyOptions);
+    if (this.#party?.splitLoot) this.#bag = { gold: 0, items: [], capacity: 0 };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -715,9 +850,90 @@ export class HuntRuleset implements Ruleset {
    * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
    */
   partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
-    if (this.#party === undefined || !splitLootOf(this.#party) || this.#bag === null) return undefined;
+    if (this.#party === undefined || !this.#party.splitLoot || this.#bag === null) return undefined;
     const presentIds = session.participants.map((p) => p.id);
     return settleBag(this.#bag, presentIds, this.#options.items).shares;
+  }
+
+  /**
+   * Muda a configuração da party (D1, D2). Só o líder pode; a validação de catálogo acontece
+   * ANTES de qualquer mutação — ou tudo se aplica, ou nada (como `configureBot`, mas com recusa
+   * tipada porque aqui a recusa é visível ao jogador, não só um no-op silencioso).
+   *
+   * Chamado pelo host ENTRE avanços, a partir do opcode C2S `party-settings` (#400) — nunca
+   * dentro de `advanceBy` (invariante 2). O cliente manda intenção crua; quem valida é aqui.
+   */
+  configureParty(
+    session: Session, patch: PartySettingsPatch, byCharacterId: string,
+  ): ConfigurePartyResult {
+    const party = this.#party;
+    if (party === undefined || byCharacterId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    if (patch.collect !== undefined && patch.collect !== null) {
+      for (const itemId of patch.collect) {
+        if (!this.#options.items.has(itemId)) return { ok: false, reason: 'unknown-item', itemId };
+      }
+    }
+    if (patch.autoSell !== undefined) {
+      for (const itemId of patch.autoSell) {
+        const item = this.#options.items.get(itemId);
+        if (item === undefined) return { ok: false, reason: 'unknown-item', itemId };
+        if (item.value === 0) return { ok: false, reason: 'unsellable-item', itemId };
+      }
+    }
+    const next: PartySettings = {
+      shareCosts: patch.shareCosts ?? party.shareCosts,
+      splitLoot: patch.splitLoot ?? party.splitLoot,
+      collect: patch.collect === undefined ? party.collect : patch.collect,
+      autoSell: patch.autoSell ?? party.autoSell,
+    };
+    // Ligar: nasce vazia, igual ao construtor. Desligar: liquida com quem está presente AGORA
+    // pela regra de HOJE (settlement inteiro — por entrada é o #395) e descarta. Nada se perde:
+    // vira gold ou vai para o líder (`value: 0`, `unsold` de `settleBag`).
+    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: 0, items: [], capacity: 0 };
+    if (!next.splitLoot && party.splitLoot && this.#bag !== null) {
+      this.#settle(session, session.participants);
+      this.#bag = null;
+    }
+    party.shareCosts = next.shareCosts;
+    party.splitLoot = next.splitLoot;
+    party.collect = next.collect;
+    party.autoSell = next.autoSell;
+    return { ok: true };
+  }
+
+  /**
+   * O bloco PARTY dos Detalhes da Caçada (§32, ADR 0033 decisão 11). Getter PURO, sem `emit()`:
+   * o host o chama por ciclo, como `partySpendingPreview` (DT-03). `undefined` fora de party.
+   *
+   * `autoSell.limit` é o do PERSONAGEM líder (D3): o conteúdo manda os números, a sessão só lê.
+   * `autoSell.configured` é quantos ids o líder guardou — a aplicação de fato é do #395.
+   */
+  partySummary(session: Session): PartySummary | undefined {
+    const party = this.#party;
+    if (party === undefined) return undefined;
+    const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    const unique = uniqueVocations(present);
+    const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
+    const bagValue = this.#bag === null ? 0 : this.#bag.gold + this.#bag.items.reduce(
+      (sum, item) => sum + (this.#options.items.get(item.itemId)?.value ?? 0) * item.quantity, 0,
+    );
+    // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
+    // tipo é opcional por causa das fixtures antigas de `RawContent`.
+    const limits = this.#options.party.autoSellItemTypes ?? { free: 0, premium: 0 };
+    const limit = party.premiumByCharacter[party.leaderId] === true ? limits.premium : limits.free;
+    return {
+      leaderId: party.leaderId,
+      shareCosts: party.shareCosts,
+      splitLoot: party.splitLoot,
+      members: session.participants.map((p) => p.id),
+      uniqueVocations: unique,
+      xpPoolPercent,
+      bagValue,
+      bagWeight: this.#bagWeight,
+      autoSell: { configured: party.autoSell.length, limit },
+    };
   }
 
   /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
@@ -849,8 +1065,10 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * A cascata pendente do §13.9 e a liderança que passa (#193): `#leader` já cai para o mais
-   * antigo presente; o que muda é avisar. Sem ninguém, nada a anunciar — a sessão encerra.
+   * A cascata pendente do §13.9 e a liderança por TEMPO de party (#193, D9): `participants[0]`
+   * já é o mais antigo, e `leaderId` passa a ser reescrito quando o líder sai — não só lido com
+   * fallback. A troca entra no extrato (`leader-changed`) e o `party-state` avisa.
+   * Sem ninguém, nada a anunciar — a sessão encerra.
    */
   #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
     if (!this.#lossPending) return;
@@ -860,6 +1078,14 @@ export class HuntRuleset implements Ruleset {
       // O motivo é o do ÚLTIMO a sair: se a cascata levou alguém, foi a regra dele.
       if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
       return;
+    }
+    const party = this.#party;
+    if (party !== undefined && !session.participants.some((p) => p.id === party.leaderId)) {
+      const next = session.participants[0];
+      if (next !== undefined) {
+        party.leaderId = next.id;
+        session.record('leader-changed', next.id);
+      }
     }
     this.#emitPartyState(session);
   }
@@ -1025,10 +1251,12 @@ export class HuntRuleset implements Ruleset {
     this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
-    // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
+    // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
+    const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
     const penalty = applyDeathPenalty(
       character,
-      { premium: this.#options.premium ?? false },
+      { premium },
       this.#vocationOf(character),
       this.#options.progression,
     );
@@ -1131,7 +1359,19 @@ export class HuntRuleset implements Ruleset {
       ammoFallbackTold: [...this.#ammoFallbackTold],
       ...(state.botConfig === undefined ? {} : { botConfig: state.botConfig }),
       runners,
-      ...(this.#party === undefined ? {} : { partyOptions: this.#party }),
+      // Sempre no formato NOVO (achatado). O campo continua opcional e sem bump: um nó antigo
+      // que leia `partyOptions.mode`/`shareCosts`/`splitLoot` ainda encontra os três.
+      ...(this.#party === undefined ? {} : {
+        partyOptions: {
+          leaderId: this.#party.leaderId,
+          mode: this.#party.mode,
+          shareCosts: this.#party.shareCosts,
+          splitLoot: this.#party.splitLoot,
+          collect: this.#party.collect,
+          autoSell: this.#party.autoSell,
+          premiumByCharacter: this.#party.premiumByCharacter,
+        },
+      }),
       ...(this.#bag === null ? {} : { partyBag: { gold: this.#bag.gold, items: [...this.#bag.items], capacity: this.#bag.capacity } }),
     };
   }
@@ -1198,9 +1438,10 @@ export class HuntRuleset implements Ruleset {
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
-    this.#party = restored.partyOptions;
+    // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
+    this.#party = normalizePartyOptions(restored.partyOptions);
     this.#bag = restored.partyBag === undefined
-      ? (this.#party !== undefined && splitLootOf(this.#party) ? { gold: 0, items: [], capacity: 0 } : null)
+      ? (this.#party?.splitLoot ? { gold: 0, items: [], capacity: 0 } : null)
       : { gold: restored.partyBag.gold, items: [...restored.partyBag.items], capacity: restored.partyBag.capacity };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
@@ -2110,7 +2351,7 @@ export class HuntRuleset implements Ruleset {
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
-    const shared = this.#party !== undefined && shareCostsOf(this.#party) && session.participants.length > 1;
+    const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
@@ -2756,10 +2997,17 @@ export class HuntRuleset implements Ruleset {
       // aqui a resposta é não atirar — nunca um tiro de dano inventado.
       if (ammo === null) return;
       if (ammo.price > 0) {
-        // Gold gasto pela munição paga: no personagem E no agregado da sessão, como o supply
-        // (§20.1). O extrato leva os dois ao ledger.
-        character.goldDelta -= ammo.price;
-        session.credit(character.id, 'goldSpent', ammo.price);
+        // O rateio do §4 inclui a MUNIÇÃO paga (#394): com `shareCosts` ligado quem paga é a
+        // purse compartilhada — a MESMA do supply, com o resto do atirador. O `#ammoFor` já
+        // conferiu `canAfford` pela purse; aqui só se debita. Sem rateio, o comportamento de
+        // sempre: gold do personagem E agregado da sessão (§20.1).
+        const shareCosts = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
+        if (shareCosts) {
+          this.#sharedPurse(session, character).pay(ammo.price);
+        } else {
+          character.goldDelta -= ammo.price;
+          session.credit(character.id, 'goldSpent', ammo.price);
+        }
       }
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
@@ -2905,13 +3153,21 @@ export class HuntRuleset implements Ruleset {
    * A munição que o tiro usa (#152): a escolhida da família, se o gold paga o tiro; senão a
    * grátis — e o jogador é avisado UMA vez por sessão, como evento notável. Sem gold o bot
    * continua atirando: parar seria o oposto do invariante 11.
+   *
+   * Com `shareCosts` ligado, "paga o tiro" é a PURSE compartilhada (#394), e não o saldo do
+   * atirador — o débito de fato acontece no `#strike`.
    */
   #ammoFor(session: Session, character: CharacterRuntime, family: AmmoFamily): Ammunition | null {
     const free = this.#freeAmmo.get(family) ?? null;
     const chosenId = character.ammo.get(family);
     const chosen = chosenId === undefined ? undefined : this.#options.ammunition.get(chosenId);
     if (chosen === undefined || chosen.family !== family) return free;
-    if (chosen.price === 0 || balanceOf(character) >= chosen.price) return chosen;
+    if (chosen.price === 0) return chosen;
+    const shareCosts = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
+    const canAfford = shareCosts
+      ? this.#sharedPurse(session, character).canAfford(chosen.price)
+      : balanceOf(character) >= chosen.price;
+    if (canAfford) return chosen;
     if (!this.#ammoFallbackTold.has(character.id)) {
       this.#ammoFallbackTold.add(character.id);
       session.record('ammo-fallback', chosen.id);
@@ -3273,7 +3529,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#party === undefined || session.participants.length < 2) {
       return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
     }
-    if (splitLootOf(this.#party)) return null;
+    if (this.#party.splitLoot) return null;
     if (eligible.length === 0) return null;
     return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
   }
@@ -3533,7 +3789,7 @@ export interface HuntSessionOptions {
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -3559,7 +3815,7 @@ export interface HuntRulesetExtras {
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfig>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
