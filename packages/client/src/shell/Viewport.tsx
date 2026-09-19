@@ -4,9 +4,21 @@ import { TextureBook } from '../world/textures.js';
 import { loadStackMap, sceneFromStack } from '../world/scene.js';
 import type { Scene } from '../world/scene.js';
 import { mountViewport } from '../world/viewport.js';
-import type { ViewportHandle } from '../world/viewport.js';
+import type { ViewportHandle, ViewportStats } from '../world/viewport.js';
 import { useAssetPack } from './AssetPackContext.js';
 import { WorldStatusOverlay } from './WorldStatusOverlay.js';
+
+/**
+ * O global de desenvolvimento (M23 §40, D8): em `import.meta.env.DEV`, quem estiver com o
+ * console aberto lê `window.__draconya.renderStats()` e vê os contadores do renderer. É
+ * leitura sob demanda — o laço do Pixi nunca avisa ninguém (ADR 0007) —, e em produção o
+ * objeto nunca é escrito.
+ */
+declare global {
+  interface Window {
+    __draconya?: { renderStats: () => ViewportStats };
+  }
+}
 
 /**
  * De onde vem a cena de um `mapId`: de `things/<versão>/maps/<id>.json` — o mesmo caminho das
@@ -78,6 +90,9 @@ export function Viewport() {
         return;
       }
       handleRef.current = mounted;
+      // O global aponta para o handle VIVO: o StrictMode monta duas vezes e a primeira
+      // montagem apaga o dela no cleanup, então a segunda reescreve o global.
+      if (import.meta.env.DEV) window.__draconya = { renderStats: () => mounted.stats() };
       // O pacote pode ter chegado enquanto o Pixi subia: o efeito de pacote já rodou, não
       // tinha a quem entregar, e deixou aqui.
       mounted.setPack(packRef.current);
@@ -85,6 +100,7 @@ export function Viewport() {
 
     return () => {
       cancelled = true;
+      if (import.meta.env.DEV) delete window.__draconya;
       handleRef.current?.destroy();
       handleRef.current = null;
       bookRef.current = null;
