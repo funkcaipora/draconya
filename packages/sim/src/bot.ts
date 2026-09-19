@@ -15,6 +15,7 @@
 
 import type {
   BotAction, BotCategory, BotCondition, BotConfig, BotExitRule, BotLure, BotRingSwap,
+  BotRuleTarget,
 } from '@draconya/content';
 import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
@@ -51,6 +52,14 @@ export interface BotView {
    * view sabe os dois.
    */
   target: BotTarget | null;
+  /**
+   * O candidato de party sob avaliação por uma regra de alvo != self. `null` fora dessa
+   * avaliação (§26-30, ADR 0033 d.10).
+   *
+   * É a peça que faz "HP < 50%" numa regra `target: 'lowest-hp-member'` filtrar MEMBROS, e não
+   * o próprio lançador: `compileCondition` lê daqui quando o alvo da regra não é `self`.
+   */
+  partyTarget: CharacterRuntime | null;
 }
 
 /** O que uma condição precisa saber do alvo. Nada além disto. */
@@ -59,9 +68,17 @@ export interface BotTarget {
   readonly maxHealth: number;
 }
 
+/** Nenhum candidato: regra `target != self` sem resolvedor, ou resolvedor que filtrou todos. */
+const NO_CANDIDATES: readonly CharacterRuntime[] = [];
+
 export interface CompiledRule {
   readonly when: (view: BotView) => boolean;
   readonly act: BotAction;
+  /**
+   * O alvo CRU da regra — como `exit`/`lure` continuam crus: quem resolve tem
+   * `session.participants`, e `bot.ts` não conhece nem sessão nem party.
+   */
+  readonly target: BotRuleTarget;
 }
 
 export interface CompiledBot {
@@ -96,8 +113,18 @@ export interface CompiledBot {
    * "Primeira válida executa" é a ordem do vetor, e a avaliação PARA na primeira que vale —
    * as demais daquela categoria nem são consultadas. Sem prioridade global entre categorias:
    * cada uma decide a sua.
+   *
+   * `resolveCandidates` só é chamado para regra com `target.kind !== 'self'`. Devolve a lista
+   * JÁ filtrada (vivo, ao alcance) e, para `lowest-hp-member`, JÁ ordenada por percentual
+   * ascendente — o `select` só decide QUAL delas satisfaz a condição, chamando o MESMO `when`
+   * compilado uma vez por candidato, na ordem em que a lista chegou (§29: "usa o primeiro que
+   * satisfaz"). Ausente: nenhum candidato, que é o mesmo de uma lista vazia.
    */
-  select(category: BotCategory, view: BotView): BotAction | null;
+  select(
+    category: BotCategory,
+    view: BotView,
+    resolveCandidates?: (rule: CompiledRule) => readonly CharacterRuntime[],
+  ): { readonly action: BotAction; readonly recipient: CharacterRuntime | null } | null;
 }
 
 /** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply e item). */
@@ -117,13 +144,24 @@ export interface BotActuator {
  * O `switch` fecha sobre `kind` UMA vez, na compilação, e o que sobra é uma closure que só faz
  * a comparação. É a diferença entre percorrer o JSON por avaliação e chamar uma função.
  */
-function compileCondition(condition: BotCondition): (view: BotView) => boolean {
+function compileCondition(condition: BotCondition, target: BotRuleTarget): (view: BotView) => boolean {
   switch (condition.kind) {
     case 'hp': {
       const { op, percent } = condition;
+      // Alvo != self: quem tem o HP relevante é o candidato resolvido, não o lançador — é
+      // isto que faz "HP < 50%" na regra do §29 filtrar MEMBROS, não o próprio druida.
+      if (target.kind !== 'self') {
+        return (view) => {
+          const candidate = view.partyTarget;
+          // Sem candidato a condição é FALSA, nunca um erro — a mesma regra de `target-hp`.
+          return candidate !== null && compare(percentOf(candidate.health, candidate.maxHealth), op, percent);
+        };
+      }
       return (view) => compare(percentOf(view.self.health, view.self.maxHealth), op, percent);
     }
     case 'mana': {
+      // Mana continua SEMPRE do lançador (D11): quem paga o cast é quem lança, alvo != self
+      // não muda isso.
       const { op, percent } = condition;
       return (view) => compare(percentOf(view.self.mana, view.self.maxMana), op, percent);
     }
@@ -146,7 +184,7 @@ function compileCondition(condition: BotCondition): (view: BotView) => boolean {
 }
 
 /** Percentual inteiro, com o zero protegido: `maxHealth` zero é dado quebrado, não divisão. */
-function percentOf(current: number, max: number): number {
+export function percentOf(current: number, max: number): number {
   if (max <= 0) return 0;
   return (current / max) * 100;
 }
@@ -181,9 +219,22 @@ export function compileBot(config: BotConfig): CompiledBot {
       // primeira.
       config[category]
         .filter((rule) => rule.enabled !== false)
-        .map((rule) => ({ when: compileCondition(rule.when), act: rule.do })),
+        .map((rule) => ({
+          when: compileCondition(rule.when, rule.target ?? { kind: 'self' }),
+          act: rule.do,
+          target: rule.target ?? { kind: 'self' },
+        })),
     );
   }
+
+  // O resultado REAPROVEITADO, como a `BotView`: `select` roda cinco vezes por segundo por
+  // personagem, e devolver um objeto novo por avaliação é alocação por evento — o custo que
+  // este pacote evita. Quem chama o consome ANTES de chamar de novo (o ruleset lê `action` e
+  // `recipient` na hora), então a referência única é segura.
+  const selection = {
+    action: null as unknown as BotAction,
+    recipient: null as CharacterRuntime | null,
+  };
 
   return {
     categories,
@@ -191,14 +242,34 @@ export function compileBot(config: BotConfig): CompiledBot {
     exit: config.exit,
     lure: config.lure,
     ringSwap: config.ringSwap,
-    select(category, view) {
+    select(category, view, resolveCandidates) {
       const rules = categories.get(category);
       if (rules === undefined) return null;
       // Laço indexado, e não `find`: `find` aloca a closure por chamada, e esta é a função
       // mais chamada do bot — cinco vezes por segundo por personagem, vezes 5.000 sessões.
       for (let i = 0; i < rules.length; i += 1) {
         const rule = rules[i] as CompiledRule;
-        if (rule.when(view)) return rule.act;
+        if (rule.target.kind === 'self') {
+          view.partyTarget = null;
+          if (rule.when(view)) {
+            selection.action = rule.act;
+            selection.recipient = null;
+            return selection;
+          }
+          continue;
+        }
+        // Alvo != self: tenta cada candidato, NA ORDEM em que chegou (já rankeado por quem
+        // resolveu), até o primeiro cuja condição vale — é o "usa o primeiro válido" do §29.
+        const candidates = resolveCandidates === undefined ? NO_CANDIDATES : resolveCandidates(rule);
+        for (let j = 0; j < candidates.length; j += 1) {
+          const candidate = candidates[j] as CharacterRuntime;
+          view.partyTarget = candidate;
+          if (rule.when(view)) {
+            selection.action = rule.act;
+            selection.recipient = candidate;
+            return selection;
+          }
+        }
       }
       return null;
     },

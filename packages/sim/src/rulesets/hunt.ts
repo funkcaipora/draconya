@@ -51,8 +51,8 @@ import {
 import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules, Wearer } from '../inventory.js';
-import { compileBot } from '../bot.js';
-import type { BotActuator, BotView, CompiledBot } from '../bot.js';
+import { compileBot, percentOf } from '../bot.js';
+import type { BotActuator, BotView, CompiledBot, CompiledRule } from '../bot.js';
 import {
   MonsterRuntime, chooseTarget, decideMonsterAction, monsterSubject,
 } from '../monster/monster.js';
@@ -190,6 +190,8 @@ function runnerState(runner: Runner): RunnerState {
 const NO_TILES: readonly WorldPoint[] = [];
 const NO_MEMBERS: readonly CharacterRuntime[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
+/** Nenhum candidato de party para a regra (alvo inválido, fora de alcance ou efeito self-only). */
+const NO_CANDIDATES: readonly CharacterRuntime[] = [];
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
@@ -295,6 +297,20 @@ export function compileExitRules(
         };
     }
   });
+}
+
+/**
+ * A configuração tem alguma regra de cura/suporte com alvo != self? É a pergunta que
+ * `#armHealersOf` faz por participante (só heal/potion/support têm alvo; `rule.target` é
+ * opcional no tipo mas preenchido com `self` no parse do conteúdo).
+ */
+function hasNonSelfHealRule(config: BotConfig): boolean {
+  for (const category of ['heal', 'potion', 'support'] as const) {
+    for (const rule of config[category]) {
+      if ((rule.target?.kind ?? 'self') !== 'self') return true;
+    }
+  }
+  return false;
 }
 
 export interface HuntRulesetOptions {
@@ -751,7 +767,7 @@ export class HuntRuleset implements Ruleset {
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
-    self: null as unknown as CharacterRuntime, targetCount: 0, target: null,
+    self: null as unknown as CharacterRuntime, targetCount: 0, target: null, partyTarget: null,
   };
 
   /**
@@ -2036,17 +2052,21 @@ export class HuntRuleset implements Ruleset {
     const bot = runner.bot;
     if (bot === undefined || !character.alive) return;
 
-    const action = bot.select(category, this.#botViewOf(character));
-    if (action === null) return;
+    const resolved = bot.select(
+      category, this.#botViewOf(character),
+      (rule) => this.#resolveRuleTarget(session, character, rule),
+    );
+    if (resolved === null) return;
+    const recipient = resolved.recipient ?? character;
 
     const external = this.#options.actuator;
     if (external !== undefined) {
-      if (!external.perform(action, this.#botView)) return;
+      if (!external.perform(resolved.action, this.#botView)) return;
       this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
       return;
     }
 
-    const result = this.#perform(session, character, action);
+    const result = this.#perform(session, character, resolved.action, recipient);
     if (result.ok) {
       this.#scheduleBot(session, category, characterId, this.#botCooldownMs());
       // A ação mudou HP, mana ou gold: o que está engatilhado reavalia AGORA, sobre o mundo
@@ -2078,10 +2098,12 @@ export class HuntRuleset implements Ruleset {
    * pipeline de morte. Uma classe separada receberia os quatro por parâmetro e não ganharia
    * nada em troca.
    */
-  #perform(session: Session, character: CharacterRuntime, action: BotAction): CastResult {
+  #perform(
+    session: Session, character: CharacterRuntime, action: BotAction, recipient: CharacterRuntime,
+  ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId);
-      case 'supply': return this.#useSupply(session, character, action.supplyId);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
       // Catálogo de ITEM é M8. `validateBotConfig` já recusa a regra na entrada; aqui a
       // resposta é não fazer nada, que é o que "sem catálogo" significa.
       case 'item': return NOT_IN_CATALOG;
@@ -2089,10 +2111,78 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * Alcance do EFEITO de cura da ação — nunca o de ataque. `null` quando a ação não é magia/
+   * supply de cura, OU o efeito é `self`-only: é a checagem em profundidade do RF-05
+   * (`validateBotConfig` já recusa a combinação na configuração; aqui a resposta é "sem
+   * candidato", nunca uma exceção — a mesma filosofia de toda outra recusa deste arquivo).
+   */
+  #healRangeOf(action: BotAction): number | null {
+    if (action.kind === 'spell') {
+      const effect = this.#options.spells.get(action.spellId)?.effect;
+      if (effect === undefined || effect.kind !== 'heal' || effect.target !== 'friend') return null;
+      return effect.range ?? null;
+    }
+    if (action.kind === 'supply') {
+      const effect = this.#options.supplies.get(action.supplyId)?.effect;
+      if (effect === undefined || (effect.kind !== 'heal' && effect.kind !== 'mana')
+        || effect.target !== 'friend') {
+        return null;
+      }
+      return effect.range ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Os candidatos de uma regra com alvo != self (D11, ADR 0033 decisão 10).
+   *
+   * `member` usa SÓ o id pedido: morto, fora da sessão ou fora do alcance devolve lista vazia e
+   * a regra não age (§30 — nunca substitui por outro vivo). `lowest-hp-member` devolve todo
+   * participante vivo ao alcance ordenado por percentual ASCENDENTE (§28); o próprio lançador
+   * entra como candidato de si mesmo, então numa hunt solo "menor vida da party" é ele.
+   */
+  #resolveRuleTarget(
+    session: Session, character: CharacterRuntime, rule: CompiledRule,
+  ): readonly CharacterRuntime[] {
+    const range = this.#healRangeOf(rule.act);
+    if (range === null) return NO_CANDIDATES;
+
+    if (rule.target.kind === 'member') {
+      const member = findById(session.participants, rule.target.characterId);
+      if (member === null || !member.alive) return NO_CANDIDATES;
+      if (distance(character.position, member.position) > range) return NO_CANDIDATES;
+      return [member];
+    }
+
+    // `session.participants` já está na ordem de entrada, e `Array#sort` é ESTÁVEL: o desempate
+    // cai de graça.
+    return session.participants
+      .filter((p) => p.alive && distance(character.position, p.position) <= range)
+      .sort((a, b) => percentOf(a.health, a.maxHealth) - percentOf(b.health, b.maxHealth));
+  }
+
+  /**
+   * Acorda o bot de todo participante com ao menos uma regra heal/potion/support de alvo !=
+   * self — não só de quem apanhou (RF-06). Custo N por golpe, só com party (ADR 0033,
+   * consequências: "aceito").
+   */
+  #armHealersOf(session: Session): void {
+    if (session.participants.length <= 1) return;
+    for (const participant of session.participants) {
+      const runner = this.#runners.get(participant.id);
+      if (runner === undefined || runner.bot === undefined || runner.botConfig === undefined) continue;
+      if (hasNonSelfHealRule(runner.botConfig)) this.#armBot(session, participant.id);
+    }
+  }
+
+  /**
    * Lança a magia. O alvo é o mesmo do golpe — o monstro mais próximo —, e o alcance é o da
    * MAGIA, não o da arma: uma magia de alcance 3 alcança de onde o corpo a corpo não alcança.
    */
-  #castSpell(session: Session, character: CharacterRuntime, spellId: string): CastResult {
+  #castSpell(
+    session: Session, character: CharacterRuntime, spellId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
@@ -2104,7 +2194,7 @@ export class HuntRuleset implements Ruleset {
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      this.#spellScaling(character),
+      this.#spellScaling(character), recipient,
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
@@ -2144,8 +2234,9 @@ export class HuntRuleset implements Ruleset {
     }
     if (aim === null) {
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
-      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
-      this.#emitHealed(session, character, result.healed, 'spell');
+      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
+      // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou.
+      this.#emitHealed(session, recipient, result.healed, 'spell');
       return result;
     }
 
@@ -2551,7 +2642,10 @@ export class HuntRuleset implements Ruleset {
   }
 
   /** Usa o supply e leva o gasto ao extrato. O débito em si é do `useSupply`. */
-  #useSupply(session: Session, character: CharacterRuntime, supplyId: string): CastResult {
+  #useSupply(
+    session: Session, character: CharacterRuntime, supplyId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
@@ -2566,6 +2660,7 @@ export class HuntRuleset implements Ruleset {
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
+      recipient,
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -2584,7 +2679,7 @@ export class HuntRuleset implements Ruleset {
           : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
-      if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
+      if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply');
       else this.#applyHits(session, character, result.hits);
       return result;
     }
@@ -2668,6 +2763,9 @@ export class HuntRuleset implements Ruleset {
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
+    // Sem candidato até que `select` avalie uma regra de alvo != self — e `select` o reescreve a
+    // cada regra, então um valor da avaliação anterior nunca vaza para a próxima.
+    this.#botView.partyTarget = null;
     return this.#botView;
   }
 
@@ -3012,6 +3110,9 @@ export class HuntRuleset implements Ruleset {
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
     this.#armBot(session, character.id);
+    // E os curandeiros da party: quem tem regra de alvo != self precisa acordar AGORA, sem
+    // esperar o próprio ciclo de golpe — o HP que caiu é de OUTRO membro (RF-06).
+    this.#armHealersOf(session);
     // E o anel defensivo (§13.8): este é o instante em que ele existe para servir.
     this.#applyRingSwap(session, character);
     if (character.health > 0) return;
@@ -4091,19 +4192,6 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = false;
     this.#world.reset([...this.#monsters, ...session.participants]);
   }
-}
-
-/**
- * Percentual inteiro, com o zero protegido — `maxMana` zero é o personagem que ainda não tem
- * mana, não uma divisão por zero.
- *
- * Mesma conta que `bot.ts` faz para as condições, e é de propósito: os dois lados do bot
- * comparam percentual, e um deles usando outra fórmula faria "abaixo de 30%" querer dizer duas
- * coisas diferentes na mesma configuração.
- */
-function percentOf(current: number, max: number): number {
-  if (max <= 0) return 0;
-  return (current / max) * 100;
 }
 
 /**
