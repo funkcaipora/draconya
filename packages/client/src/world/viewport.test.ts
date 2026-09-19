@@ -16,7 +16,8 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { renderTiles, visibleTiles, viewFor } from './camera.js';
+import { renderTiles, prefetchTiles, visibleTiles, viewFor } from './camera.js';
+import type { Scene, TileStack } from './scene.js';
 
 /** O catálogo mínimo dos testes desta issue — ver a seção 11 da spec (#381). */
 const GRASS = 100;
@@ -359,31 +360,6 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     expect(requestsFor116).toHaveLength(1);
   });
 
-  // Achado 2 da rodada 1 de revisão (#382): `warm` (viewport.ts) também trocou de
-  // `visibleTiles` para `renderTiles`, mas nenhum teste consultava `SyntheticArt.warmedObjects`
-  // (testing/art.ts) — mutar `warm` de volta para margem 0 não reprovava nada. O harness monta
-  // com `scene` ANTES do `spawnSelf` (`mountTestViewport`), então o `setScene` do mount aquece
-  // com o alvo em "sem self ainda" (o centro do mapa); chamar `handle.setScene` de novo DEPOIS
-  // do `spawnSelf` é o que aquece com o alvo certo, e é isso que o teste abaixo aciona.
-  it('setScene aquece a janela de RENDER, não só a visível', async () => {
-    const clock = testClock();
-    const art = new SyntheticArt(groundCatalog(), { now: clock.now });
-    const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
-    const viewport = await mountTestViewport({ art, clock, width: 128, height: 96 });
-    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
-
-    viewport.handle.setScene(scene);
-
-    // Vista 4×3 em (10, 10): visível cobre x 8..12 (ids 108..112, o que APARECE na tela);
-    // render soma 3 de cada lado, x 5..15 (ids 105..115, RF-03 acima) — o que precisa estar
-    // pronto quando a câmera chegar lá. `warm` com margem 0 aqueceria só 108..112.
-    const warmed = new Set(art.warmedObjects.flat());
-    for (let x = 5; x <= 15; x++) expect(warmed.has(100 + x)).toBe(true);
-    // E não é a janela do mapa inteiro por acidente: fora da janela de render não é aquecido.
-    expect(warmed.has(100 + 4)).toBe(false);
-    expect(warmed.has(100 + 16)).toBe(false);
-  });
-
   // Achado 3 da rodada 1 de revisão (#382): os dois cenários RF-03 ficam inteiros dentro do
   // mapa 40×40 quando o alvo está em (10, 10) — a filtragem por `Scene.tileAt` (RF-07, §11)
   // nunca é exercitada. Perto do canto a janela de render extrapola o mapa dos dois lados.
@@ -411,5 +387,173 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     const groundSprites = viewport.layers().terrain.children
       .filter((child) => 'texture' in child && child.visible);
     expect(groundSprites).toHaveLength(56);
+  });
+});
+
+/**
+ * O prefetch contínuo (issue #383, §11): a janela de prefetch tem margem `PREFETCH_TILES` (5),
+ * dois tiles além da de render (3). O chão é `1000 + x` no andar 7 e `2000 + x` no andar 6, num
+ * mapa 80×40 com os dois andares — a coluna vira id, então "que coluna foi pedida" é uma
+ * asserção direta sobre `SyntheticArt.warmedObjects`. A vista inteira (`viewFor(1024, 768, 2)`
+ * = 16×12) faz `minX` e `maxX` avançarem juntos: um passo = uma coluna que entra.
+ *
+ * O alvo fica em (20, 18): a janela de prefetch (x 7..33, y 7..35) cabe INTEIRA no mapa, então
+ * `idsIn` vê exatamente `{1000 + x}` para toda coluna da janela — sem o recorte de `tileAt`
+ * na borda embaralhar a contagem.
+ */
+describe('viewport: prefetch contínuo (issue #383)', () => {
+  const WIDTH = 80;
+  const HEIGHT = 40;
+  const CENTER = { x: 20, y: 18, z: 7 };
+  const VIEW = viewFor(1024, 768, 2); // 16×12, inteira
+
+  /** O chão do andar: `1000 + x` no 7, `2000 + x` no 6 — o andar vira id distinto (cenário 5a). */
+  function field(): Record<string, TileStack> {
+    const tiles: Record<string, TileStack> = {};
+    for (const z of [6, 7]) {
+      for (let y = 0; y < HEIGHT; y++) {
+        for (let x = 0; x < WIDTH; x++) {
+          tiles[`${x},${y},${z}`] = { ground: (z === 6 ? 2000 : 1000) + x, items: [] };
+        }
+      }
+    }
+    return tiles;
+  }
+
+  const SCENE = (): Scene => sceneOf({ width: WIDTH, height: HEIGHT, floors: [6, 7], tiles: field() });
+
+  const CATALOG: SyntheticCatalog = { 128: { kind: 'outfit' }, 129: { kind: 'outfit' } };
+
+  /** Monta, põe o self em `center`, entrega cena e pacote, e dá UM quadro (a janela inteira). */
+  async function mountWarmed(center = CENTER): Promise<{
+    clock: ReturnType<typeof testClock>;
+    art: SyntheticArt;
+    viewport: Awaited<ReturnType<typeof mountTestViewport>>;
+  }> {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ clock, width: 1024, height: 768 });
+    viewport.spawnSelf(1, center, 0);
+    viewport.handle.setPack(art);
+    viewport.handle.setScene(SCENE());
+    await viewport.tick(0);
+    return { clock, art, viewport };
+  }
+
+  /** Os ids de chão das colunas de `window` no andar (7 → `1000 + x`, 6 → `2000 + x`). */
+  function columnIds(window: { readonly minX: number; readonly maxX: number }, floor: number): Set<number> {
+    const ids = new Set<number>();
+    for (let x = window.minX; x <= window.maxX; x++) ids.add((floor === 6 ? 2000 : 1000) + x);
+    return ids;
+  }
+
+  it('1. ao receber a cena, aquece a janela de PREFETCH inteira (não a de render)', async () => {
+    const { art } = await mountWarmed();
+    const window = prefetchTiles(CENTER, VIEW);
+
+    expect(art.warmedObjects).toHaveLength(1);
+    expect(new Set(art.warmedObjects[0])).toEqual(columnIds(window, 7));
+  });
+
+  it('2. cada tile cruzado gera UMA chamada só com a coluna que entrou, disjunta das anteriores', async () => {
+    const { art, viewport } = await mountWarmed();
+    const before = art.warmedObjects.length;
+    const initial = prefetchTiles(CENTER, VIEW);
+
+    const union = new Set<number>();
+    for (let i = 1; i <= 30; i++) {
+      viewport.moveSelfTo({ x: CENTER.x + i, y: CENTER.y, z: 7 });
+      await viewport.tick(i * 16);
+    }
+
+    const calls = art.warmedObjects.slice(before);
+    expect(calls).toHaveLength(30);
+    calls.forEach((call, index) => {
+      expect(call).toEqual([1000 + initial.maxX + index + 1]);
+      for (const id of call) expect(union.has(id)).toBe(false);
+      for (const id of call) union.add(id);
+    });
+  });
+
+  it('3. parado, nenhum warmObjects/warmOutfit — mesmo com o ticker rodando', async () => {
+    const { art, viewport } = await mountWarmed();
+    const objects = art.warmedObjects.length;
+    const outfits = art.warmedOutfits.length;
+
+    for (let i = 1; i <= 120; i++) await viewport.tick(i * 16);
+
+    expect(art.warmedObjects).toHaveLength(objects);
+    expect(art.warmedOutfits).toHaveLength(outfits);
+  });
+
+  it('4. outfit por proximidade, uma vez por pacote; fora da janela não aquece', async () => {
+    const { clock, art, viewport } = await mountWarmed();
+    const window = prefetchTiles(CENTER, VIEW);
+
+    viewport.spawn(2, { x: 22, y: 18, z: 7 }, 128); // B, dentro da janela
+    await viewport.tick(16);
+    expect(art.warmedOutfits).toEqual([128]);
+
+    viewport.spawn(3, { x: 23, y: 18, z: 7 }, 128); // C, mesmo outfit: o `Set` deduplica
+    await viewport.tick(32);
+    expect(art.warmedOutfits).toEqual([128]);
+
+    // D usa OUTRO outfit de propósito: com 128 o `Set` já o teria deduplicado, e o caso negativo
+    // passaria mesmo sem o corte pela janela — o que se quer provar aqui é a POSIÇÃO.
+    viewport.spawn(4, { x: window.maxX + 20, y: 18, z: 7 }, 129); // fora da janela
+    await viewport.tick(48);
+    expect(art.warmedOutfits).toEqual([128]);
+
+    const other = new SyntheticArt(CATALOG, { now: clock.now });
+    viewport.handle.setPack(other);
+    await viewport.tick(64);
+    expect(other.warmedOutfits).toEqual([128]); // pacote novo repete o pedido
+  });
+
+  it('5a. trocar de andar refaz a janela inteira, nos dois andares de floorsBelow', async () => {
+    const { art, viewport } = await mountWarmed();
+    const before = art.warmedObjects.length;
+
+    viewport.moveSelfTo({ x: CENTER.x, y: CENTER.y, z: 6 });
+    await viewport.tick(16);
+
+    expect(art.warmedObjects.length).toBe(before + 1);
+    const window = prefetchTiles({ ...CENTER, z: 6 }, VIEW);
+    const expected = new Set([...columnIds(window, 7), ...columnIds(window, 6)]);
+    expect(new Set(art.warmedObjects[before])).toEqual(expected);
+  });
+
+  it('5b. resize refaz a janela inteira, sobre a vista nova', async () => {
+    const { art, viewport } = await mountWarmed();
+    const before = art.warmedObjects.length;
+
+    viewport.resize(640, 480); // zoom 1, vista 18×14
+    await viewport.tick(16);
+
+    expect(art.warmedObjects.length).toBe(before + 1);
+    const window = prefetchTiles(CENTER, { widthTiles: 18, heightTiles: 14 });
+    expect(new Set(art.warmedObjects[before])).toEqual(columnIds(window, 7));
+  });
+
+  it('6. sem pacote nada é pedido; o pacote que chega depois aquece a janela inteira', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: SCENE(), art, clock, width: 1024, height: 768 });
+    viewport.spawnSelf(1, CENTER, 0);
+
+    viewport.handle.setPack(null);
+    for (let i = 0; i < 10; i++) {
+      if (i < 3) viewport.moveSelfTo({ x: CENTER.x + 1 + i, y: CENTER.y, z: 7 });
+      await viewport.tick(i * 16);
+    }
+    expect(art.warmedObjects).toEqual([]);
+    expect(art.warmedOutfits).toEqual([]);
+
+    viewport.handle.setPack(art);
+    await viewport.tick(1000);
+
+    expect(art.warmedObjects).toHaveLength(1);
+    const window = prefetchTiles({ x: CENTER.x + 3, y: CENTER.y, z: 7 }, VIEW);
+    expect(new Set(art.warmedObjects[0])).toEqual(columnIds(window, 7));
   });
 });
