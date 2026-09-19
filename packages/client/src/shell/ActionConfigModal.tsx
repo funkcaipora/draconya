@@ -1,13 +1,15 @@
 // O modal que a barra de ações abre ao configurar um slot (AB-11/#426, régua
 // `docs/kit-reference/34-modal-action-config.png`). Edita o rascunho v2 do slot — ação, condições
-// em E, tecla, a chave "automática" e a reposição do item — e manda `bot-config` ao Salvar.
+// em E, tecla e a chave "automática" — e manda `bot-config` ao Salvar.
 //
 // **Nada de opcode novo** (invariante 5): Salvar reusa `setSlot` + `flushSave`, o mesmo caminho
 // de intenção do editor v1 (invariante 4). A recusa chega tipada em `bot-config-result`, e o
 // rascunho NÃO é descartado (AGENTS.md do cliente).
 //
 // O vocabulário vem do catálogo v2 (`catalogue.bot`, #424): TIPO, AÇÃO, ATALHO e os tipos de
-// condição. Sem catálogo o modal diz "Carregando…" e não oferece lista vazia (RF-10).
+// condição. A ação é magia ou SUPRIMENTO abstrato (poção/runa) — o uso debita gold, não há item
+// nem reposição por lote (ADR 0032 d.6/d.7, restaurado na M18). Sem catálogo o modal diz
+// "Carregando…" e não oferece lista vazia (RF-10).
 
 import { useState } from 'react';
 import { BOT_HOTKEYS } from '@draconya/content';
@@ -15,13 +17,10 @@ import type { BotActionV2, BotHotkey } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import type { Catalogue } from '../state/hud.js';
 import { bot, setSlot } from '../bot/store.js';
-import {
-  DEFAULT_RESTOCK, draftFromSlot, draftProblem, slotFromDraft,
-} from '../bot/action-config.js';
-import type { BotSet, SlotDraft, SlotRestock } from '../bot/action-config.js';
+import { draftFromSlot, draftProblem, slotFromDraft } from '../bot/action-config.js';
+import type { BotSet, SlotDraft } from '../bot/action-config.js';
 import { Modal } from './ui/Modal.js';
 import { Select } from './ui/Select.js';
-import { Input } from './ui/Input.js';
 import { Switch } from './ui/Switch.js';
 import { Button } from './ui/Button.js';
 import { Kicker } from './ui/Kicker.js';
@@ -38,17 +37,15 @@ export interface ActionConfigModalProps {
   onClose: () => void;
 }
 
-/** As ações que o catálogo oferece para um tipo: magias, ou os consumíveis (a poção é item). */
+/** As ações que o catálogo oferece para um tipo: magias, ou os suprimentos abstratos. */
 function actionOptions(kind: ActionKind, catalogue: Catalogue): ReadonlyArray<{ value: string; label: string }> {
   if (kind === 'spell') {
     return catalogue.bot.spells.map((spell) => ({ value: spell.id, label: spell.name }));
   }
-  return catalogue.items
-    .filter((item) => item.kind === 'consumable')
-    .map((item) => ({ value: item.id, label: item.name }));
+  return (catalogue.bot.supplies ?? []).map((supply) => ({ value: supply.id, label: supply.name }));
 }
 
-/** Nome, rótulo curto do `Slot` e a legenda do cabeçalho (`magia · gasta N mana` | `item · …`). */
+/** Nome, rótulo do `Slot` e a legenda do cabeçalho (`magia · gasta N mana` | `suprimento · N gold`). */
 function selectedAction(
   action: BotActionV2 | null,
   catalogue: Catalogue,
@@ -59,38 +56,24 @@ function selectedAction(
     const name = spell?.name ?? action.spellId;
     return { label: name, name, subtitle: `magia · gasta ${String(spell?.manaCost ?? 0)} mana` };
   }
-  const item = catalogue.items.find((entry) => entry.id === action.itemId);
-  return {
-    label: item?.shortLabel ?? item?.name ?? action.itemId,
-    name: item?.name ?? action.itemId,
-    subtitle: 'item · consumível',
-  };
+  const supply = (catalogue.bot.supplies ?? []).find((entry) => entry.id === action.supplyId);
+  const name = supply?.name ?? action.supplyId;
+  return { label: name, name, subtitle: `suprimento · ${String(supply?.price ?? 0)} gold` };
 }
 
-/** A reposição default de um item: a do catálogo, ou 1/0 quando ele não a declara (ADR 0032 d.6). */
-function restockFor(itemId: string, catalogue: Catalogue): SlotRestock {
-  return catalogue.items.find((entry) => entry.id === itemId)?.restock ?? DEFAULT_RESTOCK;
-}
-
-/** Um rascunho com a ação trocada; `restock` só sobrevive quando o novo `do` é item. */
-function withDo(draft: SlotDraft, action: BotActionV2 | null, restock?: SlotRestock): SlotDraft {
+/** Um rascunho com a ação trocada; condições, tecla e automática sobrevivem. */
+function withDo(draft: SlotDraft, action: BotActionV2 | null): SlotDraft {
   return {
     do: action,
     when: draft.when,
     auto: draft.auto,
     ...(draft.hotkey === undefined ? {} : { hotkey: draft.hotkey }),
-    ...(restock === undefined ? {} : { restock }),
   };
 }
 
 /** O rascunho sem tecla — a opção "sem tecla" do ATALHO (22 teclas para 24 slots). */
 function withoutHotkey(draft: SlotDraft): SlotDraft {
-  return {
-    do: draft.do,
-    when: draft.when,
-    auto: draft.auto,
-    ...(draft.restock === undefined ? {} : { restock: draft.restock }),
-  };
+  return { do: draft.do, when: draft.when, auto: draft.auto };
 }
 
 export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProps) {
@@ -119,7 +102,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
   const hotkeys = catalogue.bot.hotkeys ?? BOT_HOTKEYS;
   const actionValue = draft.do === null
     ? ''
-    : draft.do.kind === 'spell' ? draft.do.spellId : draft.do.itemId;
+    : draft.do.kind === 'spell' ? draft.do.spellId : draft.do.supplyId;
 
   return (
     <Modal
@@ -172,7 +155,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
         <Select
           label="Tipo"
           size="sm"
-          options={[{ value: 'spell', label: 'Magia' }, { value: 'item', label: 'Item' }]}
+          options={[{ value: 'spell', label: 'Magia' }, { value: 'supply', label: 'Suprimento' }]}
           value={activeKind}
           onChange={(value) => {
             const next = value as ActionKind;
@@ -191,7 +174,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
               setDraft(withDo(draft, { kind: 'spell', spellId: value }));
               return;
             }
-            setDraft(withDo(draft, { kind: 'item', itemId: value }, restockFor(value, catalogue)));
+            setDraft(withDo(draft, { kind: 'supply', supplyId: value }));
           }}
         />
         <Select
@@ -214,38 +197,6 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
         conditions={draft.when}
         onChange={(when) => { setDraft({ ...draft, when }); }}
       />
-
-      {draft.do?.kind === 'item' && (
-        <section className="action-config-restock">
-          <Kicker tone="muted">LEVAR/REPOR</Kicker>
-          <Input
-            label="Levar"
-            size="sm"
-            type="number"
-            min={1}
-            value={String(draft.restock?.batch ?? DEFAULT_RESTOCK.batch)}
-            onChange={(event) => {
-              setDraft({
-                ...draft,
-                restock: { batch: Number(event.target.value), min: draft.restock?.min ?? 0 },
-              });
-            }}
-          />
-          <Input
-            label="Repor abaixo de"
-            size="sm"
-            type="number"
-            min={0}
-            value={String(draft.restock?.min ?? DEFAULT_RESTOCK.min)}
-            onChange={(event) => {
-              setDraft({
-                ...draft,
-                restock: { batch: draft.restock?.batch ?? 1, min: Number(event.target.value) },
-              });
-            }}
-          />
-        </section>
-      )}
 
       <p className="action-config-note">
         Cura, poções, ataque, runas e suporte vivem aqui, na barra de ações — a ordem dos slots é a

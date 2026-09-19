@@ -15,7 +15,7 @@ import type { BotAutomation, BotAutomationModel, BotConditionV2 } from '@dracony
 import { useHudSlice } from '../state/useSlice.js';
 import { putAutomation } from '../bot/store.js';
 import {
-  automationProblem, automationSummary, itemName, itemsForParam,
+  ammoName, automationProblem, automationSummary, itemName, itemsForParam,
 } from '../bot/automation-text.js';
 import type { AutomationItemParam } from '../bot/automation-text.js';
 import type { ItemDefinition } from '../state/hud.js';
@@ -35,7 +35,23 @@ export interface AutomationConfigModalProps {
   onClose: () => void;
 }
 
-/** O select de um item do catálogo, filtrado pelo `slot` que o parâmetro exige. */
+/** O select de um id do catálogo, com as opções e o nome de fallback que quem chama decide. */
+function IdField({ label, value, options, nameOf, onChange }: {
+  label: string;
+  value: string;
+  options: readonly { readonly value: string; readonly label: string }[];
+  nameOf: (id: string) => string;
+  onChange: (id: string) => void;
+}) {
+  // Id que saiu do catálogo continua selecionável pelo id cru — o resumo não inventa nome e o
+  // servidor decide na validação (invariante 7: a versão da sessão é fixa).
+  const withCurrent = options.some((option) => option.value === value)
+    ? options
+    : [{ value, label: nameOf(value) }, ...options];
+  return <Select label={label} size="sm" options={withCurrent} value={value} onChange={onChange} />;
+}
+
+/** O select de um item de equipamento do catálogo, filtrado pelo `slot` que o parâmetro exige. */
 function ItemField({ model, param, label, value, items, onChange }: {
   model: BotAutomationModel;
   param: AutomationItemParam;
@@ -44,13 +60,15 @@ function ItemField({ model, param, label, value, items, onChange }: {
   items: readonly ItemDefinition[];
   onChange: (id: string) => void;
 }) {
-  const options = itemsForParam(model, param, items).map((item) => ({ value: item.id, label: item.name }));
-  // Item que saiu do catálogo continua selecionável pelo id cru — o resumo não inventa nome e o
-  // servidor decide na validação (invariante 7: a versão da sessão é fixa).
-  const withCurrent = options.some((option) => option.value === value)
-    ? options
-    : [{ value, label: itemName(value, items) }, ...options];
-  return <Select label={label} size="sm" options={withCurrent} value={value} onChange={onChange} />;
+  return (
+    <IdField
+      label={label}
+      value={value}
+      options={itemsForParam(model, param, items).map((item) => ({ value: item.id, label: item.name }))}
+      nameOf={(id) => itemName(id, items)}
+      onChange={onChange}
+    />
+  );
 }
 
 export function AutomationConfigModal({ index, initial, onClose }: AutomationConfigModalProps) {
@@ -70,7 +88,8 @@ export function AutomationConfigModal({ index, initial, onClose }: AutomationCon
   }
 
   const items = catalogue.items;
-  const problem = automationProblem(draft, items);
+  const ammunition = catalogue.ammunition;
+  const problem = automationProblem(draft, items, ammunition);
   const setEnter = (enter: readonly BotConditionV2[]): void => { setDraft({ ...draft, enter: [...enter] }); };
   const setExit = (exit: readonly BotConditionV2[]): void => { setDraft({ ...draft, exit: [...exit] }); };
 
@@ -106,8 +125,10 @@ export function AutomationConfigModal({ index, initial, onClose }: AutomationCon
           <div className="automation-config-grid">
             <section className="automation-config-box">
               <Kicker tone="muted">MUITOS ALVOS</Kicker>
-              <ItemField
-                model={draft.model} param="ammoA" label="Munição" value={draft.params.ammoA} items={items}
+              <IdField
+                label="Munição" value={draft.params.ammoA}
+                options={ammunition.map((ammo) => ({ value: ammo.id, label: ammo.name }))}
+                nameOf={(id) => ammoName(id, ammunition)}
                 onChange={(ammoA) => { setDraft({ ...draft, params: { ...draft.params, ammoA } }); }}
               />
               <Input
@@ -124,8 +145,10 @@ export function AutomationConfigModal({ index, initial, onClose }: AutomationCon
             </section>
             <section className="automation-config-box">
               <Kicker tone="muted">POUCOS ALVOS</Kicker>
-              <ItemField
-                model={draft.model} param="ammoB" label="Munição" value={draft.params.ammoB} items={items}
+              <IdField
+                label="Munição" value={draft.params.ammoB}
+                options={ammunition.map((ammo) => ({ value: ammo.id, label: ammo.name }))}
+                nameOf={(id) => ammoName(id, ammunition)}
                 onChange={(ammoB) => { setDraft({ ...draft, params: { ...draft.params, ammoB } }); }}
               />
               <p className="automation-config-hint">Volta quando cair abaixo do limite.</p>
@@ -228,7 +251,7 @@ export function AutomationConfigModal({ index, initial, onClose }: AutomationCon
     >
       {problem !== null && <p className="system-error" role="alert">{problem}</p>}
       <div className="automation-config-head">
-        <span className="automation-config-summary">{automationSummary(draft, items)}</span>
+        <span className="automation-config-summary">{automationSummary(draft, items, ammunition)}</span>
         <label className="automation-config-toggle">
           <span>ligada</span>
           <Switch

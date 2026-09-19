@@ -312,11 +312,10 @@ describe('setSlot grava o slot e manda bot-config AGORA (AB-11, #426)', () => {
 
   it('grava no conjunto e no índice certos e manda UMA mensagem na hora', () => {
     const next: BotSlot = {
-      do: { kind: 'item', itemId: 'health-potion' },
+      do: { kind: 'supply', supplyId: 'health-potion' },
       when: [{ kind: 'mana', op: '>=', percent: 20 }],
       auto: false,
       hotkey: 'F1',
-      restock: { batch: 20, min: 5 },
     };
     setSlot(2, 4, next);
     expect(sent).toHaveLength(1);

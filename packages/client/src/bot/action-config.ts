@@ -3,9 +3,9 @@
 // `action-bar.ts` e `exit-rules.ts`.
 //
 // **A tela não decide elegibilidade, cooldown nem estoque** (invariante 4): ela monta o
-// vocabulário fechado do conteúdo e valida só o que o jogador consegue ver — faixa de um valor,
-// unicidade de tecla no conjunto, reposição de item. Quem decide se a configuração vale é o
-// servidor, e a recusa chega tipada em `bot-config-result`.
+// vocabulário fechado do conteúdo e valida só o que o jogador consegue ver — faixa de um valor
+// e unicidade de tecla no conjunto. Quem decide se a configuração vale é o servidor, e a recusa
+// chega tipada em `bot-config-result`.
 //
 // **Adaptação de forma (AB-10/#425).** O vocabulário v2 real (`BotVocabulary` em `state/hud.ts`)
 // não publica os tipos de condição nem os efeitos — o catálogo de efeitos chega com o motor
@@ -21,12 +21,6 @@ import type {
 /** Um conjunto da configuração v2 — a assinatura de `hotkeyConflict`/`draftProblem`. */
 export type BotSet = BotConfigV2['sets'][number];
 
-/** A reposição por lote de um slot de item (ADR 0032 d.6). */
-export interface SlotRestock {
-  readonly batch: number;
-  readonly min: number;
-}
-
 /**
  * O rascunho local de um slot. `do: null` é o slot vazio — o schema do slot não aceita ausência
  * de ação, então a ausência vive aqui e `slotFromDraft` é quem materializa (DT-01).
@@ -36,11 +30,7 @@ export interface SlotDraft {
   readonly when: readonly BotConditionV2[];
   readonly hotkey?: BotHotkey;
   readonly auto: boolean;
-  readonly restock?: SlotRestock;
 }
-
-/** O default quando o item do catálogo não traz `restock`: o jogador decide (ADR 0032 d.6). */
-export const DEFAULT_RESTOCK: SlotRestock = { batch: 1, min: 0 };
 
 /**
  * Os tipos de condição que a tela oferece. `condition` (efeito presente/ausente) só entra quando
@@ -107,13 +97,12 @@ export function draftFromSlot(slot: BotSlot | null): SlotDraft {
     when: slot.when,
     auto: slot.auto,
     ...(slot.hotkey === undefined ? {} : { hotkey: slot.hotkey }),
-    ...(slot.restock === undefined ? {} : { restock: slot.restock }),
   };
 }
 
 /**
  * Materializa o slot no Salvar. `null` quando ainda não há ação — o modal mantém o Salvar
- * bloqueado nesse caso. `restock` só sai em slot de item (#418 recusa em magia).
+ * bloqueado nesse caso. O suprimento é abstrato: não há `restock` a carregar.
  */
 export function slotFromDraft(draft: SlotDraft): BotSlot | null {
   if (draft.do === null) return null;
@@ -122,7 +111,6 @@ export function slotFromDraft(draft: SlotDraft): BotSlot | null {
     when: [...draft.when],
     auto: draft.auto,
     ...(draft.hotkey === undefined ? {} : { hotkey: draft.hotkey }),
-    ...(draft.do.kind === 'item' && draft.restock !== undefined ? { restock: draft.restock } : {}),
   };
 }
 
@@ -150,9 +138,6 @@ export function draftProblem(draft: SlotDraft, set: BotSet, index: number): stri
     if (value < min || (max !== null && value > max)) {
       return `Valor fora de faixa: use entre ${String(min)}${max === null ? '' : ` e ${String(max)}`}.`;
     }
-  }
-  if (draft.restock !== undefined && (draft.restock.batch <= 0 || draft.restock.min < 0)) {
-    return 'Reposição inválida: o lote precisa ser maior que zero.';
   }
   if (draft.hotkey !== undefined) {
     const conflict = hotkeyConflict(set, index, draft.hotkey);

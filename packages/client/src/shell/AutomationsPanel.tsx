@@ -63,6 +63,7 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   }
 
   const items = catalogue.items;
+  const ammunition = catalogue.ammunition;
   const labelOf = (model: BotAutomation['model']): string =>
     descriptor.find((entry) => entry.model === model)?.label ?? model;
 
@@ -81,9 +82,9 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
                 title={automation.enabled !== false ? 'ligada' : 'desligada'}
                 onChange={() => { toggleAutomation(index); }}
               />
-              <span className="automation-row-text" title={automationSummary(automation, items)}>
+              <span className="automation-row-text" title={automationSummary(automation, items, ammunition)}>
                 <b>{labelOf(automation.model)}</b>
-                <small>{automationSummary(automation, items)}</small>
+                <small>{automationSummary(automation, items, ammunition)}</small>
               </span>
               <IconButton title="Configurar" onClick={() => { setEditing({ index, initial: automation }); }}>⚙</IconButton>
               <IconButton title="Remover automação" onClick={() => { removeAutomation(index); }}>×</IconButton>
@@ -97,7 +98,7 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
       {adding && (
         <AddAutomationModal
           onPick={(model) => {
-            const draft = blankAutomation(model, items);
+            const draft = blankAutomation(model, items, ammunition);
             setAdding(false);
             // Modelo sem o item exigido no catálogo: o `AddAutomationModal` já o desabilita, e
             // `blankAutomation` devolve `null` — nunca um modal com `itemId` vazio.

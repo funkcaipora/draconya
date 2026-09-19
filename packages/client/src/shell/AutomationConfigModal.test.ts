@@ -21,11 +21,13 @@ const catalogue = (): Catalogue => ({
     { id: 'life-ring', name: 'Life Ring', appearanceId: 1, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
     { id: 'energy-ring', name: 'Energy Ring', appearanceId: 2, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
     { id: 'glacier-amulet', name: 'Glacier Amulet', appearanceId: 3, weight: 1, slot: 'neck', twoHanded: false, kind: 'amulet' },
-    { id: 'burst-arrow', name: 'Burst Arrow', appearanceId: 4, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
-    { id: 'arrow', name: 'Arrow', appearanceId: 5, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
     { id: 'steel-axe', name: 'Steel Axe', appearanceId: 6, weight: 1, slot: 'hand', twoHanded: false, kind: 'weapon' },
     { id: 'spike-sword', name: 'Spike Sword', appearanceId: 7, weight: 1, slot: 'hand', twoHanded: true, kind: 'weapon' },
     { id: 'wooden-shield', name: 'Wooden Shield', appearanceId: 8, weight: 1, slot: 'shield', twoHanded: false, kind: 'shield' },
+  ],
+  ammunition: [
+    { id: 'burst-arrow', name: 'Burst Arrow', family: 'arrow', attack: 30, price: 5, appearanceId: 4, requires: {} },
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 5, requires: {} },
   ],
   bot: {
     vocabularyVersion: 2,
@@ -78,7 +80,7 @@ describe('AutomationConfigModal — renew-ring (RF-10)', () => {
 });
 
 describe('AutomationConfigModal — swap-ammo-by-targets (captura 37)', () => {
-  it('tem os dois lados da troca e o ALVOS ≥', async () => {
+  it('tem os dois lados da troca, a munição do catálogo e o ALVOS ≥', async () => {
     const html = await render(ammo);
     expect(html).toContain('MUITOS ALVOS');
     expect(html).toContain('POUCOS ALVOS');
@@ -126,6 +128,6 @@ describe('AutomationConfigModal — o Salvar manda bot-config (RF-08)', () => {
   it('chama putAutomation(index, draft) e fecha', async () => {
     const source = await readFile(new URL('./AutomationConfigModal.tsx', import.meta.url), 'utf8');
     expect(source).toContain('putAutomation(index, draft)');
-    expect(source).toContain('automationProblem(draft, items)');
+    expect(source).toContain('automationProblem(draft, items, ammunition)');
   });
 });

@@ -53,6 +53,7 @@ const catalogue: Catalogue = {
     spells: [], supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
   ],

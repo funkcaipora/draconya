@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BotConfigV2, BotSlot } from '@draconya/content';
-import type { Catalogue, Inventory, SlotState } from '../state/hud.js';
+import type { Catalogue, SlotState } from '../state/hud.js';
 import {
   hotkeyForKey, lureCaption, policyLabel, slotForHotkey, slotKey, slotTitle, slotView,
 } from './action-bar.js';
@@ -11,10 +11,8 @@ import {
 const catalogue = (over: Partial<Catalogue> = {}): Catalogue => ({
   hunts: [],
   monsters: [],
-  items: [{
-    id: 'health-potion', name: 'Poção de Vida', appearanceId: 266, weight: 2.7,
-    slot: null, twoHanded: false, kind: 'consumable', shortLabel: 'HP', group: 'potion',
-  }],
+  items: [],
+  ammunition: [],
   vocations: [],
   vocationLevel: 0,
   bot: {
@@ -28,23 +26,20 @@ const catalogue = (over: Partial<Catalogue> = {}): Catalogue => ({
       id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null,
       effect: 'heal', group: 'healing',
     }],
+    supplies: [{
+      id: 'health-potion', name: 'Poção de Vida', price: 20, effect: 'heal',
+      group: 'potion', requires: {},
+    }],
     automations: [],
   },
   ...over,
 });
 
-const inventory = (): Inventory => ({
-  backpack: [{ instanceId: 'i1', itemId: 'health-potion', quantity: 5 }],
-  satchel: [{ instanceId: 'i2', itemId: 'health-potion', quantity: 3 }],
-  equipped: {},
-  capacity: { used: 0, total: 100 },
-});
-
 const spellSlot = (over: Partial<BotSlot> = {}): BotSlot => ({
   do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, hotkey: '1', ...over,
 });
-const itemSlot = (over: Partial<BotSlot> = {}): BotSlot => ({
-  do: { kind: 'item', itemId: 'health-potion' }, when: [], auto: true, ...over,
+const supplySlot = (over: Partial<BotSlot> = {}): BotSlot => ({
+  do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true, ...over,
 });
 
 function setsWith(slot: BotSlot | null, set = 0, index = 0): BotConfigV2['sets'] {
@@ -88,46 +83,47 @@ describe('slotForHotkey', () => {
 
 describe('slotView', () => {
   it('slot nulo é vazio: null, nada inventado', () => {
-    expect(slotView(null, catalogue(), inventory(), null)).toBeNull();
+    expect(slotView(null, catalogue(), null)).toBeNull();
   });
 
-  it('magia: rótulo do catálogo e sem contagem', () => {
-    const view = slotView(spellSlot(), catalogue(), inventory(), null);
-    expect(view).toMatchObject({ label: 'Cura', hotkey: '1', count: undefined, cooldownMs: 0, blocked: false });
+  it('magia: rótulo do catálogo, sem contagem', () => {
+    const view = slotView(spellSlot(), catalogue(), null);
+    expect(view).toMatchObject({ label: 'Cura', hotkey: '1', cooldownMs: 0, blocked: false });
     // O catálogo v2 não carrega elemento — nada de cor inventada.
     expect(view?.element).toBeUndefined();
   });
 
-  it('item: rótulo curto e a contagem somada do inventário (mochila + bolsa)', () => {
-    const view = slotView(itemSlot(), catalogue(), inventory(), null);
-    expect(view).toMatchObject({ label: 'HP', count: 8 });
+  it('suprimento: nome do catálogo, sem pilha nem contagem', () => {
+    const view = slotView(supplySlot(), catalogue(), null);
+    expect(view).toMatchObject({ label: 'Poção de Vida', cooldownMs: 0, blocked: false });
+    expect(view).not.toHaveProperty('count');
   });
 
-  it('item fora do inventário: contagem undefined, nunca 0 presumido', () => {
-    const empty: Inventory = { backpack: [], satchel: [], equipped: {}, capacity: { used: 0, total: 100 } };
-    expect(slotView(itemSlot(), catalogue(), empty, null)?.count).toBeUndefined();
+  it('suprimento fora do catálogo cai no id cru, nunca num nome inventado', () => {
+    const slot: BotSlot = { do: { kind: 'supply', supplyId: 'gone-potion' }, when: [], auto: true };
+    expect(slotView(slot, catalogue(), null)?.label).toBe('gone-potion');
   });
 
   it('cooldown e bloqueio vêm do slot-state', () => {
     const state: SlotState = { set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 };
-    const view = slotView(spellSlot(), catalogue(), inventory(), state);
+    const view = slotView(spellSlot(), catalogue(), state);
     expect(view?.cooldownMs).toBe(1500);
     expect(view?.blocked).toBe(false);
-    expect(slotView(spellSlot(), catalogue(), inventory(), { set: 0, slot: 0, state: 'blocked', remainingMs: 0 })?.blocked)
+    expect(slotView(spellSlot(), catalogue(), { set: 0, slot: 0, state: 'blocked', remainingMs: 0 })?.blocked)
       .toBe(true);
   });
 });
 
 describe('slotTitle', () => {
   it('inclui o motivo do servidor quando veio, e o limpa quando null', () => {
-    const view = slotView(spellSlot(), catalogue(), inventory(), null);
+    const view = slotView(spellSlot(), catalogue(), null);
     expect(view).not.toBeNull();
     expect(slotTitle(view!, 'Sem mana.')).toContain('Sem mana.');
     expect(slotTitle(view!, null)).not.toContain('Sem mana.');
   });
 
   it('mostra o cooldown restante e o bloqueio', () => {
-    const view = slotView(spellSlot(), catalogue(), inventory(), { set: 0, slot: 0, state: 'blocked', remainingMs: 0 });
+    const view = slotView(spellSlot(), catalogue(), { set: 0, slot: 0, state: 'blocked', remainingMs: 0 });
     expect(slotTitle(view!, 'sem estoque')).toContain('bloqueado');
     expect(slotTitle(view!, null)).toContain('Cura');
   });

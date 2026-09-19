@@ -1,17 +1,17 @@
-// O texto DERIVADO das automações (AB-12/#427): o resumo da linha, o nome de um item, os
-// defaults de um rascunho novo e o problema que bloqueia o Salvar. PURO: sem React, sem store,
-// sem socket e sem relógio — o mesmo molde de `action-config.ts`.
+// O texto DERIVADO das automações (AB-12/#427): o resumo da linha, o nome de um item/munição,
+// os defaults de um rascunho novo e o problema que bloqueia o Salvar. PURO: sem React, sem
+// store, sem socket e sem relógio — o mesmo molde de `action-config.ts`.
 //
 // O resumo é gerado dos parâmetros e das condições (RF-03): trocar o item ou o limiar muda o que
 // a linha mostra. Nada aqui avalia elegibilidade, estoque, alvo ou resultado (invariante 4) — é
 // apresentação, e quem decide é o `sim`.
 //
-// **Adaptação de forma (AB-12).** O vocabulário v2 real usa `BotConditionV2` (o `BotCondition` do
-// rascunho da issue era o tipo v1). O modelo e os parâmetros são o `BotAutomation` do #418, e os
-// itens vêm do catálogo v2 do #424.
+// **Munição é abstrata (ADR 0026 d.3, restaurada na M18).** `swap-ammo-by-targets` aponta ids de
+// `catalogue.ammunition`; as outras automações continuam apontando ids de ITEM para equipamento
+// (anéis, arma, escudo). O vocabulário v2 real usa `BotConditionV2`.
 
 import type { BotAutomation, BotAutomationModel, BotConditionV2 } from '@draconya/content';
-import type { ItemDefinition } from '../state/hud.js';
+import type { AmmoDefinition, ItemDefinition } from '../state/hud.js';
 import { OPERATOR_OPTIONS } from './action-config.js';
 
 /** O glifo de cada comparador, a mesma fonte que o `ConditionList` usa. */
@@ -39,8 +39,17 @@ export function itemName(itemId: string, items: readonly ItemDefinition[]): stri
   return items.find((item) => item.id === itemId)?.name ?? itemId;
 }
 
+/** O nome de exibição da munição; id fora do catálogo sai cru, como o de item. */
+export function ammoName(ammoId: string, ammunition: readonly AmmoDefinition[]): string {
+  return ammunition.find((ammo) => ammo.id === ammoId)?.name ?? ammoId;
+}
+
 /** O resumo da LINHA, gerado dos parâmetros e das condições — nunca um texto fixo por modelo. */
-export function automationSummary(automation: BotAutomation, items: readonly ItemDefinition[]): string {
+export function automationSummary(
+  automation: BotAutomation,
+  items: readonly ItemDefinition[],
+  ammunition: readonly AmmoDefinition[],
+): string {
   const enter = automation.enter.map(conditionSummary).join(' · ');
   const exit = automation.exit.map(conditionSummary).join(' · ');
   switch (automation.model) {
@@ -49,7 +58,7 @@ export function automationSummary(automation: BotAutomation, items: readonly Ite
       // O gatilho é o slot vazio (AB-08); o item está no modal, então o resumo é o "quando".
       return 'quando acabar';
     case 'swap-ammo-by-targets':
-      return `${enter} → ${itemName(automation.params.ammoA, items)} · senão ${itemName(automation.params.ammoB, items)}`;
+      return `${enter} → ${ammoName(automation.params.ammoA, ammunition)} · senão ${ammoName(automation.params.ammoB, ammunition)}`;
     case 'swap-weapon-shield-by-hp':
       return `${enter} → Escudo + ${itemName(automation.params.oneHanded, items)} · ${exit} → ${itemName(automation.params.twoHanded, items)}`;
     case 'swap-ring':
@@ -70,14 +79,13 @@ export const MODEL_SUBTITLE: Readonly<Partial<Record<BotAutomationModel, string>
   'swap-ring': 'Troca o anel e o remove quando o HP recupera',
 };
 
-/** Os parâmetros de item de cada modelo — o que a tela oferece e o que `blankAutomation` exige. */
-export type AutomationItemParam =
-  | 'itemId' | 'ammoA' | 'ammoB' | 'oneHanded' | 'shield' | 'twoHanded';
+/** Os parâmetros de ITEM de cada modelo — a munição é abstrata e mora à parte. */
+export type AutomationItemParam = 'itemId' | 'oneHanded' | 'shield' | 'twoHanded';
 
 /**
  * Os itens que um parâmetro aceita. O `slot` do catálogo separa anel (`finger`) de colar
- * (`neck`), munição (`ammo`) e escudo (`shield`); entre as armas, `twoHanded` separa o set
- * defensivo do ofensivo. É a única "lista de opções" desta tela, e ela é derivada do catálogo.
+ * (`neck`) e escudo (`shield`); entre as armas, `twoHanded` separa o set defensivo do ofensivo.
+ * A munição NÃO passa por aqui — `swap-ammo-by-targets` lê `catalogue.ammunition`.
  */
 export function itemsForParam(
   model: BotAutomationModel,
@@ -85,9 +93,6 @@ export function itemsForParam(
   items: readonly ItemDefinition[],
 ): readonly ItemDefinition[] {
   switch (param) {
-    case 'ammoA':
-    case 'ammoB':
-      return items.filter((item) => item.slot === 'ammo');
     case 'shield':
       return items.filter((item) => item.slot === 'shield');
     case 'oneHanded':
@@ -106,10 +111,11 @@ function firstItemId(
   return itemsForParam(model, param, items)[0]?.id ?? null;
 }
 
-/** Um rascunho novo do modelo, com defaults do kit e o primeiro item do slot exigido. */
+/** Um rascunho novo do modelo, com defaults do kit e o primeiro id do catálogo exigido. */
 export function blankAutomation(
   model: BotAutomationModel,
   items: readonly ItemDefinition[],
+  ammunition: readonly AmmoDefinition[],
 ): BotAutomation | null {
   switch (model) {
     case 'renew-ring': {
@@ -123,8 +129,8 @@ export function blankAutomation(
       return { model, params: { itemId }, enter: [], exit: [] };
     }
     case 'swap-ammo-by-targets': {
-      const ammoA = firstItemId(model, 'ammoA', items);
-      const ammoB = itemsForParam(model, 'ammoB', items)[1]?.id ?? ammoA;
+      const ammoA = ammunition[0]?.id ?? null;
+      const ammoB = ammunition[1]?.id ?? ammoA;
       if (ammoA === null || ammoB === null) return null;
       return {
         model,
@@ -158,27 +164,38 @@ export function blankAutomation(
   }
 }
 
-/** Os ids de item de uma automação, para conferir que todos existem no catálogo. */
+/** Os ids de ITEM de uma automação, para conferir que todos existem no catálogo. */
 function itemIdsOf(automation: BotAutomation): readonly string[] {
   switch (automation.model) {
     case 'renew-ring':
     case 'renew-amulet':
     case 'swap-ring':
       return [automation.params.itemId];
-    case 'swap-ammo-by-targets':
-      return [automation.params.ammoA, automation.params.ammoB];
     case 'swap-weapon-shield-by-hp':
       return [automation.params.oneHanded, automation.params.shield, automation.params.twoHanded];
+    case 'swap-ammo-by-targets':
+      return [];
   }
 }
 
+/** Os ids de MUNIÇÃO de uma automação — `swap-ammo-by-targets` é a única que os tem. */
+function ammoIdsOf(automation: BotAutomation): readonly string[] {
+  return automation.model === 'swap-ammo-by-targets'
+    ? [automation.params.ammoA, automation.params.ammoB]
+    : [];
+}
+
 /**
- * Bloqueia o Salvar: faixa morta de HP ou item ausente do catálogo. A faixa morta é a mesma
- * regra do `botAutomationSchema`/`sim` (AB-08): saída de HP precisa ser MAIOR que a entrada,
- * senão a troca oscila a cada golpe (rodapé das capturas 37/38). O servidor recusa de novo, e a
- * tela mostra o motivo antes de salvar.
+ * Bloqueia o Salvar: faixa morta de HP ou id ausente do catálogo. A faixa morta é a mesma regra
+ * do `botAutomationSchema`/`sim` (AB-08): saída de HP precisa ser MAIOR que a entrada, senão a
+ * troca oscila a cada golpe (rodapé das capturas 37/38). O servidor recusa de novo, e a tela
+ * mostra o motivo antes de salvar.
  */
-export function automationProblem(automation: BotAutomation, items: readonly ItemDefinition[]): string | null {
+export function automationProblem(
+  automation: BotAutomation,
+  items: readonly ItemDefinition[],
+  ammunition: readonly AmmoDefinition[],
+): string | null {
   if (automation.model === 'swap-weapon-shield-by-hp' || automation.model === 'swap-ring') {
     const enter = automation.enter.find((condition) => condition.kind === 'hp');
     const exit = automation.exit.find((condition) => condition.kind === 'hp');
@@ -190,7 +207,9 @@ export function automationProblem(automation: BotAutomation, items: readonly Ite
       return 'A saída de HP precisa ser maior que a entrada — sem faixa morta a troca oscila a cada golpe.';
     }
   }
-  const missing = itemIdsOf(automation).find((id) => !items.some((item) => item.id === id));
-  if (missing !== undefined) return `O item ${missing} não está no catálogo.`;
+  const missingItem = itemIdsOf(automation).find((id) => !items.some((item) => item.id === id));
+  if (missingItem !== undefined) return `O item ${missingItem} não está no catálogo.`;
+  const missingAmmo = ammoIdsOf(automation).find((id) => !ammunition.some((ammo) => ammo.id === id));
+  if (missingAmmo !== undefined) return `A munição ${missingAmmo} não está no catálogo.`;
   return null;
 }

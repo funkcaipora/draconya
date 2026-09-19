@@ -606,9 +606,6 @@ body {
 .action-config-fields {
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 12px 2px 10px;
 }
-.action-config-restock {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px 2px 4px;
-}
 .action-config-note {
   margin: 10px 2px 0; color: var(--text-faint); font: 7px var(--font-mono); line-height: 1.6;
 }
@@ -1097,6 +1094,21 @@ body {
   list-style: none; margin: 6px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(6, 26px); gap: 3px; justify-content: center;
 }
+/* O seletor de munição (#152, ADR 0026 d.3): flutua sob a coluna direita, sobre o mundo, como
+   o resto das janelas do HUD. A lista é a família do bow, com sprite, attack e preço por tiro. */
+.ammo-picker {
+  position: absolute; right: 10px; top: calc(var(--topbar-h) + 10px); z-index: 20; width: 260px;
+}
+.ammo-options { list-style: none; margin: 0; padding: 6px 10px 0; display: grid; gap: 4px; }
+.ammo-option {
+  width: 100%; display: flex; align-items: center; gap: 8px; padding: 4px 6px; text-align: left;
+  background: var(--ash-2); border: 1px solid var(--ash-5); border-radius: 3px;
+  color: var(--parchment-2); font: 8px var(--font-mono); cursor: pointer;
+}
+.ammo-option.active { border-color: var(--gold-4); color: var(--gold-5); }
+.ammo-option:disabled { opacity: 0.45; cursor: default; }
+.ammo-name { flex: 1 1 auto; }
+.slot-ammo-picker { outline: 1px dashed var(--gold-4); outline-offset: -1px; }
 /* Inventário e equipamento (FUN-90, FUN-108). Cada lugar é um SLOT: 30 px no set, 26 px na
    mochila e na bolsa (#253, ADR 0029 D4/DT-04) — o tamanho vem do CONTEXTO (`.equipment .slot`,
    `.container-grid .slot`), não de uma classe por tamanho. O lugar vazio mostra o RÓTULO
@@ -1222,6 +1234,8 @@ body {
      o `Panel` dele continua fornecendo cabeçalho e ×. Sem `order`: fica no fim do fluxo, porque
      o caso de uso móvel é configurar o bot (comentário de cima), não conversar (DT-05). */
   .chat-window { position: static; width: auto; margin: 10px; order: 5; }
+  /* O seletor de munição vira folha inferior no modo página. */
+  .ammo-picker { position: fixed; left: 10px; right: 10px; width: auto; top: auto; bottom: 10px; }
   /* No modo página a janela deixa de flutuar e arrastar não tem função. */
   .floating-window { position: static; margin: 10px 10px 0; z-index: auto; }
   .floating-window-drag { pointer-events: none; }

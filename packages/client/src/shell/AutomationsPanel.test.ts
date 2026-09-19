@@ -20,11 +20,13 @@ const catalogue = (): Catalogue => ({
   vocationLevel: 0,
   items: [
     { id: 'life-ring', name: 'Life Ring', appearanceId: 1, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
-    { id: 'burst-arrow', name: 'Burst Arrow', appearanceId: 2, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
-    { id: 'arrow', name: 'Arrow', appearanceId: 3, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
     { id: 'steel-axe', name: 'Steel Axe', appearanceId: 4, weight: 1, slot: 'hand', twoHanded: false, kind: 'weapon' },
     { id: 'spike-sword', name: 'Spike Sword', appearanceId: 5, weight: 1, slot: 'hand', twoHanded: true, kind: 'weapon' },
     { id: 'wooden-shield', name: 'Wooden Shield', appearanceId: 6, weight: 1, slot: 'shield', twoHanded: false, kind: 'shield' },
+  ],
+  ammunition: [
+    { id: 'burst-arrow', name: 'Burst Arrow', family: 'arrow', attack: 30, price: 5, appearanceId: 2, requires: {} },
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 3, requires: {} },
   ],
   bot: {
     vocabularyVersion: 2,

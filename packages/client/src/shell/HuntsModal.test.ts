@@ -30,7 +30,7 @@ const hunts: HuntListing[] = [
 const catalogue: Catalogue = {
   hunts, monsters: [],
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
-  items: [], vocations: [], vocationLevel: 8,
+  items: [], ammunition: [], vocations: [], vocationLevel: 8,
 };
 
 async function render(props: { hunting: boolean; onClose?: () => void }): Promise<string> {

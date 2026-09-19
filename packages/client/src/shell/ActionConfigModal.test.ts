@@ -8,20 +8,17 @@ import type { Catalogue } from '../state/hud.js';
 import { INITIAL_BOT, bot, edit } from '../bot/store.js';
 
 // O modal de configuração de slot (AB-11, #426), régua `docs/kit-reference/34-modal-action-config.png`.
-// `prerender` roda sem DOM: o que se prende é a ESTRUTURA — título, cabeçalho, selects, condições,
-// LEVAR/REPOR e o Salvar bloqueado com motivo. A escolha em si (clicar num select) é presa pelo
-// teste puro de `action-config.test.ts`.
+// `prerender` roda sem DOM: o que se prende é a ESTRUTURA — título, cabeçalho, selects, condições
+// e o Salvar bloqueado com motivo. A escolha em si (clicar num select) é presa pelo teste puro de
+// `action-config.test.ts`. A ação é magia ou SUPRIMENTO abstrato (sem item, sem reposição).
 
 const catalogue = (): Catalogue => ({
   hunts: [],
   monsters: [],
+  ammunition: [],
   vocations: [],
   vocationLevel: 0,
-  items: [{
-    id: 'health-potion', name: 'Poção de Vida', appearanceId: 266, weight: 2.7,
-    slot: null, twoHanded: false, kind: 'consumable', shortLabel: 'HP', group: 'potion',
-    restock: { batch: 20, min: 5 },
-  }],
+  items: [],
   bot: {
     vocabularyVersion: 2,
     setCount: 4,
@@ -33,6 +30,10 @@ const catalogue = (): Catalogue => ({
       id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null,
       effect: 'heal', group: 'healing',
     }],
+    supplies: [{
+      id: 'health-potion', name: 'Poção de Vida', price: 20, effect: 'heal',
+      group: 'potion', requires: {},
+    }],
     automations: [],
   },
 });
@@ -40,9 +41,8 @@ const catalogue = (): Catalogue => ({
 const spellSlot = (over: Partial<BotSlot> = {}): BotSlot => ({
   do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, hotkey: 'F1', ...over,
 });
-const itemSlot = (): BotSlot => ({
-  do: { kind: 'item', itemId: 'health-potion' }, when: [], auto: true,
-  restock: { batch: 20, min: 5 },
+const supplySlot = (): BotSlot => ({
+  do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true,
 });
 
 /** Põe um slot no conjunto 0, sem tocar nos outros 23. */
@@ -92,7 +92,7 @@ describe('ActionConfigModal — o cabeçalho (RF-01/RF-02)', () => {
     const html = await render(0);
     expect((html.match(/ui-select-sm/g) ?? []).length).toBe(3);
     expect(html).toContain('Magia');
-    expect(html).toContain('Item');
+    expect(html).toContain('Suprimento');
     expect(html).toContain('F1');
     expect(html).toContain('sem tecla');
   });
@@ -118,20 +118,17 @@ describe('ActionConfigModal — condições em E (RF-04)', () => {
   });
 });
 
-describe('ActionConfigModal — LEVAR/REPOR só em item (RF-07)', () => {
-  it('slot de item mostra lote e mínimo do catálogo', async () => {
-    withSlot(0, itemSlot());
+describe('ActionConfigModal — suprimento abstrato (RF-07)', () => {
+  it('slot de suprimento mostra o nome e o preço em gold, sem LEVAR/REPOR', async () => {
+    withSlot(0, supplySlot());
     const html = await render(0);
     expect(html).toContain('Poção de Vida');
-    expect(html).toContain('item · consumível');
-    expect(html).toContain('LEVAR/REPOR');
-    expect(html).toContain('Levar');
-    expect(html).toContain('Repor abaixo de');
-    expect(html).toContain('value="20"');
-    expect(html).toContain('value="5"');
+    expect(html).toContain('suprimento · 20 gold');
+    expect(html).not.toContain('LEVAR/REPOR');
+    expect(html).not.toContain('Repor abaixo de');
   });
 
-  it('slot de magia não mostra a seção de reposição', async () => {
+  it('slot de magia também não mostra seção de reposição', async () => {
     withSlot(0, spellSlot());
     const html = await render(0);
     expect(html).not.toContain('LEVAR/REPOR');

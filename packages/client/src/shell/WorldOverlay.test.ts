@@ -31,6 +31,7 @@ const mockCatalogue: Catalogue = {
     supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
 };

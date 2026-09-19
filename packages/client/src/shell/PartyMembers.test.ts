@@ -17,6 +17,7 @@ const mockCatalogue = {
     spells: [], supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
     { id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 30, capacityPerLevel: 10, startingWeaponItemId: 'wand-of-vortex' },

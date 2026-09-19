@@ -507,9 +507,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
   botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
-  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. O slot `ammo` é genérico
-  desde a AB-05 (#420): a munição é item empilhável no slot, e o seletor por família sobre o
-  Escudo foi removido. Arrastar é DnD
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. **A munição é abstrata**
+  (ADR 0026 d.3, restaurada na M18): com um bow/crossbow na mão, o slot do Escudo vira o
+  `AmmoPicker` — a seleção por família, com preço por tiro e level — e o slot `ammo` do corpo
+  segue genérico. Não há pilha nem contagem de munição. Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
   lugar de origem. **A barra de ações 2 × 12 é a configuração do bot desde o M18** (AB-10…AB-13):

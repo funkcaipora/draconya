@@ -51,7 +51,7 @@ export function AddAutomationModal({ onPick, onClose }: AddAutomationModalProps)
             <button
               type="button"
               className={`automation-option${entry.model === picked ? ' automation-option-selected' : ''}`}
-              disabled={blankAutomation(entry.model, catalogue.items) === null}
+              disabled={blankAutomation(entry.model, catalogue.items, catalogue.ammunition) === null}
               onClick={() => { setPicked(entry.model); }}
             >
               <b>{entry.label}</b>

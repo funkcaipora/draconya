@@ -73,17 +73,10 @@ export type HuntListing = Catalogue['hunts'][number];
  * O vocabulário do bot no cliente.
  *
  * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09 e são o que a barra de
- * ações (AB-10) lê. `slots` e `supplies` são o vocabulário v1 que os painéis aposentados liam:
- * continuam aqui só como forma dos fixtures de teste, e o catálogo v2 NÃO os
- * manda mais — a UI antiga degrada para vazio.
+ * ações (AB-10) lê. Ficam OPCIONAIS porque as fixtures de teste montam catálogos parciais e um
+ * nó `game` antigo pode não mandá-los; a UI degrada para vazio. `supplies` é o suprimento
+ * abstrato (poção/runa), a forma exata do protocolo.
  */
-export interface LegacyBotSupply {
-  readonly id: string;
-  readonly name: string;
-  readonly price: number;
-  readonly effect: string;
-  readonly requires: { readonly level?: number; readonly magicLevel?: number };
-}
 export interface BotVocabulary {
   readonly vocabularyVersion: number;
   readonly spells: S2CProps<'catalogue'>['bot']['spells'];
@@ -96,9 +89,14 @@ export interface BotVocabulary {
   readonly automations?: S2CProps<'catalogue'>['bot']['automations'];
   /** Vocabulário v1 aposentado no AB-11. */
   readonly slots?: Readonly<Record<string, number>>;
-  readonly supplies?: readonly LegacyBotSupply[];
+  /** Os suprimentos abstratos (§20.1, ADR 0026 d.3): a tela os oferece como ação de slot. */
+  readonly supplies?: S2CProps<'catalogue'>['bot']['supplies'];
 }
 export type ItemDefinition = Catalogue['items'][number];
+/** A munição abstrata do catálogo (#152): a seleção por família, com preço por tiro. */
+export type AmmoDefinition = Catalogue['ammunition'][number];
+/** Um suprimento abstrato (poção/runa): o uso debita gold, não há item nem pilha. */
+export type SupplyDefinition = NonNullable<Catalogue['bot']['supplies']>[number];
 export type MonsterListing = Catalogue['monsters'][number];
 /** Os marcos e o bônus por marco (§18). Ausente do catálogo: o servidor não tem Bestiário. */
 export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
@@ -258,6 +256,11 @@ export interface HudState {
   readonly conditionsReceivedAtMs: number;
   readonly huntId: string | null;
   readonly difficulty: string | null;
+  /**
+   * A munição escolhida por família (#152, ADR 0026 d.3): `null` é "nenhuma escolhida". O
+   * servidor valida `requires.level` na seleção; a tela só mostra o que ele mandou de volta.
+   */
+  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
 }
 
 export const INITIAL_HUD: HudState = {
@@ -293,6 +296,7 @@ export const INITIAL_HUD: HudState = {
   conditionsReceivedAtMs: 0,
   huntId: null,
   difficulty: null,
+  ammo: { arrow: null, bolt: null },
 };
 
 /**

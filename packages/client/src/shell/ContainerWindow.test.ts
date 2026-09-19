@@ -11,7 +11,7 @@ async function render(container: 'backpack' | 'satchel', collapsed = false): Pro
 }
 
 const catalogue: Catalogue = {
-  hunts: [], monsters: [], vocations: [], vocationLevel: 8,
+  hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 8,
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
   items: [
     { id: 'backpack', name: 'Backpack', appearanceId: 2854, weight: 18, slot: 'back', twoHanded: false },

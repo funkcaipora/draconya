@@ -5,21 +5,20 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { BotSlot } from '@draconya/content';
 import { ActionBar } from './ActionBar.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { Catalogue, Inventory } from '../state/hud.js';
+import type { Catalogue } from '../state/hud.js';
 import { INITIAL_BOT, bot, edit } from '../bot/store.js';
 import type { BotDraft } from '../bot/store.js';
 
 // A barra 2 × 12 (AB-10). `prerender` roda sem DOM: o que se prende é a ESTRUTURA — 24 slots de
-// 36 px, vazio sem dado, rótulo/tecla/contagem quando há, CONJUNTO/ALVO e a legenda. A fiação
-// do clique/teclado é presa por inspeção de fonte (DT-03, mesmo limite de HuntActions.test.ts).
+// 36 px, vazio sem dado, rótulo/tecla quando há, CONJUNTO/ALVO e a legenda. A fiação do
+// clique/teclado é presa por inspeção de fonte (DT-03, mesmo limite de HuntActions.test.ts).
+// Suprimento é abstrato: o slot mostra nome/tecla, nunca contagem de pilha.
 
 const catalogue = (): Catalogue => ({
   hunts: [],
   monsters: [],
-  items: [{
-    id: 'health-potion', name: 'Poção de Vida', appearanceId: 266, weight: 2.7,
-    slot: null, twoHanded: false, kind: 'consumable', shortLabel: 'HP', group: 'potion',
-  }],
+  ammunition: [],
+  items: [],
   vocations: [],
   vocationLevel: 0,
   bot: {
@@ -33,22 +32,19 @@ const catalogue = (): Catalogue => ({
       { id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal', group: 'healing' },
       { id: 'strike', name: 'Strike', manaCost: 10, minLevel: 1, vocationId: null, effect: 'damage', group: 'attack' },
     ],
+    supplies: [{
+      id: 'health-potion', name: 'Poção de Vida', price: 20, effect: 'heal',
+      group: 'potion', requires: {},
+    }],
     automations: [],
   },
-});
-
-const inventory = (): Inventory => ({
-  backpack: [{ instanceId: 'i1', itemId: 'health-potion', quantity: 8 }],
-  satchel: [],
-  equipped: {},
-  capacity: { used: 0, total: 100 },
 });
 
 const spell = (spellId: string, hotkey?: BotSlot['hotkey']): BotSlot => ({
   do: { kind: 'spell', spellId }, when: [], auto: true,
   ...(hotkey === undefined ? {} : { hotkey }),
 });
-const item = (): BotSlot => ({ do: { kind: 'item', itemId: 'health-potion' }, when: [], auto: true });
+const supply = (): BotSlot => ({ do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true });
 
 function withSlots(set: number, entries: ReadonlyArray<[number, BotSlot]>): BotDraft {
   const draft = INITIAL_BOT.draft;
@@ -64,18 +60,18 @@ async function render(): Promise<string> {
 }
 
 beforeEach(() => {
-  hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue(), inventory: inventory() }));
+  hud.set(() => ({ ...INITIAL_HUD, catalogue: catalogue() }));
   bot.set(() => INITIAL_BOT);
 });
 
 describe('ActionBar — a fileira de 124 px (RF-01..RF-04)', () => {
   it('monta 24 slots de 36 px na ordem 0..23', async () => {
-    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')], [1, item()]]), activeSet: draft.activeSet }));
+    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')], [1, supply()]]), activeSet: draft.activeSet }));
     const html = await render();
     expect((html.match(/class="ui-slot[ "]/g) ?? []).length).toBe(24);
     expect((html.match(/--slot-size:36px/g) ?? []).length).toBe(24);
     expect(html.indexOf('Cura')).toBeGreaterThan(-1);
-    expect(html.indexOf('Cura')).toBeLessThan(html.indexOf('HP'));
+    expect(html.indexOf('Cura')).toBeLessThan(html.indexOf('Poção de Vida'));
   });
 
   it('slot sem dado é vazio e tracejado; nada de rótulo/contagem/elemento inventado', async () => {
@@ -86,13 +82,14 @@ describe('ActionBar — a fileira de 124 px (RF-01..RF-04)', () => {
     expect(html).not.toContain('LV 50');
   });
 
-  it('slot com dado mostra rótulo, tecla e contagem', async () => {
-    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')], [1, item()]]), activeSet: draft.activeSet }));
+  it('slot com dado mostra rótulo e tecla, mas nenhuma contagem de pilha', async () => {
+    edit((draft) => ({ ...withSlots(0, [[0, spell('heal', '1')], [1, supply()]]), activeSet: draft.activeSet }));
     const html = await render();
     expect(html).toContain('Cura');
+    expect(html).toContain('Poção de Vida');
     expect(html).toContain('ui-slot-hotkey');
     expect(html).toContain('>1<');
-    expect(html).toContain('>8<');
+    expect(html).not.toContain('ui-slot-count');
   });
 
   it('renderiza na Cidade e na caçada', async () => {

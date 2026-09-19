@@ -14,6 +14,7 @@ const catalogue: Catalogue = {
     { id: 'demon', name: 'Demon' },
   ],
   items: [],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
   bot: {

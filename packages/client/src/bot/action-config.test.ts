@@ -8,7 +8,7 @@ import {
 import type { BotSet, SlotDraft } from './action-config.js';
 
 // O rascunho do slot e a validação que o modal usa antes de mandar `bot-config` (AB-11, #426).
-// PURO (DT-03): o teste prende a decisão, não o DOM.
+// PURO (DT-03): o teste prende a decisão, não o DOM. O suprimento é abstrato: não há reposição.
 
 function setOf(entries: ReadonlyArray<[number, BotSlot]>): BotSet {
   return {
@@ -53,13 +53,6 @@ describe('draftProblem — o Salvar bloqueado tem motivo', () => {
     expect(draftProblem(bad, setOf([]), 0)).toContain('fora de faixa');
   });
 
-  it('lote de reposição zero bloqueia', () => {
-    const bad = draft({
-      do: { kind: 'item', itemId: 'health-potion' }, restock: { batch: 0, min: 0 },
-    });
-    expect(draftProblem(bad, setOf([]), 0)).toContain('Reposição inválida');
-  });
-
   it('tecla em conflito bloqueia nomeando o slot em conflito', () => {
     const set = setOf([[2, spellSlot({ hotkey: 'F1' })]]);
     expect(draftProblem(draft({ hotkey: 'F1' }), set, 0))
@@ -82,16 +75,13 @@ describe('slotFromDraft — o rascunho vira o slot do contrato', () => {
     expect(slot !== null && 'hotkey' in slot).toBe(false);
   });
 
-  it('omite restock em magia e o mantém em item', () => {
-    const restock = { batch: 20, min: 5 };
-    const spell = slotFromDraft({
-      do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, restock,
+  it('materializa o suprimento abstrato sem reposição', () => {
+    const slot = slotFromDraft({
+      do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true,
     });
-    expect(spell !== null && 'restock' in spell).toBe(false);
-    const item = slotFromDraft({
-      do: { kind: 'item', itemId: 'health-potion' }, when: [], auto: true, restock,
+    expect(slot).toEqual({
+      do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true,
     });
-    expect(item?.restock).toEqual(restock);
   });
 });
 
@@ -100,13 +90,12 @@ describe('draftFromSlot — abrir carrega o que está salvo (UC-ACTION-002)', ()
     expect(draftFromSlot(null)).toEqual({ do: null, when: [], auto: true });
   });
 
-  it('round-trip preserva ação, condições, tecla, auto e restock', () => {
+  it('round-trip preserva ação, condições, tecla e auto', () => {
     const original: BotSlot = {
-      do: { kind: 'item', itemId: 'health-potion' },
+      do: { kind: 'supply', supplyId: 'health-potion' },
       when: [{ kind: 'mana', op: '>=', percent: 20 }],
       auto: false,
       hotkey: 'F1',
-      restock: { batch: 20, min: 5 },
     };
     expect(slotFromDraft(draftFromSlot(original))).toEqual(original);
   });

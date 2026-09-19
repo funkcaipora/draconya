@@ -52,6 +52,7 @@ const catalogue: Catalogue = {
     supplies: [],
   },
   items: [cheeseItem, goldCoinItem],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
 };

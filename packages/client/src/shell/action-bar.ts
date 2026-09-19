@@ -3,11 +3,11 @@
 // `drag-intent.ts`. A fiação (clique, teclado) fica na casca e é presa por inspeção, porque
 // `prerender` não dispara evento (DT-03).
 //
-// **Nada é inventado.** Slot sem config vira vazio; item fora do inventário não ganha contagem;
-// conjunto/alvo ausentes não viram opção. A barra mostra o que o servidor disse (invariante 4).
+// **Nada é inventado.** Slot sem config vira vazio; suprimento não tem pilha nem contagem; o
+// cooldown e o bloqueio vêm do `slot-state`. A barra mostra o que o servidor disse (invariante 4).
 
 import type { BotConfigV2, BotSlot, BotTargetPolicy, BotTargeting } from '@draconya/content';
-import type { Catalogue, Inventory, SlotState } from '../state/hud.js';
+import type { Catalogue, SlotState } from '../state/hud.js';
 import { slotKey } from '../state/hud.js';
 import type { SlotProps } from './ui/Slot.js';
 
@@ -57,55 +57,32 @@ export function slotForHotkey(
 export interface SlotView {
   readonly label: string;
   readonly hotkey: string | undefined;
-  /** Sem fonte no catálogo v2 (nem magia nem item trazem elemento), fica `undefined`. */
+  /** Sem fonte no catálogo v2 (nem magia nem suprimento trazem elemento), fica `undefined`. */
   readonly element: SlotProps['element'] | undefined;
-  readonly count: number | undefined;
   readonly cooldownMs: number;
   readonly blocked: boolean;
 }
 
-/** A contagem de um consumível no inventário — a soma das pilhas da mochila e da bolsa. */
-function countOf(itemId: string, inventory: Inventory | null): number | undefined {
-  if (inventory === null) return undefined;
-  let total = 0;
-  let found = false;
-  for (const entry of [...inventory.backpack, ...inventory.satchel]) {
-    if (entry !== null && entry.itemId === itemId) {
-      total += entry.quantity;
-      found = true;
-    }
-  }
-  // Fora do inventário é `undefined`, nunca 0: o cliente não presume quantidade (DT-04).
-  return found ? total : undefined;
-}
-
 /**
  * O view-model do slot: o que o `Slot` desenha, ou `null` para vazio (nada inventado).
- * `slot.do` de item busca rótulo curto/contagem no catálogo e no `inventory`; de magia busca o
- * nome no catálogo. O cooldown e o bloqueio vêm do `slot-state`; o motivo, do `slot-result`.
+ * `slot.do` de suprimento busca o nome no catálogo v2; de magia, no catálogo de magias. O
+ * cooldown e o bloqueio vêm do `slot-state`; o motivo, do `slot-result`. Não há contagem: o
+ * suprimento é abstrato e o uso debita gold (ADR 0032 d.6/d.7).
  */
 export function slotView(
   slot: BotSlot | null,
   catalogue: Catalogue,
-  inventory: Inventory | null,
   state: SlotState | null,
 ): SlotView | null {
   if (slot === null) return null;
   const action = slot.do;
-  let label: string;
-  let count: number | undefined;
-  if (action.kind === 'spell') {
-    label = catalogue.bot.spells.find((spell) => spell.id === action.spellId)?.name ?? action.spellId;
-  } else {
-    const item = catalogue.items.find((entry) => entry.id === action.itemId);
-    label = item?.shortLabel ?? item?.name ?? action.itemId;
-    count = countOf(action.itemId, inventory);
-  }
+  const label = action.kind === 'spell'
+    ? catalogue.bot.spells.find((spell) => spell.id === action.spellId)?.name ?? action.spellId
+    : catalogue.bot.supplies?.find((supply) => supply.id === action.supplyId)?.name ?? action.supplyId;
   return {
     label,
     hotkey: slot.hotkey,
     element: undefined,
-    count,
     cooldownMs: state?.remainingMs ?? 0,
     blocked: state?.state === 'blocked',
   };

@@ -8,24 +8,31 @@ import type { Catalogue } from '../state/hud.js';
 
 // O catálogo de modelos (AB-12, #427), régua `docs/kit-reference/35-modal-add-automation.png`.
 // `prerender` roda sem DOM: prende a lista vinda do catálogo (os cinco `label`, sem a sexta e sem
-// a trava de level) e o `disabled` do modelo sem item. O clique é preso por inspeção de fonte.
+// a trava de level) e o `disabled` do modelo sem o id exigido. O clique é preso por inspeção de fonte.
 
 const items = (): Catalogue['items'] => [
   { id: 'life-ring', name: 'Life Ring', appearanceId: 1, weight: 1, slot: 'finger', twoHanded: false, kind: 'ring' },
   { id: 'glacier-amulet', name: 'Glacier Amulet', appearanceId: 2, weight: 1, slot: 'neck', twoHanded: false, kind: 'amulet' },
-  { id: 'burst-arrow', name: 'Burst Arrow', appearanceId: 3, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
-  { id: 'arrow', name: 'Arrow', appearanceId: 4, weight: 1, slot: 'ammo', twoHanded: false, kind: 'ammo' },
   { id: 'steel-axe', name: 'Steel Axe', appearanceId: 5, weight: 1, slot: 'hand', twoHanded: false, kind: 'weapon' },
   { id: 'spike-sword', name: 'Spike Sword', appearanceId: 6, weight: 1, slot: 'hand', twoHanded: true, kind: 'weapon' },
   { id: 'wooden-shield', name: 'Wooden Shield', appearanceId: 7, weight: 1, slot: 'shield', twoHanded: false, kind: 'shield' },
 ];
 
-const catalogue = (catalogueItems: Catalogue['items']): Catalogue => ({
+const ammunition = (): Catalogue['ammunition'] => [
+  { id: 'burst-arrow', name: 'Burst Arrow', family: 'arrow', attack: 30, price: 5, appearanceId: 3, requires: {} },
+  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 4, requires: {} },
+];
+
+const catalogue = (
+  catalogueItems: Catalogue['items'],
+  catalogueAmmo: Catalogue['ammunition'] = ammunition(),
+): Catalogue => ({
   hunts: [],
   monsters: [],
   vocations: [],
   vocationLevel: 0,
   items: catalogueItems,
+  ammunition: catalogueAmmo,
   bot: {
     vocabularyVersion: 2,
     spells: [],
@@ -76,6 +83,12 @@ describe('AddAutomationModal — o catálogo v2 (RF-04/RF-05)', () => {
     expect((html.match(/automation-option[^>]*disabled/g) ?? []).length).toBe(1);
   });
 
+  it('swap-ammo fica disabled sem munição no catálogo', async () => {
+    hud.set((state) => ({ ...state, catalogue: catalogue(items(), []) }));
+    const html = await render();
+    expect((html.match(/automation-option[^>]*disabled/g) ?? []).length).toBe(1);
+  });
+
   it('sem catálogo devolve null — nunca uma lista vazia', async () => {
     hud.set((state) => ({ ...state, catalogue: null }));
     const html = await render();
@@ -90,6 +103,6 @@ describe('AddAutomationModal — a escolha (RF-04)', () => {
     const source = await readFile(new URL('./AddAutomationModal.tsx', import.meta.url), 'utf8');
     expect(source).toContain('disabled={picked === null}');
     expect(source).toContain('onPick(picked)');
-    expect(source).toContain('blankAutomation(entry.model, catalogue.items) === null');
+    expect(source).toContain('blankAutomation(entry.model, catalogue.items, catalogue.ammunition) === null');
   });
 });

@@ -4,9 +4,9 @@
 // do servidor.
 //
 // A barra NÃO calcula elegibilidade, não consome estoque e não decide cooldown (invariante 4):
-// contagem vem do `inventory`, cooldown/bloqueio do `slot-state`, e a recusa da tecla do
-// `slot-result`. O cliente só manda intenção — a tecla manda `use-slot`, CONJUNTO/ALVO e o
-// Shift+clique mandam `bot-config`.
+// cooldown/bloqueio vêm do `slot-state`, e a recusa da tecla do `slot-result`. Suprimento é
+// abstrato (sem pilha nem contagem). O cliente só manda intenção — a tecla manda `use-slot`,
+// CONJUNTO/ALVO e o Shift+clique mandam `bot-config`.
 
 import { useEffect, useState } from 'react';
 import { BOT_SLOTS_PER_SET } from '@draconya/content';
@@ -30,7 +30,6 @@ import {
 
 export function ActionBar() {
   const catalogue = useHudSlice((state) => state.catalogue);
-  const inventory = useHudSlice((state) => state.inventory);
   const slotStates = useHudSlice((state) => state.slotStates);
   const slotResults = useHudSlice((state) => state.slotResults);
   const targetId = useHudSlice((state) => state.targetId);
@@ -79,7 +78,7 @@ export function ActionBar() {
             const key = slotKey(activeSet, index);
             const view = catalogue === null
               ? null
-              : slotView(slots[index] ?? null, catalogue, inventory, slotStates[key] ?? null);
+              : slotView(slots[index] ?? null, catalogue, slotStates[key] ?? null);
             if (view === null) {
               return (
                 <Slot
@@ -98,7 +97,6 @@ export function ActionBar() {
               size: 36,
               label: view.label,
               ...(view.hotkey === undefined ? {} : { hotkey: view.hotkey }),
-              ...(view.count === undefined ? {} : { count: view.count }),
               ...(view.element === undefined ? {} : { element: view.element }),
               ...(view.cooldownMs > 0 ? { className: 'action-slot-cooldown' } : {}),
               title: slotTitle(view, slotResults[key] ?? null),

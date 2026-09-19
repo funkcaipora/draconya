@@ -35,9 +35,10 @@ const catalogue: Catalogue = {
   vocations: [], vocationLevel: 8,
   bot: {
     vocabularyVersion: 1, slots: {},
-    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],
+    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', group: 'potion', requires: {} }],
   },
   items: [],
+  ammunition: [],
   bestiary: { milestones: [10_000], xpBonusPercentPerMilestone: 1 },
 };
 

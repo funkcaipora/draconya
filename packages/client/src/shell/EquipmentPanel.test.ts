@@ -32,7 +32,10 @@ const catalogue: Catalogue = {
     { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
     { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null, twoHanded: false },
     { id: 'bow', name: 'Bow', appearanceId: 3350, weight: 31, slot: 'hand', twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
-    { id: 'arrow', name: 'Arrow', appearanceId: 3447, weight: 0.1, slot: null, twoHanded: false },
+  ],
+  ammunition: [
+    { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 3447, requires: {} },
+    { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
   ],
 };
 
@@ -122,7 +125,7 @@ describe('o slot equipado (FUN-108)', () => {
       ...state,
       catalogue,
       inventory: inventory({
-        equipped: { ammo: { instanceId: 'i9', itemId: 'gold-coin', quantity: 40 } },
+        equipped: { back: { instanceId: 'i9', itemId: 'gold-coin', quantity: 40 } },
       }),
     }));
 
@@ -154,33 +157,30 @@ describe('a coluna da direita (#161)', () => {
     expect(html).not.toContain('1.234');
   });
 
-  it('com um bow na mão, o escudo NÃO é mais seletor: o slot `ammo` é genérico (#420)', async () => {
-    // O seletor por família sobre o Escudo (ADR 0026 d.3) saiu: a escolha é o item no slot
-    // `ammo` (ADR 0032 d.7), desenhado pelo caminho genérico como todo slot.
+  it('com um bow na mão, o escudo vira o seletor de munição; sem seleção mostra só "Munição"', async () => {
+    // Mutação que mata: ignorar `weapon.kind` (o escudo continua slot), ou mostrar uma munição
+    // "grátis" que não existe mais (a escolha é sempre explícita e debita gold).
     hud.set((state) => ({
       ...state, catalogue,
       inventory: inventory({ equipped: { hand: { instanceId: 'b1', itemId: 'bow', quantity: 1 } } }),
     }));
-    const html = await render();
-    expect(html).toContain('class="slot-shield"');
-    expect(html).not.toContain('slot-ammo-picker');
-    expect(html).toContain('Escudo (vazio)');
-    expect(html).toContain('class="slot-ammo"');
-    expect(html).toContain('Munição (vazio)');
-  });
+    const none = await render();
+    expect(none).toContain('class="slot-shield"');
+    expect(none).toContain('slot-ammo-picker');
+    expect(none).toContain('munição: Munição');
+    expect(none).not.toContain('Escudo (vazio)');
+    expect(none).not.toContain('grátis');
+    // O slot `ammo` do corpo continua genérico (vazio).
+    expect(none).toContain('class="slot-ammo"');
+    expect(none).toContain('Munição (vazio)');
 
-  it('o slot Munição mostra a pilha equipada e a contagem (RF-02)', async () => {
-    hud.set((state) => ({
-      ...state, catalogue,
-      inventory: inventory({
-        equipped: { ammo: { instanceId: 'a1', itemId: 'arrow', quantity: 900 } },
-      }),
-    }));
-    const html = await render();
-    expect(html).toContain('class="slot-ammo"');
-    expect(html).toContain('title="Tirar Arrow"');
-    expect(html).toContain('aria-label="Arrow"');
-    expect(html).toContain('<b class="ui-slot-count">900</b>');
+    hud.set((state) => ({ ...state, ammo: { arrow: 'sniper-arrow', bolt: null } }));
+    const chosen = await render();
+    expect(chosen).toContain('munição: Sniper Arrow · 5 gold/tiro');
+
+    // Sem bow, o escudo é um slot.
+    hud.set((state) => ({ ...state, inventory: inventory() }));
+    expect(await render()).toContain('Escudo (vazio)');
   });
 
   it('minimizado mantém o cabeçalho e não desmonta', async () => {
