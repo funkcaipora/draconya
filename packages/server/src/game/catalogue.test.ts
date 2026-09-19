@@ -193,15 +193,19 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(bot.groups).toEqual(['potion']);
   });
 
-  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais', () => {
-    // Dano, cura, alcance e cooldown são balanceamento, e o cliente não simula (invariante 4).
-    // Mandá-los seria dar a ele material para calcular resultado.
+  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais (ADR 0033)', () => {
+    // Desde o ADR 0033 o catálogo carrega os números de EXIBIÇÃO (cooldown e o detalhe do
+    // efeito) para o `ActionConfigModal` — mostrar a faixa que o servidor vai sortear não dá ao
+    // cliente material para FABRICAR resultado (invariante 4); o servidor continua rolando.
+    // `groupCooldownMs` e `description` ficam de fora porque a magia de teste não os declara.
     const { bot } = buildCatalogue(content);
     const spell = bot.spells[0];
 
     expect(spell).toBeDefined();
     expect(Object.keys(spell ?? {}).sort())
-      .toEqual(['effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+      .toEqual(['cooldownMs', 'detail', 'effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+    // `amount` do `heal` de teste, e nada de `basePower`/`range`/`area`/`damageType` que ela não tem.
+    expect(spell?.detail).toEqual({ amount: 60 });
   });
 
   it('vocação ausente vira `null`, e não some', () => {
@@ -226,9 +230,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     });
   });
 
-  it('a runa leva group e os requisitos — e nunca o Base Power (#165, AB-09)', () => {
-    // A tela desabilita a runa abaixo do level, como faz com magia; o BP e a conversão são
-    // balanceamento (invariante 4) e ficam fora.
+  it('a runa leva group, os requisitos e o detalhe do efeito — o Base Power inclusive (#165, AB-09, ADR 0033)', () => {
+    // A tela desabilita a runa abaixo do level, como faz com magia. Desde o ADR 0033 o Base
+    // Power VAI no `detail`: é o número que o painel converte com `spellPowerRange` para
+    // mostrar a faixa "min~max" — o servidor continua sendo quem rola de verdade (invariante 4).
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withRune = {
       ...raw,
@@ -246,7 +251,40 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(rune).toMatchObject({
       price: 14, group: 'attack', effect: 'damage', requires: { level: 30, magicLevel: 4 },
     });
-    expect(JSON.stringify(rune)).not.toContain('basePower');
+    expect(rune?.detail).toEqual({
+      range: 4, area: { shape: 'circle', radius: 3, centered: 'target' }, damageType: 'arcane', basePower: 45,
+    });
+  });
+
+  it('uma magia de haste leva speedPercent e durationMs no detalhe, sem damageType (ADR 0033)', () => {
+    // Suporte não tem tipo de dano: o detalhe leva só o que o `kind: haste` declara.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withHaste = {
+      ...raw,
+      spells: [
+        ...(raw.spells ?? []),
+        {
+          id: 'haste', name: 'Haste', manaCost: 20, cooldownMs: 1_000, group: 'support',
+          groupCooldownMs: 1_000,
+          effect: { kind: 'haste', speedPercent: 30, durationMs: 33_000 },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(buildContent({ ...withHaste, appearances: [placeholderAppearances(withHaste)] }));
+    const haste = bot.spells.find((spell) => spell.id === 'haste');
+
+    expect(haste?.cooldownMs).toBe(1_000);
+    expect(haste?.groupCooldownMs).toBe(1_000);
+    expect(haste?.detail).toEqual({ speedPercent: 30, durationMs: 33_000 });
+    expect('damageType' in (haste?.detail ?? {})).toBe(false);
+  });
+
+  it('bot.spellPower é o conteúdo fixado na sessão, para a prévia do painel (ADR 0033)', () => {
+    // A prévia do `ActionConfigModal` (`min~max`) é calculada pelo CLIENTE com
+    // `spellPowerRange`; os coeficientes precisam vir do mesmo `combat.spellPower` que o
+    // servidor usa para rolar de verdade — fonte única.
+    const { bot } = buildCatalogue(content);
+    expect(bot.spellPower).toEqual(content.combat.spellPower);
   });
 
   it('leva valor de venda, ataque e armadura nas definições de item (#337)', () => {

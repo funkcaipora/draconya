@@ -275,6 +275,40 @@ export const BOT_AUTOMATION_MODELS = [
   'swap-weapon-shield-by-hp', 'swap-ring',
 ] as const;
 export type BotAutomationModel = (typeof BOT_AUTOMATION_MODELS)[number];
+
+/**
+ * A forma de área de uma ação, como o catálogo a publica (#436, ADR 0033). Espelha
+ * `spellAreaSchema` de `content` — este pacote não importa de lá — e é só exibição: quem
+ * resolve os tiles é o `sim`.
+ */
+export const catalogueAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    radius: z.number().int().positive(),
+    centered: z.enum(['target', 'caster']),
+  }),
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  z.object({ shape: z.literal('cleave') }),
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+/**
+ * O detalhe de exibição de um efeito (#436, ADR 0033): os números que o painel do
+ * `ActionConfigModal` mostra. Tudo opcional — cada `kind` preenche o que tem. NÃO é o efeito
+ * executável: o `sim` lê o conteúdo, nunca esta projeção.
+ */
+export const catalogueEffectDetailSchema = z.object({
+  range: z.number().int().positive().optional(),
+  area: catalogueAreaSchema.optional(),
+  damageType: z.string().min(1).optional(),
+  basePower: z.number().int().positive().optional(),
+  power: z.number().int().positive().optional(),
+  amount: z.number().int().positive().optional(),
+  intervalMs: z.number().int().positive().optional(),
+  durationMs: z.number().int().positive().optional(),
+  speedPercent: z.number().int().positive().optional(),
+});
+
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
   welcome: z.object({ characterId: z.string(), contentVersion: z.string() }),
@@ -566,6 +600,15 @@ export const S2C_SCHEMAS = {
         effect: z.string().min(1),
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
+        /**
+         * Os números de EXIBIÇÃO (#436, ADR 0033), para o `ActionConfigModal`. Opcionais SEM
+         * `default`: um nó `game` anterior manda sem, e o cliente novo não pode recusar a
+         * mensagem — o painel só omite a linha que falta (RF-09).
+         */
+        cooldownMs: z.number().int().positive().optional(),
+        groupCooldownMs: z.number().int().positive().optional(),
+        description: z.string().min(1).optional(),
+        detail: catalogueEffectDetailSchema.optional(),
       })),
       /**
        * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa não são itens — usar
@@ -582,6 +625,10 @@ export const S2C_SCHEMAS = {
           level: z.number().int().positive().optional(),
           magicLevel: z.number().int().nonnegative().optional(),
         }).default({}),
+        /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */
+        groupCooldownMs: z.number().int().positive().optional(),
+        description: z.string().min(1).optional(),
+        detail: catalogueEffectDetailSchema.optional(),
       })).default([]),
       /** Os cinco modelos de automação e os parâmetros de cada um (AB-12). */
       automations: z.array(z.object({
@@ -592,6 +639,17 @@ export const S2C_SCHEMAS = {
           kind: z.enum(['item', 'number', 'boolean']),
         })),
       })),
+      /**
+       * Os coeficientes da conversão do Base Power (#436, ADR 0033; ADR 0026 d.5), para o
+       * cliente MOSTRAR a faixa "min~max" no painel de detalhe — a rolagem de verdade continua
+       * só no servidor. Opcional sem `default`: um nó `game` anterior manda sem, e o painel
+       * omite a faixa de magia com `basePower` até o nó atualizar (RF-09).
+       */
+      spellPower: z.object({
+        levelFactor: z.number().nonnegative(),
+        skillFactor: z.number().nonnegative(),
+        spread: z.number().min(0).max(1),
+      }).optional(),
     }),
     /**
      * As DEFINIÇÕES de item (§21.2, FUN-90). Nome, peso, onde veste e a aparência.

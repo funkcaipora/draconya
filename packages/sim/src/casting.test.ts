@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Combat, Spell, Supply } from '@draconya/content';
 import { CharacterRuntime } from './character.js';
-import { balanceOf, castSpell, spellCooldownKey, spellPowerRange, useSupply } from './casting.js';
+import { balanceOf, castSpell, spellCooldownKey, useSupply } from './casting.js';
 import { Rng } from './rng.js';
 
 // Esquiva zero e armadura que conta inteira: aqui o assunto é o PORTÃO — level, cooldown,
@@ -288,15 +288,9 @@ describe('requisito de VOCAÇÃO (FUN-92)', () => {
 });
 
 describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
-  it('converts the Base Power by level and skill, integer at both ends', () => {
-    // Light Healing (BP 40) no level 8 com magic 0: mid = 40 × 1,48 = 59,2 → [50, 69]. Mutação
-    // que mata: trocar `floor`/`ceil` por `round` (dá [50, 68]), ou esquecer o `skillFactor`.
-    expect(spellPowerRange(40, 8, 0, combat.spellPower)).toEqual({ min: 50, max: 69 });
-    expect(spellPowerRange(40, 8, 10, combat.spellPower)).toEqual({ min: 101, max: 138 });
-    // Nunca abaixo de 1, e `min <= max` sempre.
-    expect(spellPowerRange(1, 1, 0, { levelFactor: 0, skillFactor: 0, spread: 0.9 })).toEqual({ min: 1, max: 2 });
-  });
-
+  // A conversão do Base Power (`spellPowerRange`) migrou para `@draconya/content` (#436, ADR
+  // 0033) — o cliente precisa dela para a prévia sem importar `sim`. O teste da fórmula em si
+  // mora em `packages/content/src/spell-power.test.ts`; aqui fica só a integração com `castSpell`.
   it('a basePower spell rolls in the range and does NOT stack the per-use skill multiplier (DT-03)', () => {
     const bp: Spell = { ...heal, id: 'light-healing', effect: { kind: 'heal', basePower: 40 } };
     const caster = hero({ level: 8, health: 1 });

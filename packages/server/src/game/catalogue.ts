@@ -9,17 +9,46 @@
 // diz que existe — se as duas divergirem, o jogador configura o que o bot recusa, e descobre isso
 // pelo extrato que não fecha em vez de por uma mensagem de erro.
 //
-// O que NÃO entra: dano, cura, cooldown, alcance. São balanceamento, e o cliente não simula
-// (invariante 4) — mandá-los seria dar ao cliente material para calcular resultado.
+// **O que entra desde o ADR 0033: os números de EXIBIÇÃO** — cooldown, área, alcance, tipo de
+// dano, Base Power ou fixo, duração, descrição. O `ActionConfigModal` do cliente Tibia (a régua
+// da imagem, #435) mostra esses números; sem eles o jogador configura a barra às cegas e
+// descobre o efeito pelo extrato. Mostrar a faixa de dano que o servidor vai sortear não dá ao
+// cliente nada que fabrique resultado — o servidor continua rolando e continua sendo o único que
+// escreve vida, mana e gold (invariante 4).
+//
+// **O que continua fora: o que DECIDE.** Elegibilidade, cooldown corrente e estoque vêm de
+// `slot-state`, nunca daqui — o catálogo é conteúdo fixado na sessão (invariante 7), e essas três
+// coisas mudam a cada golpe.
 
 import type { S2CProps } from '@draconya/protocol';
-import type { Content } from '@draconya/content';
+import type { Content, Spell, Supply } from '@draconya/content';
 import {
   BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
 } from '@draconya/content';
 import { huntListings } from '@draconya/sim';
 
 export type Catalogue = S2CProps<'catalogue'>;
+
+type EffectDetail = NonNullable<Catalogue['bot']['spells'][number]['detail']>;
+
+/**
+ * O detalhe de exibição de um efeito (ADR 0033): só os campos que o `kind` tem. `power`/
+ * `amount`/`basePower` são exclusivos por construção (`buildContent` confere), então no máximo
+ * um deles aparece.
+ */
+function detailOf(effect: Spell['effect'] | Supply['effect']): EffectDetail {
+  const detail: { -readonly [K in keyof EffectDetail]: EffectDetail[K] } = {};
+  if ('range' in effect && effect.range !== undefined) detail.range = effect.range;
+  if ('area' in effect && effect.area !== undefined) detail.area = effect.area;
+  if ('damageType' in effect) detail.damageType = effect.damageType;
+  if ('basePower' in effect && effect.basePower !== undefined) detail.basePower = effect.basePower;
+  if ('power' in effect && effect.power !== undefined) detail.power = effect.power;
+  if ('amount' in effect) detail.amount = effect.amount;
+  if ('intervalMs' in effect) detail.intervalMs = effect.intervalMs;
+  if ('durationMs' in effect) detail.durationMs = effect.durationMs;
+  if ('speedPercent' in effect) detail.speedPercent = effect.speedPercent;
+  return detail;
+}
 
 /**
  * Monta o catálogo UMA vez, no boot.
@@ -58,15 +87,21 @@ export function buildCatalogue(content: Content): Catalogue {
         // `null` e não ausente: a tela precisa distinguir "qualquer um lança" de "o servidor
         // não disse", e campo opcional colapsa os dois no mesmo `undefined`.
         vocationId: spell.vocationId ?? null,
-        // Só o `kind`: é o que separa em qual categoria a magia cabe. O quanto ela cura ou
-        // machuca é balanceamento.
+        // Só o `kind`: é o que separa em qual categoria a magia cabe. O detalhe (dano, cura,
+        // alcance…) vem em `detail`, resolvido por `detailOf`.
         effect: spell.effect.kind,
-        // O grupo (#155): a tela mostra ao lado do nome; BP e conversão não descem.
+        // O grupo (#155): a tela mostra ao lado do nome.
         group: spell.group ?? 'attack',
+        // Os números de EXIBIÇÃO (ADR 0033): cooldown, grupo, descrição e o detalhe do efeito.
+        cooldownMs: spell.cooldownMs,
+        ...(spell.groupCooldownMs === undefined ? {} : { groupCooldownMs: spell.groupCooldownMs }),
+        ...(spell.description === undefined ? {} : { description: spell.description }),
+        detail: detailOf(spell.effect),
       })),
       /**
        * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa NÃO são itens — usar debita
-       * gold. O `price` e o `group` são o que a tela mostra para escolher.
+       * gold. O `price` e o `group` são o que a tela mostra para escolher; o detalhe (ADR 0033)
+       * é o mesmo mecanismo da magia.
        */
       supplies: [...content.supplies.values()].map((supply) => ({
         id: supply.id,
@@ -80,6 +115,9 @@ export function buildCatalogue(content: Content): Catalogue {
             ? {}
             : { magicLevel: supply.requires.magicLevel }),
         },
+        groupCooldownMs: supply.groupCooldownMs,
+        ...(supply.description === undefined ? {} : { description: supply.description }),
+        detail: detailOf(supply.effect),
       })),
       // Os cinco modelos de automação e os parâmetros de cada um (AB-12), do descritor do
       // conteúdo. A engine é dona do mecanismo; o conteúdo, dos rótulos.
@@ -88,6 +126,9 @@ export function buildCatalogue(content: Content): Catalogue {
         label: descriptor.label,
         params: descriptor.params.map((param) => ({ name: param.name, kind: param.kind })),
       })),
+      // Os coeficientes da conversão do Base Power (ADR 0033; ADR 0026 d.5), para o cliente
+      // MOSTRAR a faixa "min~max" — a rolagem de verdade continua só no servidor.
+      spellPower: content.combat.spellPower,
     },
     // As DEFINIÇÕES, uma vez cada. Atributo base é fixo (§21.2): duas espadas do mesmo id são
     // idênticas, então repetir nome e peso por instância mandaria o mesmo texto dezenas de

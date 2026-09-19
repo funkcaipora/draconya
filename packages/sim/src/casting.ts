@@ -15,6 +15,7 @@
 // cuida do LANÇADOR: portão, custo e cooldown.
 
 import type { Combat, CompiledMitigation, Spell, Supply } from '@draconya/content';
+import { spellPowerRange } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -153,20 +154,6 @@ export interface SpellScaling {
 }
 
 const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
-
-/**
- * A conversão do Base Power (ADR 0026 decisão 5): inteira nas duas pontas, `min <= max`
- * sempre, nunca abaixo de 1. Os coeficientes são conteúdo (`combat.spellPower`).
- */
-export function spellPowerRange(
-  basePower: number, level: number, skillLevel: number, spellPower: Combat['spellPower'],
-): { readonly min: number; readonly max: number } {
-  const mid = basePower * (1 + level * spellPower.levelFactor + skillLevel * spellPower.skillFactor);
-  return {
-    min: Math.max(1, Math.floor(mid * (1 - spellPower.spread))),
-    max: Math.max(1, Math.ceil(mid * (1 + spellPower.spread))),
-  };
-}
 
 /**
  * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
