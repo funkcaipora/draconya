@@ -191,4 +191,20 @@ export interface MemberLeft {
   readonly departure: Departure;
 }
 
-export type PartyEvent = PartyBagChanged | PartySettlement | PartyState | MemberLeft;
+/**
+ * O follow de UM personagem mudou de estado (ADR 0033 d.9, §D10, #398): ligou/retomou, ou foi
+ * INTERROMPIDO sem escolher outro alvo. `targetId` é sempre o alvo CONFIGURADO — inclusive ao
+ * desligar, para o cliente saber qual follow parou. `reason` só acompanha `active: false`.
+ *
+ * Não existe `'disconnected'`: o `sim` não conhece sockets (invariante 3), e a hunt roda sem
+ * ninguém olhando. É a divergência registrada do PRD §25.1/§30 — ver D10.
+ */
+export interface FollowState {
+  readonly kind: 'follow-state';
+  readonly characterId: string;
+  readonly active: boolean;
+  readonly targetId: string;
+  readonly reason?: 'dead' | 'left' | 'unreachable';
+}
+
+export type PartyEvent = PartyBagChanged | PartySettlement | PartyState | MemberLeft | FollowState;

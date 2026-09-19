@@ -183,6 +183,7 @@ function runnerState(runner: Runner): RunnerState {
     warnedNoGold: runner.warnedNoGold,
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
+    ...(runner.followInterrupted ? { followInterrupted: true } : {}),
   };
 }
 
@@ -654,6 +655,8 @@ interface Runner {
   warnedExhausted: boolean;
   warnedFullBackpack: boolean;
   warnedNoGold: boolean;
+  /** Já reportamos `active:false` para este follow e ainda não retomou (§D10, "uma vez"). */
+  followInterrupted: boolean;
 }
 
 /**
@@ -681,6 +684,11 @@ export interface RunnerState {
   readonly warnedNoGold: boolean;
   readonly botConfig?: BotConfig;
   readonly pendingExit?: ExitReason;
+  /**
+   * Já reportamos `active:false` para o follow deste participante (#398). Opcional e OMITIDO
+   * quando `false`: um snapshot de hunt sem follow configurado não muda de tamanho.
+   */
+  readonly followInterrupted?: boolean;
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1119,6 +1127,10 @@ export class HuntRuleset implements Ruleset {
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
     this.#ammoFallbackTold.delete(character.id);
+    // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
+    // no próximo `#holdFollow` — porque depois do `splice` de `Session.leave` morte e saída
+    // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
+    this.#interruptFollowersOf(session, character);
     // As condições dele saem com ele (CMB-07): o vencimento de quem já saiu não fica órfão.
     this.#cancelConditions(session, character);
     // A bolsa é vendida e dividida COM quem sai (#192, ADR 0027 decisão 5): ele leva a parte
@@ -1188,6 +1200,7 @@ export class HuntRuleset implements Ruleset {
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
+      followInterrupted: state?.followInterrupted ?? false,
     };
     for (const category of state?.botScheduled ?? []) runner.botReady[category] = false;
     return runner;
@@ -1699,6 +1712,15 @@ export class HuntRuleset implements Ruleset {
       return null;
     }
 
+    // Follow de membro (ADR 0033 d.9, §D10, #398): substitui a rota E a postura contra monstro
+    // enquanto ativo. O combate já rodou acima — é ele, não isto, que decide se o personagem
+    // para para bater; seguir não impede atacar quem estiver ao alcance da arma.
+    const follow = this.#holdFollow(session, runner, character);
+    if (follow !== false) {
+      this.#armPlayerAttack(session, character);
+      return follow;
+    }
+
     // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
     // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
     const posture = this.#holdPosture(session, runner, character);
@@ -1790,6 +1812,94 @@ export class HuntRuleset implements Ruleset {
 
     runner.walker.stop();
     return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * Follow de membro (ADR 0033 d.9, §D10, #398). Passo guloso até ficar ADJACENTE (distância 1,
+   * Chebyshev — a mesma grade do resto do movimento) do alvo configurado; parado quando já está.
+   *
+   * `kind: 'leader'` resolve `#leader(session)` a CADA vencimento — nunca guarda o id — pela
+   * mesma razão de `#approachTarget` nunca guardar o monstro escolhido: a mira certa é a de
+   * agora. `#leader` já cai para o mais antigo presente quando o líder muda (#394), então uma
+   * troca de liderança no meio da hunt já reflete aqui sem nenhum código extra.
+   *
+   * Devolve `false` quando não há follow ativo — E quando o follow está INTERROMPIDO —, para
+   * `#playerStep` cair na postura contra monstro e na rota, exatamente como sem follow nenhum.
+   */
+  #holdFollow(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+
+    // Alvo ausente: nunca deveria chegar aqui por morte ou saída — `#interruptFollowersOf` já
+    // reportou no MESMO evento em que o alvo saiu (`onLeave`) —, mas cair no mesmo `false` por
+    // segurança nunca escolhe outro, que é a garantia que importa.
+    if (target === null || target.id === character.id) return false;
+
+    const from = character.position;
+    const d = distance(from, target.position);
+    const radius = this.#options.targetSearchRadius ?? 8;
+
+    if (d > radius) {
+      this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+      return false;
+    }
+    // Em alcance: reporta a RETOMADA se estava interrompido (não-op se já estava ativo). Fica
+    // ANTES do "já adjacente" porque retomar e já estar adjacente são independentes: o alvo pode
+    // ter voltado ao alcance parado.
+    this.#reportFollow(session, runner, character.id, target.id, true);
+
+    if (d === 1) return null;
+
+    const to = greedyStep(from, target.position, this.#blockedFor(character));
+    // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
+    // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
+    // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento.
+    if (to === null) return null;
+
+    runner.walker.stop();
+    return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * Emite `follow-state` só na TRANSIÇÃO (§D10: "uma vez"). `runner.followInterrupted` é o que
+   * faz cada chamada custar uma comparação em vez de um evento — `#holdFollow` chama isto a CADA
+   * vencimento enquanto o alvo está em alcance, e só a primeira depois de uma mudança produz
+   * `session.emit`.
+   */
+  #reportFollow(
+    session: Session, runner: Runner, characterId: string, targetId: string, active: boolean,
+    reason?: 'dead' | 'left' | 'unreachable',
+  ): void {
+    if (runner.followInterrupted === !active) return;
+    runner.followInterrupted = !active;
+    session.emit({
+      kind: 'follow-state', characterId, targetId, active,
+      ...(reason === undefined ? {} : { reason }),
+    });
+  }
+
+  /**
+   * O alvo de um follow saiu da sessão (§D10, #398): quem o seguia é interrompido AGORA, no mesmo
+   * evento da saída — é o único lugar em que dá para diferenciar `'dead'` de `'left'`, porque
+   * `character.alive` já está `false` antes de `onLeave` rodar. `kind: 'leader'` usa
+   * `this.#party?.leaderId` — o valor de ANTES desta saída, porque #394 só o reescreve depois, em
+   * `#flushLoss` — para saber se o `departed` ERA o líder.
+   */
+  #interruptFollowersOf(session: Session, departed: CharacterRuntime): void {
+    const reason = departed.alive ? 'left' : 'dead';
+    const wasLeader = departed.id === this.#party?.leaderId;
+    for (const [followerId, runner] of this.#runners) {
+      const follow = runner.botConfig?.follow;
+      if (follow === undefined || follow.kind === 'none') continue;
+      const followedId = follow.kind === 'leader'
+        ? (wasLeader ? departed.id : null)
+        : follow.characterId;
+      if (followedId !== departed.id) continue;
+      this.#reportFollow(session, runner, followerId, departed.id, false, reason);
+    }
   }
 
   /**
