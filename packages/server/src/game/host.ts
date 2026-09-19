@@ -19,12 +19,14 @@ import type {
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
-import { ITEM_SLOTS } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
+import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
+import type {
+  Appearances, Ammunition, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
+} from '@draconya/content';
 import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
-  InventoryState, Place, VocationRefusal,
+  AmmoRefusal, CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset,
+  InventoryRefusal, InventoryResult, InventoryState, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory } from '../directory.js';
@@ -56,7 +58,7 @@ export interface TransitionRequest {
    * pelo cliente — o cliente manda a configuração numa mensagem própria, e o que chega aqui é
    * o que o servidor aceitou.
    */
-  readonly botConfig?: BotConfig;
+  readonly botConfig?: BotConfigV2;
 }
 
 /**
@@ -107,20 +109,20 @@ export interface SessionHostOptions {
    * Registra a preferência no Redis para jobs/api gravarem no Postgres (ADR 0028).
    * Ausente ou falhando: aplica na sessão, mas devolve falha de salvamento ao jogador.
    */
-  readonly saveBotConfig?: (characterId: string, config: BotConfig) => Promise<void>;
+  readonly saveBotConfig?: (characterId: string, config: BotConfigV2) => Promise<void>;
   /**
    * O catálogo de itens (FUN-76), para as regras de equipar. Ausente: nada se veste, e a
    * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
   /**
-   * O catálogo de munição (#152), para a escolha pelo socket. Ausente: nada se escolhe, e a
-   * recusa é honesta — como o de itens.
+   * O catálogo de munição abstrata (ADR 0026 d.3), para o `select-ammo`. Ausente: a escolha é
+   * recusada, e a recusa é honesta — um host sem conteúdo não sabe o que é uma flecha.
    */
-  readonly ammunition?: ReadonlyMap<string, Ammunition>;
+  readonly ammunitionCatalog?: ReadonlyMap<string, Ammunition>;
   /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
-   * Ausentes: nada se escolhe, e a recusa é honesta — como munição e itens.
+   * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
    */
   readonly vocations?: ReadonlyMap<string, Vocation>;
   readonly vocationLevel?: number;
@@ -212,6 +214,55 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
   'already-chosen': 'Você já escolheu a sua vocação.',
 };
+
+/** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
+const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
+  'level-too-low': 'Você ainda não tem o level dessa munição.',
+};
+
+/**
+ * A recusa do slot em palavras (AB-09, FUN-73): o `sim` devolve o código tipado, e é AQUI que
+ * ele vira o motivo que o tooltip do slot mostra (AB-10). Traduzir no cliente espalharia a
+ * mesma explicação por dois lugares.
+ */
+const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
+  'empty-slot': 'Este slot está vazio.',
+  'wrong-set': 'Este conjunto não é o ativo — a barra mudou.',
+  'disabled': 'Este slot está desligado.',
+  'not-in-catalog': 'Essa ação não pode ser usada agora.',
+  'not-enough-mana': 'Mana insuficiente.',
+  'not-enough-gold': 'Gold insuficiente.',
+  // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
+  // uso, e o que falta ali é gold, não item.
+  'not-enough-item': 'Você não tem o item.',
+  'no-target': 'Nenhum alvo ao alcance.',
+  'out-of-range': 'O alvo está fora de alcance.',
+  'on-cooldown': 'Ainda em cooldown.',
+  'group-cooldown': 'O grupo ainda está em cooldown.',
+};
+
+/** A assinatura de `(state, reason)` de um `slot-state` — o gatilho de envio (DT-06). */
+function slotStateSignature(states: readonly SlotState[]): string {
+  let signature = '';
+  for (const state of states) {
+    signature += `${state.set}:${state.slot}:${state.state}:${state.reason ?? ''}|`;
+  }
+  return signature;
+}
+
+/** O `slot-state` no fio, montado do estado puro do ruleset. */
+function slotStateMessage(states: readonly SlotState[]): S2CMessage {
+  return {
+    type: 'slot-state',
+    slots: states.map((state) => ({
+      set: state.set,
+      slot: state.slot,
+      state: state.state,
+      remainingMs: state.remainingMs,
+      ...(state.reason === undefined ? {} : { reason: state.reason }),
+    })),
+  };
+}
 
 /** Agregados zerados: o extrato de estado durável do shard não credita nada (#154). */
 const EMPTY_AGGREGATES: Aggregates = {
@@ -317,11 +368,12 @@ function playerStatsOf(
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
     targetId,
+    vocationId: character?.vocationId ?? null,
+    // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
       arrow: character?.ammo.get('arrow') ?? null,
       bolt: character?.ammo.get('bolt') ?? null,
     },
-    vocationId: character?.vocationId ?? null,
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
@@ -513,7 +565,7 @@ function activeConditionsOf(snapshot: ConditionsSnapshot, nowMs: number): S2CPro
 
 /** Ver `createBotConfigValidator` em `sessions.ts`. */
 export type BotConfigDecision =
-  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: true; readonly config: BotConfigV2 }
   | { readonly ok: false; readonly reason: string };
 
 interface HostedSession {
@@ -598,6 +650,18 @@ interface HostedSession {
   /** As últimas condições ENTREGUES a quem olha cada personagem (#341, SV-05). */
   readonly sentConditions: Map<string, ConditionsSnapshot>;
   /**
+   * A assinatura `(state, reason)` dos slots ENTREGUE a quem olha cada personagem (AB-09),
+   * por `characterId`. É o gatilho do `slot-state`: o `remainingMs` decresce sempre, e compará-lo
+   * mandaria a banda inteira a 10 Hz. Entrada ausente é "ninguém recebeu ainda".
+   */
+  readonly sentSlotState: Map<string, string>;
+  /**
+   * O instante do último cálculo de `slotStates` desta sessão (AB-09). O gatilho por assinatura
+   * já evita o envio, mas o CÁLCULO — 24 slots e uma varredura de alvos por slot de dano — roda
+   * a cada ciclo; sem esta marca, uma party de dois faria 200 varreduras/s para descartar tudo.
+   */
+  slotStateAtMs: number;
+  /**
    * `characterId` (UUID) → id numérico de criatura na instância.
    *
    * O protocolo numera criatura com `number` porque isso vai no caminho quente: um id de 4
@@ -650,6 +714,16 @@ const PLAYER_COUNT_INTERVAL_MS = 30_000;
 const SNAPSHOT_INTERVAL_MS = 10_000;
 
 /**
+ * Cada quanto o estado dos slots é recalculado no ciclo (AB-09, #420).
+ *
+ * A assinatura já evita o ENVIO quando nada muda, mas o cálculo de 24 `SlotState` — com uma
+ * varredura de alvos por slot de dano — rodava a 10 Hz por personagem observado. A 2 Hz o
+ * cliente continua animando o prazo localmente e a transição de cooldown chega em até 500 ms,
+ * que é o mesmo atraso que ele já tolera entre a entrega e o vencimento.
+ */
+const SLOT_STATE_INTERVAL_MS = 500;
+
+/**
  * Quanto tempo uma sessão de REPOUSO fica de pé sem ninguém olhando (FUN-52).
  *
  * Cinco minutos é escolhido pelos dois lados do erro. Curto demais e recarregar a página vira
@@ -692,7 +766,7 @@ export class SessionHost {
    * Cidade e entra na hunt, e é o host que constrói a hunt. Guardá-la no runtime a poria no
    * snapshot duas vezes — o do personagem e o do ruleset.
    */
-  readonly #botByCharacter = new Map<string, BotConfig>();
+  readonly #botByCharacter = new Map<string, BotConfigV2>();
   readonly #preparations = new Map<string, Promise<void>>();
   /** Transições em voo, por personagem. Ver `transition`. */
   readonly #transitions = new Map<string, Promise<void>>();
@@ -1020,7 +1094,7 @@ export class SessionHost {
           // A hunt nasce compilada com a configuração que o servidor aceitou — do ticket ou
           // da última `bot-config` desta conexão.
           ...(this.#botByCharacter.has(viewer.characterId)
-            ? { botConfig: this.#botByCharacter.get(viewer.characterId) as BotConfig }
+            ? { botConfig: this.#botByCharacter.get(viewer.characterId) as BotConfigV2 }
             : {}),
         });
         return;
@@ -1054,16 +1128,26 @@ export class SessionHost {
         // level basta e em que slot vai é o servidor.
         this.#requestEquip(viewer, message.instanceId);
         return;
-      case 'select-ammo':
-        this.#requestAmmo(viewer, message.ammoId);
-        return;
       case 'choose-vocation':
         // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
         this.#requestVocation(viewer, message.vocationId);
         return;
+      case 'select-ammo':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
+        this.#requestSelectAmmo(viewer, message.ammoId);
+        return;
       case 'move-item':
         // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
         this.#requestMove(viewer, message.from, message.to);
+        return;
+      case 'use-slot':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL slot; elegibilidade, estoque, mana e
+        // cooldown são do servidor (AB-09, ADR 0032 d.3).
+        this.#requestUseSlot(viewer, message.set, message.slot);
+        return;
+      case 'select-target':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL criatura; quem valida o alvo é o servidor.
+        this.#requestSelectTarget(viewer, message.creatureId);
         return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
@@ -1223,6 +1307,66 @@ export class SessionHost {
     this.#answerInventory(viewer, result);
   }
 
+  /**
+   * O disparo manual de um slot (AB-09, ADR 0032 d.3). Processado NA CHEGADA, como equipar.
+   *
+   * Fora de hunt é RECUSA com motivo, nunca silêncio: a barra é montada na Cidade e a tecla
+   * existe lá — "não estou numa caçada" é a resposta, não esconder o botão (ADR 0032 d.3).
+   */
+  #requestUseSlot(viewer: Viewer, set: number, slot: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    const outcome = hosted === undefined || ruleset?.useSlot === undefined
+      ? undefined
+      : ruleset.useSlot(hosted.session, viewer.characterId, set, slot);
+    if (outcome === undefined) {
+      viewer.send({ type: 'slot-result', set, slot, ok: false, reason: 'Você não está numa caçada.' });
+      return;
+    }
+    viewer.send({
+      type: 'slot-result', set, slot, ok: outcome.ok,
+      ...(outcome.ok ? {} : { reason: SLOT_REFUSAL[outcome.reason] }),
+    });
+    if (!outcome.ok || hosted === undefined) return;
+    // A ação do jogador muda o estado do slot na hora: destrava o throttle para o próximo ciclo
+    // entregar o cooldown novo, sem esperar a janela de `SLOT_STATE_INTERVAL_MS`.
+    hosted.slotStateAtMs = 0;
+    // Supply e magia não tocam o inventário (o modelo abstrato debita gold no uso): o que muda
+    // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
+    // `equipment-changed` como caminho próprio.
+    const character = this.#participantOf(hosted, viewer.characterId);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    hosted.sentStats.set(viewer.characterId, stats);
+    this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
+  }
+
+  /**
+   * O jogador escolheu um alvo clicando (AB-09, ADR 0032 d.5). Id desconhecido ou morto é
+   * IGNORADO em silêncio, como o `walk` recusado — um cliente com bug em laço não gera tráfego
+   * de volta. Sucesso é `player-stats.targetId` imediato.
+   */
+  #requestSelectTarget(viewer: Viewer, creatureId: number): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    if (hosted === undefined) return;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.chooseTarget === undefined) return;
+    const subject = this.#subjectOfCreature(hosted, creatureId);
+    if (subject === null) return;
+    if (!ruleset.chooseTarget(hosted.session, viewer.characterId, subject)) return;
+    const character = this.#participantOf(hosted, viewer.characterId);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    hosted.sentStats.set(viewer.characterId, stats);
+    this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
+  }
+
+  /** O subject do `sim` por trás do id numérico que o cliente clicou. `null` é desconhecido. */
+  #subjectOfCreature(hosted: HostedSession, creatureId: number): string | null {
+    for (const [subject, id] of hosted.creatureIds) {
+      if (id === creatureId) return subject;
+    }
+    return null;
+  }
+
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
   #containerRules(character: CharacterRuntime): ContainerRules {
     const progression = this.#options.progression;
@@ -1230,31 +1374,6 @@ export class SessionHost {
       return { backpackSlots: 0, satchelSlots: 0, row: 1 };
     }
     return containerRulesFor(character.inventory, this.#options.itemCatalog ?? EMPTY_ITEMS, progression);
-  }
-
-  /**
-   * Escolher a munição (#152, ADR 0026 decisão 3). Processado NA CHEGADA, como equipar. Quem
-   * confere o level é o `sim`; o host traduz a recusa e, no sucesso, manda os vitais com a
-   * escolha nova — na Cidade não há ciclo que os compare, e o seletor precisa ver a resposta.
-   */
-  #requestAmmo(viewer: Viewer, ammoId: string): void {
-    const hosted = this.#hostedSession(viewer.characterId);
-    const character = this.#ownerOf(viewer.characterId);
-    if (hosted === undefined || character === undefined) return;
-    const ammo = this.#options.ammunition?.get(ammoId);
-    if (ammo === undefined) {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
-      return;
-    }
-    const result = character.selectAmmo(ammo);
-    if (!result.ok) {
-      viewer.send({ type: 'system-message', level: 'warning', text: 'Seu level não basta para essa munição.' });
-      return;
-    }
-    hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
-    hosted.sentStats.set(character.id, stats);
-    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**
@@ -1314,6 +1433,32 @@ export class SessionHost {
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
+  }
+
+  /**
+   * O jogador escolheu a munição da família (#152, ADR 0026 d.3). INTENÇÃO: o cliente diz o id;
+   * o catálogo e o gate de level são do servidor, e a escolha é aplicada na sessão dona. Recusa
+   * vira `system-message`, como a de equipar; o sucesso sai no `player-stats.ammo`.
+   */
+  #requestSelectAmmo(viewer: Viewer, ammoId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const ammunition = this.#options.ammunitionCatalog;
+    const ammo = ammunition?.get(ammoId);
+    if (ammo === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
+      return;
+    }
+    const result = character.selectAmmo(ammo);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: AMMO_REFUSAL[result.reason] });
+      return;
+    }
+    hosted.dirty.add(character.id);
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**
@@ -1445,10 +1590,16 @@ export class SessionHost {
       return;
     }
     this.#botByCharacter.set(characterId, decision.config);
+    // A v1 migrada é DADO NOVO: persiste pelo caminho write-behind (ADR 0028, DT-07), senão
+    // toda entrada repetiria a migração e a coluna seguiria na v1. `saveBotConfig` só existe
+    // quando o papel aceita persistir; falha não é fatal — a config vale nesta sessão.
+    if (!isBotConfigV2(raw)) {
+      void this.#options.saveBotConfig?.(characterId, decision.config).catch(() => undefined);
+    }
   }
 
   /** Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal. */
-  #applyBotConfig(hosted: HostedSession, config: BotConfig): void {
+  #applyBotConfig(hosted: HostedSession, config: BotConfigV2): void {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     // A sessão dona é quem escreve (invariante 9), e é ela que está aqui: `configureBot`
     // recompila dentro do ruleset, não de fora.
@@ -1538,6 +1689,7 @@ export class SessionHost {
       // E o Bestiário, se um abate contou (FUN-113): é progressão permanente, e a tela precisa
       // ver o marco chegar sem reconectar.
       this.#presentBestiary(hosted);
+      this.#presentSlotState(hosted, nowMs);
       this.#presentPartyLive(hosted);
       // Caiu loot desde o último ciclo: a mochila mudou, e quem está olhando precisa ver.
       // Comparar um inteiro é o que evita serializar o inventário dez vezes por segundo.
@@ -1605,6 +1757,11 @@ export class SessionHost {
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
+          continue;
+        case 'equipment-changed':
+          // O `sim` mudou o corpo sozinho (o colar esgotou, o anel venceu): o cliente só sabe
+          // pelo `inventory`, e a mensagem é a MESMA de sempre (opcode 16, sem campo novo).
+          this.#sendInventory(event.characterId);
           continue;
         case 'creature-moved':
           break;
@@ -1946,6 +2103,33 @@ export class SessionHost {
   }
 
   /**
+   * O estado dos slots do conjunto ativo, para quem olha CADA personagem (AB-09, DT-06).
+   *
+   * O gatilho é o par `(state, reason)`, nunca o `remainingMs`: ele decresce sempre, e compará-lo
+   * mandaria um `slot-state` por ciclo a 10 Hz — a banda inteira para dizer que um cooldown
+   * andou. O cliente anima o prazo a partir do instante da entrega. Sem visualizador não se
+   * compara nada (invariante 3); o `sim` já resolveu o estado de qualquer jeito.
+   *
+   * O cálculo é throttled a `SLOT_STATE_INTERVAL_MS` (#420): a assinatura evita o envio, mas
+   * não a varredura de alvos que produz o estado.
+   */
+  #presentSlotState(hosted: HostedSession, nowMs: number): void {
+    if (hosted.viewers.size === 0) return;
+    if (nowMs - hosted.slotStateAtMs < SLOT_STATE_INTERVAL_MS) return;
+    hosted.slotStateAtMs = nowMs;
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    if (ruleset.slotStates === undefined) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const states = ruleset.slotStates(hosted.session, character);
+      const signature = slotStateSignature(states);
+      if (hosted.sentSlotState.get(character.id) === signature) continue;
+      hosted.sentSlotState.set(character.id, signature);
+      this.#sendToViewersOf(hosted, character.id, slotStateMessage(states));
+    }
+  }
+
+  /**
    * O estado COMPLETO para um visualizador: o mundo (`session-state`) e os vitais
    * (`player-stats`), nessa ordem e pela fila.
    *
@@ -1992,6 +2176,15 @@ export class SessionHost {
     const counts = participant?.bestiary.getState() ?? {};
     hosted.sentBestiary.set(characterId, bestiaryTotal(counts));
     viewer.send({ type: 'bestiary', counts });
+    // E o estado dos slots (AB-09): a barra do conjunto ativo precisa dele ao montar, e a
+    // Cidade não tem ciclo para o mandar depois. Ruleset sem slots (a Cidade) não manda nada.
+    const slotStates = participant === undefined
+      ? undefined
+      : (hosted.session.ruleset as Partial<HuntRuleset>).slotStates?.(hosted.session, participant);
+    if (slotStates !== undefined) {
+      hosted.sentSlotState.set(characterId, slotStateSignature(slotStates));
+      viewer.send(slotStateMessage(slotStates));
+    }
     // O `session-state` acabou de levar os agregados DELE: o ciclo seguinte não precisa repetir.
     hosted.sentAnalyzer.set(characterId, {
       aggregates: { ...hosted.session.aggregatesOf(characterId) },
@@ -2423,6 +2616,8 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentParty: null,
       sentConditions: new Map(),
+      sentSlotState: new Map(),
+      slotStateAtMs: 0,
       sentSpending: null,
     };
     this.#sessions.set(next.id, successor);
@@ -2740,8 +2935,8 @@ export class SessionHost {
    * O extrato de ESTADO DURÁVEL de um shard (#154).
    *
    * O shard não credita progresso (ADR 0023) — mas guarda estado: vocação, equipamento, arma
-   * de vocação e munição mudam na praça e, sem isto, sumiam no logout (o `equip` da FUN-82 e
-   * o `select-ammo` do #152 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
+   * de vocação e munição equipada mudam na praça e, sem isto, sumiam no logout (o `equip` da
+   * FUN-82 e o `move-item` da AB-05 já caíam nesse buraco). Só para quem mexeu em algo (`dirty`).
    * Agregados zerados: a linha de ledger que o `jobs` insere é a chave de idempotência
    * (`UNIQUE (session_id, seq)`), não um crédito. `seq` avança na cópia compartilhada, e
    * cada extrato tem o seu.
@@ -3126,6 +3321,8 @@ export class SessionHost {
       sentBestiary: new Map(),
       sentParty: null,
       sentConditions: new Map(),
+      sentSlotState: new Map(),
+      slotStateAtMs: 0,
       sentSpending: null,
     };
     this.#sessions.set(session.id, hosted);

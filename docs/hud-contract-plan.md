@@ -97,17 +97,17 @@ A coluna "Decisão" aponta o item do ADR 0032; "Marco" é onde a lacuna fecha.
 |---|---|---|---|
 | Barras HP/MP com "valor / máximo" | existem | — | — |
 | Grade de equipamento 3 × 4 com os 10 slots | existe (bate com `ITEM_SLOTS`) | — | — |
-| Munição como slot próprio com pilha | parcial — seletor por família sobre o Escudo | 7 | M18 |
+| Munição: seleção por família no slot do Escudo | existe — `AmmoPicker`, preço por tiro e level gate | 7 | M18 |
 | "CAP 612 / 3.715 oz" | existe (formatação) | — | M21 (CO-07) |
 | Postura Defensiva/Balanceada/Atacante | **ausente** (nem o primitivo desabilitado foi montado) | 10 | M21 |
 | BOLSA: GOLD · PLAT · GEM | ausente — grade genérica vazia | 11 | M21 |
-| MOCHILA: itens com rótulo e contagem (UH 150, ARROW 900…) | parcial — sprites sem rótulo; nada tem contagem porque nada é pilha | 6, 7 | M18 |
+| MOCHILA: itens com rótulo e contagem | parcial — sprites sem rótulo; a contagem vale para o que empilha (loot) | 6, 7 | M18 |
 | BATALHA · N com %, barra e alvo | existe; ícone da criatura é um quadrado vazio | 15 | M18 (clique escolhe o alvo) |
 
 **O que existe hoje e não está na imagem** (sai quando o substituto entrar): o `BotPanel` com as
 cinco categorias, o `RuleEditor`, o botão "⌖ Lure e alvo", a seção "Configurações avançadas" e a
-trava "Bot avançado a partir do level 50" da coluna esquerda; a Caixa de Loot em Redis (FUN-88); o seletor de munição sobre o Escudo; o
-catálogo `supplies/` e o débito de gold por uso; a skill `melee` única.
+trava "Bot avançado a partir do level 50" da coluna esquerda; a Caixa de Loot em Redis (FUN-88); a
+skill `melee` única.
 
 ---
 
@@ -121,8 +121,8 @@ catálogo `supplies/` e o débito de gold por uso; a skill `melee` única.
 | 3 | A tecla dispara agora (`use-slot`); Shift+clique só desliga o automático | ADR 0030 d.2 ("fase E10") |
 | 4 | Conjunto = 4 loadouts com nomes fixos (Energia/Fogo/Gelo/Sagrado) | — |
 | 5 | ALVO = seguir / mais próximo / menor HP (`select-target`); ⌖ abre o modal SV-09; sem trava de level — tudo desde o level 1 | `advancedFromLevel` (FUN-87) |
-| 6 | P1 = SIM: suprimento é item empilhável; reposição por lote pelo ledger | ADR 0026 d.8, economy §20.1 |
-| 7 | P4 = SIM: munição é item no slot `ammo`; `arrow` tem preço | ADR 0026 d.3 |
+| 6 | P1 = SIM: suprimento é abstrato; o gold sai no uso (`useSupply`), sem pilha nem lote | ADR 0026 d.8, economy §20.1 |
+| 7 | P4 = SIM: munição é abstrata, escolhida por família (`select-ammo`); o gold sai no tiro | ADR 0026 d.3 |
 | 8 | Anel gasta por tempo, colar por carga; o `sim` consome e destrói | campos mortos `charges`/`durationMs` |
 | 9 | Cinco automações de catálogo, entrada OU / saída E; comida e "Comer comida" ficam para o plano de regeneração | ADR 0030/#362 |
 | 10 | Postura = fight mode do TFS, perfil `combat-v2`, default Balanceada | ADR 0030 d.4, ADR 0031 (adiamento) |
@@ -143,7 +143,7 @@ com a spec completa no corpo (o executor não tem este documento nem o kit: a sp
 "antes"); os números do GitHub entram na tabela do §4 quando forem criadas. Cada issue cita
 "ADR 0032 decisão n".
 
-### M18 · Barra de ações, estoque e automações (milestone [8](https://github.com/funkcaipora/draconya/milestone/8), redesenhado)
+### M18 · Barra de ações, suprimento e automações (milestone [8](https://github.com/funkcaipora/draconya/milestone/8), redesenhado)
 
 O marco da coluna esquerda e do rodapé. A #362 fecha pelo ADR 0032 (P1/P4 confirmadas pela
 diretriz; vocabulário v2 nas decisões 1–3 e 9). Ordem: a onda 0 é servidor e roda em cadeia
@@ -151,25 +151,25 @@ empilhada; a onda 1 é cliente e parte do fim da onda 0.
 
 | Id | Issue | Camadas | Depende de | Notas |
 |---|---|---|---|---|
-| AB-01 | Consumíveis como itens: poção, runa, carga de bênção viram `items/` (`kind: consumable`, peso, `value`, pilha 100, `group` de cooldown, `restock { batch, min }` default); `supplies/` sai; baseline por vocação | content | — | Decisão 6. Os números (preço, lote, peso) vêm da referência (ADR 0019) e ficam em `content` |
-| AB-02 | Munição, colar e escudo como itens: `arrow`/`burst-arrow`/`sniper-arrow`/`onyx-arrow` com `slot: ammo`, família, ataque, preço; o primeiro colar por carga; o primeiro escudo real; `ammunition/` sai | content | AB-01 | Decisões 7 e 8 |
-| AB-03 | Vocabulário v2 do bot: `sets[4]` × `slots[24]` (`do`, `when[]` em E, `hotkey`, `auto`, `restock`), `activeSet`, `automations[]` (seis modelos, `enter[]` OU, `exit[]` E, parâmetros), `stance`, `BOT_VOCABULARY_VERSION = 2`; `advancedFromLevel`/`advancedOnly` saem (sem trava de level em nada); função pura `migrateBotConfigV1` (categorias → conjunto 1, ordem cura→poções→ataque→runas→suporte, teclas em sequência) | content | AB-01, AB-02 | Decisões 1, 2, 4, 5, 9. A migração é testada com toda baseline v1 do repositório |
-| AB-04 | Estoque e reposição: usar consome da pilha; `restock` por lote quando a pilha < `min`, pelo ledger (`purchase`), limitado pela capacidade livre; primeira compra ao entrar; "acabar o gold" continua a regra de saída; agregados de gasto passam a somar as compras | sim, server | AB-01, AB-03 | Decisão 6. Invariante 10: uma linha por lote; retry idempotente |
-| AB-05 | Munição no slot: cada tiro consome 1 da pilha equipada; sem pilha, puxa a próxima da mochila; sem munição, o tiro não sai (o bot pula o slot); `select-ammo` (opcode 14) e o fallback para `arrow` grátis saem | sim, protocol, server | AB-02, AB-04 | Decisão 7 |
+| AB-01 | Suprimentos abstratos: poção e runa em `supplies/` (`price`, `effect`, `requires`, `group`); `blessing-charge` segue o único item `consumable`, não-empilhável; baseline por vocação | content | — | Decisão 6. Os números (preço) vêm da referência (ADR 0019) e ficam em `content` |
+| AB-02 | Munição abstrata, colar e escudo: `arrow`/`burst-arrow`/`sniper-arrow`/`onyx-arrow` em `ammunition/` com família, `attack`, `price` e `requires.level`; o primeiro colar por carga; o primeiro escudo real | content | AB-01 | Decisões 7 e 8 |
+| AB-03 | Vocabulário v2 do bot: `sets[4]` × `slots[24]` (`do`, `when[]` em E, `hotkey`, `auto`), `activeSet`, `automations[]` (seis modelos, `enter[]` OU, `exit[]` E, parâmetros), `stance`, `BOT_VOCABULARY_VERSION = 2`; `advancedFromLevel`/`advancedOnly` saem (sem trava de level em nada); função pura `migrateBotConfigV1` (categorias → conjunto 1, ordem cura→poções→ataque→runas→suporte, teclas em sequência) | content | AB-01, AB-02 | Decisões 1, 2, 4, 5, 9. A migração é testada com toda baseline v1 do repositório |
+| AB-04 | Gold no uso: `useSupply` debita o `price` do saldo no ato e soma `goldSpent`; "acabar o gold" continua a regra de saída | sim, server | AB-01, AB-03 | Decisão 6. O débito é evento, não tick (invariante 2) |
+| AB-05 | Munição por família: opcode 14 `select-ammo` restaurado, `requires.level` validado no servidor, `player-stats.ammo { arrow, bolt }`; cada tiro debita o `price`; sem munição paga o tiro não sai | sim, protocol, server | AB-02, AB-04 | Decisão 7 |
 | AB-06 | Cargas e duração: anel vence por tempo equipado (evento na fila), colar por carga consumida no bloqueio elemental; item destruído ao esgotar; evento S2C de inventário como hoje | sim | AB-02 | Decisão 8 |
 | AB-07 | Motor de slots v2: avaliação por grupo de cooldown do conteúdo, ordem do slot, condições em E, pula o inelegível no mesmo ciclo, condição `condition` (efeito ativo/ausente); motivo de bloqueio por slot exposto; o motor v1 por categoria sai | sim | AB-03, AB-04 | Decisão 2. Substitui `select()`/`#onBot` por categoria |
 | AB-08 | Automações v2: os cinco modelos com entrada OU / saída E; atuadores de equipar/desequipar/trocar munição no `sim` (o bot não usa os opcodes do jogador); `swap-ring` absorve o `ringSwap` atual | sim, content | AB-05, AB-06, AB-07 | Decisão 9. Comida e "Comer comida" ficam para o plano de regeneração |
-| AB-09 | Protocolo e servidor: C2S `use-slot { set, slot }` e `select-target { creatureId }`; S2C `slot-state` (por slot: pronto/cooldown restante/bloqueado por quê; contagem vem do `inventory`), `slot-result` (recusa com motivo); `catalogue` v2 (itens consumíveis, grupos, teclas válidas, modelos de automação); gate de versão + migração v1 → v2 ao carregar (caminho do ADR 0028) | protocol, server | AB-03, AB-07 | Decisões 3 e 5. Campos novos opcionais com default |
-| AB-10 | `ActionBar`: a fileira de 124 px volta (`grid-template-rows: minmax(0,1fr) 124px`), 2 × 12 `Slot` de 36 px com rótulo/tecla/elemento/contagem/cooldown, "AÇÕES" · "Salva automaticamente", CONJUNTO e ALVO (`Select inline`), ⌖ Lure·Follow com a legenda (sem trava de level: o estado "LV 50+" do kit não existe); montada na Cidade e na caçada; teclado → `use-slot`; Shift+clique → `auto: false`; as pills de caçada sobem para `bottom:130` e a legenda de saída fica acima, centralizada | client | AB-09 | Decisões 1–5. Régua: captura 10; JSX de `ActionBar` em `Hud.jsx:71-84` |
-| AB-11 | `ActionConfigModal` (captura 34): ação por catálogo, condições em E (`ConditionList`), tecla, chave automática, "Levar/Repor" (`restock`) | client | AB-10 | Decisão 3, 6. `NumField` = `Input` numérico pequeno (ADR 0029 D2) |
+| AB-09 | Protocolo e servidor: C2S `use-slot { set, slot }`, `select-target { creatureId }` e `select-ammo { ammoId }`; S2C `slot-state` (por slot: pronto/cooldown restante/bloqueado por quê), `slot-result` (recusa com motivo) e `player-stats.ammo`; `catalogue` v2 (suprimentos, munição, grupos, teclas válidas, modelos de automação); gate de versão + migração v1 → v2 ao carregar (caminho do ADR 0028) | protocol, server | AB-03, AB-07 | Decisões 3 e 5. Campos novos opcionais com default |
+| AB-10 | `ActionBar`: a fileira de 124 px volta (`grid-template-rows: minmax(0,1fr) 124px`), 2 × 12 `Slot` de 36 px com rótulo/tecla/elemento/cooldown, "AÇÕES" · "Salva automaticamente", CONJUNTO e ALVO (`Select inline`), ⌖ Lure·Follow com a legenda (sem trava de level: o estado "LV 50+" do kit não existe); montada na Cidade e na caçada; teclado → `use-slot`; Shift+clique → `auto: false`; as pills de caçada sobem para `bottom:130` e a legenda de saída fica acima, centralizada | client | AB-09 | Decisões 1–5. Régua: captura 10; JSX de `ActionBar` em `Hud.jsx:71-84` |
+| AB-11 | `ActionConfigModal`: ação por catálogo (magia ou suprimento), condições em E (`ConditionList`), tecla, chave automática | client | AB-10 | Decisão 3, 6. Régua: imagem de referência `docs/kit-reference/41-modal-action-config-reference.png` (issue #435), ADR 0033 — não a captura 34 do kit. `NumField` = `Input` numérico pequeno (ADR 0029 D2) |
 | AB-12 | `AutomationsPanel` + `AddAutomationModal` + `AutomationConfigModal` (capturas 35–38): lista toggle · nome · resumo · ⚙ · ×, "+ Adicionar" com o catálogo, entrada OU / saída E, montado na Cidade e na caçada; aposenta `BotPanel`, `RuleEditor`, o botão "Lure e alvo" e "Configurações avançadas" | client | AB-10 | Decisão 9. Régua: JSX `AutomationsPanel` em `Hud.jsx:39-47` |
-| AB-13 | Coluna direita e alvo: slot de munição com pilha no set (o seletor sobre o Escudo sai), Mochila com rótulo curto + contagem quando o item tem `shortLabel` (o `Slot` já suporta `label`/`count`), clique na Batalha e no mundo → `select-target`, moldura vermelha no alvo sobre a criatura | client | AB-09 | Decisões 7, 15 |
-| AB-14 | `docs/product` em dia: `bot.md` (v2 inteiro), `items.md` (consumível, munição, cargas), `economy.md` (§20.1 revertido, reposição por lote), `hunt.md`; `packages/*/AGENTS.md` onde a fronteira mudou | docs | AB-13 | Fecha o marco |
+| AB-13 | Coluna direita e alvo: `AmmoPicker` sobre o Escudo com bow/crossbow (preço por tiro e level gate; sem pilha), Mochila com rótulo curto + contagem quando o item tem `shortLabel` (o `Slot` já suporta `label`/`count`), clique na Batalha e no mundo → `select-target`, moldura vermelha no alvo sobre a criatura | client | AB-09 | Decisões 7, 15 |
+| AB-14 | `docs/product` em dia: `bot.md` (v2 inteiro), `items.md` (suprimento abstrato, munição, cargas), `economy.md` (§20.1, gold no uso), `hunt.md`; `packages/*/AGENTS.md` onde a fronteira mudou | docs | AB-13 | Fecha o marco |
 
-**Pronto quando:** um cavaleiro vê a barra com as contagens reais, aperta a tecla e a magia sai,
-muda de conjunto, liga "Trocar arma/escudo por vida" e o servidor troca; a poção acaba, o bot repõe
-pelo ledger e, sem gold, sai da hunt; o painel Bot antigo não existe mais e nenhuma configuração
-salva se perdeu.
+**Pronto quando:** um cavaleiro vê a barra, aperta a tecla e a magia sai,
+muda de conjunto, liga "Trocar arma/escudo por vida" e o servidor troca; o gold acaba, o bot para
+de pagar poção e tiro e, com a regra ligada, sai da hunt; o painel Bot antigo não existe mais e
+nenhuma configuração salva se perdeu.
 
 ### M21 · Postura, moedas, loot e skills (milestone [12](https://github.com/funkcaipora/draconya/milestone/12))
 
@@ -180,7 +180,7 @@ salva se perdeu.
 | CO-03 | Loot na mochila e Despachar loot: o drop entra na mochila limitado pela capacidade; C2S `dispatch-loot` vende ao `value` pelo ledger (party: `shareLoot`); capacidade cheia despacha sozinho; a Caixa de Loot em Redis sai | sim, protocol, server | CO-02 | Decisão 12 |
 | CO-04 | Cliente: Bolsa GOLD/PLAT/GEM, pill "Despachar loot »" + modal (captura 25), topo = saldo | client | CO-03 | Régua: `BagPanel` em `Hud.jsx:67-70`, `DispatchLootModal` |
 | CO-05 | Skills por família: `fist`/`club`/`sword`/`axe`/`distance`/`shielding`/`magic` no conteúdo e no `sim` (a família da arma equipada treina a sua); migração copia `melee` para as três; `player-stats.skills` já é `Record` | content, sim, server | — | Decisão 13. ADR 0026 d.4 sai |
-| CO-06 | Soul Points: `soul`/`maxSoul` no personagem, regeneração por evento (240 s; 120 s Premium), magia com custo `soul`; a conjuração de munição do paladino (cria pilha de flechas na mochila) é o primeiro consumidor | content, sim, protocol | AB-05 | Decisão 13 |
+| CO-06 | Soul Points: `soul`/`maxSoul` no personagem, regeneração por evento (240 s; 120 s Premium), magia com custo `soul`; a conjuração de munição do paladino é o primeiro consumidor | content, sim, protocol | AB-05 | Decisão 13 |
 | CO-07 | Protocolo e painel Skills: `xpPercentToNext` em `player-stats`, barra do Level, 11 linhas default (`exp, level, hp, mp, soul, cap, speed, stamina, ml, sword, shield`), Personalizar com as 15 skills reais, "CAP" com separador de milhar | protocol, server, client | CO-05, CO-06 | Régua: captura 10 e 39 |
 | CO-08 | `docs/product` em dia: `combat.md` (postura, `combat-v2`), `economy.md` (moedas, venda), `items.md` (loot na mochila), `progression.md` (famílias, soul), `death.md` (bolsa preservada) | docs | CO-07 | Fecha o marco |
 
@@ -228,7 +228,8 @@ M20 (existente, em paralelo ao M21):  PT-01 ‖ PT-02 (depois da #394)
 M22 (a partir da AB-08 e do M21):  TP-01 → TP-02 → TP-03 ‖ TP-04 ; TP-05 ‖ TP-07 ; TP-06 por último → TP-08
 ```
 
-- Nada do M21/M22 abre antes da AB-09: tudo depende do vocabulário v2 e dos itens consumíveis.
+- Nada do M21/M22 abre antes da AB-09: tudo depende do vocabulário v2 e dos suprimentos
+  abstratos.
 - CO-05 (skills por família) e TP-05/TP-07 não dependem de nada e servem para ocupar a fila
   enquanto a onda 0 do M18 roda.
 - As migrações de dado (bot v1 → v2, `melee` → famílias, loot da Caixa em Redis
@@ -250,19 +251,21 @@ M22 (a partir da AB-08 e do M21):  TP-01 → TP-02 → TP-03 ‖ TP-04 ; TP-05 �
 ## 5. Verificação
 
 - **Por issue:** `pnpm check` verde; conformidade de combate (`combat-v2` na CO-01) com a matriz
-  do M19; testes de ledger para compra por lote, venda de loot e crédito da bolsa (retry não
+  do M19; testes de ledger para o débito do supply e do tiro, venda de loot e crédito da bolsa
+  (retry não
   duplica); teste da migração v1 → v2 com todas as baselines; `prerender` das telas novas.
 - **Por marco:** a captura do HUD atual refeita (procedimento em
   `reviews/hud-parity-audit-2026-09-18.md` §0) e comparada lado a lado com
   `kit-reference/10-hud-hunt.png` — revisão humana do orquestrador, nunca do executor.
 - **Do plano:** o "pronto quando" de cada marco, com um personagem de cada vocação numa hunt com
-  o navegador fechado por uma hora: o estoque cai e repõe, o ledger tem os lotes, a configuração
+  o navegador fechado por uma hora: o gold cai e o consumo para, o ledger tem os débitos, a
+  configuração
   v1 de antes da virada continua funcionando.
 
 ## 6. Riscos
 
-- **A economia muda de forma.** Débito por uso → compra por lote muda o custo por hora de toda
-  hunt (o lote paga adiantado, a capacidade limita o estoque, a `arrow` deixa de ser grátis). Os
+- **A economia mantém o débito por uso.** O custo por hora de toda hunt fica exposto a cada poção
+  e a cada tiro (`goldSpent` no ato), sem estoque que amortize. Os
   números são do conteúdo e podem ser recalibrados sem ADR, mas a primeira semana vai precisar de
   `huntera-observed.md` §4–§5 e do analisador para achar o ponto.
 - **Duas migrações de personagem no mesmo marco** (bot v1 → v2 e `melee` → famílias). Ambas

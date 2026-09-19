@@ -353,7 +353,8 @@ describe('HUD deltas', () => {
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         targetId: null,
-        ammo: { arrow: null, bolt: null }, vocationId: null,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       0,
@@ -370,7 +371,8 @@ describe('HUD deltas', () => {
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         targetId: null,
-        ammo: { arrow: null, bolt: null }, vocationId: null,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
         speed: 125,
         skills: {
           melee: { level: 12, percentToNext: 40 },
@@ -409,7 +411,8 @@ describe('HUD deltas', () => {
         health: 140, maxHealth: 185, mana: 25, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         targetId: null,
-        ammo: { arrow: null, bolt: null }, vocationId: null,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       0,
@@ -432,7 +435,8 @@ describe('HUD deltas', () => {
         health: 140, maxHealth: 185, mana: 25, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
         targetId: null,
-        ammo: { arrow: null, bolt: null }, vocationId: null,
+        ammo: { arrow: null, bolt: null },
+        vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
       },
       0,
@@ -726,20 +730,43 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
   } as S2CMessage);
 
   it('carrega a configuração em vigor na store do bot', () => {
-    applyMessage(state({
-      botConfig: {
-        ...toConfig(emptyDraft()),
-        heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }],
-      },
-    }), 0);
-    expect(bot.get().draft.rules.heal).toHaveLength(1);
+    const config = toConfig(emptyDraft());
+    const sets = config.sets.map((set, i) => i === 0
+      ? { slots: set.slots.map((entry, j) => (j === 0
+        ? { do: { kind: 'spell' as const, spellId: 'heal' }, when: [], auto: true }
+        : entry)) }
+      : set);
+    applyMessage(state({ botConfig: { ...config, sets } }), 0);
+    expect(bot.get().draft.sets[0]?.slots[0]?.do).toEqual({ kind: 'spell', spellId: 'heal' });
     expect(bot.get().save).toBe('saved');
   });
 
   it('sem configuração no estado, a store do bot não muda', () => {
     applyMessage(state(), 0);
-    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().draft.sets[0]?.slots[0]).toBeNull();
     expect(bot.get().save).toBe('idle');
+  });
+});
+
+describe('o estado de slot e a recusa da tecla (AB-10)', () => {
+  it('slot-state substitui o mapa por `${set}:${slot}` e limpa a recusa do slot reavaliado', () => {
+    hud.set((state) => ({
+      ...state,
+      slotResults: { '0:0': 'sem mana' },
+    }));
+    applyMessage({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 }],
+    }, 0);
+    expect(hud.get().slotStates['0:0']).toEqual({ set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 });
+    expect(hud.get().slotResults['0:0']).toBeUndefined();
+  });
+
+  it('slot-result ok:false guarda o motivo; ok:true limpa', () => {
+    applyMessage({ type: 'slot-result', set: 1, slot: 2, ok: false, reason: 'Sem mana.' }, 0);
+    expect(hud.get().slotResults['1:2']).toBe('Sem mana.');
+    applyMessage({ type: 'slot-result', set: 1, slot: 2, ok: true }, 0);
+    expect(hud.get().slotResults['1:2']).toBeUndefined();
   });
 });
 
@@ -761,9 +788,7 @@ describe('a derivada por hora (FUN-83, §16.1)', () => {
 
 describe('o catálogo (FUN-79, FUN-89)', () => {
   const vocabulary = {
-    vocabularyVersion: 1, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
     spells: [{ id: 'heal', name: 'Cura', manaCost: 20, minLevel: 1, vocationId: null, effect: 'heal' }],
     supplies: [{ id: 'hp', name: 'Poção', price: 45, effect: 'heal' }],
   };

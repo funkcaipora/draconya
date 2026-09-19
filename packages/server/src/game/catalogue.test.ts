@@ -76,9 +76,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
-  it('leva a munição e como cada arma bate — tipo, alcance, família, duas mãos — e nunca mana nem faixa de dano (#152)', () => {
-    // O seletor no slot do escudo precisa da família e do preço por tiro; o tooltip, do
-    // alcance. Mana por golpe e faixa de dano são balanceamento (invariante 4) e ficam fora.
+  it('leva como cada arma bate — tipo, alcance, família, duas mãos — e a munição abstrata (#152)', () => {
+    // O tooltip precisa do alcance e da família da munição; mana por golpe e faixa de dano são
+    // balanceamento (invariante 4) e ficam fora. A munição é ABSTRATA (ADR 0026 d.3): ela sai
+    // no topo do catálogo, com família, `attack` e preço — não como item de slot.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withWeapons = {
       ...raw,
@@ -88,20 +89,21 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
         { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
       ],
       ammunition: [
-        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 },
+        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 },
         { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, requires: { level: 20 } },
       ],
     };
     const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
-    const { items, ammunition } = buildCatalogue(content);
+    const catalogue = buildCatalogue(content);
 
-    expect(items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
-    const wand = items.find((item) => item.id === 'wand');
+    expect(catalogue.items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
+    const wand = catalogue.items.find((item) => item.id === 'wand');
     expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
-    expect(ammunition).toEqual([
-      { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 1, requires: {} },
-      { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 2, requires: { level: 20 } },
-    ]);
+    expect(catalogue.items.find((item) => item.id === 'arrow')).toBeUndefined();
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'arrow'))
+      .toMatchObject({ family: 'arrow', attack: 25, price: 1, requires: {} });
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'sniper-arrow'))
+      .toMatchObject({ family: 'arrow', price: 5, requires: { level: 20 } });
   });
 
   it('leva as vocações — ganhos por level e arma inicial — e o level da escolha (#154)', () => {
@@ -163,26 +165,47 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       .toEqual({ milestones: [3, 5], xpBonusPercentPerMilestone: 20 });
   });
 
-  it('leva o vocabulário do bot, e é ele que a tela oferece', () => {
+  it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
-    // configura o que o bot recusa — e descobre pelo extrato que não fecha.
+    // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o
+    // v1: saem `slots` por categoria; entram conjuntos, teclas, grupos, modelos e os suprimentos
+    // ABSTRATOS (`supplies`, com gold no uso).
     const { bot } = buildCatalogue(content);
 
     expect(bot.vocabularyVersion).toBe(content.bot.vocabularyVersion);
-    expect(bot.advancedFromLevel).toBe(content.bot.advancedFromLevel);
-    expect(bot.slots).toEqual(content.bot.slots);
-    expect(bot.advancedOnly.targetPolicies).toEqual(content.bot.advancedOnly.targetPolicies);
+    expect(bot.setCount).toBe(4);
+    expect(bot.slotsPerSet).toBe(24);
+    expect(bot.setNames.length).toBe(4);
+    expect(bot.hotkeys).toContain('1');
+    expect(bot.automations.map((automation) => automation.model)).toEqual([
+      'renew-ring', 'renew-amulet', 'swap-ammo-by-targets', 'swap-weapon-shield-by-hp', 'swap-ring',
+    ]);
+    expect(bot).not.toHaveProperty('slots');
+    expect(bot.supplies.map((supply) => supply.id)).toContain('health-potion');
+    expect(bot).not.toHaveProperty('advancedFromLevel');
+    expect(bot).not.toHaveProperty('advancedOnly');
   });
 
-  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais', () => {
-    // Dano, cura, alcance e cooldown são balanceamento, e o cliente não simula (invariante 4).
-    // Mandá-los seria dar a ele material para calcular resultado.
+  it('leva os grupos de cooldown do conteúdo, unindo magia e consumível (AB-09)', () => {
+    // O editor do AB-11 oferece exatamente estes grupos; o motor de grupos usa os mesmos. A
+    // magia de teste não declara grupo, então só o consumível contribui aqui.
+    const { bot } = buildCatalogue(content);
+    expect(bot.groups).toEqual(['potion']);
+  });
+
+  it('a magia leva o que a tela mostra e o que o GATE precisa — e nada mais (ADR 0033)', () => {
+    // Desde o ADR 0033 o catálogo carrega os números de EXIBIÇÃO (cooldown e o detalhe do
+    // efeito) para o `ActionConfigModal` — mostrar a faixa que o servidor vai sortear não dá ao
+    // cliente material para FABRICAR resultado (invariante 4); o servidor continua rolando.
+    // `groupCooldownMs` e `description` ficam de fora porque a magia de teste não os declara.
     const { bot } = buildCatalogue(content);
     const spell = bot.spells[0];
 
     expect(spell).toBeDefined();
     expect(Object.keys(spell ?? {}).sort())
-      .toEqual(['effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+      .toEqual(['cooldownMs', 'detail', 'effect', 'group', 'id', 'manaCost', 'minLevel', 'name', 'vocationId']);
+    // `amount` do `heal` de teste, e nada de `basePower`/`range`/`area`/`damageType` que ela não tem.
+    expect(spell?.detail).toEqual({ amount: 60 });
   });
 
   it('vocação ausente vira `null`, e não some', () => {
@@ -195,33 +218,73 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('vocationId' in (semVocacao ?? {})).toBe(true);
   });
 
-  it('o supply leva o PREÇO, e é o único número de balanceamento aqui', () => {
-    // O jogador configura "beber poção abaixo de 40% de HP" olhando quanto ela custa por hora
-    // de hunt. Sem o preço, a decisão que a tela existe para apoiar não pode ser tomada.
-    const { bot } = buildCatalogue(content);
-    const supply = bot.supplies[0];
+  it('o suprimento leva price, effect, group e requires — e nunca o Base Power (AB-09, RF-11)', () => {
+    // O editor de ação do AB-11 filtra por `effect` e mostra o preço de uso. A poção é SUPPLY
+    // abstrato (FUN-77, §20.1): ela não está em `items[]`, e sim em `bot.supplies[]`.
+    const { bot, items } = buildCatalogue(content);
+    const potion = bot.supplies.find((supply) => supply.id === 'health-potion');
 
-    expect(supply).toBeDefined();
-    expect(Object.keys(supply ?? {}).sort()).toEqual(['effect', 'id', 'name', 'price', 'requires']);
-    expect(supply?.price).toBeGreaterThan(0);
+    expect(items.find((item) => item.id === 'health-potion')).toBeUndefined();
+    expect(potion).toMatchObject({
+      price: 45, group: 'potion', effect: 'heal', requires: {},
+    });
   });
 
-  it('a runa leva os requisitos — level e magic level — e nunca o Base Power (#165)', () => {
-    // A tela desabilita a runa abaixo do level, como faz com magia; o BP e a conversão são
-    // balanceamento (invariante 4) e ficam fora.
+  it('a runa leva group, os requisitos e o detalhe do efeito — o Base Power inclusive (#165, AB-09, ADR 0033)', () => {
+    // A tela desabilita a runa abaixo do level, como faz com magia. Desde o ADR 0033 o Base
+    // Power VAI no `detail`: é o número que o painel converte com `spellPowerRange` para
+    // mostrar a faixa "min~max" — o servidor continua sendo quem rola de verdade (invariante 4).
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withRune = {
       ...raw,
       supplies: [
         ...(raw.supplies ?? []),
-        { id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, requires: { level: 30, magicLevel: 4 },
-          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } } },
+        {
+          id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+          requires: { level: 30, magicLevel: 4 },
+          effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } },
+        },
       ],
     };
     const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
-    const rune = bot.supplies.find((s) => s.id === 'avalanche-rune');
-    expect(rune).toEqual({ id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage', requires: { level: 30, magicLevel: 4 } });
-    expect(JSON.stringify(rune)).not.toContain('basePower');
+    const rune = bot.supplies.find((supply) => supply.id === 'avalanche-rune');
+    expect(rune).toMatchObject({
+      price: 14, group: 'attack', effect: 'damage', requires: { level: 30, magicLevel: 4 },
+    });
+    expect(rune?.detail).toEqual({
+      range: 4, area: { shape: 'circle', radius: 3, centered: 'target' }, damageType: 'arcane', basePower: 45,
+    });
+  });
+
+  it('uma magia de haste leva speedPercent e durationMs no detalhe, sem damageType (ADR 0033)', () => {
+    // Suporte não tem tipo de dano: o detalhe leva só o que o `kind: haste` declara.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withHaste = {
+      ...raw,
+      spells: [
+        ...(raw.spells ?? []),
+        {
+          id: 'haste', name: 'Haste', manaCost: 20, cooldownMs: 1_000, group: 'support',
+          groupCooldownMs: 1_000,
+          effect: { kind: 'haste', speedPercent: 30, durationMs: 33_000 },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(buildContent({ ...withHaste, appearances: [placeholderAppearances(withHaste)] }));
+    const haste = bot.spells.find((spell) => spell.id === 'haste');
+
+    expect(haste?.cooldownMs).toBe(1_000);
+    expect(haste?.groupCooldownMs).toBe(1_000);
+    expect(haste?.detail).toEqual({ speedPercent: 30, durationMs: 33_000 });
+    expect('damageType' in (haste?.detail ?? {})).toBe(false);
+  });
+
+  it('bot.spellPower é o conteúdo fixado na sessão, para a prévia do painel (ADR 0033)', () => {
+    // A prévia do `ActionConfigModal` (`min~max`) é calculada pelo CLIENTE com
+    // `spellPowerRange`; os coeficientes precisam vir do mesmo `combat.spellPower` que o
+    // servidor usa para rolar de verdade — fonte única.
+    const { bot } = buildCatalogue(content);
+    expect(bot.spellPower).toEqual(content.combat.spellPower);
   });
 
   it('leva valor de venda, ataque e armadura nas definições de item (#337)', () => {

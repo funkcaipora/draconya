@@ -1,5 +1,5 @@
 import {
-  cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadContent } from './load.js';
 import { floorChangeAt, isBlocked } from './map.js';
+import { BOT_CATEGORIES } from './schemas.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 
@@ -243,21 +244,22 @@ describe('loadContent', () => {
     expect(distance?.startingLevel).toBe(10);
   });
 
-  it('carrega a munição como seleção: a arrow é grátis, as outras debitam gold por tiro (ADR 0026, decisão 3)', () => {
+  it('a munição é ABSTRATA: `content.ammunition` existe, a arrow tem price > 0 e a família arrow (ADR 0026 d.3)', () => {
     const content = loadContent(DATA);
-    // Ícone (objeto) e projétil (missile), conferidos de olho: arrow 3, sniper arrow 22, onyx
-    // arrow 23 são os projéteis do pacote 13.32 (#152).
-    const ammo = [...content.ammunition.values()]
-      .map((a) => [a.id, a.family, a.attack, a.price, a.appearanceId, a.missileId]);
-    expect(ammo).toEqual([
-      ['arrow', 'arrow', 25, 0, 3447, 3],
-      ['onyx-arrow', 'arrow', 38, 7, 7365, 23],
-      ['sniper-arrow', 'arrow', 28, 5, 7364, 22],
-    ]);
-    expect(content.ammunition.get('sniper-arrow')?.requires.level).toBe(20);
-    expect(content.ammunition.get('onyx-arrow')?.requires.level).toBe(40);
-    // A flecha física saiu do catálogo de itens: munição não tem peso, pilha nem instância.
+    // A munição é seleção por família, não item: família, attack e preço por tiro (RF-01).
+    for (const id of ['arrow', 'burst-arrow', 'sniper-arrow', 'onyx-arrow']) {
+      const ammo = content.ammunition.get(id);
+      expect(ammo?.family, id).toBe('arrow');
+      expect(ammo?.attack, id).toBeGreaterThan(0);
+      expect(ammo?.price, id).toBeGreaterThan(0);
+      expect(ammo?.appearanceId, id).toBeGreaterThan(0);
+      expect(ammo?.missileId, id).toBeGreaterThan(0);
+    }
+    // A flecha não é item: não há item de munição no catálogo.
     expect(content.items.has('arrow')).toBe(false);
+    expect(content.ammunition.get('arrow')?.attack).toBe(25);
+    // A tabela guarda o ícone E o projétil, os dois conferidos contra o pacote.
+    expect(content.appearances?.ammunition['arrow']).toEqual({ icon: 3447, missile: 3 });
   });
 });
 
@@ -293,10 +295,10 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
     }
   });
 
-  it('carrega a Avalanche Rune como supply de ATAQUE, com gate e área (#165)', () => {
-    // A runa é supply (debita gold, sem item físico) e não magia: mora em `supplies/`, tem
-    // `requires` — o servidor recusa abaixo de level 30 / magic level 4 — e a forma é o
-    // círculo de raio 3 no alvo. O gate dela é o primeiro `requires` em supply do repositório.
+  it('carrega a Avalanche Rune como consumível de ATAQUE, com gate e área (#165, AB-01)', () => {
+    // A runa é item consumível (ADR 0032 d.6) e aparece na projeção v1 como supply de dano:
+    // tem `requires` — o servidor recusa abaixo de level 30 / magic level 4 — e a forma é o
+    // círculo de raio 3 no alvo. O gate dela é o primeiro `requires` de consumível do repositório.
     // Mutação que mata: apagar `requires` do arquivo — o default `{}` liberaria a runa no level 1.
     const content = loadContent(DATA);
     const rune = content.supplies.get('avalanche-rune');
@@ -306,6 +308,56 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
     expect(content.supplies.get('health-potion')?.requires).toEqual({});
+  });
+
+  it('blessing-charge é o ÚNICO item consumable: não-empilhável, sem group nem restock (ADR 0026 d.3)', () => {
+    const content = loadContent(DATA);
+    const consumables = [...content.items.values()].filter((item) => item.kind === 'consumable');
+    expect(consumables.map((item) => item.id)).toEqual(['blessing-charge']);
+    const blessing = content.items.get('blessing-charge');
+    expect(blessing?.stackable).toBe(false);
+    expect(blessing?.effect).toEqual({ kind: 'blessing' });
+    expect(blessing?.weight).toBeGreaterThan(0);
+  });
+
+  it('content.supplies é o catálogo ABSTRATO, com price e group de cooldown (ADR 0026 d.3)', () => {
+    const content = loadContent(DATA);
+    expect(content.supplies.get('health-potion')).toMatchObject({
+      id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+      effect: { kind: 'heal', amount: 80 }, requires: {},
+    });
+    expect(content.supplies.get('avalanche-rune')?.group).toBe('attack');
+    // A bênção não é supply: é o único consumível que ainda é item.
+    expect(content.supplies.has('blessing-charge')).toBe(false);
+  });
+
+  it('appearances.supplies É conferido contra o catálogo abstrato, de um lado só (FUN-109)', () => {
+    // A linha órfã continua sendo recusada, mas supply sem efeito é mudo e válido — por isso a
+    // conferência é da tabela para o catálogo, e não o contrário (FUN-109).
+    const content = loadContent(DATA);
+    expect(content.appearances?.supplies['health-potion']).toEqual({ effect: 14 });
+    for (const id of Object.keys(content.appearances?.supplies ?? {})) {
+      expect(content.supplies.has(id), id).toBe(true);
+    }
+  });
+
+  it('todo supplyId da baseline de bot resolve no catálogo abstrato (AB-03)', () => {
+    // A config v1 salva continua válida: o id aponta para o catálogo de suprimentos.
+    const content = loadContent(DATA);
+    const config = content.bot.defaultConfig;
+    const usados = BOT_CATEGORIES.flatMap((category) => config?.[category] ?? [])
+      .flatMap((rule) => (rule.do.kind === 'supply' ? [rule.do.supplyId] : []));
+    // A baseline TEM ao menos um supplyId; sem isso o laço abaixo passaria vazio.
+    expect(usados.length).toBeGreaterThan(0);
+    for (const id of usados) {
+      expect(content.supplies.has(id), id).toBe(true);
+    }
+  });
+
+  it('data/supplies voltou a existir, e a poção não é mais item (ADR 0026 d.3)', () => {
+    expect(existsSync(join(DATA, 'supplies'))).toBe(true);
+    const content = loadContent(DATA);
+    expect(content.items.has('health-potion')).toBe(false);
   });
 
   it('o pacote que a tabela cita tem inventário em packs/, e a tabela passa por ele (FUN-21)', () => {

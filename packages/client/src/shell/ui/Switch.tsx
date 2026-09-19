@@ -1,5 +1,5 @@
 // Switch (#246, ADR 0029 D2). role="switch" + aria-checked já eram assim no handoff — RuleRow
-// (bot vBot, #162) usa o mesmo par de atributos hoje em BotPanel.tsx, então esta migração não
+// (bot vBot, #162) usa o mesmo par de atributos nos painéis do bot, então esta migração não
 // muda contrato de a11y, só o LUGAR onde o interruptor mora (DS-12 troca o consumo, não este
 // componente).
 

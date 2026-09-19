@@ -2,7 +2,7 @@
 // Uma entrada por personagem, sem TTL: indisponibilidade do banco não pode apagar uma edição.
 import { randomUUID } from 'node:crypto';
 import type { Redis } from 'ioredis';
-import type { BotConfig } from '@draconya/content';
+import type { BotConfig, BotConfigV2 } from '@draconya/content';
 
 const KEY = 'bot-config:pending';
 /**
@@ -50,7 +50,7 @@ function envelopeConfig(serialized: string): { readonly config: unknown } | null
 export class BotConfigStore {
   constructor(private readonly redis: Redis) {}
 
-  async save(characterId: string, config: BotConfig): Promise<void> {
+  async save(characterId: string, config: BotConfig | BotConfigV2): Promise<void> {
     // O nonce distingue inclusive duas edições com conteúdo idêntico (ABA).
     await this.redis.hset(KEY, characterId, JSON.stringify({ id: randomUUID(), config }));
   }

@@ -16,7 +16,7 @@ vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 import { Container, drawOrder, Graphics, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { renderTiles, prefetchTiles, visibleTiles, viewFor } from './camera.js';
+import { renderTiles, prefetchTiles, visibleTiles, viewFor, zoomFor } from './camera.js';
 import type { Scene, TileStack } from './scene.js';
 
 /** O catálogo mínimo dos testes desta issue — ver a seção 11 da spec (#381). */
@@ -51,7 +51,11 @@ describe('viewport (issue #381)', () => {
     // `groundFallback` (viewport.ts) é o PRIMEIRO filho SÓ de `terrain`.
     const [terrain, creatures, above, effects, overlay] = viewport.stage.children;
     expect(terrain?.children[0]).toBeInstanceOf(Graphics);
-    for (const layer of [creatures, above, effects, overlay]) expect(layer?.children).toHaveLength(0);
+    for (const layer of [creatures, above, effects]) expect(layer?.children).toHaveLength(0);
+    // O `overlay` deixou de nascer vazio com a seleção de alvo (#428): o `targetFrame` é um
+    // `Graphics` criado junto com ele. O que a asserção prova é que os três containers do meio
+    // nascem vazios e que `terrain` tem o `groundFallback` como primeiro filho.
+    expect(overlay?.children[0]).toBeInstanceOf(Graphics);
     const layers = viewport.layers();
     expect(layers.terrain).toBe(terrain);
     expect(layers.overlay).toBe(overlay);
@@ -527,11 +531,11 @@ describe('viewport: prefetch contínuo (issue #383)', () => {
     const { art, viewport } = await mountWarmed();
     const before = art.warmedObjects.length;
 
-    viewport.resize(640, 480); // zoom 1, vista 18×14
+    viewport.resize(640, 480); // sem teto (#415): a vista é o que cabe no canvas (20×15 a zoom 1)
     await viewport.tick(16);
 
     expect(art.warmedObjects.length).toBe(before + 1);
-    const window = prefetchTiles(CENTER, { widthTiles: 18, heightTiles: 14 });
+    const window = prefetchTiles(CENTER, viewFor(640, 480, zoomFor(640, 480)));
     expect(new Set(art.warmedObjects[before])).toEqual(columnIds(window, 7));
   });
 

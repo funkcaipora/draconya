@@ -112,6 +112,9 @@ function better(
     case 'nearest': return candidateDistance < championDistance;
     case 'lowest-hp': return candidate.health < champion.health;
     case 'highest-hp': return candidate.health > champion.health;
+    // `follow` é o nome do dropdown para "o alvo que eu escolhi" (ADR 0032 d.5). Sem escolha
+    // viva, a comparação cai em `nearest` — o fallback que a decisão 5 promete.
+    case 'follow': return candidateDistance < championDistance;
   }
 }
 

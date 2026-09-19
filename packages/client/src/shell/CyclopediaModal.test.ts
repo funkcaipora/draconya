@@ -46,8 +46,8 @@ function catalogue(over: Partial<Catalogue> = {}): Catalogue {
   return {
     hunts: [], monsters, ammunition: [], vocations: [], vocationLevel: 8,
     bot: {
-      vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-      advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [],
+      vocabularyVersion: 1, slots: {},
+      spells: [], supplies: [],
     },
     items, bestiary: config,
     ...over,
