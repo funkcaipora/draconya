@@ -101,6 +101,8 @@ export interface TestViewport {
   floorLayers(z: number): FloorLayerView;
   /** O sprite de uma criatura, ou `undefined` antes do primeiro `tick` que a viu. */
   creatureSprite(id: number): Sprite | undefined;
+  /** Os sprites do `scene` do andar `z` que NÃO são criatura — os objetos do mapa (marcador de #389). */
+  objectSprites(z: number): Sprite[];
   /** Quantos sprites de criatura o harness já casou — constante quando ninguém nasce/morre. */
   creatureCount(): number;
   /** As operações do `Graphics` de reserva do andar do jogador desde o último `clear()`. */
@@ -248,6 +250,12 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
     drawnFloors,
     floorLayers,
     creatureSprite: (id) => known.get(id),
+    objectSprites(z) {
+      const creatures = new Set<Sprite>(known.values());
+      return floorLayers(z).scene.children.filter(
+        (child) => !creatures.has(child as Sprite),
+      ) as Sprite[];
+    },
     creatureCount: () => known.size,
     placeholderOps: () => placeholder().ops,
     placeholderClears: () => placeholder().clears,
