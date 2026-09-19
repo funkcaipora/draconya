@@ -6,7 +6,7 @@
 // R0-05) é o tamanho da barra de navegação do topo.
 //
 // `active` NÃO tem default (#306): o `<button>` só ganha `aria-pressed` quando o dono passa um
-// booleano — "–"/"×"/"⚙" do Panel/BotPanel, que não têm estado de pressionado, continuam sem o
+// booleano — "–"/"×"/"⚙" do Panel, que não têm estado de pressionado, continuam sem o
 // atributo (React omite `aria-pressed={undefined}`); `TopBar` e "Ordenar" do `BattlePanel`, que
 // alternam, ganham `aria-pressed="true"/"false"`, como o `TopBar` fazia antes de migrar para cá.
 

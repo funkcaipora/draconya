@@ -45,16 +45,14 @@ const huntWithoutDesc: HuntListing = { ...huntWithDesc, description: undefined }
 const catalogue: Catalogue = {
   hunts: [huntWithDesc],
   monsters: [ratMonster, caveRatMonster],
-  ammunition: [],
   bot: {
     vocabularyVersion: 1,
-    advancedFromLevel: 50,
     slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [],
     supplies: [],
   },
   items: [cheeseItem, goldCoinItem],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
 };

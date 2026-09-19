@@ -2,6 +2,8 @@
   "id": "health-potion",
   "name": "Poção de Vida",
   "price": 45,
+  "group": "potion",
+  "groupCooldownMs": 1000,
   "effect": { "kind": "heal", "amount": 80 },
-  "_open": "Preço de referência do §20.2 (preços do Tibia como ponto de partida). Não é valor final."
+  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2 (preços do Tibia como ponto de partida). Não é valor final."
 }

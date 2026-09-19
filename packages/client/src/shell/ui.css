@@ -517,6 +517,12 @@
   color: var(--gold-5);
   font: 500 6.5px var(--font-mono);
 }
+/* Rótulo curto POR CIMA do sprite (AB-13, #428): a Mochila mostra o sprite E o rótulo E a
+   contagem, como o kit (UH 150). Trocar o sprite pelo rótulo perderia a leitura visual. */
+.ui-slot > .item-sprite + .ui-slot-label {
+  position: absolute; left: 2px; bottom: 1px;
+  font: 500 6px var(--font-mono); color: var(--gold-5);
+}
 
 /* === VitalBar === */
 .ui-vital-bar { display: grid; grid-template-columns: 1fr; align-items: center; gap: 8px; }
