@@ -1,6 +1,7 @@
 {
   "id": "whirlwind-throw",
   "name": "Whirlwind Throw",
+  "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "knight",
   "minLevel": 28,
   "manaCost": 40,

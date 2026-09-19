@@ -1,6 +1,7 @@
 {
   "id": "light-healing-paladin",
   "name": "Light Healing",
+  "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 8,
   "manaCost": 20,

@@ -1,6 +1,7 @@
 {
   "id": "death-strike",
   "name": "Death Strike",
+  "description": "Lança um raio de morte no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 16,
   "manaCost": 20,

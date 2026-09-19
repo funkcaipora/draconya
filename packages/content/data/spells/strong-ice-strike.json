@@ -1,6 +1,7 @@
 {
   "id": "strong-ice-strike",
   "name": "Strong Ice Strike",
+  "description": "Lança um raio de gelo no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 80,
   "manaCost": 60,

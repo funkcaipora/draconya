@@ -1,6 +1,7 @@
 {
   "id": "avalanche-rune",
   "name": "Avalanche Rune",
+  "description": "Lança um raio de gelo no alvo, causando dano numa área de 7x7 ao redor dele.",
   "price": 14,
   "group": "attack",
   "groupCooldownMs": 2000,

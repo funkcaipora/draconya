@@ -1,6 +1,7 @@
 {
   "id": "divine-missile",
   "name": "Divine Missile",
+  "description": "Lança um raio sagrado no seu alvo atual.",
   "vocationId": "paladin",
   "minLevel": 40,
   "manaCost": 20,

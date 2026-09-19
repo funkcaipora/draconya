@@ -1,6 +1,7 @@
 {
   "id": "brutal-strike",
   "name": "Brutal Strike",
+  "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "knight",
   "minLevel": 16,
   "manaCost": 30,

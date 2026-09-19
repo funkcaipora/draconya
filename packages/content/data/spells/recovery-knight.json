@@ -1,6 +1,7 @@
 {
   "id": "recovery-knight",
   "name": "Recovery",
+  "description": "Cura 20 pontos de vida a cada 3 segundos, por 60 segundos.",
   "vocationId": "knight",
   "minLevel": 50,
   "manaCost": 75,

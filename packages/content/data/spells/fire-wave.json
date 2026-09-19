@@ -1,6 +1,7 @@
 {
   "id": "fire-wave",
   "name": "Fire Wave",
+  "description": "Lança uma onda de fogo à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 18,
   "manaCost": 25,

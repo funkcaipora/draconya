@@ -1,6 +1,7 @@
 {
   "id": "terra-strike-druid",
   "name": "Terra Strike",
+  "description": "Lança um raio de terra no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 13,
   "manaCost": 20,

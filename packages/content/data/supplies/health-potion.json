@@ -1,6 +1,7 @@
 {
   "id": "health-potion",
   "name": "Poção de Vida",
+  "description": "Cura 80 pontos de vida.",
   "price": 45,
   "group": "potion",
   "groupCooldownMs": 1000,

@@ -1,6 +1,7 @@
 {
   "id": "berserk",
   "name": "Berserk",
+  "description": "Causa dano mágico numa área de 3x3 ao seu redor.",
   "vocationId": "knight",
   "minLevel": 35,
   "manaCost": 125,

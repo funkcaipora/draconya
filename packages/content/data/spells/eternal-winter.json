@@ -1,6 +1,7 @@
 {
   "id": "eternal-winter",
   "name": "Eternal Winter",
+  "description": "Causa dano de gelo numa área de 9x9 ao seu redor.",
   "vocationId": "druid",
   "minLevel": 60,
   "manaCost": 1050,

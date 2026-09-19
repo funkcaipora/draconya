@@ -1,6 +1,7 @@
 {
   "id": "magic-patch-druid",
   "name": "Magic Patch",
+  "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 1,
   "manaCost": 6,

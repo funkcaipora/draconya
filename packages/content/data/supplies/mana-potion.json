@@ -1,6 +1,7 @@
 {
   "id": "mana-potion",
   "name": "Poção de Mana",
+  "description": "Recupera 100 pontos de mana.",
   "price": 50,
   "group": "potion",
   "groupCooldownMs": 1000,

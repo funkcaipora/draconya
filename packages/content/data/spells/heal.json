@@ -1,6 +1,7 @@
 {
   "id": "heal",
   "name": "Cura",
+  "description": "Cura 60 pontos de vida.",
   "manaCost": 20,
   "cooldownMs": 1000,
   "group": "healing",

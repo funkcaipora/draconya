@@ -1,6 +1,7 @@
 {
   "id": "lesser-front-sweep",
   "name": "Lesser Front Sweep",
+  "description": "Causa dano mágico nos três tiles à sua frente.",
   "vocationId": "knight",
   "minLevel": 1,
   "manaCost": 6,

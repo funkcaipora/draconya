@@ -1,6 +1,7 @@
 {
   "id": "salvation",
   "name": "Salvation",
+  "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 60,
   "manaCost": 210,

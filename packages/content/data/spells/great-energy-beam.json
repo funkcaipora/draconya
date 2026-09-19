@@ -1,6 +1,7 @@
 {
   "id": "great-energy-beam",
   "name": "Great Energy Beam",
+  "description": "Lança um raio de energia numa linha reta à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 29,
   "manaCost": 110,

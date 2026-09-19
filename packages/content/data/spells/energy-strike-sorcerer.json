@@ -1,6 +1,7 @@
 {
   "id": "energy-strike-sorcerer",
   "name": "Energy Strike",
+  "description": "Lança um raio de energia no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 12,
   "manaCost": 20,

@@ -1,6 +1,7 @@
 {
   "id": "blast",
   "name": "Explosão Arcana",
+  "description": "Causa 30 de dano mágico numa área de 3x3 ao redor do alvo.",
   "manaCost": 60,
   "cooldownMs": 4000,
   "group": "attack",

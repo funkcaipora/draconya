@@ -1,6 +1,7 @@
 {
   "id": "ultimate-healing-druid",
   "name": "Ultimate Healing",
+  "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 30,
   "manaCost": 160,

@@ -1,6 +1,7 @@
 {
   "id": "ethereal-spear",
   "name": "Ethereal Spear",
+  "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "paladin",
   "minLevel": 23,
   "manaCost": 25,

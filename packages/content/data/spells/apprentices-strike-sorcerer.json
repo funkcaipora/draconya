@@ -1,6 +1,7 @@
 {
   "id": "apprentices-strike-sorcerer",
   "name": "Apprentice's Strike",
+  "description": "Lança um raio de energia no seu alvo atual.",
   "vocationId": "sorcerer",
   "minLevel": 6,
   "manaCost": 6,

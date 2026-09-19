@@ -1,6 +1,7 @@
 {
   "id": "divine-healing",
   "name": "Divine Healing",
+  "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 35,
   "manaCost": 160,
