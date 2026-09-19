@@ -206,6 +206,12 @@ export function castSpell(
    * sabe quais skills alimentam magia é o conteúdo — e este arquivo não conhece catálogo.
    */
   scaling: SpellScaling = NO_SCALING,
+  /**
+   * Quem recebe cura/mana. Ausente: o próprio lançador — o comportamento de sempre. O PAGAMENTO
+   * continua sendo do `caster` (a mana sai dele); só o benefício vai ao `recipient` (§26-30,
+   * ADR 0033 d.10).
+   */
+  recipient: CharacterRuntime = caster,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -292,7 +298,7 @@ export function castSpell(
     case 'heal':
       return {
         ok: true,
-        healed: restore(caster, 'health', powerOf(effect, caster, scaling, combat, rng)),
+        healed: restore(recipient, 'health', powerOf(effect, caster, scaling, combat, rng)),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
       };
     case 'heal-over-time':
@@ -358,6 +364,12 @@ export function useSupply(
   scaling?: SpellScaling,
   /** Quem paga (#192). Ausente: o próprio usuário, do saldo dele — o solo de sempre. */
   purse: Purse = ownPurse(user),
+  /**
+   * Quem recebe cura/mana. Ausente: o próprio usuário — o comportamento de sempre. O PAGAMENTO
+   * continua saindo da `purse` de quem usa; só o benefício vai ao `recipient` (§26-30, ADR
+   * 0033 d.10).
+   */
+  recipient: CharacterRuntime = user,
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -400,7 +412,7 @@ export function useSupply(
   return supply.effect.kind === 'heal'
     ? {
       ok: true,
-      healed: restore(user, 'health', supply.effect.amount),
+      healed: restore(recipient, 'health', supply.effect.amount),
       manaRestored: 0,
       damage: 0,
       hits: NO_HITS,
@@ -409,7 +421,7 @@ export function useSupply(
     : {
       ok: true,
       healed: 0,
-      manaRestored: restore(user, 'mana', supply.effect.amount),
+      manaRestored: restore(recipient, 'mana', supply.effect.amount),
       damage: 0,
       hits: NO_HITS,
       goldSpent: supply.price,

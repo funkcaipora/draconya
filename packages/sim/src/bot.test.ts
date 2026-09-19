@@ -16,7 +16,7 @@ const hero = (health: number, maxHealth = 100, mana = 100, maxMana = 100) =>
   });
 
 const view = (over: Partial<BotView> = {}): BotView => ({
-  self: hero(100), targetCount: 0, target: null, ...over,
+  self: hero(100), targetCount: 0, target: null, partyTarget: null, ...over,
 });
 
 const config = (over: Partial<BotConfig> = {}): BotConfig =>
@@ -41,11 +41,11 @@ describe('as quatro condições viram predicado (FUN-80)', () => {
     const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
 
     expect(bot.select('heal', view({ self: hero(40, 100) }))).toEqual(
-      { kind: 'spell', spellId: 'cure' },
+      { action: { kind: 'spell', spellId: 'cure' }, recipient: null },
     );
     // 400 de 1000 é o MESMO 40%, e a regra vale igual.
     expect(bot.select('heal', view({ self: hero(400, 1000) }))).toEqual(
-      { kind: 'spell', spellId: 'cure' },
+      { action: { kind: 'spell', spellId: 'cure' }, recipient: null },
     );
     expect(bot.select('heal', view({ self: hero(60, 100) }))).toBeNull();
   });
@@ -62,7 +62,7 @@ describe('as quatro condições viram predicado (FUN-80)', () => {
 
     expect(bot.select('attack', view({ target: null }))).toBeNull();
     expect(bot.select('attack', view({ target: { health: 20, maxHealth: 100 } })))
-      .toEqual({ kind: 'spell', spellId: 'finish' });
+      .toEqual({ action: { kind: 'spell', spellId: 'finish' }, recipient: null });
   });
 
   it('maxHealth zero não divide por zero', () => {
@@ -93,7 +93,7 @@ describe('primeira válida executa (§13.4)', () => {
     (espiao.categories as Map<string, unknown>).set('heal', espiadas);
 
     expect(espiao.select('heal', view({ self: hero(20) })))
-      .toEqual({ kind: 'spell', spellId: 'forte' });
+      .toEqual({ action: { kind: 'spell', spellId: 'forte' }, recipient: null });
     expect(avaliadas).toBe(1);
   });
 
@@ -113,8 +113,8 @@ describe('primeira válida executa (§13.4)', () => {
     }));
     const v = view({ self: hero(40), targetCount: 5 });
 
-    expect(bot.select('heal', v)).toEqual({ kind: 'spell', spellId: 'cure' });
-    expect(bot.select('attack', v)).toEqual({ kind: 'spell', spellId: 'wave' });
+    expect(bot.select('heal', v)).toEqual({ action: { kind: 'spell', spellId: 'cure' }, recipient: null });
+    expect(bot.select('attack', v)).toEqual({ action: { kind: 'spell', spellId: 'wave' }, recipient: null });
   });
 });
 
@@ -130,7 +130,7 @@ describe('compilar é o que torna a avaliação barata', () => {
     const segunda = bot.select('heal', v);
 
     expect(primeira).toBe(segunda);
-    expect(primeira).toBe(bot.categories.get('heal')?.[0]?.act);
+    expect(primeira?.action).toBe(bot.categories.get('heal')?.[0]?.act);
   });
 
   it('a view é reaproveitada: mudar o campo muda o resultado, sem recompilar', () => {
@@ -157,9 +157,61 @@ describe('o interruptor por regra (#162)', () => {
     });
     const compiled = compileBot(config);
     const hurt = view({ self: hero(50) });
-    expect(compiled.select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'on' });
+    expect(compiled.select('heal', hurt)).toEqual({ action: { kind: 'spell', spellId: 'on' }, recipient: null });
     // Ligar de volta é uma configuração nova: a primeira volta a ser avaliada primeiro.
     const on = botConfigSchema.parse({ ...config, heal: config.heal.map((r) => ({ ...r, enabled: true })) });
-    expect(compileBot(on).select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'off' });
+    expect(compileBot(on).select('heal', hurt)).toEqual({ action: { kind: 'spell', spellId: 'off' }, recipient: null });
+  });
+});
+
+describe('cura com alvo de party (§D11, #399)', () => {
+  const targeted = (target: BotConfig['heal'][number]['target'], over: Partial<BotConfig> = {}): BotConfig =>
+    config({
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'cure' },
+        ...(target === undefined ? {} : { target }),
+      }],
+      ...over,
+    });
+
+  it('alvo != self avalia o hp do CANDIDATO, e self continua lendo view.self (RF-03)', () => {
+    // O candidato a 40% satisfaz "HP <= 50%" MESMO com o lançador a 90%: é o que a regra
+    // "cure o membro abaixo de 50%" pede. Com `target: 'self'` a mesma condição reprova.
+    const candidate = hero(40, 100);
+    const wounded = targeted({ kind: 'member', characterId: 'b' });
+    const ownHp = targeted({ kind: 'self' });
+
+    expect(compileBot(wounded).select('heal', view({ self: hero(90, 100) }), () => [candidate]))
+      .toEqual({ action: { kind: 'spell', spellId: 'cure' }, recipient: candidate });
+    expect(compileBot(ownHp).select('heal', view({ self: hero(90, 100) }), () => [candidate]))
+      .toBeNull();
+  });
+
+  it('sem candidato a condição é FALSA, nunca um erro', () => {
+    // `partyTarget` nulo é o estado de uma regra de party sem resolvedor — a mesma regra de
+    // `target-hp` sem alvo: não vale, e não derruba a sessão.
+    const bot = compileBot(targeted({ kind: 'lowest-hp-member' }));
+    expect(bot.select('heal', view({ self: hero(10, 100) }), () => [])).toBeNull();
+  });
+
+  it('select tenta os candidatos NA ORDEM e para no primeiro que satisfaz', () => {
+    // "1. filtra HP<X% 2. remove inválido 3. ordena 4. usa o primeiro" do §29: o 80% reprova, o
+    // 30% vale, e o 10% nem é consultado. Um `select` que ignora a ordem falha aqui.
+    const first = hero(80, 100);
+    const second = hero(30, 100);
+    const third = hero(10, 100);
+    const bot = compileBot(targeted({ kind: 'lowest-hp-member' }));
+    const result = bot.select('heal', view({ self: hero(100) }), () => [first, second, third]);
+    expect(result?.recipient).toBe(second);
+  });
+
+  it('regra self NUNCA chama resolveCandidates', () => {
+    // Custo desnecessário: resolver candidato para uma regra que lê o próprio HP resolveria a
+    // party toda para nada.
+    let chamadas = 0;
+    const bot = compileBot(targeted({ kind: 'self' }));
+    bot.select('heal', view({ self: hero(10, 100) }), () => { chamadas += 1; return [hero(1, 100)]; });
+    expect(chamadas).toBe(0);
   });
 });

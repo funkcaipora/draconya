@@ -6759,3 +6759,185 @@ describe('hunt identity, attackTargetOf e condições ativas (#341, SV-05)', () 
   });
 });
 
+describe('cura e suporte com alvo (§D11, #399)', () => {
+  // A magia/supply de AMIGO que #392 entrega em conteúdo. Aqui ela é fixture: o que se prende
+  // é a SELEÇÃO de alvo, não o número.
+  const friendHeal = {
+    id: 'friend-heal', name: 'Cura Amiga', manaCost: 20, cooldownMs: 1_000,
+    effect: { kind: 'heal' as const, amount: 60, target: 'friend' as const, range: 3 },
+  };
+
+  /** Sem monstros por padrão: as perturbações de dano estragariam a asserção de alvo. */
+  const loaded = (over: Partial<RawContent> = {}): Content => content({
+    spells: [...spells, friendHeal],
+    progression: [{
+      ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+    }],
+    routes: [{ ...route, spawnPoints: [] }],
+    ...over,
+  });
+
+  const member = (id: string, health: number, maxHealth: number): CharacterRuntime =>
+    new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health, maxHealth, mana: 200, maxMana: 200,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+
+  const healRule = (target: ReturnType<typeof botConfig>['heal'][number]['target']) => botConfig({
+    heal: [{
+      when: { kind: 'hp', op: '<', percent: 100 },
+      do: { kind: 'spell', spellId: 'friend-heal' },
+      ...(target === undefined ? {} : { target }),
+    }],
+  });
+
+  const walkTo = (session: Session, ruleset: HuntRuleset, id: string, to: { x: number; y: number }): void => {
+    const character = session.participants.find((p) => p.id === id);
+    if (character === undefined) throw new Error(`sem participante ${id}`);
+    let guard = 0;
+    while ((character.position.x !== to.x || character.position.y !== to.y) && guard++ < 20) {
+      const dx = Math.sign(to.x - character.position.x);
+      const dy = Math.sign(to.y - character.position.y);
+      const result = ruleset.requestMove(session, id, { x: character.position.x + dx, y: character.position.y + dy });
+      if (!result.ok) throw new Error(`requestMove recusou: ${result.reason}`);
+    }
+    // Trava no tile: o passo seguinte não vence mais, e a posição do alvo fica determinística.
+    session.cancelEvent('player-step', id);
+  };
+
+  it('lowest-hp-member ordena por PERCENTUAL: cavaleiro 20% vence o mago 50% (RF-01)', () => {
+    // O contraexemplo do §28/#392: por HP ABSOLUTO o mago (1.000) perderia para o cavaleiro
+    // (2.000) — que é exatamente a ordenação errada. O percentual inverte o resultado.
+    const session = createHuntSession({
+      id: 'heal-target', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'lowest-hp-member' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const knight = member('k', 2_000, 10_000);
+    const mage = member('m', 1_000, 2_000);
+    session.enter(a);
+    session.enter(knight);
+    session.enter(mage);
+    walkTo(session, ruleset, 'k', { x: 2, y: 1 });
+    walkTo(session, ruleset, 'm', { x: 1, y: 2 });
+
+    run(session, 100, 100);
+
+    const healed = ofKind(session.drainEvents(), 'creature-healed');
+    expect(healed.map((e) => e.creatureId)).toEqual(['k']);
+    expect(healed[0]?.amount).toBe(60);
+    expect(knight.health).toBe(2_060);
+    expect(mage.health).toBe(1_000);
+  });
+
+  it('membro específico morto não lança, e NÃO escolhe outro vivo no lugar (RF-02)', () => {
+    // §30: alvo inválido espera. O `b` vivo e ferido no alcance seria o substituto natural de
+    // uma implementação que "caisse para qualquer um" — e é justamente o que o PRD proíbe.
+    const session = createHuntSession({
+      id: 'heal-target', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfigs: { a: healRule({ kind: 'member', characterId: 'c' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const b = member('b', 500, 1_000);
+    const c = member('c', 0, 1_000);
+    session.enter(a);
+    session.enter(b);
+    session.enter(c);
+    walkTo(session, ruleset, 'b', { x: 2, y: 1 });
+    walkTo(session, ruleset, 'c', { x: 1, y: 2 });
+    c.alive = false;
+
+    run(session, 100, 100);
+
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(b.health).toBe(500);
+  });
+
+  it('efeito self-only com target != self não age e não derruba a sessão (RF-05)', () => {
+    // Config inconsistente forçada (snapshot antigo, troca de conteúdo): `#healRangeOf` devolve
+    // null e a regra vira "sem candidato", nunca uma exceção — a mesma filosofia de toda recusa.
+    const session = createHuntSession({
+      id: 'heal-target', content: loaded(), huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0,
+      botConfigs: {
+        a: botConfig({
+          heal: [{
+            when: { kind: 'hp', op: '<', percent: 100 },
+            do: { kind: 'spell', spellId: 'heal' },
+            target: { kind: 'lowest-hp-member' },
+          }],
+        }),
+      },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    const a = member('a', 100, 100);
+    const b = member('b', 500, 1_000);
+    session.enter(a);
+    session.enter(b);
+    walkTo(session, ruleset, 'b', { x: 2, y: 1 });
+
+    expect(() => run(session, 100, 100)).not.toThrow();
+    expect(ofKind(session.drainEvents(), 'creature-healed')).toHaveLength(0);
+    expect(session.ended).toBeNull();
+  });
+
+  // O cenário de dano: um tanque longe o bastante para o primeiro golpe NÃO cair no t=0 (o
+  // evento de cura do bot precisa ter falhado antes, senão o teste passaria sem `#armHealersOf`).
+  const tank = {
+    ...rat, name: 'Tanque', health: 100_000,
+    attack: 500, attackIntervalMs: 1_000, speed: 100, aggroRadius: 10, attackRange: 1,
+    loot: { gold: { chance: 1, min: 1, max: 1 }, items: [] },
+  };
+
+  const damageScenario = (hz: number) => {
+    const session = createHuntSession({
+      id: 'heal-wake', content: loaded({
+        monsters: [tank],
+        routes: [{ ...route, spawnPoints: [{ routeIndex: 5, radius: 1 }] }],
+      }),
+      huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      botConfigs: { b: healRule({ kind: 'member', characterId: 'a' }) },
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    // `a` entra primeiro e fica no tile inicial: o monstro o escolhe pelo empate de distância
+    // (a ordem de entrada é o desempate de `chooseTarget`). `b` é o curandeiro.
+    const a = member('a', 10_000, 10_000);
+    const b = member('b', 100, 100);
+    session.enter(a);
+    session.enter(b);
+    walkTo(session, ruleset, 'a', { x: 1, y: 1 });
+    walkTo(session, ruleset, 'b', { x: 1, y: 2 });
+
+    run(session, 6_000, 1000 / hz);
+
+    return {
+      events: ofKind(session.drainEvents(), 'creature-healed').map((e) => ({ id: e.creatureId, amount: e.amount })),
+      victim: a.health, mana: b.mana, ended: session.ended,
+    };
+  };
+
+  it('quem apanha acorda o curandeiro da party, sem esperar o próprio cooldown (RF-06)', () => {
+    // Mutação que mata: sem `#armHealersOf`, a categoria de cura de `b` fica ENGATILHADA para
+    // sempre — ela só reage a dano no próprio `b`, e o HP que caiu é do `a`.
+    const result = damageScenario(10);
+    const curado = result.events.filter((e) => e.id === 'a');
+    expect(curado.length).toBeGreaterThan(0);
+    expect(curado[0]?.amount).toBe(60);
+    expect(result.mana).toBeLessThan(200);
+    expect(result.ended).toBeNull();
+  });
+
+  it('o alvo de party é o mesmo a 1 Hz e a 10 Hz (RF-07)', () => {
+    const rapido = damageScenario(10);
+    const lento = damageScenario(1);
+    expect(lento).toEqual(rapido);
+    // Não-vacuidade: o cenário precisa ter curado de fato, senão um empate de zeros passaria.
+    expect(rapido.events.length).toBeGreaterThan(0);
+  });
+});
+

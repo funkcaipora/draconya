@@ -173,6 +173,37 @@ describe('useSupply — gold, e o saldo que nunca fica negativo', () => {
   });
 });
 
+describe('cura em outro personagem (#399, ADR 0033 d.10)', () => {
+  it('castSpell: o RECIPIENT recebe a cura, quem lança paga a mana (RF-04)', () => {
+    const caster = hero({ mana: 100 });
+    const recipient = hero({ health: 10 });
+
+    const result = castSpell(caster, heal, null, 0, combat, rng(), undefined, recipient);
+
+    expect(result).toMatchObject({ ok: true, healed: 60 });
+    expect(recipient.health).toBe(70);
+    // O lançador fica intacto de vida e paga a mana — o benefício viaja, o custo não.
+    expect(caster.health).toBe(100);
+    expect(caster.mana).toBe(80);
+  });
+
+  it('useSupply: o RECIPIENT recebe vida/mana, quem usa paga o gold (RF-04)', () => {
+    const user = hero({ health: 100, mana: 0, gold: 100 });
+    const recipient = hero({ health: 0, mana: 0 });
+
+    const life = useSupply(user, potion, null, undefined, undefined, undefined, undefined, recipient);
+    expect(life).toMatchObject({ ok: true, healed: 80, goldSpent: 45 });
+    expect(recipient.health).toBe(80);
+    expect(user.health).toBe(100);
+    expect(user.goldDelta).toBe(-45);
+
+    const mana = useSupply(user, manaPotion, null, undefined, undefined, undefined, undefined, recipient);
+    expect(mana).toMatchObject({ ok: true, manaRestored: 100, goldSpent: 50 });
+    expect(recipient.mana).toBe(100);
+    expect(user.goldDelta).toBe(-95);
+  });
+});
+
 describe('magia em ÁREA (FUN-92)', () => {
   const blast = {
     id: 'blast', name: 'Explosão', manaCost: 60, cooldownMs: 4_000, minLevel: 1,
