@@ -32,6 +32,7 @@ const catalogue: Catalogue = {
     { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
     { id: 'gold-coin', name: 'Gold Coin', appearanceId: 3031, weight: 0.1, slot: null, twoHanded: false },
     { id: 'bow', name: 'Bow', appearanceId: 3350, weight: 31, slot: 'hand', twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
+    { id: 'arrow', name: 'Arrow', appearanceId: 3447, weight: 0.1, slot: null, twoHanded: false },
   ],
 };
 
@@ -166,6 +167,20 @@ describe('a coluna da direita (#161)', () => {
     expect(html).toContain('Escudo (vazio)');
     expect(html).toContain('class="slot-ammo"');
     expect(html).toContain('Munição (vazio)');
+  });
+
+  it('o slot Munição mostra a pilha equipada e a contagem (RF-02)', async () => {
+    hud.set((state) => ({
+      ...state, catalogue,
+      inventory: inventory({
+        equipped: { ammo: { instanceId: 'a1', itemId: 'arrow', quantity: 900 } },
+      }),
+    }));
+    const html = await render();
+    expect(html).toContain('class="slot-ammo"');
+    expect(html).toContain('title="Tirar Arrow"');
+    expect(html).toContain('aria-label="Arrow"');
+    expect(html).toContain('<b class="ui-slot-count">900</b>');
   });
 
   it('minimizado mantém o cabeçalho e não desmonta', async () => {

@@ -27,7 +27,7 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor,
+  TILE, compareDrawOrder, fromScreen, toScreen, viewFor, visibleTiles, zoomFor,
 } from './camera.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
@@ -43,6 +43,7 @@ import {
   creatureKey, effectKey, effectKeysOf, missileKey, objectKey,
 } from './keys.js';
 import { paintOf } from './outfit-colors.js';
+import { pickCreature } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type ObjectInfo } from './tile-stack.js';
@@ -57,6 +58,8 @@ const CAVERN_TINT = 0x8e8eb0;
 const COLOR_CREATURE = 0xc25b4a;
 const COLOR_SELF = 0x4ac26a;
 const COLOR_HEALTH_FRAME = 0x000000;
+/** A moldura do alvo (ADR 0032 decisão 15): vermelha sobre a criatura que o servidor marcou. */
+const TARGET_FRAME_COLOR = 0xd64848;
 /** Efeito e projétil sem quadro: um clarão e um ponto, para se ver que houve. */
 const COLOR_EFFECT_FALLBACK = 0xf2d26b;
 const COLOR_MISSILE_FALLBACK = 0xe8e8f0;
@@ -130,6 +133,13 @@ export interface ViewportHandle {
    * ritmo, sem o laço do Pixi disparar renderização React.
    */
   getFps(): number;
+  /**
+   * A criatura desenhada sob um ponto do canvas (px do cliente), ou `null`. É a leitura do
+   * clique: quem manda a intenção `select-target` é o `shell`, nunca este módulo (invariante 4).
+   */
+  creatureAt(clientX: number, clientY: number): number | null;
+  /** O alvo do servidor; desenha a moldura vermelha sobre a criatura de `id`. */
+  setTargetId(id: number | null): void;
   destroy(): void;
 }
 
@@ -230,6 +240,18 @@ export async function mountViewport(
   const effectSprites = new Map<number, EffectEntry>();
   const missileSprites = new Map<number, Sprite>();
   const textLabels = new Map<number, Text>();
+
+  /**
+   * A moldura do alvo (ADR 0032 decisão 15). O alvo chega por `setTargetId`, chamado pelo
+   * `useEffect` do shell a cada mudança (raro) — o canvas segue fora do React (ADR 0007). Só
+   * redesenha quando o alvo OU o retângulo de tela dele muda, como a barra de vida já faz.
+   */
+  let targetId: number | null = null;
+  const targetFrame = new Graphics();
+  targetFrame.roundPixels = true;
+  overlay.addChild(targetFrame);
+  let drawnTarget: number | null = null;
+  let drawnTargetRect = '';
 
   function target(): { x: number; y: number; z: number } {
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
@@ -546,6 +568,8 @@ export async function mountViewport(
     const floor = Math.round(center.z);
     /** Cada criatura com a posição interpolada E a de TELA — deslocada pelo andar (FUN-121). */
     const drawable: Array<{ creature: Creature; x: number; y: number; z: number; below: number; sx: number; sy: number }> = [];
+    /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado. */
+    let targetRect: string | null = null;
 
     for (const creature of world.creatures.values()) {
       const position = interpolate(creature, nowMs);
@@ -610,21 +634,39 @@ export async function mountViewport(
         sprite.height = texture.height;
         sprite.x = lifted.x + TILE - texture.width;
         sprite.y = lifted.y + TILE - texture.height;
-        continue;
+      } else {
+        // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
+        // véu que o quadro teria. É a degradação, não o erro.
+        sprite.texture = Texture.WHITE;
+        sprite.width = TILE - 6;
+        sprite.height = TILE - 6;
+        sprite.x = lifted.x + 3;
+        sprite.y = lifted.y + 3;
+        sprite.tint = shade(entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
       }
-      // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
-      // véu que o quadro teria. É a degradação, não o erro.
-      sprite.texture = Texture.WHITE;
-      sprite.width = TILE - 6;
-      sprite.height = TILE - 6;
-      sprite.x = lifted.x + 3;
-      sprite.y = lifted.y + 3;
-      sprite.tint = shade(entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
+      // A moldura do alvo usa o MESMO retângulo do sprite — inclusive o de degradação, que é
+      // o que está na tela quando não há quadro.
+      if (entry.creature.id === targetId) {
+        targetRect = `${sprite.x},${sprite.y},${sprite.width},${sprite.height}`;
+      }
     }
 
     // A ordem é pela posição de TELA: uma criatura dois andares abaixo desenhada na mesma
     // célula que uma do andar do jogador é comparada onde de fato está, não onde o mapa a põe.
     reorder(drawable.filter((entry) => entry.below >= 0).map((entry) => ({ creature: entry.creature, x: entry.sx, y: entry.sy })));
+
+    // A moldura só é redesenhada quando o alvo ou o retângulo dele muda; criatura que sumiu
+    // (`targetRect === null`) limpa a moldura no quadro seguinte.
+    const rect = targetRect ?? '';
+    if (rect !== drawnTargetRect || targetId !== drawnTarget) {
+      drawnTarget = targetId;
+      drawnTargetRect = rect;
+      targetFrame.clear();
+      if (targetRect !== null) {
+        const [x, y, width, height] = targetRect.split(',').map(Number) as [number, number, number, number];
+        targetFrame.rect(x, y, width, height).stroke({ width: 1, color: TARGET_FRAME_COLOR });
+      }
+    }
   }
 
   /**
@@ -890,6 +932,23 @@ export async function mountViewport(
     getFps() {
       return fps.read();
     },
+    creatureAt(clientX, clientY) {
+      // O canvas é escalado pelo stage (zoom inteiro); `fromScreen` trabalha em pixels de tile.
+      const bounds = app.canvas.getBoundingClientRect();
+      const center = target();
+      const at = fromScreen(
+        { x: (clientX - bounds.left) / zoom, y: (clientY - bounds.top) / zoom },
+        center, view,
+      );
+      return pickCreature(
+        world.creatures.values(),
+        { x: Math.round(at.x), y: Math.round(at.y), z: Math.round(center.z) },
+        performance.now(),
+      );
+    },
+    setTargetId(id) {
+      targetId = id;
+    },
     destroy() {
       for (const sprite of sprites.values()) sprite.destroy();
       sprites.clear();
@@ -908,6 +967,7 @@ export async function mountViewport(
       ground.length = 0;
       for (const sprite of top) sprite.destroy();
       top.length = 0;
+      targetFrame.destroy();
       above.destroy();
       overlay.destroy();
       book.clear();

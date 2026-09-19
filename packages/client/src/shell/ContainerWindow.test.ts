@@ -17,6 +17,7 @@ const catalogue: Catalogue = {
     { id: 'backpack', name: 'Backpack', appearanceId: 2854, weight: 18, slot: 'back', twoHanded: false },
     { id: 'cheese', name: 'Cheese', appearanceId: 3607, weight: 1, slot: null, twoHanded: false },
     { id: 'sword', name: 'Sword', appearanceId: 3264, weight: 10, slot: 'hand', twoHanded: false },
+    { id: 'uh', name: 'Ultimate Healing Rune', appearanceId: 3155, weight: 1, slot: null, twoHanded: false, shortLabel: 'UH' },
   ],
 };
 const cheese = { instanceId: 'c1', itemId: 'cheese', quantity: 7 };
@@ -60,5 +61,25 @@ describe('ContainerWindow', () => {
     expect(collapsed).toContain('<strong class="ui-panel-title">Mochila</strong>');
     hud.set((state) => ({ ...state, inventory: null }));
     expect(await render('backpack')).toContain('Carregando');
+  });
+
+  it('item com shortLabel mostra rótulo E contagem (RF-03)', async () => {
+    hud.set((state) => ({
+      ...state,
+      inventory: inventory({
+        backpack: [{ instanceId: 'u1', itemId: 'uh', quantity: 150 }, ...Array<null>(24).fill(null)],
+      }),
+    }));
+    const html = await render('backpack');
+    expect(html).toContain('>UH<');
+    expect(html).toContain('ui-slot-count">150');
+  });
+
+  it('item sem shortLabel mostra só o sprite e a contagem, sem rótulo inventado (RF-03)', async () => {
+    // O `cheese` do catálogo não declara `shortLabel`: nada de `undefined` nem de inicial no
+    // lugar do rótulo — o `.ui-slot-label` simplesmente não existe.
+    const html = await render('backpack');
+    expect(html).toContain('ui-slot-count">7');
+    expect(html).not.toContain('ui-slot-label');
   });
 });

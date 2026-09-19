@@ -66,11 +66,12 @@ export function Slot({
       onDrop={onDrop}
       style={{ '--slot-size': `${String(size)}px` } as CSSProperties}
     >
-      {icon ?? (
-        <span className="ui-slot-label" data-element={element}>
-          {empty === true && label === undefined ? '+' : label}
-        </span>
-      )}
+      {icon}
+      {label !== undefined
+        ? <span className="ui-slot-label" data-element={element}>{label}</span>
+        : icon === undefined && empty === true
+          ? <span className="ui-slot-label">+</span>
+          : null}
       {hotkey !== undefined && <small className="ui-slot-hotkey">{hotkey}</small>}
       {count !== undefined && count !== null && <b className="ui-slot-count">{count}</b>}
     </button>

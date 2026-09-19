@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor, TILE,
+  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, fromScreen, toScreen, viewFor, visibleTiles, zoomFor, TILE,
 } from './camera.js';
 
 const view = { widthTiles: 18, heightTiles: 14 };
@@ -34,6 +34,18 @@ describe('camera', () => {
       { x: 5, y: 3 }, { x: 1, y: 3 }, { x: 9, y: 1 },
     ].sort(compareDrawOrder);
     expect(creatures).toEqual([{ x: 9, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
+  });
+
+  it('fromScreen é o inverso de toScreen, inclusive com posição fracionária', () => {
+    // É o caminho do clique: o pixel do canvas volta a tile. Eixo trocado ou offset da câmera
+    // errado só aparece aqui — no canvas o sintoma é acertar a criatura ao lado.
+    const target = at(10, 10);
+    for (const point of [{ x: 8.25, y: 9.5 }, { x: 10, y: 10 }, { x: 11.75, y: 12.1 }]) {
+      const screen = toScreen(point, target, view);
+      const back = fromScreen(screen, target, view);
+      expect(back.x).toBeCloseTo(point.x);
+      expect(back.y).toBeCloseTo(point.y);
+    }
   });
 });
 

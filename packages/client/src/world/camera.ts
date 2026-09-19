@@ -98,6 +98,24 @@ export function toScreen(
 }
 
 /**
+ * De pixel do canvas para coordenada de mundo (tiles, fracionária) — o inverso de `toScreen`.
+ *
+ * O ponto entra em pixels de TILE (o mesmo espaço de `toScreen`); quem tem pixels do cliente
+ * divide pelo zoom do stage antes de chamar (ver `creatureAt` no viewport).
+ */
+export function fromScreen(
+  point: { x: number; y: number },
+  target: Point,
+  view: Viewport,
+): { x: number; y: number } {
+  const origin = cameraOrigin(target, view);
+  return {
+    x: point.x / TILE + origin.x,
+    y: point.y / TILE + origin.y,
+  };
+}
+
+/**
  * Ordem de desenho de criaturas: quem está mais ao sul cobre quem está ao norte, e o desempate
  * é por `x` para a ordem ser estável. Sem desempate, duas criaturas no mesmo `y` trocam de
  * ordem entre quadros e piscam uma na frente da outra.
