@@ -57,9 +57,9 @@ describe('packProblems', () => {
     // Mutação que mata: apagar o laço de `ammunition` em `packProblems` — o resto da suíte
     // continua verde, porque o conteúdo real só tem ids válidos, e a flecha com id fora do
     // pacote subiria como o quadrado invisível que este módulo existe para impedir.
-    expect(packProblems(table({ ammunition: { arrow: { missile: 5 } } }), pack)).toEqual([]);
+    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 5 } } }), pack)).toEqual([]);
     // O projétil é conferido no registro de MISSILES: 43 é o buraco entre as faixas.
-    expect(packProblems(table({ ammunition: { arrow: { missile: 43 } } }), pack))
+    expect(packProblems(table({ ammunition: { arrow: { icon: 1200, missile: 43 } } }), pack))
       .toEqual(['appearances.ammunition.arrow.missile: missile 43 não existe no pacote tibia-test']);
   });
 
