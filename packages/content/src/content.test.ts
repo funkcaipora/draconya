@@ -36,7 +36,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } };
+const party = { id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200 } };
 
 // As famílias de arma e as skills que elas escalam (CMB-05). O conteúdo real vive em
 // `data/weapon-families/` e `data/skills/`; aqui é o mínimo que faz uma arma montar. A fórmula
@@ -602,9 +602,19 @@ describe('a tabela da party (#188, ADR 0027)', () => {
 
   it('is indexed on the content, with the pool by unique vocations', () => {
     const content = buildContent(base());
-    expect(content.party.maxMembers).toBe(4);
-    expect(content.party.xpPoolPercentByUniqueVocations['4']).toBe(200);
+    expect(content.party.maxMembers).toBe(8);
+    expect(content.party.xpPoolPercentByUniqueVocations['8']).toBe(200);
     expect(content.party.matchmakingLevelRange).toBe(0);
+  });
+
+  it('carrega o limite de venda automática, com default seguro para fixtures antigas (§8)', () => {
+    // Mutação que mata: tirar o `.default()` de `autoSellItemTypes` — as quatro fixtures de
+    // `RawContent` que não conhecem VIP (content.test, server/testing, tools/bench) parariam de
+    // validar.
+    expect(buildContent(base()).party.autoSellItemTypes).toEqual({ free: 5, premium: 20 });
+    expect(buildContent(base({
+      party: [{ ...party, autoSellItemTypes: { free: 1, premium: 3 } }],
+    })).party.autoSellItemTypes).toEqual({ free: 1, premium: 3 });
   });
 
   it('refuses a missing key, a decreasing percent, and maxMembers below two', () => {
@@ -619,6 +629,39 @@ describe('a tabela da party (#188, ADR 0027)', () => {
     expect(table({ maxMembers: 1 })).toThrow(ContentError);
     // Chave a mais é inofensiva.
     expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200 } })).not.toThrow();
+  });
+});
+
+describe('cura e mana com alvo (§26, ADR 0033 d.10)', () => {
+  const spell = (effect: Record<string, unknown>) =>
+    ({ id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1000, effect });
+  const supply = (effect: Record<string, unknown>) =>
+    ({ id: 'potion', name: 'Poção', price: 10, effect });
+
+  it('aceita magia self sem range e magia friend com range', () => {
+    expect(() => buildContent(base({ spells: [spell({ kind: 'heal', amount: 60 })] }))).not.toThrow();
+    expect(() => buildContent(base({
+      spells: [spell({ kind: 'heal', amount: 60, target: 'friend', range: 4 })],
+    }))).not.toThrow();
+  });
+
+  it('recusa magia friend sem range e self com range', () => {
+    // Mutação que mata: trocar `effect.target === 'friend'` por `!== 'self'` — equivalente
+    // hoje, mas quebra se um terceiro valor de `target` aparecer.
+    expect(() => buildContent(base({ spells: [spell({ kind: 'heal', amount: 60, target: 'friend' })] })))
+      .toThrow(/cura em outro personagem precisa de range/);
+    expect(() => buildContent(base({ spells: [spell({ kind: 'heal', amount: 60, target: 'self', range: 4 })] })))
+      .toThrow(/cura em si mesmo não tem alcance/);
+  });
+
+  it('aplica a mesma regra ao supply de cura e de mana', () => {
+    expect(() => buildContent(base({ supplies: [supply({ kind: 'heal', amount: 80, target: 'friend' })] })))
+      .toThrow(/supply\/potion: efeito em outro personagem precisa de range/);
+    expect(() => buildContent(base({ supplies: [supply({ kind: 'mana', amount: 100, target: 'self', range: 1 })] })))
+      .toThrow(/supply\/potion: efeito em si mesmo não tem alcance/);
+    expect(() => buildContent(base({
+      supplies: [supply({ kind: 'mana', amount: 100, target: 'friend', range: 1 })],
+    }))).not.toThrow();
   });
 });
 

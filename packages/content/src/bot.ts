@@ -53,6 +53,37 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
   for (const category of BOT_CATEGORIES) {
     config[category].forEach((rule, slot) => {
       const where = `categoria "${category}", slot ${slot + 1}`;
+
+      // Alvo ≠ self só vale em heal/potion/support, e só quando a ação aceita amigo (§26-30,
+      // ADR 0033 d.10). O alvo de ataque continua sendo o monstro. A checagem ignora efeito
+      // inexistente de propósito: o `switch` abaixo já reporta "não existe", e reportar os dois
+      // pelo mesmo slot faria o jogador procurar dois defeitos onde há um.
+      if ((rule.target?.kind ?? 'self') !== 'self') {
+        if (category === 'attack' || category === 'rune') {
+          problems.push(
+            `${where}: alvo "${rule.target?.kind ?? 'self'}" não vale em ${category} — o alvo `
+              + 'continua sendo o monstro',
+          );
+        } else {
+          const effect = rule.do.kind === 'spell'
+            ? content.spells.get(rule.do.spellId)?.effect
+            : rule.do.kind === 'supply'
+              ? content.supplies.get(rule.do.supplyId)?.effect
+              : undefined;
+          const friendly = effect !== undefined
+            && (effect.kind === 'heal' || effect.kind === 'mana')
+            && effect.target === 'friend';
+          // Ação inexistente já foi reportada pelo switch abaixo — aqui só quem existe mas não
+          // serve.
+          if (effect !== undefined && !friendly) {
+            problems.push(
+              `${where}: esta ${rule.do.kind === 'spell' ? 'magia' : 'supply'} não pode ser `
+                + 'usada em outro personagem',
+            );
+          }
+        }
+      }
+
       switch (rule.do.kind) {
         case 'spell':
           if (!content.spells.has(rule.do.spellId)) {

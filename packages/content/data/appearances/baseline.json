@@ -287,6 +287,9 @@
     "mass-healing": {
       "effect": 13
     },
+    "heal-friend-druid": {
+      "effect": 13
+    },
     "terra-wave": {
       "effect": 45
     },
