@@ -1,0 +1,12 @@
+{
+  "id": "heal-friend-druid",
+  "name": "Exura Sio",
+  "vocationId": "druid",
+  "minLevel": 14,
+  "manaCost": 30,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "cooldownMs": 1000,
+  "effect": { "kind": "heal", "basePower": 60, "target": "friend", "range": 5 },
+  "_open": "TibiaWiki (conferir ao gravar): level, mana e basePower REAIS de Exura Sio ainda não foram auditados nesta task — os valores acima são um ponto de partida no mesmo formato de intense-healing-druid.json, não uma cópia confirmada. range 5 é o mesmo teto de alcance de magia de alvo único do catálogo atual; ajustar se o TibiaWiki divergir. A variante do Paladin (§9.2) fica para quando o TibiaWiki confirmar que ele a usa."
+}

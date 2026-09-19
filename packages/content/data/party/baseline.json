@@ -1,7 +1,11 @@
 {
   "id": "baseline",
-  "maxMembers": 4,
-  "xpPoolPercentByUniqueVocations": { "1": 125, "2": 150, "3": 175, "4": 200 },
+  "maxMembers": 8,
+  "xpPoolPercentByUniqueVocations": {
+    "1": 125, "2": 150, "3": 175, "4": 200,
+    "5": 200, "6": 200, "7": 200, "8": 200
+  },
   "matchmakingLevelRange": 0,
-  "_open": "§15.3: 25 % por vocação única, teto 100 % (ADR 0027). A tabela existe para o PRD (aceitar tabela por composição) e para balancear sem mexer no sim. matchmakingLevelRange é §43.2, ainda aberto — 0 desliga o filtro."
+  "autoSellItemTypes": { "free": 5, "premium": 20 },
+  "_open": "§15.3: 25 % por vocação única, teto 100 % (ADR 0027) — teto batido em 4 vocações reais + \"nenhuma\", então 5..8 repetem 200 (PRD §2.1 sobe o teto de jogadores, não de vocações únicas: com null contando como vocação, o máximo continua 5). matchmakingLevelRange é §43.2, ainda aberto. autoSellItemTypes é §8/§42.1 — 5 Free / 20 Premium do personagem líder."
 }
