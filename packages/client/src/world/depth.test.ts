@@ -5,7 +5,7 @@ import {
 
 const sign = (n: number): number => Math.sign(n);
 
-describe('depth (ADR 0033)', () => {
+describe('depth (ADR 0034)', () => {
   it('sul > norte: quem está mais ao sul é desenhado depois', () => {
     for (const x of [0, 1, 5, 42, 999]) {
       for (const y of [0, 1, 5, 42]) {

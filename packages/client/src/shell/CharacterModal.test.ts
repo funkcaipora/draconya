@@ -10,15 +10,14 @@ import { CharacterModal } from './CharacterModal.js';
 const BESTIARY = { milestones: [10, 50, 200], xpBonusPercentPerMilestone: 1.5 };
 
 const CATALOGUE_WITH_BESTIARY = {
-  hunts: [], monsters: [], ammunition: [], items: [],
+  hunts: [], monsters: [], items: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
   ],
   vocationLevel: 8,
   bestiary: BESTIARY,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
 } as unknown as Catalogue;

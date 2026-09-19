@@ -397,7 +397,7 @@ function engineContent(): ReturnType<typeof buildContent> {
     combat: [{ ...COMBAT, player: { ...COMBAT.player, attackPower: 25, attackIntervalMs: 2_000 } }],
     stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
     party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } }],
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1_000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1_000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [{ id: 'arena', z: 7, grid: ARENA_GRID }],
     routes: [ARENA_ROUTE],

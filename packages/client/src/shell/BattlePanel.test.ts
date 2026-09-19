@@ -1,4 +1,5 @@
 import { createElement, type ReactElement } from 'react';
+import { readFile } from 'node:fs/promises';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { BattlePanel, battleTone, sortBattleRows } from './BattlePanel.js';
@@ -168,11 +169,15 @@ describe('o painel Batalha (#254)', () => {
     expect(html).not.toContain('battle-row-selected');
   });
 
-  it('não possui botões interativos dentro de battle-list', async () => {
+  it('a linha da Batalha é um botão que manda select-target (RF-05)', async () => {
+    // `prerender` não dispara evento: o botão e a intenção são presos pelo HTML e pela fonte,
+    // o mesmo precedente de `HuntActions.test.ts`.
     world.selfId = 99;
     world.creatures.set(1, creature(1, { name: 'Rat' }));
     const html = await render(createElement(BattlePanel));
     const listHtml = html.slice(html.indexOf('battle-list'));
-    expect(listHtml).not.toContain('<button');
+    expect(listHtml).toContain('<button type="button" class="battle-row"');
+    const source = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'select-target', creatureId: row.id })");
   });
 });

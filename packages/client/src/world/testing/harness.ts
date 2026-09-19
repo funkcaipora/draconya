@@ -69,7 +69,7 @@ export interface MountOptions {
   readonly clock?: TestClock;
 }
 
-/** A raiz dos andares e os dois containers globais de HOJE, na ordem de `stage.children` (ADR 0033). */
+/** A raiz dos andares e os dois containers globais de HOJE, na ordem de `stage.children` (ADR 0034). */
 export interface Layers {
   readonly floorsRoot: Container;
   readonly effects: Container;
