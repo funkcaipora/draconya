@@ -5,7 +5,7 @@
 // inerte, e nada aqui toca `CharacterRuntime` nenhum (invariante 9). No `start` ela vira uma
 // sessão de hunt com N donos e some daqui.
 //
-//   party:{id}            HASH   leaderId, mode, huntId, difficulty, createdAtMs   TTL
+//   party:{id}            HASH   leaderId, mode, shareCosts, splitLoot, huntId, difficulty, createdAtMs   TTL
 //   party:{id}:members    ZSET   score = instante de entrada  → a liderança sucessória
 //   party:{id}:accounts   HASH   characterId → accountId    (quem é de quem, para o ticket)
 //   party:{id}:invites    SET    characterIds convidados      TTL curto
@@ -23,7 +23,11 @@ export type PartyMode = 'split' | 'shared';
 export interface PartyRecord {
   readonly id: string;
   readonly leaderId: string;
+  /** Espelho derivado dos dois eixos (D1), para o cliente antigo. */
   readonly mode: PartyMode;
+  /** Os dois eixos do líder (ADR 0033 D1), mutáveis na hunt por `party-settings`. */
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
   readonly huntId: string | null;
   readonly difficulty: string | null;
   readonly createdAtMs: number;
@@ -203,7 +207,7 @@ export class PartyStore {
     const claimed = await this.#redis.set(byCharacterKey(leaderId), id, 'PX', String(this.#ttlMs), 'NX');
     if (claimed !== 'OK') return null;
     await this.#redis.multi()
-      .hset(partyKey(id), { leaderId, mode: 'split', createdAtMs: String(now) })
+      .hset(partyKey(id), { leaderId, mode: 'split', shareCosts: '0', splitLoot: '0', createdAtMs: String(now) })
       .pexpire(partyKey(id), this.#ttlMs)
       .zadd(membersKey(id), String(now), leaderId)
       .pexpire(membersKey(id), this.#ttlMs)
@@ -221,10 +225,15 @@ export class PartyStore {
       this.#redis.hgetall(accountsKey(id)),
     ]);
     if (hash['leaderId'] === undefined) return null;
+    const mode = hash['mode'] === 'shared' ? 'shared' : 'split';
     return {
       id,
       leaderId: hash['leaderId'],
-      mode: hash['mode'] === 'shared' ? 'shared' : 'split',
+      mode,
+      // Ausente é party criada por um `api` anterior ao #400: migra de `mode` (D1), a mesma
+      // tabela do snapshot antigo.
+      shareCosts: hash['shareCosts'] === undefined ? mode === 'shared' : hash['shareCosts'] === '1',
+      splitLoot: hash['splitLoot'] === undefined ? mode === 'shared' : hash['splitLoot'] === '1',
       huntId: hash['huntId'] ?? null,
       difficulty: hash['difficulty'] ?? null,
       createdAtMs: Number(hash['createdAtMs'] ?? 0),
@@ -318,10 +327,21 @@ export class PartyStore {
 
   /** O líder propõe; a proposta zera as aprovações e aprova o próprio líder. */
   async propose(
-    id: string, proposal: { huntId: string; difficulty: string; mode: PartyMode }, leaderId: string,
+    id: string,
+    proposal: {
+      huntId: string; difficulty: string; mode: PartyMode;
+      /** Ausentes derivam de `mode` — um cliente anterior ao #400 só manda `mode`. */
+      shareCosts?: boolean; splitLoot?: boolean;
+    },
+    leaderId: string,
   ): Promise<void> {
+    const shareCosts = proposal.shareCosts ?? proposal.mode === 'shared';
+    const splitLoot = proposal.splitLoot ?? proposal.mode === 'shared';
     await this.#redis.multi()
-      .hset(partyKey(id), { huntId: proposal.huntId, difficulty: proposal.difficulty, mode: proposal.mode })
+      .hset(partyKey(id), {
+        huntId: proposal.huntId, difficulty: proposal.difficulty, mode: proposal.mode,
+        shareCosts: shareCosts ? '1' : '0', splitLoot: splitLoot ? '1' : '0',
+      })
       .del(approvedKey(id))
       .sadd(approvedKey(id), leaderId)
       .pexpire(approvedKey(id), this.#ttlMs)
