@@ -93,6 +93,12 @@ export interface SessionSnapshot {
    * a restauração atribui `aggregates` inteiro ao único participante que existia então.
    */
   readonly aggregatesByCharacter?: Readonly<Record<string, Aggregates>>;
+  /**
+   * O instante lógico em que cada participante entrou (#397, ADR 0033 decisão 6). Opcional:
+   * snapshot anterior não tem, e a ausência de uma chave equivale a `0` — o comportamento de
+   * hoje, em que o extrato leva TODOS os eventos notáveis da sessão.
+   */
+  readonly joinedAtMs?: Readonly<Record<string, number>>;
   readonly notableEvents: readonly NotableEvent[];
   readonly ledgerSeq: number;
   readonly endedReason: EndReason | null;
@@ -315,6 +321,11 @@ export class Session {
    */
   readonly aggregates: Aggregates = zeroAggregates();
   readonly #aggregatesByCharacter = new Map<string, Aggregates>();
+  /**
+   * Instante lógico de entrada de cada participante (#397). Não é evento de domínio: é dado
+   * estrutural da sessão, como `#aggregatesByCharacter` — só o `Session` escreve.
+   */
+  readonly #joinedAtMs = new Map<string, number>();
   /** Os extratos do `end`, memoizados: `end` duas vezes devolve os mesmos, sem `seq` novo. */
   #receipts: readonly Receipt[] | null = null;
 
@@ -370,6 +381,11 @@ export class Session {
       // Snapshot anterior ao #187: um dono só, e a soma É o agregado dele.
       session.#aggregatesByCharacter.set(snapshot.participants[0].id, { ...snapshot.aggregates });
     }
+    if (snapshot.joinedAtMs !== undefined) {
+      for (const [id, atMs] of Object.entries(snapshot.joinedAtMs)) {
+        session.#joinedAtMs.set(id, atMs);
+      }
+    }
     if (snapshot.ruleset !== undefined) ruleset.restore?.(snapshot.ruleset);
     ruleset.onResume?.(session);
     return session;
@@ -410,7 +426,19 @@ export class Session {
   enter(character: CharacterRuntime): void {
     if (this.#endedReason) throw new Error(`session ${this.id} has already ended`);
     this.participants.push(character);
-    this.ruleset.onEnter(this, character);
+    this.#joinedAtMs.set(character.id, this.#logicalNowMs);
+    try {
+      this.ruleset.onEnter(this, character);
+    } catch (error) {
+      // `onEnter` pode recusar por lotação (#397) sem que a sessão PRÉ-EXISTENTE seja afetada —
+      // reverte a admissão para deixar `participants` exatamente como estava antes da tentativa.
+      // Sem isto, os outros N-1 membros de uma hunt já em curso herdariam um (N+1)º fantasma:
+      // contado em `session.participants`, sem runner, sem posição no mundo, sem bot armado.
+      const index = this.participants.indexOf(character);
+      if (index >= 0) this.participants.splice(index, 1);
+      this.#joinedAtMs.delete(character.id);
+      throw error;
+    }
   }
 
   /**
@@ -470,13 +498,17 @@ export class Session {
   }
 
   #receiptFor(character: CharacterRuntime, reason: EndReason): Receipt {
+    // `?? 0` cobre quem entrou antes desta issue existir (snapshot restaurado sem a chave) e o
+    // próprio primeiro participante de uma sessão nova, cujo `joinedAtMs` é o instante zero da
+    // sessão — os dois casos devem levar TODOS os eventos, que é o comportamento de hoje.
+    const joinedAtMs = this.#joinedAtMs.get(character.id) ?? 0;
     return {
       sessionId: this.id,
       characterId: character.id,
       reason,
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
-      notableEvents: [...this.notableEvents],
+      notableEvents: this.notableEvents.filter((event) => event.atMs >= joinedAtMs),
     };
   }
 
@@ -665,6 +697,9 @@ export class Session {
       aggregatesByCharacter: Object.fromEntries(
         [...this.#aggregatesByCharacter].map(([id, own]) => [id, { ...own }]),
       ),
+      ...(this.#joinedAtMs.size === 0 ? {} : {
+        joinedAtMs: Object.fromEntries(this.#joinedAtMs),
+      }),
       notableEvents: [...this.notableEvents],
       ledgerSeq: this.ledgerSeq,
       endedReason: this.#endedReason,
