@@ -20,6 +20,10 @@ export class TextureBook {
   readonly #byKey = new Map<string, Texture | null | Promise<void>>();
   #closed = false;
   #version = 0;
+  /** Métricas de desenvolvimento (M23 §40): `get` que devolveu uma `Texture` pronta. */
+  #hits = 0;
+  /** Métricas de desenvolvimento (M23 §40): `get` que disparou um pedido ao pacote. */
+  #misses = 0;
 
   /**
    * Sobe a cada mudança no que está PRONTO: uma textura que chega, uma resposta "não existe",
@@ -28,15 +32,26 @@ export class TextureBook {
    */
   get version(): number { return this.#version; }
 
+  /** `get` que devolveu uma `Texture` pronta. Métrica de desenvolvimento (M23 §40). */
+  get hits(): number { return this.#hits; }
+
+  /** `get` que disparou um pedido ao pacote. `null` (não existe) e pendente não contam. */
+  get misses(): number { return this.#misses; }
+
   /**
    * A textura de uma chave, ou `undefined` enquanto ela não chega — e dispara o pedido na
    * primeira vez. `null` é resposta definitiva: o pacote disse que não há quadro.
    */
   get(key: string, request: TextureRequest): Texture | null | undefined {
     const known = this.#byKey.get(key);
-    if (known instanceof Texture || known === null) return known;
+    if (known instanceof Texture) {
+      this.#hits += 1;
+      return known;
+    }
+    if (known === null) return known;
     if (known !== undefined) return undefined;
 
+    this.#misses += 1;
     const flight = request().then((bitmap) => {
       if (this.#closed) return;
       // O `.then` VERIFICA que a chave ainda é a mesma pendência: `clear()` no meio do voo
