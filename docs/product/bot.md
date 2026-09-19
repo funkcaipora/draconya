@@ -531,8 +531,18 @@ mensagem de erro.
 **Nada de estado do bot é calculado no cliente**: o cooldown e o bloqueio vêm do `slot-state`, e a
 recusa da tecla do `slot-result`. A munição selecionada vem do `player-stats.ammo`.
 
-**O clique simples abre o `ActionConfigModal`** (ação, condições, tecla e `auto`);
-**Shift+clique desliga o automático** (`auto: false`) — o atalho continua manual. O
+**O clique simples abre o `ActionConfigModal`**, redesenhado no M18 (#437, ADR 0033) na régua da
+imagem do "Configurar ação" do cliente Tibia em vez do kit de três `Select` do #426: abas
+**Magias / Runas / Itens** (magia é `bot.spells`; runa é `bot.supplies` com `group === 'attack'`;
+item é o resto), uma lista à esquerda ordenada por level exigido e um painel de detalhe à
+direita — título, `Lv. X+` (e `ML Y+` quando o suprimento exige), Tipo, Área, Tipo de dano, Dano/
+Cura/Efeito, Custo, Cooldown e Descrição. A faixa de dano/cura (`min~max`) é calculada no cliente
+por `spellPowerRange` (`@draconya/content`) a partir de `catalogue.bot.spellPower` e do level/magic
+level do personagem — uma PRÉVIA da mesma fórmula que o servidor usa para sortear; a rolagem de
+verdade continua exclusiva dele (invariante 4). Campo que o catálogo não manda (nó `game` anterior
+à #436) nunca vira número inventado: a linha correspondente some. Abaixo, as condições e a tecla e
+`auto` de sempre; trocar de aba não descarta a ação escolhida em outra. **Shift+clique desliga o
+automático** (`auto: false`) — o atalho continua manual. O
 `AutomationsPanel` lista uma linha por automação do rascunho (interruptor, nome, resumo dos
 parâmetros, ⚙ e ×), com "+ Adicionar" abrindo o catálogo de modelos; os modais
 `AddAutomationModal`/`AutomationConfigModal` editam. O `ExitRulesPopover` grava a lista `exit`.

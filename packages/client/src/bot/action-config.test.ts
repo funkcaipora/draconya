@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BOT_SLOTS_PER_SET } from '@draconya/content';
 import type { BotSlot } from '@draconya/content';
 import {
-  blankConditionV2, conditionBounds, conditionText, conditionValue, draftFromSlot,
-  draftProblem, hotkeyConflict, slotFromDraft,
+  OPERATOR_OPTIONS, blankConditionV2, conditionBounds, conditionText, conditionValue,
+  draftFromSlot, draftProblem, hotkeyConflict, operatorLabel, slotFromDraft,
 } from './action-config.js';
 import type { BotSet, SlotDraft } from './action-config.js';
 
@@ -114,9 +114,26 @@ describe('blankConditionV2 — a condição nasce pronta para editar', () => {
     expect(conditionBounds('targets')).toEqual({ min: 0, max: null });
   });
 
-  it('conditionText escreve a frase que o jogador lê', () => {
-    expect(conditionText({ kind: 'targets', op: '>=', count: 2 })).toBe('Nº de alvos ≥ 2');
-    expect(conditionText({ kind: 'mana', op: '>=', percent: 20 })).toBe('Mana ≥ 20 %');
+  it('conditionText escreve a frase que o jogador lê, com o operador por extenso (#437)', () => {
+    expect(conditionText({ kind: 'targets', op: '>=', count: 2 }))
+      .toBe('Nº de alvos maior ou igual a 2');
+    expect(conditionText({ kind: 'mana', op: '>=', percent: 20 }))
+      .toBe('Mana maior ou igual a 20 %');
     expect(conditionValue({ kind: 'targets', op: '>=', count: 3 })).toBe(3);
+  });
+});
+
+describe('operatorLabel — os quatro comparadores por extenso, uma tabela só (#437, DT-05)', () => {
+  it('cobre os quatro operadores do §13.3 sem símbolo nenhum', () => {
+    expect(operatorLabel('<')).toBe('menor que');
+    expect(operatorLabel('<=')).toBe('menor ou igual a');
+    expect(operatorLabel('>')).toBe('maior que');
+    expect(operatorLabel('>=')).toBe('maior ou igual a');
+  });
+
+  it('OPERATOR_OPTIONS é a mesma fonte que operatorLabel lê', () => {
+    for (const option of OPERATOR_OPTIONS) {
+      expect(operatorLabel(option.value)).toBe(option.label);
+    }
   });
 });

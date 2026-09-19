@@ -132,7 +132,7 @@ export function AutomationConfigModal({ index, initial, onClose }: AutomationCon
                 onChange={(ammoA) => { setDraft({ ...draft, params: { ...draft.params, ammoA } }); }}
               />
               <Input
-                label="ALVOS ≥" size="sm" type="number" min={0} value={String(count)}
+                label="Alvos maior ou igual a" size="sm" type="number" min={0} value={String(count)}
                 onChange={(event) => {
                   const next = Number(event.target.value);
                   setDraft({

@@ -70,8 +70,8 @@ describe('AutomationsPanel — as linhas do kit (RF-02)', () => {
     expect((html.match(/role="switch"/g) ?? []).length).toBe(2);
     expect(html).toContain('Trocar munição por alvos');
     expect(html).toContain('Trocar arma/escudo por vida');
-    expect(html).toContain('≥ 3 alvos → Burst Arrow · senão Arrow');
-    expect(html).toContain('HP &lt; 50 % → Escudo + Steel Axe · HP &gt; 80 % → Spike Sword');
+    expect(html).toContain('alvos maior ou igual a 3 → Burst Arrow · senão Arrow');
+    expect(html).toContain('HP menor que 50 % → Escudo + Steel Axe · HP maior que 80 % → Spike Sword');
     expect((html.match(/⚙/g) ?? []).length).toBe(2);
     expect((html.match(/×/g) ?? []).length).toBe(2);
     expect(html).toContain('+ Adicionar');
