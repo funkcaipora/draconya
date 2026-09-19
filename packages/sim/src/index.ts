@@ -9,6 +9,7 @@ export * from './movement.js';
 export * from './presence.js';
 export * from './combat-events.js';
 export * from './bot.js';
+export * from './automation.js';
 export * from './character.js';
 export * from './death.js';
 export * from './loot.js';

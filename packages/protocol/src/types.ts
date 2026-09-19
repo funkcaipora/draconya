@@ -172,6 +172,26 @@ export const C2S_SCHEMAS = {
    * recusa é `system-message`, como equipar.
    */
   'move-item': z.object({ from: Place, to: Place }),
+  /**
+   * Disparo manual de um slot da barra (AB-09, ADR 0032 d.3). INTENÇÃO: o cliente diz QUAL
+   * slot; quem decide elegibilidade, consome estoque, gasta mana e inicia cooldown é o
+   * servidor (invariante 4). `set` é o conjunto que o cliente acredita ativo — defasado, o
+   * servidor recusa (`wrong-set`).
+   *
+   * Os literais `3`/`23` (máximo = contagem − 1) ficam AQUI porque `protocol` não importa
+   * `content` (fronteira do pacote): a mesma razão de `enter-hunt` validar dificuldade como
+   * string. O conteúdo (`BOT_SET_COUNT`/`BOT_SLOTS_PER_SET`) é a fonte; o teto do fio o repete.
+   */
+  'use-slot': z.object({
+    set: z.number().int().min(0).max(3),
+    slot: z.number().int().min(0).max(23),
+  }),
+  /**
+   * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
+   * criatura pelo id numérico do servidor; quem decide se ela é alvo válido é o servidor
+   * (invariante 4).
+   */
+  'select-target': z.object({ creatureId: z.number().int().nonnegative() }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196): só os PRESENTES; quem saiu some da lista. */
@@ -242,6 +262,19 @@ export const PartySpending = z.object({
  */
 export const ACTIVE_CONDITION_KINDS = ['haste', 'buff', 'mana-shield', 'heal-over-time'] as const;
 export type ActiveConditionKind = (typeof ACTIVE_CONDITION_KINDS)[number];
+
+/**
+ * Os cinco modelos de automação do catálogo v2 (AB-09, ADR 0032 d.9). Vocabulário FECHADO do
+ * contrato: o servidor só envia estes, e um modelo novo entra aqui e no cliente na mesma PR.
+ *
+ * O protocolo repete a lista em vez de importar de `content` (fronteira do pacote): a mesma
+ * razão de `enter-hunt` validar dificuldade como string — o protocolo não depende do conteúdo.
+ */
+export const BOT_AUTOMATION_MODELS = [
+  'renew-ring', 'renew-amulet', 'swap-ammo-by-targets',
+  'swap-weapon-shield-by-hp', 'swap-ring',
+] as const;
+export type BotAutomationModel = (typeof BOT_AUTOMATION_MODELS)[number];
 export const S2C_SCHEMAS = {
   pong: z.object({ t: z.number() }),
   welcome: z.object({ characterId: z.string(), contentVersion: z.string() }),
@@ -501,25 +534,28 @@ export const S2C_SCHEMAS = {
       xpBonusPercentPerMilestone: z.number().nonnegative(),
     }).optional(),
     /**
-     * O que a UI do bot pode oferecer (§13.3, FUN-89).
+     * O que a UI do bot pode oferecer (AB-09, ADR 0032 d.1/d.9).
      *
      * **A tela NÃO tem lista de opções em código.** O que existe é o que este pacote diz que
      * existe: se a tela e o servidor divergirem, o jogador configura o que o bot recusa — e
      * descobre isso pelo extrato que não fecha, não por uma mensagem de erro.
      *
-     * As magias e supplies vêm com o que a tela mostra e com o que o gate do §13.2 precisa —
-     * level e vocação —, e nada mais: dano, cura e cooldown são balanceamento, e o cliente não
-     * simula (invariante 4).
+     * O v2 substitui o vocabulário v1: saem o gate de level, o record de slots por categoria e
+     * a lista de supply; entram a contagem e os nomes dos conjuntos, as teclas válidas, os
+     * grupos de cooldown do conteúdo e os modelos de automação. As magias vêm de `spells[]` e
+     * os suprimentos abstratos de `supplies[]` — a poção voltou a ser supply (gold no uso).
      */
     bot: z.object({
       vocabularyVersion: z.number().int().positive(),
-      advancedFromLevel: z.number().int().positive(),
-      slots: z.record(z.string(), z.number().int().nonnegative()),
-      advancedOnly: z.object({
-        conditions: z.array(z.string()),
-        targetPolicies: z.array(z.string()),
-        postures: z.array(z.string()),
-      }),
+      /** Quantos conjuntos e quantos slots por conjunto o conteúdo define (ADR 0032 d.1). */
+      setCount: z.number().int().positive(),
+      slotsPerSet: z.number().int().positive(),
+      /** Os nomes fixos dos conjuntos (ADR 0032 d.4) — rótulo do kit, não mecânica. */
+      setNames: z.array(z.string().min(1)),
+      /** As teclas válidas (1–9, 0, F1–F12) — a tela não tem a lista em código (UC-BAR). */
+      hotkeys: z.array(z.string().min(1)),
+      /** Os grupos de cooldown do conteúdo (união de `spell.group` e `supply.group`). */
+      groups: z.array(z.string().min(1)),
       spells: z.array(z.object({
         id: z.string().min(1),
         name: z.string().min(1),
@@ -531,16 +567,30 @@ export const S2C_SCHEMAS = {
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
       })),
+      /**
+       * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa não são itens — usar
+       * debita gold. O `price` e o `group` são o que a tela mostra para escolher.
+       */
       supplies: z.array(z.object({
         id: z.string().min(1),
         name: z.string().min(1),
         price: z.number().int().nonnegative(),
         effect: z.string().min(1),
-        /** Level e magic level exigidos (#165) — para a tela não oferecer o que o servidor vai recusar. `default({})`: nó anterior. */
+        group: z.string().min(1),
+        /** Level e magic level exigidos (#165) — para a tela não oferecer o que o servidor recusa. */
         requires: z.object({
           level: z.number().int().positive().optional(),
           magicLevel: z.number().int().nonnegative().optional(),
         }).default({}),
+      })).default([]),
+      /** Os cinco modelos de automação e os parâmetros de cada um (AB-12). */
+      automations: z.array(z.object({
+        model: z.enum(BOT_AUTOMATION_MODELS),
+        label: z.string().min(1),
+        params: z.array(z.object({
+          name: z.string().min(1),
+          kind: z.enum(['item', 'number', 'boolean']),
+        })),
       })),
     }),
     /**
@@ -567,9 +617,20 @@ export const S2C_SCHEMAS = {
       attack: z.number().int().nonnegative().optional(),
       armor: z.number().int().nonnegative().optional(),
       /**
-       * Como a arma bate (#152): o tipo e o alcance, para o tooltip e para o seletor de munição
-       * saber a família. Mana por golpe e faixa de dano ficam de fora — são balanceamento que o
-       * cliente não simula (invariante 4).
+       * O tipo de item (AB-09): `weapon`, `armor`, `shield`… O editor de ação do AB-11 filtra
+       * por ele. Opcional sem default, como `value`/`attack`/`armor`: um nó anterior manda sem,
+       * e o cliente trata ausência como "não filtrável".
+       */
+      kind: z.string().min(1).optional(),
+      /**
+       * O rótulo curto da barra/Mochila (AB-13). Opcional: só o item que o conteúdo declara
+       * tem; ausente, a tela cai no `name`.
+       */
+      shortLabel: z.string().min(1).optional(),
+      /**
+       * Como a arma bate (#152): o tipo e o alcance, para o tooltip. `ammoFamily` diz de que
+       * família é a munição que a arma dispara — o seletor de munição a usa. Mana por golpe e
+       * faixa de dano ficam de fora — são balanceamento que o cliente não simula (invariante 4).
        */
       weapon: z.object({
         kind: z.string().min(1),
@@ -578,7 +639,7 @@ export const S2C_SCHEMAS = {
       }).optional(),
     })),
     /**
-     * A munição que existe (#152, ADR 0026 decisão 3): o seletor no slot do escudo lista a
+     * A munição abstrata que existe (#152, ADR 0026 d.3): o seletor no slot do escudo lista a
      * família do bow, com o preço por tiro — o único número de balanceamento aqui, pela mesma
      * razão do preço do supply: é o que o jogador olha para escolher. `default([])`: nó anterior.
      */
@@ -665,8 +726,9 @@ export const S2C_SCHEMAS = {
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
     targetId: z.number().int().nonnegative().nullable().default(null),
     /**
-     * A munição escolhida por família (#152), a forma do Huntera (`ammo-selection`): `null` é
-     * "a grátis". `default`: um nó `game` anterior manda sem, e o cliente mostra a grátis.
+     * A munição escolhida por família (#152, ADR 0026 decisão 3), a forma do Huntera
+     * (`ammo-selection`): `null` é "nenhuma escolhida". `default`: um nó `game` anterior manda
+     * sem, e o cliente não mostra seleção.
      */
     ammo: z.object({ arrow: z.string().nullable(), bolt: z.string().nullable() })
       .default({ arrow: null, bolt: null }),
@@ -675,6 +737,28 @@ export const S2C_SCHEMAS = {
     speed: z.number().int().nonnegative().default(0),
     skills: z.record(z.string().min(1), SkillProgress).default({}),
     magicLevel: SkillProgress.default({ level: 0, percentToNext: 0 }),
+  }),
+  /**
+   * O estado de cada slot do conjunto ATIVO (AB-09, UC-BAR-003, RG-003). `remainingMs` é o
+   * instante da entrega; o cliente anima o cooldown localmente. A CONTAGEM não vem aqui: é do
+   * `inventory` (invariante 4 — o servidor manda o número, não a regra).
+   */
+  'slot-state': z.object({
+    slots: z.array(z.object({
+      set: z.number().int().min(0).max(3),
+      slot: z.number().int().min(0).max(23),
+      state: z.enum(['ready', 'cooldown', 'blocked', 'empty']),
+      remainingMs: z.number().int().nonnegative().default(0),
+      /** Texto já em palavras (FUN-73), como `bot-config-result.reason`. Ausente em `ready`/`empty`. */
+      reason: z.string().optional(),
+    })),
+  }),
+  /** A resposta ao `use-slot` (AB-09, ADR 0032 d.3): `ok:false` carrega o motivo para o tooltip. */
+  'slot-result': z.object({
+    set: z.number().int().min(0).max(3),
+    slot: z.number().int().min(0).max(23),
+    ok: z.boolean(),
+    reason: z.string().optional(),
   }),
   'experience-gain': z.object({ amount: z.number(), sourceId: z.number().int().optional() }),
   'system-message': z.object({ level: z.enum(['info', 'warning', 'error']), text: z.string() }),

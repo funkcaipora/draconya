@@ -67,10 +67,36 @@ export type NotableEvent = S2CProps<'session-state'>['notableEvents'][number];
  * A hunt vem sem estimativa de XP/h nem de gold/h, e não por esquecimento: o campo não existe
  * no protocolo. Ver o comentário de `catalogue` lá.
  */
-export type Catalogue = S2CProps<'catalogue'>;
+export type Catalogue = Omit<S2CProps<'catalogue'>, 'bot'> & { bot: BotVocabulary };
 export type HuntListing = Catalogue['hunts'][number];
-export type BotVocabulary = Catalogue['bot'];
+/**
+ * O vocabulário do bot no cliente.
+ *
+ * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09 e são o que a barra de
+ * ações (AB-10) lê. Ficam OPCIONAIS porque as fixtures de teste montam catálogos parciais e um
+ * nó `game` antigo pode não mandá-los; a UI degrada para vazio. `supplies` é o suprimento
+ * abstrato (poção/runa), a forma exata do protocolo.
+ */
+export interface BotVocabulary {
+  readonly vocabularyVersion: number;
+  readonly spells: S2CProps<'catalogue'>['bot']['spells'];
+  /** Vocabulário v2 (AB-09): a barra e os painéis novos leem; opcionais até o AB-10. */
+  readonly setCount?: number;
+  readonly slotsPerSet?: number;
+  readonly setNames?: readonly string[];
+  readonly hotkeys?: readonly string[];
+  readonly groups?: readonly string[];
+  readonly automations?: S2CProps<'catalogue'>['bot']['automations'];
+  /** Vocabulário v1 aposentado no AB-11. */
+  readonly slots?: Readonly<Record<string, number>>;
+  /** Os suprimentos abstratos (§20.1, ADR 0026 d.3): a tela os oferece como ação de slot. */
+  readonly supplies?: S2CProps<'catalogue'>['bot']['supplies'];
+}
 export type ItemDefinition = Catalogue['items'][number];
+/** A munição abstrata do catálogo (#152): a seleção por família, com preço por tiro. */
+export type AmmoDefinition = Catalogue['ammunition'][number];
+/** Um suprimento abstrato (poção/runa): o uso debita gold, não há item nem pilha. */
+export type SupplyDefinition = NonNullable<Catalogue['bot']['supplies']>[number];
 export type MonsterListing = Catalogue['monsters'][number];
 /** Os marcos e o bônus por marco (§18). Ausente do catálogo: o servidor não tem Bestiário. */
 export type BestiaryConfig = NonNullable<Catalogue['bestiary']>;
@@ -94,6 +120,22 @@ export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
  * coisas diferentes, e a primeira é o estado normal do primeiro segundo de conexão.
  */
 export type Inventory = S2CProps<'inventory'>;
+
+/**
+ * O estado de UM slot do conjunto ativo (AB-09): pronto, em cooldown, bloqueado por quê ou
+ * vazio. A CONTAGEM não vem daqui — é do `inventory` (invariante 4; DT-04).
+ */
+export type SlotState = S2CProps<'slot-state'>['slots'][number];
+/** A recusa do `use-slot` (AB-09): `reason` é o motivo que o tooltip do slot mostra. */
+export type SlotResult = S2CProps<'slot-result'>;
+
+/**
+ * A chave canônica de um slot no HUD: `${set}:${slot}`. Vive aqui porque é a chave das duas
+ * fatias de estado (`slotStates`/`slotResults`) e do `apply`; a barra a reexporta.
+ */
+export function slotKey(set: number, slot: number): string {
+  return `${String(set)}:${String(slot)}`;
+}
 
 /**
  * O analisador (§16.1, §16.2, FUN-83).
@@ -140,8 +182,6 @@ export interface HudState {
   readonly staminaMs: number;
   readonly speed: number;
   readonly skills: PlayerSkills;
-  /** A munição escolhida por família (#152): `null` é a grátis. Chega em `player-stats`. */
-  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
   /** A vocação (#154): `null` até a escolha. Chega em `player-stats` e em `session-state`. */
   readonly vocationId: string | null;
 
@@ -183,6 +223,17 @@ export interface HudState {
   readonly inventory: Inventory | null;
 
   /**
+   * O estado por slot do conjunto ativo (AB-10, `slot-state`), indexado por `${set}:${slot}`.
+   * Substitui a cada mensagem: o servidor manda o estado inteiro do conjunto, não um delta.
+   */
+  readonly slotStates: Readonly<Record<string, SlotState>>;
+  /**
+   * A última recusa do `use-slot` por slot, indexada por `${set}:${slot}` — o motivo que o
+   * tooltip mostra. `slot-result { ok:true }` limpa a entrada; o próximo `slot-state` também.
+   */
+  readonly slotResults: Readonly<Record<string, string>>;
+
+  /**
    * Abates por monstro (§18, FUN-113). Chega no attach e sempre que um contador muda.
    *
    * `null` até chegar, pela mesma razão do inventário: um Bestiário que abre em zero afirma
@@ -205,6 +256,11 @@ export interface HudState {
   readonly conditionsReceivedAtMs: number;
   readonly huntId: string | null;
   readonly difficulty: string | null;
+  /**
+   * A munição escolhida por família (#152, ADR 0026 d.3): `null` é "nenhuma escolhida". O
+   * servidor valida `requires.level` na seleção; a tela só mostra o que ele mandou de volta.
+   */
+  readonly ammo: { readonly arrow: string | null; readonly bolt: string | null };
 }
 
 export const INITIAL_HUD: HudState = {
@@ -220,7 +276,6 @@ export const INITIAL_HUD: HudState = {
     distance: { level: 0, percent: 0 },
     magic: { level: 0, percent: 0 },
   },
-  ammo: { arrow: null, bolt: null },
   vocationId: null,
   latencyMs: null,
   connection: 'idle',
@@ -230,6 +285,8 @@ export const INITIAL_HUD: HudState = {
   analyzer: INITIAL_ANALYZER,
   catalogue: null,
   inventory: null,
+  slotStates: {},
+  slotResults: {},
   bestiary: null,
   party: null,
   partyBag: null,
@@ -239,6 +296,7 @@ export const INITIAL_HUD: HudState = {
   conditionsReceivedAtMs: 0,
   huntId: null,
   difficulty: null,
+  ammo: { arrow: null, bolt: null },
 };
 
 /**

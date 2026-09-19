@@ -14,6 +14,9 @@
 
 import type { S2CProps } from '@draconya/protocol';
 import type { Content } from '@draconya/content';
+import {
+  BOT_AUTOMATION_CATALOGUE, BOT_HOTKEYS, BOT_SET_COUNT, BOT_SET_NAMES, BOT_SLOTS_PER_SET,
+} from '@draconya/content';
 import { huntListings } from '@draconya/sim';
 
 export type Catalogue = S2CProps<'catalogue'>;
@@ -42,13 +45,11 @@ export function buildCatalogue(content: Content): Catalogue {
     })),
     bot: {
       vocabularyVersion: content.bot.vocabularyVersion,
-      advancedFromLevel: content.bot.advancedFromLevel,
-      slots: { ...content.bot.slots },
-      advancedOnly: {
-        conditions: [...content.bot.advancedOnly.conditions],
-        targetPolicies: [...content.bot.advancedOnly.targetPolicies],
-        postures: [...content.bot.advancedOnly.postures],
-      },
+      setCount: BOT_SET_COUNT,
+      slotsPerSet: BOT_SLOTS_PER_SET,
+      setNames: [...BOT_SET_NAMES],
+      hotkeys: [...BOT_HOTKEYS],
+      groups: groupsOf(content),
       spells: [...content.spells.values()].map((spell) => ({
         id: spell.id,
         name: spell.name,
@@ -63,18 +64,29 @@ export function buildCatalogue(content: Content): Catalogue {
         // O grupo (#155): a tela mostra ao lado do nome; BP e conversão não descem.
         group: spell.group ?? 'attack',
       })),
+      /**
+       * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa NÃO são itens — usar debita
+       * gold. O `price` e o `group` são o que a tela mostra para escolher.
+       */
       supplies: [...content.supplies.values()].map((supply) => ({
         id: supply.id,
         name: supply.name,
-        // O preço APARECE, e é o único número de balanceamento aqui: o jogador configura
-        // "beber poção abaixo de 40% de HP" olhando quanto ela custa por hora de hunt.
         price: supply.price,
         effect: supply.effect.kind,
-        // Os requisitos (#165): a tela desabilita a runa abaixo do level, como faz com magia.
+        group: supply.group,
         requires: {
           ...(supply.requires.level === undefined ? {} : { level: supply.requires.level }),
-          ...(supply.requires.magicLevel === undefined ? {} : { magicLevel: supply.requires.magicLevel }),
+          ...(supply.requires.magicLevel === undefined
+            ? {}
+            : { magicLevel: supply.requires.magicLevel }),
         },
+      })),
+      // Os cinco modelos de automação e os parâmetros de cada um (AB-12), do descritor do
+      // conteúdo. A engine é dona do mecanismo; o conteúdo, dos rótulos.
+      automations: BOT_AUTOMATION_CATALOGUE.map((descriptor) => ({
+        model: descriptor.model,
+        label: descriptor.label,
+        params: descriptor.params.map((param) => ({ name: param.name, kind: param.kind })),
       })),
     },
     // As DEFINIÇÕES, uma vez cada. Atributo base é fixo (§21.2): duas espadas do mesmo id são
@@ -93,8 +105,12 @@ export function buildCatalogue(content: Content): Catalogue {
       value: item.value,
       attack: item.attack,
       armor: item.armor,
-      // Como a arma bate (#152): tipo, alcance e família — para o tooltip e o seletor. Mana
-      // por golpe e faixa de dano ficam de fora: balanceamento (invariante 4).
+      // O tipo (AB-09): o editor de ação do AB-11 filtra consumível por aqui.
+      kind: item.kind,
+      // O rótulo curto da barra/Mochila (AB-13), só quando o conteúdo o declara.
+      ...(item.shortLabel === undefined ? {} : { shortLabel: item.shortLabel }),
+      // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
+      // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
         ? {}
         : {
@@ -105,8 +121,11 @@ export function buildCatalogue(content: Content): Catalogue {
           },
         }),
     })),
-    // A munição (#152, ADR 0026 decisão 3): o seletor lista a família do bow com o preço por
-    // tiro, o único número de balanceamento aqui — é o que o jogador olha para escolher.
+    /**
+     * A munição abstrata (#152, ADR 0026 d.3): o seletor no slot do escudo lista a família do
+     * bow, com o preço por tiro e o `appearanceId` do ícone. `attack` é o único número de
+     * balanceamento aqui, pela mesma razão do preço do supply: é o que o jogador olha.
+     */
     ammunition: [...content.ammunition.values()].map((ammo) => ({
       id: ammo.id,
       name: ammo.name,
@@ -114,7 +133,9 @@ export function buildCatalogue(content: Content): Catalogue {
       attack: ammo.attack,
       price: ammo.price,
       appearanceId: ammo.appearanceId,
-      requires: ammo.requires.level === undefined ? {} : { level: ammo.requires.level },
+      requires: {
+        ...(ammo.requires.level === undefined ? {} : { level: ammo.requires.level }),
+      },
     })),
     // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui — a tela não
     // pode ter o 8 em código. Só os ganhos e a arma inicial (id de item); nada de fórmula.
@@ -160,6 +181,22 @@ export function buildCatalogue(content: Content): Catalogue {
         },
       }),
   };
+}
+
+/**
+ * Os grupos de cooldown do conteúdo (AB-09, ADR 0032 d.2): a união de `spell.group` e
+ * `supply.group`, em ordem estável. É o vocabulário que o editor do AB-11 oferece, e é o que o
+ * motor de grupos usa para priorizar dentro de cada livro.
+ */
+function groupsOf(content: Content): string[] {
+  const groups = new Set<string>();
+  for (const spell of content.spells.values()) {
+    if (spell.group !== undefined) groups.add(spell.group);
+  }
+  for (const supply of content.supplies.values()) {
+    groups.add(supply.group);
+  }
+  return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 function monstersOf(content: Content, huntId: string): Array<{ id: string; name: string }> {

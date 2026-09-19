@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { advancedFeaturesUsed, validateBotConfig } from './bot.js';
+import { validateBotConfig, validateBotConfigV2 } from './bot.js';
 import { buildContent } from './content.js';
 import {
-  BOT_CATEGORIES, BOT_VOCABULARY_VERSION, botConfigSchema, botConditionSchema,
-  botExitRuleSchema, botLureSchema, botRingSwapSchema, botTargetingSchema,
+  BOT_CATEGORIES, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
+  botConditionSchema, botConfigV2Schema, botExitRuleSchema, botLureSchema, botRingSwapSchema,
+  botTargetingSchema,
 } from './schemas.js';
-import type { BotConfig, BotExitRule } from './schemas.js';
+import type { BotConfig, BotConfigV2, BotExitRule, BotSlot } from './schemas.js';
 
 /**
  * O conteúdo mínimo que a validação cruzada precisa: os limites, e os catálogos contra os
@@ -52,7 +53,6 @@ const content = buildContent({
   party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } }],
   bot: [{
     id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000,
-    advancedFromLevel: 50,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
   }],
   spells: [{
@@ -60,7 +60,7 @@ const content = buildContent({
     effect: { kind: 'heal', amount: 60 },
   }],
   supplies: [{
-    id: 'health-potion', name: 'Poção de Vida', price: 45,
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
     effect: { kind: 'heal', amount: 80 },
   }],
   items: [
@@ -83,9 +83,9 @@ const rule = (percent: number) => ({
 const config = (over: Partial<BotConfig> = {}): BotConfig =>
   // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
   // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
-  // que é trabalho que o parse já faz — e do jeito que a produção faz.
+  // que é o trabalho que o parse já faz — e do jeito que a produção faz.
   botConfigSchema.parse({
-    version: BOT_VOCABULARY_VERSION,
+    version: BOT_VOCABULARY_VERSION_V1,
     heal: [], potion: [], attack: [], rune: [], support: [],
     ...over,
   });
@@ -361,20 +361,60 @@ describe('lure e ring swap: a seção AVANÇADA do vocabulário (FUN-87, §13.7 
     expect(problema).toContain('hand');
   });
 
-  it('os dois são AVANÇADOS por nome, sem passar pela lista de conteúdo', () => {
-    // O §13.2 cita lure e ring swap como o que o bot avançado tem. Aqui seguir a especificação
-    // é fixar em código; pôr os dois em `advancedOnly` seria fingir que o conteúdo decidiu.
-    expect(content.bot.advancedOnly.conditions).toEqual([]);
-    expect(content.bot.advancedOnly.postures).toEqual([]);
-
-    expect(advancedFeaturesUsed(config(), content.bot)).toEqual([]);
-    expect(advancedFeaturesUsed(config({ lure: { min: 2, max: 5 } }), content.bot))
-      .toEqual(['lure dinâmico']);
-
+  it('os dois deixaram de ter gate de level (AB-03)', () => {
+    // O §13.2 exigia level 50 para lure e ring swap; o ADR 0032 d.4 revogou o gate. Aqui a
+    // asserção é que a configuração v1 continua válida SEM o gate — o juiz v1 não olha mais
+    // level nenhum.
     const parsed = ring();
     if (!parsed.success) throw new Error('a fixture do anel deveria parsear');
-    expect(advancedFeaturesUsed(config({ ringSwap: parsed.data }), content.bot))
-      .toEqual(['troca de anel']);
+    expect(validateBotConfig(config({ lure: { min: 2, max: 5 }, ringSwap: parsed.data }), content))
+      .toEqual([]);
+  });
+});
+
+describe('o juiz do vocabulário v2 (AB-03)', () => {
+  const emptySlots = (): (BotSlot | null)[] => Array.from({ length: 24 }, () => null);
+  const set = (slots = emptySlots()) => ({ slots });
+  const v2 = (over: Partial<BotConfigV2> = {}): BotConfigV2 => botConfigV2Schema.parse({
+    version: 2,
+    sets: [set(), set(), set(), set()],
+    ...over,
+  });
+
+  it('recusa magia e supply inexistentes nomeando conjunto e slot', () => {
+    const badSpell = v2({
+      sets: [
+        set([{ do: { kind: 'spell', spellId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(1)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(badSpell, content)[0]).toContain('conjunto 1, slot 1');
+    expect(validateBotConfigV2(badSpell, content)[0]).toContain('nao-existe');
+
+    const badSupply = v2({
+      sets: [
+        set([null, { do: { kind: 'supply', supplyId: 'nao-existe' }, when: [], auto: true }, ...emptySlots().slice(2)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(badSupply, content)[0]).toContain('conjunto 1, slot 2');
+  });
+
+  it('aceita o que existe, e confere as automações contra o catálogo', () => {
+    const good = v2({
+      sets: [
+        set([{ do: { kind: 'spell', spellId: 'strong-heal' }, when: [], auto: true }, ...emptySlots().slice(1)]),
+        set(), set(), set(),
+      ],
+    });
+    expect(validateBotConfigV2(good, content)).toEqual([]);
+
+    const badAutomation = v2({
+      automations: [{ model: 'renew-ring', params: { itemId: 'nao-existe' }, enter: [], exit: [] }],
+    });
+    const problems = validateBotConfigV2(badAutomation, content);
+    expect(problems[0]).toContain('renew-ring');
+    expect(problems[0]).toContain('nao-existe');
   });
 });
 

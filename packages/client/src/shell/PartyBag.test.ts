@@ -10,9 +10,9 @@ import type { Catalogue } from '../state/hud.js';
 // real preservado como desvio consciente.
 
 const catalogue = {
-  hunts: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 8,
+  hunts: [], monsters: [], vocations: [], vocationLevel: 8,
   items: [{ id: 'sword', name: 'Espada', appearanceId: 3, weight: 30, slot: 'hand', twoHanded: false }],
-  bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 }, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+  bot: { vocabularyVersion: 1, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 }, spells: [], supplies: [] },
 } as unknown as Catalogue;
 
 async function render(): Promise<string> {

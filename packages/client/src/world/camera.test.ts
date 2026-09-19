@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, toScreen, viewFor, visibleTiles, zoomFor, TILE,
+  VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder, fromScreen, tileAtScreen, toScreen, viewFor, visibleTiles, zoomFor, TILE,
 } from './camera.js';
 
 const view = { widthTiles: 18, heightTiles: 14 };
@@ -34,6 +34,28 @@ describe('camera', () => {
       { x: 5, y: 3 }, { x: 1, y: 3 }, { x: 9, y: 1 },
     ].sort(compareDrawOrder);
     expect(creatures).toEqual([{ x: 9, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
+  });
+
+  it('fromScreen é o inverso de toScreen, inclusive com posição fracionária', () => {
+    // É o caminho do clique: o pixel do canvas volta a tile. Eixo trocado ou offset da câmera
+    // errado só aparece aqui — no canvas o sintoma é acertar a criatura ao lado.
+    const target = at(10, 10);
+    for (const point of [{ x: 8.25, y: 9.5 }, { x: 10, y: 10 }, { x: 11.75, y: 12.1 }]) {
+      const screen = toScreen(point, target, view);
+      const back = fromScreen(screen, target, view);
+      expect(back.x).toBeCloseTo(point.x);
+      expect(back.y).toBeCloseTo(point.y);
+    }
+  });
+
+  it('quantiza o tile pelo PISO, não pelo arredondamento (#420)', () => {
+    // Câmera em x=10, vista de 18: origem.x = 1.5; o tile 10 ocupa os pixels 272–304. O pixel
+    // 290 (metade DIREITA) dá 290/32 + 1.5 = 10.56 — o tile é o 10. Com `round` a metade direita
+    // de cada sprite cai no tile seguinte e o clique erra a criatura.
+    // Em y, origem = 3.5: o tile 10 ocupa 208–240; o pixel 232 (metade INFERIOR) dá 10.75.
+    expect(tileAtScreen({ x: 290, y: 232 }, at(10, 10), view)).toEqual({ x: 10, y: 10 });
+    // E a metade esquerda/superior continua sendo o mesmo tile.
+    expect(tileAtScreen({ x: 273, y: 209 }, at(10, 10), view)).toEqual({ x: 10, y: 10 });
   });
 });
 
