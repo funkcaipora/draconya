@@ -6384,7 +6384,7 @@ describe('o uso de supply inicia o cooldown do grupo (#420)', () => {
     session.advanceBy(1);
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
-    monster.position = { x: 1, y: 0, z: 7 };
+    monster.position = { x: 1, y: 0 };
 
     expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
     // O grupo vence em 1 s, mas a magia tranca 4 s: o `#perform` recusaria por 3 s a mais se o
@@ -6423,7 +6423,7 @@ describe('o uso de supply inicia o cooldown do grupo (#420)', () => {
     session.advanceBy(1);
     const monster = ruleset.monsters[0];
     if (monster === undefined) throw new Error('faltou rato');
-    monster.position = { x: 1, y: 0, z: 7 };
+    monster.position = { x: 1, y: 0 };
 
     expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
     // A runa é do grupo `attack`: a magia de ataque acabou de trancá-lo, e a runa recusa pelo
@@ -6441,7 +6441,7 @@ describe('automação bloqueada avisa na TRANSIÇÃO, não a cada ciclo (#420)',
   it('renew-ring bloqueado por 10 minutos gera um único automation-blocked', () => {
     const { session, ruleset } = withSpells(
       botConfigV2([], {
-        automations: [{ model: 'renew-ring', params: { itemId: 'life-ring' } }],
+        automations: [{ model: 'renew-ring', params: { itemId: 'life-ring' }, enter: [], exit: [] }],
       }),
       { items: [lifeRing], monsters: false },
     );

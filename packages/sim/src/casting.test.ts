@@ -24,11 +24,11 @@ const strike: Spell = {
 };
 
 const potion: Supply = {
-  id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', requires: {},
+  id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', groupCooldownMs: 1_000, requires: {},
   effect: { kind: 'heal', amount: 80 },
 };
 const manaPotion: Supply = {
-  id: 'mana-potion', name: 'Poção de Mana', price: 50, group: 'potion', requires: {},
+  id: 'mana-potion', name: 'Poção de Mana', price: 50, group: 'potion', groupCooldownMs: 1_000, requires: {},
   effect: { kind: 'mana', amount: 100 },
 };
 
@@ -380,7 +380,7 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
 
 describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisão 8)', () => {
   const rune: Supply = {
-    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,
     requires: { level: 30, magicLevel: 4 },
     effect: { kind: 'damage', basePower: 45, range: 4, damageType: 'ice', area: { shape: 'circle', radius: 3, centered: 'target' } },
   };
@@ -430,7 +430,7 @@ describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisã
 describe('quem paga o supply é a Purse (#192, ADR 0027)', () => {
   it('a refusing purse debits nothing and heals nothing; a paying one is charged after the checks', () => {
     // Mutação que mata: debitar ou curar antes de `canAfford` — a poção sairia sem pagar.
-    const potion = { id: 'health-potion', name: 'Poção', price: 45, group: 'potion' as const, requires: {}, effect: { kind: 'heal' as const, amount: 80 } };
+    const potion = { id: 'health-potion', name: 'Poção', price: 45, group: 'potion' as const, groupCooldownMs: 1_000, requires: {}, effect: { kind: 'heal' as const, amount: 80 } };
     const hero = new CharacterRuntime({
       id: 'hero', position: { x: 0, y: 0, z: 7 }, health: 10, maxHealth: 500, mana: 0, maxMana: 0,
       level: 1, xp: 0, gold: 1_000, goldDelta: 0, alive: true, cooldowns: {},
