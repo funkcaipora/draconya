@@ -56,9 +56,8 @@ export type { MapTiles } from './scene.js';
  * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
  * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
  */
-export type WorldArt = Pick<AssetPack,
-  'object' | 'objectPattern' | 'objectFlags' | 'outfit' | 'framesOf'
-  | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'>;
+export type WorldArt = Pick<AssetPack, 'object' | 'objectPattern' | 'objectFlags' | 'objectSize'
+  | 'outfit' | 'framesOf' | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'>;
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
@@ -243,10 +242,16 @@ export async function mountViewport(
   const groundFallback = new Graphics();
   terrain.addChild(groundFallback);
 
-  /** As flags e o padrão que a pilha precisa, pelo pacote de agora — `NO_FLAGS` sem pacote. */
+  /**
+   * As flags, o padrão e a DIMENSÃO que a pilha precisa, pelo pacote de agora — `NO_FLAGS` e
+   * `{1, 1}` sem pacote. A camada `scene` que sai daqui ainda é desenhada em `terrain`: o
+   * container espacial e a profundidade por objeto são de 385; até lá, classificar não muda a
+   * tela.
+   */
   const objectInfo: ObjectInfo = {
     flagsOf: (id) => pack?.objectFlags(id) ?? NO_FLAGS,
     patternOf: (id) => pack?.objectPattern(id) ?? { width: 1, height: 1 },
+    sizeOf: (id) => pack?.objectSize(id) ?? { width: 1, height: 1 },
   };
 
   /**

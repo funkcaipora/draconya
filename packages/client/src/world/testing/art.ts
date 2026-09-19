@@ -70,6 +70,14 @@ export class SyntheticArt implements WorldArt {
     return { ...NO_FLAGS, ...(this.#catalog[appearanceId]?.flags ?? {}) };
   }
 
+  /**
+   * `WorldArt.objectSize`: a dimensão em tiles pelo `size` do catálogo sintético; é o que o
+   * `sizeOf` do `ObjectInfo` do viewport lê para a reserva de camada. `{1, 1}` por omissão.
+   */
+  objectSize(appearanceId: number): { width: number; height: number } {
+    return { ...(this.#catalog[appearanceId]?.size ?? { width: 1, height: 1 }) };
+  }
+
   outfit(
     outfitId: number, direction: Direction, phase: number, moving = false, _colors?: OutfitColors,
   ): Promise<Bitmap | null> {
