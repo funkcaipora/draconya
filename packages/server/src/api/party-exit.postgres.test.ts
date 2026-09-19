@@ -255,12 +255,15 @@ beforeAll(async () => {
     auth, repository, tickets,
     isCharacterActive: (accountId, characterId) => directory.isActive(accountId, characterId),
     locateSession: (characterId) => directory.lookup(characterId),
+    // A lotação viva e o nó do líder do `/join` em curso (#402).
+    directory,
     settleProgress,
     listItemInstances: (characterId) => repository.listItemInstances(characterId),
     // A party (#195), montada como o `main.ts` monta.
     party: new PartyStore(redis),
     partyLimits: {
       maxMembers: content.party.maxMembers,
+      contentVersion: content.version,
       difficultiesOf: (huntId) => {
         const hunt = content.hunts.get(huntId);
         return hunt === undefined ? null : Object.keys(hunt.difficulties);

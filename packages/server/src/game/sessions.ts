@@ -175,6 +175,17 @@ export function createCitySessionFactory(
 }
 
 /**
+ * O personagem de UM recém-chegado numa sessão que já existe (#402, ADR 0033 D7). Mesma costura
+ * de `createSession`: função, e não `Content`, para o host não precisar conhecer balanceamento.
+ */
+export function createLateJoiner(
+  content: Content,
+  now: () => number = () => Date.now(),
+): (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime {
+  return (characterId, initialCharacter) => characterFromTicket(content, characterId, initialCharacter, now);
+}
+
+/**
  * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
  * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
  * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
@@ -213,7 +224,7 @@ function partyHuntFor(content: Content, party: PartyTicket, now: () => number): 
 }
 
 /** O `CharacterRuntime` que um ticket descreve (FUN-12 … #154): o que o `api` leu do banco. */
-function characterFromTicket(
+export function characterFromTicket(
   content: Content, characterId: string, initialCharacter: InitialCharacter, now: () => number,
 ): CharacterRuntime {
   {

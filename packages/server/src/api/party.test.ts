@@ -42,14 +42,17 @@ function build(over: {
   ]);
   const issued: Array<{ characterId: string; party: PartyTicket | undefined }> = [];
   const revoked: string[] = [];
+  // Onde cada personagem está pelo diretório FAKE: sessão e nó. `locate` cobre o `type` que as
+  // rotas antigas já usavam; `sessionId`/`nodeId` são a lotação viva e o nó do líder (#402).
+  const locations = new Map<string, { sessionId: string; nodeId: string; type: string }>();
   const deps: PartyRouteDependencies = {
     party: new PartyStore(redis),
     tickets: {
       resolveNode: async () => ({ ok: true, node: NODE }),
-      issue: async (_accountId, characterId, _initial, _node, party) => {
+      issue: async (_accountId, characterId, _initial, node, party) => {
         const result = over.issue?.(characterId) ?? {
           ok: true,
-          value: { ticket: `tok-${characterId}`, wsUrl: `ws://n1:7171/?ticket=tok-${characterId}`, nodeId: 'n1', expiresAtMs: 1_000 },
+          value: { ticket: `tok-${characterId}`, wsUrl: `ws://n1:7171/?ticket=tok-${characterId}`, nodeId: node?.nodeId ?? 'n1', expiresAtMs: 1_000 },
         };
         if (result.ok) issued.push({ characterId, party });
         return result;
@@ -67,8 +70,15 @@ function build(over: {
       return found !== undefined && found.accountId === accountId ? found : null;
     },
     settleProgress: async () => ({ written: 0, failed: 0 }),
-    locateSession: async (characterId) => over.locate?.(characterId) ?? null,
-    limits: { maxMembers: 4, difficultiesOf: (huntId) => (huntId === 'arena' ? ['cautious', 'bold'] : null) },
+    locateSession: async (characterId) => over.locate?.(characterId) ?? locations.get(characterId) ?? null,
+    directory: {
+      lookup: async (characterId) => locations.get(characterId) ?? null,
+      node: async (nodeId) => ({ nodeId, sessions: 0, url: `ws://${nodeId}:7171` }),
+    },
+    limits: {
+      maxMembers: 4, contentVersion: 'v-test',
+      difficultiesOf: (huntId) => (huntId === 'arena' ? ['cautious', 'bold'] : null),
+    },
   };
   registerPartyRoutes(app, deps);
   const as = (characterId: string) => ({
@@ -80,8 +90,9 @@ function build(over: {
       method: 'GET', url: `/api/party/mine?characterId=${characterId}`,
       headers: { 'x-account': characters.get(characterId)?.accountId ?? 'nobody' },
     }),
+    rooms: () => app.inject({ method: 'GET', url: '/api/party/rooms' }),
   });
-  return { app, as, issued, revoked };
+  return { app, as, issued, revoked, locations, characters };
 }
 
 describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () => {
@@ -132,10 +143,13 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     const party = issued[1]?.party;
     expect(party).toMatchObject({ sessionId: body.sessionId, leaderId: 'p1', mode: 'shared', huntId: 'arena', difficulty: 'bold' });
     expect(party?.members.map((m) => [m.characterId, m.accountId, m.initialCharacter.level])).toEqual([['p1', 'a1', 10], ['p2', 'a2', 10]]);
-    // O outro pega o seu pelo `mine`, uma vez; depois, nada.
+    // O outro pega o seu pelo `mine`, uma vez; depois, o ticket some mas a party CONTINUA (#402).
     const mine = await as('p2').mine();
     expect((mine.json() as { ticket: { ticket: string } | null }).ticket?.ticket).toBe('tok-p2');
-    expect((await as('p2').mine()).json()).toEqual({ party: null, ticket: null });
+    const after = (await as('p2').mine()).json() as { party: { state: string } | null; ticket: unknown; invites: unknown[] };
+    expect(after.ticket).toBeNull();
+    expect(after.party?.state).toBe('hunting');
+    expect(after.invites).toEqual([]);
   });
 
   it('refuses a member in a hunt, and reserves nothing', async () => {
@@ -260,5 +274,93 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
     const forged = await app.inject({ method: 'POST', url: '/api/party', payload: { characterId: 'p3' }, headers: { 'x-account': 'a5' } });
     expect(forged.statusCode).toBe(404);
     expect((await app.inject({ method: 'POST', url: '/api/party', payload: { characterId: 'p3' } })).statusCode).toBe(401);
+  });
+});
+
+// A party em curso e a sala pública (#402, ADR 0033 D7/D8). O `api` sozinho não decide a
+// capacidade definitiva — o que se prende aqui é a elegibilidade, o ticket de entrada e os
+// índices; a recusa por lotação de verdade é do `onEnter` no `game` (testado em host.test.ts).
+describe.runIf(available)('a party em curso e a sala pública (#402)', () => {
+  async function startedParty(over: { minLevel?: number; maxLevel?: number } = {}) {
+    const context = build();
+    const { as, issued } = context;
+    const id = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p2' });
+    await as('p2').post(`/api/party/${id}/join`);
+    await as('p1').post(`/api/party/${id}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+    await as('p1').post(`/api/party/${id}/publish`, { minLevel: over.minLevel ?? 1, maxLevel: over.maxLevel ?? 99 });
+    await as('p2').post(`/api/party/${id}/approve`);
+    const started = await as('p1').post(`/api/party/${id}/start`);
+    expect(started.statusCode).toBe(200);
+    const sessionId = (started.json() as { sessionId: string }).sessionId;
+    context.locations.set('p1', { sessionId, nodeId: 'n1', type: 'hunt' });
+    context.locations.set('p2', { sessionId, nodeId: 'n1', type: 'hunt' });
+    return { ...context, id, sessionId };
+  }
+
+  it('publishes a room that `rooms` lists, and `unpublish` removes it (RF-03)', async () => {
+    const { as, id } = await startedParty();
+    const rooms = await as('p3').rooms();
+    expect(rooms.statusCode).toBe(200);
+    const listed = rooms.json() as { rooms: Array<{ partyId: string; leader: { characterId: string; name: string; level: number }; members: number; state: string }> };
+    expect(listed.rooms.map((room) => room.partyId)).toContain(id);
+    expect(listed.rooms[0]?.leader).toEqual({ characterId: 'p1', name: 'Hero p1', level: 10 });
+    expect(listed.rooms[0]?.members).toBe(2);
+    expect(listed.rooms[0]?.state).toBe('hunting');
+    await as('p1').post(`/api/party/${id}/unpublish`);
+    const after = await as('p3').rooms();
+    expect((after.json() as { rooms: unknown[] }).rooms).toEqual([]);
+  });
+
+  it('joins a hunting party by public room and emits a one-member `join: true` ticket for the leader node (RF-05)', async () => {
+    const { as, issued, id, sessionId } = await startedParty();
+    const join = await as('p3').post(`/api/party/${id}/join`);
+    expect(join.statusCode).toBe(200);
+    expect((join.json() as { sessionId: string }).sessionId).toBe(sessionId);
+    const ticket = issued[issued.length - 1]?.party;
+    expect(ticket).toMatchObject({ join: true, sessionId, leaderId: 'p1', huntId: 'arena', difficulty: 'bold' });
+    expect(ticket?.members).toHaveLength(1);
+    expect(ticket?.members[0]).toMatchObject({ characterId: 'p3', accountId: 'a3' });
+  });
+
+  it('refuses a public-room join outside the published level band (RF-04)', async () => {
+    const { as, id } = await startedParty({ minLevel: 20, maxLevel: 30 });
+    const join = await as('p3').post(`/api/party/${id}/join`);
+    expect(join.statusCode).toBe(403);
+    expect(join.json()).toEqual({ error: 'level-out-of-range' });
+  });
+
+  it('refuses an invite when the live party is already at maxMembers (RF-06)', async () => {
+    const { as, id, sessionId, locations } = await startedParty();
+    // p1 + p2 já são 2; p3 e p4 entram em curso e aparecem no diretório, fechando os 4.
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p3' });
+    await as('p3').post(`/api/party/${id}/join`);
+    locations.set('p3', { sessionId, nodeId: 'n1', type: 'hunt' });
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p4' });
+    await as('p4').post(`/api/party/${id}/join`);
+    locations.set('p4', { sessionId, nodeId: 'n1', type: 'hunt' });
+    const eighth = await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p5' });
+    expect(eighth.statusCode).toBe(409);
+    expect(eighth.json()).toEqual({ error: 'party-full' });
+  });
+
+  it('shows the invite to the invitee in `mine`, and `decline` clears it (RF-07, RF-08)', async () => {
+    const { as, id } = await startedParty();
+    await as('p1').post(`/api/party/${id}/invite`, { inviteeId: 'p5' });
+    const mine = (await as('p5').mine()).json() as { invites: Array<{ partyId: string; leaderId: string; leaderName: string; huntId: string; state: string }> };
+    expect(mine.invites).toEqual([{ partyId: id, leaderId: 'p1', leaderName: 'Hero p1', huntId: 'arena', state: 'hunting' }]);
+    const declined = await as('p5').post(`/api/party/${id}/decline`);
+    expect(declined.statusCode).toBe(200);
+    expect(((await as('p5').mine()).json() as { invites: unknown[] }).invites).toEqual([]);
+  });
+
+  it('a published forming party also accepts a qualified stranger without an invite (DT-04)', async () => {
+    const { as } = build();
+    const created = ((await as('p1').post('/api/party')).json() as { id: string }).id;
+    await as('p1').post(`/api/party/${created}/propose`, { huntId: 'arena', difficulty: 'bold', mode: 'split' });
+    await as('p1').post(`/api/party/${created}/publish`, { minLevel: 1, maxLevel: 99 });
+    const joined = await as('p3').post(`/api/party/${created}/join`);
+    expect(joined.statusCode).toBe(200);
+    expect((joined.json() as { members: Array<{ characterId: string }> }).members.map((m) => m.characterId)).toEqual(['p1', 'p3']);
   });
 });

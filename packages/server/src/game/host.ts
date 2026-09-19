@@ -21,7 +21,7 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS } from '@draconya/content';
 import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill, Vocation } from '@draconya/content';
-import { containerRulesFor } from '@draconya/sim';
+import { containerRulesFor, PartyFullError } from '@draconya/sim';
 import type {
   CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset, InventoryRefusal,
   InventoryResult, InventoryState, PartyBagChanged, PartySettingsPatch, Place, VocationRefusal,
@@ -84,6 +84,12 @@ export interface SessionHostOptions {
   readonly nodeId: string;
   readonly contentVersion: string;
   readonly createSession: SessionFactory;
+  /**
+   * Constrói UM personagem para entrar numa sessão que JÁ existe (#402, ADR 0033 D7). É a
+   * costura equivalente a `createSession`, mas para o recém-chegado: o host chama `session.enter`
+   * com ele DENTRO do ciclo da sessão dona (invariante 9), sem conhecer balanceamento.
+   */
+  readonly createParticipant?: (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime;
   readonly logger: Logger;
   readonly directory?: SessionDirectory;
   /** Onde as sessões são guardadas para sobreviver à queda do processo (FUN-28). */
@@ -725,6 +731,12 @@ interface HostedSession {
 /** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
 export interface PrepareResult {
   readonly created: boolean;
+  /**
+   * Presente só quando a admissão FOI recusada (#402) — `created` fica `false` junto, e o
+   * handshake do WebSocket fecha com o status do motivo. Aditivo de propósito (DT-03): os
+   * consumidores antigos continuam lendo `created` como booleano direto.
+   */
+  readonly refused?: 'party-full' | 'content-version' | 'session-not-here';
 }
 
 /**
@@ -913,6 +925,12 @@ export class SessionHost {
       return { created: false };
     }
 
+    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso.
+    // A sessão é achada pelo id dela neste nó; sessão ausente é recusa tipada, não sessão nova.
+    if (party?.join === true) {
+      return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
+    }
+
     const pending = this.#preparations.get(characterId);
     if (pending !== undefined) {
       await pending;
@@ -930,6 +948,53 @@ export class SessionHost {
         this.#preparations.delete(characterId);
       }
     }
+    return { created: true };
+  }
+
+  /**
+   * Um personagem NOVO numa hunt que JÁ existe neste nó (#402, ADR 0033 D7, PRD §22).
+   *
+   * A sessão é achada pelo `sessionId` do ticket — o nó certo foi resolvido pelo `api` a partir
+   * do diretório. Aqui dentro, `session.enter` roda na sessão DONA (invariante 9): é o `onEnter`
+   * do #397 que aplica o teto de `maxMembers` e recusa acima dele, e é por isso que a lotação
+   * otimista do `api` não basta (DT-02).
+   */
+  async #admitLateJoiner(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+    party: PartyTicket,
+  ): Promise<PrepareResult> {
+    const hosted = this.#sessions.get(party.sessionId);
+    if (hosted === undefined) return { created: false, refused: 'session-not-here' };
+    if (hosted.session.contentVersion !== this.#options.contentVersion) {
+      return { created: false, refused: 'content-version' };
+    }
+    const member = party.members[0];
+    const newcomer = member === undefined || this.#options.createParticipant === undefined
+      ? undefined
+      : this.#options.createParticipant(member.characterId, member.initialCharacter);
+    if (newcomer === undefined) return { created: false, refused: 'session-not-here' };
+    try {
+      hosted.session.enter(newcomer);
+    } catch (error) {
+      // Teto de `maxMembers` do conteúdo (#397): recusa ESPERADA, não falha de sessão.
+      if (error instanceof PartyFullError) return { created: false, refused: 'party-full' };
+      throw error;
+    }
+    // O premium de quem entra DEPOIS do `start` é fato sobre o personagem, não configuração da
+    // party (#400): sem ele, a penalidade de morte do recém-chegado usaria o default do líder.
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    ruleset.setMemberPremium?.(hosted.session, characterId, member?.initialCharacter.premium ?? false);
+    // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
+    await this.#register(characterId, hosted.session, accountId);
+    // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
+    if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    if (initialCharacter?.outfitColors !== undefined) {
+      this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
+    }
+    this.#createLocal(characterId, hosted.session, accountId);
+    this.#adoptTicketBotConfig(characterId, hosted.session, initialCharacter);
     return { created: true };
   }
 
