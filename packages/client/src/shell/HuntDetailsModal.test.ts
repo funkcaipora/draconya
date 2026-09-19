@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -167,6 +168,79 @@ describe('HuntDetailsModal (#325, #349, SV-05, SV-13)', () => {
   it('renders nothing when open is false', async () => {
     const html = await render({ open: false });
     expect(html).toBe('');
+  });
+});
+
+describe('configuração de loot da party (#405, ADR 0033 D2)', () => {
+  // Só há config com party E `splitLoot` ligado: sem bolsa compartilhada não há o que
+  // configurar. `value: 0` é ignorado pelo servidor (D2).
+  const member = { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null };
+  const party = {
+    leaderId: 'me', mode: 'shared' as const, shareCosts: true, splitLoot: true,
+    loot: { collect: null, autoSell: [], autoSellLimit: 5, leaderPremium: false },
+    members: [member],
+  };
+  const cheeseWithValue = { ...cheeseItem, value: 5 };
+
+  function setState(over: Partial<{ party: unknown; items: Catalogue['items'] }> = {}): void {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      huntId: 'rat-cellars',
+      difficulty: 'bold',
+      catalogue: { ...catalogue, items: over.items ?? [cheeseWithValue] },
+      party: (over.party ?? party) as never,
+    }));
+  }
+
+  it('RF-03/04: the leader sees PEGAR/VENDER per item and "Venda automática: N / limite"', async () => {
+    setState();
+    const html = await render({ open: true });
+    expect(html).toContain('Configuração de loot da party');
+    expect(html).toContain('PEGAR');
+    expect(html).toContain('VENDER');
+    expect(html).toContain('Venda automática: 0 / 5');
+    // Líder com `collect: null` e item vendável: os dois nascem habilitados.
+    expect(html).not.toContain('aria-disabled="true"');
+  });
+
+  it('RF-03: `value: 0` leaves VENDER disabled (D2)', async () => {
+    setState({ items: [{ ...cheeseItem, value: 0 }] });
+    const html = await render({ open: true });
+    // PEGAR habilitado, VENDER desabilitado: exatamente um `aria-disabled`.
+    expect((html.match(/aria-disabled="true"/g) ?? []).length).toBe(1);
+  });
+
+  it('RF-03: a member sees PEGAR and VENDER disabled', async () => {
+    setState({ party: { ...party, leaderId: 'lead', members: [
+      { ...member, characterId: 'lead' }, member,
+    ] } });
+    const html = await render({ open: true });
+    expect((html.match(/aria-disabled="true"/g) ?? []).length).toBe(2);
+  });
+
+  it('RF-03: VENDER is disabled for an item that is not collected', async () => {
+    setState({ party: { ...party, loot: { ...party.loot, collect: [] } } });
+    const html = await render({ open: true });
+    // PEGAR habilitado (dá para marcar), VENDER desabilitado (não coletado).
+    expect((html.match(/aria-disabled="true"/g) ?? []).length).toBe(1);
+  });
+
+  it('hides the loot config without `splitLoot`, or without the `loot` block (DT-01)', async () => {
+    setState({ party: { ...party, mode: 'split', shareCosts: false, splitLoot: false } });
+    expect(await render({ open: true })).not.toContain('Configuração de loot da party');
+
+    setState({ party: { ...party, loot: undefined } });
+    expect(await render({ open: true })).not.toContain('Configuração de loot da party');
+  });
+
+  it('RF-03: unchecking PEGAR with `collect: null` sends every item except it, and clears autoSell', async () => {
+    // Sem DOM, a regra de borda se prova pela costura: o ramo `collect === null` vira a lista
+    // explícita de todos MENOS este, e o `autoSell` acompanha.
+    const source = await readFile(new URL('./HuntDetailsModal.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'party-settings'");
+    expect(source).toContain('collect === null');
+    expect(source).toContain('autoSell: checked ? autoSell : autoSell.filter');
   });
 });
 

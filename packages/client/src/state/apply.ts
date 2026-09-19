@@ -192,6 +192,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
             ? state.analyzer.notableEvents
             : [...state.analyzer.notableEvents, ...message.notableEvents],
           receivedAtMs: nowMs,
+          // A seção PARTY (§32, ADR 0033 d.11): o bloco vem no MESMO `analyzer` que os
+          // agregados. `undefined` é solo/nó anterior — a caixa não monta (D8).
+          party: message.party,
         },
       }));
       return;
@@ -288,6 +291,8 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           notableEvents: message.notableEvents,
           receivedAtMs: nowMs,
           ended: true,
+          // A sessão acabou: a seção PARTY não existe mais no extrato.
+          party: undefined,
         },
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
@@ -351,6 +356,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           notableEvents: message.notableEvents,
           receivedAtMs: nowMs,
           ended: false,
+          // A seção PARTY (§32, ADR 0033 d.11): `session-state.party` já é o roster, então o
+          // bloco do analisador viaja como `partySummary`. `undefined` é solo/nó anterior (D8).
+          party: message.partySummary,
         },
         // A party (#196): o estado SUBSTITUI, como o inventário. Ausente é solo.
         party: message.party ?? null,
@@ -398,6 +406,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'party-spending':
+      // O gasto de cada membro e a prévia de rateio (#354, SV-18). A "Sua parte" do analisador
+      // lê daqui (DT-03): era descartado, e o `estimatedShare` se perdia.
+      hud.set((state) => ({ ...state, partySpending: message }));
       return;
 
     case 'follow-state':

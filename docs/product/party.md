@@ -5,7 +5,7 @@ level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`); **M20 em
 iteração (eixos mutáveis durante a hunt, bolsa com reserva, entrada em curso, sala pública, bot cooperativo)
 está desenhada em `docs/party-vip-plan.md` e decidida no ADR 0033; este documento é atualizado
 no fim do milestone (#408)
-**Última atualização:** 2026-09-18
+**Última atualização:** 2026-09-19
 **PRD:** §15, §43.2
 **Épico:** E9
 
@@ -73,7 +73,9 @@ morto nada.
 ### Dois modos de loot e custo (§15.4, §15.5)
 
 O modo é proposto pelo líder, **fixado na sessão** (`party.mode` no ticket e no snapshot) e não
-muda no meio — ADR 0027, decisão 5.
+muda no meio — ADR 0027, decisão 5. **Emendado no M20** (ADR 0033 d.1): os dois eixos
+`shareCosts`/`splitLoot` passaram a ser mutáveis pelo líder durante a hunt, e `mode` ficou no fio
+como derivado dos dois; a UI dos dois interruptores é a seção M20 acima.
 
 **`split` (dividido)** — cada um paga o próprio supply, como no solo. Por monstro, **um** membro
 elegível é sorteado (uniforme, com o `Rng` da sessão, antes de `rollLoot`) e o loot — gold e
@@ -127,6 +129,34 @@ mundo, aberta por padrão durante a hunt e alternável pelo ▣ do cabeçalho da
 do mesmo cabeçalho reabre a formação e as ações da party durante a hunt, no modal "Gerenciar
 party" (#320); o analisador é por personagem (`analyzer.md`).
 
+### Dois eixos mutáveis, bolsa v2 e seção PARTY (M20, #405)
+
+O contrato v2 (ADR 0033) tornou visível no cliente o que antes era só dado no fio:
+
+- **Os dois interruptores do líder** no rodapé de `PartyMembers` — "Rateio de custos" e
+  "Dividir loot". Leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
+  nunca escrito à mão) e, para o líder, mandam `party-settings` (C2S, opcode 17) com o patch. O
+  membro vê os dois desabilitados. O clique é intenção (invariante 4): a tela reflete o
+  `party-state` que volta, nunca o valor otimista. O modo como texto saiu do rodapé.
+- **A configuração de loot** em "Detalhes da caçada" (`HuntDetailsModal`): uma linha por item de
+  loot possível, com PEGAR / VENDER e a linha "Venda automática: N / limite"
+  (`party-state.loot.autoSell.length` / `autoSellLimit`). Só aparece com party e `splitLoot`
+  ligado (DT-01), e só o líder edita. `value: 0` (ou ausente) desabilita VENDER (D2); desmarcar
+  PEGAR de um item com `collect: null` ("coletar tudo") manda a lista explícita de todos MENOS
+  ele, e limpa o `autoSell` junto.
+- **Party loot v2** (`PartyBag`): valor total (`party-bag.value`), "sua capacidade reservada" (a
+  entrada do personagem em `party-bag.reservations`, com o percentual; `available: 0` omite o %,
+  nunca divide por zero) e o badge OVERWEIGHT quando `party-bag.overweight === true`. A janela
+  passa a montar por `splitLoot`, não pelo `mode` derivado — com eixos independentes, a bolsa
+  existe sse `splitLoot` está ligado.
+- **A seção PARTY do analisador** (`Analyzer.tsx`), do `analyzer.party` / `session-state.partySummary`:
+  jogadores, vocações únicas, bônus/multiplicador de XP, XP total e a XP do viewer, rateio e
+  supplies totais, "Sua parte" (de `party-spending.shares[me].estimatedShare`, DT-03), divisão de
+  lucro, valor/peso da bolsa e venda automática `N / limite`.
+
+Campo ausente — nó `game` anterior ao #400, ou "não se aplica" — não monta a UI nova: a tela
+continua exatamente o que era, nunca com um número fabricado (D8, invariante 4).
+
 ## Regras
 
 - Party é uma sessão de hunt com N participantes; um personagem está em uma sessão só.
@@ -140,7 +170,9 @@ party" (#320); o analisador é por personagem (`analyzer.md`).
   (cap = Σ capacidades), excedente na caixa do líder; venda e divisão a cada saída e no fim.
 - `itemSchema.value` é obrigatório; `0` é "não se vende" e vai para o líder.
 - Sair e morrer são `leave` com extrato próprio; o último encerra; `party-member-lost` cascateia.
-- Modo fixo na sessão; sem opcode cliente→servidor novo (invariante 4).
+- Os dois eixos (`shareCosts`/`splitLoot`) são mutáveis pelo líder em tempo de hunt via
+  `party-settings` (C2S 17); `mode` continua no fio como derivado (ADR 0033 d.1). O cliente só
+  manda intenção (invariante 4).
 
 ## Parâmetros de balanceamento
 

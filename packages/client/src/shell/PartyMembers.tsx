@@ -12,8 +12,13 @@
 // conteúdo divergente). Nada aparece quando `vocationId` é `null` ou, para level/mana, quando o
 // campo é `undefined` (D8: o cliente não fabrica o que o servidor não mandou). Gasto ainda
 // espera SV-18, DPS/HPS esperam E2; expulsar é ação da FORMAÇÃO (`PartyPanel.tsx`, SV-22/#358),
-// não deste painel. O modo (`split`/`shared`) continua texto: os interruptores de rateio e loot
-// exigem SV-23, pois o modo é FIXADO na proposta (ADR 0027 decisão 5).
+// não deste painel.
+//
+// O rodapé ganhou os DOIS interruptores do líder (#405, ADR 0033 D1): "Rateio de custos" e
+// "Dividir loot" leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
+// nunca escrito à mão) e o líder os liga/desliga EM TEMPO DE HUNT. O clique manda INTENÇÃO
+// (`party-settings`, invariante 4); quem decide se aplica é o host, e a tela só reflete o
+// `party-state` que volta. O membro vê os dois desabilitados.
 //
 // O botão usa `leave-hunt`, não `partyActions.leave()`: depois do start a party HTTP já foi
 // consumida, enquanto o opcode 10 retira somente este personagem da sessão compartilhada.
@@ -23,19 +28,14 @@ import { useHudSlice } from '../state/useSlice.js';
 import { sendIntent } from '../net/current.js';
 import { leaveHunt } from './HuntActions.js';
 import { percentFromWorld } from './party-member-view.js';
+import { shareCostsOf, splitLootOf } from './party-loot-format.js';
 import { Button } from './ui/Button.js';
 import { IconButton } from './ui/IconButton.js';
 import { Panel } from './ui/Panel.js';
+import { Switch } from './ui/Switch.js';
 import { VitalBar } from './ui/VitalBar.js';
 
 export const HEALTH_POLL_MS = 1_000;
-
-/**
- * Duplicado de propósito, e não importado de `PartyPanel.tsx` — a formação, que esta issue NÃO
- * toca (DS-16 é quem redesenha a formação, dentro do modal de caçada). Um módulo só para duas
- * entradas acoplaria dois arquivos que precisam poder mudar em issues diferentes sem se tocar.
- */
-const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
 
 /** A letra que representa a vocação (SV-11, #347) — a inicial do NOME, nunca do id. */
 export function vocationAbbreviation(name: string): string {
@@ -58,10 +58,33 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   }, [partyView]);
   if (partyView === null) return null;
 
+  // O líder é quem muda os dois eixos (PRD §33). O membro VÊ o estado, sem clicar.
+  const leader = partyView.leaderId === me;
   const footer = (
     <div className="party-footer">
       <p className="party-footer-note">Parar no meio da caçada exige o sim de todos.</p>
-      <p className="party-mode">{MODE_TEXT[partyView.mode]}</p>
+      <div className="party-footer-toggles">
+        <Switch
+          title="Rateio de custos"
+          tone="gold"
+          on={shareCostsOf(partyView)}
+          disabled={!leader}
+          // Intenção, nunca o valor final (invariante 4): quem decide se aplica é o host, que
+          // devolve o `party-state` atualizado ou um `system-message` de recusa.
+          {...(leader
+            ? { onChange: (on: boolean) => { sendIntent({ type: 'party-settings', shareCosts: on }); } }
+            : {})}
+        />
+        <Switch
+          title="Dividir loot"
+          tone="gold"
+          on={splitLootOf(partyView)}
+          disabled={!leader}
+          {...(leader
+            ? { onChange: (on: boolean) => { sendIntent({ type: 'party-settings', splitLoot: on }); } }
+            : {})}
+        />
+      </div>
       <Button
         variant="danger"
         size="sm"
