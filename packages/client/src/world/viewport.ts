@@ -4,10 +4,11 @@
 // quadro; nenhum estado de mundo entra por prop. Se um dia precisar de um `useEffect` para
 // saber onde uma criatura está, o desenho está errado.
 //
-// SPRITES, com retângulo como degradação. O pacote de arte entra por `AssetPack` e cada quadro
-// vira `Texture` pelo `TextureBook`; enquanto um quadro não chega — ou quando o pacote não tem
-// aquele id — o lugar dele é um retângulo, e a tela nunca fica preta por causa de arte. A parte
-// difícil continua a mesma de antes: câmera, camadas, ordem de desenho, pool e interpolação.
+// SPRITES, com retângulo como degradação. O pacote de arte entra por `WorldArt` (a interface que
+// o pacote real de assets satisfaz por estrutura — issue #381) e cada quadro vira `Texture` pelo
+// `TextureBook`; enquanto um quadro não chega — ou quando o pacote não tem aquele id — o lugar
+// dele é um retângulo, e a tela nunca fica preta por causa de arte. A parte difícil continua a
+// mesma de antes: câmera, camadas, ordem de desenho, pool e interpolação.
 //
 // A barra de vida e o nome NÃO dependem de arte: existem no modo sem pacote também. São
 // `Graphics` e `Text` na camada `overlay`, um par por criatura, no mesmo pool por id que os
@@ -27,7 +28,8 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, compareDrawOrder, tileAtScreen, toScreen, viewFor, visibleTiles, zoomFor,
+  TILE, compareDrawOrder, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering,
+  toScreen, viewFor, zoomFor, type TileWindow,
 } from './camera.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
@@ -49,6 +51,15 @@ import { TextureBook } from './textures.js';
 import { drawTile, type ObjectInfo } from './tile-stack.js';
 
 export type { MapTiles } from './scene.js';
+
+/**
+ * O que o viewport pede à arte. É uma INTERFACE, e não a classe, para o teste entregar uma
+ * arte sintética e para o contrato do viewport ficar visível num lugar só. O pacote real a
+ * satisfaz por estrutura — `shell/Viewport.tsx` não muda (issue #381).
+ */
+export type WorldArt = Pick<AssetPack,
+  'object' | 'objectPattern' | 'objectFlags' | 'outfit' | 'framesOf'
+  | 'effect' | 'effectPhases' | 'missile' | 'warmObjects' | 'warmOutfit'>;
 
 const COLOR_FLOOR = 0x2b2b33;
 const COLOR_WALL = 0x14141a;
@@ -104,9 +115,16 @@ interface EffectEntry {
   readonly phases: readonly number[];
 }
 
+/** A última janela de prefetch aquecida, com a cena e o andar dela. `null` força a janela inteira. */
+interface Warmed {
+  readonly window: TileWindow;
+  readonly sceneId: string;
+  readonly floor: number;
+}
+
 export interface ViewportOptions {
   /** O pacote de arte. `null` desenha só retângulos — é o modo sem assets, e continua válido. */
-  readonly pack?: AssetPack | null;
+  readonly pack?: WorldArt | null;
   /** O livro de texturas, criado por quem criou o pacote: é ele que recebe o `onEvict`. */
   readonly book?: TextureBook;
   /**
@@ -115,6 +133,8 @@ export interface ViewportOptions {
    * (ADR 0007). `null` é mapa que não há: a tela mostra a grade lisa de reserva.
    */
   readonly loadScene?: (mapId: string) => Promise<Scene | null>;
+  /** O relógio do quadro. `performance.now` por padrão; o teste injeta o dele (issue #381). */
+  readonly now?: () => number;
 }
 
 export interface ViewportHandle {
@@ -127,7 +147,7 @@ export interface ViewportHandle {
    * catálogo leva o que a rede levar, e a tela não espera por ele. O caminho normal é UMA
    * chamada, de `null` para o pacote, quando ele carrega.
    */
-  setPack(pack: AssetPack | null): void;
+  setPack(pack: WorldArt | null): void;
   /**
    * FPS médio dos últimos quadros, arredondado. É só leitura: o overlay consulta no próprio
    * ritmo, sem o laço do Pixi disparar renderização React.
@@ -162,6 +182,8 @@ export async function mountViewport(
   /** O pacote de agora. `let` porque ele pode chegar depois do Pixi (`setPack`). */
   let pack = options.pack ?? null;
   const book = options.book ?? new TextureBook();
+  /** O relógio do quadro — injetável para o teste dirigir o laço sem `performance` (issue #381). */
+  const now = options.now ?? (() => performance.now());
   /**
    * O zoom inteiro e a vista em tiles, DA TELA DE AGORA. O stage é escalado pelo zoom, então
    * todo o resto continua em pixels de tile (32) e só o resultado é ampliado — é o que mantém
@@ -179,6 +201,9 @@ export async function mountViewport(
     for (const label of textLabels.values()) label.scale.set(1 / zoom);
     // O terreno só repinta quando a chave muda, e a chave não sabe do tamanho da tela.
     painted = '';
+    // A vista mudou de tamanho: a janela de prefetch é outra, e o delta contra a antiga
+    // aqueceria só as bordas — a tela nova pode ser um zoom a menos e o dobro de tiles.
+    warmed = null;
   });
 
   // Camadas na ordem de desenho: terreno embaixo, criaturas em cima, o `top` da pilha sobre
@@ -199,6 +224,17 @@ export async function mountViewport(
   let painted = '';
   /** Assinatura das posições INTEIRAS. A ordem de desenho só muda quando ela muda. */
   let ordered = '';
+  /**
+   * A última janela de prefetch aquecida, com a cena e o andar dela. `null` é "aqueça tudo":
+   * é o que cena nova, pacote novo, andar novo e `resize` fazem. Comparar quatro inteiros por
+   * quadro é o custo de saber que nada mudou — a varredura dos tiles só roda quando mudou.
+   */
+  let warmed: Warmed | null = null;
+  /**
+   * Os outfits já pedidos ao pacote DE AGORA. Zera em `setPack`: um pacote novo tem folhas
+   * novas, e o que o anterior aqueceu não vale para ele.
+   */
+  const warmedOutfits = new Set<number>();
   /** RC-13: recebe um delta por quadro e só é lido uma vez por segundo no overlay DOM. */
   const fps = createFpsMeter();
   /**
@@ -255,7 +291,7 @@ export async function mountViewport(
 
   function target(): { x: number; y: number; z: number } {
     const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
-    if (self !== undefined) return interpolate(self, performance.now());
+    if (self !== undefined) return interpolate(self, now());
     // Sem `selfId` ainda (FUN-32), a câmera fica no centro do mapa: é melhor mostrar o mapa
     // do que mostrar o canto (0,0), que num mapa cercado por parede é só parede.
     if (scene !== null) return { x: (scene.width - 1) / 2, y: (scene.height - 1) / 2, z: scene.defaultZ };
@@ -294,32 +330,81 @@ export async function mountViewport(
     return from + (to - from) * t;
   }
 
-  /**
-   * Aquece as folhas da janela inicial (FUN-121), como `warmOutfit` faz com os monstros: sem
-   * isto Thais abria em retângulos pelos segundos que a primeira folha de cada chão leva no
-   * Worker. Só os ids que a câmera vê agora; o resto chega à medida que ela anda.
-   */
-  function warm(next: Scene): void {
-    const art = pack;
-    if (art === null) return;
-    const center = target();
-    const window = visibleTiles(center, view);
+  /** Os ids de chão e item das faixas, nos andares que `paintTerrain` desenha para este `z`. */
+  function idsIn(scene: Scene, tiles: ReadonlyArray<{ x: number; y: number }>, floors: readonly number[]): Set<number> {
     const ids = new Set<number>();
-    for (const z of floorsBelow(next.floors, Math.round(center.z))) {
-      for (let y = window.minY; y <= window.maxY; y++) {
-        for (let x = window.minX; x <= window.maxX; x++) {
-          const stack = next.tileAt(x, y, z);
-          if (stack === null) continue;
-          if (stack.ground > 0) ids.add(stack.ground);
-          for (const item of stack.items) ids.add(item.id);
-        }
+    for (const z of floors) {
+      for (const { x, y } of tiles) {
+        const stack = scene.tileAt(x, y, z);
+        if (stack === null) continue;
+        if (stack.ground > 0) ids.add(stack.ground);
+        for (const item of stack.items) ids.add(item.id);
       }
     }
-    void art.warmObjects(ids);
+    return ids;
+  }
+
+  /**
+   * Prefetch CONTÍNUO (M23, D5): a cada quadro compara a janela de prefetch de agora com a
+   * última aquecida e pede ao pacote só o que ENTROU — a coluna nova quando o personagem anda
+   * um tile, a janela inteira quando cena, andar, pacote ou tela mudaram. A margem de prefetch
+   * está dois tiles além da de render: são dois passos (~800 ms) para a folha sair do Worker
+   * antes de o tile ser desenhado, e é isso que tira o retângulo de reserva da borda da tela.
+   *
+   * **Só o que entrou, e uma chamada por mudança.** Pedir a janela inteira a cada tile seria
+   * `warmObjects` sobre ~700 ids por passo — o pacote deduplica em voo, mas a varredura da cena
+   * e a alocação do `Set` são por chamada, e o passo é o caso NORMAL de uma hunt, não a exceção.
+   *
+   * Sem pacote não há o que aquecer, e `warmed` fica `null` de propósito: o pacote que chegar
+   * depois encontra "aqueça tudo", não uma janela que ninguém aqueceu.
+   */
+  function warmWindow(center: { x: number; y: number; z: number }): void {
+    const art = pack;
+    if (art === null || scene === null) {
+      warmed = null;
+      return;
+    }
+    const floor = Math.round(center.z);
+    const next = prefetchTiles(center, view);
+    const previous = warmed;
+    const sameContext = previous !== null && previous.sceneId === scene.id && previous.floor === floor;
+    if (sameContext && sameWindow(previous.window, next)) return;
+
+    const tiles = tilesEntering(sameContext ? previous.window : null, next);
+    warmed = { window: next, sceneId: scene.id, floor };
+    const ids = idsIn(scene, tiles, floorsBelow(scene.floors, floor));
+    // Tile fora do mapa (borda) não vira pedido: `warmObjects([])` seria uma promessa por
+    // quadro de borda, e o teste conta chamadas.
+    if (ids.size > 0) void art.warmObjects(ids);
+  }
+
+  /**
+   * Os outfits de quem está por perto (M23, D5). O `warmOutfit` da FUN-112 roda na Cidade pelo
+   * catálogo da hunt; este roda na hunt pelo que o servidor mandou — o monstro que apareceu na
+   * borda do raio de interesse tem a janela de prefetch inteira para chegar antes de ser
+   * desenhado. Um `Set.has` por criatura por quadro; o pedido só sai uma vez por outfit.
+   *
+   * A posição é o DESTINO do passo: é onde a criatura vai estar quando o quadro dela importar.
+   */
+  function warmOutfitsNear(window: TileWindow): void {
+    const art = pack;
+    if (art === null) return;
+    for (const creature of world.creatures.values()) {
+      const { appearanceId } = creature;
+      if (appearanceId <= 0 || warmedOutfits.has(appearanceId)) continue;
+      const at = creature.step?.to ?? creature.position;
+      if (at.x < window.minX || at.x > window.maxX || at.y < window.minY || at.y > window.maxY) continue;
+      warmedOutfits.add(appearanceId);
+      void art.warmOutfit(appearanceId);
+    }
   }
 
   function paintTerrain(center: { x: number; y: number; z: number }): void {
-    const window = visibleTiles(center, view);
+    // A janela de RENDER (M23): três tiles além de cada borda visível já estão pintados, e é
+    // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
+    // tela, que é o tempo que a folha tem para sair do Worker. A chave abaixo muda quando ESTA
+    // janela muda, exatamente como antes mudava com a visível: uma vez por tile cruzado.
+    const window = renderTiles(center, view);
     // **O terreno é pintado em coordenada RELATIVA à janela e o CONTAINER é que anda.** Pintar
     // com o centro fracionário só quando a janela vira faria o chão pular um tile inteiro
     // enquanto as criaturas — posicionadas a cada quadro — deslizam: cisalhamento de até 32 px
@@ -879,7 +964,7 @@ export async function mountViewport(
 
   app.ticker.add(() => {
     fps.record(app.ticker.deltaMS);
-    const nowMs = performance.now();
+    const nowMs = now();
     // A troca de cena é notada AQUI (FUN-121): o `instance-enter` põe o `mapId` no `world`, o
     // `world` não avisa ninguém (ADR 0007), e o laço de quadro é quem olha. A resposta que
     // chegar depois de outro pedido é de outro mapa, e é descartada.
@@ -888,16 +973,19 @@ export async function mountViewport(
       requested = mapId;
       scene = null;
       painted = '';
+      warmed = null;
       if (mapId !== null && options.loadScene !== undefined) {
         void options.loadScene(mapId).then((next) => {
           if (requested !== mapId) return;
           scene = next;
           painted = '';
-          if (next !== null) warm(next);
+          warmed = null;   // era `if (next !== null) warm(next);` — o próximo quadro aquece tudo
         });
       }
     }
     const center = target();
+    warmWindow(center);
+    if (warmed !== null) warmOutfitsNear(warmed.window);
     paintTerrain(center);
     paintCreatures(center, nowMs);
     paintEffects(center, nowMs);
@@ -910,7 +998,7 @@ export async function mountViewport(
       scene = next;
       requested = world.mapId;
       painted = '';
-      if (next !== null) warm(next);
+      warmed = null;       // era `if (next !== null) warm(next);`
     },
     setPack(next) {
       pack = next;
@@ -922,8 +1010,10 @@ export async function mountViewport(
       // enquanto não havia arte — não existe entrada "não existe" envenenada para o pacote
       // que chega agora. (Limpar também não daria: `clear()` fecha o livro para sempre.)
       painted = '';
-      // A arte que acabou de chegar aquece a janela que já está na tela.
-      if (next !== null && scene !== null) warm(scene);
+      // Pacote novo, folhas novas: o que o anterior aqueceu não conta, e a janela é aquecida
+      // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
+      warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
+      warmedOutfits.clear();
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
       for (const entry of effectSprites.values()) entry.sprite.destroy();
