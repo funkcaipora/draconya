@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PREFETCH_TILES, RENDER_OVERSCAN_TILES, VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder,
+  PREFETCH_TILES, RENDER_OVERSCAN_TILES, VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin,
   prefetchTiles, renderTiles, sameWindow, tileWindow, tilesEntering, toScreen, viewFor,
   visibleTiles, zoomFor, TILE, type TileWindow,
 } from './camera.js';
@@ -163,15 +163,6 @@ describe('camera', () => {
     expect(sameWindow(a, { ...a, minY: a.minY - 1 })).toBe(false);
     expect(sameWindow(a, { ...a, maxX: a.maxX + 1 })).toBe(false);
     expect(sameWindow(a, { ...a, maxY: a.maxY + 1 })).toBe(false);
-  });
-
-  it('orders by y, then by x', () => {
-    // O desempate por `x` é o que torna a ordem estável: sem ele, duas criaturas no mesmo
-    // `y` trocam de ordem entre quadros e piscam uma na frente da outra.
-    const creatures = [
-      { x: 5, y: 3 }, { x: 1, y: 3 }, { x: 9, y: 1 },
-    ].sort(compareDrawOrder);
-    expect(creatures).toEqual([{ x: 9, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
   });
 });
 

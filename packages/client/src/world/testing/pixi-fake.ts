@@ -11,10 +11,10 @@
 
 /**
  * Ordem de CRIAÇÃO dos containers — nunca muda com `addChild`/`setChildIndex`. Só o harness lê
- * `Container.seq` (issue #381, achado 2): `reorder` (`viewport.ts`) reordena `creatures.children`
- * por posição de tela no MESMO quadro em que uma criatura nasce, então a posição de um sprite
- * no array de filhos não é mais "a ordem em que nasceu" — e é essa ordem que
- * `syncCreatureSprites` (`harness.ts`) precisa para casar sprite novo com id novo.
+ * `Container.seq` (issue #381, achado 2): desde #385 os sprites de criatura e de objeto dividem
+ * o `scene` do andar, então a posição de um sprite no array de filhos não é "a ordem em que
+ * nasceu" — e é essa ordem que `syncCreatureSprites` (`harness.ts`) precisa para casar sprite
+ * novo com id novo.
  */
 let nextSeq = 0;
 
@@ -53,6 +53,14 @@ export class Container {
       this.children.splice(at, 1);
       child.parent = null;
     }
+  }
+
+  /** Como o Pixi: devolve os filhos removidos, todos desligados do pai. */
+  removeChildren(): Container[] {
+    const removed = [...this.children];
+    for (const child of removed) child.parent = null;
+    this.children.length = 0;
+    return removed;
   }
 
   /**
