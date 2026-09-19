@@ -14,8 +14,8 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
-  SessionSnapshot, SessionType, SkillProgress,
+  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, MemberLeft, PartyEvent, PresenceEvent,
+  Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
@@ -1743,15 +1743,18 @@ export class SessionHost {
         case 'party-state':
           this.#presentParty(hosted, event);
           continue;
+        case 'follow-state':
+          // POR PERSONAGEM (#401) — ao contrário dos três casos acima, que são da SESSÃO
+          // inteira (todo membro vê a bolsa e a composição), Follow é configuração de bot de
+          // UM personagem: vazar para quem olha outro membro exporia a estratégia de bot de
+          // alguém para os companheiros sem que ele tenha pedido isso — o mesmo motivo de
+          // `player-stats` (FUN-109) e `active-conditions` serem por personagem.
+          this.#presentFollow(hosted, event);
+          continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
           // ciclo é síncrono — fica na fila e sai logo depois dele (#194).
           hosted.departures.push(event);
-          continue;
-        case 'follow-state':
-          // O `sim` já produz o evento (#398); serializá-lo no fio é o #401. Até lá ele é
-          // consumido sem mensagem — a união precisa ser tratada, e ignorar é a opção que
-          // não inventa protocolo.
           continue;
         case 'creature-moved':
           break;
@@ -2153,6 +2156,44 @@ export class SessionHost {
       eventCount: hosted.session.notableEvents.length,
       party: partySummaryOf(hosted),
     });
+    // O Follow interrompido sobrevive à desconexão (#401): `#presentMoves` DESCARTA o evento
+    // `follow-state` quando ninguém olha — a apresentação é o que se perde, nunca o resultado da
+    // simulação (invariante 3). Sem isto, quem reconecta depois de o alvo morrer veria o Follow
+    // como se ainda estivesse ativo até o PRÓXIMO evento — que pode nunca vir, porque "voltou a
+    // ficar inválido" não é uma transição que se repete sozinha.
+    //
+    // Só quando INTERROMPIDO: quando o Follow está ativo, o cliente já sabe — foi ele que
+    // configurou — e reenviar toda vez seria tráfego sem informação nova no attach mais comum
+    // (o de sempre, hunt correndo, nada de errado).
+    const follow = (hosted.session.ruleset as Partial<HuntRuleset>).followStateOf?.(characterId);
+    if (follow !== undefined && !follow.active) {
+      viewer.send({
+        type: 'follow-state',
+        active: false,
+        targetId: follow.targetId,
+        ...(follow.reason === undefined ? {} : { reason: follow.reason }),
+      });
+    }
+  }
+
+  /**
+   * O Follow do bot no fio, por PERSONAGEM (#401): quem configurou o Follow é quem precisa saber
+   * que o alvo sumiu — nunca os outros visualizadores da sessão. `#presentParty`, ao lado, manda
+   * para `hosted.viewers` inteiro porque bolsa e composição SÃO da sessão; Follow não é.
+   *
+   * Sem comparação com "o último entregue" (ao contrário de `#presentStats`/`#presentAnalyzer`,
+   * que reamostram todo ciclo): o `sim` já emite este evento UMA VEZ por transição — interrompeu,
+   * ou retomou (#398, §D10) —, então não há nada aqui para deduplicar. Duplicar a dedução no
+   * host criaria uma segunda fonte de verdade sobre "o que já foi entregue" que o `sim` já
+   * resolveu sozinho.
+   */
+  #presentFollow(hosted: HostedSession, event: FollowState): void {
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'follow-state',
+      active: event.active,
+      targetId: event.targetId,
+      ...(event.reason === undefined ? {} : { reason: event.reason }),
+    });
   }
 
   /**
@@ -2191,7 +2232,8 @@ export class SessionHost {
       case 'member-left':
         return;
       case 'follow-state':
-        // Roteado no fio pelo #401; aqui a união precisa estar fechada.
+        // POR PERSONAGEM (#401): `#presentMoves` o intercepta antes e chama `#presentFollow` —
+        // nunca este broadcast. O caso existe só para a união `PartyEvent` ficar fechada.
         return;
     }
     for (const viewer of hosted.viewers) viewer.send(message);

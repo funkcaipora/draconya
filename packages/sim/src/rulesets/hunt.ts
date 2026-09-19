@@ -184,6 +184,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
     ...(runner.followInterrupted ? { followInterrupted: true } : {}),
+    ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
+    ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
   };
 }
 
@@ -673,6 +675,15 @@ interface Runner {
   warnedNoGold: boolean;
   /** Já reportamos `active:false` para este follow e ainda não retomou (§D10, "uma vez"). */
   followInterrupted: boolean;
+  /**
+   * O alvo CONFIGURADO do follow, guardado no último `#reportFollow` (#401). Existe para o
+   * `followStateOf` devolver a verdade ATUAL a quem reconecta: o evento `follow-state` só é
+   * emitido na TRANSIÇÃO, e `kind: 'leader'` resolve o líder a cada vencimento — guardar o id
+   * aqui é o que dispensa uma segunda resolução de liderança no hospedeiro.
+   */
+  followTargetId: string | undefined;
+  /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
+  followReason: 'dead' | 'left' | 'unreachable' | undefined;
 }
 
 /**
@@ -705,6 +716,10 @@ export interface RunnerState {
    * quando `false`: um snapshot de hunt sem follow configurado não muda de tamanho.
    */
   readonly followInterrupted?: boolean;
+  /** O alvo do follow (#401). Opcional: snapshot anterior a esta issue não o tem. */
+  readonly followTargetId?: string;
+  /** A razão da interrupção do follow (#401). Opcional pelo mesmo motivo. */
+  readonly followReason?: 'dead' | 'left' | 'unreachable';
 }
 
 export class HuntRuleset implements Ruleset {
@@ -1217,6 +1232,8 @@ export class HuntRuleset implements Ruleset {
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
       followInterrupted: state?.followInterrupted ?? false,
+      followTargetId: state?.followTargetId,
+      followReason: state?.followReason,
     };
     for (const category of state?.botScheduled ?? []) runner.botReady[category] = false;
     return runner;
@@ -1889,12 +1906,46 @@ export class HuntRuleset implements Ruleset {
     session: Session, runner: Runner, characterId: string, targetId: string, active: boolean,
     reason?: 'dead' | 'left' | 'unreachable',
   ): void {
+    // A verdade ATUAL é gravada ANTES do curto-circuito de transição: o evento só sai uma vez,
+    // mas o `followStateOf` precisa responder "onde o Follow está agora" mesmo quando nada mudou
+    // desde o último vencimento (#401).
+    runner.followTargetId = targetId;
+    runner.followReason = active ? undefined : reason;
     if (runner.followInterrupted === !active) return;
     runner.followInterrupted = !active;
     session.emit({
       kind: 'follow-state', characterId, targetId, active,
       ...(reason === undefined ? {} : { reason }),
     });
+  }
+
+  /**
+   * O estado ATUAL do Follow de um personagem (#401), para o hospedeiro reenviar a quem
+   * reconecta. O evento `follow-state` só é emitido na TRANSIÇÃO (#398), e sem visualizador ele
+   * é descartado pelo hospedeiro — esta leitura síncrona é o que faz a verdade sobreviver ao
+   * descarte (invariante 3), em vez de o host guardar uma segunda cópia do estado.
+   *
+   * `undefined` sem Follow configurado (`kind: 'none'`) ou sem alvo resolvido ainda — os dois
+   * casos em que o cliente não tem nada a corrigir.
+   */
+  followStateOf(characterId: string): {
+    readonly active: boolean;
+    readonly targetId: string;
+    readonly reason?: 'dead' | 'left' | 'unreachable';
+  } | undefined {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return undefined;
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return undefined;
+    const targetId = runner.followTargetId
+      ?? (follow.kind === 'member' ? follow.characterId : this.#party?.leaderId);
+    if (targetId === undefined) return undefined;
+    const active = !runner.followInterrupted;
+    return {
+      active,
+      targetId,
+      ...(active || runner.followReason === undefined ? {} : { reason: runner.followReason }),
+    };
   }
 
   /**
