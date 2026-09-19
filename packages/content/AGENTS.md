@@ -217,20 +217,23 @@ por isso tem lugar próprio, em vez de um `itemId: "gold-coin"` que o código te
 pelo nome. `items` só aceita lista vazia enquanto não houver catálogo de itens; `buildContent`
 recusa o resto, porque creditar um item fantasma no primeiro abate é pior que não subir.
 
-## Magia e supply (FUN-74, FUN-77)
+## Magia e consumível (FUN-74, FUN-77, AB-01)
 
-`spells/*.json` e `supplies/*.json` são catálogos como os outros: **a engine é dona do
-mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura e
-quanto custa em gold — nada disso mora em `sim`.
+`spells/*.json` e os consumíveis de `items/*.json` são catálogos como os outros: **a engine é
+dona do mecanismo, o conteúdo é dono dos números.** Custo de mana, cooldown, alcance, quanto cura
+e quanto custa em gold — nada disso mora em `sim`.
 
 O `effect` é uma união discriminada por `kind`, fechada como o vocabulário do bot e pela mesma
 razão: o `sim` só executa o que conhece, e uma magia com efeito desconhecido é recusada no boot
 em vez de virar um slot morto que ninguém explica.
 
-**Supply não é item** (§20.1). Ele tem `price` e não tem peso, slot nem instância — usar debita
-gold direto. É por isso que ele tem pasta própria em vez de esperar o catálogo de itens, que é
-M8. `validateBotConfig` cruza `spellId` e `supplyId` contra estes dois catálogos; `itemId` é
-sempre recusado, pela mesma razão que `loot.items` só aceita lista vazia.
+**Suprimento é abstrato** (AB-01, ADR 0032 d.6). Poção e runa vivem em `supplies/*.json` com
+`price`, `effect`, `requires` e `group`; o uso debita gold direto (`useSupply`), sem pilha e sem
+reposição. O vocabulário v2 do bot (AB-03) usa o token `supply` com `supplyId`, e
+`validateBotConfigV2` cruza `spellId`/`supplyId` contra os catálogos. A carga de bênção é a única
+exceção: segue item `kind: 'consumable'` **não-empilhável** em `items/blessing-charge.json`, sem
+`restock` nem `group` obrigatórios, e quem a consome é a TP-03 (M22). O motor por grupo é a AB-07
+(#422).
 
 ## Skills (FUN-75)
 
@@ -256,8 +259,9 @@ instância — junto com a pergunta "por que a minha é pior".
 `loot.items` do monstro é conferido contra este catálogo. Antes ele era recusado por princípio
 porque catálogo não existia; agora o que decide é a referência existir.
 
-`charges` e `durationMs` estão no schema e ninguém os consome ainda (§21.3) — a forma entra agora
-para o catálogo não mudar quando a mecânica existir.
+`charges` e `durationMs` são mecanismos vivos desde a AB-06 (#421, ADR 0032 d.8): o `sim` gasta a
+carga do colar no golpe elemental que ele protege e agenda o vencimento do item de duração na fila
+de eventos, destruindo o item ao esgotar.
 
 **`defense` é da peça e só nas combinações aprovadas** (CMB-04, emenda do ADR 0031): escudo, ou
 arma corpo a corpo de uma mão. Bow/twoHanded e wand/rod não têm defesa residual, e `buildContent`
@@ -295,19 +299,24 @@ recusado. O projétil da wand e do rod mora em `appearances.weapons[itemId].miss
 como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a segura
 até o level 8: o personagem nasce sem vocação.
 
-## Munição (#151, ADR 0026)
+## Munição (#151, AB-02, ADR 0032 decisão 7)
 
-`ammunition/*.json` é um catálogo à parte, e **munição não é item**: não tem peso, pilha nem
-instância. É uma seleção por família (`arrow` para bow, `bolt` para crossbow), o modelo do
-Huntera (`ammo-selection { arrow, bolt }`, `docs/reference/huntera-observed.md` §20): a de
-`price: 0` é a grátis e o padrão da família, e cada tiro das outras debita `price` do gold do
-personagem, pelo caminho do supply (§20.1). `buildContent` exige uma grátis por família — é
-ela que o bow dispara quando o gold acaba, e sem ela o bot pararia de atirar (invariante 11).
-A aparência vive em `appearances.ammunition[id] = { icon, missile }`, conferida dos dois
-lados como a do item: `icon` é o objeto que o seletor mostra, `missile` o projétil do tiro —
-os dois obrigatórios (arrow 3, sniper arrow 22, onyx arrow 23 no 13.32, conferidos de olho). Hoje: arrow (3447, attack 25, grátis), sniper arrow (7364, 28,
-level 20) e onyx arrow (7365, 38, level 40); os preços por tiro são `_open` até serem
-conferidos no TibiaWiki. Quem atira é o `sim` (#152).
+**Munição é abstrata** (ADR 0032 d.7; a decisão 3 do ADR 0026 volta a valer): flecha e virote
+vivem em `ammunition/*.json` com `family` (`arrow`/`bolt`), `attack`, `price` (> 0 — sem fallback
+grátis) e `requires.level`. O `attack` e o `damageType` (default `physical`) do tiro são da
+munição, e cada tiro debita o `price` do gold. `buildContent` recusa arma de distância cuja
+`ammoFamily` não tem munição no catálogo.
+
+A aparência: o projétil fica em `appearances.ammunition[id]` (`missile`), e o ícone do
+`AmmoPicker` vem da mesma tabela. Não duplicar o ícone — duas verdades para o mesmo número
+(DT-03). Os projéteis do pacote 13.32: arrow 3, burst arrow 4, sniper arrow 22, onyx arrow 23.
+
+A seleção é por família pelo opcode 14 `select-ammo`, validada por `requires.level` no servidor e
+publicada em `player-stats.ammo { arrow, bolt }`; a ausência de uma família cai na básica da
+família (a primeira em ordem de id), que também é paga. O primeiro colar (`glacier-amulet`,
+`kind: 'amulet'`, `slot: 'neck'`, `charges` + `mitigation` elemental) e o primeiro escudo real
+(`wooden-shield`, `kind: 'shield'`, `slot: 'shield'`, `defense`) entram como itens; o consumo da
+carga é a AB-06 (#421).
 
 ## Como testar
 

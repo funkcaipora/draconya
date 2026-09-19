@@ -7,10 +7,10 @@
 // é o primitivo `ui/Slot` (FD-07): borda dourada, tracejado nos sete lugares que o kit traceja,
 // fundo claro vazio / marrom ocupado — tudo do próprio `Slot`, nada daqui.
 //
-// **Com uma arma de distância na mão, o escudo é o seletor de munição** (ADR 0026 decisão 3):
-// a célula mostra a munição em uso — a escolhida, ou a grátis, que é o que o servidor atira
-// quando não há escolha — com o preço por tiro; o clique abre o `AmmoPicker`. Sem bow, o slot é
-// um slot.
+// **Com uma arma de distância na mão, o escudo é o seletor de munição** (ADR 0026 decisão 3,
+// restaurada na M18): a munição é abstrata, uma SELEÇÃO por família. A célula do escudo mostra a
+// munição escolhida — ou vazia quando ainda não há seleção — com o preço por tiro; o clique abre
+// o `AmmoPicker`. Sem bow/crossbow, o slot é um slot. O slot `ammo` do corpo continua genérico.
 //
 // O clique num item vestido desveste; soltar um item de container em cima veste. O cliente não
 // soma peso (FUN-90) e não decide o que cabe: `capacity` vem pronto do servidor.
@@ -19,7 +19,7 @@ import { useState } from 'react';
 import { ITEM_SLOTS } from '@draconya/content';
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
-import { AmmoPicker, ammoInUse } from './AmmoPicker.js';
+import { AmmoPicker, ammoFamilyOf, ammoInUse } from './AmmoPicker.js';
 import { dropOn, startDrag } from './ContainerWindow.js';
 import { clickIntent } from './drag-intent.js';
 import { ItemSprite } from './ItemSprite.js';
@@ -62,7 +62,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
   const byId = new Map(catalogue.items.map((item) => [item.id, item]));
   const hand = inventory.equipped['hand'];
   const handDefinition = hand === undefined ? undefined : byId.get(hand.itemId);
-  const ammoFamily = handDefinition?.weapon?.kind === 'distance' ? handDefinition.weapon.ammoFamily : undefined;
+  const ammoFamily = ammoFamilyOf(handDefinition?.weapon);
 
   return (
     <>
@@ -84,7 +84,7 @@ export function EquipmentPanel({ collapsed = false, onToggle }: { collapsed?: bo
               const inUse = ammoInUse(catalogue.ammunition, ammoFamily, chosen);
               const title = inUse === undefined
                 ? 'Munição'
-                : `${inUse.name} · ${inUse.price === 0 ? 'grátis' : `${String(inUse.price)} gold/tiro`}`;
+                : `${inUse.name} · ${String(inUse.price)} gold/tiro`;
               return (
                 <li key={slot} className="slot-shield">
                   <Slot

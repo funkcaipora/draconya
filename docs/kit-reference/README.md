@@ -56,6 +56,7 @@ anteriores continuam válidas.
 | `38-modal-automation-weapon-shield.png` | Automação "Trocar arma/escudo por vida" (kit v3, M18): sets defensivo/ofensivo, condições de entrada em OU e de saída em E, aviso de faixa morta |
 | `39-modal-skills-customize.png` | Personalizar skills (kit v3, RC-04): checkboxes em duas colunas, meta "N de M visíveis", Padrão/Salvar; a ordem do painel é a da lista — sem arrastar |
 | `40-modal-analyzer-expanded.png` | Analisador expandido (kit v3, RC-02): as linhas de `analyzer.rows` com /h na terceira coluna — todo dado já trafega hoje (`Aggregates` + /h no cliente) |
+| `41-modal-action-config-reference.png` | **Não é captura do `ui_kit`** — é a referência EXTERNA do `ActionConfigModal` desde o ADR 0033 (issue #435): o "Configurar ação" do cliente Tibia, que o dono anexou para substituir a captura 34 como régua desta tela. Abas Magias/Runas/Itens, lista à esquerda, painel de detalhe (Tipo, Área, Tipo de dano, Dano/Cura, Custo, Cooldown, Descrição) à direita — nos tokens do design system vigente, não no visual literal do Tibia |
 
 **Shim do `NumField` (26, 27 e 37):** esses modais quebram no protótipo original — usam um
 componente `NumField` que o kit nunca define, nem no v3 (lacuna catalogada na auditoria). Para a captura,

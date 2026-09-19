@@ -1,5 +1,9 @@
 import { useEffect, useRef } from 'react';
+import type { MouseEvent } from 'react';
 import type { AssetPack } from '../assets/pack.js';
+import { sendIntent } from '../net/current.js';
+import { useHudSlice } from '../state/useSlice.js';
+import { world } from '../state/world.js';
 import { TextureBook } from '../world/textures.js';
 import { loadStackMap, sceneFromStack } from '../world/scene.js';
 import type { Scene } from '../world/scene.js';
@@ -60,6 +64,23 @@ export function Viewport() {
   const bookRef = useRef<TextureBook | null>(null);
   /** O último pacote que o contexto entregou — para o Pixi que ainda estava subindo. */
   const packRef = useRef<AssetPack | null>(null);
+  /** O último alvo que o HUD entregou — para o Pixi que ainda estava subindo. */
+  const targetRef = useRef<number | null>(null);
+  const targetId = useHudSlice((state) => state.targetId);
+
+  useEffect(() => {
+    targetRef.current = targetId;
+    handleRef.current?.setTargetId(targetId);
+  }, [targetId]);
+
+  const onCanvasClick = (event: MouseEvent<HTMLDivElement>): void => {
+    // O canvas é filho do Pixi; o overlay de status é irmão React. Só o clique no canvas escolhe.
+    if (!(event.target instanceof HTMLCanvasElement)) return;
+    const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
+    if (id === null || id === world.selfId) return;
+    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido.
+    sendIntent({ type: 'select-target', creatureId: id });
+  };
 
   useEffect(() => {
     const parent = holder.current;
@@ -81,6 +102,7 @@ export function Viewport() {
       // O pacote pode ter chegado enquanto o Pixi subia: o efeito de pacote já rodou, não
       // tinha a quem entregar, e deixou aqui.
       mounted.setPack(packRef.current);
+      mounted.setTargetId(targetRef.current);
     })();
 
     return () => {
@@ -111,7 +133,7 @@ export function Viewport() {
   }, [loaded]);
 
   return (
-    <div className="viewport" ref={holder}>
+    <div className="viewport" ref={holder} onClick={onCanvasClick}>
       {/* O canvas é anexado pelo Pixi; este filho React absoluto pinta o status por cima dele. */}
       <WorldStatusOverlay handleRef={handleRef} />
     </div>

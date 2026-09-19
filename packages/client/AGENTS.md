@@ -2,7 +2,8 @@
 
 ## Propósito
 
-O cliente web: React + PixiJS v8 + Vite. HUD em DOM, mundo em canvas, câmera de ~18×14 tiles.
+O cliente web: React + PixiJS v8 + Vite. HUD em DOM, mundo em canvas, câmera do tamanho do
+canvas (o raio de interesse da rede é 18×14).
 Pipeline de assets (parser de aparências, decoder LZMA em Worker, cache persistente).
 
 ## Fronteiras
@@ -253,8 +254,8 @@ pnpm tsx scripts/make-sheet-fixture.ts
   para quem chegou sem: um nó `game` anterior num deploy em rolagem, um personagem que nunca
   escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
   sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
-  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera de 18×14,
-  camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
+  inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
+  do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
   `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta e
   aquece) e prefetch (`PREFETCH_TILES` = 5) — porque a textura de uma coluna pedida no quadro
   em que ela entra na tela chega tarde; a janela de render é o que compra a antecedência.
@@ -492,9 +493,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   à mesma sessão (ADR 0001): o que se perde é o clique, não o estado.
 - **O catálogo de hunts SUBSTITUI a lista, nunca acumula.** Reconectar reenvia a mesma lista, e
   concatenar daria hunts duplicadas a cada queda de rede.
-- **A UI do bot não tem lista de opções em código** (FUN-89). Categorias, slots, magias e
-  supplies vêm do catálogo (`state/hud.ts`, `catalogue`). Divergir do servidor faz o jogador
-  configurar o que o bot recusa — e descobrir pelo extrato que não fecha.
+- **A UI do bot não tem lista de opções em código** (AB-10…AB-13). Conjuntos, slots, teclas,
+  grupos de cooldown, magias, itens e modelos de automação vêm do catálogo (`state/hud.ts`,
+  `catalogue`). Divergir do servidor faz o jogador configurar o que o bot recusa — e descobrir
+  pelo extrato que não fecha.
 - **Salvar é intenção, e a recusa NÃO descarta o rascunho.** Apagar o que o jogador escreveu é a
   pior resposta a "corrija isto". `bot-config-result` é tipado justamente para a tela não ter de
   casar com o texto de um `system-message`.
@@ -509,21 +511,22 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
   botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
-  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. Com bow na mão o escudo é o
-  seletor de munição (`AmmoPicker`). Arrastar é DnD
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. **A munição é abstrata**
+  (ADR 0026 d.3, restaurada na M18): com um bow/crossbow na mão, o slot do Escudo vira o
+  `AmmoPicker` — a seleção por família, com preço por tiro e level — e o slot `ammo` do corpo
+  segue genérico. Não há pilha nem contagem de munição. Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,
-  minimizável pelo próprio cabeçalho (RC-09/#322 — antes era a barra do topo; `collapsed` esconde
-  tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
-  (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
-  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
-  o remetente por `setConfigSender` ao montar.
+  lugar de origem. **A barra de ações 2 × 12 é a configuração do bot desde o M18** (AB-10…AB-13):
+  montada na Cidade e na caçada, com o `ActionConfigModal` para editar o slot e o
+  `AutomationsPanel` para as cinco automações. O interruptor salva sozinho — `bot/store.ts`
+  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), a barra injeta
+  o remetente por `setConfigSender` ao montar. O painel Bot v1 foi aposentado no mesmo marco.
 - **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`SkillsPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, ao lado de `AutomationsPanel`/`SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
   (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`. "Party loot" (#316) é uma janela
@@ -540,8 +543,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   FUN-115). É a geografia do Huntera, que é a referência visual: o canvas acompanha o tamanho
   da tela (`resizeTo`), o stage é ampliado por um **zoom inteiro** (`zoomFor`: 1×, 2× a partir
   de 560 px no lado menor, 3× a partir de 1400 — inteiro porque pixel art a 1,5× é borrão), e
-  a vista em tiles é o que couber (`viewFor`), com teto em 18×14, que continua sendo o campo de
-  visão da rede. **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
+  a vista em tiles é o que couber no canvas (`viewFor`, sem teto desde #415), e o teto de 18×14
+  é do raio de interesse da rede, não da câmera — o alvo fica no centro real do canvas.
+  **O texto do mundo tem tamanho de TELA, não de mundo:** nome e número flutuante
   são escalados por `1 / zoom`, senão um nome de dez pixels a 3× vira letreiro. A barra do topo
   tem nome, level, gold e os botões que abrem e fecham cada janela — as vitais (HP/mana) saíram
   do topo desde #253 e ficam no alto da coluna direita (`Vitals`, primeiro filho de
@@ -553,9 +557,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   os cinco ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
   Chat — nunca
   emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
-  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
-  faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
-  marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
+  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até a
+  fileira inferior de 124 px, que é a **barra de ações** entregue no M18 (AB-10, ADR 0032 d.1–5;
+  o D5 do ADR 0029 a adiava). A geografia continua a mesma de sempre, só a moldura mudou de pele.
   Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que
   abre minimizada é janela que abre vazia. **Hunts é EXCEÇÃO desde #259** (ADR 0029 D6): não é
   mais uma seção da coluna, é o `HuntsModal` — modal sob demanda, fechado por padrão

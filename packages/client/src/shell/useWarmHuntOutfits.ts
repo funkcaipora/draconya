@@ -15,7 +15,7 @@ import { useHudSlice } from '../state/useSlice.js';
 type Catalogue = S2CProps<'catalogue'>;
 
 /** Os outfits a aquecer: os de todas as hunts, sem repetir. Puro, para o teste. */
-export function outfitsToWarm(catalogue: Catalogue | null): number[] {
+export function outfitsToWarm(catalogue: { hunts: Catalogue['hunts'] } | null): number[] {
   if (catalogue === null) return [];
   const outfits = new Set<number>();
   for (const hunt of catalogue.hunts) for (const outfit of hunt.outfitIds) outfits.add(outfit);

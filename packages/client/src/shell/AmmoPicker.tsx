@@ -1,25 +1,24 @@
-// O seletor de munição (#161, ADR 0026 decisão 3 — o modelo do Huntera).
+// O seletor de munição (#161, ADR 0026 decisão 3 — o modelo do Huntera; restaurado na M18).
 //
-// Munição não é item nem pilha: é uma SELEÇÃO por família, mostrada no slot do escudo quando
-// há um bow na mão. Aqui a lista da família — sprite, nome, attack, preço por tiro ou "grátis",
-// level exigido — e um clique manda `select-ammo`. A escolha aparece quando `player-stats.ammo`
-// volta; a tela nunca a assume. Level maior que o do personagem vem desabilitado só para não
-// oferecer o que o servidor vai recusar — quem confere é ele.
+// Munição não é item nem pilha: é uma SELEÇÃO por família, mostrada no slot do escudo quando há
+// um bow/crossbow na mão. Aqui a lista da família — sprite, nome, attack, preço por tiro e level
+// exigido — e um clique manda `select-ammo`. A escolha aparece quando `player-stats.ammo` volta;
+// a tela nunca a assume. Level maior que o do personagem vem desabilitado só para não oferecer o
+// que o servidor vai recusar — quem confere é ele (invariante 4).
 
 import { sendIntent } from '../net/current.js';
 import { useHudSlice } from '../state/useSlice.js';
-import type { Catalogue } from '../state/hud.js';
+import type { AmmoDefinition, Catalogue } from '../state/hud.js';
 import { ItemSprite } from './ItemSprite.js';
 import { Panel } from './ui/Panel.js';
 
-export type AmmoOption = Catalogue['ammunition'][number];
+export type AmmoOption = AmmoDefinition;
 
-/** A munição em uso de uma família: a escolhida, ou a grátis quando não há escolha. */
+/** A munição em uso de uma família: a escolhida, ou nada quando ainda não há seleção. */
 export function ammoInUse(
   ammunition: readonly AmmoOption[], family: string, chosen: string | null,
 ): AmmoOption | undefined {
-  const mine = ammunition.filter((ammo) => ammo.family === family);
-  return mine.find((ammo) => ammo.id === chosen) ?? mine.find((ammo) => ammo.price === 0);
+  return ammunition.find((ammo) => ammo.family === family && ammo.id === chosen);
 }
 
 export function AmmoPicker({ family, onClose }: { family: string; onClose: () => void }) {
@@ -36,7 +35,7 @@ export function AmmoPicker({ family, onClose }: { family: string; onClose: () =>
         <ul className="ammo-options">
           {options.map((option) => {
             const locked = option.requires.level !== undefined && level > 0 && level < option.requires.level;
-            const active = (chosen ?? undefined) === option.id || (chosen === null && option.price === 0);
+            const active = chosen === option.id;
             return (
               <li key={option.id}>
                 <button
@@ -53,7 +52,7 @@ export function AmmoPicker({ family, onClose }: { family: string; onClose: () =>
                   <ItemSprite appearanceId={option.appearanceId} name={option.name} />
                   <span className="ammo-name">{option.name}</span>
                   <span className="entry-meta">
-                    {`atk ${String(option.attack)} · ${option.price === 0 ? 'grátis' : `${String(option.price)} gold/tiro`}`}
+                    {`atk ${String(option.attack)} · ${String(option.price)} gold/tiro`}
                     {option.requires.level !== undefined && ` · lv ${String(option.requires.level)}`}
                   </span>
                 </button>
@@ -64,4 +63,11 @@ export function AmmoPicker({ family, onClose }: { family: string; onClose: () =>
       </Panel>
     </div>
   );
+}
+
+/** A família de munição que uma arma de distância dispara, ou `undefined` quando não é uma. */
+export function ammoFamilyOf(
+  weapon: Catalogue['items'][number]['weapon'] | undefined,
+): string | undefined {
+  return weapon?.kind === 'distance' ? weapon.ammoFamily : undefined;
 }

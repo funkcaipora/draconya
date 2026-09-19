@@ -50,7 +50,11 @@ describe('viewport (issue #381)', () => {
     // `groundFallback` (viewport.ts) é o PRIMEIRO filho SÓ de `terrain`.
     const [terrain, creatures, above, effects, overlay] = viewport.stage.children;
     expect(terrain?.children[0]).toBeInstanceOf(Graphics);
-    for (const layer of [creatures, above, effects, overlay]) expect(layer?.children).toHaveLength(0);
+    for (const layer of [creatures, above, effects]) expect(layer?.children).toHaveLength(0);
+    // O `overlay` deixou de nascer vazio com a seleção de alvo (#428): o `targetFrame` é um
+    // `Graphics` criado junto com ele. O que a asserção prova é que os três containers do meio
+    // nascem vazios e que `terrain` tem o `groundFallback` como primeiro filho.
+    expect(overlay?.children[0]).toBeInstanceOf(Graphics);
     const layers = viewport.layers();
     expect(layers.terrain).toBe(terrain);
     expect(layers.overlay).toBe(overlay);
