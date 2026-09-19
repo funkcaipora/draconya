@@ -4733,6 +4733,12 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     ...rat, health: 30, experience: 0,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }, { itemId: 'loot-cheese', chance: 1, min: 1, max: 1 }] },
   };
+  // Só a espada (peso 30), sem queijo: é o cenário determinístico de encher a bolsa até a borda
+  // exata, necessário para um OVERWEIGHT que os drops não recusam antes de chegar lá (#396).
+  const swordOnly = {
+    ...rat, health: 30, experience: 0,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
   const potion = { id: 'health-potion', name: 'Poção de Vida', price: 14, effect: { kind: 'heal', amount: 80 } };
   const loaded = (over: Partial<RawContent> = {}) => buildContent(raw({
     monsters: [rich], items: [...items, sword, cheese], supplies: [potion],
@@ -4810,25 +4816,108 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(broke.session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(1);
   });
 
-  it('loot goes to the bag up to the summed capacity; the overflow lands in the leader\'s loot box', () => {
-    // Capacidade 35 + 35 = 70: duas espadas (30) cabem, a terceira não. O queijo (4) cabe.
-    const { session, ruleset } = shared([member('lead', 0, 35), member('b', 0, 35)]);
+  it('OVERWEIGHT: o item que não cabe fica no cadáver — não vai à caixa do líder nem conta itemsLooted (#396)', () => {
+    // Capacidade DISPONÍVEL 30 + 30 = 60 e um item de peso 30 por abate: dois enchem a bolsa na
+    // borda exata (60); o terceiro não cabe e, em OVERWEIGHT, não é coletado (§14).
+    const { session, ruleset } = shared(
+      [member('lead', 0, 30), member('b', 0, 30)], { content: loaded({ monsters: [swordOnly] }) },
+    );
     run(session, 60_000, 100);
     const kills = session.aggregates.kills / 2;
     expect(kills).toBeGreaterThan(2);
     const bag = ruleset.getState().partyBag;
-    expect(bag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
+    expect(bag?.capacity).toBe(60);
+    expect(bag?.overweight).toBe(true);
+    // O gold NUNCA é recusado (§14): entra sempre, mesmo em OVERWEIGHT.
     expect(bag?.gold.reduce((n, e) => n + e.amount, 0)).toBe(kills * 3);
     const swordsInBag = bag?.items.filter((i) => i.item.itemId === 'loot-sword').length ?? 0;
     expect(swordsInBag).toBe(2);
     const lead = session.participants.find((p) => p.id === 'lead');
-    expect(lead?.lootBox.filter((i) => i.itemId === 'loot-sword')).toHaveLength(kills - 2);
-    // Ninguém recebeu na mochila, e `itemsLooted` conta para os dois.
+    // A caixa do líder NÃO recebe o excedente: "coletar com outro destinatário" é coletar (DT-01).
+    expect(lead?.lootBox).toEqual([]);
     expect([...(lead?.inventory.items() ?? [])]).toHaveLength(0);
-    expect(session.aggregatesOf('b').itemsLooted).toBe(kills * 2);
-    expect(session.aggregatesOf('lead').itemsLooted).toBe(kills * 2);
+    // `itemsLooted` conta só o que de fato foi coletado (2 espadas), não o recusado.
+    expect(session.aggregatesOf('b').itemsLooted).toBe(2);
+    expect(session.aggregatesOf('lead').itemsLooted).toBe(2);
     const changed = session.drainEvents().filter((e) => e.kind === 'party-bag-changed');
     expect(changed.length).toBeGreaterThan(0);
+    const last = changed.at(-1);
+    expect(last?.kind === 'party-bag-changed' && last.overweight).toBe(true);
+  });
+
+  it('party-bag-changed leva value, overweight e reservations proporcionais à disponível (#396)', () => {
+    const { session } = shared([member('lead', 0, 1_000), member('b', 0, 500)]);
+    run(session, 8_000, 100);
+    const events = session.drainEvents().filter((e) => e.kind === 'party-bag-changed');
+    const last = events.at(-1);
+    if (last?.kind !== 'party-bag-changed') throw new Error('sem party-bag-changed');
+    expect(last.overweight).toBe(false);
+    expect(last.value).toBeGreaterThan(0);
+    expect(last.reservations.map((r) => r.characterId)).toEqual(['lead', 'b']);
+    // A reserva é proporcional à capacidade DISPONÍVEL (1000 : 500 = 2 : 1), não à total.
+    const [lead, b] = last.reservations;
+    if (lead === undefined || b === undefined) throw new Error('sem reservas');
+    expect(lead.available).toBe(1_000);
+    expect(b.available).toBe(500);
+    expect(lead.reserved).toBeCloseTo(2 * b.reserved, 10);
+  });
+
+  it('party-overweight é notável só na TRANSIÇÃO: on, off, on = 3 linhas (#396, RF-06)', () => {
+    const { session } = shared(
+      [member('lead', 0, 30), member('b', 0, 30), member('c', 0, 30)],
+      { content: loaded({ monsters: [swordOnly] }) },
+    );
+    run(session, 60_000, 100);
+    expect(session.notableEvents.filter((e) => e.type === 'party-overweight').map((e) => e.detail))
+      .toEqual(['on']);
+    // `c` sai: o settlement vende a bolsa e zera o peso — a reserva sai de OVERWEIGHT.
+    session.leave('c', 'manual-exit');
+    // E a bolsa volta a encher com os dois que ficaram.
+    run(session, 60_000, 100);
+    expect(session.notableEvents.filter((e) => e.type === 'party-overweight').map((e) => e.detail))
+      .toEqual(['on', 'off', 'on']);
+  });
+
+  it('#settle libera a reserva: o item que não vende entra na mochila do líder com a capacidade cheia (#396, RF-05)', () => {
+    const relic = { id: 'relic', name: 'Relic', kind: 'other', weight: 31, value: 0 };
+    const withRelic = loaded({ items: [...items, sword, cheese, relic] });
+    const { session } = shared([member('lead', 0, 35), member('b', 0, 1_000)], { content: withRelic });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    // O líder já carrega 4 de peso (um queijo): sobra 31 de 35 — exatamente o peso do relic. Sem
+    // a reserva, ele cabe; com a reserva da própria bolsa em cima, seria recusado para a caixa.
+    const leadState = snapshot.participants.find((p) => p.id === 'lead');
+    if (leadState === undefined) throw new Error('sem lead');
+    (leadState as { inventory: InventoryState }).inventory = {
+      backpack: [{ instanceId: 'inv-cheese', itemId: 'loot-cheese', quantity: 1 }],
+      equipped: {},
+    };
+    (snapshot.ruleset as { partyBag?: unknown }).partyBag = {
+      gold: [], capacity: 0, overweight: false,
+      items: [{ item: { instanceId: 'bag-relic', itemId: 'relic', quantity: 1 }, eligible: ['lead', 'b'] }],
+    };
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, withRelic) as HuntRuleset, Rng.fromSeed('reserve-release'),
+    );
+    const leader = restored.participants.find((p) => p.id === 'lead');
+    if (leader === undefined) throw new Error('sem lead');
+    restored.leave('b', 'manual-exit');
+    expect([...leader.inventory.items()].map((i) => i.itemId)).toContain('relic');
+    expect(leader.lootBox.map((i) => i.itemId)).not.toContain('relic');
+  });
+
+  it('1 Hz == 10 Hz atravessando OVERWEIGHT (#396, RF-04)', () => {
+    const at = (hz: number) => {
+      const { session, ruleset } = shared(
+        [member('lead', 0, 30), member('b', 0, 30)], { content: loaded({ monsters: [swordOnly] }) },
+      );
+      run(session, 60_000, 1000 / hz);
+      return {
+        bag: ruleset.getState().partyBag,
+        overweight: session.notableEvents
+          .filter((e) => e.type === 'party-overweight').map((e) => e.detail),
+      };
+    };
+    expect(at(1)).toEqual(at(10));
   });
 
   it('settlement por entrada: cada composição de elegibilidade paga só quem estava no drop (#395)', () => {
@@ -4860,8 +4949,13 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     const total = 13 * (kills1 + kills2);
     expect(ruleset.getState().partyBag?.gold).toHaveLength(0);
     expect(ruleset.getState().partyBag?.items).toHaveLength(0);
-    // A capacidade é a soma dos PRESENTES, na hora — o level up reescreve `capacity`.
-    expect(ruleset.getState().partyBag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
+    // A capacidade é a soma das DISPONÍVEIS dos PRESENTES, na hora — a mochila do líder já
+    // recebeu os `unsold` do settlement, então o disponível dela caiu (#396).
+    const catalog = loaded().items;
+    const available = session.participants.reduce(
+      (n, p) => n + Math.max(0, p.capacity - p.inventory.weight(catalog)), 0,
+    );
+    expect(ruleset.getState().partyBag?.capacity).toBe(available);
     const lead = session.participants.find((p) => p.id === 'lead');
     expect([...(lead?.inventory.items() ?? [])].filter((i) => i.itemId === 'loot-cheese').reduce((n, i) => n + i.quantity, 0)).toBe(kills1 + kills2);
     expect(session.notableEvents.find((e) => e.type === 'party-settlement')?.detail).toBe(`${String(total)}/3`);

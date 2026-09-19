@@ -135,13 +135,24 @@ export interface MonsterAbilityCast {
 export type CombatEvent =
   | CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot | MonsterAbilityCast;
 
-/** A bolsa da party mudou (#192): o que há nela, e quanto cabe. */
+/** A bolsa da party mudou (#192): o que há nela, quanto vale, quanto cabe e o que está reservado. */
 export interface PartyBagChanged {
   readonly kind: 'party-bag-changed';
   readonly gold: number;
   readonly items: readonly CarriedItem[];
   readonly weight: number;
+  /** Σ da capacidade DISPONÍVEL dos presentes — não a total (#396). */
   readonly capacity: number;
+  /** Quanto a bolsa vende agora (PRD §10). */
+  readonly value: number;
+  /** `peso > Σ disponível` (§14). */
+  readonly overweight: boolean;
+  /** A reserva proporcional de cada membro (§11-§13), para o mapa de capacidade do HUD. */
+  readonly reservations: ReadonlyArray<{
+    readonly characterId: string;
+    readonly reserved: number;
+    readonly available: number;
+  }>;
 }
 
 /**

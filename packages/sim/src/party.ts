@@ -34,11 +34,58 @@ export interface GoldEntry {
   readonly eligible: readonly string[];
 }
 
-/** A bolsa do modo compartilhado. O ruleset é quem mantém `capacity` (Σ dos presentes). */
+/** A bolsa do modo compartilhado. O ruleset é quem mantém `capacity` (Σ das disponíveis). */
 export interface PartyBagState {
   gold: GoldEntry[];
   readonly items: BagEntry[];
+  /** Σ da capacidade DISPONÍVEL dos presentes (não a total) — #396. */
   capacity: number;
+  /** `peso > Σ disponível` (§14). Persistido para a transição não disparar falso no resume. */
+  overweight: boolean;
+}
+
+/** A capacidade disponível de um membro para a reserva proporcional (§12). */
+export interface MemberCapacity {
+  readonly id: string;
+  readonly available: number;
+}
+
+/**
+ * A reserva proporcional de cada membro (§12): `R_i = W × B_i / ΣB`, em ponto flutuante (peso é
+ * float no conteúdo). `B_i` é a capacidade DISPONÍVEL (`capacity − inventory.weight`), nunca a
+ * total — bolsa e mochila contam a mesma capacidade duas vezes sem isto (D4).
+ *
+ * Σ reservas = `min(weight, ΣB)`: em OVERWEIGHT cada membro reserva TODA a disponível que tem, e
+ * o excedente da bolsa fica sem reserva de ninguém (§14: quem chama decide não coletar, não
+ * "sobrar" para alguém). Disponível `0` ou negativa não gera reserva negativa nem `NaN`.
+ *
+ * Pura: sem RNG, sem I/O, sem relógio — como o resto de `party.ts`.
+ */
+export function reserveProportionally(
+  weight: number,
+  members: readonly MemberCapacity[],
+): Map<string, number> {
+  const totalAvailable = members.reduce((sum, m) => sum + Math.max(0, m.available), 0);
+  const reserved = new Map<string, number>();
+  if (weight <= 0 || totalAvailable <= 0) {
+    for (const m of members) reserved.set(m.id, 0);
+    return reserved;
+  }
+  const capped = Math.min(weight, totalAvailable);
+  for (const m of members) {
+    const available = Math.max(0, m.available);
+    reserved.set(m.id, (capped * available) / totalAvailable);
+  }
+  return reserved;
+}
+
+/** Quanto a bolsa vende hoje (PRD §10) — leitura pura do que já existe, sem consumir sorteio. */
+export function bagValue(bag: PartyBagState, catalog: ReadonlyMap<string, Item>): number {
+  let total = bag.gold.reduce((sum, entry) => sum + entry.amount, 0);
+  for (const entry of bag.items) {
+    total += (catalog.get(entry.item.itemId)?.value ?? 0) * entry.item.quantity;
+  }
+  return total;
 }
 
 export interface EntrySettlement {
