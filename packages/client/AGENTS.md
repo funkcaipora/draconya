@@ -99,10 +99,11 @@ cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um v
 
 **O que é lido, e o que é pulado.** Lidos: `id`, `frame_group`, e de `sprite_info` os
 `pattern_*`, `layers`, `sprite_id`, `bounding_square` e as durações das fases; e, de `flags`
-(FUN-117, ADR 0025), só o que bloqueio e pilha precisam — `bank` (com `waypoints`, a
-velocidade do chão), `clip`, `bottom`, `top`, `unpass`, `unmove`, `unsight`, `avoid`,
-`no_movement_animation`, `take`, `hang`, `hook`, `shift`, `height`, `lying_object`,
-`animate_always`, `fullbank` — booleanos e três números por aparência, com os números de campo
+(FUN-117, ADR 0025), só o que bloqueio, pilha e VISIBILIDADE DE ANDAR precisam — `bank` (com
+`waypoints`, a velocidade do chão), `clip`, `bottom`, `top`, `unpass`, `unmove`, `unsight`,
+`avoid`, `no_movement_animation`, `take`, `hang`, `dont_hide`, `hook`, `shift`, `height`,
+`lying_object`, `animate_always`, `fullbank` — booleanos e três números por aparência, com os
+números de campo
 conferidos contra o pacote 1332 real (`appearances.pack.test.ts`). Pulados: o resto das flags
 (mercado, NPC, cyclopedia, vocação, luz, minimapa), `name`, `description`,
 `bounding_box_per_direction`, `is_opaque` — e todo campo que uma versão futura trouxer, **pelo
@@ -306,11 +307,20 @@ pnpm tsx scripts/make-sheet-fixture.ts
   na primeira linha, 5/10/25/50 na segunda — a moeda de 4×3 do 13.x volta à posição, como o
   cliente do Tibia faz), pelo GANCHO da parede do mesmo tile para o pendurável (sul → coluna
   1, leste → 2); **âncora** no canto inferior direito do tile, como já era. **Andares**
-  (`world/floors.ts`, puro): na superfície desenha-se do andar do jogador até o 7, o de baixo
-  primeiro, cada nível abaixo deslocado um tile para baixo e para a direita — o
-  `transformPositionTo2D` do OTClient — e sob um véu (`VEIL_PER_FLOOR`, também sobre os
-  retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da arte); no
-  subsolo, só o andar do jogador; quem está ACIMA do jogador não aparece — não há telhado. A
+  (`world/visibility.ts`, puro; `world/floors.ts` é só o véu; M23, D7): desenha-se
+  `visibleFloors(first, last)`, o de baixo primeiro. `last` é o 7 na superfície e `z + 2` no
+  subsolo; `first` é 0 na superfície e `max(z − 2, 8)` no subsolo, **subindo até a primeira
+  cobertura** — a regra de `calcFirstVisibleFloor` do OTClient, em números: nos 3×3 em volta da
+  posição LÓGICA do jogador (o centro sempre, os ortogonais só com vista livre, a diagonal
+  nunca), o tile fisicamente acima `(x, y, z−1)` ou o geometricamente acima `(x+1, y+1, z−1)`
+  cuja primeira coisa é chão, ou `bottom` (com `unsight` quando o tile de baixo tem vista
+  livre), e que não é `dontHide`, limita a vista em `z`. Cada andar ABAIXO do jogador aparece
+  deslocado um tile para baixo e para a direita por nível e sob um véu (`VEIL_PER_FLOOR`, também
+  sobre os retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da
+  arte); cada andar ACIMA, um tile para cima e para a esquerda, **sem véu** — é o telhado da casa
+  e o topo da montanha, e a criatura que está lá aparece. Entrar em casa cobre: o andar de cima
+  some numa rampa de `FLOOR_FADE_MS` no alpha do container dele (`floorAlpha`), e volta na mesma
+  rampa ao sair; trocar de andar é teleporte e não tem rampa. A rua (7) nunca entra no subsolo. A
   criatura em cima de uma caixa sobe a elevação do tile, INTERPOLADA ao longo do passo — lida
   só pelo tile arredondado ela pulava 24 px no meio do passo. `ambience: 'cavern'` do
   `instance-enter` é um tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**

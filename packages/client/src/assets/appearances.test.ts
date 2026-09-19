@@ -233,6 +233,18 @@ describe('as flags de aparência (FUN-117)', () => {
     expect(odd?.hookSouth).toBeUndefined();
   });
 
+  it('lê dont_hide (24): ligado é true, ausente é false', () => {
+    const catalogue = readAppearances(appearances({
+      object: [
+        appearance({ id: 1, frameGroups: [frameGroup({ spriteIds: [1] })], flags: flags({ dontHide: true }) }),
+        appearance({ id: 2, frameGroups: [frameGroup({ spriteIds: [1] })], flags: flags({ bottom: true }) }),
+      ],
+    }));
+    expect(catalogue.object.get(1)?.flags?.dontHide).toBe(true);
+    expect(catalogue.object.get(2)?.flags?.dontHide).toBe(false);
+    expect(NO_FLAGS.dontHide).toBe(false);
+  });
+
   it('chão sem waypoints continua sendo chão: bank vazio dá zero, não undefined', () => {
     // O pacote real grava `bank {}` em chão sem velocidade declarada. A pergunta que o
     // importador faz é "é chão?", e a resposta tem que ser sim.

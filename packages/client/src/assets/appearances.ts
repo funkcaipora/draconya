@@ -19,9 +19,9 @@
 //   message AppearanceFlags { AppearanceFlagBank bank=1; bool clip=2, bottom=3, top=4;
 //                         bool unpass=13, unmove=14, unsight=15, avoid=16,
 //                         no_movement_animation=17, take=18, hang=20;
-//                         AppearanceFlagHook hook=21; AppearanceFlagShift shift=26;
-//                         AppearanceFlagHeight height=27; bool lying_object=28,
-//                         animate_always=29, fullbank=32; ... }
+//                         AppearanceFlagHook hook=21; bool dont_hide=24;
+//                         AppearanceFlagShift shift=26; AppearanceFlagHeight height=27;
+//                         bool lying_object=28, animate_always=29, fullbank=32; ... }
 //   message AppearanceFlagBank { uint32 waypoints=1; }      -- a velocidade do chão
 //   message AppearanceFlagHook { HOOK_TYPE south=1; HOOK_TYPE east=2; }
 //   message AppearanceFlagShift { uint32 x=1; uint32 y=2; }
@@ -107,6 +107,8 @@ export interface AppearanceFlags {
   readonly noMovementAnimation: boolean;
   readonly take: boolean;
   readonly hang: boolean;
+  /** `dont_hide` (24): o item não esconde os andares abaixo — não limita a vista (`visibility.ts`). */
+  readonly dontHide: boolean;
   readonly hookSouth?: number;
   readonly hookEast?: number;
   /** `AppearanceFlagShift`, em pixels. Ausente é `{0, 0}`. */
@@ -122,8 +124,8 @@ export interface AppearanceFlags {
 /** Aparência sem nenhuma flag lida — o que uma sem o campo 3 devolve, e o que um teste usa. */
 export const NO_FLAGS: AppearanceFlags = Object.freeze({
   clip: false, bottom: false, top: false, unpass: false, unmove: false, unsight: false,
-  avoid: false, noMovementAnimation: false, take: false, hang: false, lyingObject: false,
-  animateAlways: false, fullbank: false,
+  avoid: false, noMovementAnimation: false, take: false, hang: false, dontHide: false,
+  lyingObject: false, animateAlways: false, fullbank: false,
 });
 
 export interface Appearance {
@@ -237,6 +239,7 @@ function readAppearanceFlags(reader: Reader): AppearanceFlags {
       else if (field === 17) flags.noMovementAnimation = on;
       else if (field === 18) flags.take = on;
       else if (field === 20) flags.hang = on;
+      else if (field === 24) flags.dontHide = on;
       else if (field === 28) flags.lyingObject = on;
       else if (field === 29) flags.animateAlways = on;
       else if (field === 32) flags.fullbank = on;

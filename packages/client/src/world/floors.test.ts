@@ -1,31 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { VEIL_PER_FLOOR, floorsBelow, shade, veilTint } from './floors.js';
-
-describe('floorsBelow (FUN-121)', () => {
-  const thais = [4, 5, 6, 7];
-
-  it('na superfície, do andar do jogador até o 7, o mais fundo primeiro', () => {
-    expect(floorsBelow(thais, 7)).toEqual([7]);
-    expect(floorsBelow(thais, 6)).toEqual([7, 6]);
-    expect(floorsBelow(thais, 4)).toEqual([7, 6, 5, 4]);
-  });
-
-  it('nunca um andar ACIMA do jogador: não há telhado', () => {
-    expect(floorsBelow(thais, 6)).not.toContain(5);
-    expect(floorsBelow(thais, 7)).not.toContain(6);
-  });
-
-  it('no subsolo, só o andar do jogador — o bueiro não mostra a rua', () => {
-    expect(floorsBelow([8], 8)).toEqual([8]);
-    expect(floorsBelow([7, 8, 9], 8)).toEqual([8]);
-    expect(floorsBelow([7, 8, 9], 9)).toEqual([9]);
-  });
-
-  it('andar que a cena não tem simplesmente não entra', () => {
-    expect(floorsBelow([7], 5)).toEqual([7]);
-    expect(floorsBelow([4, 5], 7)).toEqual([]);
-  });
-});
+import { VEIL_PER_FLOOR, shade, veilTint } from './floors.js';
 
 describe('veilTint e shade (FUN-121)', () => {
   it('o andar do jogador não tem véu; cada nível abaixo escurece em progressão geométrica', () => {

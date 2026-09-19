@@ -12,7 +12,6 @@ import {
   clearTransients, world, type Creature, type Point,
 } from '../../state/world.js';
 import { mountViewport, type ViewportHandle } from '../viewport.js';
-import { floorsBelow } from '../floors.js';
 import type { Scene, TileStack } from '../scene.js';
 import {
   lastApplication, type Application, type Container, type Graphics, type GraphicsOp, type Sprite,
@@ -77,8 +76,9 @@ export interface Layers {
   readonly overlay: Container;
 }
 
-/** As três camadas de UM andar, mais o `Graphics` de reserva (filho 0 de `ground`). */
+/** As três camadas de UM andar, mais o `root` do andar e o `Graphics` de reserva (filho 0 de `ground`). */
 export interface FloorLayerView {
+  readonly root: Container;
   readonly ground: Container;
   readonly scene: Container;
   readonly top: Container;
@@ -139,8 +139,9 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
     );
   }
 
-  // O harness segue a cena para saber a ordem de `floorsRoot.children` (que é a de `floorsBelow`)
-  // sem tocar no viewport. `setScene` é envolvido porque os testes de #383 o chamam direto.
+  // O harness segue a cena para o `defaultZ` (o andar sem self): a ordem de `floorsRoot` e os
+  // `z` de cada andar saem do `label` que o viewport escreve no `root` do andar. `setScene` é
+  // envolvido porque os testes de #383 o chamam direto.
   let currentScene: Scene | null = null;
   const setScene = handle.setScene.bind(handle);
   handle.setScene = (next) => { currentScene = next; setScene(next); };
@@ -160,20 +161,25 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
     return self === undefined ? (currentScene?.defaultZ ?? 0) : Math.round(self.position.z);
   };
 
-  const drawnFloors = (): number[] => {
-    const floor = playerFloor();
-    return currentScene === null ? [floor] : floorsBelow(currentScene.floors, floor);
-  };
+  /**
+   * O `z` de cada `root` anexado, do fundo ao topo — a ordem de `floorsRoot.children`. O
+   * viewport marca o `label` do container do andar (`layersFor`); o harness o lê, então não
+   * redescobre a faixa de andares nem sofre com o fade (que mantém o andar saindo na lista).
+   */
+  const drawnFloors = (): number[] => layers().floorsRoot.children.map(
+    (root) => Number(root.label.slice('floor:'.length)),
+  );
 
   const floorLayers = (z: number): FloorLayerView => {
-    const floors = drawnFloors();
-    const index = floors.indexOf(z);
-    if (index < 0) throw new Error(`harness: andar ${z} não está desenhado (${floors.join(',')})`);
-    const [ground, scene, top] = layers().floorsRoot.children.slice(index * 3, index * 3 + 3);
-    if (ground === undefined || scene === undefined || top === undefined) {
-      throw new Error('harness: floorsRoot não tem as três camadas do andar');
+    const root = layers().floorsRoot.children.find((child) => child.label === `floor:${z}`);
+    if (root === undefined) {
+      throw new Error(`harness: andar ${z} não está desenhado (${drawnFloors().join(',')})`);
     }
-    return { ground, scene, top, fallback: ground.children[0] as Graphics };
+    const [ground, scene, top] = root.children;
+    if (ground === undefined || scene === undefined || top === undefined) {
+      throw new Error('harness: root do andar não tem as três camadas');
+    }
+    return { root, ground, scene, top, fallback: ground.children[0] as Graphics };
   };
 
   const placeholder = (): Graphics => floorLayers(playerFloor()).fallback;
@@ -181,8 +187,10 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
   /** Os sprites dos `scene` dos andares ANEXADOS — é onde objeto e criatura moram desde #385. */
   const sceneSprites = (): Sprite[] => {
     const result: Sprite[] = [];
-    for (const container of layers().floorsRoot.children) {
-      if (container.sortableChildren) result.push(...(container.children as Sprite[]));
+    for (const root of layers().floorsRoot.children) {
+      for (const container of root.children) {
+        if (container.sortableChildren) result.push(...(container.children as Sprite[]));
+      }
     }
     return result;
   };
