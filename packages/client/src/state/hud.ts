@@ -91,6 +91,12 @@ export interface BotVocabulary {
   readonly slots?: Readonly<Record<string, number>>;
   /** Os suprimentos abstratos (§20.1, ADR 0026 d.3): a tela os oferece como ação de slot. */
   readonly supplies?: S2CProps<'catalogue'>['bot']['supplies'];
+  /**
+   * Os coeficientes da conversão do Base Power (#436/#437, ADR 0033), para o `ActionConfigModal`
+   * mostrar a faixa "min~max" no painel de detalhe. Opcional: um nó `game` anterior manda sem, e
+   * `bot/action-detail.ts` omite a linha em vez de inventar um número (RF-09).
+   */
+  readonly spellPower?: S2CProps<'catalogue'>['bot']['spellPower'];
 }
 export type ItemDefinition = Catalogue['items'][number];
 /** A munição abstrata do catálogo (#152): a seleção por família, com preço por tiro. */

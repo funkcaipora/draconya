@@ -591,34 +591,64 @@ body {
 /* Cooldown visual: a tecla continua disparável — quem recusa é o servidor (invariante 4). */
 .action-slot-cooldown { opacity: .6; }
 
-/* ---- O modal de configuração de slot (#426, AB-11, régua kit/34) --------------------------- */
-.action-config-head {
-  display: flex; align-items: center; gap: 12px; padding: 2px 2px 12px;
-  border-bottom: 1px solid var(--ash-4);
+/* ---- O modal de configuração de slot (#437, AB-11, régua da imagem #435, ADR 0033) ---------- */
+.action-config-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 2px 2px 12px; border-bottom: 1px solid var(--ash-4);
 }
-.action-config-ident { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.action-config-name { color: var(--parchment-1); font: 600 13px var(--font-display); }
-.action-config-subtitle { color: var(--text-faint); font: 8px var(--font-mono); letter-spacing: .04em; }
 .action-config-auto {
   display: flex; align-items: center; gap: 7px;
   color: var(--text-muted); font: 7px var(--font-mono); letter-spacing: .1em; text-transform: uppercase;
 }
-.action-config-fields {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 12px 2px 10px;
+.action-config-split {
+  display: grid; grid-template-columns: 220px 1fr; gap: 10px; height: 260px; padding: 10px 2px;
 }
-.action-config-note {
-  margin: 10px 2px 0; color: var(--text-faint); font: 7px var(--font-mono); line-height: 1.6;
+.action-config-list {
+  list-style: none; margin: 0; padding: 0 4px 0 0; overflow-y: auto;
+  display: grid; gap: 4px; align-content: start;
 }
+.action-config-list button {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px;
+  border: 1px solid transparent; border-radius: 3px; background: none; cursor: pointer;
+  color: var(--parchment-1); font: 9px var(--font-mono); text-align: left;
+}
+.action-config-list button[aria-pressed="true"] {
+  border-color: var(--border-gold); background: var(--surface-slot);
+}
+.action-config-list button.is-locked { opacity: .55; }
+.action-config-detail {
+  display: flex; flex-direction: column; gap: 8px; padding: 4px 6px; overflow-y: auto;
+  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
+}
+.action-config-detail header { display: flex; align-items: center; gap: 8px; }
+.action-config-detail h3 {
+  margin: 0; color: var(--parchment-1); font: 600 12px var(--font-display); flex: 1; min-width: 0;
+}
+.action-config-req {
+  color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .04em; white-space: nowrap;
+}
+.action-config-detail dl {
+  margin: 0; display: grid; grid-template-columns: 84px 1fr; gap: 4px 6px; align-items: baseline;
+}
+.action-config-detail dt {
+  margin: 0; color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.action-config-detail dd { margin: 0; color: var(--parchment-1); font: 9px var(--font-mono); }
+.action-config-description { margin: 0; color: var(--text-muted); font: 8px var(--font-mono); line-height: 1.6; }
+.action-config-conditions-head { padding: 8px 2px 2px; }
 .action-config-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
 .action-config-actions { display: flex; gap: 8px; }
 
-/* ---- A lista de condições em E do slot (#426, AB-11) --------------------------------------- */
+/* ---- A lista de condições em E do slot (#426/#437, AB-11, régua da imagem #435) ------------- */
 .condition-list { display: grid; gap: 5px; padding: 6px 2px 2px; }
 .condition-row {
-  display: grid; grid-template-columns: 1.3fr 64px 1fr 26px; align-items: center; gap: 5px;
+  display: grid; grid-template-columns: 72px 1fr 1.2fr 26px 56px 26px 34px 26px;
+  align-items: center; gap: 5px;
   padding: 5px 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
 }
 .condition-row .ui-input { margin: 0; }
+.condition-row .ui-checkbox { justify-content: center; }
 .condition-list > .ui-button { justify-self: start; margin-top: 2px; }
 
 /* ---- O painel AUTOMAÇÕES da coluna esquerda (#427, AB-12, régua kit/10) -------------------- */
