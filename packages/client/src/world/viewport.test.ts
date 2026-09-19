@@ -25,6 +25,7 @@ import type { Scene, TileStack } from './scene.js';
 
 /** O catálogo mínimo dos testes — ver a seção 11 das specs #381 e #385. */
 const GRASS = 100;
+const ROOF = 101;
 const WALL = 102;
 const ARCH = 106;
 const CRATE = 103;
@@ -36,6 +37,7 @@ const BIG_SHIFTED = 24;
 
 const CATALOG: SyntheticCatalog = {
   [GRASS]: { kind: 'object' },
+  [ROOF]: { kind: 'object' },
   [WALL]: { kind: 'object', flags: { bottom: true, unpass: true }, size: { width: 2, height: 2 } },
   [ARCH]: { kind: 'object', flags: { top: true } },
   [CRATE]: { kind: 'object', flags: { elevation: 8 } },
@@ -355,11 +357,12 @@ describe('viewport: cena espacial por andar (issue #385)', () => {
     const children = viewport.layers().floorsRoot.children;
     const floor7 = viewport.floorLayers(7);
     const floor6 = viewport.floorLayers(6);
-    expect(children[0]).toBe(floor7.ground);
-    expect(children[1]).toBe(floor7.scene);
-    expect(children[2]).toBe(floor7.top);
-    expect(children[3]).toBe(floor6.ground);
-    expect(children.indexOf(floor6.top)).toBeGreaterThan(children.indexOf(floor6.scene));
+    expect(children[0]).toBe(floor7.root);
+    expect(children[1]).toBe(floor6.root);
+    expect(floor7.root.children[0]).toBe(floor7.ground);
+    expect(floor7.root.children[1]).toBe(floor7.scene);
+    expect(floor7.root.children[2]).toBe(floor7.top);
+    expect(floor6.root.children.indexOf(floor6.top)).toBeGreaterThan(floor6.root.children.indexOf(floor6.scene));
 
     const ground7 = floor7.ground.children.filter(
       (child) => 'texture' in child && child.visible,
@@ -377,7 +380,7 @@ describe('viewport: cena espacial por andar (issue #385)', () => {
     await viewport.tick(0);
     await viewport.tick(16);
 
-    const children = viewport.layers().floorsRoot.children;
+    const children = viewport.floorLayers(7).root.children;
     const layers = viewport.floorLayers(7);
     expect(children.indexOf(layers.top)).toBeGreaterThan(children.indexOf(layers.scene));
     expect(spriteWith(layers.top, art.bitmapOf('object:106:0:0'))).toBeDefined();
@@ -939,7 +942,7 @@ describe('viewport: prefetch contínuo (issue #383)', () => {
     expect(other.warmedOutfits).toEqual([128]); // pacote novo repete o pedido
   });
 
-  it('5a. trocar de andar refaz a janela inteira, nos dois andares de floorsBelow', async () => {
+  it('5a. trocar de andar refaz a janela inteira, nos dois andares visíveis', async () => {
     const { art, viewport } = await mountWarmed();
     const before = art.warmedObjects.length;
 
@@ -984,5 +987,188 @@ describe('viewport: prefetch contínuo (issue #383)', () => {
     expect(art.warmedObjects).toHaveLength(1);
     const window = prefetchTiles({ x: CENTER.x + 3, y: CENTER.y, z: 7 }, VIEW);
     expect(new Set(art.warmedObjects[0])).toEqual(columnIds(window, 7));
+  });
+});
+
+/**
+ * A visibilidade de andares (issue #387, seção 11): o andar acima é desenhado até a cobertura,
+ * sem véu, e a criatura que está lá aparece; entrar em casa faz o andar sumir numa rampa de
+ * `FLOOR_FADE_MS` no alpha do `root` do andar, e sair o traz de volta; o prefetch segue a faixa
+ * VISÍVEL (não o andar que está sumindo).
+ */
+describe('viewport: visibilidade de andares (issue #387)', () => {
+  /** A rua toda `GRASS`; um telhado `ROOF` em (5..8, 5..8) do andar 6. */
+  function houseScene(): Scene {
+    const tiles: Record<string, TileStack> = {};
+    for (let y = 5; y <= 8; y++) {
+      for (let x = 5; x <= 8; x++) tiles[`${x},${y},6`] = { ground: ROOF, items: [] };
+    }
+    return sceneOf({
+      width: 20, height: 20, floors: [6, 7],
+      fill: { 7: { ground: GRASS, items: [] } },
+      tiles,
+    });
+  }
+
+  it('V1: fora da casa o 6 é desenhado sem véu, e a criatura no 6 aparece', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 6, y: 6, z: 6 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const roof = viewport.floorLayers(6);
+    expect(roof.root.visible).toBe(true);
+    expect(roof.root.alpha).toBe(1);
+    const sprites = [...roof.ground.children, ...roof.scene.children]
+      .filter((child) => 'texture' in child) as Sprite[];
+    expect(sprites.length).toBeGreaterThan(0);
+    for (const sprite of sprites) expect(sprite.tint).toBe(0xffffff);
+    expect(viewport.creatureSprite(2)?.visible).toBe(true);
+  });
+
+  it('V2: entrar em casa começa a rampa no passo, e o 6 e B somem no fim dela', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 6, y: 6, z: 6 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const roof = viewport.floorLayers(6).root;
+    // A posição LÓGICA é o destino desde o instante do passo: a rampa começa já, com a câmera
+    // ainda em (12, 12). Mutação que mata: usar `interpolate` na conta.
+    viewport.step(1, { x: 12, y: 12, z: 7 }, { x: 6, y: 6, z: 7 }, 1000, 400);
+
+    await viewport.tick(1000);
+    expect(roof.alpha).toBe(1);
+
+    await viewport.tick(1125);
+    expect(roof.alpha).toBeCloseTo(0.5);
+
+    await viewport.tick(1250);
+    expect(roof.alpha).toBe(0);
+    expect(roof.visible).toBe(false);
+    // `overlay.children[0]` é o `targetFrame` (#428); barra e nome de B vêm depois dele.
+    const overlay = viewport.layers().overlay.children.slice(1);
+    expect(viewport.creatureSprite(2)?.visible).toBe(false);
+    expect((overlay[2] as Container).visible).toBe(false);
+    expect((overlay[3] as Container).visible).toBe(false);
+  });
+
+  it('V3: sair de casa traz o 6 de volta numa rampa, e B volta com ele', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 6, y: 6, z: 6 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const roof = viewport.floorLayers(6).root;
+    viewport.moveSelfTo({ x: 6, y: 6, z: 7 });
+    await viewport.tick(1000);
+    await viewport.tick(1250); // a rampa de entrada terminou; o pool guarda o root do 6
+    expect(roof.visible).toBe(false);
+
+    viewport.moveSelfTo({ x: 12, y: 12, z: 7 });
+    await viewport.tick(2000);
+    expect(viewport.drawnFloors()).toContain(6);
+    expect(roof.alpha).toBe(0);
+
+    await viewport.tick(2125);
+    expect(roof.alpha).toBeCloseTo(0.5);
+
+    await viewport.tick(2250);
+    expect(roof.alpha).toBe(1);
+    expect(roof.visible).toBe(true);
+    expect(viewport.creatureSprite(2)?.visible).toBe(true);
+  });
+
+  it('V4: entrar e sair no meio da rampa nunca tira o alpha de [0, 1]', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 6, y: 6, z: 6 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const roof6 = viewport.floorLayers(6).root;
+    const roof7 = viewport.floorLayers(7).root;
+    const bar2 = viewport.layers().overlay.children[2] as Container;
+    const check = (): void => {
+      for (const alpha of [roof6.alpha, roof7.alpha, bar2.alpha]) {
+        expect(alpha).toBeGreaterThanOrEqual(0);
+        expect(alpha).toBeLessThanOrEqual(1);
+      }
+    };
+
+    viewport.moveSelfTo({ x: 6, y: 6, z: 7 });
+    for (let t = 3000; t <= 3090; t += 10) {
+      await viewport.tick(t);
+      check();
+    }
+    viewport.moveSelfTo({ x: 12, y: 12, z: 7 }); // troca no MEIO da rampa
+    for (let t = 3100; t <= 3600; t += 10) {
+      await viewport.tick(t);
+      check();
+    }
+  });
+
+  it('V5: criatura no andar de cima é desenhada no `scene` do 6 e ordena como criatura', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    viewport.spawn(2, { x: 6, y: 6, z: 6 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    viewport.step(2, { x: 6, y: 6, z: 6 }, { x: 7, y: 6, z: 6 }, 0, 400);
+    await viewport.tick(200);
+
+    const b = viewport.creatureSprite(2) as Sprite;
+    expect(b.visible).toBe(true);
+    expect(b.parent).toBe(viewport.floorLayers(6).scene);
+    // Andar de cima deslocado um tile para cima/esquerda: o tile de ordem é (6, 5).
+    expect(b.zIndex).toBe(sceneZIndex(6, 5, CREATURE_SLOT));
+  });
+
+  it('V6: o prefetch aquece a faixa visível, não o andar que acabou de sair', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now, latencyMs: 100 });
+    const viewport = await mountTestViewport({ scene: houseScene(), art, clock });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, RAT);
+    await viewport.tick(0);
+    expect(art.warmedObjects.some((ids) => ids.includes(ROOF))).toBe(true);
+
+    viewport.step(1, { x: 12, y: 12, z: 7 }, { x: 6, y: 6, z: 7 }, 1000, 400);
+    await viewport.tick(1300);
+    await viewport.tick(1400); // a câmera pousa em (6, 6) e a janela se acomoda
+    const before = art.warmedObjects.length;
+
+    // Um passo DENTRO do telhado (5..8): a janela anda, mas a faixa visível continua só o 7.
+    viewport.step(1, { x: 6, y: 6, z: 7 }, { x: 8, y: 8, z: 7 }, 1400, 400);
+    await viewport.tick(1800);
+
+    const calls = art.warmedObjects.slice(before);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const ids of calls) expect(ids).not.toContain(ROOF);
+  });
+
+  it('V7: sem cena, um andar só no pool, alpha 1, sem erro em vinte quadros', async () => {
+    const viewport = await mountTestViewport({ scene: null });
+    viewport.spawnSelf(1, { x: 12, y: 12, z: 7 }, 0);
+    viewport.handle.setScene(null);
+    for (let i = 0; i < 20; i++) await viewport.tick(i * 16);
+
+    const roots = viewport.layers().floorsRoot.children;
+    expect(roots).toHaveLength(1);
+    expect(roots[0]?.alpha).toBe(1);
+    expect(roots[0]?.visible).toBe(true);
   });
 });
