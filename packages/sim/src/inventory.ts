@@ -40,8 +40,8 @@ export interface CarriedItem {
    * De onde veio (§25.3, #154). Ausente é `'loot'` — o snapshot anterior a #154 não tem a
    * chave, e tudo o que existia antes caiu de monstro. É o `origin` da linha de `item_instance`.
    *
-   * Alargado de `'loot' | 'vocation-choice'` para `ItemOrigin` no #419: a pilha comprada pelo
-   * bot entra como `'market'`, e o valor é do conteúdo (`schemas.ts`), não desta task.
+   * Alargado de `'loot' | 'vocation-choice'` para `ItemOrigin` no #419: o comércio entrou como
+   * `'market'` (`schemas.ts`), e o supply é abstrato — o gold sai no uso, sem pilha comprada.
    */
   readonly origin?: ItemOrigin;
   /**

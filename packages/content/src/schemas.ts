@@ -471,8 +471,8 @@ export const ITEM_ORIGINS = [
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 /**
- * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v1 ainda não os lê (AB-07):
- * aqui o grupo é DECLARADO pelo conteúdo, não executado.
+ * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v2 os lê: o uso do supply
+ * tranca o livro do grupo, como a magia tranca o dela.
  */
 export const CONSUMABLE_GROUPS = ['potion', 'attack', 'healing', 'support'] as const;
 export type ConsumableGroup = (typeof CONSUMABLE_GROUPS)[number];
@@ -632,6 +632,13 @@ export const supplySchema = z.object({
   price: z.number().int().nonnegative(),
   /** Grupo de cooldown do motor v2 (ADR 0032 d.2). O mesmo vocabulário de `spell.group`. */
   group: z.enum(CONSUMABLE_GROUPS),
+  /**
+   * Por quanto tempo o uso tranca o livro do grupo (ADR 0032 d.2/d.6), como
+   * `spell.groupCooldownMs`. O supply não tem cooldown individual separado: o grupo É o livro
+   * dele. Default 1000: o passo do Tibia para poção e a cadência que o pool `potion` já
+   * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
+   */
+  groupCooldownMs: z.number().int().positive().default(1_000),
   effect: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
     z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
@@ -1428,11 +1435,11 @@ export type Bestiary = z.infer<typeof bestiarySchema>;
 export const BOT_VOCABULARY_VERSION = 2;
 
 /**
- * A v1 continua existindo como ENTRADA da migração e como input do motor até o AB-07.
+ * A v1 continua existindo como ENTRADA da migração.
  *
- * O vocabulário do CONTEÚDO subiu para 2 (a barra é a configuração), mas a config que o
- * jogador salvou e que o `sim` ainda lê continua na v1 — e é `migrateBotConfigV1` quem a
- * converte.
+ * O vocabulário do CONTEÚDO subiu para 2 (a barra é a configuração) e o motor lê a v2; a config
+ * que o jogador salvou e que o `sim` ainda aceita continua na v1 — e é `migrateBotConfigV1` quem
+ * a converte no boundary.
  */
 export const BOT_VOCABULARY_VERSION_V1 = 1;
 
@@ -1516,8 +1523,7 @@ export const BOT_CONDITION_KINDS = ['hp', 'mana', 'targets', 'target-hp'] as con
 export type BotConditionKind = (typeof BOT_CONDITION_KINDS)[number];
 
 /**
- * A condição da v1: HP, mana, alvos e vida do alvo. É o que o motor lê até o AB-07, e é o
- * input da migração.
+ * A condição da v1: HP, mana, alvos e vida do alvo. É o INPUT da migração — o motor executa a v2.
  */
 export const botConditionSchemaV1 = z.discriminatedUnion('kind', [
   /** HP do personagem, em percentual do máximo. */
@@ -1581,7 +1587,7 @@ export const botActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
 ]);
 
-/** A ação da v1, com `supply`, `spell` e `item` — a config salva ainda a usa até o AB-07. */
+/** A ação da v1, com `supply`, `spell` e `item` — a config salva ainda a usa e a migração a converte. */
 export const botActionV1Schema = botActionSchema;
 
 /**
@@ -1740,7 +1746,7 @@ export const botRingSwapSchema = z.object({
 
 /**
  * Uma linha de slot da v1: a condição e o que fazer quando ela vale. Preservada com outro nome
- * porque é o INPUT da migração — e o motor ainda a lê até o AB-07.
+ * porque é o INPUT da migração — o motor executa a v2.
  */
 export const botRuleV1Schema = z.object({
   /**
@@ -1763,7 +1769,7 @@ export const botRuleSchema = botRuleV1Schema;
  * para baixo, e a primeira regra válida executa.
  *
  * **Saem no AB-07**: a barra v2 usa a ORDEM do slot e o grupo do conteúdo (ADR 0032 d.2). Aqui
- * elas continuam porque o motor v1 ainda as lê.
+ * elas continuam só como vocabulário da v1, que a migração converte.
  */
 export const BOT_CATEGORIES = ['heal', 'potion', 'attack', 'rune', 'support'] as const;
 export type BotCategory = (typeof BOT_CATEGORIES)[number];
@@ -1871,8 +1877,8 @@ export type BotConfigV2 = z.infer<typeof botConfigV2Schema>;
  * Os limites do bot, em CONTEÚDO e não em código (§13.3).
  *
  * Quantos slots cada categoria tem é balanceamento, e balanceamento mora onde um designer o
- * alcança sem deploy. **Sai no AB-07** (DT-06): o motor v1 ainda lê `categoryCooldownMs` e
- * `slots`. O gate de level do bot avançado foi REVOGADO no AB-03 (ADR 0032 d.4).
+ * alcança sem deploy. **Sai no AB-07** (DT-06): a v1 carrega `categoryCooldownMs` e `slots`,
+ * que só a migração lê. O gate de level do bot avançado foi REVOGADO no AB-03 (ADR 0032 d.4).
  */
 export const botSchema = z.object({
   id: z.literal('baseline'),
@@ -1933,8 +1939,8 @@ export const botSchema = z.object({
  * A configuração v1 que o JOGADOR salvou. Não é conteúdo — é dado dele —, mas o schema mora
  * aqui porque quem define o que é aceitável é o vocabulário, e o vocabulário é conteúdo.
  *
- * Preservada com outro nome porque é o INPUT de `migrateBotConfigV1` e o que o motor lê até o
- * AB-07. `botConfigSchema` continua sendo o alias dela para os leitores que ainda não migraram.
+ * Preservada com outro nome porque é o INPUT de `migrateBotConfigV1`; o motor executa a v2 e
+ * `botConfigSchema` continua sendo o alias dela para os leitores que ainda não migraram.
  *
  * Os limites de slot NÃO são checados aqui: eles vêm de `bot/baseline.json`, que o schema não
  * enxerga. Quem cruza os dois é `validateBotConfig`.
@@ -1950,7 +1956,8 @@ export const botConfigV1Schema = z.object({
   exit: z.array(botExitRuleSchema).default(() => []),
   /**
    * O bot AVANÇADO (§13.2, FUN-87). Ausente é o bot básico. O gate de level foi revogado no
-   * AB-03; `lure` e `ringSwap` continuam existindo na v1 até o AB-07/AB-08.
+   * AB-03; `lure` e `ringSwap` continuam existindo como vocabulário da v1, que a migração
+   * converte para as automações v2.
    */
   lure: botLureSchema.optional(),
   ringSwap: botRingSwapSchema.optional(),

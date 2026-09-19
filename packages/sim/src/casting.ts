@@ -354,9 +354,10 @@ function cast(condition: ConditionState): CastSuccess {
  * estoque a conferir nem instância a consumir. O saldo nunca fica negativo, e a garantia é a
  * ordem: o débito é RECUSADO antes, não corrigido depois.
  *
- * Sem cooldown próprio: quem limita a cadência é o cooldown de CATEGORIA do bot (§13.5). Dar
- * um segundo cooldown ao supply seria dois lugares decidindo a mesma coisa, e o dia em que
- * eles divergissem ninguém saberia qual dos dois estava valendo.
+ * Sem cooldown PRÓPRIO separado: o livro é o do GRUPO (`groupCooldownMs` do conteúdo), como o
+ * `group:<g>` de `castSpell`. Um segundo cooldown individual ao lado do de grupo seria dois
+ * lugares decidindo a mesma coisa, e o dia em que eles divergissem ninguém saberia qual valia.
+ * O início do livro é o mesmo ponto do `castSpell`: depois do pagamento, quando a ação SAIU.
  */
 export function useSupply(
   user: CharacterRuntime,
@@ -368,6 +369,12 @@ export function useSupply(
   scaling?: SpellScaling,
   /** Quem paga (#192). Ausente: o próprio usuário, do saldo dele — o solo de sempre. */
   purse: Purse = ownPurse(user),
+  /**
+   * O relógio LÓGICO da sessão. Ausente é "não inicia cooldown" — caminho de fixture que prova
+   * o gold sem a mecânica de tempo. O ruleset em produção sempre passa `session.nowMs`, e é o
+   * que faz o uso trancar o grupo como o lançamento de magia.
+   */
+  nowMs?: number,
 ): CastResult {
   // Runa de ataque (#165, ADR 0026 d.8): a ordem das recusas é a de `castSpell` — requisitos,
   // alvo, alcance, e SÓ ENTÃO o gold. Runa em ninguém não pode custar.
@@ -384,6 +391,7 @@ export function useSupply(
     // Chamador sem contexto de combate: a runa não existe para ele — nunca dano sem `rng`.
     if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
     purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
     const hits: number[] = [];
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
@@ -407,6 +415,7 @@ export function useSupply(
   }
 
   purse.pay(supply.price);
+  startSupplyCooldown(user, supply, nowMs);
   return supply.effect.kind === 'heal'
     ? {
       ok: true,
@@ -424,6 +433,16 @@ export function useSupply(
       hits: NO_HITS,
       goldSpent: supply.price,
     };
+}
+
+/**
+ * Tranca o livro do grupo depois que o uso SAIU — o mesmo ponto do `castSpell`, e pelo mesmo
+ * motivo: uma ação recusada não pode consumir o cooldown de quem não a executou. Sem `nowMs` o
+ * tempo lógico não está disponível e nada é iniciado (caminho de fixture).
+ */
+function startSupplyCooldown(user: CharacterRuntime, supply: Supply, nowMs: number | undefined): void {
+  if (nowMs === undefined) return;
+  user.cooldowns.start(groupCooldownKey(supply.group), nowMs, supply.groupCooldownMs);
 }
 
 /**

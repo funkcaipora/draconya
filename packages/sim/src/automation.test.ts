@@ -244,6 +244,25 @@ describe('swap-weapon-shield-by-hp (ADR 0032 d.9)', () => {
     ]);
   });
 
+  it('arma de uma mão JÁ equipada não é `missing-item`: o escudo sobe (#420)', () => {
+    // O item equipado não está em container, então exigir `carriedItem` de quem já veste a arma
+    // dava `missing-item:spike-sword` todo ciclo e o escudo nunca subia. "Já está no slot"
+    // satisfaz, e a mão não é desequipada à toa.
+    const { actuator, log } = fake({
+      equipped: { hand: 'spike-sword' },
+      carried: ['wooden-shield'],
+      slots, twoHanded: ['bow'],
+    });
+
+    expect(run?.run(view({ health: 30 }), actuator))
+      .toEqual({
+        kind: 'applied', event: 'weapon-shield-swapped', detail: 'spike-sword+wooden-shield',
+      });
+    expect(actuator.equippedItemId('hand')).toBe('spike-sword');
+    expect(actuator.equippedItemId('shield')).toBe('wooden-shield');
+    expect(log).toEqual(['equip:shield:wooden-shield']);
+  });
+
   it('HP alto volta para as duas mãos, na ordem inversa', () => {
     const { actuator, log } = fake({
       equipped: { hand: 'spike-sword', shield: 'wooden-shield' },

@@ -182,7 +182,7 @@ type BotConfigInput = BotConfigV2 | BotConfig;
  */
 export type SlotRefusal =
   | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog'
-  | 'not-enough-mana' | 'not-enough-item' | 'no-target' | 'out-of-range'
+  | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown';
 
 /** O resultado do disparo manual: sucesso, ou recusa tipada com o prazo quando é cooldown. */
@@ -219,8 +219,9 @@ function refusalOf(result: CastRefused): SlotRefusal {
     case 'no-target': return 'no-target';
     case 'out-of-range': return 'out-of-range';
     case 'not-enough-mana': return 'not-enough-mana';
-    // O consumível v2 recusa por `not-enough-gold` quando não há pilha (não há débito no uso).
-    case 'not-enough-gold': return 'not-enough-item';
+    // O suprimento v2 é ABSTRATO: o "estoque" é o saldo, e a falta dele tem motivo próprio —
+    // `not-enough-item` fica reservado ao consumível FÍSICO (a carga de bênção de M22).
+    case 'not-enough-gold': return 'not-enough-gold';
   }
 }
 
@@ -277,6 +278,9 @@ function runnerState(runner: Runner): RunnerState {
     warnedExhausted: runner.warnedExhausted,
     warnedFullBackpack: runner.warnedFullBackpack,
     warnedNoGold: runner.warnedNoGold,
+    ...(runner.automationWarned.size === 0
+      ? {}
+      : { automationWarned: Object.fromEntries(runner.automationWarned) }),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
@@ -591,6 +595,20 @@ interface Runner {
    * `[]` é nenhuma, e é o que faz um runner sem automação habilitada não agendar o evento.
    */
   automations: CompiledAutomations;
+  /**
+   * O atuador das automações, montado UMA vez por runner (#420).
+   *
+   * Antes `#onAutomation` reconstruía o objeto com ~10 closures a cada ciclo (1 Hz mais cada
+   * golpe recebido); com 5.000 hunts isso é o coletor rodando o tempo todo. `undefined` só no
+   * runner descartável de `getState` sem participantes — não há automação a executar.
+   */
+  actuator: AutomationActuator | undefined;
+  /**
+   * Por automação (chave = `model`), a última chave `reason:itemId` que já foi registrada como
+   * `automation-blocked`. Só a TRANSIÇÃO registra: uma automação bloqueada por 8 h vale UMA
+   * linha no extrato, não 28.800. Ver `RunnerState.automationWarned`.
+   */
+  readonly automationWarned: Map<string, string>;
   exitRules: readonly HuntExitRule[];
   pendingExit: ExitReason | null;
   /** Por GRUPO: `true` = ENGATILHADO (nenhum evento pendente), `false` = agendado. */
@@ -622,6 +640,12 @@ export interface RunnerState {
   readonly warnedExhausted: boolean;
   readonly warnedFullBackpack: boolean;
   readonly warnedNoGold: boolean;
+  /**
+   * Por automação, a última chave `reason:itemId` que já virou `automation-blocked` (AB-08,
+   * #420). Precisa entrar no snapshot: sem ele, uma hunt retomada volta a registrar o mesmo
+   * aviso a cada ciclo, que é o defeito que este campo fecha. Ausente é "nada avisado".
+   */
+  readonly automationWarned?: Readonly<Record<string, string>>;
   readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
 }
@@ -959,7 +983,7 @@ export class HuntRuleset implements Ruleset {
     // o primeiro a entrar.
     const config = this.#options.botConfigs?.[character.id]
       ?? (this.#runners.size === 0 ? this.#options.botConfig : undefined);
-    const runner = this.#newRunner(config);
+    const runner = this.#newRunner(config, undefined, character);
     this.#runners.set(character.id, runner);
     // A colocação passa pela MESMA legalidade que um passo (FUN-69). O primeiro tile da rota
     // é validado no carregamento do conteúdo (FUN-9), então uma recusa aqui é conteúdo
@@ -1095,7 +1119,9 @@ export class HuntRuleset implements Ruleset {
     this.#beginExit(session, characterId, 'manual-exit');
   }
 
-  #newRunner(config: BotConfigInput | undefined, state?: RunnerState): Runner {
+  #newRunner(
+    config: BotConfigInput | undefined, state?: RunnerState, character?: CharacterRuntime,
+  ): Runner {
     // A v1 é normalizada no boundary (DT-02): a config que o jogador salvou continua valendo, e
     // o motor v2 só vê o vocabulário v2. Idempotente — um snapshot v2 volta só parseado.
     const normalized = config === undefined ? undefined : migrateBotConfigV1(config);
@@ -1105,6 +1131,8 @@ export class HuntRuleset implements Ruleset {
       bot,
       botConfig: normalized,
       automations: compileAutomations(normalized?.automations ?? []),
+      actuator: undefined,
+      automationWarned: new Map(Object.entries(state?.automationWarned ?? {})),
       exitRules: this.#composeExitRules(normalized),
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
@@ -1116,6 +1144,9 @@ export class HuntRuleset implements Ruleset {
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
     };
+    // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
+    // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
+    if (character !== undefined) runner.actuator = this.#automationActuatorFor(runner, character);
     if (bot !== undefined) {
       // Todo grupo começa ENGATILHADO. Só um snapshot v2 carrega chaves de grupo em
       // `botScheduled`; as categorias v1 (`potion`, `attack`, `support`) colidiriam com nomes
@@ -1398,7 +1429,7 @@ export class HuntRuleset implements Ruleset {
       // sem bot: continua andando e matando com o ataque básico, então nada PARECE quebrado —
       // o que some é a cura, e o jogador descobre pelo personagem morto. As regras de SAÍDA
       // vêm junto, pela mesma razão.
-      this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined));
+      this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined, character));
       // O mundo mudou enquanto a sessão estava parada: o que estava ENGATILHADO reavalia agora.
       // O que estava AGENDADO tem evento na fila restaurada e `#armBot` o pula — nunca os dois.
       if (character.alive) this.#armBot(session, character.id);
@@ -1720,6 +1751,7 @@ export class HuntRuleset implements Ruleset {
     runner.botConfig = normalized;
     runner.bot = compileBot(normalized, this.#cooldownOf);
     runner.automations = compileAutomations(normalized.automations);
+    runner.actuator = this.#automationActuatorFor(runner, character);
     // Grupo NOVO (a config antiga não o tinha) nasce ENGATILHADO: `#armBot` só toca os
     // engatilhados, e sem esta linha a regra recém-configurada nunca acordaria.
     for (const group of runner.bot.groups.keys()) {
@@ -2033,7 +2065,7 @@ export class HuntRuleset implements Ruleset {
       return this.#aim;
     }
 
-    const primary = selectTarget(this.#targetingOf(character), this.#monsters, character.position, range ?? 1);
+    const primary = this.#targetInRange(character, range);
     if (primary === null) return null;
     this.#collect(primary);
 
@@ -2379,6 +2411,7 @@ export class HuntRuleset implements Ruleset {
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
+      session.nowMs,
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -2474,14 +2507,22 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * Quanto falta para o livro individual E o de grupo liberarem — o MAIOR dos dois (AB-07/AB-09).
-   * O par sai de `#cooldownOf`, resolvido do conteúdo: a magia de grupo tranca `group:<g>`, e a
-   * ação sem grupo cai no livro próprio. Zero é "pode executar".
+   *
+   * A magia tranca TRÊS livros no `castSpell`: o próprio `spell:<id>`, o do grupo e o
+   * secundário. O par de `#cooldownOf` só expõe o individual quando não há grupo, então o
+   * `spell:<id>` é consultado à parte — sem isso, uma magia de `cooldownMs: 4000` num grupo de
+   * `1000` aparecia `ready` no `slotStates` e o `#perform` recusava por 3 s (DT-08). O supply
+   * usa o mesmo caminho com o livro do grupo. Zero é "pode executar".
    */
   #cooldownWaitOf(character: CharacterRuntime, action: BotActionV2, nowMs: number): number {
     const { cooldownKey, group } = this.#cooldownOf(action);
+    const individualKey = action.kind === 'spell'
+      ? spellCooldownKey(action.spellId)
+      : supplyCooldownKey(action.supplyId);
     return Math.max(
       character.cooldowns.remainingMs(cooldownKey, nowMs),
       character.cooldowns.remainingMs(groupCooldownKey(group), nowMs),
+      character.cooldowns.remainingMs(individualKey, nowMs),
     );
   }
 
@@ -2525,8 +2566,10 @@ export class HuntRuleset implements Ruleset {
       }
       if (this.#targetInRange(character, supply.effect.range) === null) return blocked('no-target');
     }
-    // Poção e runa são ABSTRATAS: o "estoque" é o saldo, e sem ele a ação não acontece.
-    if (balanceOf(character) < supply.price) return blocked('not-enough-item');
+    // Poção e runa são ABSTRATAS: o "estoque" é o saldo, e sem ele a ação não acontece. O motivo
+    // é próprio (`not-enough-gold`) — dizer "não tem o item" de uma poção que não é item é o
+    // tooltip errado; `not-enough-item` fica com o consumível físico (carga de bênção, M22).
+    if (balanceOf(character) < supply.price) return blocked('not-enough-gold');
     return { set, slot, state: 'ready', remainingMs: 0 };
   }
 
@@ -2536,8 +2579,18 @@ export class HuntRuleset implements Ruleset {
     return effect.area === undefined || !isSelfOrigin(effect.area);
   }
 
-  /** O melhor alvo dentro de `range`, para o espelho de elegibilidade. Não muta nada. */
+  /**
+   * O melhor alvo dentro de `range`, para a mira e o espelho de elegibilidade. Não muta nada.
+   *
+   * O alvo ESCOLHIDO pelo jogador vem primeiro (AB-09, ADR 0032 d.5), e vale também para magia
+   * e runa: escolhido FORA do alcance devolve `null` em vez de cair na política, que é o mesmo
+   * contrato de `#attackTarget` — quem mandou mirar num alvo não quer acertar outro.
+   */
   #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
+    const chosen = this.#chosenMonsterOf(character);
+    if (chosen !== null) {
+      return distance(character.position, chosen.position) <= (range ?? 1) ? chosen : null;
+    }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, range ?? 1,
     );
@@ -2627,17 +2680,29 @@ export class HuntRuleset implements Ruleset {
     const runner = this.#runners.get(characterId);
     if (runner === undefined) return;
     const character = findById(session.participants, characterId);
-    if (character !== null && character.alive) {
+    if (character !== null && character.alive && runner.actuator !== undefined) {
       const view = this.#botViewOf(character);
-      const actuator = this.#automationActuator(character);
+      const actuator = runner.actuator;
       for (const automation of runner.automations.list) {
         const outcome = automation.run(view, actuator);
         if (outcome.kind === 'applied') {
+          // A automação voltou a agir: o aviso saiu da transição, e a próxima vez que ela
+          // bloquear no mesmo motivo volta a valer como notícia.
+          runner.automationWarned.delete(automation.model);
           session.record(outcome.event, outcome.detail);
         } else if (outcome.kind === 'blocked') {
-          session.record(
-            'automation-blocked', `${automation.model}:${outcome.reason}:${outcome.itemId}`,
-          );
+          // Só a TRANSIÇÃO registra (#420): uma automação bloqueada por 8 h é UMA linha no
+          // extrato, não uma por ciclo. Sem isto, `notableEvents` crescia sem teto e era
+          // reserializado inteiro em cada snapshot.
+          const key = `${outcome.reason}:${outcome.itemId}`;
+          if (runner.automationWarned.get(automation.model) !== key) {
+            runner.automationWarned.set(automation.model, key);
+            session.record('automation-blocked', `${automation.model}:${key}`);
+          }
+        } else {
+          // `idle`: a automação saiu do bloqueio sem agir (o alvo vivo, o HP voltou). Limpa o
+          // aviso para que um novo bloqueio seja notícia de novo.
+          runner.automationWarned.delete(automation.model);
         }
       }
     }
@@ -2652,10 +2717,12 @@ export class HuntRuleset implements Ruleset {
    * O que uma automação pode fazer com o inventário. Fecha sobre o personagem e o catálogo de
    * itens; NENHUM opcode é emitido — a escrita é `character.inventory.equip/unequip` direto,
    * dentro do evento da própria sessão (invariantes 4 e 9).
+   *
+   * Montado UMA vez por runner (#420), em `#newRunner` e recompilado em `configureBot`. As
+   * `containerRules` NÃO são capturadas: elas derivam do inventário (que cresce por level) e
+   * seriam um valor velho numa hunt longa, então são lidas na hora em que `unequip` é chamado.
    */
-  #automationActuator(character: CharacterRuntime): AutomationActuator {
-    const runner = this.#runnerOf(character.id);
-    const rules = this.#containerRules(character);
+  #automationActuatorFor(runner: Runner, character: CharacterRuntime): AutomationActuator {
     const items = this.#options.items;
     const ammunition = this.#options.ammunition;
     return {
@@ -2664,7 +2731,7 @@ export class HuntRuleset implements Ruleset {
       carriedItem: (itemId) => character.inventory.findStack(itemId),
       slotOf: (itemId) => items.get(itemId)?.slot ?? null,
       equip: (instanceId) => character.inventory.equip(instanceId, character, items).ok,
-      unequip: (slot) => character.inventory.unequip(slot, rules).ok,
+      unequip: (slot) => character.inventory.unequip(slot, this.#containerRules(character)).ok,
       // A família vem da ARMA na mão; sem arma de distância não há seleção a trocar.
       selectedAmmoId: () => {
         const family = character.inventory.weapon(items, character)?.weapon?.ammoFamily;

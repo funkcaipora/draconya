@@ -6268,7 +6268,7 @@ describe('estado dos slots (AB-09, UC-BAR-003)', () => {
     const before = blocked.ruleset.slotStates(blocked.session, blocked.hero);
     expect(before).toHaveLength(24);
     expect(before[0]).toMatchObject({ set: 0, slot: 0, state: 'empty' });
-    expect(before[1]).toMatchObject({ state: 'blocked', reason: 'not-enough-item' });
+    expect(before[1]).toMatchObject({ state: 'blocked', reason: 'not-enough-gold' });
     expect(before[2]).toMatchObject({ state: 'ready' });
     // NÃO muta: o estado dos slots é apresentação, e o saldo continua igual.
     expect(blocked.hero.goldDelta).toBe(0);
@@ -6327,5 +6327,135 @@ describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
     // Id morto/desconhecido é ignorado.
     expect(ruleset.chooseTarget(session, 'hero', a.subject)).toBe(false);
     expect(ruleset.chooseTarget(session, 'hero', 'm:nao-existe')).toBe(false);
+  });
+
+  it('a magia de dano mira o ESCOLHIDO, não o mais próximo (#420)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([
+      { do: { kind: 'spell', spellId: 'strike' }, auto: false },
+    ]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b] = [...ruleset.monsters];
+    if (a === undefined || b === undefined) throw new Error('faltam ratos');
+    // `a` está mais perto; a política sozinha o escolheria. O clique em `b` sobrepõe.
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x + 2, y: hero.position.y };
+    expect(ruleset.chooseTarget(session, 'hero', b.subject)).toBe(true);
+
+    // O ataque BÁSICO do personagem (independente do bot) já saiu no primeiro tique e acertou
+    // `a`; drena antes para o teste medir só o golpe da magia.
+    session.drainEvents();
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    const hits = session.drainEvents()
+      .filter((event) => event.kind === 'creature-hit')
+      .map((event) => (event as { creatureId: string }).creatureId);
+    expect(hits).toEqual([b.subject]);
+  });
+});
+
+// --- o cooldown do supply e o aviso limitado das automações (#420) ---------------------------
+
+describe('o uso de supply inicia o cooldown do grupo (#420)', () => {
+  it('o segundo disparo no mesmo instante recusa, e o slot-state mostra o prazo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([
+      { do: { kind: 'supply', supplyId: 'health-potion' }, auto: false },
+    ]), { health: 100, gold: 100, monsters: false });
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 1_000 });
+    expect(ruleset.slotStates(session, hero)[0])
+      .toMatchObject({ state: 'cooldown', remainingMs: 1_000, reason: 'on-cooldown' });
+
+    // Vencido o livro, o slot volta a valer.
+    session.advanceBy(1_000);
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+  });
+
+  it('o slot-state mostra o cooldown INDIVIDUAL da magia, não só o do grupo (#420)', () => {
+    const slow = {
+      id: 'berserk', name: 'Berserk', manaCost: 15, cooldownMs: 4_000,
+      group: 'attack', groupCooldownMs: 1_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
+    };
+    const { session, hero, ruleset } = withSpells(
+      botConfigV2([{ do: { kind: 'spell', spellId: 'berserk' }, auto: false }]),
+      { mana: 200, spells: [slow] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.position = { x: 1, y: 0, z: 7 };
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    // O grupo vence em 1 s, mas a magia tranca 4 s: o `#perform` recusaria por 3 s a mais se o
+    // `slot-state` só olhasse `group:<g>` (DT-08).
+    expect(ruleset.useSlot(session, 'hero', 0, 0))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 4_000 });
+    expect(ruleset.slotStates(session, hero)[0])
+      .toMatchObject({ state: 'cooldown', remainingMs: 4_000 });
+
+    session.advanceBy(1_000);
+    expect(ruleset.slotStates(session, hero)[0])
+      .toMatchObject({ state: 'cooldown', remainingMs: 3_000 });
+  });
+
+  it('a runa de `attack` respeita o MESMO livro que a magia de ataque', () => {
+    const attackSpell = {
+      id: 'strike', name: 'Strike', manaCost: 15, cooldownMs: 2_000,
+      group: 'attack', groupCooldownMs: 2_000,
+      effect: { kind: 'damage', power: 40, range: 3, damageType: 'fire' },
+    };
+    const attackRune = {
+      id: 'avalanche', name: 'Avalanche', price: 14, group: 'attack', groupCooldownMs: 2_000,
+      requires: {},
+      effect: {
+        kind: 'damage', basePower: 45, range: 4, damageType: 'ice',
+        area: { shape: 'circle', radius: 1, centered: 'target' },
+      },
+    };
+    const { session, ruleset } = withSpells(
+      botConfigV2([
+        { do: { kind: 'spell', spellId: 'strike' }, auto: false },
+        { do: { kind: 'supply', supplyId: 'avalanche' }, auto: false },
+      ]),
+      { mana: 200, gold: 100, spells: [attackSpell], supplies: [attackRune] },
+    );
+    session.advanceBy(1);
+    const monster = ruleset.monsters[0];
+    if (monster === undefined) throw new Error('faltou rato');
+    monster.position = { x: 1, y: 0, z: 7 };
+
+    expect(ruleset.useSlot(session, 'hero', 0, 0)).toEqual({ ok: true });
+    // A runa é do grupo `attack`: a magia de ataque acabou de trancá-lo, e a runa recusa pelo
+    // prazo do livro (não pelo cooldown individual da magia).
+    expect(ruleset.useSlot(session, 'hero', 0, 1))
+      .toEqual({ ok: false, reason: 'on-cooldown', retryInMs: 2_000 });
+  });
+});
+
+describe('automação bloqueada avisa na TRANSIÇÃO, não a cada ciclo (#420)', () => {
+  const lifeRing = {
+    id: 'life-ring', name: 'Life Ring', kind: 'ring', slot: 'finger', weight: 1, value: 0,
+  };
+
+  it('renew-ring bloqueado por 10 minutos gera um único automation-blocked', () => {
+    const { session, ruleset } = withSpells(
+      botConfigV2([], {
+        automations: [{ model: 'renew-ring', params: { itemId: 'life-ring' } }],
+      }),
+      { items: [lifeRing], monsters: false },
+    );
+
+    // 600 ciclos de 1 s (mais os ciclos trazidos pelos golpes — aqui não há golpe). Antes do
+    // #420 isto virava ~600 eventos; o extrato de uma hunt de 8 h acumulava ~28.800.
+    run(session, 600_000, 100);
+
+    const blocked = session.notableEvents.filter((event) => event.type === 'automation-blocked');
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]?.detail).toBe('renew-ring:missing-item:life-ring');
+
+    // A chave avisada viaja no snapshot: uma retomada não volta a registrar o mesmo aviso.
+    const runner = Object.values(ruleset.getState().runners ?? {})[0];
+    expect(runner?.automationWarned).toEqual({ 'renew-ring': 'missing-item:life-ring' });
   });
 });

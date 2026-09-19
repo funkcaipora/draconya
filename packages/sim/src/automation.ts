@@ -14,7 +14,7 @@
 
 import type { BotAutomation, BotConditionV2, ItemSlot } from '@draconya/content';
 import type { CarriedItem } from './inventory.js';
-import { compileCondition } from './bot.js';
+import { compileAll, compileCondition, percentOf } from './bot.js';
 import type { BotView } from './bot.js';
 
 /**
@@ -77,20 +77,6 @@ function anyOf(conditions: readonly BotConditionV2[]): (view: BotView) => boolea
   };
 }
 
-/** E: vazio é FALSO — uma automação sem condição de saída nunca volta (DT-01). */
-function allOf(conditions: readonly BotConditionV2[]): (view: BotView) => boolean {
-  if (conditions.length === 0) return () => false;
-  const predicates = conditions.map(compileCondition);
-  return (view) => {
-    for (let i = 0; i < predicates.length; i += 1) {
-      if (!(predicates[i] as (v: BotView) => boolean)(view)) return false;
-    }
-    return true;
-  };
-}
-
-const percent = (current: number, max: number): number => (max <= 0 ? 0 : (current / max) * 100);
-
 const missing = (itemId: string): AutomationOutcome =>
   ({ kind: 'blocked', reason: 'missing-item', itemId });
 
@@ -147,7 +133,7 @@ function swapAmmoByTargets(
   automation: Extract<BotAutomation, { model: 'swap-ammo-by-targets' }>,
 ): CompiledAutomation {
   const enter = anyOf(automation.enter);
-  const exit = allOf(automation.exit);
+  const exit = compileAll(automation.exit, false);
   const { ammoA, ammoB } = automation.params;
   return {
     model: 'swap-ammo-by-targets',
@@ -173,7 +159,7 @@ function swapWeaponShield(
   automation: Extract<BotAutomation, { model: 'swap-weapon-shield-by-hp' }>,
 ): CompiledAutomation {
   const enter = anyOf(automation.enter);
-  const exit = allOf(automation.exit);
+  const exit = compileAll(automation.exit, false);
   const { oneHanded, shield, twoHanded } = automation.params;
   return {
     model: 'swap-weapon-shield-by-hp',
@@ -182,14 +168,20 @@ function swapWeaponShield(
         && act.equippedItemId('shield') === shield;
       if (!inRegion) {
         if (!enter(view)) return IDLE;
-        const one = act.carriedItem(oneHanded);
-        const board = act.carriedItem(shield);
-        if (one === null) return missing(oneHanded);
-        if (board === null) return missing(shield);
-        act.unequip('hand');
-        act.unequip('shield');
-        if (!act.equip(one.instanceId)) return notEquippable(oneHanded);
-        if (!act.equip(board.instanceId)) return notEquippable(shield);
+        // "Já está no slot" É satisfeito: um item equipado não está em container, então exigir
+        // `carriedItem` de quem já veste a arma de uma mão dava `missing-item` para sempre e o
+        // escudo nunca subia. A mão só é desequipada quando NÃO é já a arma de uma mão; o
+        // mesmo para o escudo.
+        const oneAlready = act.equippedItemId('hand') === oneHanded;
+        const boardAlready = act.equippedItemId('shield') === shield;
+        const one = oneAlready ? null : act.carriedItem(oneHanded);
+        const board = boardAlready ? null : act.carriedItem(shield);
+        if (one === null && !oneAlready) return missing(oneHanded);
+        if (board === null && !boardAlready) return missing(shield);
+        if (!oneAlready) act.unequip('hand');
+        if (!boardAlready) act.unequip('shield');
+        if (one !== null && !act.equip(one.instanceId)) return notEquippable(oneHanded);
+        if (board !== null && !act.equip(board.instanceId)) return notEquippable(shield);
         return {
           kind: 'applied', event: 'weapon-shield-swapped', detail: `${oneHanded}+${shield}`,
         };
@@ -216,12 +208,12 @@ function swapRing(
   automation: Extract<BotAutomation, { model: 'swap-ring' }>,
 ): CompiledAutomation {
   const enter = anyOf(automation.enter);
-  const exit = allOf(automation.exit);
+  const exit = compileAll(automation.exit, false);
   const { itemId, manaFloor, restorePrevious } = automation.params;
   return {
     model: 'swap-ring',
     run(view, act) {
-      const mana = percent(view.self.mana, view.self.maxMana);
+      const mana = percentOf(view.self.mana, view.self.maxMana);
       const wearing = act.equippedItemId('finger') === itemId;
       if (!wearing) {
         // `manaFloor` desativa a máquina inteira: não equipa abaixo do piso.

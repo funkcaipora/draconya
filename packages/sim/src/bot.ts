@@ -156,16 +156,22 @@ export function compileCondition(condition: BotConditionV2): (view: BotView) => 
   }
 }
 
-/**
- * A E entre as condições do slot (RG-006): todas verdadeiras, na ordem declarada.
- *
- * `when: []` é elegível sempre (RG-007), e por isso devolve o predicado constante em vez de uma
- * closure com laço vazio — o caso mais comum não paga nem a chamada de função do laço.
- */
 const ALWAYS = (): boolean => true;
+const NEVER = (): boolean => false;
 
-function compileAll(conditions: readonly BotConditionV2[]): (view: BotView) => boolean {
-  if (conditions.length === 0) return ALWAYS;
+/**
+ * A E entre as condições (RG-006): todas verdadeiras, na ordem declarada.
+ *
+ * O `empty` diz o que uma lista VAZIA vale, e é explícito porque os dois donos discordam de
+ * propósito: o `when` do slot é elegível sempre (RG-007, `true`), enquanto o `exit` da
+ * automação nunca sai e o `enter` nunca entra (DT-01, `false`). Deixar isso implícito faria
+ * uma automação sem condição reverter no mesmo ciclo em que entrou.
+ */
+export function compileAll(
+  conditions: readonly BotConditionV2[],
+  empty = true,
+): (view: BotView) => boolean {
+  if (conditions.length === 0) return empty ? ALWAYS : NEVER;
   const predicates = conditions.map(compileCondition);
   return (view) => {
     for (let i = 0; i < predicates.length; i += 1) {
@@ -176,7 +182,7 @@ function compileAll(conditions: readonly BotConditionV2[]): (view: BotView) => b
 }
 
 /** Percentual inteiro, com o zero protegido: `maxHealth` zero é dado quebrado, não divisão. */
-function percentOf(current: number, max: number): number {
+export function percentOf(current: number, max: number): number {
   if (max <= 0) return 0;
   return (current / max) * 100;
 }

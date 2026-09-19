@@ -3,6 +3,7 @@
   "name": "Avalanche Rune",
   "price": 14,
   "group": "attack",
+  "groupCooldownMs": 2000,
   "requires": {
     "level": 30,
     "magicLevel": 4

@@ -123,9 +123,10 @@ export function validateBotConfig(config: BotConfig, content: Content): string[]
 /**
  * O juiz do vocabulário v2 (AB-03).
  *
- * Espelha a v1, trocando categoria por conjunto/slot e validando a ação contra `content.items`
- * (consumível) e `content.spells`. As automações são conferidas por id de item — nunca por
- * sprite (invariante 6). `targeting`, `exit` e `lure` repetem a validação da v1.
+ * Espelha a v1, trocando categoria por conjunto/slot e validando a ação contra
+ * `content.supplies` (suprimento abstrato) e `content.spells`. As automações são conferidas por
+ * id de item — nunca por sprite (invariante 6). `targeting`, `exit` e `lure` repetem a validação
+ * da v1.
  *
  * A faixa morta do `swap-ring` é a relação `enter`/`exit` de HP; como no v1, o schema não a
  * consegue checar sozinho — quem valida é o motor do AB-07. Aqui a referência é só existência.
