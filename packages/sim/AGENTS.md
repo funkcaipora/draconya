@@ -125,10 +125,12 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   contas em inteiro, sem RNG: `uniqueVocations` (`null` CONTA como uma vocação), `xpPool`
   (`floor(xp × tabela[únicas] / 100)`; um elegível só devolve `xp` sem ler a tabela — solo é
   100 %, e a linha `"1"` é da party de vocações iguais), `xpShare` (cota igual, resto
-  DESCARTADO — dar o resto a alguém seria prioridade por golpe, §15.5) e `settleBag`
-  (vende a bolsa por `item.value`, divide com `splitEqually` — resto UM a UM nos primeiros,
-  porque gold descartado é valor que o ledger não vê; `value: 0` vai em `unsold`, para o
-  líder, não para o gold). Nada aqui sabe o que é sessão; é o que permite testar por tabela.
+  DESCARTADO — dar o resto a alguém seria prioridade por golpe, §15.5) e `settleEntries`
+  (vende a bolsa ENTRADA por entrada, cada uma dividida só entre `eligible ∩ presentes` com
+  `splitEqually` — resto UM a UM nos primeiros, porque gold descartado é valor que o ledger não
+  vê; `value: 0` vai em `unsold`, para o líder, não para o gold), além de `autoSellLimit` (o
+  limite de tipos do líder lê o Premium do PERSONAGEM). Nada aqui sabe o que é sessão; é o
+  que permite testar por tabela.
 - **Agregados são POR PARTICIPANTE desde o #187, e `session.aggregates` é a SOMA.** Escreva
   com `session.credit(id, key, delta)` — nunca `session.aggregates.x += n`: `credit` escreve
   no participante e na soma no mesmo passo, e trata `best*Hit` como máximo. `end()` devolve
@@ -139,8 +141,13 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   0027). `#bag` guarda gold e itens; a capacidade é `Σ capacity` dos presentes calculada na
   hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
   pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
-  O settlement (`#settle`) roda no `onLeave` COM quem sai e no `onEnd`, antes de a `Session`
-  emitir os extratos — é o que põe o gold neles. O rateio do supply é uma `Purse` (`casting.ts`):
+  Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no cadáver) e
+  `autoSell` vira gold no drop, cortado pelo `autoSellLimit` do líder; cada `BagEntry`/
+  `GoldEntry` guarda `eligible` = presentes no abate (§16.1), e `#settle` vende por entrada —
+  na saída (com quem sai), no fim e ao desligar `splitLoot`, com `reason` no evento.
+  O settlement (`#settle`) roda no `onLeave` COM quem sai, no `onEnd` e no `toggle`, antes de a
+  `Session` emitir os extratos — é o que põe o gold neles. O rateio do supply é uma `Purse`
+  (`casting.ts`):
   `useSupply` confere `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de
   um (`ownPurse`) é o solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de
   cada um, o resto do usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou.

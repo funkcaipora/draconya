@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Item, PartyConfig } from '@draconya/content';
-import { settleBag, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpPool, xpShare } from './party.js';
-import type { PartyMember } from './party.js';
+import {
+  autoSellLimit, settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpPool, xpShare,
+} from './party.js';
+import type { BagEntry, GoldEntry, PartyBagState, PartyMember } from './party.js';
 
 // As contas da party (#189, ADR 0027), por tabela. O que se prende aqui é a fórmula do
 // `docs/party-hunt-plan.md` §3.3 — e que nada consome RNG nem sai de inteiro.
@@ -85,37 +87,86 @@ describe('splitEqually', () => {
   });
 });
 
-describe('settleBag', () => {
+describe('settleEntries', () => {
+  const catalogItem = (id: string, value: number): Item =>
+    ({ id, name: id, kind: 'other', weight: 1, value, stackable: true } as unknown as Item);
   const catalog = new Map<string, Item>([
-    ['sword', { id: 'sword', name: 'Sword', kind: 'weapon', weight: 30, value: 10, stackable: false, attack: 0, armor: 0, twoHanded: false, requires: {} } as unknown as Item],
-    ['cheese', { id: 'cheese', name: 'Cheese', kind: 'other', weight: 4, value: 0, stackable: true, attack: 0, armor: 0, twoHanded: false, requires: {} } as unknown as Item],
+    ['sword', catalogItem('sword', 10)],
+    ['cheese', catalogItem('cheese', 0)],
   ]);
+  const carried = (itemId: string, quantity = 1, instanceId = `s:${itemId}`) =>
+    ({ instanceId, itemId, quantity });
+  const bag = (gold: GoldEntry[], items: BagEntry[], capacity = 400): PartyBagState =>
+    ({ gold, items, capacity });
 
-  it('sells what has a value, splits it with the remainder in order, and returns the rest unsold', () => {
-    // 7 + 10 × 2 = 27 → [9, 9, 9]; o queijo não vira gold.
-    const bag = {
-      gold: 7, capacity: 400,
-      items: [
-        { instanceId: 's:1', itemId: 'sword', quantity: 2 },
-        { instanceId: 's:2', itemId: 'cheese', quantity: 3 },
-      ],
-    };
-    const settled = settleBag(bag, ['a', 'b', 'c'], catalog);
-    expect(settled.total).toBe(27);
-    expect([...settled.shares]).toEqual([['a', 9], ['b', 9], ['c', 9]]);
-    expect(settled.unsold).toEqual([{ instanceId: 's:2', itemId: 'cheese', quantity: 3 }]);
-    // E a bolsa NÃO é mutada aqui: quem zera é o ruleset, depois de entregar.
-    expect(bag.items).toHaveLength(2);
-    expect(bag.gold).toBe(7);
+  it('autovenda: 30 gold entre 4 presentes → 8/8/7/7 (resto na ordem de entrada)', () => {
+    const settled = settleEntries(
+      bag([{ amount: 30, eligible: ['a', 'b', 'c', 'd'] }], []), ['a', 'b', 'c', 'd'], catalog,
+    );
+    expect([...settled.shares]).toEqual([['a', 8], ['b', 8], ['c', 7], ['d', 7]]);
+    expect(settled.total).toBe(30);
   });
 
-  it('puts the remainder on the first present, and an item outside the catalog goes unsold', () => {
-    const bag = { gold: 0, capacity: 0, items: [{ instanceId: 's:1', itemId: 'sword', quantity: 1 }, { instanceId: 's:9', itemId: 'ghost', quantity: 1 }] };
-    const settled = settleBag(bag, ['b', 'a'], catalog);
-    expect([...settled.shares]).toEqual([['b', 5], ['a', 5]]);
-    expect(settleBag({ ...bag, gold: 1 }, ['b', 'a'], catalog).shares.get('b')).toBe(6);
-    expect(settled.unsold.map((i) => i.itemId)).toEqual(['ghost']);
-    expect(settleBag(bag, [], catalog).shares.size).toBe(0);
+  it('elegibilidade: cada entrada paga só quem estava no drop (A50/B50/C0; Y 34/33/33)', () => {
+    // X cai com A,B; C entra; B sai. O settlement inclui quem sai (eligible ∩ present).
+    const x: BagEntry = { item: carried('sword', 10, 's:x'), eligible: ['a', 'b'] };
+    const y: BagEntry = { item: carried('sword', 10, 's:y'), eligible: ['a', 'b', 'c'] };
+    const settled = settleEntries(bag([], [x, y]), ['a', 'b', 'c'], catalog);
+    expect(settled.shares.get('a')).toBe(84);
+    expect(settled.shares.get('b')).toBe(83);
+    expect(settled.shares.get('c')).toBe(33);
+    expect(settled.total).toBe(200);
+
+    // Só X: 100 entre A e B; C (que entrou depois) não recebe nada dela.
+    const justX = settleEntries(bag([], [x]), ['a', 'b', 'c'], catalog);
+    expect([...justX.shares]).toEqual([['a', 50], ['b', 50]]);
+    expect(justX.shares.get('c')).toBeUndefined();
+  });
+
+  it('entrada MIGRADA (eligible: []) divide entre os presentes — a regra de hoje (D5)', () => {
+    const settled = settleEntries(bag([{ amount: 9, eligible: [] }], []), ['a', 'b', 'c'], catalog);
+    expect([...settled.shares]).toEqual([['a', 3], ['b', 3], ['c', 3]]);
+  });
+
+  it('item com value: 0 vai para unsold e não vira gold; fora do catálogo também', () => {
+    const settled = settleEntries(bag([], [
+      { item: carried('cheese', 3, 's:c'), eligible: ['a', 'b'] },
+      { item: carried('ghost', 1, 's:g'), eligible: ['a', 'b'] },
+    ]), ['a', 'b'], catalog);
+    expect(settled.shares.size).toBe(0);
+    expect(settled.total).toBe(0);
+    expect(settled.unsold.map((i) => i.itemId)).toEqual(['cheese', 'ghost']);
+  });
+
+  it('a soma das cotas É o total, e a bolsa não é mutada', () => {
+    const state = bag(
+      [{ amount: 7, eligible: ['a', 'b'] }],
+      [{ item: carried('sword', 2, 's:x'), eligible: ['a'] }],
+    );
+    const settled = settleEntries(state, ['a', 'b'], catalog);
+    expect(settled.total).toBe(27);
+    expect([...settled.shares.values()].reduce((sum, gold) => sum + gold, 0)).toBe(27);
+    expect(state.gold).toHaveLength(1);
+    expect(state.items).toHaveLength(1);
+  });
+});
+
+describe('autoSellLimit (#395)', () => {
+  const limits = { free: 5, premium: 20 };
+
+  it('lê o Premium do LÍDER; a lista guarda 18 e só os 5 primeiros valem com free', () => {
+    expect(autoSellLimit({ lead: true }, 'lead', limits)).toBe(20);
+    expect(autoSellLimit({ lead: false }, 'lead', limits)).toBe(5);
+    expect(autoSellLimit({}, 'lead', limits)).toBe(5);
+    // O Premium de OUTRO membro não vale: o limite é do líder.
+    expect(autoSellLimit({ b: true }, 'lead', limits)).toBe(5);
+    const configured = Array.from({ length: 18 }, (_, i) => `i${String(i)}`);
+    expect(configured.slice(0, autoSellLimit({}, 'lead', limits))).toHaveLength(5);
+    expect(configured).toHaveLength(18);
+  });
+
+  it('sem o bloco de conteúdo, o limite é zero', () => {
+    expect(autoSellLimit({ lead: true }, 'lead', undefined)).toBe(0);
   });
 });
 

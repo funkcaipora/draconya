@@ -144,10 +144,16 @@ export interface PartyBagChanged {
   readonly capacity: number;
 }
 
-/** A bolsa foi vendida e dividida (#192): ao sair alguém, e no fim. */
+/**
+ * A bolsa foi vendida e dividida (#192): a cada saída, no fim e ao desligar `splitLoot`, além
+ * da VENDA AUTOMÁTICA no drop (#395). `reason` diz qual dos quatro momentos gerou o extrato;
+ * `itemId` só acompanha `'auto-sell'`, e a venda automática NÃO entra em `notableEvents`.
+ */
 export interface PartySettlement {
   readonly kind: 'party-settlement';
   readonly total: number;
+  readonly reason: 'leave' | 'end' | 'toggle' | 'auto-sell';
+  readonly itemId?: string;
   readonly shares: ReadonlyArray<{ readonly characterId: string; readonly gold: number }>;
 }
 
