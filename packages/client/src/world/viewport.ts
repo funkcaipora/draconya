@@ -28,9 +28,10 @@ import {
   interpolate, world, type Creature, type Effect, type FloatingText, type Missile,
 } from '../state/world.js';
 import {
-  TILE, compareDrawOrder, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering,
-  toScreen, viewFor, zoomFor, type TileWindow,
+  TILE, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tilesEntering, toScreen, viewFor,
+  zoomFor, type TileWindow,
 } from './camera.js';
+import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import {
   FALLBACK_EFFECT_PHASES, effectPhaseAt, floatingTextColor, floatingTextOffset, missileProgress,
 } from './effects.js';
@@ -48,7 +49,7 @@ import { paintOf } from './outfit-colors.js';
 import { pickCreature } from './pick.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
-import { drawTile, type ObjectInfo } from './tile-stack.js';
+import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
 
 export type { MapTiles } from './scene.js';
 
@@ -119,6 +120,22 @@ interface Warmed {
   readonly window: TileWindow;
   readonly sceneId: string;
   readonly floor: number;
+}
+
+/**
+ * As três camadas de UM andar, com os pools presos a elas (ADR 0034). `ground` e `top` seguem a
+ * ordem de inserção; `scene` tem `sortableChildren` e ordena parede, objeto alto e criatura por
+ * `zIndex = sceneZIndex(x, y, slot)` (`world/depth.ts`, puro). O `fallback` é filho 0 de
+ * `ground`: a grade lisa e os retângulos de reserva daquele andar.
+ */
+interface FloorLayers {
+  readonly z: number;
+  readonly ground: Container;
+  readonly scene: Container;
+  readonly top: Container;
+  readonly fallback: Graphics;
+  readonly pools: { readonly ground: Sprite[]; readonly scene: Sprite[]; readonly top: Sprite[] };
+  used: { ground: number; scene: number; top: number };
 }
 
 export interface ViewportOptions {
@@ -205,15 +222,49 @@ export async function mountViewport(
     warmed = null;
   });
 
-  // Camadas na ordem de desenho: terreno embaixo, criaturas em cima, o `top` da pilha sobre
-  // elas (FUN-121: o arco cobre quem passa por baixo), efeitos sobre tudo — a explosão cobre o
-  // monstro, não o contrário — e a sobreposição por último.
-  const terrain = new Container();
-  const creatures = new Container();
-  const above = new Container();
+  // A raiz dos andares anda com a janela (o que `terrain` fazia); efeitos e overlay continuam
+  // absolutos, por cima de todos os andares. Cada andar tem `ground` → `scene` → `top`
+  // (ADR 0034): parede, objeto alto e criatura no MESMO `scene`, ordenados por `zIndex`.
+  const floorsRoot = new Container();
   const effects = new Container();
   const overlay = new Container();
-  app.stage.addChild(terrain, creatures, above, effects, overlay);
+  app.stage.addChild(floorsRoot, effects, overlay);
+
+  /** Camadas por andar, criadas uma vez. Trocar de andar re-anexa; nunca destrói. */
+  const floorLayers = new Map<number, FloorLayers>();
+  function layersFor(z: number): FloorLayers {
+    let layers = floorLayers.get(z);
+    if (layers !== undefined) return layers;
+    const ground = new Container();
+    const scene = new Container();
+    // A ÚNICA ordenação automática do viewport: o Pixi só reordena `scene` quando um filho
+    // entra ou um `zIndex` muda (`sortDirty`), nunca por quadro sem mudança.
+    scene.sortableChildren = true;
+    const top = new Container();
+    const fallback = new Graphics();
+    ground.addChild(fallback);
+    layers = {
+      z, ground, scene, top, fallback,
+      pools: { ground: [], scene: [], top: [] }, used: { ground: 0, scene: 0, top: 0 },
+    };
+    floorLayers.set(z, layers);
+    return layers;
+  }
+
+  /** Um sprite do pool de UMA camada, criado se o pool acabou — preso àquele container. */
+  function take(layers: FloorLayers, layer: DrawLayer): Sprite {
+    const pool = layers.pools[layer];
+    const index = layers.used[layer]++;
+    let sprite = pool[index];
+    if (sprite === undefined) {
+      sprite = new Sprite();
+      sprite.roundPixels = true;
+      pool.push(sprite);
+      layers[layer].addChild(sprite);
+    }
+    sprite.visible = true;
+    return sprite;
+  }
 
   /** A cena de agora, e o `mapId` que foi pedido por último — para a resposta atrasada de outro mapa não entrar. */
   let scene: Scene | null = null;
@@ -221,8 +272,6 @@ export async function mountViewport(
   // Última janela desenhada. O terreno só é redesenhado quando ela muda — redesenhar a cada
   // quadro é o desperdício óbvio, e num mapa grande é o que come o orçamento de quadro.
   let painted = '';
-  /** Assinatura das posições INTEIRAS. A ordem de desenho só muda quando ela muda. */
-  let ordered = '';
   /**
    * A última janela de prefetch aquecida, com a cena e o andar dela. `null` é "aqueça tudo":
    * é o que cena nova, pacote novo, andar novo e `resize` fazem. Comparar quatro inteiros por
@@ -243,20 +292,9 @@ export async function mountViewport(
   const elevations = new Map<string, number>();
 
   /**
-   * Pools de sprites de terreno — um por OBJETO desenhado na janela, nas duas camadas (a de
-   * baixo das criaturas e a `top`). Reaproveitados a cada troca de janela: recriar Sprites a
-   * cada tile cruzado é a fragmentação que o pool de criaturas já evita.
-   */
-  const ground: Sprite[] = [];
-  const top: Sprite[] = [];
-  const groundFallback = new Graphics();
-  terrain.addChild(groundFallback);
-
-  /**
    * As flags, o padrão e a DIMENSÃO que a pilha precisa, pelo pacote de agora — `NO_FLAGS` e
-   * `{1, 1}` sem pacote. A camada `scene` que sai daqui ainda é desenhada em `terrain`: o
-   * container espacial e a profundidade por objeto são de 385; até lá, classificar não muda a
-   * tela.
+   * `{1, 1}` sem pacote. A camada `scene` que sai daqui é desenhada no `scene` do andar dela,
+   * com `zIndex` espacial desde 385 (ADR 0034).
    */
   const objectInfo: ObjectInfo = {
     flagsOf: (id) => pack?.objectFlags(id) ?? NO_FLAGS,
@@ -415,15 +453,11 @@ export async function mountViewport(
     // enquanto as criaturas — posicionadas a cada quadro — deslizam: cisalhamento de até 32 px
     // assim que a câmera seguir o personagem.
     const origin = toScreen({ x: window.minX, y: window.minY }, center, view);
-    terrain.x = Math.round(origin.x);
-    terrain.y = Math.round(origin.y);
-    above.x = terrain.x;
-    above.y = terrain.y;
-    // O ambiente é um tom sobre as camadas inteiras (FUN-121): o bueiro é escuro, a rua não.
-    const ambient = world.ambience === 'cavern' ? CAVERN_TINT : 0xffffff;
-    terrain.tint = ambient;
-    creatures.tint = ambient;
-    above.tint = ambient;
+    floorsRoot.x = Math.round(origin.x);
+    floorsRoot.y = Math.round(origin.y);
+    // O ambiente é um tom sobre as camadas inteiras (FUN-121): o bueiro é escuro, a rua não. O
+    // tint do container multiplica o dos filhos, então `ambiente × véu` sai igual ao de hoje.
+    floorsRoot.tint = world.ambience === 'cavern' ? CAVERN_TINT : 0xffffff;
 
     // A chave inclui a VERSÃO do livro de texturas: o primeiro quadro pinta retângulo, e o
     // quadro em que uma folha resolve — ou em que um despejo esquece uma célula — precisa
@@ -453,29 +487,26 @@ export async function mountViewport(
       return base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] };
     };
 
-    groundFallback.clear();
+    // Re-anexa os andares desta repintura, do fundo ao topo: `ground` → `scene` → `top` de
+    // cada um. Um andar que saiu da lista sai do stage mas fica no Map, com os pools.
+    floorsRoot.removeChildren();
+    const drawnFloors = scene === null ? [floor] : floorsBelow(scene.floors, floor);
+    for (const z of drawnFloors) {
+      const layers = layersFor(z);
+      layers.fallback.clear();
+      layers.used = { ground: 0, scene: 0, top: 0 };
+      floorsRoot.addChild(layers.ground, layers.scene, layers.top);
+    }
+
     elevations.clear();
-    let usedGround = 0;
-    let usedTop = 0;
-    /** Um sprite do pool pedido, criado se o pool acabou. */
-    const take = (pool: Sprite[], index: number, layer: Container): Sprite => {
-      let sprite = pool[index];
-      if (sprite === undefined) {
-        sprite = new Sprite();
-        sprite.roundPixels = true;
-        pool.push(sprite);
-        layer.addChild(sprite);
-      }
-      sprite.visible = true;
-      return sprite;
-    };
 
     if (scene === null) {
       // Sem cena — o mapa ainda não chegou, ou não há — a grade lisa de reserva em volta da
       // câmera: o personagem continua visível num chão, em vez de flutuar no preto.
+      const layers = layersFor(floor);
       for (let y = window.minY; y <= window.maxY; y++) {
         for (let x = window.minX; x <= window.maxX; x++) {
-          groundFallback
+          layers.fallback
             .rect((x - window.minX) * TILE, (y - window.minY) * TILE, TILE, TILE)
             .fill(COLOR_FLOOR)
             .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
@@ -490,73 +521,83 @@ export async function mountViewport(
      */
     const paintStack = (
       stack: TileStack, mx: number, my: number, below: number, local: { x: number; y: number },
-      withPlaceholder: boolean,
+      withPlaceholder: boolean, layers: FloorLayers,
     ): number => {
       const tint = veilTint(below);
       const drawn = drawTile(stack, mx, my, objectInfo);
-      // O retângulo de reserva do tile, sob o mesmo véu do andar: chão é chão, e tile bloqueado
-      // — parede, pilar — é escuro. Sem pacote é tudo o que há; com pacote, é o que segura o
-      // lugar do PRIMEIRO objeto da pilha enquanto o quadro dele não chega — o chão, ou a
-      // parede de um tile sem chão. A tela nunca fica preta por causa de arte, e um item de
-      // cima sem quadro não é nada. O item do chão sobre a grade de reserva não tem retângulo:
-      // a grade já é o chão dele.
-      const placeholder = (): void => {
+      const color = shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below);
+      let sceneSlot = 0;
+      // O lugar do PRIMEIRO objeto enquanto o quadro dele não chega — ou sem pacote — na camada
+      // DELE: chão em voo é um retângulo no `Graphics` do `ground`, como sempre; parede em voo
+      // num tile sem chão é um Sprite branco no `scene`, com o zIndex que a parede vai ter, para
+      // a criatura ao norte já ficar atrás do lugar dela. Um item de cima sem quadro não é nada.
+      const placeholder = (layer: DrawLayer): void => {
         if (!withPlaceholder) return;
-        groundFallback
-          .rect(local.x, local.y, TILE, TILE)
-          .fill(shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below))
-          .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
+        if (layer === 'ground') {
+          layers.fallback
+            .rect(local.x, local.y, TILE, TILE)
+            .fill(color)
+            .stroke({ width: 1, color: COLOR_GRID, alignment: 0 });
+          return;
+        }
+        const sprite = take(layers, layer);
+        sprite.texture = Texture.WHITE;
+        sprite.tint = color;
+        sprite.width = TILE;
+        sprite.height = TILE;
+        sprite.x = local.x;
+        sprite.y = local.y;
+        if (layer === 'scene') sprite.zIndex = sceneZIndex(mx, my, sceneSlot);
       };
       if (pack === null) {
-        placeholder();
+        placeholder(drawn.objects[0]?.layer ?? 'ground');
         return drawn.creatureElevation;
       }
       for (const [index, object] of drawn.objects.entries()) {
         const texture = objectTexture(object.appearanceId, object.cell);
         if (!(texture instanceof Texture)) {
-          if (index === 0) placeholder();
+          if (index === 0) placeholder(object.layer);
+          if (object.layer === 'scene') sceneSlot++;
           continue;
         }
-        const sprite = object.layer === 'top'
-          ? take(top, usedTop++, above)
-          : take(ground, usedGround++, terrain);
+        const sprite = take(layers, object.layer);
         sprite.texture = texture;
         sprite.tint = tint;
         // Ancorado no canto INFERIOR DIREITO do tile, transbordando para cima e para a
         // esquerda, como no Tibia; a elevação e o shift deslocam mais para lá.
+        sprite.width = texture.width;
+        sprite.height = texture.height;
         sprite.x = local.x + TILE - texture.width + object.dx;
         sprite.y = local.y + TILE - texture.height + object.dy;
+        if (object.layer === 'scene') sprite.zIndex = sceneZIndex(mx, my, sceneSlot++);
       }
       return drawn.creatureElevation;
     };
 
-    if (scene === null) {
-      // Sem cena, o que está no chão do andar do jogador aparece mesmo assim (FUN-123): o
-      // cadáver que caiu enquanto o mapa carregava tem prazo, e esperar a cena era perdê-lo.
-      for (const [at, items] of groundItemsAt) {
-        const [x, y, z] = at.split(',').map(Number) as [number, number, number];
-        if (z !== floor || x < window.minX || x > window.maxX || y < window.minY || y > window.maxY) continue;
-        paintStack({ ground: 0, items }, x, y, 0, { x: (x - window.minX) * TILE, y: (y - window.minY) * TILE }, false);
-      }
-    }
-
     // Do andar mais fundo ao do jogador (FUN-121): o de cima cobre o de baixo. Um andar `below`
     // níveis abaixo aparece deslocado `below` tiles para baixo e para a direita — a perspectiva
-    // do Tibia —, e sob um véu que escurece a cada nível.
-    for (const z of scene === null ? [] : floorsBelow(scene.floors, floor)) {
+    // do Tibia —, e sob um véu que escurece a cada nível. As coordenadas de `sceneZIndex` são
+    // as do MAPA (`mx`, `my`): dentro de um andar o deslocamento é uniforme e não muda a ordem.
+    for (const z of drawnFloors) {
       const below = z - floor;
+      const layers = layersFor(z);
       for (let sy = window.minY; sy <= window.maxY; sy++) {
         for (let sx = window.minX; sx <= window.maxX; sx++) {
           const stack = stackAt(sx - below, sy - below, z);
           if (stack === null) continue;
           const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
-          const elevation = paintStack(stack, sx - below, sy - below, below, local, true);
+          const elevation = paintStack(stack, sx - below, sy - below, below, local, true, layers);
           if (below === 0 && elevation > 0) elevations.set(`${sx},${sy},${z}`, elevation);
         }
       }
     }
-    for (let i = usedGround; i < ground.length; i++) (ground[i] as Sprite).visible = false;
-    for (let i = usedTop; i < top.length; i++) (top[i] as Sprite).visible = false;
+    // Esconde o que sobrou de cada pool do andar desenhado — a repintura de agora usou menos.
+    for (const z of drawnFloors) {
+      const { pools, used } = layersFor(z);
+      for (const layer of ['ground', 'scene', 'top'] as const) {
+        for (let i = used[layer]; i < pools[layer].length; i++) (pools[layer][i] as Sprite).visible = false;
+      }
+    }
   }
 
   /** O quadro de uma criatura agora: direção, fase e parado/andando saem do passo dela. */
@@ -656,19 +697,84 @@ export async function mountViewport(
   function paintCreatures(center: { x: number; y: number; z: number }, nowMs: number): void {
     const seen = new Set<number>();
     const floor = Math.round(center.z);
-    /** Cada criatura com a posição interpolada E a de TELA — deslocada pelo andar (FUN-121). */
-    const drawable: Array<{ creature: Creature; x: number; y: number; z: number; below: number; sx: number; sy: number }> = [];
-    /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado. */
+    // A janela de RENDER (M23) e os andares DESENHADOS: fora deles o sprite fica invisível, no
+    // pool, sem ser destruído — volta ao entrar sem `addChild` nem textura nova.
+    const window = renderTiles(center, view);
+    const drawn = new Set(scene === null ? [floor] : floorsBelow(scene.floors, floor));
+    /** O retângulo de tela do alvo neste quadro, se ele estiver desenhado (#428). */
     let targetRect: string | null = null;
 
     for (const creature of world.creatures.values()) {
+      seen.add(creature.id);
       const position = interpolate(creature, nowMs);
       const below = position.z - floor;
-      drawable.push({
-        creature, x: position.x, y: position.y, z: position.z, below,
-        sx: position.x + below, sy: position.y + below,
-      });
-      seen.add(creature.id);
+      let sprite = sprites.get(creature.id);
+      if (sprite === undefined) {
+        sprite = new Sprite(Texture.WHITE);
+        sprite.roundPixels = true;
+        sprites.set(creature.id, sprite);
+      }
+      let head = overlays.get(creature.id);
+      if (head === undefined) {
+        head = createOverlay();
+        overlays.set(creature.id, head);
+      }
+      // O container do andar DELA. Reparentar é o que "trocar de andar" significa aqui; a
+      // criatura sempre mora no `scene` do próprio andar, mesmo invisível (fica no pool).
+      const layers = layersFor(position.z);
+      if (sprite.parent !== layers.scene) layers.scene.addChild(sprite);
+
+      // Coordenadas de TELA (deslocadas pelo andar) só para o culling e para o overlay.
+      const sx = position.x + below;
+      const sy = position.y + below;
+      const outside = !drawn.has(position.z)
+        || Math.round(sx) < window.minX || Math.round(sx) > window.maxX
+        || Math.round(sy) < window.minY || Math.round(sy) > window.maxY;
+      sprite.visible = !outside;
+      head.bar.visible = !outside;
+      head.label.visible = !outside;
+      if (outside) continue;
+
+      // Tile ARREDONDADO nesta issue; 386 troca por `walkingTile(...)`. O `zIndex` muda no meio
+      // do passo — é aí que a criatura passa para trás ou para a frente da parede.
+      sprite.zIndex = sceneZIndex(Math.round(position.x), Math.round(position.y), CREATURE_SLOT);
+
+      const screen = toScreen({ x: sx, y: sy }, center, view);
+      // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
+      // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
+      const lift = below === 0 ? liftOf(creature, position, nowMs) : 0;
+      const lifted = { x: screen.x - lift, y: screen.y - lift };
+      paintOverlay(head, creature, lifted);
+      // O sprite mora num container que ANDA com a janela: posição local = tela − raiz.
+      const local = { x: lifted.x - floorsRoot.x, y: lifted.y - floorsRoot.y };
+      const texture = creatureTexture(creature, nowMs);
+      if (texture instanceof Texture) {
+        sprite.texture = texture;
+        sprite.tint = veilTint(below);
+        // Em Pixi `width`/`height` são ESCALA. Um quadro de 64×64 tem que ficar 64×64 — e
+        // transbordar para cima e para a esquerda, ancorado no canto inferior direito do tile.
+        sprite.width = texture.width;
+        sprite.height = texture.height;
+        sprite.x = local.x + TILE - texture.width;
+        sprite.y = local.y + TILE - texture.height;
+        // A moldura do alvo (#428) usa o retângulo de TELA do sprite — o sprite mora no
+        // container do andar, que anda com a janela; a moldura mora no `overlay` global.
+        if (creature.id === targetId) {
+          targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
+        }
+        continue;
+      }
+      // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
+      // véu que o quadro teria. É a degradação, não o erro.
+      sprite.texture = Texture.WHITE;
+      sprite.width = TILE - 6;
+      sprite.height = TILE - 6;
+      sprite.x = local.x + 3;
+      sprite.y = local.y + 3;
+      sprite.tint = shade(creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
+      if (creature.id === targetId) {
+        targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
+      }
     }
 
     for (const [id, sprite] of sprites) {
@@ -682,69 +788,6 @@ export async function mountViewport(
         overlays.delete(id);
       }
     }
-
-    for (const entry of drawable) {
-      let sprite = sprites.get(entry.creature.id);
-      if (sprite === undefined) {
-        sprite = new Sprite(Texture.WHITE);
-        sprite.roundPixels = true;
-        sprites.set(entry.creature.id, sprite);
-        creatures.addChild(sprite);
-      }
-      let head = overlays.get(entry.creature.id);
-      if (head === undefined) {
-        head = createOverlay();
-        overlays.set(entry.creature.id, head);
-      }
-      // Andar (FUN-121): quem está ACIMA do jogador não aparece — não há telhado, não há
-      // ninguém em cima dele —, e quem está abaixo aparece deslocado e sob o véu do andar.
-      const { below } = entry;
-      if (below < 0) {
-        sprite.visible = false;
-        head.bar.visible = false;
-        head.label.visible = false;
-        continue;
-      }
-      sprite.visible = true;
-      head.bar.visible = true;
-      head.label.visible = true;
-      const screen = toScreen({ x: entry.sx, y: entry.sy }, center, view);
-      // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
-      // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
-      const lift = below === 0 ? liftOf(entry.creature, entry, nowMs) : 0;
-      const lifted = { x: screen.x - lift, y: screen.y - lift };
-      paintOverlay(head, entry.creature, lifted);
-      const texture = creatureTexture(entry.creature, nowMs);
-      if (texture instanceof Texture) {
-        sprite.texture = texture;
-        sprite.tint = veilTint(below);
-        // Em Pixi `width`/`height` são ESCALA. Um quadro de 64×64 tem que ficar 64×64 — e
-        // transbordar para cima e para a esquerda, ancorado no canto inferior direito do tile.
-        sprite.width = texture.width;
-        sprite.height = texture.height;
-        sprite.x = lifted.x + TILE - texture.width;
-        sprite.y = lifted.y + TILE - texture.height;
-      } else {
-        // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
-        // véu que o quadro teria. É a degradação, não o erro.
-        sprite.texture = Texture.WHITE;
-        sprite.width = TILE - 6;
-        sprite.height = TILE - 6;
-        sprite.x = lifted.x + 3;
-        sprite.y = lifted.y + 3;
-        sprite.tint = shade(entry.creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
-      }
-      // A moldura do alvo usa o MESMO retângulo do sprite — inclusive o de degradação, que é
-      // o que está na tela quando não há quadro.
-      if (entry.creature.id === targetId) {
-        targetRect = `${sprite.x},${sprite.y},${sprite.width},${sprite.height}`;
-      }
-    }
-
-    // A ordem é pela posição de TELA: uma criatura dois andares abaixo desenhada na mesma
-    // célula que uma do andar do jogador é comparada onde de fato está, não onde o mapa a põe.
-    reorder(drawable.filter((entry) => entry.below >= 0).map((entry) => ({ creature: entry.creature, x: entry.sx, y: entry.sy })));
-
     // A moldura só é redesenhada quando o alvo ou o retângulo dele muda; criatura que sumiu
     // (`targetRect === null`) limpa a moldura no quadro seguinte.
     const rect = targetRect ?? '';
@@ -940,33 +983,6 @@ export async function mountViewport(
     prune(textLabels, alive, (label) => label.destroy());
   }
 
-  /**
-   * Quem está mais ao sul cobre quem está ao norte — mas SÓ quando alguém troca de tile.
-   *
-   * A ordem só pode mudar quando a posição inteira muda; dentro de um passo, as criaturas
-   * deslizam sem se ultrapassar. Ordenar a cada quadro seria refazer o mesmo trabalho 60
-   * vezes por segundo numa hunt com dezenas de criaturas — e é exatamente o custo que o
-   * orçamento de quadro não tem para dar.
-   */
-  function reorder(drawable: ReadonlyArray<{ creature: Creature; x: number; y: number }>): void {
-    const signature = drawable
-      .map((entry) => `${entry.creature.id}:${Math.round(entry.x)},${Math.round(entry.y)}`)
-      .join('|');
-    if (signature === ordered) return;
-    ordered = signature;
-
-    const sorted = [...drawable].sort((a, b) => compareDrawOrder(
-      { x: Math.round(a.x), y: Math.round(a.y) },
-      { x: Math.round(b.x), y: Math.round(b.y) },
-    ));
-    for (const [index, entry] of sorted.entries()) {
-      const sprite = sprites.get(entry.creature.id);
-      // `zIndex` sozinho não basta sem `sortableChildren`; reordenar o filho é mais barato
-      // que ligar ordenação automática num container inteiro.
-      if (sprite !== undefined) creatures.setChildIndex(sprite, index);
-    }
-  }
-
   app.ticker.add(() => {
     fps.record(app.ticker.deltaMS);
     const nowMs = now();
@@ -1060,12 +1076,20 @@ export async function mountViewport(
       missileSprites.clear();
       for (const label of textLabels.values()) label.destroy();
       textLabels.clear();
-      for (const sprite of ground) sprite.destroy();
-      ground.length = 0;
-      for (const sprite of top) sprite.destroy();
-      top.length = 0;
+      // Cada andar tem os próprios pools e as próprias camadas; trocar de andar nunca as
+      // destrói, mas o `destroy` do viewport leva todas.
+      for (const layers of floorLayers.values()) {
+        for (const layer of ['ground', 'scene', 'top'] as const) {
+          for (const sprite of layers.pools[layer]) sprite.destroy();
+        }
+        layers.fallback.destroy();
+        layers.ground.destroy();
+        layers.scene.destroy();
+        layers.top.destroy();
+      }
+      floorLayers.clear();
+      floorsRoot.destroy();
       targetFrame.destroy();
-      above.destroy();
       overlay.destroy();
       book.clear();
       app.destroy(true, { children: true });

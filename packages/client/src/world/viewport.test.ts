@@ -1,9 +1,11 @@
-// O harness de teste do viewport (issue #381): prende os SEIS comportamentos de hoje, mais
-// `drawOrder`, para que as issues seguintes do M23 (que reescrevem camadas, ordem de desenho,
-// prefetch e andares) provem que mudaram só o que disseram que mudariam. Os testes (8) e (9)
-// são a rede de segurança da rodada 1 de revisão desta issue: (8) prende que o harness casa
-// sprite↔id certo mesmo quando `reorder` embaralha `creatures.children` no mesmo quadro do
-// nascimento (achado 2), e (9) cobre a entrega com latência da arte sintética (achado 5).
+// O harness de teste do viewport (issue #381) e os cenários da cena espacial por andar (#385).
+//
+// A #381 prendeu os SEIS comportamentos de então (camadas, criatura, parede/arco, repintura por
+// janela, grade de reserva, elevação) para que as issues seguintes do M23 provassem que mudaram
+// só o que disseram. A #385 troca os cinco containers por `floorsRoot` → `ground`/`scene`/`top`
+// por andar (ADR 0034), põe parede, objeto alto e criatura no MESMO `scene` com `zIndex`
+// espacial, e é o que a seção 11 desta issue prende. A #382 (janela de render) e a #383
+// (prefetch contínuo) seguem nos blocos próprios.
 //
 // O mock abaixo troca todo `import` do pacote real de renderização, no gráfico de módulos
 // inteiro — inclusive dentro de `viewport.ts` e `world/textures.ts` —, pelo falso em
@@ -13,13 +15,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 
-import { Container, drawOrder, Graphics, Texture } from './testing/pixi-fake.js';
+import { Container, drawOrder, Graphics, Sprite, Texture } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { renderTiles, prefetchTiles, visibleTiles, viewFor, zoomFor } from './camera.js';
+import { prefetchTiles, renderTiles, visibleTiles, viewFor, zoomFor } from './camera.js';
+import { CREATURE_SLOT, sceneZIndex } from './depth.js';
+import { veilTint } from './floors.js';
 import type { Scene, TileStack } from './scene.js';
 
-/** O catálogo mínimo dos testes desta issue — ver a seção 11 da spec (#381). */
+/** O catálogo mínimo dos testes — ver a seção 11 das specs #381 e #385. */
 const GRASS = 100;
 const WALL = 102;
 const ARCH = 106;
@@ -38,30 +42,53 @@ const CATALOG: SyntheticCatalog = {
 
 beforeEach(resetWorld);
 
-describe('viewport (issue #381)', () => {
-  it('(1) monta os cinco containers de hoje, na ordem terrain/creatures/above/effects/overlay, e um único callback de quadro', async () => {
+/** O sprite de um container cuja textura é o bitmap `resource`, ou `undefined`. */
+function spriteWith(container: Container, resource: unknown): Sprite | undefined {
+  return container.children.find(
+    (child) => 'texture' in child && (child as Sprite).texture.source.resource === resource,
+  ) as Sprite | undefined;
+}
+
+/** O índice de desenho de um sprite no container, pela ordem do Pixi (`zIndex` estável). */
+function indexIn(container: Container, sprite: Sprite): number {
+  return drawOrder(container).indexOf(sprite);
+}
+
+/** Um campo de chão em todos os tiles dos andares, mais os tiles `extra`. */
+function fieldScene(
+  width: number, height: number, floors: readonly number[], extra: Readonly<Record<string, TileStack>> = {},
+): Scene {
+  const tiles: Record<string, TileStack> = {};
+  for (const z of floors) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) tiles[`${x},${y},${z}`] = { ground: GRASS, items: [] };
+    }
+  }
+  Object.assign(tiles, extra);
+  return sceneOf({ width, height, floors, tiles });
+}
+
+describe('viewport (issue #381, adaptado a #385)', () => {
+  it('(1) monta `floorsRoot`/`effects`/`overlay` e um único callback de quadro; o andar nasce no primeiro quadro', async () => {
     const scene = sceneOf({ width: 4, height: 4, floors: [7] });
     const viewport = await mountTestViewport({ scene });
 
     expect(viewport.app.ticker.callbacks.length).toBe(1);
-    expect(viewport.stage.children.length).toBe(5);
-    // `layers()` (harness.ts) destrutura `stage.children` NESSA ordem — comparar com ela mesma
-    // é tautológico (achado 3 da issue #381) e passaria com os cinco containers em qualquer
-    // posição. A asserção estrutural que distingue de fato `terrain` dos outros quatro:
-    // `groundFallback` (viewport.ts) é o PRIMEIRO filho SÓ de `terrain`.
-    const [terrain, creatures, above, effects, overlay] = viewport.stage.children;
-    expect(terrain?.children[0]).toBeInstanceOf(Graphics);
-    for (const layer of [creatures, above, effects]) expect(layer?.children).toHaveLength(0);
-    // O `overlay` deixou de nascer vazio com a seleção de alvo (#428): o `targetFrame` é um
-    // `Graphics` criado junto com ele. O que a asserção prova é que os três containers do meio
-    // nascem vazios e que `terrain` tem o `groundFallback` como primeiro filho.
-    expect(overlay?.children[0]).toBeInstanceOf(Graphics);
-    const layers = viewport.layers();
-    expect(layers.terrain).toBe(terrain);
-    expect(layers.overlay).toBe(overlay);
+    expect(viewport.stage.children.length).toBe(3);
+    expect(viewport.layers().floorsRoot).toBe(viewport.stage.children[0]);
+    expect(viewport.layers().overlay).toBe(viewport.stage.children[2]);
+
+    viewport.spawnSelf(1, { x: 2, y: 2, z: 7 }, 0);
+    await viewport.tick(0);
+
+    const layers = viewport.floorLayers(7);
+    expect(layers.fallback).toBeInstanceOf(Graphics);
+    expect(layers.ground.children[0]).toBe(layers.fallback);
+    expect(layers.scene.sortableChildren).toBe(true);
+    expect(layers.top.sortableChildren).toBe(false);
   });
 
-  it('(2) a criatura vira sprite em `creatures`, com a textura do pacote', async () => {
+  it('(2) a criatura vira sprite no `scene` do andar dela, com a textura do pacote', async () => {
     const clock = testClock();
     const art = new SyntheticArt(CATALOG, { now: clock.now });
     const scene = sceneOf({ width: 20, height: 20, floors: [7] });
@@ -73,11 +100,11 @@ describe('viewport (issue #381)', () => {
 
     const sprite = viewport.creatureSprite(1);
     expect(sprite).toBeDefined();
-    expect(sprite?.parent).toBe(viewport.layers().creatures);
+    expect(sprite?.parent).toBe(viewport.floorLayers(7).scene);
     expect(sprite?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
   });
 
-  it('(3) parede vira `terrain`, arco vira `above` — nenhum arco em `terrain`', async () => {
+  it('(3) parede vira `scene`, arco vira `top` — nenhum arco no `scene`', async () => {
     const clock = testClock();
     const art = new SyntheticArt(CATALOG, { now: clock.now });
     const scene = sceneOf({
@@ -93,19 +120,10 @@ describe('viewport (issue #381)', () => {
     await viewport.tick(0);
     await viewport.tick(16);
 
-    const layers = viewport.layers();
-    const wallSprite = layers.terrain.children.find(
-      (child) => 'texture' in child && (child as { texture: Texture }).texture.source.resource === art.bitmapOf('object:102:0:0'),
-    );
-    const archSprite = layers.above.children.find(
-      (child) => 'texture' in child && (child as { texture: Texture }).texture.source.resource === art.bitmapOf('object:106:0:0'),
-    );
-    expect(wallSprite).toBeDefined();
-    expect(archSprite).toBeDefined();
-    const archInTerrain = layers.terrain.children.some(
-      (child) => 'texture' in child && (child as { texture: Texture }).texture.source.resource === art.bitmapOf('object:106:0:0'),
-    );
-    expect(archInTerrain).toBe(false);
+    const layers = viewport.floorLayers(7);
+    expect(spriteWith(layers.scene, art.bitmapOf('object:102:0:0'))).toBeDefined();
+    expect(spriteWith(layers.top, art.bitmapOf('object:106:0:0'))).toBeDefined();
+    expect(spriteWith(layers.scene, art.bitmapOf('object:106:0:0'))).toBeUndefined();
   });
 
   it('(4) o terreno só repinta quando a janela muda de tile, não a cada quadro', async () => {
@@ -124,7 +142,7 @@ describe('viewport (issue #381)', () => {
     expect(viewport.placeholderClears()).toBe(2);
   });
 
-  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `renderTiles` (M23/#382: era `visibleTiles`)', async () => {
+  it('(5) sem pacote, o retângulo de reserva cobre a janela inteira de `renderTiles` (M23/#382)', async () => {
     const scene = sceneOf({
       width: 40, height: 40, floors: [7], fill: { 7: { ground: GRASS, items: [] } },
     });
@@ -139,7 +157,7 @@ describe('viewport (issue #381)', () => {
     expect(rects.length).toBe(expected);
   });
 
-  it('(6) a elevação do tile interpola ao longo do passo, e não pula 24px', async () => {
+  it('(6) a elevação do tile interpola ao longo do passo, e o sprite continua no `scene`', async () => {
     const clock = testClock();
     const art = new SyntheticArt(CATALOG, { now: clock.now });
     const scene = sceneOf({
@@ -156,14 +174,8 @@ describe('viewport (issue #381)', () => {
 
     viewport.step(1, { x: 10, y: 10, z: 7 }, { x: 11, y: 10, z: 7 }, 1000, 400);
     // O passo muda o facing de `south` para `east` no início — e CONTINUA `east` depois que o
-    // passo vence: `facingOf` (facing.ts) lê só a direção do ÚLTIMO passo, inclusive parada, e
-    // nunca volta a `south` sozinho. O que muda em `t = 1` (`elapsed >= durationMs`, já "parado"
-    // em `walkFrame`) é `moving`: a chave de textura vai de `outfit:21:east:w:0` para
-    // `outfit:21:east:s:0` — uma chave NOVA, e o primeiro quadro que a pede desenha o retângulo
-    // enquanto ela não chega (regra de sempre). Tickar duas vezes no MESMO instante deixa a
-    // textura chegar sem mexer no `lift` (`t` é o mesmo nas duas), para cada leitura usar a
-    // MESMA fórmula — senão a transição retângulo→textura, e não a elevação, explicaria a
-    // diferença.
+    // passo vence. Tickar duas vezes no MESMO instante deixa a textura chegar sem mexer no
+    // `lift` (`t` é o mesmo nas duas), para cada leitura usar a MESMA fórmula.
     const render = async (atMs: number): Promise<void> => {
       await viewport.tick(atMs);
       await viewport.tick(atMs);
@@ -177,6 +189,7 @@ describe('viewport (issue #381)', () => {
 
     await render(1400);
     expect(viewport.creatureSprite(1)?.y).toBe(y0 - 8);
+    expect(viewport.creatureSprite(1)?.parent).toBe(viewport.floorLayers(7).scene);
   });
 
   it('(7) `drawOrder`: por zIndex quando `sortableChildren`, estável no empate; senão, inserção', () => {
@@ -197,7 +210,7 @@ describe('viewport (issue #381)', () => {
     expect(drawOrder(container)).toEqual([b, c, d, a]); // por zIndex; c antes de d — estável no empate
   });
 
-  it('(8) duas criaturas nascem no mesmo quadro em posições que o `reorder` inverte: cada sprite fica com o id certo', async () => {
+  it('(8) duas criaturas nascem no mesmo quadro: cada sprite fica com o id certo', async () => {
     const clock = testClock();
     const art = new SyntheticArt(CATALOG, { now: clock.now });
     const scene = sceneOf({
@@ -205,27 +218,16 @@ describe('viewport (issue #381)', () => {
     });
     const viewport = await mountTestViewport({ scene, art, clock });
 
-    // id 1 nasce PRIMEIRO (ordem de `world.creatures`) mas fica mais ao SUL (y maior); id 2
-    // nasce DEPOIS mas fica mais ao NORTE. `paintCreatures` cria os sprites na ordem de
-    // nascimento e só DEPOIS chama `reorder` (viewport.ts), que ordena `creatures.children`
-    // por posição de tela (`compareDrawOrder`: y, depois x) — no MESMO quadro. Isso põe o
-    // sprite de id 2 ANTES do de id 1 em `creatures.children`, o oposto da ordem de criação
-    // (issue #381, achado 2: casar pela posição no array, e não pela ordem de criação, casava
-    // o sprite errado com cada id, sem lançar).
     viewport.spawnSelf(1, { x: 10, y: 12, z: 7 }, RAT);
     viewport.spawn(2, { x: 10, y: 10, z: 7 }, DOG);
     await viewport.tick(0);
     await viewport.tick(16);
 
-    const layers = viewport.layers();
     const one = viewport.creatureSprite(1);
     const two = viewport.creatureSprite(2);
     expect(one).toBeDefined();
     expect(two).toBeDefined();
     expect(one).not.toBe(two);
-    // A prova de que `reorder` de fato inverteu a ordem: id 2 está ANTES de id 1 no array.
-    expect(layers.creatures.children.indexOf(two as Container))
-      .toBeLessThan(layers.creatures.children.indexOf(one as Container));
     expect(one?.texture.source.resource).toBe(art.bitmapOf('outfit:21:south:s:0'));
     expect(two?.texture.source.resource).toBe(art.bitmapOf('outfit:22:south:s:0'));
   });
@@ -256,12 +258,217 @@ describe('viewport (issue #381)', () => {
 });
 
 /**
+ * A cena espacial por andar (issue #385, seção 11): parede, objeto alto e criatura no MESMO
+ * `scene`, ordenados por `sceneZIndex` (`world/depth.ts`); andar de baixo anexado antes e sob
+ * véu; culling pela janela de render; reparentação na troca de andar.
+ */
+describe('viewport: cena espacial por andar (issue #385)', () => {
+  it('RF-01: parede e criatura moram no MESMO `scene` do andar', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '12,10,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0'));
+    const creature = viewport.creatureSprite(1);
+    expect(wall).toBeDefined();
+    expect(creature).toBeDefined();
+    expect(wall?.parent).toBe(layers.scene);
+    expect(creature?.parent).toBe(layers.scene);
+  });
+
+  it('RF-02: criatura ao norte da parede vem antes; ao sul, depois', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '10,10,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 9, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0')) as Sprite;
+    const creature = viewport.creatureSprite(1) as Sprite;
+    expect(indexIn(layers.scene, creature)).toBeLessThan(indexIn(layers.scene, wall));
+
+    viewport.moveSelfTo({ x: 10, y: 11, z: 7 });
+    await viewport.tick(32);
+    expect(indexIn(layers.scene, creature)).toBeGreaterThan(indexIn(layers.scene, wall));
+  });
+
+  it('RF-03: no mesmo tile, o item de `scene` vem antes da criatura', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '10,10,7': { ground: GRASS, items: [{ id: WALL }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const layers = viewport.floorLayers(7);
+    const wall = spriteWith(layers.scene, art.bitmapOf('object:102:0:0')) as Sprite;
+    const creature = viewport.creatureSprite(1) as Sprite;
+    expect(wall.zIndex).toBeLessThan(creature.zIndex);
+    expect(creature.zIndex).toBe(sceneZIndex(10, 10, CREATURE_SLOT));
+  });
+
+  it('RF-04: mesma linha, leste depois de oeste, e a ordem não pisca entre quadros', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 3, y: 5, z: 7 }, RAT);
+    viewport.spawn(2, { x: 7, y: 5, z: 7 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const layers = viewport.floorLayers(7);
+    const one = viewport.creatureSprite(1) as Sprite;
+    const two = viewport.creatureSprite(2) as Sprite;
+    expect(indexIn(layers.scene, one)).toBeLessThan(indexIn(layers.scene, two));
+
+    const before = drawOrder(layers.scene).map((child) => child.seq);
+    await viewport.tick(32);
+    await viewport.tick(48);
+    await viewport.tick(64);
+    expect(drawOrder(layers.scene).map((child) => child.seq)).toEqual(before);
+  });
+
+  it('RF-05: andar de baixo anexado antes e sob véu; `top` depois do `scene` do mesmo andar', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [6, 7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 6, z: 6 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const children = viewport.layers().floorsRoot.children;
+    const floor7 = viewport.floorLayers(7);
+    const floor6 = viewport.floorLayers(6);
+    expect(children[0]).toBe(floor7.ground);
+    expect(children[1]).toBe(floor7.scene);
+    expect(children[2]).toBe(floor7.top);
+    expect(children[3]).toBe(floor6.ground);
+    expect(children.indexOf(floor6.top)).toBeGreaterThan(children.indexOf(floor6.scene));
+
+    const ground7 = floor7.ground.children.filter(
+      (child) => 'texture' in child && child.visible,
+    ) as Sprite[];
+    expect(ground7.length).toBeGreaterThan(0);
+    expect(ground7[0]?.tint).toBe(veilTint(1));
+  });
+
+  it('RF-05: o `top` do andar é anexado depois do `scene` — o arco cobre quem passa', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [7], { '12,10,7': { ground: GRASS, items: [{ id: WALL }, { id: ARCH }] } });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const children = viewport.layers().floorsRoot.children;
+    const layers = viewport.floorLayers(7);
+    expect(children.indexOf(layers.top)).toBeGreaterThan(children.indexOf(layers.scene));
+    expect(spriteWith(layers.top, art.bitmapOf('object:106:0:0'))).toBeDefined();
+  });
+
+  it('RF-06: fora da janela de render a criatura fica invisível e volta sem destruir o sprite', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(40, 40, [7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 5, y: 5, z: 7 }, RAT);
+    viewport.spawn(2, { x: 40, y: 40, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const sprite = viewport.creatureSprite(2) as Sprite;
+    expect(sprite.visible).toBe(false);
+    const count = viewport.creatureCount();
+
+    viewport.step(2, { x: 40, y: 40, z: 7 }, { x: 6, y: 5, z: 7 }, 16, 0);
+    await viewport.tick(32);
+
+    expect(viewport.creatureSprite(2)).toBe(sprite);
+    expect(sprite.visible).toBe(true);
+    expect(viewport.creatureCount()).toBe(count);
+  });
+
+  it('RF-07: trocar de andar reparenta a criatura para o `scene` do andar novo, mesmo Sprite', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const scene = fieldScene(20, 20, [6, 7]);
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 6, z: 6 }, RAT);
+    viewport.spawn(2, { x: 10, y: 7, z: 7 }, DOG);
+    await viewport.tick(0);
+    await viewport.tick(16);
+
+    const sprite = viewport.creatureSprite(2) as Sprite;
+    expect(sprite.parent).toBe(viewport.floorLayers(7).scene);
+
+    viewport.step(2, { x: 10, y: 7, z: 7 }, { x: 10, y: 6, z: 6 }, 32, 0);
+    await viewport.tick(48);
+
+    expect(viewport.creatureSprite(2)).toBe(sprite);
+    expect(sprite.parent).toBe(viewport.floorLayers(6).scene);
+  });
+
+  it('RF-08: sem pacote, o `fallback` do andar recebe a grade e o `scene` fica sem placeholders', async () => {
+    const scene = fieldScene(20, 20, [7]);
+    const viewport = await mountTestViewport({ scene });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, 0);
+    await viewport.tick(0);
+
+    const layers = viewport.floorLayers(7);
+    const window = renderTiles({ x: 10, y: 10, z: 7 }, viewFor(576, 448, 1));
+    // Um `rect` por tile DENTRO do mapa pintado na janela de render (a grade lisa da janela
+    // inteira é só o caso `scene === null`); fora do mapa `tileAt` devolve `null` e não pinta.
+    const inMap = (Math.min(window.maxX, 19) - Math.max(window.minX, 0) + 1)
+      * (Math.min(window.maxY, 19) - Math.max(window.minY, 0) + 1);
+    const rects = layers.fallback.ops.filter((op) => op.kind === 'rect');
+    expect(rects.length).toBe(inMap);
+    // Nenhum placeholder de chão vazou para o `scene`: o único filho é o sprite da criatura.
+    expect(layers.scene.children).toEqual([viewport.creatureSprite(1)]);
+  });
+
+  it('RF-08: parede em voo num tile sem chão é um Sprite branco no `scene`, no zIndex dela', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now, latencyMs: 100 });
+    const scene = sceneOf({
+      width: 20,
+      height: 20,
+      floors: [7],
+      tiles: { '12,10,7': { ground: 0, items: [{ id: WALL }] } },
+    });
+    const viewport = await mountTestViewport({ scene, art, clock });
+    viewport.spawnSelf(1, { x: 10, y: 10, z: 7 }, RAT);
+    await viewport.tick(0);
+
+    const layers = viewport.floorLayers(7);
+    const placeholder = layers.scene.children.find(
+      (child) => child.zIndex === sceneZIndex(12, 10, 0),
+    ) as Sprite | undefined;
+    expect(placeholder).toBeDefined();
+    expect(placeholder?.texture).toBe(Texture.WHITE);
+
+    await viewport.tick(100);
+    expect(spriteWith(layers.scene, art.bitmapOf('object:102:0:0'))).toBe(placeholder);
+  });
+});
+
+/**
  * A janela de RENDER (issue #382, §11 da spec): o viewport passa a pintar e aquecer
  * `renderTiles`, não `visibleTiles`. Um mapa 40×40 com `groundAt(x, y) = 100 + x` deixa a
- * coluna virar id — é como o teste lê "que coluna já foi pedida" sem precisar inspecionar
- * `objectTexture`. `mountTestViewport({ width: 128, height: 96 })` dá zoom 1 e vista 4×3
- * (`zoomFor`/`viewFor`), o mínimo em que a diferença entre janela visível e de render é grande
- * o bastante para não empatar com arredondamento.
+ * coluna virar id — é como o teste lê "que coluna já foi pedida". `mountTestViewport({ width:
+ * 128, height: 96 })` dá zoom 1 e vista 4×3, o mínimo em que a diferença entre janela visível
+ * e de render é grande o bastante para não empatar com arredondamento.
  */
 describe('viewport pinta a janela de render (issue #382)', () => {
   const view = { widthTiles: 4, heightTiles: 3 };
@@ -295,14 +502,13 @@ describe('viewport pinta a janela de render (issue #382)', () => {
 
     // Vista 4×3 fracionária em (10, 10): visível cobre 8..12 (x) × 9..11 (y); render soma 3 de
     // cada lado — 5..15 (11 colunas) × 6..14 (9 linhas) = 99, todos dentro do mapa 40×40.
-    const window = { visible: visibleTiles({ x: 10, y: 10, z: 7 }, view) };
-    expect(window.visible).toEqual({ minX: 8, minY: 9, maxX: 12, maxY: 11 });
-    const groundSprites = viewport.layers().terrain.children
+    expect(visibleTiles({ x: 10, y: 10, z: 7 }, view)).toEqual({ minX: 8, minY: 9, maxX: 12, maxY: 11 });
+    const groundSprites = viewport.floorLayers(7).ground.children
       .filter((child) => 'texture' in child && child.visible);
     expect(groundSprites).toHaveLength(99);
   });
 
-  it('RF-03: parado exatamente no meio de um passo (câmera inteira), a janela de render some 3 tiles de cada lado sem a coluna parcial', async () => {
+  it('RF-03: parado no meio de um passo (câmera inteira), a janela de render some 3 tiles de cada lado', async () => {
     const clock = testClock();
     const art = new SyntheticArt(groundCatalog(), { now: clock.now });
     const scene = sceneOf({ width: 40, height: 40, floors: [7], tiles: groundMap() });
@@ -320,7 +526,7 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     expect(visibleTiles({ x: 10.5, y: 10, z: 7 }, view)).toEqual({
       minX: 9, minY: 9, maxX: 12, maxY: 11,
     });
-    const groundSprites = viewport.layers().terrain.children
+    const groundSprites = viewport.floorLayers(7).ground.children
       .filter((child) => 'texture' in child && child.visible);
     expect(groundSprites).toHaveLength(90);
   });
@@ -337,14 +543,12 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     await viewport.tick(16);
     const repaintsBefore = viewport.placeholderClears();
 
-    // Achado 4 da rodada 1 de revisão (#382): sem isto, um `paintTerrain` que já pintasse uma
-    // janela maior (margem 4, por exemplo) passaria igual — só a metade "pedida antes de
-    // entrar na visível" era provada. Em (10, 10) a janela de render vai só até `maxX = 15`
-    // (5..15, ver RF-03 acima); a coluna 116 (x = 16) ainda não foi pedida.
+    // Em (10, 10) a janela de render vai só até `maxX = 15`; a coluna 116 (x = 16) ainda não foi
+    // pedida.
     expect(art.requests.some((r) => r.key === 'object:116:0:0')).toBe(false);
 
-    // Um passo de (10, 10) para (11, 10): a nova janela de render tem `maxX = 16` (id 116),
-    // mas a visível só chega a `maxX = 13` — a coluna 16 ainda não apareceria na tela de hoje.
+    // Um passo de (10, 10) para (11, 10): a nova janela de render tem `maxX = 16` (id 116), mas
+    // a visível só chega a `maxX = 13` — a coluna 16 ainda não apareceria na tela de hoje.
     viewport.step(1, { x: 10, y: 10, z: 7 }, { x: 11, y: 10, z: 7 }, 1000, 400);
     await viewport.tick(1400); // `elapsed (400) >= durationMs (400)`: o passo já venceu
     await viewport.tick(1400);
@@ -360,13 +564,9 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     await viewport.tick(2000);
 
     expect(visibleTiles({ x: 14, y: 10, z: 7 }, view).maxX).toBeGreaterThanOrEqual(16);
-    const requestsFor116 = art.requests.filter((r) => r.key === 'object:116:0:0');
-    expect(requestsFor116).toHaveLength(1);
+    expect(art.requests.filter((r) => r.key === 'object:116:0:0')).toHaveLength(1);
   });
 
-  // Achado 3 da rodada 1 de revisão (#382): os dois cenários RF-03 ficam inteiros dentro do
-  // mapa 40×40 quando o alvo está em (10, 10) — a filtragem por `Scene.tileAt` (RF-07, §11)
-  // nunca é exercitada. Perto do canto a janela de render extrapola o mapa dos dois lados.
   it('RF-07: perto do canto do mapa, o chão pintado conta só os tiles DENTRO do mapa', async () => {
     const clock = testClock();
     const art = new SyntheticArt(groundCatalog(), { now: clock.now });
@@ -379,16 +579,9 @@ describe('viewport pinta a janela de render (issue #382)', () => {
     await viewport.tick(0);
     await viewport.tick(16);
 
-    // Janela de render em (2, 2), vista 4×3: x −3..7, y −2..6 (mesma conta de `tileWindow` das
-    // outras RF-03) — metade cai fora do mapa 40×40. `Scene.tileAt` devolve `null` fora
-    // (scene.ts), e só os tiles DENTRO do mapa viram sprite: x 0..7 (8 colunas) × y 0..6
-    // (7 linhas) = 56, e não os 11×9 = 99 de um alvo longe da borda (RF-03 acima) — a
-    // diferença só aparece se a filtragem estiver acontecendo de fato.
-    const renderWindow = renderTiles({ x: 2, y: 2, z: 7 }, view);
-    expect(renderWindow).toEqual({
-      minX: -3, minY: -2, maxX: 7, maxY: 6,
-    });
-    const groundSprites = viewport.layers().terrain.children
+    // Janela de render em (2, 2), vista 4×3: x −3..7, y −2..6 — metade cai fora do mapa 40×40.
+    expect(renderTiles({ x: 2, y: 2, z: 7 }, view)).toEqual({ minX: -3, minY: -2, maxX: 7, maxY: 6 });
+    const groundSprites = viewport.floorLayers(7).ground.children
       .filter((child) => 'texture' in child && child.visible);
     expect(groundSprites).toHaveLength(56);
   });
@@ -398,12 +591,7 @@ describe('viewport pinta a janela de render (issue #382)', () => {
  * O prefetch contínuo (issue #383, §11): a janela de prefetch tem margem `PREFETCH_TILES` (5),
  * dois tiles além da de render (3). O chão é `1000 + x` no andar 7 e `2000 + x` no andar 6, num
  * mapa 80×40 com os dois andares — a coluna vira id, então "que coluna foi pedida" é uma
- * asserção direta sobre `SyntheticArt.warmedObjects`. A vista inteira (`viewFor(1024, 768, 2)`
- * = 16×12) faz `minX` e `maxX` avançarem juntos: um passo = uma coluna que entra.
- *
- * O alvo fica em (20, 18): a janela de prefetch (x 7..33, y 7..35) cabe INTEIRA no mapa, então
- * `idsIn` vê exatamente `{1000 + x}` para toda coluna da janela — sem o recorte de `tileAt`
- * na borda embaralhar a contagem.
+ * asserção direta sobre `SyntheticArt.warmedObjects`.
  */
 describe('viewport: prefetch contínuo (issue #383)', () => {
   const WIDTH = 80;

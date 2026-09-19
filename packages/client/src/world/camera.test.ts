@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PREFETCH_TILES, RENDER_OVERSCAN_TILES, VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, compareDrawOrder,
-  fromScreen, prefetchTiles, renderTiles, sameWindow, tileAtScreen, tileWindow, tilesEntering,
-  toScreen, viewFor, visibleTiles, zoomFor, TILE, type TileWindow,
+  PREFETCH_TILES, RENDER_OVERSCAN_TILES, VIEW_HEIGHT, VIEW_WIDTH, cameraOrigin, fromScreen,
+  prefetchTiles, renderTiles, sameWindow, tileAtScreen, tileWindow, tilesEntering, toScreen,
+  viewFor, visibleTiles, zoomFor, TILE, type TileWindow,
 } from './camera.js';
 
 const view = { widthTiles: 18, heightTiles: 14 };
@@ -164,16 +164,6 @@ describe('camera', () => {
     expect(sameWindow(a, { ...a, maxX: a.maxX + 1 })).toBe(false);
     expect(sameWindow(a, { ...a, maxY: a.maxY + 1 })).toBe(false);
   });
-
-  it('orders by y, then by x', () => {
-    // O desempate por `x` é o que torna a ordem estável: sem ele, duas criaturas no mesmo
-    // `y` trocam de ordem entre quadros e piscam uma na frente da outra.
-    const creatures = [
-      { x: 5, y: 3 }, { x: 1, y: 3 }, { x: 9, y: 1 },
-    ].sort(compareDrawOrder);
-    expect(creatures).toEqual([{ x: 9, y: 1 }, { x: 1, y: 3 }, { x: 5, y: 3 }]);
-  });
-
   it('fromScreen é o inverso de toScreen, inclusive com posição fracionária', () => {
     // É o caminho do clique: o pixel do canvas volta a tile. Eixo trocado ou offset da câmera
     // errado só aparece aqui — no canvas o sintoma é acertar a criatura ao lado.

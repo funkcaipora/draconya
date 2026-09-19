@@ -160,7 +160,6 @@ export function toScreen(
     y: (position.y - origin.y) * TILE,
   };
 }
-
 /**
  * De pixel do canvas para coordenada de mundo (tiles, fracionária) — o inverso de `toScreen`.
  *
@@ -193,16 +192,4 @@ export function tileAtScreen(
 ): { x: number; y: number } {
   const at = fromScreen(point, target, view);
   return { x: Math.floor(at.x), y: Math.floor(at.y) };
-}
-
-/**
- * Ordem de desenho de criaturas: quem está mais ao sul cobre quem está ao norte, e o desempate
- * é por `x` para a ordem ser estável. Sem desempate, duas criaturas no mesmo `y` trocam de
- * ordem entre quadros e piscam uma na frente da outra.
- */
-export function compareDrawOrder(
-  a: { readonly y: number; readonly x: number },
-  b: { readonly y: number; readonly x: number },
-): number {
-  return a.y - b.y || a.x - b.x;
 }

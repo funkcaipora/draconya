@@ -3,9 +3,9 @@
 // O clique no mundo é uma INTENÇÃO (invariante 4): quem decide se o id é alvo válido, qual é o
 // alvo efetivo e a queda para `nearest` é o servidor (#424). Aqui só se responde "qual criatura
 // está desenhada sob este ponto agora" — a mesma regra de quem cobre quem no canvas
-// (`compareDrawOrder`), para o clique acertar o que o olho vê.
+// (`spatialOrder`, o `zIndex` de `scene`), para o clique acertar o que o olho vê.
 
-import { compareDrawOrder } from './camera.js';
+import { spatialOrder } from './depth.js';
 import { interpolate, type Creature } from '../state/world.js';
 
 /**
@@ -23,7 +23,7 @@ export function creatureTile(
 
 /**
  * A criatura sob um tile: quando há mais de uma, a que é desenhada POR CIMA — a de
- * `compareDrawOrder` maior (mais ao sul), a mesma regra de quem cobre quem no canvas.
+ * `spatialOrder` maior (mais ao sul/leste), a mesma regra de quem cobre quem no canvas.
  * `null` é tile sem criatura.
  *
  * O filtro é pelo tile ARREDONDADO (onde o cursor caiu); o desempate usa a posição
@@ -39,7 +39,7 @@ export function pickCreature(
     const cell = creatureTile(creature, nowMs);
     if (cell.x !== tile.x || cell.y !== tile.y || cell.z !== tile.z) continue;
     const at = interpolate(creature, nowMs);
-    if (top === null || compareDrawOrder(at, top) > 0) {
+    if (top === null || spatialOrder(at.x, at.y) > spatialOrder(top.x, top.y)) {
       picked = creature.id;
       top = { x: at.x, y: at.y };
     }
