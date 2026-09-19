@@ -76,7 +76,7 @@ errado em vez de dizer "nenhuma variante casou".
 |---|---|---|
 | `hp` | `op`, `percent` (0–100) | HP do personagem, em percentual do máximo |
 | `mana` | `op`, `percent` (0–100) | Mana do personagem, em percentual do máximo |
-| `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance da arma (#152, #216) |
+| `targets` | `op`, `count` (≥ 0) | Quantos alvos estão dentro do alcance do grupo (#152, #216, #444): o da arma, ou o da ação de dano à distância do grupo (uma runa de alcance 8 conta a 8) |
 | `target-hp` | `op`, `percent` (0–100) | Vida do alvo atual. Sem alvo, a condição é falsa — nunca erro |
 | `condition` | `conditionId`, `present` (padrão `true`) | Efeito ativo/ausente no personagem, por chave semântica (`haste`, `mana-shield`, `buff`) — "castar haste só sem haste" |
 
@@ -319,6 +319,14 @@ configuração.
 
 `follow` é o alvo que o jogador escolheu clicando no mundo/Batalha (intenção `select-target`,
 AB-09): o override vale enquanto o monstro vive e, ao morrer, cai em `nearest`.
+
+**O alvo também é escolhido sozinho** (#444): ao surgir um monstro na tela — o raio de busca, os
+mesmos 8 tiles — o motor o guarda como alvo pela política corrente, mesmo fora do alcance da arma.
+É o que permite a uma runa de alcance 8 ser lançada num alvo a 5 tiles com arma corpo a corpo na
+mão. O alvo persiste no `Runner` até o monstro morrer ou sair da tela, e atravessa o snapshot. O
+clique do jogador continua tendo precedência: enquanto ele vive, o auto-target não o troca; e o
+alvo do jogador é exclusivo — fora do alcance ele **não** cai na política, ao contrário do alvo do
+auto-target, que é só a mira corrente e deixa o corpo a corpo bater em quem estiver colado.
 
 A ordem de decisão é contrato, e é o que faz duas execuções da mesma semente escolherem o mesmo
 monstro:

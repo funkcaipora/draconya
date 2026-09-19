@@ -281,6 +281,8 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.automationWarned.size === 0
       ? {}
       : { automationWarned: Object.fromEntries(runner.automationWarned) }),
+    ...(runner.chosenTarget === null ? {} : { chosenTarget: runner.chosenTarget }),
+    ...(runner.chosenTargetPinned ? { chosenTargetPinned: true } : {}),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
@@ -616,11 +618,20 @@ interface Runner {
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
   playerAttackReady: boolean;
   /**
-   * O alvo ESCOLHIDO pelo jogador (AB-09, ADR 0032 d.5), por subject do monstro (`m:<id>`).
-   * Estado QUENTE transitório: não entra no snapshot — o alvo é reconstruído do clique e cai
-   * em `nearest` se ausente (o precedente de `luring`/`ringReplaced`).
+   * O alvo ESCOLHIDO, por subject do monstro (`m:<id>`). É o override do jogador (AB-09, ADR
+   * 0032 d.5) E o alvo do auto-target (#444): ao surgir um monstro na tela (raio de busca) o
+   * alvo é preenchido automaticamente com o melhor da política, e sobrevive a snapshots até
+   * morrer ou sair da tela.
    */
   chosenTarget: string | null;
+  /**
+   * O alvo escolhido é do JOGADOR (`true`, AB-09) ou do auto-target (`false`, #444)?
+   *
+   * A diferença é o que fazer quando ele sai do alcance: o alvo do jogador é EXCLUSIVO — quem
+   * mandou seguir um não quer bater em outro no caminho —, enquanto o do auto-target é só a
+   * mira corrente, e o golpe cai no que estiver ao alcance enquanto ele se aproxima.
+   */
+  chosenTargetPinned: boolean;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
   running: boolean;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
@@ -646,6 +657,14 @@ export interface RunnerState {
    * aviso a cada ciclo, que é o defeito que este campo fecha. Ausente é "nada avisado".
    */
   readonly automationWarned?: Readonly<Record<string, string>>;
+  /**
+   * O alvo escolhido/auto-selecionado (#444). Precisa entrar no snapshot: o alvo persiste no
+   * runner até morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem
+   * alvo" — snapshot anterior, que cai na política no primeiro evento.
+   */
+  readonly chosenTarget?: string | null;
+  /** O alvo é do jogador (AB-09) ou do auto-target (#444)? Ausente é auto (`false`). */
+  readonly chosenTargetPinned?: boolean;
   readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
 }
@@ -911,6 +930,8 @@ export class HuntRuleset implements Ruleset {
     const runner = this.#runners.get(characterId);
     if (runner === undefined) return false;
     runner.chosenTarget = subject;
+    // Clique do jogador: o alvo é EXCLUSIVO e não cai na política se sair do alcance (AB-09).
+    runner.chosenTargetPinned = true;
     return true;
   }
 
@@ -1054,6 +1075,7 @@ export class HuntRuleset implements Ruleset {
     }
     // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
     // nada, e os eventos por grupo só existem para quem de fato configurou.
+    this.#autoSelectTarget(session, character);
     this.#armBot(session, character.id);
     // As automações (AB-08) seguem a mesma regra: só quem habilitou alguma entra na fila.
     this.#armAutomations(session, character.id);
@@ -1137,7 +1159,8 @@ export class HuntRuleset implements Ruleset {
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
       playerAttackReady: state?.playerAttackReady ?? true,
-      chosenTarget: null,
+      chosenTarget: state?.chosenTarget ?? null,
+      chosenTargetPinned: state?.chosenTargetPinned ?? false,
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
@@ -1432,7 +1455,10 @@ export class HuntRuleset implements Ruleset {
       this.#runners.set(character.id, this.#newRunner(state?.botConfig, state ?? undefined, character));
       // O mundo mudou enquanto a sessão estava parada: o que estava ENGATILHADO reavalia agora.
       // O que estava AGENDADO tem evento na fila restaurada e `#armBot` o pula — nunca os dois.
-      if (character.alive) this.#armBot(session, character.id);
+      if (character.alive) {
+        this.#autoSelectTarget(session, character);
+        this.#armBot(session, character.id);
+      }
     }
   }
 
@@ -1584,8 +1610,13 @@ export class HuntRuleset implements Ruleset {
       this.#scheduleMonsterAttack(session, monster, 0);
     }
     // Nasceu colado num personagem: se o golpe dele estava engatilhado, sai agora — de cada
-    // um que o tem ao alcance (#203).
-    for (const character of session.participants) this.#armPlayerAttack(session, character);
+    // um que o tem ao alcance (#203). E o auto-target (#444) reavalia na hora: o monstro que
+    // acabou de surgir na tela vira alvo antes do próximo vencimento do bot.
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armPlayerAttack(session, character);
+      this.#armBot(session, character.id);
+    }
   }
 
   /**
@@ -1611,6 +1642,10 @@ export class HuntRuleset implements Ruleset {
     // resultado para quem fica e adianta o de quem anda para chão mais lento; por isso o
     // reagendamento fica no fim, com o que de fato aconteceu.
     const stepped = this.#playerStep(session, character);
+    // Andou (ou parou para lutar): reavalia o alvo na tela da posição nova e acorda o bot —
+    // um monstro que entrou no raio de busca pode destravar a runa (#444).
+    this.#autoSelectTarget(session, character);
+    this.#armBot(session, character.id);
     const cadence = stepped !== null && stepped.ok
       ? stepped.durationMs
       : movementDuration(this.#world, character, character.position, character.position);
@@ -1763,6 +1798,7 @@ export class HuntRuleset implements Ruleset {
     // continua valendo do outro lado de uma troca de configuração. Um grupo que SAIU da config
     // tem `botReady` órfão, e o evento pendente dele vence sem achar slots: não faz nada.
     if (character.alive) {
+      this.#autoSelectTarget(session, character);
       this.#armBot(session, character.id);
       this.#armAutomations(session, character.id);
     }
@@ -1880,7 +1916,8 @@ export class HuntRuleset implements Ruleset {
     if (slots === undefined) return;
     // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
     // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
-    const view = this.#botViewOf(character);
+    // O alcance é o do GRUPO (#444): um grupo com runa enxerga a 8, não no alcance da arma.
+    const view = this.#botViewOf(character, this.#groupRange(slots, character));
     const external = this.#options.actuator;
 
     let retryInMs = 0;
@@ -2582,45 +2619,74 @@ export class HuntRuleset implements Ruleset {
   /**
    * O melhor alvo dentro de `range`, para a mira e o espelho de elegibilidade. Não muta nada.
    *
-   * O alvo ESCOLHIDO pelo jogador vem primeiro (AB-09, ADR 0032 d.5), e vale também para magia
-   * e runa: escolhido FORA do alcance devolve `null` em vez de cair na política, que é o mesmo
-   * contrato de `#attackTarget` — quem mandou mirar num alvo não quer acertar outro.
+   * O alvo escolhido vem primeiro (AB-09, ADR 0032 d.5), e vale também para magia e runa. Alvo
+   * do JOGADOR fora do alcance devolve `null` — quem mandou mirar num alvo não quer acertar
+   * outro; alvo do AUTO-TARGET (#444) cai na política, como em `#attackTarget`.
    */
   #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
+    const maxDistance = range ?? 1;
     const chosen = this.#chosenMonsterOf(character);
     if (chosen !== null) {
-      return distance(character.position, chosen.position) <= (range ?? 1) ? chosen : null;
+      if (distance(character.position, chosen.position) <= maxDistance) return chosen;
+      if (this.#isPinned(character)) return null;
     }
     return selectTarget(
-      this.#targetingOf(character), this.#monsters, character.position, range ?? 1,
+      this.#targetingOf(character), this.#monsters, character.position, maxDistance,
     );
   }
 
-  /** A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80). */
-  #botViewOf(character: CharacterRuntime): BotView {
-    const target = this.#attackTarget(character);
+  /**
+   * A view REAPROVEITADA: campos reescritos, objeto nunca recriado (FUN-80).
+   *
+   * `range` é o alcance da AVALIAÇÃO (#444): um grupo com runa de alcance 8 precisa contar e
+   * mirar a 8, e não no alcance da arma. Ausente é o alcance da arma — o caminho de quem não
+   * declarou ação de dano à distância.
+   */
+  #botViewOf(character: CharacterRuntime, range?: number): BotView {
+    const reach = range ?? this.#attackRangeOf(character);
+    const target = this.#targetInRange(character, reach);
     this.#botView.self = character;
-    this.#botView.targetCount = this.#targetsInReach(character);
+    this.#botView.targetCount = countTargets(
+      this.#targetingOf(character), this.#monsters, character.position, reach,
+    );
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
     return this.#botView;
   }
 
-  #maxHealthOf(monster: MonsterRuntime): number {
-    return this.#options.monsters.get(monster.monsterId)?.health ?? monster.health;
+  /**
+   * O maior alcance entre as ações de DANO à distância de um grupo (#444). É o alcance que a
+   * condição `targets` e o `target` da view usam, porque é o alcance que a ação do grupo pode
+   * de fato atingir — sem ele, uma runa de alcance 8 não enxerga o alvo a 5 tiles.
+   *
+   * Sem ação de dano, cai no alcance da ARMA: um grupo de cura não herda alcance de runa que
+   * ele não tem.
+   */
+  #groupRange(slots: readonly CompiledSlot[], character: CharacterRuntime): number {
+    let maxRange = 0;
+    for (const slot of slots) {
+      const range = this.#actionRange(slot.act);
+      if (range !== null && range > maxRange) maxRange = range;
+    }
+    return maxRange > 0 ? maxRange : this.#attackRangeOf(character);
   }
 
-  /**
-   * Quantos alvos ao alcance. O NÚMERO, sem materializar a lista (FUN-80).
-   *
-   * Monstro IGNORADO não conta (FUN-85): "3 ou mais alvos → onda" disparando por causa de
-   * quem o jogador mandou o bot deixar em paz é a regra reagindo ao que ela não vai atingir.
-   */
-  #targetsInReach(character: CharacterRuntime): number {
-    return countTargets(
-      this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
-    );
+  /** O alcance da ação, quando ela mira à distância; `null` para cura e ação sem alvo. */
+  #actionRange(action: BotActionV2): number | null {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      if (spell === undefined) return null;
+      if (spell.effect.kind !== 'damage' && spell.effect.kind !== 'damage-over-time') return null;
+      return 'range' in spell.effect ? spell.effect.range ?? null : null;
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    if (supply === undefined || supply.effect.kind !== 'damage') return null;
+    return supply.effect.range ?? null;
+  }
+
+  #maxHealthOf(monster: MonsterRuntime): number {
+    return this.#options.monsters.get(monster.monsterId)?.health ?? monster.health;
   }
 
   /**
@@ -2874,6 +2940,12 @@ export class HuntRuleset implements Ruleset {
     // Chegou ao alcance com o golpe engatilhado: ele sai agora, e não no próximo múltiplo de
     // um relógio. É a mesma regra do personagem, do outro lado — e vale por ability.
     this.#armMonsterAbilities(session, monster, definition, target);
+    // Um monstro que entrou no raio de busca vira alvo na hora (#444): sem isto, quem se
+    // aproxima de fora da tela só seria notado no próximo passo do personagem.
+    for (const character of session.participants) {
+      this.#autoSelectTarget(session, character);
+      this.#armBot(session, character.id);
+    }
   }
 
   /**
@@ -3570,12 +3642,11 @@ export class HuntRuleset implements Ruleset {
       session.cancelEvent(MONSTER_ABILITY, monsterAbilitySubject(monster.id, ability.id));
     }
     this.#monsterBySubject.delete(subject);
-    // O alvo ESCOLHIDO morreu: o override é limpo e o alvo efetivo cai na política — `nearest`
-    // por padrão (AB-09, ADR 0032 d.5). Sem isto, o escolhido apontaria para um subject morto.
-    for (const runner of this.#runners.values()) {
-      if (runner.chosenTarget === subject) runner.chosenTarget = null;
-    }
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
+    // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
+    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e é
+    // `#chosenMonsterOf` quem o limpa — não há um segundo lugar para esquecer de limpar.
+    for (const character of session.participants) this.#autoSelectTarget(session, character);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
     session.emit({ kind: 'creature-vanished', creatureId: subject });
@@ -3903,23 +3974,26 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Em quem bater AGORA: o alvo ESCOLHIDO pelo jogador, se vivo e ao alcance (AB-09, ADR 0032
-   * d.5); senão o melhor da política dentro do alcance da arma (FUN-85).
+   * Em quem bater AGORA: o alvo escolhido, se vivo e ao alcance; senão o melhor da política
+   * dentro do alcance da arma (FUN-85).
    *
    * Era `#nearestMonster`, e a política era o motor. Agora ela vem da configuração — e
    * `nearest` continua sendo o padrão, então uma hunt sem bot se comporta exatamente como
    * antes. O desempate segue estável, e é `selectTarget` que o garante.
    *
-   * Escolhido FORA do alcance devolve `null` em vez de cair na política: quem mandou seguir um
-   * alvo não quer bater em outro no caminho — quem o leva até lá é `#approachTarget`, na
-   * postura `follow` (ADR 0032 d.5).
+   * Alvo do JOGADOR fora do alcance devolve `null` em vez de cair na política: quem mandou
+   * seguir um não quer bater em outro no caminho — quem o leva até lá é `#approachTarget`, na
+   * postura `follow` (ADR 0032 d.5). Alvo do AUTO-TARGET (#444) é só a mira corrente: fora do
+   * alcance da arma, o golpe cai no melhor da política, e é isso que mantém o corpo a corpo
+   * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
     const chosen = this.#chosenMonsterOf(character);
     if (chosen !== null) {
-      return distance(character.position, chosen.position) <= this.#attackRangeOf(character)
-        ? chosen
-        : null;
+      if (distance(character.position, chosen.position) <= this.#attackRangeOf(character)) {
+        return chosen;
+      }
+      if (this.#isPinned(character)) return null;
     }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
@@ -3936,13 +4010,20 @@ export class HuntRuleset implements Ruleset {
     const monster = this.#monsterBySubject.get(runner.chosenTarget);
     if (monster === undefined || !monster.alive) {
       runner.chosenTarget = null;
+      runner.chosenTargetPinned = false;
       return null;
     }
     if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
       runner.chosenTarget = null;
+      runner.chosenTargetPinned = false;
       return null;
     }
     return monster;
+  }
+
+  /** O alvo corrente é do JOGADOR (AB-09)? Sem runner, não há alvo — e não há o que fixar. */
+  #isPinned(character: CharacterRuntime): boolean {
+    return this.#runners.get(character.id)?.chosenTargetPinned === true;
   }
 
   /**
@@ -3969,6 +4050,35 @@ export class HuntRuleset implements Ruleset {
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
+  }
+
+  /**
+   * Auto-target (#444): sem alvo escolhido válido, seleciona o melhor monstro na TELA — o raio
+   * de busca, o mesmo de `#approachTarget` — e o guarda em `chosenTarget`. É o que faz um
+   * monstro que surge ao longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva
+   * até lá é `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
+   *
+   * NÃO sobrepõe o clique do jogador: com um alvo vivo e na tela, sai sem tocar em nada. Quando
+   * ele morre ou sai da tela, `#chosenMonsterOf` limpa o campo e a chamada seguinte já reavalia
+   * para o próximo mais próximo.
+   */
+  #autoSelectTarget(session: Session, character: CharacterRuntime): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || !character.alive) return;
+    // Valida e limpa o alvo atual; com um vivo na tela, não há o que reavaliar.
+    if (this.#chosenMonsterOf(character) !== null) return;
+
+    const best = this.#approachTarget(character);
+    const next = best === null ? null : best.subject;
+    if (next === runner.chosenTarget) return;
+    runner.chosenTarget = next;
+    // Alvo do motor, não do jogador: sai do alcance e a política reassume (`#attackTarget`).
+    runner.chosenTargetPinned = false;
+    if (next === null) return;
+    // O alvo novo pode destravar uma regra e um golpe engatilhados: reavalia agora, e não no
+    // próximo múltiplo de um relógio.
+    this.#armBot(session, character.id);
+    this.#armPlayerAttack(session, character);
   }
 
   // --- ocupação -----------------------------------------------------------------------------

@@ -92,7 +92,7 @@ TP-03 (M22). Ver `economy.md` e `bot.md`.
 |---|---|---|---|---|
 | `health-potion` | `heal` 80 | `potion` | 45 | `data/supplies/health-potion.json` |
 | `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
-| `avalanche-rune` | `damage` gelo, BP 45, raio 3, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
+| `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
 
 | Item | Efeito | Arquivo |
 |---|---|---|
