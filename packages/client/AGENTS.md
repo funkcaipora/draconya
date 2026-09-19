@@ -256,9 +256,10 @@ pnpm tsx scripts/make-sheet-fixture.ts
   sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
   inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
   do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
-  `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta e
-  aquece) e prefetch (`PREFETCH_TILES` = 5) — porque a textura de uma coluna pedida no quadro
-  em que ela entra na tela chega tarde; a janela de render é o que compra a antecedência.
+  `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
+  prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
+  pedida no quadro em que ela entra na tela chega tarde; a janela de render é o que compra a
+  antecedência, e o prefetch contínuo (M23, D5) mantém a dela pronta antes.
 - **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
   (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
   hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que
@@ -308,9 +309,15 @@ pnpm tsx scripts/make-sheet-fixture.ts
   `ground-item-disappear` e no `session-state.world.groundItems`, que substitui. **Mapa autorado à mão** (a adega de
   teste) vira pilha SINTÉTICA — `[chão]` no livre, `[peça pela vizinhança]` no bloqueado
   (`sceneFromTilemap`) — e passa pelo MESMO pintor: um caminho de desenho, duas origens. Cena
-  ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao
-  receber a cena, `AssetPack.warmObjects` aquece as folhas dos ids da janela inicial, como
-  `warmOutfit` faz com os monstros.
+  ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. **O
+  prefetch é CONTÍNUO** (M23, D5): o viewport aquece a janela INTEIRA de prefetch
+  (`PREFETCH_TILES` = 5, dois tiles além da de render) quando cena, pacote, andar ou `resize`
+  mudam, e a cada tile cruzado pede ao pacote só a faixa que ENTROU (`tilesEntering`, uma
+  chamada a `AssetPack.warmObjects`); o outfit de cada criatura dentro dessa janela é aquecido
+  uma vez por pacote (`warmOutfitsNear`, deduplicado por `appearanceId`, o `Set` zerado em
+  `setPack`). A folga de dois tiles entre a janela de render e a de prefetch é o tempo que uma
+  folha tem para sair do Worker antes de ser desenhada — é o que tira o retângulo de reserva da
+  borda da tela.
 - **Setas e WASD andam, e a repetição da tecla presa é do CLIENTE** (`shell/walk-keys.ts`,
   puro; `shell/useWalkKeys.ts`, a casca; FUN-122). Só as quatro cardeais, a última tecla
   pressionada vence, nunca diagonal — o que o Huntera faz. O hook ouve a JANELA (o canvas
