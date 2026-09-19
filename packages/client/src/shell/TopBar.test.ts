@@ -16,7 +16,7 @@ import type { Creature } from '../state/world.js';
 // criatura já está em `world` ANTES da renderização — o `setInterval` do polling nunca dispara
 // aqui, como em `BattlePanel.test.ts`.
 
-const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, chat: true };
+const OPEN = { character: false, hunts: true, bot: true, inventory: true, analyzer: true, bestiary: false, social: false, chat: true };
 const NOOP_TOGGLE = (): void => {};
 
 async function render(open = OPEN, chatBadge: ChatBadgeTier | null = null): Promise<string> {
@@ -102,25 +102,35 @@ describe('TopBar', () => {
     expect(html).not.toContain(' · LV 3');
   });
 
-  it('shows exactly five window icons, in the kit order, and none for Bot/Inventory/inexistent systems', async () => {
+  it('shows exactly six window icons, in the kit order, and none for Bot/Inventory/inexistent systems', async () => {
     const html = await render();
-    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(5);
-    // Cinco ícones de navegação e o retrato clicável carregam data-window.
-    expect((html.match(/data-window="/g) ?? []).length).toBe(6);
-    const order = ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat'];
+    expect((html.match(/ui-icon-button-lg/g) ?? []).length).toBe(6);
+    // Seis ícones de navegação e o retrato clicável carregam data-window.
+    expect((html.match(/data-window="/g) ?? []).length).toBe(7);
+    const order = ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Amigos', 'Chat'];
     const indexes = order.map((label) => html.indexOf(`title="${label}"`));
     expect(indexes.every((index) => index >= 0)).toBe(true);
     expect([...indexes].sort((a, b) => a - b)).toEqual(indexes);
-    for (const label of ['Bot', 'Inventário', 'Loja', 'Guild', 'Amigos', 'Prey', 'Configurações']) {
+    for (const label of ['Bot', 'Inventário', 'Loja', 'Guild', 'Prey', 'Configurações']) {
       expect(html).not.toContain(`title="${label}"`);
     }
+  });
+
+  it('the "Amigos" icon is the social one, after Cyclopedia and before Chat (RF-08, #404)', async () => {
+    const html = await render();
+    expect(html).toContain('data-window="social"');
+    const social = buttonFor(html, 'social');
+    expect(social).toContain('title="Amigos"');
+    expect(social).toContain('aria-pressed="false"');
+    expect(html.indexOf('title="Cyclopedia"')).toBeLessThan(html.indexOf('title="Amigos"'));
+    expect(html.indexOf('title="Amigos"')).toBeLessThan(html.indexOf('title="Chat"'));
   });
 
   it('never renders a permanent text label under a nav icon (R1-10) — only the title tooltip', async () => {
     const html = await render();
     expect(html).not.toContain('topbar-icon-label');
     // O tooltip nativo continua presente para cada ícone (kit: IconButton usa só `title`).
-    for (const label of ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Chat']) {
+    for (const label of ['Personagem', 'Hunts', 'Analisador', 'Cyclopedia', 'Amigos', 'Chat']) {
       expect(html).toContain(`title="${label}"`);
     }
   });
@@ -199,6 +209,6 @@ describe('TopBar', () => {
 
   it('every window icon carries aria-pressed (#306)', async () => {
     const html = await render();
-    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(5);
+    expect((html.match(/aria-pressed="(true|false)"/g) ?? []).length).toBe(6);
   });
 });

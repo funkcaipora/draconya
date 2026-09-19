@@ -17,8 +17,9 @@
 // com ele, e o inventário desenha o sprite de cada item. A casca (painéis, barras, slots) é
 // CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useHudSlice } from '../state/useSlice.js';
+import { partyActions, PARTY_POLL_MS } from '../party/store.js';
 import { AssetPackContext } from './AssetPackContext.js';
 import { useBrowserPack } from './useBrowserPack.js';
 import { useWarmHuntOutfits } from './useWarmHuntOutfits.js';
@@ -38,6 +39,8 @@ import { SkillsPanel } from './SkillsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
+import { FriendsModal } from './FriendsModal.js';
+import { PartyInviteDialog } from './PartyInviteDialog.js';
 import { VocationChoice } from './VocationChoice.js';
 import { Vitals } from './Vitals.js';
 import { TopBar } from './TopBar.js';
@@ -64,7 +67,7 @@ const DEFAULT_WINDOWS: Readonly<Record<WindowId, boolean>> = {
   // nasce aberto empurraria uma decisão antes de a tela aparecer, e janela fixa é quem nasce
   // aberta (DT-02 de #259). A pill "Escolher caçada"/"Sair da caçada" (`HuntActions`) é quem
   // fica sempre visível, fora das colunas.
-  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, chat: false,
+  hunts: false, bot: true, inventory: true, analyzer: true, bestiary: false, social: false, chat: false,
 };
 
 export function Shell() {
@@ -98,6 +101,16 @@ export function Shell() {
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
   const sessionType = useHudSlice((state) => state.analyzer.sessionType);
   const hunting = sessionType !== null && sessionType !== 'city';
+
+  // O polling de `/mine` (#404, DT-01): subiu de `PartyPanel` para cá e roda SEMPRE que há
+  // personagem — o convite de party precisa aparecer em qualquer tela, Cidade ou hunt (D7).
+  // Duplicar o `setInterval` em três componentes correria três `refresh()` a cada 2 s.
+  const characterId = useHudSlice((state) => state.characterId);
+  useEffect(() => {
+    if (characterId === null) return undefined;
+    const id = setInterval(() => { void partyActions.refresh(); }, PARTY_POLL_MS);
+    return () => { clearInterval(id); };
+  }, [characterId]);
 
   // A geografia do Huntera (FUN-115): o mundo ocupa a tela inteira, e o resto FLUTUA por cima —
   // a barra do topo, as janelas à esquerda e à direita, o chat embaixo. Cada janela é a seção
@@ -176,6 +189,9 @@ export function Shell() {
         {/* A escolha de vocação (#154): sobreposição pela mesma razão do bot, e some sozinha
             quando `vocationId` chega — quem decide se ela existe é o estado, não a barra. */}
         <VocationChoice />
+        {/* O convite de party (#404, D7): montado incondicional como VocationChoice — quem
+            decide se ele existe é `party.invites`, e não a tela em que o jogador está. */}
+        <PartyInviteDialog />
         {/* As pills de caçada (#259, D3/D6): centralizadas sobre o mundo, no rodapé — a faixa
             de 124 px do handoff que as hospedaria não entra neste marco (D5), então o mundo a
             ocupa e as pills flutuam direto sobre ele. O modal abre pelo MESMO `open.hunts` que a
@@ -186,6 +202,9 @@ export function Shell() {
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
             da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
         {open.bestiary && <CyclopediaModal onClose={() => { toggle('bestiary'); }} />}
+        {/* Amigos (#404): o ícone social da TopBar abre o modal; a lista e o convite moram na
+            store `friends/`, separada da party (DT-04). */}
+        {open.social && <FriendsModal onClose={() => { toggle('social'); }} />}
         {/* O chat permanece fixo (#252, ADR 0029 D5), mas nasce fechado desde #323/RC-10: o
             ícone que o abre pode acender com uma `system-message`. A posição ainda é dada por
             `.chat-window`, fora das colunas. */}

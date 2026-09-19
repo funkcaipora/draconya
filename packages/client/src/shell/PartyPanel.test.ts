@@ -29,7 +29,8 @@ async function render(): Promise<string> {
 const withParty = (over: Partial<PartyView>) => {
   party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: {
     id: 'party-1', leaderId: 'me', mode: 'split', huntId: null, difficulty: null,
-    members: [{ characterId: 'me', name: 'Eu', approved: false }], ...over,
+    members: [{ characterId: 'me', name: 'Eu', approved: false }],
+    published: false, minLevel: null, maxLevel: null, state: 'forming', sessionId: null, ...over,
   } }));
 };
 
@@ -112,6 +113,7 @@ describe('PartyPanel', () => {
     party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: {
       id: 'party-1', leaderId: 'me', mode: 'split', huntId: null, difficulty: null,
       members: [{ characterId: 'me', name: 'Eu', approved: false }, { characterId: 'b', name: 'Bob', approved: false }],
+      published: false, minLevel: null, maxLevel: null, state: 'forming', sessionId: null,
     } }));
     const { prelude } = await prerender(createElement(PartyPanel, { hunts: bare }));
     const html = await new Response(prelude).text();
