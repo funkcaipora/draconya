@@ -225,7 +225,7 @@ const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
  * ele vira o motivo que o tooltip do slot mostra (AB-10). Traduzir no cliente espalharia a
  * mesma explicação por dois lugares.
  */
-const SLOT_REFUSAL: Readonly<Record<SlotRefusal | 'not-enough-gold', string>> = {
+const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'empty-slot': 'Este slot está vazio.',
   'wrong-set': 'Este conjunto não é o ativo — a barra mudou.',
   'disabled': 'Este slot está desligado.',
