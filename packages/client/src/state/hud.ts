@@ -73,8 +73,8 @@ export type HuntListing = Catalogue['hunts'][number];
  * O vocabulário do bot no cliente.
  *
  * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09 e são o que a barra de
- * ações (AB-10) lê. `slots` e `supplies` são o vocabulário v1 que o `BotPanel`/`RuleEditor`
- * aposentados liam: continuam aqui só como forma dos fixtures de teste, e o catálogo v2 NÃO os
+ * ações (AB-10) lê. `slots` e `supplies` são o vocabulário v1 que os painéis aposentados liam:
+ * continuam aqui só como forma dos fixtures de teste, e o catálogo v2 NÃO os
  * manda mais — a UI antiga degrada para vazio.
  */
 export interface LegacyBotSupply {

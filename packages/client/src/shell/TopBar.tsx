@@ -13,7 +13,7 @@
 // existe.
 //
 // Bot e Inventário SAÍRAM daqui (R1-09, RC-09/#322 — revoga DS-08 de docs/design-system-plan.md):
-// quem minimiza esses painéis agora é só o próprio cabeçalho de cada um (`BotPanel` já usava
+// quem minimiza esses painéis agora é só o próprio cabeçalho de cada um (o painel do bot já usava
 // `Panel`+`onToggle`; `EquipmentPanel` já tinha o próprio botão ▸/▾ — nenhum dos dois precisou de
 // código novo, só perderam o segundo gatilho que a TopBar oferecia).
 //

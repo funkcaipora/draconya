@@ -14,7 +14,7 @@
 
 import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema } from '@draconya/content';
 import type {
-  BotConfigV2, BotPosture, BotSlot, BotStance, BotTargetPolicy, BotTargeting,
+  BotAutomation, BotConfigV2, BotPosture, BotSlot, BotStance, BotTargetPolicy, BotTargeting,
 } from '@draconya/content';
 import { createStore } from '../state/hud.js';
 import { DEFAULT_HP_BELOW_PERCENT, setHpBelowPercent, toggleExitRule } from './exit-rules.js';
@@ -196,6 +196,41 @@ export function setSlot(set: number, index: number, slot: BotSlot | null): void 
       : current)),
   }));
   flushSave();
+}
+
+/**
+ * Grava UMA automação e manda `bot-config` AGORA (o "Salvar" do `AutomationConfigModal`,
+ * AB-12/#427). `null` acrescenta; um índice substitui a linha — o mesmo caminho de intenção do
+ * `setSlot` (invariante 4), e o servidor decide se a configuração vale.
+ */
+export function putAutomation(index: number | null, automation: BotAutomation): void {
+  edit((draft) => ({
+    ...draft,
+    automations: index === null
+      ? [...draft.automations, automation]
+      : draft.automations.map((current, i) => (i === index ? automation : current)),
+  }));
+  flushSave();
+}
+
+/** Liga/desliga a automação e salva com debounce — o interruptor da linha (DT-04). */
+export function toggleAutomation(index: number): void {
+  edit((draft) => ({
+    ...draft,
+    automations: draft.automations.map((current, i) => (i === index
+      ? { ...current, enabled: current.enabled === false }
+      : current)),
+  }));
+  scheduleSave();
+}
+
+/** Remove a automação e salva com debounce — o × da linha. A configuração sai junto. */
+export function removeAutomation(index: number): void {
+  edit((draft) => ({
+    ...draft,
+    automations: draft.automations.filter((_, i) => i !== index),
+  }));
+  scheduleSave();
 }
 
 /** Liga, desliga ou reescreve uma regra de saída (#260) e salva — o mesmo debounce do conjunto. */

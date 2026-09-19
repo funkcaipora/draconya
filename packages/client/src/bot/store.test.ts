@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION } from '@draconya/content';
-import type { BotConfigV2, BotSlot } from '@draconya/content';
+import type { BotAutomation, BotConfigV2, BotSlot } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig,
-  setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule, setIgnore, setLure, setPosture,
-  setPrioritize, setSlot, setSlotAuto, setTargetingPolicy, toConfig,
+  putAutomation, removeAutomation, setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule,
+  setIgnore, setLure, setPosture, setPrioritize, setSlot, setSlotAuto, setTargetingPolicy,
+  toggleAutomation, toConfig,
 } from './store.js';
 import type { BotDraft } from './store.js';
 
@@ -329,5 +330,72 @@ describe('setSlot grava o slot e manda bot-config AGORA (AB-11, #426)', () => {
     setSlot(1, 3, null);
     expect(sent[0]?.sets[1]?.slots[3]).toBeNull();
     expect(bot.get().draft.sets[1]?.slots[3]).toBeNull();
+  });
+});
+
+describe('as automações salvam e mandam bot-config (AB-12, #427)', () => {
+  const sent: BotConfigV2[] = [];
+  const ring: BotAutomation = {
+    model: 'renew-ring', params: { itemId: 'life-ring' }, enter: [], exit: [],
+  };
+  const ammo: BotAutomation = {
+    model: 'swap-ammo-by-targets',
+    params: { ammoA: 'burst-arrow', ammoB: 'arrow' },
+    enter: [{ kind: 'targets', op: '>=', count: 3 }],
+    exit: [{ kind: 'targets', op: '<', count: 3 }],
+  };
+
+  beforeEach(() => {
+    sent.length = 0;
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => { setConfigSender(null); });
+
+  it('putAutomation(null) acrescenta e manda UMA mensagem na hora', () => {
+    putAutomation(null, ring);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.automations).toEqual([ring]);
+    expect(bot.get().draft.automations).toEqual([ring]);
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('putAutomation(index) substitui só a linha do índice', () => {
+    putAutomation(null, ring);
+    putAutomation(null, ammo);
+    putAutomation(0, { ...ring, params: { itemId: 'energy-ring' } });
+    expect(bot.get().draft.automations).toHaveLength(2);
+    expect(bot.get().draft.automations[0]).toMatchObject({ params: { itemId: 'energy-ring' } });
+    expect(bot.get().draft.automations[1]).toEqual(ammo);
+  });
+
+  it('toggleAutomation desliga a linha e agenda com debounce', () => {
+    vi.useFakeTimers();
+    try {
+      bot.set((state) => ({ ...state, draft: { ...state.draft, automations: [ring] } }));
+      toggleAutomation(0);
+      expect(bot.get().draft.automations[0]?.enabled).toBe(false);
+      expect(sent).toHaveLength(0);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.automations[0]?.enabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('removeAutomation tira a linha e agenda com debounce', () => {
+    vi.useFakeTimers();
+    try {
+      bot.set((state) => ({ ...state, draft: { ...state.draft, automations: [ring, ammo] } }));
+      removeAutomation(0);
+      expect(bot.get().draft.automations).toEqual([ammo]);
+      expect(sent).toHaveLength(0);
+      vi.advanceTimersByTime(SAVE_DEBOUNCE_MS);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]?.automations).toEqual([ammo]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -35,6 +35,7 @@ import { PartyMembers } from './PartyMembers.js';
 import { PartyLootWindow } from './PartyBag.js';
 import { PartyModal } from './PartyModal.js';
 import { SkillsPanel } from './SkillsPanel.js';
+import { AutomationsPanel } from './AutomationsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
 import { EquipmentPanel } from './EquipmentPanel.js';
 import { ContainerWindow } from './ContainerWindow.js';
@@ -123,6 +124,10 @@ export function Shell() {
           {/* Skills é FIXO à esquerda (#317): sempre montado, sem `open.*` — minimiza pelo próprio
               cabeçalho do Panel (DS-04), não pela barra do topo (não há ícone "Skills"). */}
           <SkillsPanel />
+          {/* Automações é FIXO à esquerda (AB-12/#427, ADR 0032 d.9): montado na Cidade e na
+              caçada, sem condição de `hunting` — como o painel v1 era, e minimizável pelo próprio
+              cabeçalho. A configuração é editável em qualquer lugar; a execução é da hunt. */}
+          <AutomationsPanel />
           {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
               Skills, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
               menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
