@@ -12,6 +12,7 @@ import {
   clearTransients, world, type Creature, type Point,
 } from '../../state/world.js';
 import { mountViewport, type ViewportHandle } from '../viewport.js';
+import { floorsBelow } from '../floors.js';
 import type { Scene, TileStack } from '../scene.js';
 import {
   lastApplication, type Application, type Container, type Graphics, type GraphicsOp, type Sprite,
@@ -69,13 +70,19 @@ export interface MountOptions {
   readonly clock?: TestClock;
 }
 
-/** Os cinco containers de HOJE, na ordem de `stage.children`. */
+/** A raiz dos andares e os dois containers globais de HOJE, na ordem de `stage.children` (ADR 0033). */
 export interface Layers {
-  readonly terrain: Container;
-  readonly creatures: Container;
-  readonly above: Container;
+  readonly floorsRoot: Container;
   readonly effects: Container;
   readonly overlay: Container;
+}
+
+/** As três camadas de UM andar, mais o `Graphics` de reserva (filho 0 de `ground`). */
+export interface FloorLayerView {
+  readonly ground: Container;
+  readonly scene: Container;
+  readonly top: Container;
+  readonly fallback: Graphics;
 }
 
 export interface TestViewport {
@@ -88,9 +95,15 @@ export interface TestViewport {
   /** Dispara o `renderer.on('resize')` com o novo tamanho. */
   resize(width: number, height: number): void;
   layers(): Layers;
+  /** Os andares desenhados agora, do fundo ao topo — a ordem de `floorsRoot.children`. */
+  drawnFloors(): number[];
+  /** As camadas de UM andar desenhado (a ordem de `floorsRoot.children`). */
+  floorLayers(z: number): FloorLayerView;
   /** O sprite de uma criatura, ou `undefined` antes do primeiro `tick` que a viu. */
   creatureSprite(id: number): Sprite | undefined;
-  /** As operações do `Graphics` de reserva (primeiro filho de `terrain`) desde o último `clear()`. */
+  /** Quantos sprites de criatura o harness já casou — constante quando ninguém nasce/morre. */
+  creatureCount(): number;
+  /** As operações do `Graphics` de reserva do andar do jogador desde o último `clear()`. */
   placeholderOps(): readonly GraphicsOp[];
   /** Quantas vezes o `Graphics` de reserva foi limpo — uma por repintura do terreno. */
   placeholderClears(): number;
@@ -125,43 +138,75 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
       "pixi-fake não está ativo: o arquivo de teste precisa de vi.mock('pixi.js', () => import('./testing/pixi-fake.js'))",
     );
   }
+
+  // O harness segue a cena para saber a ordem de `floorsRoot.children` (que é a de `floorsBelow`)
+  // sem tocar no viewport. `setScene` é envolvido porque os testes de #383 o chamam direto.
+  let currentScene: Scene | null = null;
+  const setScene = handle.setScene.bind(handle);
+  handle.setScene = (next) => { currentScene = next; setScene(next); };
   if (options.scene !== undefined) handle.setScene(options.scene);
 
   const known = new Map<number, Sprite>();
+
   const layers = (): Layers => {
-    const [terrain, creatures, above, effects, overlay] = app.stage.children;
-    if (overlay === undefined) throw new Error('harness: o stage não tem os cinco containers de hoje');
-    return {
-      terrain: terrain as Container,
-      creatures: creatures as Container,
-      above: above as Container,
-      effects: effects as Container,
-      overlay,
-    };
+    const [floorsRoot, effects, overlay] = app.stage.children;
+    if (overlay === undefined) throw new Error('harness: o stage não tem floorsRoot/effects/overlay');
+    return { floorsRoot: floorsRoot as Container, effects: effects as Container, overlay };
   };
-  const placeholder = (): Graphics => layers().terrain.children[0] as Graphics;
+
+  /** O andar do jogador (posição LÓGICA do self; `defaultZ` quando não há self ainda). */
+  const playerFloor = (): number => {
+    const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
+    return self === undefined ? (currentScene?.defaultZ ?? 0) : Math.round(self.position.z);
+  };
+
+  const drawnFloors = (): number[] => {
+    const floor = playerFloor();
+    return currentScene === null ? [floor] : floorsBelow(currentScene.floors, floor);
+  };
+
+  const floorLayers = (z: number): FloorLayerView => {
+    const floors = drawnFloors();
+    const index = floors.indexOf(z);
+    if (index < 0) throw new Error(`harness: andar ${z} não está desenhado (${floors.join(',')})`);
+    const [ground, scene, top] = layers().floorsRoot.children.slice(index * 3, index * 3 + 3);
+    if (ground === undefined || scene === undefined || top === undefined) {
+      throw new Error('harness: floorsRoot não tem as três camadas do andar');
+    }
+    return { ground, scene, top, fallback: ground.children[0] as Graphics };
+  };
+
+  const placeholder = (): Graphics => floorLayers(playerFloor()).fallback;
+
+  /** Os sprites dos `scene` dos andares ANEXADOS — é onde objeto e criatura moram desde #385. */
+  const sceneSprites = (): Sprite[] => {
+    const result: Sprite[] = [];
+    for (const container of layers().floorsRoot.children) {
+      if (container.sortableChildren) result.push(...(container.children as Sprite[]));
+    }
+    return result;
+  };
 
   /**
-   * Casa sprite com id SEM tocar no viewport: `paintCreatures` cria os sprites que faltam na
-   * ordem de `world.creatures` (Map, ordem de inserção), os põe em `creatures` (`viewport.ts`)
-   * e SÓ DEPOIS chama `reorder`, que reordena `creatures.children` por posição de TELA — no
-   * mesmo quadro em que a criatura nasceu. Casar pela posição do filho no array (a ordem depois
-   * do `reorder`) casa errado sempre que duas criaturas nascem no mesmo quadro em posições que
-   * não empatam com a ordem de `world.creatures` (issue #381, achado 2 — reproduzido: duas
-   * criaturas na mesma janela saem com o sprite trocado, sem lançar). `Container.seq`
-   * (`pixi-fake.ts`) é a ordem de CRIAÇÃO, que `reorder` não toca — casar por ela é o que
-   * sobrevive ao reorder do próprio quadro.
+   * Casa sprite com id SEM tocar no viewport. Desde #385 objeto e criatura dividem o `scene` do
+   * andar, e os de objeto nascem antes dos de criatura no mesmo quadro (`paintTerrain` roda
+   * antes de `paintCreatures`): entre os sprites criados NESTE quadro (`before` é o retrato de
+   * antes do ticker), os últimos `newIds.length` por `seq` são as criaturas. `Container.seq`
+   * (`pixi-fake.ts`) é a ordem de CRIAÇÃO.
    */
-  const syncCreatureSprites = (): void => {
+  const syncCreatureSprites = (before: ReadonlySet<Container>): void => {
     for (const [id, sprite] of known) if (sprite.destroyed) known.delete(id);
-    const seen = new Set(known.values());
-    const fresh = (layers().creatures.children.filter((child) => !seen.has(child as Sprite)) as Sprite[])
-      .sort((a, b) => a.seq - b.seq);
-    const newIds = [...world.creatures.keys()].filter((id) => !known.has(id));
-    if (fresh.length !== newIds.length) {
+    const fresh = sceneSprites().filter((child) => !before.has(child)).sort((a, b) => a.seq - b.seq);
+    const newIds = [...world.creatures.keys()].filter((id) => {
+      if (known.has(id)) return false;
+      const creature = world.creatures.get(id);
+      return creature !== undefined && drawnFloors().includes(Math.round(creature.position.z));
+    });
+    if (fresh.length < newIds.length) {
       throw new Error(`harness: ${fresh.length} sprites novos para ${newIds.length} criaturas novas`);
     }
-    newIds.forEach((id, index) => known.set(id, fresh[index] as Sprite));
+    const creatureSprites = fresh.slice(fresh.length - newIds.length);
+    newIds.forEach((id, index) => known.set(id, creatureSprites[index] as Sprite));
   };
 
   const spawnCreature = (id: number, at: Point, appearanceId = 0): Creature => {
@@ -181,9 +226,10 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
       clock.set(atMs);
       art?.advance(atMs); // resolve as promessas devidas…
       await flushMicrotasks(); // …e deixa o `.then` do TextureBook guardar a Texture ANTES do quadro
+      const before = new Set<Container>(sceneSprites());
       for (const callback of app.ticker.callbacks) callback();
       await flushMicrotasks(); // os pedidos disparados NESTE quadro (arte imediata) chegam ao livro para o PRÓXIMO
-      syncCreatureSprites();
+      syncCreatureSprites(before);
     },
     resize(w, h) {
       app.screen.width = w;
@@ -191,7 +237,10 @@ export async function mountTestViewport(options: MountOptions = {}): Promise<Tes
       app.renderer.emit('resize', w, h);
     },
     layers,
+    drawnFloors,
+    floorLayers,
     creatureSprite: (id) => known.get(id),
+    creatureCount: () => known.size,
     placeholderOps: () => placeholder().ops,
     placeholderClears: () => placeholder().clears,
     spawn: spawnCreature,

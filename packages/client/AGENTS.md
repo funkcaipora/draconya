@@ -285,14 +285,21 @@ pnpm tsx scripts/make-sheet-fixture.ts
   em `things/<versão>/maps/<id>.json`, buscada pelo `mapId` da sessão (`Viewport.tsx`,
   `loadScene`) quando o laço de quadro nota `world.mapId` mudar — o `world` não avisa ninguém
   (ADR 0007). As regras, lidas no OTClient (MIT — formato e regra, nunca código): **ordem**
-  chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top` (num container
-  ACIMA das criaturas: o arco cobre quem passa); **camada** (`layerOf`): chão e `clip` são
+  chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top`. **Desde #385
+  (ADR 0033) cada ANDAR tem três containers — `ground` → `scene` → `top` —, e parede, objeto
+  alto e criatura moram no MESMO `scene`**, com `sortableChildren` e
+  `zIndex = sceneZIndex(x, y, slot)` (`world/depth.ts`, puro): a profundidade de um tile é a
+  anti-diagonal `x + y`, e dentro dela `x` — o resultado da varredura do `MapView` do OTClient,
+  como função, e NÃO `y * M + x` (a parede a sudoeste de um dragão cobriria a metade esquerda
+  dele). Os itens de `scene` do tile ocupam os slots 0–62 na ordem da pilha; a criatura é o
+  slot 63. `ground` e `top` seguem a ordem de inserção. O andar de baixo é anexado antes, sob o
+  véu, e a criatura é reparentada para o `scene` do andar dela; fora da janela de render ela
+  fica invisível, nunca destruída; **camada** (`layerOf`): chão e `clip` são
   `ground`; `bottom`, `unpass`/`unsight` e o que mede mais de um tile — a dimensão da folha do
   catálogo, consultada só como RESERVA, nunca antes das flags — são `scene`; `top` é `top`. A
   partir do primeiro `scene` do tile, todo item não-`top` que vem depois também é `scene` — o
-  quadro pendurado na parede é parte dela e, sozinho, seria chão. Até a 385, `scene` ainda é
-  desenhado no container do TERRENO: o container espacial e o `zIndex` são de lá, e classificar
-  não muda a tela. **elevação** `height.elevation` acumula pelos
+  quadro pendurado na parede é parte dela e, sozinho, seria chão. **elevação**
+  `height.elevation` acumula pelos
   itens com teto de 24 px e sobe o que vem depois — e a criatura — para cima e para a
   esquerda, `top` ignora; **shift** desloca o próprio item; **padrão** por `(x % w, y % h)`,
   por CONTAGEM para o empilhável que veio com contagem E tem o padrão de 4×2 da tabela (1–4
@@ -305,9 +312,8 @@ pnpm tsx scripts/make-sheet-fixture.ts
   retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da arte); no
   subsolo, só o andar do jogador; quem está ACIMA do jogador não aparece — não há telhado. A
   criatura em cima de uma caixa sobe a elevação do tile, INTERPOLADA ao longo do passo — lida
-  só pelo tile arredondado ela pulava 24 px no meio do passo. A ordem de desenho das criaturas
-  é pela posição de TELA (deslocada pelo andar). `ambience: 'cavern'` do `instance-enter` é um
-  tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**
+  só pelo tile arredondado ela pulava 24 px no meio do passo. `ambience: 'cavern'` do
+  `instance-enter` é um tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**
   (`world.groundItems`, FUN-123 — os cadáveres) entram na pilha do tile como itens comuns, por
   cima do que o mapa tem, e `groundItemsVersion` entra na chave da repintura: um cadáver que
   cai repinta o tile dele sem varrer o mapa a cada quadro. Chegam por `ground-item-appear` /
@@ -355,9 +361,12 @@ pnpm tsx scripts/make-sheet-fixture.ts
   de `wallsOf` é RETANGULAR de propósito — num mapa quadrado, trocar `width` por `height`
   passa em silêncio. A chave de textura continua sendo id + célula do padrão: as peças têm
   padrão 2×1 e 1×2, e `tileTexture` já resolve isso.
-- **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
-  criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
-  trabalho 60 vezes por segundo.
+- **A ordem de desenho é um número por objeto, e o Pixi só reordena quando um `zIndex` muda.**
+  Não há varredura de ordenação por quadro nem reordenação de filho por índice: o `scene` de cada
+  andar tem `sortableChildren`, e o Pixi ordena os filhos uma vez por render quando algum entrou
+  ou trocou de `zIndex` (`sortDirty`). O zIndex da criatura sai do tile arredondado da posição
+  interpolada — muda no meio do passo, e é aí que ela passa para trás ou para a frente da parede
+  (386 troca o arredondamento pelo walking tile do OTClient).
 - **Reconectar é REANEXAR** (`net/connection.ts`). Não recarrega a página, não recria
   personagem e **não limpa o store**: pede ticket novo e volta para a mesma sessão, que nunca
   parou de rodar. A tela continua mostrando a última coisa verdadeira até o `session-state`
