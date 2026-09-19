@@ -4749,10 +4749,19 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
       gold, goldDelta: 0, alive: true, cooldowns: {}, capacity,
     });
   };
-  const shared = (members: CharacterRuntime[], over: { content?: Content; botConfigs?: Record<string, BotConfig>; leader?: string } = {}) => {
+  const shared = (
+    members: CharacterRuntime[],
+    over: {
+      content?: Content; botConfigs?: Record<string, BotConfig>; leader?: string;
+      premiumByCharacter?: Record<string, boolean>;
+    } = {},
+  ) => {
     const session = createHuntSession({
       id: 'shared-session', content: over.content ?? loaded(), huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
-      partyOptions: { leaderId: over.leader ?? members[0]?.id ?? '', mode: 'shared' },
+      partyOptions: {
+        leaderId: over.leader ?? members[0]?.id ?? '', mode: 'shared',
+        ...(over.premiumByCharacter === undefined ? {} : { premiumByCharacter: over.premiumByCharacter }),
+      },
       ...(over.botConfigs === undefined ? {} : { botConfigs: over.botConfigs }),
     });
     for (const m of members) session.enter(m);
@@ -4809,8 +4818,8 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(kills).toBeGreaterThan(2);
     const bag = ruleset.getState().partyBag;
     expect(bag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
-    expect(bag?.gold).toBe(kills * 3);
-    const swordsInBag = bag?.items.filter((i) => i.itemId === 'loot-sword').length ?? 0;
+    expect(bag?.gold.reduce((n, e) => n + e.amount, 0)).toBe(kills * 3);
+    const swordsInBag = bag?.items.filter((i) => i.item.itemId === 'loot-sword').length ?? 0;
     expect(swordsInBag).toBe(2);
     const lead = session.participants.find((p) => p.id === 'lead');
     expect(lead?.lootBox.filter((i) => i.itemId === 'loot-sword')).toHaveLength(kills - 2);
@@ -4822,43 +4831,48 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(changed.length).toBeGreaterThan(0);
   });
 
-  it('settlement on leave and on end: sold and split with the remainder in entry order, cheese to the leader', () => {
-    const { session, ruleset } = shared([member('lead', 0), member('b', 0), member('c', 0)]);
-    run(session, 30_000, 100);
-    const before = ruleset.getState().partyBag;
-    const kills = session.aggregates.kills / 3;
-    expect(kills).toBeGreaterThan(0);
-    // total = 3 gold + 10 por espada, por abate; o queijo não vende.
-    const total = kills * 13;
-    expect(before?.gold).toBe(kills * 3);
+  it('settlement por entrada: cada composição de elegibilidade paga só quem estava no drop (#395)', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 15_000, 100);
+    // `aggregates.kills` é a SOMA por participante: com 2 presentes, 2 por abate.
+    const agg1 = session.aggregates.kills;
+    const kills1 = agg1 / 2;
+    expect(kills1).toBeGreaterThan(0);
 
-    const departure = session.leave('c', 'manual-exit');
-    const share = Math.floor(total / 3);
-    const extra = total - share * 3;
-    expect(departure?.receipt.aggregates.goldGained).toBe(share + (extra >= 3 ? 1 : 0));
-    expect(session.aggregatesOf('lead').goldGained).toBe(share + (extra >= 1 ? 1 : 0));
-    expect(session.aggregatesOf('b').goldGained).toBe(share + (extra >= 2 ? 1 : 0));
-    expect(session.participants.reduce((sum, p) => sum + p.goldDelta, 0) + (departure?.character.goldDelta ?? 0)).toBe(total);
-    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+    // Alguém entra no meio: os drops ANTES dela têm `eligible: [lead, b]`.
+    session.enter(member('late', 0));
+    run(session, 15_000, 100);
+    const agg2 = session.aggregates.kills;
+    const kills2 = (agg2 - agg1) / 3;
+    expect(kills2).toBeGreaterThan(0);
+
+    const before = ruleset.getState().partyBag;
+    expect(before?.gold.reduce((n, e) => n + e.amount, 0)).toBe((kills1 + kills2) * 3);
+
+    // `b` sai: o settlement inclui quem sai, mas cada entrada paga só o seu `eligible`.
+    const departure = session.leave('b', 'manual-exit');
+    // Early (eligible [lead,b]): ouro 3 → 2/1; espada 10 → 5/5 → lead 7, b 6 por abate.
+    // Late (eligible [lead,b,late]): ouro 3 → 1/1/1; espada 10 → 4/3/3 → lead 5, b 4, late 4.
+    expect(session.aggregatesOf('lead').goldGained).toBe(7 * kills1 + 5 * kills2);
+    expect(departure?.receipt.aggregates.goldGained).toBe(6 * kills1 + 4 * kills2);
+    // `late` NÃO recebe nada dos drops anteriores à entrada dela — a prova do §16.1.
+    expect(session.aggregatesOf('late').goldGained).toBe(4 * kills2);
+    const total = 13 * (kills1 + kills2);
+    expect(ruleset.getState().partyBag?.gold).toHaveLength(0);
+    expect(ruleset.getState().partyBag?.items).toHaveLength(0);
     // A capacidade é a soma dos PRESENTES, na hora — o level up reescreve `capacity`.
     expect(ruleset.getState().partyBag?.capacity).toBe(session.participants.reduce((n, p) => n + p.capacity, 0));
     const lead = session.participants.find((p) => p.id === 'lead');
-    expect([...(lead?.inventory.items() ?? [])].filter((i) => i.itemId === 'loot-cheese').reduce((n, i) => n + i.quantity, 0)).toBe(kills);
+    expect([...(lead?.inventory.items() ?? [])].filter((i) => i.itemId === 'loot-cheese').reduce((n, i) => n + i.quantity, 0)).toBe(kills1 + kills2);
     expect(session.notableEvents.find((e) => e.type === 'party-settlement')?.detail).toBe(`${String(total)}/3`);
 
     // No fim: os dois que ficaram dividem o que caiu depois.
-    run(session, 20_000, 100);
-    const after = ruleset.getState().partyBag;
-    const later = (after?.gold ?? 0) + (after?.items.filter((i) => i.itemId === 'loot-sword').length ?? 0) * 10;
-    const receipts = session.end('manual-exit');
-    expect(receipts.map((r) => r.characterId)).toEqual(['lead', 'b']);
-    const gained = receipts.map((r) => r.aggregates.goldGained);
-    // A soma da SESSÃO inclui quem já saiu: é o total que a party ganhou.
-    expect((gained[0] ?? 0) + (gained[1] ?? 0) + (departure?.receipt.aggregates.goldGained ?? 0)).toBe(session.aggregates.goldGained);
-    expect(session.aggregates.goldGained).toBe(total + later);
+    run(session, 15_000, 100);
+    const laterKills = (session.aggregates.kills - agg2) / 2;
+    session.end('manual-exit');
     const settlements = session.notableEvents.filter((e) => e.type === 'party-settlement');
     expect(settlements).toHaveLength(2);
-    expect(settlements[1]?.detail).toBe(`${String(later)}/2`);
+    expect(settlements[1]?.detail).toBe(`${String(13 * laterKills)}/2`);
   });
 
   it('partySpendingPreview: calling repeatedly does not mutate bag, does not emit events, and matches real settlement', () => {
@@ -4904,17 +4918,46 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect((splitSession.ruleset as HuntRuleset).partySpendingPreview(splitSession)).toBeUndefined();
   });
 
-  it('the bag survives the snapshot, with its weight and the next instance id', () => {
+  it('the bag survives the snapshot, with its entries, weight and the next instance id', () => {
     const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
     run(session, 20_000, 100);
     const state = ruleset.getState().partyBag;
     expect((state?.items.length ?? 0)).toBeGreaterThan(0);
+    expect(state?.items.every((entry) => entry.eligible.length > 0)).toBe(true);
     const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
     const restored = Session.fromSnapshot(snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('x'));
     expect((restored.ruleset as HuntRuleset).getState().partyBag).toEqual(state);
     run(restored, 10_000, 100);
-    const ids = (restored.ruleset as HuntRuleset).getState().partyBag?.items.map((i) => i.instanceId) ?? [];
+    const ids = (restored.ruleset as HuntRuleset).getState().partyBag?.items.map((i) => i.item.instanceId) ?? [];
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('bolsa no formato ANTIGO (gold: number) migra com eligible: [] e o settlement usa os presentes (#395)', () => {
+    const { session } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 10_000, 100);
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    // O formato anterior ao #395: `gold` é número e os itens são soltos, sem `eligible`.
+    (snapshot.ruleset as { partyBag?: unknown }).partyBag = {
+      gold: 42, capacity: 400,
+      items: [{ instanceId: 'shared-session:bag:0', itemId: 'loot-sword', quantity: 1 }],
+    };
+    const restored = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, loaded()) as HuntRuleset, Rng.fromSeed('legacy-bag'),
+    );
+    const ruleset = restored.ruleset as HuntRuleset;
+    expect(ruleset.getState().partyBag?.gold).toEqual([{ amount: 42, eligible: [] }]);
+    expect(ruleset.getState().partyBag?.items).toEqual([
+      { item: { instanceId: 'shared-session:bag:0', itemId: 'loot-sword', quantity: 1 }, eligible: [] },
+    ]);
+    // O peso é derivado do catálogo (a espada pesa 30); o `seq` continua depois do id lido.
+    expect(ruleset.partySummary(restored)?.bagWeight).toBe(30);
+
+    // O settlement seguinte usa "presentes na hora": 42 de gold + 10 da espada = 52, 26 cada.
+    const receipts = restored.end('manual-exit');
+    expect(receipts.map((r) => r.characterId)).toEqual(['lead', 'b']);
+    expect(receipts.map((r) => r.aggregates.goldGained)).toEqual([26, 26]);
+    // Sem bump: o formato continua 3.
+    expect(SNAPSHOT_FORMAT_VERSION).toBe(3);
   });
 
   it('snapshot legado com mode migra para os dois eixos, sem bump (#394)', () => {
@@ -4930,7 +4973,7 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
     expect(ruleset.party?.splitLoot).toBe(true);
     expect(ruleset.party?.collect).toBeNull();
     expect(ruleset.party?.autoSell).toEqual([]);
-    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+    expect(ruleset.getState().partyBag).toMatchObject({ gold: [], items: [] });
     // Sem bump: o formato continua 3.
     expect(SNAPSHOT_FORMAT_VERSION).toBe(3);
   });
@@ -4953,6 +4996,128 @@ describe('modo shared — rateio, bolsa e settlement (#192, ADR 0027 decisão 5)
       return { bag: ruleset.getState().partyBag, spent: [spent(session, 'lead'), spent(session, 'b')] };
     };
     expect(at(1)).toEqual(at(10));
+  });
+
+  it('collect filtra DEPOIS de rollLoot: item fora da lista fica no cadáver, sem itemsLooted (#395)', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
+    expect(ruleset.configureParty(session, { collect: ['loot-sword'] }, 'lead')).toEqual({ ok: true });
+    run(session, 20_000, 100);
+    const kills = session.aggregates.kills / 2;
+    expect(kills).toBeGreaterThan(0);
+    const bag = ruleset.getState().partyBag;
+    // Só a espada foi coletada; o queijo não existe para a party.
+    expect(bag?.items.every((e) => e.item.itemId === 'loot-sword')).toBe(true);
+    expect(bag?.items).toHaveLength(kills);
+    const lead = session.participants.find((p) => p.id === 'lead');
+    expect(lead?.lootBox.some((i) => i.itemId === 'loot-cheese')).toBe(false);
+    expect([...(lead?.inventory.items() ?? [])].some((i) => i.itemId === 'loot-cheese')).toBe(false);
+    expect(session.aggregatesOf('lead').itemsLooted).toBe(kills);
+    expect(session.aggregatesOf('b').itemsLooted).toBe(kills);
+    // O gold NUNCA é filtrado: entra sempre.
+    expect(bag?.gold.reduce((n, e) => n + e.amount, 0)).toBe(kills * 3);
+  });
+
+  it('autovenda no drop: 3 dragon ham (value 10) entre 4 presentes → 8/8/7/7 por abate (#395, §3)', () => {
+    const ham = { id: 'dragon-ham', name: 'Dragon Ham', kind: 'other', weight: 10, value: 10 };
+    const hamRat = {
+      ...rat, health: 30, experience: 0,
+      loot: { gold: { chance: 0, min: 1, max: 1 }, items: [{ itemId: 'dragon-ham', chance: 1, min: 3, max: 3 }] },
+    };
+    const content = loaded({ monsters: [hamRat], items: [...items, ham] });
+    const { session, ruleset } = shared(
+      [member('a', 0), member('b', 0), member('c', 0), member('d', 0)], { content },
+    );
+    expect(ruleset.configureParty(session, { autoSell: ['dragon-ham'] }, 'a')).toEqual({ ok: true });
+    run(session, 15_000, 100);
+    const kills = session.aggregates.kills / 4;
+    expect(kills).toBeGreaterThan(0);
+    // 30 gold por abate: 8/8/7/7 (o resto vai um a um na ordem de entrada).
+    expect(session.aggregatesOf('a').goldGained).toBe(8 * kills);
+    expect(session.aggregatesOf('b').goldGained).toBe(8 * kills);
+    expect(session.aggregatesOf('c').goldGained).toBe(7 * kills);
+    expect(session.aggregatesOf('d').goldGained).toBe(7 * kills);
+    // A venda automática emite `party-settlement { reason: 'auto-sell', itemId }` no dreno…
+    const events = session.drainEvents().filter((e) => e.kind === 'party-settlement');
+    expect(events.length).toBeGreaterThan(0);
+    expect(events.every((e) =>
+      e.kind === 'party-settlement' && e.reason === 'auto-sell' && e.itemId === 'dragon-ham')).toBe(true);
+    // …e NÃO vira linha da lista curta de eventos notáveis.
+    expect(session.notableEvents.some((e) => e.type === 'party-settlement')).toBe(false);
+    // O item vendido nunca pesa nem entra na bolsa.
+    expect(ruleset.getState().partyBag?.items).toHaveLength(0);
+  });
+
+  it('autoSell corta a lista pelos primeiros N do limite do líder (#395, §23.1)', () => {
+    const ids = ['sell-a', 'sell-b', 'sell-c', 'sell-d', 'sell-e', 'sell-f'];
+    const goods = ids.map((id) => ({ id, name: id, kind: 'other', weight: 1, value: 10 }));
+    const drop = {
+      ...rat, health: 30, experience: 0,
+      loot: { gold: { chance: 0, min: 1, max: 1 }, items: [{ itemId: 'sell-f', chance: 1, min: 1, max: 1 }] },
+    };
+    const content = loaded({ monsters: [drop], items: [...items, ...goods] });
+
+    // Líder free: limite 5 — o 6º id fica salvo e inerte; o item cai como COLETADO.
+    const free = shared([member('lead', 0), member('b', 0)], { content });
+    expect(free.ruleset.configureParty(free.session, { autoSell: ids }, 'lead')).toEqual({ ok: true });
+    run(free.session, 10_000, 100);
+    const freeBag = free.ruleset.getState().partyBag;
+    expect(freeBag?.items.length ?? 0).toBeGreaterThan(0);
+    expect(freeBag?.items.every((e) => e.item.itemId === 'sell-f')).toBe(true);
+    expect(free.session.aggregatesOf('lead').goldGained).toBe(0);
+
+    // Líder Premium: limite 20 — o 6º id vende e nada entra na bolsa.
+    const premium = shared([member('lead', 0), member('b', 0)], {
+      content, premiumByCharacter: { lead: true },
+    });
+    expect(premium.ruleset.configureParty(premium.session, { autoSell: ids }, 'lead')).toEqual({ ok: true });
+    run(premium.session, 10_000, 100);
+    expect(premium.ruleset.getState().partyBag?.items).toHaveLength(0);
+    expect(premium.session.aggregatesOf('lead').goldGained).toBeGreaterThan(0);
+  });
+
+  it('item de autoSell com value: 0 é ignorado na entrega e entra como coletado (#395, DT-04)', () => {
+    // `configureParty` já recusa configurar assim; a lista é posta direto para simular conteúdo
+    // que mudou de valor sob uma sessão em voo.
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
+    const party = ruleset.party;
+    if (party === undefined) throw new Error('sem party');
+    party.collect = ['loot-cheese'];
+    party.autoSell = ['loot-cheese'];
+    run(session, 10_000, 100);
+    const bag = ruleset.getState().partyBag;
+    expect(bag?.items.length ?? 0).toBeGreaterThan(0);
+    expect(bag?.items.every((e) => e.item.itemId === 'loot-cheese')).toBe(true);
+    expect(session.aggregatesOf('lead').goldGained).toBe(0);
+    const autoSell = session.drainEvents().filter(
+      (e) => e.kind === 'party-settlement' && e.reason === 'auto-sell',
+    );
+    expect(autoSell).toHaveLength(0);
+  });
+
+  it('cada BagEntry guarda eligible = presentes no instante do abate (#395, §16.1)', () => {
+    const { session, ruleset } = shared([member('lead', 0), member('b', 0)]);
+    run(session, 8_000, 100);
+    session.enter(member('late', 0));
+    run(session, 8_000, 100);
+    const items = ruleset.getState().partyBag?.items ?? [];
+    // Entradas de antes da entrada da `late`: elegíveis [lead, b], sem ela.
+    expect(items.some((e) => e.eligible.length === 2
+      && e.eligible.includes('lead') && e.eligible.includes('b') && !e.eligible.includes('late'))).toBe(true);
+    // Entradas de depois: elegíveis com os três.
+    expect(items.some((e) => e.eligible.length === 3 && e.eligible.includes('late'))).toBe(true);
+  });
+
+  it('zero sorteio extra: collect/autoSell não mexem no Rng da sessão (#395, RF-08)', () => {
+    const plain = shared([member('lead', 0), member('b', 0)]);
+    const configured = shared([member('lead', 0), member('b', 0)]);
+    expect(configured.ruleset.configureParty(
+      configured.session, { collect: ['loot-sword'], autoSell: ['loot-sword'] }, 'lead',
+    )).toEqual({ ok: true });
+    run(plain.session, 20_000, 100);
+    run(configured.session, 20_000, 100);
+    // Mesmo número de abates e MESMO estado do gerador: o filtro e a venda rodam depois.
+    expect(configured.session.aggregates.kills).toBe(plain.session.aggregates.kills);
+    expect(configured.session.rng.getState()).toEqual(plain.session.rng.getState());
   });
 });
 
@@ -5030,7 +5195,7 @@ describe('combinações mistas de custo e loot (#359, ADR 0027 emenda)', () => {
 
     const bag = ruleset.getState().partyBag;
     expect(bag).toBeDefined();
-    expect(bag!.gold + bag!.items.length).toBeGreaterThan(0);
+    expect(bag!.gold.reduce((n, e) => n + e.amount, 0) + bag!.items.length).toBeGreaterThan(0);
 
     session.end('manual-exit');
     const settlement = session.drainEvents().find((e) => e.kind === 'party-settlement');
@@ -5173,13 +5338,13 @@ describe('a party como estado mutável: configureParty, eixos e munição no rat
     const { session, ruleset } = make([member('lead'), member('b')]);
     expect(ruleset.getState().partyBag).toBeUndefined();
     expect(ruleset.configureParty(session, { splitLoot: true }, 'lead')).toEqual({ ok: true });
-    expect(ruleset.getState().partyBag).toMatchObject({ gold: 0, items: [] });
+    expect(ruleset.getState().partyBag).toMatchObject({ gold: [], items: [] });
 
     run(session, 20_000, 100);
     const before = ruleset.getState().partyBag;
     expect((before?.items.length ?? 0)).toBeGreaterThan(0);
-    const bagValue = (before?.gold ?? 0)
-      + (before?.items ?? []).reduce((n, i) => n + (loaded().items.get(i.itemId)?.value ?? 0) * i.quantity, 0);
+    const bagValue = (before?.gold.reduce((n, e) => n + e.amount, 0) ?? 0)
+      + (before?.items ?? []).reduce((n, e) => n + (loaded().items.get(e.item.itemId)?.value ?? 0) * e.item.quantity, 0);
     const gained = session.aggregates.goldGained;
 
     expect(ruleset.configureParty(session, { splitLoot: false }, 'lead')).toEqual({ ok: true });

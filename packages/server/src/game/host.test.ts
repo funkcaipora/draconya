@@ -4796,14 +4796,15 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(spendingOf(lead.socket).length).toBe(1);
     expect(spendingOf(b.socket).length).toBe(1);
 
-    // 2. Loot na bolsa: soma dos estimatedShares bate com bag.gold
+    // 2. Loot na bolsa: soma dos estimatedShares bate com o gold da bolsa
     runFor(20_000);
     const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
-    expect(bag?.gold).toBeGreaterThan(0);
+    const bagGold = bag?.gold.reduce((n, entry) => n + entry.amount, 0) ?? 0;
+    expect(bagGold).toBeGreaterThan(0);
     const lastSpending = spendingOf(lead.socket).at(-1);
     if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
     const sumEstimated = lastSpending.shares.reduce((sum, s) => sum + (s.estimatedShare ?? 0), 0);
-    expect(sumEstimated).toBe(bag?.gold);
+    expect(sumEstimated).toBe(bagGold);
 
     // Avançar tempo após settle ou sem mudanças não duplica
     const countAfterLoot = spendingOf(lead.socket).length;

@@ -44,7 +44,9 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import { settleBag, shareCostsOf, splitLootOf, uniqueVocations, xpShare } from '../party.js';
+import {
+  autoSellLimit, settleEntries, shareCostsOf, splitEqually, splitLootOf, uniqueVocations, xpShare,
+} from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules } from '../inventory.js';
@@ -533,6 +535,26 @@ function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptio
   };
 }
 
+/**
+ * Nenhuma venda automática efetiva. Fica fora das opções porque o conjunto é derivado do
+ * líder a cada abate; criá-lo vazio é o que evita alocar um `Set` por item de quem não vende.
+ */
+const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
+
+/**
+ * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
+ * pelo `restore` para migrar uma sessão em voo para entradas com `eligible: []` — o sentinel
+ * de "presentes no settlement" (D5, sem bump de `SNAPSHOT_FORMAT_VERSION`).
+ */
+interface LegacyPartyBagState {
+  readonly gold: number;
+  readonly items: readonly CarriedItem[];
+  readonly capacity: number;
+}
+
+const isLegacyBag = (bag: unknown): bag is LegacyPartyBagState =>
+  typeof (bag as LegacyPartyBagState).gold === 'number';
+
 export interface HuntRulesetState {
   readonly huntId: string;
   readonly difficulty: HuntDifficultyName;
@@ -767,7 +789,7 @@ export class HuntRuleset implements Ruleset {
     }
     this.#options = options;
     this.#party = normalizePartyOptions(options.partyOptions);
-    if (this.#party?.splitLoot) this.#bag = { gold: 0, items: [], capacity: 0 };
+    if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0 };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -852,7 +874,7 @@ export class HuntRuleset implements Ruleset {
   partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
     if (this.#party === undefined || !this.#party.splitLoot || this.#bag === null) return undefined;
     const presentIds = session.participants.map((p) => p.id);
-    return settleBag(this.#bag, presentIds, this.#options.items).shares;
+    return settleEntries(this.#bag, presentIds, this.#options.items).shares;
   }
 
   /**
@@ -889,11 +911,11 @@ export class HuntRuleset implements Ruleset {
       autoSell: patch.autoSell ?? party.autoSell,
     };
     // Ligar: nasce vazia, igual ao construtor. Desligar: liquida com quem está presente AGORA
-    // pela regra de HOJE (settlement inteiro — por entrada é o #395) e descarta. Nada se perde:
-    // vira gold ou vai para o líder (`value: 0`, `unsold` de `settleBag`).
-    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: 0, items: [], capacity: 0 };
+    // vendendo entrada por entrada (#395) e descarta. Nada se perde: vira gold ou vai para o
+    // líder (`value: 0`, `unsold` de `settleEntries`).
+    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: [], items: [], capacity: 0 };
     if (!next.splitLoot && party.splitLoot && this.#bag !== null) {
-      this.#settle(session, session.participants);
+      this.#settle(session, session.participants, 'toggle');
       this.#bag = null;
     }
     party.shareCosts = next.shareCosts;
@@ -916,13 +938,18 @@ export class HuntRuleset implements Ruleset {
     const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
     const unique = uniqueVocations(present);
     const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
-    const bagValue = this.#bag === null ? 0 : this.#bag.gold + this.#bag.items.reduce(
-      (sum, item) => sum + (this.#options.items.get(item.itemId)?.value ?? 0) * item.quantity, 0,
-    );
+    const bagValue = this.#bag === null
+      ? 0
+      : this.#bag.gold.reduce((sum, entry) => sum + entry.amount, 0)
+        + this.#bag.items.reduce(
+          (sum, entry) => sum + (this.#options.items.get(entry.item.itemId)?.value ?? 0) * entry.item.quantity,
+          0,
+        );
     // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
     // tipo é opcional por causa das fixtures antigas de `RawContent`.
-    const limits = this.#options.party.autoSellItemTypes ?? { free: 0, premium: 0 };
-    const limit = party.premiumByCharacter[party.leaderId] === true ? limits.premium : limits.free;
+    const limit = autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
     return {
       leaderId: party.leaderId,
       shareCosts: party.shareCosts,
@@ -1055,7 +1082,7 @@ export class HuntRuleset implements Ruleset {
     // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
     // teto a bolsa só para de aceitar, até o próximo settlement zerar.
-    if (this.#bag !== null) this.#settle(session, [...session.participants, character]);
+    if (this.#bag !== null) this.#settle(session, [...session.participants, character], 'leave');
     // A cascata do §13.9 NÃO roda aqui: `Session.leave` ainda vai emitir o extrato de quem
     // está saindo, e uma cascata dentro do `onLeave` emitiria os extratos dos outros ANTES
     // do dele — `seq` fora de ordem e o `member-left` do primeiro depois dos demais. Fica
@@ -1324,7 +1351,7 @@ export class HuntRuleset implements Ruleset {
     // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
     // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
     // exatamente por isso que ele não depende de nada feito aqui.
-    if (this.#bag !== null) this.#settle(session, session.participants);
+    if (this.#bag !== null) this.#settle(session, session.participants, 'end');
   }
 
   getState(): HuntRulesetState {
@@ -1372,7 +1399,13 @@ export class HuntRuleset implements Ruleset {
           premiumByCharacter: this.#party.premiumByCharacter,
         },
       }),
-      ...(this.#bag === null ? {} : { partyBag: { gold: this.#bag.gold, items: [...this.#bag.items], capacity: this.#bag.capacity } }),
+      ...(this.#bag === null ? {} : {
+        partyBag: {
+          gold: [...this.#bag.gold],
+          items: this.#bag.items.map((entry) => ({ item: entry.item, eligible: [...entry.eligible] })),
+          capacity: this.#bag.capacity,
+        },
+      }),
     };
   }
 
@@ -1440,15 +1473,31 @@ export class HuntRuleset implements Ruleset {
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
     // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
     this.#party = normalizePartyOptions(restored.partyOptions);
-    this.#bag = restored.partyBag === undefined
-      ? (this.#party?.splitLoot ? { gold: 0, items: [], capacity: 0 } : null)
-      : { gold: restored.partyBag.gold, items: [...restored.partyBag.items], capacity: restored.partyBag.capacity };
+    // A bolsa também migra na leitura (D5): o formato antigo (`gold: number`) vira entradas com
+    // `eligible: []`, o sentinel de "presentes no settlement" — a regra de hoje, para uma sessão
+    // em voo não perder nem confiscar o que já estava na bolsa.
+    const restoredBag = restored.partyBag as unknown;
+    this.#bag = restoredBag === undefined
+      ? (this.#party?.splitLoot ? { gold: [], items: [], capacity: 0 } : null)
+      : isLegacyBag(restoredBag)
+        ? {
+            gold: restoredBag.gold > 0 ? [{ amount: restoredBag.gold, eligible: [] }] : [],
+            items: restoredBag.items.map((item) => ({ item, eligible: [] })),
+            capacity: restoredBag.capacity,
+          }
+        : {
+            gold: [...(restoredBag as PartyBagState).gold],
+            items: (restoredBag as PartyBagState).items.map(
+              (entry) => ({ item: entry.item, eligible: [...entry.eligible] }),
+            ),
+            capacity: (restoredBag as PartyBagState).capacity,
+          };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
     this.#bagSeq = 0;
-    for (const item of this.#bag?.items ?? []) {
-      this.#bagWeight += (this.#options.items.get(item.itemId)?.weight ?? 0) * item.quantity;
-      const n = Number(item.instanceId.split(':').at(-1));
+    for (const entry of this.#bag?.items ?? []) {
+      this.#bagWeight += (this.#options.items.get(entry.item.itemId)?.weight ?? 0) * entry.item.quantity;
+      const n = Number(entry.item.instanceId.split(':').at(-1));
       if (Number.isFinite(n) && n >= this.#bagSeq) this.#bagSeq = n + 1;
     }
     // O estado por participante espera `onResume` (#203): os participantes ainda não existem —
@@ -3258,7 +3307,10 @@ export class HuntRuleset implements Ruleset {
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
         const loot = rollLoot(definition.loot, session.rng);
-        this.#bag.gold += loot.gold;
+        // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+        // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+        const presentAtDrop = session.participants.map((p) => p.id);
+        if (loot.gold > 0) this.#bag.gold.push({ amount: loot.gold, eligible: presentAtDrop });
         this.#deliverToBag(session, loot.items);
         if (loot.gold > 0 && loot.items.length === 0) this.#emitBag(session);
       }
@@ -3432,25 +3484,86 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O limite de tipos vendáveis do LÍDER (D2/§23.1): o Premium é do PERSONAGEM líder, nunca do
+   * usuário do item. O conteúdo manda os números; a sessão só lê.
+   */
+  #autoSellLimit(): number {
+    const party = this.#party;
+    if (party === undefined) return 0;
+    return autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
+  }
+
+  /** Os ids que de fato vendem: só os `autoSellLimit` PRIMEIROS da lista configurada (§23.1). */
+  #effectiveAutoSell(): ReadonlySet<string> {
+    const party = this.#party;
+    if (party === undefined) return EMPTY_AUTO_SELL;
+    return new Set(party.autoSell.slice(0, this.#autoSellLimit()));
+  }
+
+  /**
    * O loot cai na bolsa (#192): pelo peso, contra a capacidade somada; o que não cabe vai
    * para a caixa de loot do LÍDER (§21.6). `itemsLooted` conta para todo presente — "quantos
    * itens caíram" é a pergunta do §16.1, e caíram para a party (DT-03).
+   *
+   * A lista de COLETA filtra DEPOIS de `rollLoot` (§7, D2): zero RNG a mais (FUN-63), e o item
+   * fora da lista fica no cadáver — sem `itemsLooted`, sem caixa de ninguém. A VENDA AUTOMÁTICA
+   * é um subconjunto lógico da coleta: o item vendável nunca pesa nem entra na bolsa, vira gold
+   * na hora dividido pelos presentes no abate (§8, D2/§16.1).
    */
   #deliverToBag(session: Session, items: readonly LootItem[]): void {
     const bag = this.#bag;
-    if (bag === null || items.length === 0) return;
+    const party = this.#party;
+    if (bag === null || party === undefined || items.length === 0) return;
     const leader = this.#leader(session);
+    // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+    // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+    const presentAtDrop = session.participants.map((p) => p.id);
+    const effectiveAutoSell = this.#effectiveAutoSell();
+
     for (const rolled of items) {
       const definition = this.#options.items.get(rolled.itemId);
       if (definition === undefined) continue;
+
+      // Filtro de coleta (§7, D2), DEPOIS de `rollLoot` — zero RNG a mais (FUN-63). Fora da
+      // lista, o item não existe para a party: sem `itemsLooted`, sem caixa de ninguém.
+      if (party.collect !== null && !party.collect.includes(rolled.itemId)) {
+        continue;
+      }
+
+      // Venda automática (§8, D2): subconjunto lógico da coleta — nunca pesa, nunca entra na
+      // bolsa. `value: 0` na lista é ignorado aqui como defesa (configureParty já recusa
+      // configurar assim; isto cobre conteúdo que mudou de valor sob uma sessão em voo).
+      if (effectiveAutoSell.has(rolled.itemId) && definition.value > 0) {
+        const amount = definition.value * rolled.quantity;
+        const split = splitEqually(amount, presentAtDrop.length);
+        const shares = presentAtDrop.map((characterId, i) => ({ characterId, gold: split[i] ?? 0 }));
+        for (const { characterId, gold } of shares) {
+          if (gold === 0) continue;
+          const member = findById(session.participants, characterId);
+          if (member === null) continue;
+          member.goldDelta += gold;
+          session.credit(member.id, 'goldGained', gold);
+        }
+        for (const p of session.participants) session.credit(p.id, 'itemsLooted', rolled.quantity);
+        // Venda automática NÃO é evento notável (D2): a lista curta da tela de retorno não leva
+        // uma linha por dragon ham — só `party-settlement` de saída/fim/toggle entra ali.
+        session.emit({
+          kind: 'party-settlement', total: amount, reason: 'auto-sell', itemId: rolled.itemId, shares,
+        });
+        continue;
+      }
+
       const carried: CarriedItem = {
         instanceId: `${session.id}:bag:${String(this.#bagSeq++)}`,
         itemId: rolled.itemId, quantity: rolled.quantity,
       };
       for (const p of session.participants) session.credit(p.id, 'itemsLooted', carried.quantity);
       const weight = definition.weight * carried.quantity;
+      // Capacidade somada — INTOCADA nesta task; reserva proporcional e OVERWEIGHT são do #396.
       if (this.#bagWeight + weight <= this.#bagCapacity(session)) {
-        bag.items.push(carried);
+        bag.items.push({ item: carried, eligible: presentAtDrop });
         this.#bagWeight += weight;
         continue;
       }
@@ -3475,24 +3588,31 @@ export class HuntRuleset implements Ruleset {
     const bag = this.#bag;
     if (bag === null) return;
     session.emit({
-      kind: 'party-bag-changed', gold: bag.gold, items: [...bag.items],
+      kind: 'party-bag-changed',
+      gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+      items: bag.items.map((entry) => entry.item),
       weight: this.#bagWeight, capacity: this.#bagCapacity(session),
     });
   }
 
   /**
-   * Vende a bolsa e divide entre `present` (#192, ADR 0027 decisão 5): ao sair alguém — com
-   * quem sai incluído — e no fim. Cada um recebe a cota em `goldDelta` e `goldGained`; o
-   * resto vai um gold por membro na ordem de entrada; o que não se vende (`value: 0`) vai
-   * para a mochila do líder, e o que não couber para a caixa dele. Registrado no extrato —
-   * "vendeu nada" também é informação.
+   * Vende a bolsa ENTRADA por entrada (#192, ADR 0027 decisão 5; #395, D4/D6): ao sair alguém
+   * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
+   * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
+   * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
+   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
+   * é informação.
    */
-  #settle(session: Session, present: readonly CharacterRuntime[]): void {
+  #settle(
+    session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
+  ): void {
     const bag = this.#bag;
     if (bag === null || present.length === 0) return;
-    const { shares, unsold, total } = settleBag(bag, present.map((p) => p.id), this.#options.items);
+    if (bag.gold.length === 0 && bag.items.length === 0) return;
+    const { shares, unsold, total } = settleEntries(bag, present.map((p) => p.id), this.#options.items);
     for (const member of present) {
       const gold = shares.get(member.id) ?? 0;
+      if (gold === 0) continue;
       member.goldDelta += gold;
       session.credit(member.id, 'goldGained', gold);
     }
@@ -3505,10 +3625,10 @@ export class HuntRuleset implements Ruleset {
     }
     session.record('party-settlement', `${String(total)}/${String(present.length)}`);
     session.emit({
-      kind: 'party-settlement', total,
+      kind: 'party-settlement', total, reason,
       shares: present.map((p) => ({ characterId: p.id, gold: shares.get(p.id) ?? 0 })),
     });
-    bag.gold = 0;
+    bag.gold = [];
     bag.items.length = 0;
     this.#bagWeight = 0;
     this.#emitBag(session);

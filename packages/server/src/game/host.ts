@@ -2090,13 +2090,21 @@ export class SessionHost {
     const bag = state?.partyBag;
     if (bag !== undefined) {
       let weight = 0;
-      for (const item of bag.items) weight += (this.#options.itemCatalog?.get(item.itemId)?.weight ?? 0) * item.quantity;
+      for (const entry of bag.items) {
+        const item = entry.item;
+        weight += (this.#options.itemCatalog?.get(item.itemId)?.weight ?? 0) * item.quantity;
+      }
       // A capacidade é a soma dos PRESENTES agora — o snapshot guarda a última calculada.
       let capacity = 0;
       for (const member of hosted.session.participants) capacity += member.capacity;
       block.partyBag = {
-        gold: bag.gold, weight, capacity,
-        items: bag.items.map((item) => ({ instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity })),
+        // A bolsa v2 (`#395`) guarda entradas com elegibilidade; o `gold` da entrada é a soma
+        // dos lançamentos. O `eligible` no fio é do #400 — aqui a apresentação não mudou.
+        gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+        weight, capacity,
+        items: bag.items.map((entry) => ({
+          instanceId: entry.item.instanceId, itemId: entry.item.itemId, quantity: entry.item.quantity,
+        })),
       };
     }
     return block;
