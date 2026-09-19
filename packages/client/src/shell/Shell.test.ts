@@ -116,7 +116,7 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     };
     hud.set((state) => ({
       ...state,
-      analyzer: { sessionType: 'hunt', aggregates, notableEvents: [], receivedAtMs: 0, ended: false },
+      analyzer: { sessionType: 'hunt', aggregates, notableEvents: [], receivedAtMs: 0, ended: false, party: undefined },
     }));
     const html = await render();
     expect(html).toContain('ui-floating-window--analyzer');

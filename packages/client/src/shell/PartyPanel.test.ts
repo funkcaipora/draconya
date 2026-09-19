@@ -171,8 +171,8 @@ describe('PartyPanel', () => {
     expect(html).toContain('Alguém da party não está na cidade.');
   });
 
-  it('PartyMembers lists the companions with HP, the mode as text, and the fallen one greyed', async () => {
-    hud.set((state) => ({ ...state, party: { leaderId: 'lead', mode: 'shared', members: [
+  it('PartyMembers lists the companions with HP, the two leader switches, and the fallen one greyed', async () => {
+    hud.set((state) => ({ ...state, characterId: 'me', party: { leaderId: 'lead', mode: 'shared', members: [
       { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80, vocationId: null },
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55, vocationId: null },
       { characterId: 'c', name: 'Cid', alive: false, healthPercent: 0, vocationId: null },
@@ -182,7 +182,10 @@ describe('PartyPanel', () => {
     }));
     const html = await new Response(prelude).text();
     expect(html).toContain('Party · 3');
-    expect(html).toContain('Compartilhado');
+    // O modo virou os dois interruptores do kit (#405): `shared` acende os dois.
+    expect(html).toMatch(/title="Rateio de custos"[^>]*aria-checked="true"/);
+    expect(html).toMatch(/title="Dividir loot"[^>]*aria-checked="true"/);
+    expect(html).not.toContain('Compartilhado');
     expect(html).toContain('<span class="party-leader-star">★</span><b>Ana</b>');
     expect(html).toContain('party-companion-self');
     expect(html).toContain('você');
@@ -191,15 +194,16 @@ describe('PartyPanel', () => {
     expect(html).toContain('caiu');
   });
 
-  it('PartyMembers shows "Dividido" for the split mode', async () => {
-    hud.set((state) => ({ ...state, party: { leaderId: 'me', mode: 'split', members: [
+  it('PartyMembers shows both switches off for the split mode', async () => {
+    hud.set((state) => ({ ...state, characterId: 'me', party: { leaderId: 'me', mode: 'split', members: [
       { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
     ] } }));
     const { prelude } = await prerender(createElement(PartyMembers, {
       partyLootOpen: true, onToggleLoot: () => {}, onManage: () => {},
     }));
     const html = await new Response(prelude).text();
-    expect(html).toContain('Dividido');
+    expect(html).toMatch(/title="Rateio de custos"[^>]*aria-checked="false"/);
+    expect(html).toMatch(/title="Dividir loot"[^>]*aria-checked="false"/);
     expect(html).toContain('Party · 1');
   });
 });

@@ -18,13 +18,14 @@
 // `Box`/`Line`, e o botão "⤢ Abrir completo" abre o `AnalyzerModal` com as dez linhas do kit.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { Aggregates, NotableEvent } from '../state/hud.js';
+import type { Aggregates, NotableEvent, PartySpendingView, PartySummary } from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { describeEvent } from './event-text.js';
 import type { EventNames } from './event-text.js';
 import { FloatingWindow } from './FloatingWindow.js';
 import { IconButton } from './ui/IconButton.js';
 import { Kicker } from './ui/Kicker.js';
+import { xpBonusLabel, xpMultiplierLabel } from './party-loot-format.js';
 import { AnalyzerModal } from './AnalyzerModal.js';
 import {
   count, duration, formatClock, gold, goldRate, optionalCount, rate as ratePerHour,
@@ -116,6 +117,43 @@ function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs:
 }
 
 /**
+ * A seção PARTY do analisador (§32, ADR 0033 d.11). Só monta com `analyzer.party` — ausência é
+ * solo, ou nó `game` anterior ao #400, nunca "0 jogadores" (D8).
+ *
+ * "Sua XP" é o agregado do VIEWER (`aggregates.xpGained`), que o host manda por personagem; "Sua
+ * parte" é `party-spending.estimatedShare` (DT-03), que já existia e era descartado — duplicá-lo
+ * em `analyzer.party` faria as duas mensagens divergirem na primeira que atualizasse só uma.
+ */
+function PartyBox({ summary, aggregates, spending, me }: {
+  summary: PartySummary; aggregates: Aggregates;
+  spending: PartySpendingView | null; me: string | null;
+}) {
+  const mine = spending?.shares.find((share) => share.characterId === me);
+  return (
+    <Box title="Party">
+      <Line label="Jogadores" value={count(summary.players)} />
+      <Line label="Vocações únicas" value={count(summary.uniqueVocations)} />
+      <Line label="Bônus de XP" value={xpBonusLabel(summary.xpPercent)} />
+      <Line label="Multiplicador" value={xpMultiplierLabel(summary.xpPercent)} />
+      <Line label="XP total" value={count(summary.totalXp)} />
+      <Line label="Sua XP" value={count(aggregates.xpGained)} />
+      <Line label="Rateio" value={summary.shareCosts ? 'Ativo' : 'Inativo'} />
+      <Line label="Supplies totais" value={gold(summary.totalSupplies)} />
+      {mine?.estimatedShare !== undefined && (
+        <Line label="Sua parte" value={gold(mine.estimatedShare)} />
+      )}
+      <Line label="Divisão de lucro" value={summary.splitLoot ? 'Ativa' : 'Inativa'} />
+      <Line label="Valor da bolsa" value={gold(summary.bagValue)} />
+      <Line label="Peso da bolsa" value={`${summary.bagWeight.toLocaleString('pt-BR')} oz`} />
+      <Line
+        label="Venda automática"
+        value={`${String(summary.autoSell.used)} / ${String(summary.autoSell.limit)}`}
+      />
+    </Box>
+  );
+}
+
+/**
  * A lista de eventos notáveis, com os nomes do catálogo. Exportada para o teste: é aqui que o
  * id do evento vira nome, e um teste de `describeEvent` com um mapa montado à mão não prova
  * que ESTE mapa é montado (achado da revisão da FUN-113).
@@ -163,6 +201,8 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
  */
 export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?: () => void }) {
   const analyzer = useHudSlice((state) => state.analyzer);
+  const partySpending = useHudSlice((state) => state.partySpending);
+  const me = useHudSlice((state) => state.characterId);
 
   const [forceOpen, setForceOpen] = useState(false);
   useEffect(() => {
@@ -203,6 +243,15 @@ export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?
     >
       <SessionBox aggregates={aggregates} elapsedMs={elapsedMs} />
       <HourBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      {/* A caixa PARTY só existe com `analyzer.party` (solo, ou nó anterior, não a monta). */}
+      {analyzer.party !== undefined && (
+        <PartyBox
+          summary={analyzer.party}
+          aggregates={aggregates}
+          spending={partySpending}
+          me={me}
+        />
+      )}
       <Events events={analyzer.notableEvents} />
       <AnalyzerModal
         open={expandedOpen}
