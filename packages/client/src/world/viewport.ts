@@ -37,7 +37,7 @@ import {
 } from './effects.js';
 import { facingOf, walkFrame } from './facing.js';
 import { createFpsMeter } from './fps.js';
-import { floorsBelow, shade, veilTint } from './floors.js';
+import { shade, veilTint } from './floors.js';
 import {
   HEALTH_BAR_HEIGHT, HEALTH_BAR_WIDTH, HEALTH_FILL_HEIGHT, HEALTH_FILL_WIDTH,
   healthColor, healthPercent, healthWidth,
@@ -49,6 +49,10 @@ import { paintOf } from './outfit-colors.js';
 import type { Scene, StackedItem, TileStack } from './scene.js';
 import { TextureBook } from './textures.js';
 import { drawTile, type DrawLayer, type ObjectInfo } from './tile-stack.js';
+import {
+  firstVisibleFloor, floorAlpha, lastVisibleFloor, paintedFirstFloor, visibleFloors, SEA_FLOOR,
+  type FloorFade,
+} from './visibility.js';
 import { NO_DISPLACEMENT, walkingTile } from './walking-tile.js';
 
 export type { MapTiles } from './scene.js';
@@ -114,21 +118,25 @@ interface EffectEntry {
   readonly phases: readonly number[];
 }
 
-/** A última janela de prefetch aquecida, com a cena e o andar dela. `null` força a janela inteira. */
+/** A última janela de prefetch aquecida, com a cena e os andares dela. `null` força a janela inteira. */
 interface Warmed {
   readonly window: TileWindow;
   readonly sceneId: string;
-  readonly floor: number;
+  /** A lista de andares aquecidos, em `join(',')` — muda de andar refaz a janela inteira. */
+  readonly floors: string;
 }
 
 /**
- * As três camadas de UM andar, com os pools presos a elas (ADR 0033). `ground` e `top` seguem a
- * ordem de inserção; `scene` tem `sortableChildren` e ordena parede, objeto alto e criatura por
+ * As três camadas de UM andar, com os pools presos a elas (ADR 0033). `ground`, `scene` e `top`
+ * são filhas de `root`, o container do ANDAR: é o `root` que o pool guarda entre trocas de
+ * faixa e é nele que o fade (M23, D7) escreve o `alpha`. `ground` e `top` seguem a ordem de
+ * inserção; `scene` tem `sortableChildren` e ordena parede, objeto alto e criatura por
  * `zIndex = sceneZIndex(x, y, slot)` (`world/depth.ts`, puro). O `fallback` é filho 0 de
  * `ground`: a grade lisa e os retângulos de reserva daquele andar.
  */
 interface FloorLayers {
   readonly z: number;
+  readonly root: Container;
   readonly ground: Container;
   readonly scene: Container;
   readonly top: Container;
@@ -227,6 +235,10 @@ export async function mountViewport(
   function layersFor(z: number): FloorLayers {
     let layers = floorLayers.get(z);
     if (layers !== undefined) return layers;
+    const root = new Container();
+    // O `label` identifica o container do andar para quem o inspeciona (o harness de teste lê
+    // daqui o `z` de cada `root` anexado); é o `label` público do Pixi v8, sem efeito no desenho.
+    root.label = `floor:${z}`;
     const ground = new Container();
     const scene = new Container();
     // A ÚNICA ordenação automática do viewport: o Pixi só reordena `scene` quando um filho
@@ -235,8 +247,9 @@ export async function mountViewport(
     const top = new Container();
     const fallback = new Graphics();
     ground.addChild(fallback);
+    root.addChild(ground, scene, top);
     layers = {
-      z, ground, scene, top, fallback,
+      z, root, ground, scene, top, fallback,
       pools: { ground: [], scene: [], top: [] }, used: { ground: 0, scene: 0, top: 0 },
     };
     floorLayers.set(z, layers);
@@ -270,6 +283,18 @@ export async function mountViewport(
    * quadro é o custo de saber que nada mudou — a varredura dos tiles só roda quando mudou.
    */
   let warmed: Warmed | null = null;
+  /**
+   * A faixa de andares visível e a troca em curso (M23, D7). `fadeKey` é o que decide se a
+   * conta roda: cena, posição LÓGICA do self e pacote — a conta varre 9 tiles × até 7 andares
+   * × 2 consultas, e rodá-la por quadro seria pagar a 60 Hz por algo que só muda por passo.
+   * `fadeZ` é o `z` da última conta: trocar de andar é teleporte (o servidor manda
+   * desaparecer/aparecer, `interpolate` nunca cruza `z`), e a rampa só faz sentido no MESMO
+   * andar — entrar e sair de construção.
+   */
+  let fade: FloorFade = { first: 0, previous: 0, since: 0 };
+  let fadeKey = '';
+  let fadeZ = SEA_FLOOR;
+  let lastFloor = SEA_FLOOR;
   /**
    * Os outfits já pedidos ao pacote DE AGORA. Zera em `setPack`: um pacote novo tem folhas
    * novas, e o que o anterior aqueceu não vale para ele.
@@ -326,6 +351,45 @@ export async function mountViewport(
     // do que mostrar o canto (0,0), que num mapa cercado por parede é só parede.
     if (scene !== null) return { x: (scene.width - 1) / 2, y: (scene.height - 1) / 2, z: scene.defaultZ };
     return { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * O jogador para a conta de visibilidade é a posição LÓGICA — `creature.position`, que
+   * `apply.ts` põe no destino ao receber o passo —, não a interpolada da câmera: o telhado
+   * começa a sumir quando o passo para dentro começa, e não quando ele acaba.
+   */
+  function playerLogical(): { x: number; y: number; z: number } {
+    const self = world.selfId === null ? undefined : world.creatures.get(world.selfId);
+    if (self !== undefined) return self.position;
+    const center = target();
+    return { x: Math.round(center.x), y: Math.round(center.y), z: Math.round(center.z) };
+  }
+
+  /** Recalcula `first`/`last` quando algo que entra na conta mudou, e devolve os andares a PINTAR agora. */
+  function updateVisibility(nowMs: number): { floors: readonly number[]; first: number; last: number } {
+    const player = playerLogical();
+    // Sem cena não há o que cobrir: a grade lisa de reserva fica no andar da câmera, como hoje.
+    if (scene === null) {
+      fadeKey = '';
+      return { floors: [player.z], first: player.z, last: player.z };
+    }
+    const key = `${scene.id}:${player.x},${player.y},${player.z}`;
+    if (key !== fadeKey) {
+      fadeKey = key;
+      const first = firstVisibleFloor(scene, player, objectInfo);
+      lastFloor = lastVisibleFloor(player.z);
+      if (first !== fade.first) {
+        fade = player.z === fadeZ
+          ? { first, previous: fade.first, since: nowMs }
+          : { first, previous: first, since: nowMs };
+      }
+      fadeZ = player.z;
+    }
+    return {
+      floors: visibleFloors(scene.floors, paintedFirstFloor(fade, nowMs), lastFloor),
+      first: fade.first,
+      last: lastFloor,
+    };
   }
 
   /**
@@ -388,21 +452,21 @@ export async function mountViewport(
    * Sem pacote não há o que aquecer, e `warmed` fica `null` de propósito: o pacote que chegar
    * depois encontra "aqueça tudo", não uma janela que ninguém aqueceu.
    */
-  function warmWindow(center: { x: number; y: number; z: number }): void {
+  function warmWindow(center: { x: number; y: number; z: number }, floors: readonly number[]): void {
     const art = pack;
     if (art === null || scene === null) {
       warmed = null;
       return;
     }
-    const floor = Math.round(center.z);
+    const floorsKey = floors.join(',');
     const next = prefetchTiles(center, view);
     const previous = warmed;
-    const sameContext = previous !== null && previous.sceneId === scene.id && previous.floor === floor;
+    const sameContext = previous !== null && previous.sceneId === scene.id && previous.floors === floorsKey;
     if (sameContext && sameWindow(previous.window, next)) return;
 
     const tiles = tilesEntering(sameContext ? previous.window : null, next);
-    warmed = { window: next, sceneId: scene.id, floor };
-    const ids = idsIn(scene, tiles, floorsBelow(scene.floors, floor));
+    warmed = { window: next, sceneId: scene.id, floors: floorsKey };
+    const ids = idsIn(scene, tiles, floors);
     // Tile fora do mapa (borda) não vira pedido: `warmObjects([])` seria uma promessa por
     // quadro de borda, e o teste conta chamadas.
     if (ids.size > 0) void art.warmObjects(ids);
@@ -429,7 +493,10 @@ export async function mountViewport(
     }
   }
 
-  function paintTerrain(center: { x: number; y: number; z: number }): void {
+  function paintTerrain(
+    center: { x: number; y: number; z: number },
+    visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
+  ): void {
     // A janela de RENDER (M23): três tiles além de cada borda visível já estão pintados, e é
     // ao pintá-los que a textura deles é pedida ao livro — três tiles antes de entrarem na
     // tela, que é o tempo que a folha tem para sair do Worker. A chave abaixo muda quando ESTA
@@ -451,10 +518,14 @@ export async function mountViewport(
     // repintar mesmo com a janela parada. Um número, e não uma sondagem célula a célula: a
     // pergunta "mudou algo?" só muda quando o livro muda, e custar 17 consultas por quadro
     // para respondê-la era pagar a 60 Hz por um evento raro. E o ANDAR do jogador: subir a
-    // escada troca a cena inteira sem a janela andar.
+    // escada troca a cena inteira sem a janela andar. **A lista de andares entra na chave**
+    // (M23, D7): é ela que muda quando o jogador entra em casa sem a janela andar — o `floor`
+    // sozinho não bastaria.
     const floor = Math.round(center.z);
+    const floors = visibility.floors;
+    const floorsKey = floors.join(',');
     // E os itens do chão (FUN-123): um cadáver que cai repinta o tile dele.
-    const key = `${scene?.id ?? '-'}:${floor}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
+    const key = `${scene?.id ?? '-'}:${floor}:${floorsKey}:${window.minX},${window.minY},${window.maxX},${window.maxY}:${book.version}:${world.groundItemsVersion}`;
     if (key === painted) return;
     painted = key;
 
@@ -474,15 +545,15 @@ export async function mountViewport(
       return base === null ? { ground: 0, items: extra } : { ground: base.ground, items: [...base.items, ...extra] };
     };
 
-    // Re-anexa os andares desta repintura, do fundo ao topo: `ground` → `scene` → `top` de
-    // cada um. Um andar que saiu da lista sai do stage mas fica no Map, com os pools.
+    // Re-anexa os andares desta repintura, do fundo ao topo: o `root` de cada andar carrega
+    // `ground` → `scene` → `top` (D1). Um andar que saiu da lista sai do stage mas fica no Map,
+    // com os pools — e é ali que o fade do quadro seguinte o esmaece antes de soltar.
     floorsRoot.removeChildren();
-    const drawnFloors = scene === null ? [floor] : floorsBelow(scene.floors, floor);
-    for (const z of drawnFloors) {
+    for (const z of floors) {
       const layers = layersFor(z);
       layers.fallback.clear();
       layers.used = { ground: 0, scene: 0, top: 0 };
-      floorsRoot.addChild(layers.ground, layers.scene, layers.top);
+      floorsRoot.addChild(layers.root);
     }
 
     elevations.clear();
@@ -502,17 +573,18 @@ export async function mountViewport(
     }
 
     /**
-     * Pinta a pilha de um tile na posição de tela `local`, sob o véu de `below` andares. É o
+     * Pinta a pilha de um tile na posição de tela `local`, sob o véu de `offset` andares. É o
      * mesmo pintor para o tile do mapa e para o item do chão sem mapa (o cadáver que caiu
-     * antes de a cena chegar): um caminho de desenho.
+     * antes de a cena chegar): um caminho de desenho. `offset` negativo é andar ACIMA, sem
+     * véu — `veilTint` e `shade` devolvem a cor como está.
      */
     const paintStack = (
-      stack: TileStack, mx: number, my: number, below: number, local: { x: number; y: number },
+      stack: TileStack, mx: number, my: number, offset: number, local: { x: number; y: number },
       withPlaceholder: boolean, layers: FloorLayers,
     ): number => {
-      const tint = veilTint(below);
+      const tint = veilTint(offset);
       const drawn = drawTile(stack, mx, my, objectInfo);
-      const color = shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, below);
+      const color = shade(drawn.blocked || stack.ground === 0 ? COLOR_WALL : COLOR_FLOOR, offset);
       let sceneSlot = 0;
       // O lugar do PRIMEIRO objeto enquanto o quadro dele não chega — ou sem pacote — na camada
       // DELE: chão em voo é um retângulo no `Graphics` do `ground`, como sempre; parede em voo
@@ -561,25 +633,27 @@ export async function mountViewport(
       return drawn.creatureElevation;
     };
 
-    // Do andar mais fundo ao do jogador (FUN-121): o de cima cobre o de baixo. Um andar `below`
-    // níveis abaixo aparece deslocado `below` tiles para baixo e para a direita — a perspectiva
-    // do Tibia —, e sob um véu que escurece a cada nível. As coordenadas de `sceneZIndex` são
-    // as do MAPA (`mx`, `my`): dentro de um andar o deslocamento é uniforme e não muda a ordem.
-    for (const z of drawnFloors) {
-      const below = z - floor;
+    // Do andar mais fundo ao mais alto que a visibilidade mandou (M23, D7): o de cima cobre o
+    // de baixo. Um andar `offset` níveis abaixo do jogador aparece deslocado `offset` tiles
+    // para baixo e para a direita — a perspectiva do Tibia —, e sob um véu que escurece a cada
+    // nível; um andar ACIMA (`offset` negativo) aparece um tile para cima e para a esquerda
+    // por nível, sem véu. As coordenadas de `sceneZIndex` são as do MAPA (`mx`, `my`): dentro
+    // de um andar o deslocamento é uniforme e não muda a ordem.
+    for (const z of floors) {
+      const offset = z - floor;
       const layers = layersFor(z);
       for (let sy = window.minY; sy <= window.maxY; sy++) {
         for (let sx = window.minX; sx <= window.maxX; sx++) {
-          const stack = stackAt(sx - below, sy - below, z);
+          const stack = stackAt(sx - offset, sy - offset, z);
           if (stack === null) continue;
           const local = { x: (sx - window.minX) * TILE, y: (sy - window.minY) * TILE };
-          const elevation = paintStack(stack, sx - below, sy - below, below, local, true, layers);
-          if (below === 0 && elevation > 0) elevations.set(`${sx},${sy},${z}`, elevation);
+          const elevation = paintStack(stack, sx - offset, sy - offset, offset, local, true, layers);
+          if (offset === 0 && elevation > 0) elevations.set(`${sx},${sy},${z}`, elevation);
         }
       }
     }
     // Esconde o que sobrou de cada pool do andar desenhado — a repintura de agora usou menos.
-    for (const z of drawnFloors) {
+    for (const z of floors) {
       const { pools, used } = layersFor(z);
       for (const layer of ['ground', 'scene', 'top'] as const) {
         for (let i = used[layer]; i < pools[layer].length; i++) (pools[layer][i] as Sprite).visible = false;
@@ -681,18 +755,22 @@ export async function mountViewport(
     entry.label.y = barTop - NAME_GAP;
   }
 
-  function paintCreatures(center: { x: number; y: number; z: number }, nowMs: number): void {
+  function paintCreatures(
+    center: { x: number; y: number; z: number },
+    visibility: { readonly floors: readonly number[]; readonly first: number; readonly last: number },
+    nowMs: number,
+  ): void {
     const seen = new Set<number>();
     const floor = Math.round(center.z);
-    // A janela de RENDER (M23) e os andares DESENHADOS: fora deles o sprite fica invisível, no
-    // pool, sem ser destruído — volta ao entrar sem `addChild` nem textura nova.
+    // A janela de RENDER (M23) e os andares VISÍVEIS (M23, D7): fora deles o sprite fica
+    // invisível, no pool, sem ser destruído — volta ao entrar sem `addChild` nem textura nova.
     const window = renderTiles(center, view);
-    const drawn = new Set(scene === null ? [floor] : floorsBelow(scene.floors, floor));
+    const visible = new Set(visibility.floors);
 
     for (const creature of world.creatures.values()) {
       seen.add(creature.id);
       const position = interpolate(creature, nowMs);
-      const below = position.z - floor;
+      const offset = position.z - floor;
       let sprite = sprites.get(creature.id);
       if (sprite === undefined) {
         sprite = new Sprite(Texture.WHITE);
@@ -709,16 +787,33 @@ export async function mountViewport(
       const layers = layersFor(position.z);
       if (sprite.parent !== layers.scene) layers.scene.addChild(sprite);
 
+      // Andar fora da faixa visível, ou já esmaecido: some inteira — sprite, barra e nome —,
+      // sem reparentar e sem tocar `zIndex`. Dentro, o sprite herda o alpha do `root` do andar;
+      // barra e nome moram no `overlay` global e precisam do próprio alpha para sumirem junto.
+      const creatureAlpha = visible.has(position.z) ? floorAlpha(position.z, fade, nowMs) : 0;
+      if (creatureAlpha <= 0) {
+        sprite.visible = false;
+        head.bar.visible = false;
+        head.label.visible = false;
+        continue;
+      }
+      sprite.visible = true;
+      head.bar.visible = true;
+      head.label.visible = true;
+      head.bar.alpha = creatureAlpha;
+      head.label.alpha = creatureAlpha;
+
       // Coordenadas de TELA (deslocadas pelo andar) só para o culling e para o overlay.
-      const sx = position.x + below;
-      const sy = position.y + below;
-      const outside = !drawn.has(position.z)
-        || Math.round(sx) < window.minX || Math.round(sx) > window.maxX
+      const sx = position.x + offset;
+      const sy = position.y + offset;
+      const outside = Math.round(sx) < window.minX || Math.round(sx) > window.maxX
         || Math.round(sy) < window.minY || Math.round(sy) > window.maxY;
-      sprite.visible = !outside;
-      head.bar.visible = !outside;
-      head.label.visible = !outside;
-      if (outside) continue;
+      if (outside) {
+        sprite.visible = false;
+        head.bar.visible = false;
+        head.label.visible = false;
+        continue;
+      }
 
       // Onde a criatura ESTÁ (interpolado) e a que tile ela PERTENCE para a ordem — que não
       // são o mesmo tile durante metade do passo. `logical` é o destino do passo em curso: é
@@ -734,7 +829,7 @@ export async function mountViewport(
       });
       // Deslocado pelo andar, como `sx`/`sy`: a ordem é pela posição de TELA (FUN-121). O
       // `zIndex` é escrito SÓ quando o walking tile muda — uma vez por passo, nunca por quadro.
-      const order = sceneZIndex(tile.x + below, tile.y + below, CREATURE_SLOT);
+      const order = sceneZIndex(tile.x + offset, tile.y + offset, CREATURE_SLOT);
       if (walkingTiles.get(creature.id) !== order) {
         walkingTiles.set(creature.id, order);
         sprite.zIndex = order;
@@ -743,7 +838,7 @@ export async function mountViewport(
       const screen = toScreen({ x: sx, y: sy }, center, view);
       // Em cima de uma caixa, a criatura sobe o que a caixa mede — a elevação do tile
       // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
-      const lift = below === 0 ? liftOf(creature, position, nowMs) : 0;
+      const lift = offset === 0 ? liftOf(creature, position, nowMs) : 0;
       const lifted = { x: screen.x - lift, y: screen.y - lift };
       paintOverlay(head, creature, lifted);
       // O sprite mora num container que ANDA com a janela: posição local = tela − raiz.
@@ -751,7 +846,7 @@ export async function mountViewport(
       const texture = creatureTexture(creature, nowMs);
       if (texture instanceof Texture) {
         sprite.texture = texture;
-        sprite.tint = veilTint(below);
+        sprite.tint = veilTint(offset);
         // Em Pixi `width`/`height` são ESCALA. Um quadro de 64×64 tem que ficar 64×64 — e
         // transbordar para cima e para a esquerda, ancorado no canto inferior direito do tile.
         sprite.width = texture.width;
@@ -767,7 +862,7 @@ export async function mountViewport(
       sprite.height = TILE - 6;
       sprite.x = local.x + 3;
       sprite.y = local.y + 3;
-      sprite.tint = shade(creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, below);
+      sprite.tint = shade(creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, offset);
     }
 
     for (const [id, sprite] of sprites) {
@@ -977,20 +1072,37 @@ export async function mountViewport(
       scene = null;
       painted = '';
       warmed = null;
+      fadeKey = '';
       if (mapId !== null && options.loadScene !== undefined) {
         void options.loadScene(mapId).then((next) => {
           if (requested !== mapId) return;
           scene = next;
           painted = '';
           warmed = null;   // era `if (next !== null) warm(next);` — o próximo quadro aquece tudo
+          fadeKey = '';
         });
       }
     }
     const center = target();
-    warmWindow(center);
+    const visibility = updateVisibility(nowMs);
+    // D5, passo 1: a lista de andares da chave do prefetch é a REAL (sem o andar que está
+    // sumindo): aquecer o que está indo embora é pedir folha para nada.
+    const prefetchFloors = scene === null
+      ? []
+      : visibleFloors(scene.floors, visibility.first, visibility.last);
+    warmWindow(center, prefetchFloors);
     if (warmed !== null) warmOutfitsNear(warmed.window);
-    paintTerrain(center);
-    paintCreatures(center, nowMs);
+    paintTerrain(center, visibility);
+    // Por quadro, DEPOIS da repintura: o alpha de cada andar do pool. A rampa anda mesmo sem
+    // repintura — é o fade que faz o andar sumir/volar, não a lista de andares.
+    for (const layers of floorLayers.values()) {
+      const inRange = visibility.floors.includes(layers.z);
+      const alpha = inRange ? floorAlpha(layers.z, fade, nowMs) : 0;
+      layers.root.alpha = alpha;
+      // Alpha 0 não é "invisível" para o Pixi: ele ainda percorre os filhos. `visible` é o corte.
+      layers.root.visible = alpha > 0;
+    }
+    paintCreatures(center, visibility, nowMs);
     paintEffects(center, nowMs);
     paintMissiles(center, nowMs);
     paintTexts(center, nowMs);
@@ -1002,6 +1114,7 @@ export async function mountViewport(
       requested = world.mapId;
       painted = '';
       warmed = null;       // era `if (next !== null) warm(next);`
+      fadeKey = '';        // a cena mudou: a faixa de andares precisa ser recalculada
     },
     setPack(next) {
       pack = next;
@@ -1017,6 +1130,7 @@ export async function mountViewport(
       // inteira no próximo quadro. `null` também zera — não fica nada pendente para o próximo.
       warmed = null;       // era `if (next !== null && scene !== null) warm(scene);`
       warmedOutfits.clear();
+      fadeKey = '';        // as flags vêm do pacote: `dontHide`, `unsight`, `bottom`
       // Os efeitos em voo nasceram com a linha do tempo de reserva; renascem no próximo
       // quadro com a do pacote, que é de onde as fases deles saem (`timelineOf`).
       for (const entry of effectSprites.values()) entry.sprite.destroy();
@@ -1050,6 +1164,7 @@ export async function mountViewport(
         layers.ground.destroy();
         layers.scene.destroy();
         layers.top.destroy();
+        layers.root.destroy();
       }
       floorLayers.clear();
       floorsRoot.destroy();

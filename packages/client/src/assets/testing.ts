@@ -106,6 +106,7 @@ export interface FlagsFixture {
   readonly noMovementAnimation?: boolean;
   readonly take?: boolean;
   readonly hang?: boolean;
+  readonly dontHide?: boolean;
   readonly hookSouth?: number;
   readonly hookEast?: number;
   readonly shift?: { readonly x: number; readonly y: number };
@@ -128,7 +129,7 @@ export function flags(fixture: FlagsFixture): Field {
     [2, fixture.clip], [3, fixture.bottom], [4, fixture.top], [13, fixture.unpass],
     [14, fixture.unmove], [15, fixture.unsight], [16, fixture.avoid],
     [17, fixture.noMovementAnimation], [18, fixture.take],
-    [20, fixture.hang], [28, fixture.lyingObject], [29, fixture.animateAlways],
+    [20, fixture.hang], [24, fixture.dontHide], [28, fixture.lyingObject], [29, fixture.animateAlways],
     [32, fixture.fullbank],
   ];
   for (const [field, on] of bools) if (on !== undefined) parts.push(uint32Field(field, on ? 1 : 0));
