@@ -113,7 +113,7 @@ dele está na biblioteca parcial. **Nenhum tem PNG.**
 | effect | 49 | 160232 | ausente | divine-caldera |
 | effect | 54 | 161139 | ausente | wrath-of-nature |
 | missile | 3 | 162053 | ausente | ammunition:arrow |
-| missile | 4 | 162061 | ausente | apprentices-strike, flame-strike, strong-flame-strike |
+| missile | 4 | 162061 | ausente | apprentices-strike, flame-strike, strong-flame-strike, ammunition:burst-arrow |
 | missile | 5 | 162069 | ausente | strike, buzz, energy-strike, lightning, strong-energy-strike, weapon:wand-of-vortex |
 | missile | 10 | 162102 | ausente | physical-strike |
 | missile | 11 | 162103 | ausente | death-strike |
@@ -127,7 +127,7 @@ dele está na biblioteca parcial. **Nenhum tem PNG.**
 | missile | 39 | 162259 | ausente | forked-thorns, weapon:snakebite-rod |
 
 A decisão de cada id fica registrada no `_open` do arquivo de conteúdo que o possui — as 75
-magias, a `avalanche-rune`, as três munições e as duas armas com projétil —, e a tabela completa
+magias, a `avalanche-rune`, as quatro munições e as duas armas com projétil —, e a tabela completa
 está aqui. Os ids vivem só em `appearances/baseline.json` (invariante 6); nenhum caminho de PNG
 entra no conteúdo.
 

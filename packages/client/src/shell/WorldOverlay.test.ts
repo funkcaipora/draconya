@@ -24,16 +24,14 @@ const mockCatalogue: Catalogue = {
     loot: [],
   }],
   monsters: [],
-  ammunition: [],
   bot: {
     vocabularyVersion: 1,
-    advancedFromLevel: 50,
     slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [],
     supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
 };

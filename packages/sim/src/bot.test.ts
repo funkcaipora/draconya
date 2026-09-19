@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import type { BotConfig, Content } from '@draconya/content';
-import { BOT_VOCABULARY_VERSION, botConfigSchema } from '@draconya/content';
+import type { BotConfigV2, BotSlot } from '@draconya/content';
+import {
+  BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema, botSlotSchema,
+} from '@draconya/content';
 import { compileBot } from './bot.js';
-import type { BotView } from './bot.js';
+import { compileTargeting, selectTarget } from './targeting.js';
+import type { BotView, CooldownOfAction } from './bot.js';
 import { CharacterRuntime } from './character.js';
 
-// O compilador não lê conteúdo ainda — a referência cruzada de magia e supply é M7/M8.
-const content = {} as Content;
+// O compilador não lê conteúdo: o grupo e a chave de cooldown chegam prontos pelo `cooldownOf`.
+// Este mapa é o conteúdo de mentira dos testes — os números do grupo são o que está sob teste.
+const GROUPS: Readonly<Record<string, string>> = {
+  cure: 'healing', forte: 'healing', media: 'healing', fraca: 'healing',
+  wave: 'attack', finish: 'attack', bolt: 'attack',
+  haste: 'support',
+  'health-potion': 'potion',
+};
+const cooldownOf: CooldownOfAction = (action) => {
+  const id = action.kind === 'spell' ? action.spellId : action.supplyId;
+  const group = GROUPS[id];
+  return group === undefined
+    ? { group: `${action.kind}:${id}`, cooldownKey: `${action.kind}:${id}` }
+    : { group, cooldownKey: `group:${group}` };
+};
 
 const hero = (health: number, maxHealth = 100, mana = 100, maxMana = 100) =>
   new CharacterRuntime({
@@ -19,147 +35,183 @@ const view = (over: Partial<BotView> = {}): BotView => ({
   self: hero(100), targetCount: 0, target: null, ...over,
 });
 
-const config = (over: Partial<BotConfig> = {}): BotConfig =>
-  // Pelo SCHEMA, e não por literal: é o schema que sabe preencher `targeting` e o que vier
-  // depois dele. Um literal aqui obriga toda fixture a acompanhar cada campo novo com default,
-  // que é trabalho que o parse já faz — e do jeito que a produção faz.
-  botConfigSchema.parse({
+/** Um conjunto da barra: 24 posições, com as dadas na frente e o resto vazio. */
+const slotsOf = (given: readonly (Partial<BotSlot> | null)[]): (BotSlot | null)[] => {
+  const slots = given.map((slot) => (slot === null ? null : botSlotSchema.parse(slot)));
+  while (slots.length < BOT_SLOTS_PER_SET) slots.push(null);
+  return slots;
+};
+
+const emptySet = () => ({ slots: slotsOf([]) });
+
+const config = (active: readonly (Partial<BotSlot> | null)[], over: Partial<BotConfigV2> = {}): BotConfigV2 =>
+  // Pelo SCHEMA, e não por literal: é o schema que sabe preencher os defaults. Um literal aqui
+  // obriga toda fixture a acompanhar cada campo novo, que é trabalho que o parse já faz.
+  botConfigV2Schema.parse({
     version: BOT_VOCABULARY_VERSION,
-    heal: [], potion: [], attack: [], rune: [], support: [],
+    activeSet: 0,
+    sets: [{ slots: slotsOf(active) }, emptySet(), emptySet(), emptySet()],
     ...over,
   });
 
-const heal = (percent: number, spellId: string) => ({
-  when: { kind: 'hp' as const, op: '<=' as const, percent },
-  do: { kind: 'spell' as const, spellId },
+const spell = (id: string, when: Partial<BotSlot>['when'] = []): Partial<BotSlot> => ({
+  do: { kind: 'spell', spellId: id }, when,
 });
 
-describe('as quatro condições viram predicado (FUN-80)', () => {
-  it('hp e mana comparam PERCENTUAL, não valor absoluto', () => {
-    // A regra do jogador fala em percentual (§13.3). Comparar o valor absoluto faria a mesma
-    // configuração se comportar diferente a cada level up, que é o oposto do que ele pediu.
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
+const supply = (id: string, when: Partial<BotSlot>['when'] = []): Partial<BotSlot> => ({
+  do: { kind: 'supply', supplyId: id }, when,
+});
 
-    expect(bot.select('heal', view({ self: hero(40, 100) }))).toEqual(
-      { kind: 'spell', spellId: 'cure' },
-    );
+describe('as condições viram predicado (FUN-80, RG-006)', () => {
+  it('hp e mana comparam PERCENTUAL, não valor absoluto', () => {
+    const bot = compileBot(config([spell('cure', [{ kind: 'hp', op: '<=', percent: 50 }])]), cooldownOf);
+    const slots = bot.groups.get('healing') ?? [];
+
+    expect(slots[0]?.when(view({ self: hero(40, 100) }))).toBe(true);
     // 400 de 1000 é o MESMO 40%, e a regra vale igual.
-    expect(bot.select('heal', view({ self: hero(400, 1000) }))).toEqual(
-      { kind: 'spell', spellId: 'cure' },
-    );
-    expect(bot.select('heal', view({ self: hero(60, 100) }))).toBeNull();
+    expect(slots[0]?.when(view({ self: hero(400, 1000) }))).toBe(true);
+    expect(slots[0]?.when(view({ self: hero(60, 100) }))).toBe(false);
   });
 
   it('target-hp sem alvo é FALSA, e não um erro', () => {
-    // "Ataque quando o alvo estiver abaixo de 30%" não vale quando não há alvo. Lançar aqui
-    // derrubaria a sessão por uma regra que o jogador escreveu certo.
-    const bot = compileBot(config({
-      attack: [{
-        when: { kind: 'target-hp', op: '<=', percent: 30 },
-        do: { kind: 'spell', spellId: 'finish' },
-      }],
-    }));
+    const bot = compileBot(config([
+      spell('finish', [{ kind: 'target-hp', op: '<=', percent: 30 }]),
+    ]), cooldownOf);
+    const slot = bot.groups.get('attack')?.[0];
 
-    expect(bot.select('attack', view({ target: null }))).toBeNull();
-    expect(bot.select('attack', view({ target: { health: 20, maxHealth: 100 } })))
-      .toEqual({ kind: 'spell', spellId: 'finish' });
+    expect(slot?.when(view({ target: null }))).toBe(false);
+    expect(slot?.when(view({ target: { health: 20, maxHealth: 100 } }))).toBe(true);
   });
 
   it('maxHealth zero não divide por zero', () => {
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
-    expect(() => bot.select('heal', view({ self: hero(0, 0) }))).not.toThrow();
+    const bot = compileBot(config([spell('cure', [{ kind: 'hp', op: '<=', percent: 50 }])]), cooldownOf);
+    expect(() => bot.groups.get('healing')?.[0]?.when(view({ self: hero(0, 0) }))).not.toThrow();
+  });
+
+  it('duas condições usam E (RG-006): todas precisam ser verdadeiras', () => {
+    // "HP <= 50 E mana <= 20": com HP baixo e mana cheia o slot NÃO é elegível.
+    const bot = compileBot(config([
+      spell('cure', [
+        { kind: 'hp', op: '<=', percent: 50 },
+        { kind: 'mana', op: '<=', percent: 20 },
+      ]),
+    ]), cooldownOf);
+    const when = bot.groups.get('healing')?.[0]?.when;
+
+    expect(when?.(view({ self: hero(40, 100, 100, 100) }))).toBe(false);
+    expect(when?.(view({ self: hero(40, 100, 10, 100) }))).toBe(true);
+    expect(when?.(view({ self: hero(90, 100, 10, 100) }))).toBe(false);
+  });
+
+  it('`when: []` é elegível sempre (RG-007)', () => {
+    const bot = compileBot(config([spell('cure')]), cooldownOf);
+    expect(bot.groups.get('healing')?.[0]?.when(view())).toBe(true);
+  });
+
+  it('`condition` presente/ausente lê o KEY semântico do efeito', () => {
+    // "Castar haste só sem haste": `present: false` é falso com o efeito ativo e verdadeiro sem
+    // ele; `present: true` é o inverso. Ler o `spellId` em vez do key reprova aqui.
+    const sem = compileBot(config([
+      spell('haste', [{ kind: 'condition', conditionId: 'haste', present: false }]),
+    ]), cooldownOf);
+    const com = compileBot(config([
+      spell('haste', [{ kind: 'condition', conditionId: 'haste', present: true }]),
+    ]), cooldownOf);
+    const whenSem = sem.groups.get('support')?.[0]?.when;
+    const whenCom = com.groups.get('support')?.[0]?.when;
+
+    const limpo = view({ self: hero(100) });
+    expect(whenSem?.(limpo)).toBe(true);
+    expect(whenCom?.(limpo)).toBe(false);
+
+    const comHaste = view({ self: hero(100) });
+    comHaste.self.conditions.apply({ key: 'haste', spellId: 'haste', expiresAtMs: 2_000 });
+    expect(whenSem?.(comHaste)).toBe(false);
+    expect(whenCom?.(comHaste)).toBe(true);
   });
 });
 
-describe('primeira válida executa (§13.4)', () => {
-  it('para na primeira, e as de baixo nem são consultadas', () => {
-    // O exemplo do PRD: "HP<=30 → forte", "HP<=55 → média", "HP<=80 → fraca". Com HP em 20 as
-    // três valem, e só a primeira executa — as outras nem são avaliadas naquele ciclo.
-    let avaliadas = 0;
-    const contando = (percent: number, spellId: string) => ({
-      ...heal(percent, spellId),
-      when: { kind: 'hp' as const, op: '<=' as const, percent },
-    });
-    const bot = compileBot(config({
-      heal: [contando(30, 'forte'), contando(55, 'media'), contando(80, 'fraca')],
-    }));
-    // Espiona os predicados compilados para contar quantos foram consultados.
-    const rules = bot.categories.get('heal') ?? [];
-    const espiadas = rules.map((rule) => ({
-      ...rule,
-      when: (v: BotView) => { avaliadas += 1; return rule.when(v); },
-    }));
-    const espiao = compileBot(config());
-    (espiao.categories as Map<string, unknown>).set('heal', espiadas);
+describe('o grupo e a ordem da barra (RP-002, AB-07)', () => {
+  it('agrupa pelo GRUPO do conteúdo, não pela categoria v1', () => {
+    const bot = compileBot(config([
+      spell('cure'),
+      spell('wave'),
+      supply('health-potion'),
+    ]), cooldownOf);
 
-    expect(espiao.select('heal', view({ self: hero(20) })))
-      .toEqual({ kind: 'spell', spellId: 'forte' });
-    expect(avaliadas).toBe(1);
+    expect([...bot.groups.keys()]).toEqual(['healing', 'attack', 'potion']);
   });
 
-  it('categoria vazia devolve null, e não quebra', () => {
-    expect(compileBot(config()).select('heal', view())).toBeNull();
+  it('preserva a ordem da barra DENTRO do grupo (RP-002)', () => {
+    // Fileira 1 da esquerda para a direita: `forte` antes de `media` antes de `fraca`.
+    const bot = compileBot(config([
+      spell('forte'),
+      spell('wave'),
+      spell('media'),
+      spell('fraca'),
+    ]), cooldownOf);
+    const healing = bot.groups.get('healing') ?? [];
+
+    expect(healing.map((s) => (s.act.kind === 'spell' ? s.act.spellId : '')))
+      .toEqual(['forte', 'media', 'fraca']);
   });
 
-  it('as categorias são independentes — sem prioridade global', () => {
-    // §13.5: uma ação de poção não impede a de ataque no mesmo instante. Quem serializa é o
-    // cooldown de cada categoria, e ele é a FUN-84.
-    const bot = compileBot(config({
-      heal: [heal(50, 'cure')],
-      attack: [{
-        when: { kind: 'targets', op: '>=', count: 3 },
-        do: { kind: 'spell', spellId: 'wave' },
-      }],
-    }));
-    const v = view({ self: hero(40), targetCount: 5 });
+  it('ação sem grupo no conteúdo cai num grupo sintético individual (DT-06)', () => {
+    const bot = compileBot(config([spell('orfa'), spell('orfa2')]), cooldownOf);
 
-    expect(bot.select('heal', v)).toEqual({ kind: 'spell', spellId: 'cure' });
-    expect(bot.select('attack', v)).toEqual({ kind: 'spell', spellId: 'wave' });
+    expect([...bot.groups.keys()]).toEqual(['spell:orfa', 'spell:orfa2']);
+  });
+
+  it('`enabled: false` e `auto: false` não entram no automático (RP-004/AB-09)', () => {
+    const bot = compileBot(config([
+      { do: { kind: 'spell', spellId: 'forte' }, enabled: false },
+      { do: { kind: 'spell', spellId: 'media' }, auto: false },
+      spell('fraca'),
+    ]), cooldownOf);
+    const healing = bot.groups.get('healing') ?? [];
+
+    expect(healing.map((s) => (s.act.kind === 'spell' ? s.act.spellId : ''))).toEqual(['fraca']);
+  });
+
+  it('o conjunto ATIVO é o que compila; os outros não entram', () => {
+    const bot = compileBot(config([spell('cure')], {
+      sets: [emptySet(), { slots: slotsOf([spell('wave')]) }, emptySet(), emptySet()],
+      activeSet: 1,
+    }), cooldownOf);
+
+    expect([...bot.groups.keys()]).toEqual(['attack']);
   });
 });
 
 describe('compilar é o que torna a avaliação barata', () => {
-  it('a avaliação NÃO aloca — nem a view, nem a regra, nem a ação', () => {
-    // É o critério de custo da issue. Com 5.000 hunts e cinco categorias por personagem,
-    // alocar por avaliação é o coletor rodando o tempo todo por dados que morrem em
-    // microssegundos. A ação devolvida é a MESMA referência do vetor compilado, não uma cópia.
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
-    const v = view({ self: hero(40) });
+  it('a ação devolvida é a MESMA referência do slot compilado', () => {
+    const bot = compileBot(config([spell('cure')]), cooldownOf);
+    const slot = bot.groups.get('healing')?.[0];
 
-    const primeira = bot.select('heal', v);
-    const segunda = bot.select('heal', v);
-
-    expect(primeira).toBe(segunda);
-    expect(primeira).toBe(bot.categories.get('heal')?.[0]?.act);
+    expect(slot?.act).toBe(bot.groups.get('healing')?.[0]?.act);
   });
 
   it('a view é reaproveitada: mudar o campo muda o resultado, sem recompilar', () => {
-    const bot = compileBot(config({ heal: [heal(50, 'cure')] }));
+    const bot = compileBot(config([spell('cure', [{ kind: 'hp', op: '<=', percent: 50 }])]), cooldownOf);
+    const when = bot.groups.get('healing')?.[0]?.when;
     const v = view({ self: hero(40) });
 
-    expect(bot.select('heal', v)).not.toBeNull();
+    expect(when?.(v)).toBe(true);
     v.self = hero(90);
-    expect(bot.select('heal', v)).toBeNull();
+    expect(when?.(v)).toBe(false);
   });
 });
 
-describe('o interruptor por regra (#162)', () => {
-  it('a regra desligada nunca dispara, a seguinte é avaliada, e ausente é ligada', () => {
-    // Mutação que mata: `compileBot` ignorar `enabled` (a primeira cura dispararia), ou tratar
-    // ausente como desligada (a segunda nunca dispararia).
-    const config = botConfigSchema.parse({
-      version: BOT_VOCABULARY_VERSION,
-      heal: [
-        { enabled: false, when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'off' } },
-        { when: { kind: 'hp', op: '<=', percent: 100 }, do: { kind: 'spell', spellId: 'on' } },
-      ],
-      potion: [], attack: [], rune: [], support: [],
+describe('a política `follow` cai na comparação `nearest` (AB-09, ADR 0032 d.5)', () => {
+  const monsters = [
+    { monsterId: 'longe', health: 100, alive: true, position: { x: 5, y: 0 } },
+    { monsterId: 'perto', health: 100, alive: true, position: { x: 1, y: 0 } },
+  ];
+
+  it('sem alvo escolhido, `follow` desempata pelo mais próximo — o fallback prometido', () => {
+    const targeting = compileTargeting({
+      policy: 'follow', prioritize: [], ignore: [], posture: { kind: 'stand' },
     });
-    const compiled = compileBot(config);
-    const hurt = view({ self: hero(50) });
-    expect(compiled.select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'on' });
-    // Ligar de volta é uma configuração nova: a primeira volta a ser avaliada primeiro.
-    const on = botConfigSchema.parse({ ...config, heal: config.heal.map((r) => ({ ...r, enabled: true })) });
-    expect(compileBot(on).select('heal', hurt)).toEqual({ kind: 'spell', spellId: 'off' });
+    expect(selectTarget(targeting, monsters, { x: 0, y: 0 }, 8)?.monsterId).toBe('perto');
   });
 });

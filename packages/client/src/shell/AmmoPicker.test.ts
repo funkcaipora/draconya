@@ -11,13 +11,13 @@ async function render(family: string): Promise<string> {
 }
 
 const ammunition: Catalogue['ammunition'] = [
-  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447, requires: {} },
+  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1, appearanceId: 3447, requires: {} },
   { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, appearanceId: 7364, requires: { level: 20 } },
-  { id: 'bolt', name: 'Bolt', family: 'bolt', attack: 30, price: 0, appearanceId: 3446, requires: {} },
+  { id: 'bolt', name: 'Bolt', family: 'bolt', attack: 30, price: 2, appearanceId: 3446, requires: {} },
 ];
 const catalogue: Catalogue = {
   hunts: [], monsters: [], items: [], vocations: [], vocationLevel: 8, ammunition,
-  bot: { vocabularyVersion: 1, advancedFromLevel: 50, slots: {}, advancedOnly: { conditions: [], targetPolicies: [], postures: [] }, spells: [], supplies: [] },
+  bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
 };
 
 beforeEach(() => {
@@ -25,27 +25,28 @@ beforeEach(() => {
 });
 
 describe('AmmoPicker', () => {
-  it('lists only the family, with price or "grátis", locks the one above the level, and marks the one in use', async () => {
+  it('lista só a família, com preço e level, trava acima do nível e marca a escolhida', async () => {
     const html = await render('arrow');
     expect(html).toContain('Arrow');
     expect(html).toContain('Sniper Arrow');
     expect(html).not.toContain('>Bolt<');
-    expect(html).toContain('grátis');
+    expect(html).toContain('1 gold/tiro');
     expect(html).toContain('5 gold/tiro');
     expect(html).toContain('lv 20');
-    // Level 10: a sniper vem desabilitada; a grátis é a "em uso" sem escolha.
+    // Level 10: a sniper vem desabilitada; sem seleção, nenhuma fica "em uso".
     expect(html).toContain('disabled=""');
-    expect(html).toContain('aria-pressed="true"');
+    expect(html).not.toContain('aria-pressed="true"');
     hud.set((state) => ({ ...state, level: 20, ammo: { arrow: 'sniper-arrow', bolt: null } }));
     const chosen = await render('arrow');
     expect(chosen).not.toContain('disabled=""');
-    expect(chosen.indexOf('aria-pressed="true"')).toBeGreaterThan(chosen.indexOf('Arrow'));
+    expect(chosen).toContain('ammo-option active');
+    expect(chosen.indexOf('Sniper Arrow')).toBeGreaterThan(chosen.indexOf('ammo-option active'));
   });
 
-  it('ammoInUse falls back to the free one, and to nothing for an unknown family', () => {
-    expect(ammoInUse(ammunition, 'arrow', null)?.id).toBe('arrow');
+  it('ammoInUse só devolve a escolhida — não existe fallback grátis', () => {
+    expect(ammoInUse(ammunition, 'arrow', null)).toBeUndefined();
     expect(ammoInUse(ammunition, 'arrow', 'sniper-arrow')?.id).toBe('sniper-arrow');
-    expect(ammoInUse(ammunition, 'arrow', 'gone')?.id).toBe('arrow');
-    expect(ammoInUse(ammunition, 'spear', null)).toBeUndefined();
+    expect(ammoInUse(ammunition, 'arrow', 'gone')).toBeUndefined();
+    expect(ammoInUse(ammunition, 'spear', 'arrow')).toBeUndefined();
   });
 });

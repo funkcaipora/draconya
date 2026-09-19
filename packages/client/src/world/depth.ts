@@ -1,4 +1,4 @@
-// A profundidade de um tile, em número (ADR 0033).
+// A profundidade de um tile, em número (ADR 0034).
 //
 // É o RESULTADO da varredura por diagonal do OTClient como função: anti-diagonal `x + y`
 // primeiro, e dentro dela `x` crescente — sudoeste antes de nordeste. Não é `y * M + x`: por

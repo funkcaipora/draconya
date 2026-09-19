@@ -23,12 +23,12 @@
 
 import { DAMAGE_TYPES } from '@draconya/content';
 import type {
-  CompiledMitigation, DamageType, Item, ItemSlot, Progression, RingEffect,
+  CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
 } from '@draconya/content';
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 
-/** Teto de empilhamento (§21.5). Munição empilha; espada não empilha por não ser `stackable`. */
+/** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
 
 /** Um item carregado. `instanceId` é a IDENTIDADE — a linha de `item_instance` (FUN-76). */
@@ -39,8 +39,37 @@ export interface CarriedItem {
   /**
    * De onde veio (§25.3, #154). Ausente é `'loot'` — o snapshot anterior a #154 não tem a
    * chave, e tudo o que existia antes caiu de monstro. É o `origin` da linha de `item_instance`.
+   *
+   * Alargado de `'loot' | 'vocation-choice'` para `ItemOrigin` no #419: o comércio entrou como
+   * `'market'` (`schemas.ts`), e o supply é abstrato — o gold sai no uso, sem pilha comprada.
    */
-  readonly origin?: 'loot' | 'vocation-choice';
+  readonly origin?: ItemOrigin;
+  /**
+   * Cargas RESTANTES (ADR 0032 d.8). Ausente é "cheio": a definição traz o total
+   * (`Item.charges`) e o primeiro consumo materializa o número. Opcional, então nenhum
+   * snapshot antigo precisa de bump. Só o colar usa hoje.
+   */
+  readonly charges?: number;
+}
+
+/**
+ * Quem quer saber que o equipamento mudou. O `sim` o instala (o ruleset, na entrada); a Cidade
+ * não tem. É o único lugar que agenda e cancela o vencimento de um item por duração, e é o que
+ * mantém o vencimento FORA do tick (invariante 2, ADR 0020).
+ */
+export interface EquipmentObserver {
+  onEquip(slot: ItemSlot, item: CarriedItem): void;
+  onUnequip(slot: ItemSlot, item: CarriedItem): void;
+}
+
+/**
+ * O equipamento mudou por decisão do próprio `sim` (ADR 0032 d.8): o colar esgotou ou o anel
+ * venceu. O `server` o mapeia para a mensagem `inventory` já existente — nenhum opcode novo
+ * (invariante 5).
+ */
+export interface EquipmentChanged {
+  readonly kind: 'equipment-changed';
+  readonly characterId: string;
 }
 
 export type ContainerName = 'backpack' | 'satchel';
@@ -111,6 +140,12 @@ export class Inventory {
   readonly #equipped = new Map<ItemSlot, CarriedItem>();
   /** Os tamanhos iniciais, para aparar linhas vazias do fim (`remove`). Zero até `ensureContainers`. */
   #initial = { backpack: 0, satchel: 0 };
+  /**
+   * Quem observa o equipamento (ADR 0032 d.8). Instalado pelo ruleset em `onEnter`/`onResume`,
+   * limpo em `onLeave`/`onEnd`: uma closure apontando para uma sessão morta vazaria. `null` é a
+   * Cidade e todo estado antes de o ruleset existir.
+   */
+  #observer: EquipmentObserver | null = null;
 
   static fromState(state: InventoryState | undefined): Inventory {
     const inventory = new Inventory();
@@ -165,6 +200,41 @@ export class Inventory {
 
   equippedAt(slot: ItemSlot): CarriedItem | null {
     return this.#equipped.get(slot) ?? null;
+  }
+
+  /** Instalado pelo ruleset em `onEnter`/`onResume`; limpo em `onLeave`/`onEnd`. */
+  setEquipmentObserver(observer: EquipmentObserver | null): void {
+    this.#observer = observer;
+  }
+
+  /**
+   * Gasta UMA carga do item equipado no slot e devolve o que sobrou; `0` é destruído (ADR 0032
+   * d.8). `full` é o total da definição — é o valor de um `charges` ainda ausente, então o
+   * primeiro consumo materializa o número sem inicializar nada no equip.
+   *
+   * Em zero o item SAI do corpo e não vai para container: carga esgotada destrói (§24), e
+   * devolver à mochila daria uma segunda vida a ele.
+   */
+  consumeCharge(slot: ItemSlot, full: number): number {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return 0;
+    const left = (equipped.charges ?? full) - 1;
+    if (left <= 0) {
+      this.#equipped.delete(slot);
+      this.#observer?.onUnequip(slot, equipped);
+      return 0;
+    }
+    this.#equipped.set(slot, { ...equipped, charges: left });
+    return left;
+  }
+
+  /** Some com o item do slot sem passar por container (esgotou). Devolve o que saiu. */
+  destroy(slot: ItemSlot): CarriedItem | null {
+    const equipped = this.#equipped.get(slot);
+    if (equipped === undefined) return null;
+    this.#equipped.delete(slot);
+    this.#observer?.onUnequip(slot, equipped);
+    return equipped;
   }
 
   /**
@@ -246,6 +316,15 @@ export class Inventory {
   }
 
   /**
+   * A primeira pilha deste item nos containers, ou `null`. Mochila primeiro — é a mesma ordem
+   * de `items()` e a que o jogador vê.
+   */
+  findStack(itemId: string): CarriedItem | null {
+    for (const item of this.items()) if (item.itemId === itemId) return item;
+    return null;
+  }
+
+  /**
    * Veste o item, trocando pelo que já estava no slot (§21.4).
    *
    * As três recusas são as do §21.2: o item precisa ter slot, e o personagem precisa do level e
@@ -305,6 +384,9 @@ export class Inventory {
     // troca estourar a capacidade — e por isso não há conferência aqui.
     this.#set(from, previous);
     if (previous === null) this.#trim(this.#containerOf(from.container), this.#initialOf(from.container));
+    // Depois da transação concluída (ADR 0032 d.8): o observer cancela o prazo antigo do slot e
+    // agenda o do item que entrou. Um item que saiu para outro do mesmo slot perde o prazo.
+    this.#observer?.onEquip(definition.slot, carried);
     return OK;
   }
 
@@ -322,6 +404,7 @@ export class Inventory {
     this.#equipped.delete(slot);
     const target = this.#equipped.has('back') ? this.#backpack : this.#satchel;
     target[this.#freePlace(target, rules)] = equipped;
+    this.#observer?.onUnequip(slot, equipped);
     return OK;
   }
 
@@ -354,10 +437,12 @@ export class Inventory {
         }
         this.#equipped.delete(from.slot);
         this.#set(to as { container: ContainerName; index: number }, { ...destination, quantity: destination.quantity + equipped.quantity });
+        this.#observer?.onUnequip(from.slot, equipped);
         return OK;
       }
       this.#equipped.delete(from.slot);
       this.#set(to as { container: ContainerName; index: number }, equipped);
+      this.#observer?.onUnequip(from.slot, equipped);
       return OK;
     }
     const source = this.#at(from);

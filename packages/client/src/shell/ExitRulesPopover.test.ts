@@ -5,7 +5,7 @@ import type { BotExitRule } from '@draconya/content';
 import { ExitRulesList, ExitRulesPopover } from './ExitRulesPopover.js';
 import { INITIAL_BOT, bot } from '../bot/store.js';
 
-// RF-01/RF-09: `prerender` roda sem DOM (mesmo limite de `RuleEditor.test.ts`) — clique de
+// RF-01/RF-09: `prerender` roda sem DOM (mesmo limite de outros testes do bot) — clique de
 // verdade (abrir/fechar, marcar o checkbox pelo dedo) é a captura no navegador da seção 10.
 
 async function renderList(rules: readonly BotExitRule[]): Promise<string> {

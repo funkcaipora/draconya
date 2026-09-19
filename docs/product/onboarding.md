@@ -48,11 +48,11 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
 - **Como persiste:** `characters.vocation` é escrita UMA vez pelo `jobs`
   (`coalesce(vocation, $1)`), a partir do extrato — o da hunt, ou o **extrato de estado
   durável** que o shard da Cidade passa a gravar no logout e na drenagem para quem mudou
-  vocação, equipamento ou munição (agregados zerados; sem crédito). Volta pelo ticket
+  vocação ou equipamento (agregados zerados; sem crédito). Volta pelo ticket
   (`InitialCharacter.vocation`) e chega ao cliente em `player-stats.vocationId` e
   `session-state.self.vocationId`. **Limite conhecido:** a Cidade não tem snapshot (ADR 0023) —
   uma escolha feita na praça e um nó que cai sem drenar se perdem juntos; é o mesmo risco que
-  `equip` e `select-ammo` na praça já tinham.
+  `equip` na praça já tinha.
 - **Com o que se nasce:** machete na mão, leather helmet/armor/legs/boots no corpo e a mochila
   nas costas — dados na criação do personagem, não dropados (a exceção ao §21.1 registrada em
   `items.md`). No level 8 a arma da vocação troca de lugar com a machete. Implementado (#153):
