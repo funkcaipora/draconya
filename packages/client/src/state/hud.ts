@@ -72,10 +72,10 @@ export type HuntListing = Catalogue['hunts'][number];
 /**
  * O vocabulário do bot no cliente.
  *
- * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09, mas quem os lê é a tela
- * nova do AB-10/AB-11 — por isso são OPCIONAIS aqui até lá. `slots` e `supplies` são o
- * vocabulário v1 que o `BotPanel`/`RuleEditor` antigos ainda leem, e que o catálogo v2 NÃO
- * manda mais (RF-10): a UI antiga degrada para vazio até o AB-11 aposentá-la.
+ * Os campos v2 (`setCount`…`automations`) chegam no fio desde o AB-09 e são o que a barra de
+ * ações (AB-10) lê. `slots` e `supplies` são o vocabulário v1 que o `BotPanel`/`RuleEditor`
+ * aposentados liam: continuam aqui só como forma dos fixtures de teste, e o catálogo v2 NÃO os
+ * manda mais — a UI antiga degrada para vazio.
  */
 export interface LegacyBotSupply {
   readonly id: string;
@@ -122,6 +122,22 @@ export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
  * coisas diferentes, e a primeira é o estado normal do primeiro segundo de conexão.
  */
 export type Inventory = S2CProps<'inventory'>;
+
+/**
+ * O estado de UM slot do conjunto ativo (AB-09): pronto, em cooldown, bloqueado por quê ou
+ * vazio. A CONTAGEM não vem daqui — é do `inventory` (invariante 4; DT-04).
+ */
+export type SlotState = S2CProps<'slot-state'>['slots'][number];
+/** A recusa do `use-slot` (AB-09): `reason` é o motivo que o tooltip do slot mostra. */
+export type SlotResult = S2CProps<'slot-result'>;
+
+/**
+ * A chave canônica de um slot no HUD: `${set}:${slot}`. Vive aqui porque é a chave das duas
+ * fatias de estado (`slotStates`/`slotResults`) e do `apply`; a barra a reexporta.
+ */
+export function slotKey(set: number, slot: number): string {
+  return `${String(set)}:${String(slot)}`;
+}
 
 /**
  * O analisador (§16.1, §16.2, FUN-83).
@@ -209,6 +225,17 @@ export interface HudState {
   readonly inventory: Inventory | null;
 
   /**
+   * O estado por slot do conjunto ativo (AB-10, `slot-state`), indexado por `${set}:${slot}`.
+   * Substitui a cada mensagem: o servidor manda o estado inteiro do conjunto, não um delta.
+   */
+  readonly slotStates: Readonly<Record<string, SlotState>>;
+  /**
+   * A última recusa do `use-slot` por slot, indexada por `${set}:${slot}` — o motivo que o
+   * tooltip mostra. `slot-result { ok:true }` limpa a entrada; o próximo `slot-state` também.
+   */
+  readonly slotResults: Readonly<Record<string, string>>;
+
+  /**
    * Abates por monstro (§18, FUN-113). Chega no attach e sempre que um contador muda.
    *
    * `null` até chegar, pela mesma razão do inventário: um Bestiário que abre em zero afirma
@@ -255,6 +282,8 @@ export const INITIAL_HUD: HudState = {
   analyzer: INITIAL_ANALYZER,
   catalogue: null,
   inventory: null,
+  slotStates: {},
+  slotResults: {},
   bestiary: null,
   party: null,
   partyBag: null,

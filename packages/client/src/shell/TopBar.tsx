@@ -32,10 +32,9 @@ import { OutfitSprite } from './OutfitSprite.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
 import type { ChatBadgeTier } from './chat-badge.js';
 
-export type WindowId = 'character' | 'hunts' | 'bot' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
-// 'bot' e 'inventory' continuam válidos como chaves de `open` (Shell.tsx os usa para os
-// cabeçalhos de BotPanel/EquipmentPanel) — só não aparecem mais no array `WINDOWS` abaixo, que é
-// o que desenha a nav.
+export type WindowId = 'character' | 'hunts' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+// 'inventory' continua válido como chave de `open` (Shell.tsx o usa para o cabeçalho do
+// EquipmentPanel) — só não aparece no array `WINDOWS` abaixo, que é o que desenha a nav.
 
 /**
  * Os CINCO ícones da barra, na ORDEM do kit (`Hud.jsx:2` — `nav` = [character, combat, analyzer,

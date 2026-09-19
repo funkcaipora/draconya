@@ -6,7 +6,7 @@
 // `shell/drag-intent.ts`, PURO, que decide a MENSAGEM — `Slot` só repassa os handlers ao
 // `<button>`; quem decide o que sai é quem monta a tela, nunca o Slot (invariante 4).
 
-import type { CSSProperties, DragEventHandler, ReactNode } from 'react';
+import type { CSSProperties, DragEventHandler, MouseEvent, ReactNode } from 'react';
 
 export interface SlotProps {
   /** Texto curto sem ícone: abreviação de magia/item, ou o rótulo do lugar vazio. */
@@ -22,7 +22,11 @@ export interface SlotProps {
   dashed?: boolean;
   /** holy | ice | earth | fire | energy | death — tinge o rótulo */
   element?: 'holy' | 'ice' | 'earth' | 'fire' | 'energy' | 'death';
-  onClick?: () => void;
+  /**
+   * O evento vai junto (AB-10, RF-07): o Shift+clique da barra precisa do modificador, e o
+   * `<button>` o engolia. Retrocompatível — um handler sem parâmetro continua atribuível.
+   */
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   /** Nome completo para tooltip nativo — o texto/rótulo visível pode vir cortado. */
   title?: string;

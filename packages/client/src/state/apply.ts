@@ -9,7 +9,7 @@
 // tocam o React.
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
-import { appendCapped, hud, type PlayerSkills, type SkillProgress } from './hud.js';
+import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
 
@@ -362,6 +362,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         difficulty: message.difficulty ?? null,
         conditions: [],
         conditionsReceivedAtMs: nowMs,
+        // A reanexação zera o que era da sessão anterior: o estado de slot e a recusa da tecla
+        // não podem sobreviver a uma sessão que já não é esta (o servidor reenvia `slot-state`).
+        slotStates: {},
+        slotResults: {},
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
       if (message.party !== undefined) partyEntered();
@@ -397,12 +401,37 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'party-spending':
       return;
 
-    // `slot-state` e `slot-result` (AB-09): o contrato já chega no fio, mas a barra de ações é
-    // o AB-10. Até lá são IGNORADAS aqui — não há estado de HUD para elas ainda. O `case`
-    // existe para o `never` do `default` continuar sendo a trava de mensagem nova sem destino.
-    case 'slot-state':
-    case 'slot-result':
+    // `slot-state` (AB-10): o estado do conjunto ATIVO por slot. SUBSTITUI o mapa — o servidor
+    // manda o estado inteiro, não um delta — e limpa a recusa dos slots que ele reavaliou: o
+    // `slot-result` velho não pode sobreviver a um estado novo do servidor.
+    case 'slot-state': {
+      const states: Record<string, SlotState> = {};
+      for (const state of message.slots) states[slotKey(state.set, state.slot)] = state;
+      hud.set((current) => {
+        const results = { ...current.slotResults };
+        for (const key of Object.keys(states)) delete results[key];
+        return { ...current, slotStates: states, slotResults: results };
+      });
       return;
+    }
+
+    // `slot-result` (AB-10): a recusa do `use-slot`. `ok:true` limpa o motivo do slot; `ok:false`
+    // guarda o texto do servidor para o tooltip (a barra lê `slotResults`).
+    case 'slot-result': {
+      const key = slotKey(message.set, message.slot);
+      hud.set((current) => {
+        if (message.ok) {
+          const results = { ...current.slotResults };
+          delete results[key];
+          return { ...current, slotResults: results };
+        }
+        return {
+          ...current,
+          slotResults: { ...current.slotResults, [key]: message.reason ?? '' },
+        };
+      });
+      return;
+    }
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de

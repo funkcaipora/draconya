@@ -726,20 +726,43 @@ describe('a configuração do bot no session-state (FUN-111)', () => {
   } as S2CMessage);
 
   it('carrega a configuração em vigor na store do bot', () => {
-    applyMessage(state({
-      botConfig: {
-        ...toConfig(emptyDraft()),
-        heal: [{ when: { kind: 'hp', op: '<=', percent: 70 }, do: { kind: 'spell', spellId: 'heal' } }],
-      },
-    }), 0);
-    expect(bot.get().draft.rules.heal).toHaveLength(1);
+    const config = toConfig(emptyDraft());
+    const sets = config.sets.map((set, i) => i === 0
+      ? { slots: set.slots.map((entry, j) => (j === 0
+        ? { do: { kind: 'spell' as const, spellId: 'heal' }, when: [], auto: true }
+        : entry)) }
+      : set);
+    applyMessage(state({ botConfig: { ...config, sets } }), 0);
+    expect(bot.get().draft.sets[0]?.slots[0]?.do).toEqual({ kind: 'spell', spellId: 'heal' });
     expect(bot.get().save).toBe('saved');
   });
 
   it('sem configuração no estado, a store do bot não muda', () => {
     applyMessage(state(), 0);
-    expect(bot.get().draft.rules.heal).toHaveLength(0);
+    expect(bot.get().draft.sets[0]?.slots[0]).toBeNull();
     expect(bot.get().save).toBe('idle');
+  });
+});
+
+describe('o estado de slot e a recusa da tecla (AB-10)', () => {
+  it('slot-state substitui o mapa por `${set}:${slot}` e limpa a recusa do slot reavaliado', () => {
+    hud.set((state) => ({
+      ...state,
+      slotResults: { '0:0': 'sem mana' },
+    }));
+    applyMessage({
+      type: 'slot-state',
+      slots: [{ set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 }],
+    }, 0);
+    expect(hud.get().slotStates['0:0']).toEqual({ set: 0, slot: 0, state: 'cooldown', remainingMs: 1500 });
+    expect(hud.get().slotResults['0:0']).toBeUndefined();
+  });
+
+  it('slot-result ok:false guarda o motivo; ok:true limpa', () => {
+    applyMessage({ type: 'slot-result', set: 1, slot: 2, ok: false, reason: 'Sem mana.' }, 0);
+    expect(hud.get().slotResults['1:2']).toBe('Sem mana.');
+    applyMessage({ type: 'slot-result', set: 1, slot: 2, ok: true }, 0);
+    expect(hud.get().slotResults['1:2']).toBeUndefined();
   });
 });
 

@@ -44,18 +44,22 @@ body {
 }
 
 /* A geografia do Huntera (FUN-115): o mundo ocupa a tela INTEIRA, e o que não é mundo flutua
-   por cima. Nada de colunas: cada janela é absoluta, o canvas fica embaixo de tudo. */
+   por cima. Nada de colunas: cada janela é absoluta, o canvas fica embaixo de tudo.
+   Desde o AB-10 (#425, ADR 0032) a casca é uma grade de DUAS linhas: o mundo e a fileira de
+   124 px da barra de ações. Os demais filhos continuam absolutos (não participam da grade). */
 .shell {
   position: fixed; inset: 0;
   overflow: hidden;
+  display: grid; grid-template-rows: minmax(0, 1fr) var(--actionbar-h);
   --accent: #e2b84a;
   --topbar-h: 65px;
   --sidebar-w: 232px;
+  --actionbar-h: 124px;
 }
 
 /* O palco do mundo agrupa o canvas e os overlays DOM absolutos sobre ele. No celular ele fica
    como referência própria: sem isso cada overlay duplicaria a faixa de 40vh do mundo. */
-.world-stage { position: absolute; inset: 0; }
+.world-stage { grid-row: 1; position: relative; min-height: 0; }
 .viewport { position: absolute; inset: 0; line-height: 0; overflow: hidden; background: #000; }
 .viewport canvas { display: block; }
 
@@ -92,7 +96,7 @@ body {
    enquanto a coluna direita flutua sobre ele; no desktop o offset pula essa coluna para manter a
    posição visual da régua. No celular, sem coluna sobre o mundo, a regra volta ao offset literal. */
 .world-status {
-  position: absolute; right: calc(var(--sidebar-w) + 12px); bottom: 8px; z-index: 1;
+  position: absolute; right: calc(var(--sidebar-w) + 12px); bottom: calc(var(--actionbar-h) + 8px); z-index: 1;
   display: flex; align-items: center; gap: 10px;
   font: 7.5px var(--font-mono); letter-spacing: .08em; color: var(--text-faint);
   text-transform: uppercase; pointer-events: none;
@@ -186,7 +190,7 @@ body {
 
 /* ---- As janelas (#251): colunas opacas de --sidebar-w, do topo até o rodapé -------------- */
 .windows {
-  position: absolute; top: var(--topbar-h); bottom: 0; width: var(--sidebar-w);
+  position: absolute; top: var(--topbar-h); bottom: var(--actionbar-h); width: var(--sidebar-w);
   display: flex; flex-direction: column; gap: 10px;
   padding: 10px; box-sizing: border-box; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: var(--ash-6) var(--ash-1);
@@ -215,7 +219,8 @@ body {
    depois de `--sidebar-w` (232px) em vez de 10px: preso ao canto, o chat cobria as últimas
    seções de `.windows-left` (Party) sempre que a coluna crescia até o rodapé (#288). */
 .chat-window {
-  position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: 10px; width: 340px; z-index: 20;
+  position: fixed; left: calc(var(--sidebar-w) + 10px); bottom: calc(var(--actionbar-h) + 10px);
+  width: 340px; z-index: 20;
 }
 
 /* Janela reutilizável para dados de HUD que o kit põe sobre o mundo (#314). A posição é da
@@ -265,7 +270,7 @@ body {
   text-shadow: 0 1px 2px #000, 1px 0 #000, -1px 0 #000;
 }
 
-/* Mensagem de sistema fora do chat (recusa de `bot-config` em `BotPanel.tsx`, erro de
+/* Mensagem de sistema fora do chat (recusa de `bot-config`, erro de
    `PartyPanel.tsx`): global porque essas telas não são o chat e não usam o prefixo `chat-`. */
 .system-warning { color: var(--warn); }
 .system-error { color: var(--danger); }
@@ -545,9 +550,50 @@ body {
   letter-spacing: .1em; text-transform: uppercase; line-height: 1.6;
 }
 
+/* ---- A barra de ações 2 × 12, na fileira de 124 px (#425, AB-10, ADR 0032 d.1–5) ---------- */
+/* O cabeçalho (AÇÕES · Salva automaticamente) fica por cima da grade; o corpo é a geometria do
+   kit — grade à esquerda, controles em 124 px à direita. A fileira em si é a linha 2 da grade
+   de `.shell`, reservada por `--actionbar-h`. */
+.action-bar {
+  grid-row: 2;
+  position: relative; z-index: 16; min-width: 0;
+  border-top: 1px solid var(--gold-3);
+  background: var(--grad-panel);
+  display: grid; grid-template-rows: auto minmax(0, 1fr);
+}
+.action-bar-head {
+  position: absolute; left: 12px; top: 8px;
+  display: flex; align-items: baseline; gap: 8px; z-index: 1;
+}
+.action-bar-save {
+  font: 7px var(--font-mono); color: var(--text-faint); letter-spacing: .04em;
+}
+.action-bar-body {
+  display: grid; grid-template-columns: minmax(0, 1fr) 124px;
+  align-items: center; gap: 10px; min-width: 0;
+  padding: 24px 12px 10px;
+}
+.action-bar-grid {
+  display: grid; grid-template-columns: repeat(12, 36px); grid-auto-rows: 36px; gap: 4px;
+  align-content: center; justify-content: center; min-width: 0;
+}
+.action-bar-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.action-bar-lure {
+  height: 24px; padding: 0 8px; border: 1px solid var(--gold-2); border-radius: 3px;
+  background: linear-gradient(180deg, var(--ash-3), var(--ash-2));
+  color: var(--parchment-2); font: 700 7.5px var(--font-display); letter-spacing: .08em;
+  white-space: nowrap; cursor: pointer;
+}
+.action-bar-caption {
+  font: 6.5px var(--font-mono); color: var(--text-faint); letter-spacing: .04em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Cooldown visual: a tecla continua disparável — quem recusa é o servidor (invariante 4). */
+.action-slot-cooldown { opacity: .6; }
+
 /* ---- As pills de caçada, sobre o mundo (#259, ADR 0029 D3/D6) --------------------------- */
 .hunt-actions {
-  position: absolute; left: 0; right: 0; bottom: 24px;
+  position: absolute; left: 0; right: 0; bottom: calc(var(--actionbar-h) + 6px);
   display: flex; justify-content: center; gap: 8px;
   pointer-events: none; z-index: 15;
 }
@@ -613,7 +659,8 @@ body {
   border-radius: 2px; color: inherit; font: inherit; text-align: right;
 }
 .exit-rules-summary {
-  position: absolute; right: 0; bottom: 32px; white-space: nowrap; padding: 3px 7px;
+  position: absolute; left: 50%; right: auto; bottom: calc(var(--actionbar-h) + 38px);
+  transform: translateX(-50%); white-space: nowrap; padding: 3px 7px;
   border: 1px solid var(--ash-5); border-radius: 2px; background: rgba(13, 9, 8, .92);
   font: 6.5px var(--font-mono); color: var(--text-muted);
 }
@@ -831,110 +878,7 @@ body {
 .cyclopedia-modal-item-stats { display: flex; gap: 6px; align-items: center; font: 8px var(--font-mono); }
 .cyclopedia-modal-item-weight { color: var(--text-muted); min-width: 54px; text-align: right; }
 
-/* O painel do bot (FUN-89; fixo à esquerda desde #162, casca do design system desde #255). Densa
-   de propósito: são cinco categorias na mesma coluna, e cada regra é UMA linha — interruptor,
-   texto, engrenagem, setas. O vBot. A moldura (título, meta, minimizar) é do `Panel`
-   (`shell/ui.css`); o que resta aqui é só o conteúdo específico do bot. */
-/* Minimizado: só o cabeçalho fica. A seção nunca desmonta — `Panel` já não desenha o corpo
-   quando `collapsed`, então não há filho a esconder aqui. */
-.bot-category { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
-.bot-category-head { display: flex; align-items: baseline; gap: 6px; }
-.bot-category-head strong { flex: 1 1 auto; }
-.bot-category-slots { color: var(--text-faint); font: 7px var(--font-mono); }
-.bot-rules { list-style: none; margin: 2px 0; padding: 0; display: grid; gap: 4px; }
-.bot-rule { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.bot-rule-off .bot-rule-text { color: var(--text-faint); text-decoration: line-through; }
-.bot-rule-text {
-  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: 8px var(--font-mono); color: var(--parchment-1);
-}
-.bot-rule-order { display: flex; flex-direction: column; flex: 0 0 auto; }
-.bot-rule-order button {
-  width: 14px; height: 9px; padding: 0; line-height: 1;
-  background: none; border: none; color: var(--text-muted); font: 7px/1 var(--font-mono); cursor: pointer;
-}
-.bot-rule-order button:disabled { color: var(--ash-6); cursor: default; }
-
-/* Configurações avançadas do bot (#353, SV-17) */
-.bot-advanced { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 2px; border-top: 1px solid var(--ash-5); padding-top: 6px; }
-.bot-advanced-head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.bot-advanced-head strong { flex: 1 1 auto; font: 500 8px var(--font-mono); color: var(--parchment-1); }
-.bot-advanced-level { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
-.bot-advanced-row {
-  display: flex; align-items: center; gap: 6px; min-width: 0;
-  padding: 4px 6px; border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
-}
-.bot-advanced-row-locked { opacity: 0.55; }
-.bot-advanced-row-text {
-  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
-}
-.bot-advanced-row-text b {
-  font: 600 8px var(--font-mono); color: var(--parchment-1);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.bot-advanced-row-text small {
-  font: 7px var(--font-mono); color: var(--text-faint);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* O editor de uma regra, agora um `Modal` (`shell/ui/Modal.tsx`) — o que resta aqui é só o
-   CONTEÚDO interno dele: a linha de condição/operador/valor, o divisor "→ AÇÃO" e a lista de
-   ações. */
-.rule-editor-row { display: grid; grid-template-columns: 1.2fr 0.6fr 0.8fr; gap: 6px; align-items: end; }
-.rule-editor-divider {
-  display: flex; align-items: center; gap: 8px; margin: 10px 0 6px;
-}
-.rule-editor-divider::before, .rule-editor-divider::after { content: ''; flex: 1; height: 1px; background: var(--ash-5); }
-.rule-editor-divider span { font: 500 7px var(--font-mono); color: var(--gold-4); letter-spacing: .14em; }
-.rule-action-list { display: grid; gap: 4px; }
-.rule-action {
-  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; text-align: left;
-  height: 30px; padding: 0 10px; border: 1px solid var(--ash-5); border-radius: 3px;
-  background: var(--ash-1); color: var(--parchment-2); font: 8.5px var(--font-mono); cursor: pointer;
-}
-.rule-action:disabled { color: var(--text-faint); cursor: not-allowed; opacity: .6; }
-.rule-action-selected { border-color: var(--gold-4); background: var(--surface-selected); color: var(--gold-5); }
-.rule-editor-warning { margin: 0 2px 6px; font: 7px var(--font-mono); line-height: 1.5; }
-.rule-editor-note { margin: 10px 2px 0; font: 7px var(--font-mono); color: var(--text-faint); line-height: 1.5; }
-.rule-editor-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
-.rule-editor-actions { display: flex; gap: 8px; }
-
-@media (max-width: 520px) {
-  .rule-editor-row { grid-template-columns: 1fr; }
-}
-
-/* O modal Ring swap (#353, SV-17; ADR 0030, captura 27-modal-swap-ring.png) */
-.ring-swap-locked { margin: 0 0 8px; font: 7px var(--font-mono); line-height: 1.5; }
-.ring-swap-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.ring-swap-header > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.ring-swap-name { font: 600 11px var(--font-display); color: var(--gold-5); }
-.ring-swap-note { font: 7.5px var(--font-mono); color: var(--text-faint); }
-.ring-swap-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.ring-swap-box {
-  display: flex; flex-direction: column; gap: 6px; padding: 8px;
-  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-1);
-}
-.ring-swap-aside { margin: 2px 0 0; font: 7px var(--font-mono); color: var(--text-faint); }
-.ring-swap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-.ring-swap-diagram {
-  display: flex; align-items: center; justify-content: space-around; padding: 8px 12px;
-  border: 1px solid var(--ash-5); border-radius: 3px; background: var(--ash-2);
-  text-align: center; margin-top: 4px;
-}
-.ring-swap-diagram span {
-  display: flex; flex-direction: column; align-items: center;
-  font: 8px var(--font-mono); color: var(--parchment-2);
-}
-.ring-swap-diagram small { font: 7px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
-.ring-swap-diagram-arrow { font-size: 14px; color: var(--gold-4); flex: 0 0 auto; }
-.ring-swap-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; flex: 1 1 auto; }
-.ring-swap-actions { display: flex; gap: 8px; }
-
-@media (max-width: 520px) {
-  .ring-swap-columns, .ring-swap-row { grid-template-columns: 1fr; }
-}
-
-/* O modal "Lure e alvo" do bot avançado (SV-09, #345) */
+/* O modal "Lure e alvo" do bot (SV-09, #345; aberto pelo ⌖ da barra desde o AB-10) */
 .lure-locked {
   margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 3px;
   background: rgba(217, 164, 65, .08); font: 8px var(--font-mono); color: var(--warn);
@@ -1145,6 +1089,10 @@ body {
 .shell > .world-stage { order: 0; }
   .shell > .world-overlay { order: 1; position: static; padding: 6px 10px 0; z-index: auto; }
   .shell > .hunt-actions { order: 1; position: static; padding: 8px 10px 0; z-index: auto; }
+  /* A barra de ações no modo página (RF-13): filho estático com `order` explícito, depois do
+     chat, em uma coluna. No desktop ela é a linha 2 da grade de `.shell`. */
+  .shell > .action-bar { order: 6; position: static; grid-template-rows: auto; grid-template-columns: 1fr; }
+  .action-bar-body { grid-template-columns: 1fr; padding: 24px 10px 12px; }
   /* O popover de regras de saída (#260) a 375 px: ancorado na ponta direita do chevron, os
      262 px vazavam pela borda esquerda (#291). No celular ele ocupa a largura da linha da pill:
      a linha (`.hunt-actions`) passa a ser o bloco de referência — `relative` continua no fluxo,
@@ -1155,7 +1103,7 @@ body {
   .exit-rules-popover { left: 10px; right: 10px; width: auto; bottom: calc(100% + 4px); }
   .exit-rules-summary { left: 10px; right: 10px; bottom: calc(100% + 2px); text-align: center; white-space: normal; }
   .world-stage { position: relative; height: 40vh; }
-  .world-status { right: 12px; }
+  .world-status { right: 12px; bottom: 8px; }
   .topbar {
     position: sticky; top: 0; height: auto; display: flex; flex-wrap: wrap;
     gap: 6px 10px; padding: 6px 8px;
@@ -1187,7 +1135,6 @@ body {
   .windows-right > .battle-panel { order: 3; }
   /* Bolsa da party: sem classe própria (comentário acima) — cai aqui, depois de Batalha. */
   .windows-right > section { order: 4; }
-  .windows-left > .bot-panel { order: 4; }
   .windows-left > section { order: 5; }
   /* O Analisador saiu de .windows-right (#315): é filho direto de .shell agora, então o `order`
      dele compete com .windows-left/.windows-right/.chat-window, não mais com os outros filhos da
@@ -1338,7 +1285,7 @@ body {
 
 /* --- A barra de condições ativas sobre o mundo (#348, SV-12) ------------------------------ */
 .buff-bar {
-  position: absolute; left: 12px; bottom: calc(24px + 34px);
+  position: absolute; left: 12px; bottom: calc(var(--actionbar-h) + 58px);
   z-index: 5;
   display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
   pointer-events: none;
