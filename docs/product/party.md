@@ -1,8 +1,11 @@
 # Party e matchmaking de hunt
 
-**Status:** implementado — M13 (#185–#199, #203; ADR 0027), M15 (#358: kick do líder e nomes na formação). Matchmaking por vocação e faixa de
-level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`)
-**Última atualização:** 2026-09-17
+**Status:** implementado — M13 (#185–#199, #203; ADR 0027), M15 (#358: kick do líder e nomes na formação; #359: `shareCosts`/`splitLoot` na proposta). Matchmaking por vocação e faixa de
+level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`); **M20 em andamento** — a segunda
+iteração (eixos mutáveis durante a hunt, bolsa com reserva, entrada em curso, sala pública, bot cooperativo)
+está desenhada em `docs/party-vip-plan.md` e decidida no ADR 0033; este documento é atualizado
+no fim do milestone (#408)
+**Última atualização:** 2026-09-18
 **PRD:** §15, §43.2
 **Épico:** E9
 
