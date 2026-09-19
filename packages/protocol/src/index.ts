@@ -8,4 +8,4 @@ export * from './codec.js';
  * de viajar ou na resposta do ticket ou no primeiro frame. Escolher entre as duas é decisão
  * do shell do cliente (FUN-24), que é quem vai ter de lidar com a recusa.
  */
-export const PROTOCOL_VERSION = '0.2.0' as const;
+export const PROTOCOL_VERSION = '0.3.0' as const;

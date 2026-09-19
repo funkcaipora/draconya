@@ -1972,7 +1972,9 @@ export class SessionHost {
       });
     }
     const state = this.#sessionState(hosted, characterId);
-    if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
+    // `state.type`, e não `'party' in state`: desde o #393 `analyzer.party` também existe, e o
+    // `in` deixaria de estreitar só para `session-state`. Aqui o `party` é o roster (#196).
+    if (state.type === 'session-state' && state.party !== undefined) hosted.sentParty = state.party;
     viewer.send(state);
     hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);

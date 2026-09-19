@@ -24,6 +24,16 @@ export const CLIENT_TO_SERVER = {
   'choose-vocation': 15,
   /** Mover um item entre lugares (#160, ADR 0026 decisão 6). */
   'move-item': 16,
+  /**
+   * O líder muda rateio, divisão de lucro, coleta ou venda automática EM TEMPO DE HUNT
+   * (#393, ADR 0033 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
+   * mantém o valor atual — e quem decide se quem mandou é o líder e se os ids do catálogo
+   * existem é o servidor (invariante 4). Sucesso é `party-state` (v2) refletindo o estado
+   * novo; recusa (`not-leader`, item fora do catálogo, `value: 0` na venda) é
+   * `system-message` — não existe um `party-settings-result` dedicado, porque a tela já
+   * reflete a verdade no próprio `party-state`, e não o eco do que foi mandado.
+   */
+  'party-settings': 17,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -88,11 +98,13 @@ export const SERVER_TO_CLIENT = {
   'ground-item-appear': 22,
   'ground-item-disappear': 23,
   /**
-   * A party (#196, ADR 0027). Três mensagens só S2C: quem está nela (`party-state` — sai no
-   * attach, quando a composição ou liderança mudam, e quando vocação, level ou mana de qualquer
-   * membro mudam via sameParty no host, #339), o que há na bolsa compartilhada
-   * (`party-bag` — a cada mudança) e o que o settlement pagou (`party-settlement` — ao sair
-   * alguém e no fim). Não há C2S: formar party é HTTP, e sair é `leave-hunt` (10).
+   * A party (#196, ADR 0027; v2 no #393, ADR 0033). Quatro mensagens só S2C: quem está nela
+   * (`party-state` — sai no attach e quando composição, liderança ou configuração mudam), o
+   * que há na bolsa compartilhada (`party-bag` — a cada mudança), o que o settlement pagou
+   * (`party-settlement` — a cada saída, no fim, ao desligar `splitLoot`, e a cada venda
+   * automática) e — desde o #393 — como o Follow do bot está (`follow-state`, por
+   * personagem). C2S: sair é `leave-hunt` (10); mudar configuração em tempo de hunt é
+   * `party-settings` (17). Formar a party continua HTTP (ADR 0027 decisão 8).
    */
   'party-state': 24,
   'party-bag': 25,
@@ -125,6 +137,13 @@ export const SERVER_TO_CLIENT = {
    * só `party-bag`/`party-state`/`party-settlement` fazem hoje.
    */
   'party-spending': 29,
+  /**
+   * O Follow do bot mudou de estado (#393, ADR 0033 decisão 9): ligou, desligou, ou foi
+   * interrompido porque o alvo morreu, saiu ou ficou inalcançável. Por PERSONAGEM — cada
+   * membro segue quem quiser. Nunca escolhe outro alvo sozinho: `active: false` é o fim da
+   * história até o jogador escolher de novo (ou o mesmo alvo voltar a ser válido).
+   */
+  'follow-state': 30,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

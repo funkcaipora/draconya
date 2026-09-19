@@ -400,6 +400,11 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'party-spending':
       return;
 
+    case 'follow-state':
+      // O Follow do bot (#393) chega aqui; a UI que o desenha é do M20 (#404–#406). O `case`
+      // existe para a mensagem nova não quebrar o `never` — a mesma porta de `party-spending`.
+      return;
+
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de
       // ser silenciosamente ignorada em produção.
