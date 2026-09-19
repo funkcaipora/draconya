@@ -529,8 +529,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   `shared`, e o ▣ no cabeçalho de `PartyMembers` a abre/fecha — não compartilha controle com o
   toggle "Inventário" (ADR 0030 decisão 3). A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
   guarda a última cópia que o servidor devolveu — não importa `net/` (ADR 0007): a casca
-  injeta o cliente e o `enterHunt` em `useConnection`. O polling de `mine` a cada 2 s só
-  enquanto há party. **Entrar na hunt é oferecer o ticket à conexão e reconectar**
+  injeta o cliente e o `enterHunt` em `useConnection`. Desde #404 o polling de `mine` a cada
+  2 s subiu para o `Shell` e roda sempre que há personagem (DT-01): o convite de party precisa
+  aparecer em qualquer tela, Cidade ou hunt, e a lista de convites vem no próprio `/mine`.
+  **Entrar na hunt é oferecer o ticket à conexão e reconectar**
   (`net/pending-ticket.ts`, `Connection.restart`): o `defaultRequestTicket` pega o oferecido
   antes de pedir outro, e a reconexão de sempre — mesma `session-attach`, mesma troca de estado
   — leva à hunt da party. Um segundo caminho de socket duplicaria tudo o que a reconexão já faz.
@@ -549,8 +551,8 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   que devolve `null` (analisador na Cidade) não deixe moldura vazia — o bot é uma seção fixa da
   esquerda como as outras desde #162, não mais uma sobreposição fora das colunas. **Desde #251
   (ADR 0029, D3/D6/D8/D9), a casca veste o design system:** topo de 65 px com identidade, gold e
-  os cinco ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
-  Chat — nunca
+  os seis ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
+  Amigos desde #404, Chat — nunca
   emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
   próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
   faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste

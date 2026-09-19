@@ -1336,6 +1336,37 @@ body {
 .party-modal-companion-down .party-modal-percent { color: var(--blood-7); }
 .party-modal-status { font: 7px var(--font-mono); color: var(--text-faint); }
 
+/* --- "Encontrar Party" (#404, ADR 0033 D8): a terceira aba do modal Gerenciar party. A lista
+   de salas é de OUTRAS parties (DT-03) — mesmas classes de texto do resto do modal. */
+.party-rooms { display: flex; flex-direction: column; gap: 6px; }
+.party-rooms-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.party-room-row {
+  display: flex; align-items: center; gap: 8px;
+  font: 8.5px var(--font-mono); color: var(--parchment-2);
+}
+.party-room-leader { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.party-invite-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* --- Amigos (#404): o subconjunto do kit social (#403). Ponto online/offline, nome com
+   "vocação · LV", onde está e o convite para a party. */
+.friends-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.friends-row {
+  display: grid; grid-template-columns: 8px 1fr auto auto; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, .04);
+  font: 8.5px var(--font-mono); color: var(--parchment-2);
+}
+.friends-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ash-6); }
+.friends-dot-online { background: var(--ok); }
+.friends-identity { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.friends-name { color: var(--parchment-1); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friends-sub { color: var(--text-muted); font-size: 7px; }
+.friends-where { color: var(--text-muted); font-size: 7px; white-space: nowrap; }
+.friends-where-offline { color: var(--text-faint); }
+.friends-empty { margin: 8px 0; color: var(--text-faint); font: 8px var(--font-mono); }
+.friends-add { display: grid; gap: 6px; width: 100%; }
+.friends-add-row { display: flex; gap: 6px; align-items: center; }
+.friends-add-row .ui-input { flex: 1 1 auto; min-width: 0; }
+
 /* --- party loot: janela flutuante da bolsa compartilhada (#316, RC-03, ADR 0030 decisão 3).
    Vive FORA das colunas, dentro de um `FloatingWindow` (#314) — aqui só o CONTEÚDO de dentro.
    Sucede o `.party-bag*` de DS-14/#257: grade FIXA 6×2 (R4-23) no lugar de `auto-fill`, sem
