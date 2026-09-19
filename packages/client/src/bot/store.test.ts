@@ -4,7 +4,7 @@ import type { BotConfigV2, BotSlot } from '@draconya/content';
 import {
   INITIAL_BOT, SAVE_DEBOUNCE_MS, bot, botResult, draftFrom, edit, emptyDraft, loadConfig,
   setActiveSet, setConfigSender, setExitHpBelowPercent, setExitRule, setIgnore, setLure, setPosture,
-  setPrioritize, setSlotAuto, setTargetingPolicy, toConfig,
+  setPrioritize, setSlot, setSlotAuto, setTargetingPolicy, toConfig,
 } from './store.js';
 import type { BotDraft } from './store.js';
 
@@ -297,5 +297,37 @@ describe('lure e targeting salvam com debounce (SV-09, #345)', () => {
       ignore: ['rat'],
       posture: { kind: 'keep-distance', tiles: 3 },
     });
+  });
+});
+
+describe('setSlot grava o slot e manda bot-config AGORA (AB-11, #426)', () => {
+  const sent: BotConfigV2[] = [];
+  beforeEach(() => {
+    sent.length = 0;
+    setConfigSender((config) => { sent.push(config); return true; });
+    bot.set(() => ({ ...INITIAL_BOT }));
+  });
+  afterEach(() => { setConfigSender(null); });
+
+  it('grava no conjunto e no índice certos e manda UMA mensagem na hora', () => {
+    const next: BotSlot = {
+      do: { kind: 'item', itemId: 'health-potion' },
+      when: [{ kind: 'mana', op: '>=', percent: 20 }],
+      auto: false,
+      hotkey: 'F1',
+      restock: { batch: 20, min: 5 },
+    };
+    setSlot(2, 4, next);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.sets[2]?.slots[4]).toEqual(next);
+    expect(bot.get().draft.sets[2]?.slots[4]).toEqual(next);
+    expect(bot.get().save).toBe('pending');
+  });
+
+  it('null limpa o slot e não toca nos vizinhos', () => {
+    edit((draft) => withSet(1, 3, slot('heal')));
+    setSlot(1, 3, null);
+    expect(sent[0]?.sets[1]?.slots[3]).toBeNull();
+    expect(bot.get().draft.sets[1]?.slots[3]).toBeNull();
   });
 });

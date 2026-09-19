@@ -22,6 +22,7 @@ import type { SlotProps } from './ui/Slot.js';
 import { Kicker } from './ui/Kicker.js';
 import { Select } from './ui/Select.js';
 import { LureTargetingModal } from './LureTargetingModal.js';
+import { ActionConfigModal } from './ActionConfigModal.js';
 import { useActionKeys } from './useActionKeys.js';
 import {
   TARGET_POLICY_OPTIONS, lureCaption, policyLabel, slotKey, slotTitle, slotView,
@@ -39,6 +40,8 @@ export function ActionBar() {
   const lure = useStoreSlice(bot, (state) => state.draft.lure);
   const draftSets = useStoreSlice(bot, (state) => state.draft.sets);
   const [lureOpen, setLureOpen] = useState(false);
+  // Qual slot está com o `ActionConfigModal` aberto, ou `null`. Um por vez: é o slot clicado.
+  const [configSlot, setConfigSlot] = useState<number | null>(null);
 
   // A tecla é do CLIENTE e só manda intenção; o hook lê a store no disparo, nunca no render.
   useActionKeys();
@@ -79,7 +82,15 @@ export function ActionBar() {
               : slotView(slots[index] ?? null, catalogue, inventory, slotStates[key] ?? null);
             if (view === null) {
               return (
-                <Slot key={index} size={36} empty dashed ariaLabel={`slot ${String(index + 1)} vazio`} />
+                <Slot
+                  key={index}
+                  size={36}
+                  empty
+                  dashed
+                  ariaLabel={`slot ${String(index + 1)} vazio`}
+                  // Slot vazio também abre o modal: é por onde o jogador configura o slot (RF-09).
+                  onClick={() => { setConfigSlot(index); }}
+                />
               );
             }
             // `exactOptionalPropertyTypes`: só entra na chamada a prop que de fato veio.
@@ -92,9 +103,12 @@ export function ActionBar() {
               ...(view.cooldownMs > 0 ? { className: 'action-slot-cooldown' } : {}),
               title: slotTitle(view, slotResults[key] ?? null),
               ariaLabel: `slot ${String(index + 1)}`,
-              // Shift+clique desliga o automático; o clique simples abre o ActionConfigModal na
-              // AB-11/#426 (aqui fica inerte, DT-06).
-              onClick: (event) => { if (event.shiftKey) setSlotAuto(index, false); },
+              // Shift+clique desliga o automático; o clique simples abre o `ActionConfigModal`
+              // (AB-11/#426).
+              onClick: (event) => {
+                if (event.shiftKey) { setSlotAuto(index, false); return; }
+                setConfigSlot(index);
+              },
             };
             return <Slot key={index} {...props} />;
           })}
@@ -130,6 +144,13 @@ export function ActionBar() {
         </div>
       </div>
       {lureOpen && <LureTargetingModal onClose={() => { setLureOpen(false); }} />}
+      {configSlot !== null && (
+        <ActionConfigModal
+          set={activeSet}
+          index={configSlot}
+          onClose={() => { setConfigSlot(null); }}
+        />
+      )}
     </section>
   );
 }

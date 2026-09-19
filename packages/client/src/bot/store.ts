@@ -183,6 +183,21 @@ export function setSlotAuto(slot: number, auto: boolean): void {
   scheduleSave();
 }
 
+/**
+ * Grava UM slot do conjunto e manda `bot-config` AGORA (o "Salvar" do `ActionConfigModal`,
+ * AB-11/#426). Diferente do interruptor/`setSlotAuto`, que salva com debounce: o modal tem um
+ * botão de Salvar explícito, e o jogador espera a intenção sair no clique. `null` limpa o slot.
+ */
+export function setSlot(set: number, index: number, slot: BotSlot | null): void {
+  edit((draft) => ({
+    ...draft,
+    sets: draft.sets.map((current, i) => (i === set
+      ? { slots: current.slots.map((entry, j) => (j === index ? slot : entry)) }
+      : current)),
+  }));
+  flushSave();
+}
+
 /** Liga, desliga ou reescreve uma regra de saída (#260) e salva — o mesmo debounce do conjunto. */
 export function setExitRule(kind: ExitRuleKind, on: boolean, percent = DEFAULT_HP_BELOW_PERCENT): void {
   edit((draft) => ({ ...draft, exit: toggleExitRule(draft.exit, kind, on, percent) }));
