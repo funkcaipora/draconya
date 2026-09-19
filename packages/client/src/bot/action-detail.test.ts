@@ -277,6 +277,17 @@ describe('actionDetail — a tabela da spec §6', () => {
     expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Cooldown', value: '2s' });
   });
 
+  it('cooldownMs igual a groupCooldownMs NÃO soma o sufixo do grupo (correção de revisão)', () => {
+    const entry: ActionEntry = {
+      kind: 'spell',
+      spell: spell({
+        id: 'exori', name: 'Exori', effect: 'damage', group: 'attack',
+        cooldownMs: 2000, groupCooldownMs: 2000, detail: { basePower: 10 },
+      }),
+    };
+    expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Cooldown', value: '2s' });
+  });
+
   it('cooldownMs com group e groupCooldownMs soma o sufixo do grupo', () => {
     const entry: ActionEntry = {
       kind: 'spell',

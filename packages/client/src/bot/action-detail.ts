@@ -129,13 +129,19 @@ function costOf(entry: ActionEntry): string {
     : `${String(entry.supply.price)} gold`;
 }
 
-/** `null` quando a magia/o suprimento não tem cooldown a mostrar (RF-09). */
+/**
+ * `null` quando a magia/o suprimento não tem cooldown a mostrar (RF-09). O sufixo "· grupo X Ys"
+ * só aparece quando o cooldown do GRUPO é DIFERENTE do da própria magia — no conteúdo real quase
+ * toda magia tem os dois iguais, e repetir o mesmo número com outro rótulo não informa nada
+ * (correção de revisão em #437: a tabela da spec só mostra o sufixo no exemplo em que os dois
+ * divergem, `1s · grupo cura 2s`; `2000/2000` é só `2s`).
+ */
 function cooldownOf(entry: ActionEntry): string | null {
   if (entry.kind === 'spell') {
     const { cooldownMs, group, groupCooldownMs } = entry.spell;
     if (cooldownMs === undefined) return null;
     const base = seconds(cooldownMs);
-    if (group === undefined || groupCooldownMs === undefined) return base;
+    if (group === undefined || groupCooldownMs === undefined || groupCooldownMs === cooldownMs) return base;
     return `${base} · grupo ${GROUP_LABEL[group] ?? group} ${seconds(groupCooldownMs)}`;
   }
   const { groupCooldownMs } = entry.supply;
