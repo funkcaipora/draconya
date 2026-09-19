@@ -4829,8 +4829,11 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(state.party?.settings).toEqual({ shareCosts: true, splitLoot: true });
     expect(state.party?.loot).toEqual({ collect: null, autoSell: [], autoSellLimit: 5, leaderPremium: false });
     expect(state.party?.members.map((m) => [m.characterId, m.connected])).toEqual([['lead', true], ['b', true]]);
-    // `joinedAtMs` é opcional: o `sim` desta branch não expõe o acessor, então fica ausente (D12).
-    for (const member of state.party?.members ?? []) expect(member).not.toHaveProperty('joinedAtMs');
+    // `joinedAtMs` chega ao fio pelo acessor `Session.joinedAtMsOf` (#397, D12) — quem entrou
+    // pela porta normal da sessão tem o instante lógico da entrada.
+    for (const member of state.party?.members ?? []) {
+      expect(member.joinedAtMs).toEqual(expect.any(Number));
+    }
 
     const bagMessage = lead.socket.received().filter((m) => m.type === 'party-bag').at(-1);
     if (bagMessage?.type !== 'party-bag') throw new Error('sem party-bag');
