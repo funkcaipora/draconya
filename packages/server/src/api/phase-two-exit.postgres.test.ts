@@ -53,7 +53,7 @@ import { ReceiptStore } from '../receipts.js';
 import { SnapshotStore } from '../snapshots.js';
 import { connectTestDatabase, type TestDatabase } from '../testing/database.js';
 import { connectTestRedis } from '../testing/redis.js';
-import { rawTestContent, TEST_SUPPLY } from '../testing/content.js';
+import { rawTestContent } from '../testing/content.js';
 import { totalXpForLevel } from '@draconya/sim';
 import { TicketService } from '../tickets.js';
 import { buildApi } from './server.js';
@@ -79,13 +79,12 @@ const raw: RawContent = {
   }, {
     id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0,
     twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
-  }, TEST_SUPPLY, {
-    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.7, value: 0, attack: 20, price: 1, ammunition: { family: 'arrow' },
+  }],
+  ammunition: [{
+    id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 1,
   }, {
-    id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.8, value: 0, attack: 30, price: 5, requires: { level: 20 },
-    ammunition: { family: 'arrow' },
+    id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 30, price: 5,
+    requires: { level: 20 },
   }],
   hunts: [...(base.hunts ?? []), {
     // A hunt em que se morre. Existe porque a morte é metade do §44.3 e esperar por ela num
@@ -573,7 +572,7 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     inbox.close();
   }, 120_000);
 
-  it('keeps settled gold and equipped ammunition across City reattach (#241, #420)', async () => {
+  it('keeps settled gold and equipped weapon across City reattach (#241)', async () => {
     await retireNodes();
     const node = await startNode('phase-two-d');
     const { cookie } = await login();
@@ -590,12 +589,6 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
         id: `${characterId}:bow`, itemId: 'bow', ownerCharacterId: characterId,
         quantity: 1, origin: 'admin', equippedSlot: 'hand',
       },
-      {
-        // A munição é item no slot `ammo` (AB-05): ela viaja no layout do inventário, não numa
-        // coluna de preferência.
-        id: `${characterId}:ammo`, itemId: 'sniper-arrow', ownerCharacterId: characterId,
-        quantity: 100, origin: 'admin', equippedSlot: 'ammo',
-      },
     ]);
     expect((await db.select().from(itemInstances).where(eq(itemInstances.ownerCharacterId, characterId)))
       .find((item) => item.id === `${characterId}:bow`)?.equippedSlot).toBe('hand');
@@ -604,13 +597,12 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     const cityHero = node.host?.sessionFor(characterId)?.participants.find((participant) => participant.id === characterId);
     expect(cityHero).toBeDefined();
     expect(cityHero?.inventory.getState().equipped.hand?.itemId).toBe('bow');
-    expect(cityHero?.inventory.getState().equipped.ammo?.itemId).toBe('sniper-arrow');
     inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await inbox.waitFor('session-state');
     await advance(60_000);
     inbox.send({ type: 'session-attach' });
     const firstHunt = await inbox.waitForNext('session-state');
-    // A munição não debita gold por tiro (AB-05): o que prova que a hunt rodou é o abate.
+    // A munição abstrata debita gold por tiro (ADR 0026 d.3), e o abate prova que a hunt rodou.
     expect(firstHunt.aggregates.kills).toBeGreaterThan(0);
 
     inbox.send({ type: 'leave-hunt' });
@@ -628,9 +620,8 @@ describe.runIf(ready)('critério de saída da Fase 2 (§44.3)', () => {
     expect(hot?.gold).toBe(row?.gold);
     expect(hot?.goldDelta).toBe(0);
     expect(stats?.gold).toBe(row?.gold);
-    expect(hot?.inventory.getState().equipped.ammo?.itemId).toBe('sniper-arrow');
-    // A pilha encolheu na primeira hunt e sobreviveu à volta para a Cidade.
-    expect(hot?.inventory.getState().equipped.ammo?.quantity).toBeLessThan(100);
+    // A arma equipada viaja no layout do inventário e sobrevive à volta para a Cidade.
+    expect(hot?.inventory.getState().equipped.hand?.itemId).toBe('bow');
 
     inbox.send({ type: 'enter-hunt', huntId: 'arena', difficulty: 'cautious' });
     await inbox.waitForNext('session-state');

@@ -34,20 +34,14 @@ export interface LedgerSweepResult {
 }
 
 /**
- * O saldo da SESSÃO como a soma das LINHAS do ledger (#419).
+ * O saldo da SESSÃO: `goldGained - goldSpent`.
  *
- * A linha do extrato leva o LÍQUIDO sem as compras — cada compra tem a própria linha com o
- * valor. Somando todas as linhas da sessão, o total continua `goldGained - goldSpent`, e a
- * auditoria vê o valor de cada lote. Sem somar as compras de volta, a linha do extrato
- * contaria o gasto duas vezes.
+ * Sem compras por lote desde a reversão do modelo abstrato: potagem e munição debitam gold no
+ * USO, e o `goldSpent` já é o total gasto. É a mesma conta que `applyProgression` escreve na
+ * coluna, e as duas têm que bater.
  */
 export function creditOf(receipt: SessionReceipt): number {
-  return receipt.aggregates.goldGained - receipt.aggregates.goldSpent + purchasedTotal(receipt);
-}
-
-/** O valor das compras por lote da sessão (#419). Zero sem compras. */
-function purchasedTotal(receipt: SessionReceipt): number {
-  return (receipt.purchases ?? []).reduce((sum, purchase) => sum + purchase.total, 0);
+  return receipt.aggregates.goldGained - receipt.aggregates.goldSpent;
 }
 
 export async function writePendingReceipts(
@@ -95,28 +89,6 @@ async function writeReceipts(
       // linha do personagem — e a reconciliação entre os dois é justamente o que o
       // invariante 10 existe para não precisar.
       await options.database.transaction(async (tx) => {
-        // As compras por lote PRIMEIRO, cada uma com o próprio `seq` e `delta: -total` (#419).
-        // Mesma transação da linha do extrato: ou as duas entram, ou nenhuma. Retry bate na
-        // `UNIQUE (session_id, seq)` e não duplica.
-        for (const purchase of receipt.purchases ?? []) {
-          await tx
-            .insert(ledger)
-            .values({
-              id: randomUUID(),
-              characterId: receipt.characterId,
-              sessionId: receipt.sessionId,
-              seq: purchase.seq,
-              type: 'purchase',
-              delta: -purchase.total,
-              ref: {
-                itemId: purchase.itemId,
-                quantity: purchase.quantity,
-                unitPrice: purchase.unitPrice,
-              },
-            })
-            .onConflictDoNothing({ target: [ledger.sessionId, ledger.seq] });
-        }
-
         const inserted = await tx
           .insert(ledger)
           .values({
@@ -195,10 +167,8 @@ async function applyProgression(
   // Piso de zero: a penalidade de morte chega como número negativo (FUN-37), e XP negativa é
   // um estado impossível que dá erro estranho em todo lugar que a lê depois.
   const xp = Math.max(0, current.xp + receipt.aggregates.xpGained);
-  // O gold do personagem é o LÍQUIDO da sessão (`goldGained - goldSpent`), e não `creditOf`:
-  // desde o #419 `creditOf` é a soma das linhas — as compras têm linha própria —, e usá-lo
-  // aqui creditaria as compras duas vezes na coluna. É esta linha que mantém
-  // `characters.gold` batendo com a soma do ledger.
+  // O gold do personagem é o LÍQUIDO da sessão (`goldGained - goldSpent`): `goldSpent` já é o
+  // total debitado no uso (poção, runa e tiro), e a linha de ledger leva o mesmo delta.
   const gold = Math.max(0, current.gold + receipt.aggregates.goldGained - receipt.aggregates.goldSpent);
 
   // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato

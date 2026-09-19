@@ -18,7 +18,7 @@
 
 import type { ChainableCommander, Redis } from 'ioredis';
 import type {
-  Aggregates, BestiaryState, EndReason, NotableEvent, PurchaseEntry, SkillsState,
+  Aggregates, BestiaryState, EndReason, NotableEvent, SkillsState,
 } from '@draconya/sim';
 import type { BoxedItem } from './loot-box.js';
 
@@ -98,12 +98,6 @@ export interface SessionReceipt {
    * expirar precisa significar que o item nunca existiu.
    */
   readonly lootBox?: readonly BoxedItem[];
-  /**
-   * As compras por lote da sessão (#419, ADR 0032 decisão 6). Cada uma vira uma linha de
-   * ledger `type: 'purchase'` com o próprio `seq` — o valor sai das compras e o extrato leva
-   * o líquido sem elas, de modo que a soma das linhas continua `goldGained - goldSpent`.
-   */
-  readonly purchases?: readonly PurchaseEntry[];
 }
 
 /** Um lugar de container, como o extrato e o banco o guardam (#160). */
@@ -309,10 +303,5 @@ function parseReceipt(raw: string): SessionReceipt | null {
       : {}),
     ...(Array.isArray(value['acquired']) ? { acquired: value['acquired'] as BoxedItem[] } : {}),
     ...(Array.isArray(value['lootBox']) ? { lootBox: value['lootBox'] as BoxedItem[] } : {}),
-    // As compras (#419): lista de PERMISSÃO, como as skills — sem esta linha elas somem no
-    // caminho de volta sem erro nenhum, e o ledger perde o lançamento `purchase`.
-    ...(Array.isArray(value['purchases'])
-      ? { purchases: value['purchases'] as PurchaseEntry[] }
-      : {}),
   };
 }

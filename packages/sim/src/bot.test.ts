@@ -17,7 +17,7 @@ const GROUPS: Readonly<Record<string, string>> = {
   'health-potion': 'potion',
 };
 const cooldownOf: CooldownOfAction = (action) => {
-  const id = action.kind === 'spell' ? action.spellId : action.itemId;
+  const id = action.kind === 'spell' ? action.spellId : action.supplyId;
   const group = GROUPS[id];
   return group === undefined
     ? { group: `${action.kind}:${id}`, cooldownKey: `${action.kind}:${id}` }
@@ -58,8 +58,8 @@ const spell = (id: string, when: Partial<BotSlot>['when'] = []): Partial<BotSlot
   do: { kind: 'spell', spellId: id }, when,
 });
 
-const item = (id: string, when: Partial<BotSlot>['when'] = []): Partial<BotSlot> => ({
-  do: { kind: 'item', itemId: id }, when,
+const supply = (id: string, when: Partial<BotSlot>['when'] = []): Partial<BotSlot> => ({
+  do: { kind: 'supply', supplyId: id }, when,
 });
 
 describe('as condições viram predicado (FUN-80, RG-006)', () => {
@@ -136,7 +136,7 @@ describe('o grupo e a ordem da barra (RP-002, AB-07)', () => {
     const bot = compileBot(config([
       spell('cure'),
       spell('wave'),
-      item('health-potion'),
+      supply('health-potion'),
     ]), cooldownOf);
 
     expect([...bot.groups.keys()]).toEqual(['healing', 'attack', 'potion']);

@@ -33,6 +33,13 @@ export interface AutomationActuator {
   equip(instanceId: string): boolean;
   /** Desveste o slot para a mochila. `false` quando não havia nada (no-op silencioso). */
   unequip(slot: ItemSlot): boolean;
+  /**
+   * A munição selecionada para a família que a arma equipada dispara, ou `null`. A munição é
+   * ABSTRATA: a seleção é por família, não um item no slot (ADR 0026 d.3).
+   */
+  selectedAmmoId(): string | null;
+  /** Seleciona a munição pelo id. `false` na recusa (level, catálogo) — nunca lança. */
+  selectAmmo(ammoId: string): boolean;
   rememberRing(instanceId: string | null): void;
   previousRing(): string | null;
 }
@@ -42,7 +49,7 @@ export type AutomationOutcome =
   | { readonly kind: 'applied'; readonly event: string; readonly detail: string }
   | {
     readonly kind: 'blocked';
-    readonly reason: 'missing-item' | 'not-equippable';
+    readonly reason: 'missing-item' | 'not-equippable' | 'ammo-unavailable';
     readonly itemId: string;
   };
 
@@ -121,17 +128,20 @@ const renewRing = (automation: Extract<BotAutomation, { model: 'renew-ring' }>):
 const renewAmulet = (automation: Extract<BotAutomation, { model: 'renew-amulet' }>): CompiledAutomation =>
   renew(automation, 'neck', 'amulet-equipped');
 
-/** Troca a pilha equipada no slot `ammo` por outra, informando a falta sem interromper. */
-function swapAmmoTo(act: AutomationActuator, itemId: string): AutomationOutcome {
-  const carried = act.carriedItem(itemId);
-  if (carried === null) return missing(itemId);
-  if (!act.equip(carried.instanceId)) return notEquippable(itemId);
-  return { kind: 'applied', event: 'ammo-swapped', detail: itemId };
+/**
+ * Seleciona uma munição da família, informando a falta sem interromper (ADR 0026 d.3). Não é
+ * item no slot: a munição é abstrata, e a seleção é o que o tiro passa a usar.
+ */
+function swapAmmoTo(act: AutomationActuator, ammoId: string): AutomationOutcome {
+  if (!act.selectAmmo(ammoId)) {
+    return { kind: 'blocked', reason: 'ammo-unavailable', itemId: ammoId };
+  }
+  return { kind: 'applied', event: 'ammo-swapped', detail: ammoId };
 }
 
 /**
- * Munição por número de alvos (ADR 0032 d.9): a região é `ammoA` equipada; `enter` (OU) leva
- * para A e `exit` (E) volta para B.
+ * Munição por número de alvos (ADR 0032 d.9): a região é `ammoA` selecionada; `enter` (OU)
+ * leva para A e `exit` (E) volta para B.
  */
 function swapAmmoByTargets(
   automation: Extract<BotAutomation, { model: 'swap-ammo-by-targets' }>,
@@ -142,7 +152,7 @@ function swapAmmoByTargets(
   return {
     model: 'swap-ammo-by-targets',
     run(view, act) {
-      if (act.equippedItemId('ammo') === ammoA) {
+      if (act.selectedAmmoId() === ammoA) {
         if (!exit(view)) return IDLE;
         return swapAmmoTo(act, ammoB);
       }

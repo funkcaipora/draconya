@@ -21,12 +21,12 @@ import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
+  Appearances, Ammunition, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
 } from '@draconya/content';
 import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
-  CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset, InventoryRefusal, InventoryResult,
-  InventoryState, Place, SlotRefusal, SlotState, VocationRefusal,
+  AmmoRefusal, CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset,
+  InventoryRefusal, InventoryResult, InventoryState, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory } from '../directory.js';
@@ -115,6 +115,11 @@ export interface SessionHostOptions {
    * recusa é honesta — um host sem conteúdo não sabe o que é uma espada.
    */
   readonly itemCatalog?: ReadonlyMap<string, Item>;
+  /**
+   * O catálogo de munição abstrata (ADR 0026 d.3), para o `select-ammo`. Ausente: a escolha é
+   * recusada, e a recusa é honesta — um host sem conteúdo não sabe o que é uma flecha.
+   */
+  readonly ammunitionCatalog?: ReadonlyMap<string, Ammunition>;
   /**
    * As vocações e o level da escolha (#154, ADR 0026 decisão 1), para `choose-vocation`.
    * Ausentes: nada se escolhe, e a recusa é honesta — como os itens.
@@ -208,6 +213,11 @@ const INVENTORY_REFUSAL: Readonly<Record<InventoryRefusal, string>> = {
 const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
   'level-too-low': 'Você ainda não chegou ao level da escolha de vocação.',
   'already-chosen': 'Você já escolheu a sua vocação.',
+};
+
+/** A recusa da seleção de munição (#152, ADR 0026 d.3), em palavras. */
+const AMMO_REFUSAL: Readonly<Record<AmmoRefusal, string>> = {
+  'level-too-low': 'Você ainda não tem o level dessa munição.',
 };
 
 /**
@@ -356,6 +366,11 @@ function playerStatsOf(
     staminaMs: character?.staminaMs ?? 0,
     targetId,
     vocationId: character?.vocationId ?? null,
+    // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
+    ammo: {
+      arrow: character?.ammo.get('arrow') ?? null,
+      bolt: character?.ammo.get('bolt') ?? null,
+    },
     speed: character === undefined ? 0 : Math.round(character.speed * character.speedScale),
     skills,
     magicLevel: skillProgressOf(character, skillCatalog?.get('magic')),
@@ -399,6 +414,8 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.capacity === b.capacity
     && a.gold === b.gold
     && a.targetId === b.targetId
+    && a.ammo.arrow === b.ammo.arrow
+    && a.ammo.bolt === b.ammo.bolt
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
     && a.speed === b.speed
     && sameSkills(a.skills, b.skills)
@@ -1096,6 +1113,10 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o cliente diz QUAL vocação; level, arma e slot são daqui.
         this.#requestVocation(viewer, message.vocationId);
         return;
+      case 'select-ammo':
+        // INTENÇÃO (invariante 4): o cliente diz QUAL munição; o level e o catálogo são daqui.
+        this.#requestSelectAmmo(viewer, message.ammoId);
+        return;
       case 'move-item':
         // INTENÇÃO (invariante 4): dois lugares; empilhar, vestir e recusar são do servidor.
         this.#requestMove(viewer, message.from, message.to);
@@ -1390,6 +1411,31 @@ export class SessionHost {
   #ownerOf(characterId: string): CharacterRuntime | undefined {
     const hosted = this.#hostedSession(characterId);
     return hosted === undefined ? undefined : this.#participantOf(hosted, characterId);
+  }
+
+  /**
+   * O jogador escolheu a munição da família (#152, ADR 0026 d.3). INTENÇÃO: o cliente diz o id;
+   * o catálogo e o gate de level são do servidor, e a escolha é aplicada na sessão dona. Recusa
+   * vira `system-message`, como a de equipar; o sucesso sai no `player-stats.ammo`.
+   */
+  #requestSelectAmmo(viewer: Viewer, ammoId: string): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const character = this.#ownerOf(viewer.characterId);
+    if (hosted === undefined || character === undefined) return;
+    const ammunition = this.#options.ammunitionCatalog;
+    const ammo = ammunition?.get(ammoId);
+    if (ammo === undefined) {
+      viewer.send({ type: 'system-message', level: 'warning', text: 'Essa munição não existe.' });
+      return;
+    }
+    const result = character.selectAmmo(ammo);
+    if (!result.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: AMMO_REFUSAL[result.reason] });
+      return;
+    }
+    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    hosted.sentStats.set(character.id, stats);
+    this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
 
   /**

@@ -230,40 +230,6 @@ describe('equipar (§21.4)', () => {
   });
 });
 
-describe('consumir do EQUIPADO (#420)', () => {
-  const ammoCatalog = new Map<string, Item>([
-    ['arrow', define({
-      id: 'arrow', kind: 'ammo', slot: 'ammo', weight: 1, value: 0, stackable: true,
-      attack: 25, price: 1, ammunition: { family: 'arrow' },
-    })],
-  ]);
-
-  const comPilha = (quantity: number) => {
-    const inventory = new Inventory();
-    inventory.add(carried('arrow', 'a1', quantity), ammoCatalog, wearer(), rules);
-    inventory.equip('a1', wearer(), ammoCatalog);
-    return inventory;
-  };
-
-  it('5 → 4, e o peso cai por uma unidade', () => {
-    const inventory = comPilha(5);
-    const left = inventory.consumeEquipped('ammo');
-    expect(left?.quantity).toBe(4);
-    expect(inventory.equippedAt('ammo')?.quantity).toBe(4);
-    expect(inventory.weight(ammoCatalog)).toBe(4);
-  });
-
-  it('1 → slot vazio e devolve `null`', () => {
-    const inventory = comPilha(1);
-    expect(inventory.consumeEquipped('ammo')).toBeNull();
-    expect(inventory.equippedAt('ammo')).toBeNull();
-  });
-
-  it('slot vazio devolve `null`', () => {
-    expect(new Inventory().consumeEquipped('ammo')).toBeNull();
-  });
-});
-
 describe('carga e destruição do equipado (#421)', () => {
   const amuletCatalog = new Map<string, Item>([
     ['amulet', define({

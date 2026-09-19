@@ -98,11 +98,6 @@ export interface SessionSnapshot {
   readonly notableEvents: readonly NotableEvent[];
   readonly ledgerSeq: number;
   readonly endedReason: EndReason | null;
-  /**
-   * As compras por lote da sessão (#419). Opcional: ausente é nenhuma compra, que é o estado
-   * de todo snapshot anterior — sem bump de formato, como `skills` e `bestiary`.
-   */
-  readonly purchases?: readonly PurchaseEntry[];
   /** Opaco: quem entende do formato é o próprio ruleset. */
   readonly ruleset?: unknown;
 }
@@ -168,26 +163,6 @@ export interface Receipt {
   readonly seq: number;
   readonly aggregates: Aggregates;
   readonly notableEvents: readonly NotableEvent[];
-  /**
-   * As compras por lote DESTE personagem (#419, ADR 0032 decisão 6). Cada uma vira uma linha
-   * de ledger `type: 'purchase'` com o próprio `seq` — o `(session_id, seq)` continua único
-   * porque o contador é o da sessão, e é ele que torna o retry inofensivo.
-   */
-  readonly purchases: readonly PurchaseEntry[];
-}
-
-/**
- * Uma compra por lote (#419). O `seq` sai do mesmo contador do extrato (`ledgerSeq`), e é
- * metade da chave de idempotência do ledger (invariante 10).
- */
-export interface PurchaseEntry {
-  readonly seq: number;
-  readonly characterId: string;
-  readonly itemId: string;
-  readonly quantity: number;
-  readonly unitPrice: number;
-  /** `quantity * unitPrice` — o valor do lançamento de ledger. */
-  readonly total: number;
 }
 
 /** O que `leave` devolve: quem saiu, e o extrato dele. */
@@ -348,12 +323,6 @@ export class Session {
   /** Sequência para idempotência econômica: `UNIQUE (session_id, seq)` (invariante 10). */
   ledgerSeq = 0;
 
-  /**
-   * As compras por lote da sessão, em ordem (#419). Só a sessão dona escreve (invariante 9);
-   * o `seq` sai do MESMO contador do extrato, então compra e extrato nunca colidem.
-   */
-  readonly purchases: PurchaseEntry[] = [];
-
   #viewers = new Set<string>();
   /** Relógio LÓGICO. Começa em zero, anda só com `advanceBy`. Ver `SessionSnapshot`. */
   #logicalNowMs = 0;
@@ -390,9 +359,6 @@ export class Session {
     session.#schedule = Schedule.fromState(snapshot.schedule);
     session.#endedReason = snapshot.endedReason;
     session.ledgerSeq = snapshot.ledgerSeq;
-    // As compras voltam com o `seq` que já consumiram do contador (restaurado logo acima):
-    // reemitir `seq` usado seria a compra batendo na chave única do ledger na retomada.
-    if (snapshot.purchases !== undefined) session.purchases.push(...snapshot.purchases);
     Object.assign(session.aggregates, snapshot.aggregates);
     session.notableEvents.push(...snapshot.notableEvents);
     for (const state of snapshot.participants) {
@@ -513,30 +479,7 @@ export class Session {
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
       notableEvents: [...this.notableEvents],
-      // Só as compras DESTE personagem: numa party cada um leva as suas, e o `seq` já é
-      // único na sessão inteira.
-      purchases: this.purchases.filter((purchase) => purchase.characterId === character.id),
     };
-  }
-
-  /**
-   * Registra uma compra por lote e aloca o `seq` no mesmo contador do extrato (#419). É o
-   * instante do FATO, e é o que faz o retry do extrato ser operação nula no ledger.
-   */
-  recordPurchase(entry: Omit<PurchaseEntry, 'seq'>): PurchaseEntry {
-    const purchase = { ...entry, seq: ++this.ledgerSeq };
-    this.purchases.push(purchase);
-    return purchase;
-  }
-
-  /**
-   * Desfaz uma compra que não pôde ser entregue (#419): o dinheiro não sai por item que não
-   * entrou. O `ledgerSeq` NÃO é decrementado — unicidade não exige continuidade, como em
-   * `leave`, e reaproveitar o `seq` seria a próxima compra batendo na chave do ledger.
-   */
-  undoPurchase(purchase: PurchaseEntry): void {
-    const index = this.purchases.findIndex((entry) => entry.seq === purchase.seq);
-    if (index >= 0) this.purchases.splice(index, 1);
   }
 
   /**
@@ -726,9 +669,6 @@ export class Session {
       ),
       notableEvents: [...this.notableEvents],
       ledgerSeq: this.ledgerSeq,
-      // Opcional de propósito: ausente é nenhuma compra, e o `ledgerSeq` já contém os `seq`
-      // que elas consumiram. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
-      ...(this.purchases.length === 0 ? {} : { purchases: [...this.purchases] }),
       endedReason: this.#endedReason,
       ...(rulesetState === undefined ? {} : { ruleset: rulesetState }),
     };

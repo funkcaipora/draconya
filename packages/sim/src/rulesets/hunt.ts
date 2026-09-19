@@ -21,7 +21,7 @@ import {
   migrateBotConfigV1,
 } from '@draconya/content';
 import type {
-  AmmoFamily, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
+  AmmoFamily, Ammunition, BotAction, BotActionV2, BotConfig, BotConfigV2, BotExitRule, Combat,
   CompiledWeaponFamily, Content, DamageType, FieldSpec, Hunt, HuntDifficulty, Item, ItemSlot,
   Monster, MonsterAbility, PartyConfig, Progression,
   ResolvedWeapon, Route, Skill, Spell, SpellArea, SpawnPoint, Stamina, Supply, Tilemap, Vocation,
@@ -30,8 +30,8 @@ import type {
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import {
-  NOT_IN_CATALOG, applyConsumableEffect, balanceOf, castSpell, groupCooldownKey,
-  itemCooldownKey, ownPurse, spellCooldownKey, useSupply,
+  NOT_IN_CATALOG, balanceOf, castSpell, groupCooldownKey,
+  ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
 import type { ConditionState } from '../conditions.js';
@@ -55,8 +55,6 @@ import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
 import type { PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver } from '../inventory.js';
-import { MAX_STACK } from '../inventory.js';
-import { planRestock } from '../restock.js';
 import { compileBot } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
 import { compileAutomations } from '../automation.js';
@@ -112,12 +110,6 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
-/**
- * A reposição por lote (#419, ADR 0032 decisão 6). Evento da fila — nunca decisão por tick
- * (invariante 2): vence ao entrar na hunt e quando uma pilha cruza o `min`. O subject é o
- * personagem; é ele quem compra.
- */
-const RESTOCK = 'restock';
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -419,6 +411,11 @@ export interface HuntRulesetOptions {
   readonly spells: ReadonlyMap<string, Spell>;
   /** Catálogo de supplies (FUN-77). Vazio é uma hunt sem poção. */
   readonly supplies: ReadonlyMap<string, Supply>;
+  /**
+   * Catálogo de munição (ADR 0026 d.3). A munição é ABSTRATA — uma seleção por família que
+   * debita gold no tiro; vazio é uma hunt em que arco e besta não atiram.
+   */
+  readonly ammunition: ReadonlyMap<string, Ammunition>;
   /** Skills que sobem por uso (FUN-75). Vazio é uma hunt em que nada sobe por fazer. */
   readonly skills: ReadonlyMap<string, Skill>;
   /** Catálogo de itens (FUN-76). O que a arma equipada bate sai daqui. */
@@ -629,28 +626,6 @@ export interface RunnerState {
   readonly pendingExit?: ExitReason;
 }
 
-/**
- * Um consumível configurado pelo bot e o que a reposição precisa saber dele (#419): o preço e
- * o peso vêm do CATÁLOGO (conteúdo), o lote e o mínimo do `restock` do item — o override por
- * slot é do vocabulário v2 (AB-07), e é aqui, num lugar só, que ele entra quando existir.
- */
-interface ConfiguredConsumable {
-  readonly itemId: string;
-  readonly price: number;
-  readonly weight: number;
-  readonly batch: number;
-  readonly min: number;
-}
-
-/**
- * A munição equipada no slot `ammo` (#420): a pilha E a definição do item. A definição é
- * `kind: 'ammo'` com `attack`, `ammunition.family` e `ammunition.damageType`.
- */
-interface EquippedAmmo {
-  readonly carried: CarriedItem;
-  readonly definition: Item;
-}
-
 export class HuntRuleset implements Ruleset {
   readonly type = 'hunt' as const;
 
@@ -729,10 +704,10 @@ export class HuntRuleset implements Ruleset {
         ? { group: `spell:${action.spellId}`, cooldownKey: spellCooldownKey(action.spellId) }
         : { group, cooldownKey: groupCooldownKey(group) };
     }
-    const item = this.#options.items.get(action.itemId);
-    const group = item?.group;
+    const supply = this.#options.supplies.get(action.supplyId);
+    const group = supply?.group;
     return group === undefined
-      ? { group: `item:${action.itemId}`, cooldownKey: itemCooldownKey(action.itemId) }
+      ? { group: `supply:${action.supplyId}`, cooldownKey: supplyCooldownKey(action.supplyId) }
       : { group, cooldownKey: groupCooldownKey(group) };
   };
 
@@ -745,6 +720,13 @@ export class HuntRuleset implements Ruleset {
    * índice de monstro por subject valer a pena.
    */
   readonly #skillsByGain: Readonly<Record<Skill['gain']['on'], readonly Skill[]>>;
+
+  /**
+   * A munição BÁSICA de cada família (ADR 0026 d.3): a primeira em ordem de id. É o padrão de
+   * quem nunca escolheu — o tiro usa a seleção da família, ou esta. Resolvida UMA vez, no
+   * boot da instância: nenhuma varredura de catálogo por tiro.
+   */
+  readonly #basicAmmo: ReadonlyMap<AmmoFamily, Ammunition>;
 
   /**
    * A mira da magia, reaproveitada pela mesma razão que `#botView` (FUN-92).
@@ -795,6 +777,12 @@ export class HuntRuleset implements Ruleset {
     };
     this.#spawner = new Spawner(options.route.spawnPoints.length, difficulty);
     this.#world = new TileOccupancy(options.map);
+    // A básica por família é a primeira em ordem de id (determinístico, sem varredura por tiro).
+    const basics = new Map<AmmoFamily, Ammunition>();
+    for (const ammo of [...options.ammunition.values()].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (!basics.has(ammo.family)) basics.set(ammo.family, ammo);
+    }
+    this.#basicAmmo = basics;
   }
 
   get monsters(): readonly MonsterRuntime[] {
@@ -1040,19 +1028,6 @@ export class HuntRuleset implements Ruleset {
         priority: EventPriority.Housekeeping,
       });
     }
-    // O legado `ammo` por família vira o item no slot `ammo` (AB-05): a escolha sobrevive se a
-    // pilha existe. Antes do `#armBot`, para o inventário já estar no estado final.
-    this.#migrateLegacyAmmo(character);
-    // Entrar na hunt dispara a PRIMEIRA compra pela mesma regra do uso (#419): sem isto, a
-    // hunt idle-first de 18 h ficaria sem poção assim que a pilha inicial acabasse. É agendada
-    // ANTES da primeira avaliação do bot: senão o bot tenta o consumível sem pilha, engatilha,
-    // e a compra que vem logo depois não o acorda — a poção só sairia no próximo evento de
-    // mundo, que numa hunt sem dano pode nunca existir.
-    if (this.#configuredConsumables(runner).length > 0) {
-      session.scheduleIn(RESTOCK, 0, {
-        priority: EventPriority.Housekeeping, subject: character.id,
-      });
-    }
     // Só grupo COM regra entra na fila (AB-07). Um personagem sem bot configurado não agenda
     // nada, e os eventos por grupo só existem para quem de fato configurou.
     this.#armBot(session, character.id);
@@ -1186,7 +1161,6 @@ export class HuntRuleset implements Ruleset {
       case SPAWN: return this.#onSpawn(session, event.subject);
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
-      case RESTOCK: return this.#onRestock(session, event.subject);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
@@ -1416,9 +1390,6 @@ export class HuntRuleset implements Ruleset {
       // reagendar aqui duplicaria o evento e o item venceria cedo. Snapshot anterior sem o
       // evento é degradação declarada — o item só volta a vencer quando for reequipado.
       character.inventory.setEquipmentObserver(this.#equipmentObserver(session, character.id));
-      // O legado `ammo` por família vira o item no slot `ammo` (AB-05), como em `onEnter`:
-      // aqui o catálogo já existe, e a pilha do item escolhido está no inventário restaurado.
-      this.#migrateLegacyAmmo(character);
       if (this.#runners.has(character.id)) continue;
       const state = pending?.byId?.[character.id]
         ?? (pending?.byId === null && session.participants.length === 1 ? pending.legacy : null)
@@ -1924,9 +1895,9 @@ export class HuntRuleset implements Ruleset {
     switch (action.kind) {
       case 'spell': return this.#castSpell(session, character, action.spellId);
       case 'supply': return this.#useSupply(session, character, action.supplyId);
-      // O item consumível substitui o supply no vocabulário v2 (AB-03): usar decrementa a
-      // pilha e a reposição por lote (#419) repõe quando ela cruza o `min`.
-      case 'item': return this.#useConsumableItem(session, character, action.itemId);
+      // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
+      // gold no uso, e o item de equipamento é das automações.
+      case 'item': return NOT_IN_CATALOG;
     }
   }
 
@@ -2450,148 +2421,6 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * Os consumíveis que o bot configurou (#419), deduplicados por item e resolvidos no
-   * catálogo. É o ÚNICO ponto que lê o `restock` — o override por slot do vocabulário v2
-   * (AB-07) entra aqui, sem tocar no resto.
-   *
-   * A munição entra aqui também (ADR 0032 d.7): `kind: 'ammo'` tem `price` e `restock` como o
-   * consumível, e sem reposição o paladino ficaria sem tiro para sempre. Item sem `price` ou
-   * sem `restock` é ignorado: nunca se compra por item que o conteúdo não precificou.
-   */
-  #configuredConsumables(runner: Runner): readonly ConfiguredConsumable[] {
-    const config = runner.botConfig;
-    if (config === undefined) return [];
-    const active = config.sets[config.activeSet];
-    if (active === undefined) return [];
-    const out: ConfiguredConsumable[] = [];
-    const seen = new Set<string>();
-    for (const slot of active.slots) {
-      if (slot === null || slot.enabled === false || slot.do.kind !== 'item') continue;
-      const itemId = slot.do.itemId;
-      if (seen.has(itemId)) continue;
-      const item = this.#options.items.get(itemId);
-      if (item?.kind !== 'consumable' && item?.kind !== 'ammo') continue;
-      const restock = slot.restock ?? item.restock;
-      if (item.price === undefined || restock === undefined) continue;
-      seen.add(itemId);
-      out.push({
-        itemId, price: item.price, weight: item.weight,
-        batch: restock.batch, min: restock.min,
-      });
-    }
-    return out;
-  }
-
-  /**
-   * Usa um consumível ITEM (#419): aplica o efeito, decrementa a pilha em 1 e, se ela cruzar o
-   * `min`, agenda a reposição. Sem débito de gold no uso — o gold saiu na compra do lote, pelo
-   * ledger (ADR 0032 decisão 6).
-   */
-  #useConsumableItem(
-    session: Session, character: CharacterRuntime, itemId: string,
-  ): CastResult {
-    const definition = this.#options.items.get(itemId);
-    if (definition?.kind !== 'consumable') return NOT_IN_CATALOG;
-    const stack = character.inventory.findStack(itemId);
-    if (stack === null) {
-      // Sem pilha o item não sai — e a notícia é a mesma do supply v1 (`not-enough-gold`): uma
-      // linha só, para quem estava ausente encontrar o motivo na tela de retorno. O aviso é do
-      // runner e sobrevive ao snapshot.
-      const runner = this.#runnerOf(character.id);
-      if (!runner.warnedNoGold) {
-        runner.warnedNoGold = true;
-        session.record('supply-unaffordable', itemId);
-      }
-      return { ok: false, reason: 'not-enough-gold', retryInMs: 0 };
-    }
-
-    const effect = definition.effect;
-    const aim = effect?.kind === 'damage'
-      ? this.#aimFor(character, effect.range, effect.area)
-      : null;
-    // Efeito PRIMEIRO, decremento depois — como `useSupply` confere antes de pagar. Consumir
-    // uma poção de cura recusada seria perdê-la sem repor nada.
-    const result = applyConsumableEffect(
-      character, definition, aim, this.#options.combat, session.rng, this.#runeScaling(character),
-    );
-    if (!result.ok) return result;
-
-    character.inventory.removeOne(stack.instanceId);
-    session.credit(character.id, 'suppliesUsed', 1);
-    session.emit({
-      kind: 'supply-used', characterId: character.id, supplyId: definition.id,
-      position: this.#at(character),
-      targets: aim === null
-        ? NO_SPELL_TARGETS
-        : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
-      tiles: aim === null ? NO_TILES : [...this.#aimTiles],
-    });
-    if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
-    else this.#applyHits(session, character, result.hits);
-
-    const configured = this.#configuredConsumables(this.#runnerOf(character.id))
-      .find((entry) => entry.itemId === itemId);
-    if (configured !== undefined && character.inventory.quantityOf(itemId) < configured.min) {
-      session.scheduleIn(RESTOCK, 0, {
-        priority: EventPriority.Housekeeping, subject: character.id,
-      });
-    }
-    return result;
-  }
-
-  /**
-   * Repõe os consumíveis que cruzaram o `min` (#419), um lote por item, limitado por
-   * capacidade, teto de pilha e saldo. Evento da fila — a 1 Hz desanexada o resultado é o
-   * mesmo da 10 Hz anexada, e é o que o teste de equivalência prende.
-   *
-   * O dinheiro NUNCA sai por item que não entrou: se o `add` recusar, a compra é desfeita.
-   */
-  #onRestock(session: Session, characterId: string): void {
-    const character = findById(session.participants, characterId);
-    if (character === null || !character.alive) return;
-    const runner = this.#runners.get(characterId);
-    if (runner === undefined) return;
-
-    for (const configured of this.#configuredConsumables(runner)) {
-      const current = character.inventory.quantityOf(configured.itemId);
-      const plan = planRestock(configured.itemId, {
-        current,
-        min: configured.min,
-        batch: configured.batch,
-        price: configured.price,
-        weight: configured.weight,
-        freeCapacity: character.capacity - character.inventory.weight(this.#options.items),
-        freeStack: MAX_STACK - current,
-        balance: balanceOf(character),
-      });
-      if (plan === null) continue;
-
-      const purchase = session.recordPurchase({
-        characterId, itemId: plan.itemId, quantity: plan.quantity,
-        unitPrice: plan.unitPrice, total: plan.total,
-      });
-      character.goldDelta -= plan.total;
-      session.credit(characterId, 'goldSpent', plan.total);
-
-      // O id é DETERMINÍSTICO e deriva do `seq`: reprocessar o extrato insere a mesma
-      // instância, como o loot (`sessionId:n`).
-      const carried: CarriedItem = {
-        instanceId: `${session.id}:${characterId}:buy:${purchase.seq}`,
-        itemId: plan.itemId, quantity: plan.quantity, origin: 'market',
-      };
-      const added = character.inventory.add(
-        carried, this.#options.items, character, this.#containerRules(character),
-      );
-      if (!added.ok) {
-        // Não cabe: o dinheiro não pode sair por item que não entrou.
-        session.undoPurchase(purchase);
-        character.goldDelta += plan.total;
-        session.credit(characterId, 'goldSpent', -plan.total);
-      }
-    }
-  }
-
-  /**
    * Reavalia agora o que está engatilhado (FUN-84, AB-07).
    *
    * O mundo mudou de um jeito que pode tornar uma regra válida — o personagem levou dano, um
@@ -2658,8 +2487,8 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * O estado NATURAL de um slot que já passou por `enabled` e cooldown: `ready`, ou `blocked`
-   * com o mesmo motivo que `#perform` daria (DT-08). Espelha as fontes — catálogo, mana, pilha
-   * do `Inventory` e alvo — sem executar e sem consumir sorteio.
+   * com o mesmo motivo que `#perform` daria (DT-08). Espelha as fontes — catálogo, mana, saldo
+   * e alvo — sem executar e sem consumir sorteio.
    */
   #naturalStateOf(
     set: number, slot: number, character: CharacterRuntime, action: BotActionV2,
@@ -2682,22 +2511,22 @@ export class HuntRuleset implements Ruleset {
       return { set, slot, state: 'ready', remainingMs: 0 };
     }
 
-    const item = this.#options.items.get(action.itemId);
-    if (item?.kind !== 'consumable') return blocked('not-in-catalog');
-    const effect = item.effect;
-    if (effect === undefined || effect.kind === 'blessing') return blocked('not-in-catalog');
-    if (character.inventory.findStack(action.itemId) === null) return blocked('not-enough-item');
-    if (item.requires.level !== undefined && character.level < item.requires.level) {
-      return blocked('not-in-catalog');
-    }
-    if (effect.kind === 'damage') {
-      const magic = this.#options.skills.get('magic');
-      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
-      if (item.requires.magicLevel !== undefined && magicLevel < item.requires.magicLevel) {
+    const supply = this.#options.supplies.get(action.supplyId);
+    if (supply === undefined) return blocked('not-in-catalog');
+    if (supply.effect.kind === 'damage') {
+      // A ordem é a de `useSupply`: requisitos, alvo, e SÓ ENTÃO o gold.
+      if (supply.requires.level !== undefined && character.level < supply.requires.level) {
         return blocked('not-in-catalog');
       }
-      if (this.#targetInRange(character, effect.range) === null) return blocked('no-target');
+      const magic = this.#options.skills.get('magic');
+      const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+      if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
+        return blocked('not-in-catalog');
+      }
+      if (this.#targetInRange(character, supply.effect.range) === null) return blocked('no-target');
     }
+    // Poção e runa são ABSTRATAS: o "estoque" é o saldo, e sem ele a ação não acontece.
+    if (balanceOf(character) < supply.price) return blocked('not-enough-item');
     return { set, slot, state: 'ready', remainingMs: 0 };
   }
 
@@ -2828,6 +2657,7 @@ export class HuntRuleset implements Ruleset {
     const runner = this.#runnerOf(character.id);
     const rules = this.#containerRules(character);
     const items = this.#options.items;
+    const ammunition = this.#options.ammunition;
     return {
       equippedItemId: (slot) => character.inventory.equippedAt(slot)?.itemId ?? null,
       equippedInstanceId: (slot) => character.inventory.equippedAt(slot)?.instanceId ?? null,
@@ -2835,6 +2665,16 @@ export class HuntRuleset implements Ruleset {
       slotOf: (itemId) => items.get(itemId)?.slot ?? null,
       equip: (instanceId) => character.inventory.equip(instanceId, character, items).ok,
       unequip: (slot) => character.inventory.unequip(slot, rules).ok,
+      // A família vem da ARMA na mão; sem arma de distância não há seleção a trocar.
+      selectedAmmoId: () => {
+        const family = character.inventory.weapon(items, character)?.weapon?.ammoFamily;
+        if (family === undefined) return null;
+        return character.ammo.get(family) ?? null;
+      },
+      selectAmmo: (ammoId) => {
+        const ammo = ammunition.get(ammoId);
+        return ammo === undefined ? false : character.selectAmmo(ammo).ok;
+      },
       rememberRing: (instanceId) => { runner.ringReplaced = instanceId; },
       previousRing: () => runner.ringReplaced,
     };
@@ -3349,25 +3189,26 @@ export class HuntRuleset implements Ruleset {
     };
 
     if (weapon !== null && how?.kind === 'distance') {
-      const ammo = this.#equippedAmmo(character, how.ammoFamily ?? 'arrow');
-      // Sem pilha da família: o tiro NÃO sai. Nada de dano inventado nem de munição grátis
-      // (ADR 0032 d.7): o slot vazio é a resposta, e a barra desenha "sem munição".
+      const ammo = this.#ammoFor(character, how.ammoFamily ?? 'arrow');
+      // Sem munição paga pela família — catálogo vazio, ou saldo que não cobre o preço: o tiro
+      // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
+      // de saída `out-of-gold` encerra a hunt, como para a poção.
       if (ammo === null) return;
-      // O `shot` leva o item que de FATO atirou; se o consumo puxar a próxima pilha, o evento
-      // continua apontando para a que saiu — senão o projétil seria de outra munição.
-      const firedId = ammo.definition.id;
+      // O gold do tiro sai no ato, no personagem E no agregado da sessão, como o supply (§20.1).
+      character.goldDelta -= ammo.price;
+      session.credit(character.id, 'goldSpent', ammo.price);
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
-        weaponItemId: weapon.id, ammoId: firedId, from: this.#at(character), to: this.#at(monster),
+        weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
       // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
       // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
       const power = how.power;
       const profile: WeaponProfile = {
         family: how.family,
-        damageType: ammo.definition.ammunition?.damageType ?? 'physical',
+        damageType: ammo.damageType,
         range: how.range,
-        ...(power === undefined ? {} : { power: { ...power, base: ammo.definition.attack } }),
+        ...(power === undefined ? {} : { power: { ...power, base: ammo.attack } }),
       };
       const result = resolveDamage(
         {
@@ -3380,11 +3221,8 @@ export class HuntRuleset implements Ruleset {
       );
       this.#land(session, character, monster, result, 'melee');
       this.#practice(session, character, profile.family, 1);
-      // O golpe ACONTECEU: consome DEPOIS de resolver, para o último tiro contar. Ao zerar,
-      // puxa a próxima pilha da mochila; sem nenhuma, o slot fica vazio (sem `ammo-fallback`).
-      if (character.inventory.consumeEquipped('ammo') === null) {
-        this.#pullNextAmmo(character, how.ammoFamily ?? 'arrow');
-      }
+      // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
+      // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
       return;
     }
 
@@ -3502,54 +3340,20 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * A munição EQUIPADA no slot `ammo` (#420), se ela é da família que a arma dispara.
+   * A munição que o tiro usa (#152, ADR 0026 d.3): a escolhida da família, ou a BÁSICA dela.
    *
-   * `null` é "sem munição": o tiro não sai (ADR 0032 d.7). A família tem de bater com a da
-   * arma — uma pilha de `bolt` num bow `arrow` não atira, e o item não é movido nem destruído:
-   * é escolha do jogador.
+   * `null` é "não atira": a família não tem munição no catálogo, ou o saldo não cobre o preço.
+   * **Não existe munição grátis** — sem gold o tiro não sai, e é a regra de saída `out-of-gold`
+   * que encerra a hunt. O preço é conferido ANTES do gold sair, e o débito fica em `#strike`.
    */
-  #equippedAmmo(character: CharacterRuntime, family: AmmoFamily): EquippedAmmo | null {
-    const carried = character.inventory.equippedAt('ammo');
-    if (carried === null) return null;
-    const definition = this.#options.items.get(carried.itemId);
-    if (definition?.kind !== 'ammo' || definition.ammunition?.family !== family) return null;
-    return { carried, definition };
-  }
-
-  /**
-   * Puxa a próxima pilha da mesma família para o slot vazio (#420): a primeira na ordem de
-   * `inventory.items()` — mochila antes da bolsa, como o jogador vê.
-   */
-  #pullNextAmmo(character: CharacterRuntime, family: AmmoFamily): void {
-    for (const carried of character.inventory.items()) {
-      const definition = this.#options.items.get(carried.itemId);
-      if (definition?.kind !== 'ammo' || definition.ammunition?.family !== family) continue;
-      // `equip` troca com o que estava no slot — que é vazio — e devolve o lugar à mochila.
-      character.inventory.equip(carried.instanceId, character, this.#options.items);
-      return;
-    }
-  }
-
-  /**
-   * Migra o legado `CharacterState.ammo` por família (#420): equipa a pilha do item escolhido,
-   * se existir, e limpa o legado. Sem a pilha a escolha não é materializável e é descartada —
-   * NÃO se inventa item (dar item grátis mudaria a economia e contradiria o preço da munição).
-   *
-   * O legado é consumido UMA vez: nunca re-equipa, e por isso `getState` não o reemite.
-   */
-  #migrateLegacyAmmo(character: CharacterRuntime): void {
-    if (character.legacyAmmo.size === 0) return;
-    if (character.inventory.equippedAt('ammo') === null) {
-      for (const [, itemId] of character.legacyAmmo) {
-        for (const carried of character.inventory.items()) {
-          if (carried.itemId !== itemId) continue;
-          character.inventory.equip(carried.instanceId, character, this.#options.items);
-          break;
-        }
-        if (character.inventory.equippedAt('ammo') !== null) break;
-      }
-    }
-    character.legacyAmmo.clear();
+  #ammoFor(character: CharacterRuntime, family: AmmoFamily): Ammunition | null {
+    const chosenId = character.ammo.get(family);
+    const chosen = chosenId === undefined ? undefined : this.#options.ammunition.get(chosenId);
+    const ammo = chosen !== undefined && chosen.family === family
+      ? chosen
+      : this.#basicAmmo.get(family) ?? null;
+    if (ammo === null || balanceOf(character) < ammo.price) return null;
+    return ammo;
   }
 
   /**
@@ -4263,6 +4067,7 @@ export function createHuntRuleset(
     targetSearchRadius: content.bot.targetSearchRadius,
     spells: content.spells,
     supplies: content.supplies,
+    ammunition: content.ammunition,
     player: { ...content.combat.player },
     ...(exitRules === undefined ? {} : { exitRules }),
     ...(premium === undefined ? {} : { premium }),

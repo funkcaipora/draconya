@@ -62,12 +62,12 @@ export interface BotTarget {
 /**
  * Um slot compilado da barra v2. `when` é a E das condições do slot (RG-006), `act` é a ação
  * crua que o atuador executa, e `cooldownKey` é o livro que a EXECUÇÃO inicia — `group:<g>` para
- * o grupo do conteúdo, ou `spell:<id>`/`item:<id>` para a ação fora de grupo.
+ * o grupo do conteúdo, ou `spell:<id>`/`supply:<id>` para a ação fora de grupo.
  */
 export interface CompiledSlot {
   readonly when: (view: BotView) => boolean;
   readonly act: BotActionV2;
-  /** A chave de cooldown que a execução INICIA: `group:<g>` ou `spell:<id>`/`item:<id>`. */
+  /** A chave de cooldown que a execução INICIA: `group:<g>`, `spell:<id>` ou `supply:<id>`. */
   readonly cooldownKey: string;
 }
 
@@ -76,7 +76,7 @@ export interface CompiledBot {
    * Grupo do conteúdo → slots na ORDEM da barra (RP-002). Substitui as categorias v1.
    *
    * A chave é o grupo do CONTEÚDO (`healing`/`attack`/`support`/`potion`), resolvido uma vez na
-   * compilação; ações sem grupo caem num grupo sintético `spell:<id>`/`item:<id>`, para não
+   * compilação; ações sem grupo caem num grupo sintético `spell:<id>`/`supply:<id>`, para não
    * inventar prioridade compartilhada que o conteúdo não declarou (DT-06).
    */
   readonly groups: ReadonlyMap<string, readonly CompiledSlot[]>;
@@ -103,7 +103,7 @@ export interface CompiledBot {
   readonly lure: BotLure | undefined;
 }
 
-/** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply e item). */
+/** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply). */
 export interface BotActuator {
   /**
    * `false` quando a ação não aconteceu — sem mana, sem supply, alvo fora de alcance.

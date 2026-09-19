@@ -3272,9 +3272,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
    * usa, e o que este arquivo prova é o desenho, não o gate.
    */
   const RUNE = {
-    id: 'rune', name: 'Runa', kind: 'consumable',
-    stackable: true, weight: 1, value: 0, price: 3, group: 'attack',
-    restock: { batch: 20, min: 5 },
+    id: 'rune', name: 'Runa', price: 3, group: 'attack',
     effect: { kind: 'damage', basePower: 40, range: 3, area: { shape: 'circle', radius: 1, centered: 'target' } },
   };
   /** A tabela de aparências do teste. Números do contrato, para o teste ler igual ao real. */
@@ -3284,15 +3282,15 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     },
     supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41 } },
     hits: { melee: 1 },
-    // O projétil do tiro (#152): o da flecha é do ITEM de munição (ADR 0032 d.7), o da wand é
-    // da ARMA. O ícone da flecha é `appearances.items['arrow']`, como todo item.
-    ammunition: { arrow: { missile: 3 } },
+    // O projétil do tiro (#152): o da flecha é da MUNIÇÃO ABSTRATA (ADR 0026 d.3), o da wand é
+    // da ARMA. A munição não tem aparência de item; o `icon` acompanha o `missile` na tabela.
+    ammunition: { arrow: { icon: 3447, missile: 3 } },
     weapons: { wand: { missile: 5 } },
     // As chaves SEMÂNTICAS da ability de monstro (CMB-06): o conteúdo aponta a chave, e é AQUI
     // que ela vira id de arte.
     abilities: { spit: { missile: 9 }, 'spit-hit': { effect: 8 } },
   } as const;
-  /** As armas de tiro do #152, e a flecha grátis que o bow atira sem ninguém escolher. */
+  /** As armas de tiro do #152, e a munição abstrata que o bow dispara. */
   const BOW = {
     id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 1, value: 0, twoHanded: true,
     weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' },
@@ -3302,8 +3300,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 5, max: 5 } },
   };
   const ARROW = {
-    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.7, value: 0, attack: 20, price: 1, ammunition: { family: 'arrow' },
+    id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 1,
   };
   const TEST_MELEE_SKILL = {
     id: 'melee', name: 'Corpo a Corpo', startingLevel: 10,
@@ -3376,26 +3373,20 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     skills: readonly unknown[];
   }> = {}) {
     const raw = rawTestContent();
-    // Item e munição precisam de linha na tabela de aparência (FUN-94): a tabela derivada é
-    // refeita com eles, e a de teste (`TABLE`) entra por cima só no host. A runa agora é item
-    // consumível (AB-01) e a flecha é item de munição (AB-02), então entram pela mesma porta
-    // que as armas.
-    const extraItems = over.weapon === undefined ? [RUNE] : [RUNE, BOW, WAND, ARROW];
+    // As armas precisam de linha na tabela de aparência (FUN-94); a munição abstrata, só do
+    // projétil. A runa é SUPPLY (FUN-77): entra por `supplies`, não por `items`.
+    const extraItems = over.weapon === undefined ? [] : [BOW, WAND];
     const armory = {
       items: [...(raw.items ?? []), ...extraItems],
+      supplies: [...(raw.supplies ?? []), RUNE],
+      ammunition: [ARROW],
     };
     const armed = over.weapon === undefined
       ? {}
       : {
         inventory: {
           backpack: [],
-          equipped: {
-            hand: { instanceId: `i-${over.weapon}`, itemId: over.weapon, quantity: 1 },
-            // O bow precisa da munição EQUIPADA no slot `ammo` (AB-05): sem ela o tiro não sai.
-            ...(over.weapon === 'bow'
-              ? { ammo: { instanceId: 'i-arrow', itemId: 'arrow', quantity: 100 } }
-              : {}),
-          },
+          equipped: { hand: { instanceId: `i-${over.weapon}`, itemId: over.weapon, quantity: 1 } },
         },
       };
     const ratOverride = {
@@ -3793,8 +3784,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(golpes.length % 2).toBe(0);
     expect(usos).toHaveLength(9 * (golpes.length / 2));
     expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
-    // A runa é item (AB-04): o gold sai na REPOSIÇÃO do lote (20 × 3 = 60), não a cada uso.
-    expect(hero().goldDelta).toBe(-60);
+    // A runa é SUPPLY (FUN-77): o gold sai a cada uso, 3 por disparo.
+    expect(hero().goldDelta).toBe(-3 * (golpes.length / 2));
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {
@@ -4022,12 +4013,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     // o gold do HUD caindo — que é `gold + goldDelta`, o saldo, e não o que entrou com o
     // ticket nem o que a sessão movimentou.
     //
-    // A poção é item (AB-04): o gold sai na reposição de entrada (2 × 45 = 90, o que o saldo
-    // de 100 paga), e o uso consome a pilha.
+    // O gold sai no USO (FUN-77, §20.1): um uso de 45 deixa o saldo em 55, e é o SALDO
+    // (`gold + goldDelta`) que o HUD mostra.
     //
     // Mutação que mata: `gold: character.gold` em `playerStatsOf` — o HUD fica em 100 depois
-    // de pagar o lote. Ler o supply na tabela de `spells` em vez de `supplies` mata pelo brilho
-    // 14, que deixa de existir.
+    // de usar. Ler o supply na tabela de `spells` em vez de `supplies` mata pelo brilho 14.
     const { runFor, received, heroId, heroTileAt } = hunt({
       monsters: false, health: 100, gold: 100,
       bot: rules({ potion: [{
@@ -4045,7 +4035,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(cura).toMatchObject({ id: heroId, amount: 80 });
     const stats = ofType(all, 'player-stats');
     expect(stats[0]?.gold).toBe(100);
-    expect(stats.at(-1)?.gold).toBe(10);
+    expect(stats.at(-1)?.gold).toBe(55);
   });
 
   it('o tiro do bow vira missile com o projétil da FLECHA, entre o herói e o rato (#152)', () => {
@@ -4053,7 +4043,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     //
     // Mutação que mata: ler `appearances.weapons[weaponItemId]` para a flecha também — o bow
     // não tem linha em `weapons`, e o tiro ficaria mudo. Trocar `from`/`to` mata pela posição.
-    const { runFor, received, heroId } = hunt({ weapon: 'bow', tanky: true });
+    const { runFor, received, heroId } = hunt({ weapon: 'bow', tanky: true, gold: 1_000 });
     runFor(5_000);
 
     const all = received();
@@ -4080,7 +4070,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
   });
 
   it('SEM linha na tabela o tiro é mudo, e a matemática não muda (invariante 3)', () => {
-    const { runFor, received } = hunt({ weapon: 'bow', tanky: true, table: false });
+    const { runFor, received } = hunt({ weapon: 'bow', tanky: true, table: false, gold: 1_000 });
     runFor(5_000);
 
     const all = received();

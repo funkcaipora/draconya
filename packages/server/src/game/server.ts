@@ -45,6 +45,8 @@ export interface GameDependencies {
   readonly saveBotConfig?: SessionHostOptions['saveBotConfig'];
   /** O catálogo de itens, para as regras de equipar (FUN-82). */
   readonly itemCatalog?: SessionHostOptions['itemCatalog'];
+  /** O catálogo de munição abstrata, para `select-ammo` (#152). */
+  readonly ammunitionCatalog?: SessionHostOptions['ammunitionCatalog'];
   /** As vocações e o level da escolha (#154). */
   readonly vocations?: SessionHostOptions['vocations'];
   readonly vocationLevel?: SessionHostOptions['vocationLevel'];
@@ -133,6 +135,9 @@ export function createGame(
       ...(dependencies.itemCatalog === undefined
         ? {}
         : { itemCatalog: dependencies.itemCatalog }),
+      ...(dependencies.ammunitionCatalog === undefined
+        ? {}
+        : { ammunitionCatalog: dependencies.ammunitionCatalog }),
       ...(dependencies.vocations === undefined ? {} : { vocations: dependencies.vocations }),
       ...(dependencies.vocationLevel === undefined ? {} : { vocationLevel: dependencies.vocationLevel }),
       ...(dependencies.progression === undefined ? {} : { progression: dependencies.progression }),

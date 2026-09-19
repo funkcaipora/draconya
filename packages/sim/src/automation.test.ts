@@ -33,6 +33,9 @@ interface FakeOptions {
   readonly slots?: Readonly<Record<string, ItemSlot>>;
   readonly twoHanded?: readonly string[];
   readonly refuseEquip?: readonly string[];
+  /** A munição BÁSICA selecionada (abstrata, por família), se houver. */
+  readonly selectedAmmo?: string;
+  readonly refuseAmmo?: readonly string[];
 }
 
 /**
@@ -46,10 +49,12 @@ function fake(options: FakeOptions = {}) {
   );
   const twoHanded = new Set(options.twoHanded ?? []);
   const refuse = new Set(options.refuseEquip ?? []);
+  const refuseAmmo = new Set(options.refuseAmmo ?? []);
   const equipped = new Map<ItemSlot, CarriedItem>();
   const carried: CarriedItem[] = [];
   const log: string[] = [];
   let next = 0;
+  let selectedAmmo = options.selectedAmmo ?? null;
   const newId = (itemId: string): string => `${itemId}#${next++}`;
 
   for (const [slot, itemId] of Object.entries(options.equipped ?? {}) as [ItemSlot, string][]) {
@@ -89,6 +94,13 @@ function fake(options: FakeOptions = {}) {
       equipped.delete(slot);
       carried.push(item);
       log.push(`unequip:${slot}:${item.itemId}`);
+      return true;
+    },
+    selectedAmmoId: () => selectedAmmo,
+    selectAmmo: (ammoId) => {
+      if (refuseAmmo.has(ammoId)) return false;
+      selectedAmmo = ammoId;
+      log.push(`select-ammo:${ammoId}`);
       return true;
     },
     rememberRing: (instanceId) => { ring = instanceId; },
@@ -139,7 +151,6 @@ describe('renew-ring e renew-amulet (ADR 0032 d.8)', () => {
 });
 
 describe('swap-ammo-by-targets (ADR 0032 d.9)', () => {
-  const slots = { 'burst-arrow': 'ammo', arrow: 'ammo' } as const;
   const swap = (over: Record<string, unknown>) => automation({
     model: 'swap-ammo-by-targets',
     params: { ammoA: 'burst-arrow', ammoB: 'arrow' },
@@ -151,14 +162,14 @@ describe('swap-ammo-by-targets (ADR 0032 d.9)', () => {
       enter: [{ kind: 'targets', op: '>=', count: 3 }],
       exit: [{ kind: 'targets', op: '<', count: 3 }],
     })]).list;
-    const { actuator } = fake({ equipped: { ammo: 'arrow' }, carried: ['burst-arrow'], slots });
+    const { actuator } = fake({ selectedAmmo: 'arrow' });
 
     expect(run?.run(view({ targetCount: 3 }), actuator))
       .toEqual({ kind: 'applied', event: 'ammo-swapped', detail: 'burst-arrow' });
-    expect(actuator.equippedItemId('ammo')).toBe('burst-arrow');
+    expect(actuator.selectedAmmoId()).toBe('burst-arrow');
     expect(run?.run(view({ targetCount: 2 }), actuator))
       .toEqual({ kind: 'applied', event: 'ammo-swapped', detail: 'arrow' });
-    expect(actuator.equippedItemId('ammo')).toBe('arrow');
+    expect(actuator.selectedAmmoId()).toBe('arrow');
   });
 
   it('entrada é OU: duas condições, uma verdadeira basta', () => {
@@ -166,7 +177,7 @@ describe('swap-ammo-by-targets (ADR 0032 d.9)', () => {
       enter: [{ kind: 'targets', op: '>=', count: 5 }, { kind: 'hp', op: '<', percent: 10 }],
       exit: [{ kind: 'targets', op: '<', count: 5 }, { kind: 'hp', op: '>', percent: 90 }],
     })]).list;
-    const { actuator } = fake({ equipped: { ammo: 'arrow' }, carried: ['burst-arrow'], slots });
+    const { actuator } = fake({ selectedAmmo: 'arrow' });
 
     // Sem alvos, mas com HP baixo: a segunda condição da entrada basta.
     expect(run?.run(view({ targetCount: 0, health: 5 }), actuator))
@@ -186,13 +197,23 @@ describe('swap-ammo-by-targets (ADR 0032 d.9)', () => {
       enter: [{ kind: 'targets', op: '>=', count: 3 }], exit: [],
     })]).list;
 
-    const first = fake({ equipped: { ammo: 'arrow' }, carried: ['burst-arrow'], slots });
+    const first = fake({ selectedAmmo: 'arrow' });
     expect(never?.run(view({ targetCount: 9 }), first.actuator)).toEqual({ kind: 'idle' });
 
-    const second = fake({ equipped: { ammo: 'arrow' }, carried: ['burst-arrow'], slots });
+    const second = fake({ selectedAmmo: 'arrow' });
     expect(stuck?.run(view({ targetCount: 3 }), second.actuator)).toMatchObject({ kind: 'applied' });
     expect(stuck?.run(view({ targetCount: 0 }), second.actuator)).toEqual({ kind: 'idle' });
-    expect(second.actuator.equippedItemId('ammo')).toBe('burst-arrow');
+    expect(second.actuator.selectedAmmoId()).toBe('burst-arrow');
+  });
+
+  it('munição indisponível vira `ammo-unavailable` e NÃO interrompe', () => {
+    const [run] = compileAutomations([swap({
+      enter: [{ kind: 'targets', op: '>=', count: 3 }],
+      exit: [],
+    })]).list;
+    const { actuator } = fake({ selectedAmmo: 'arrow', refuseAmmo: ['burst-arrow'] });
+    expect(run?.run(view({ targetCount: 3 }), actuator))
+      .toEqual({ kind: 'blocked', reason: 'ammo-unavailable', itemId: 'burst-arrow' });
   });
 });
 

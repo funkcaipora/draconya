@@ -76,10 +76,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(arena?.outfitIds).toEqual([batId, ratId]);
   });
 
-  it('leva como cada arma bate — tipo, alcance, família, duas mãos — e nunca mana nem faixa de dano (#152)', () => {
+  it('leva como cada arma bate — tipo, alcance, família, duas mãos — e a munição abstrata (#152)', () => {
     // O tooltip precisa do alcance e da família da munição; mana por golpe e faixa de dano são
-    // balanceamento (invariante 4) e ficam fora. O catálogo NÃO tem mais `ammunition`: a munição
-    // é item no slot (AB-05), e o slot `ammo` do set a desenha como todo item.
+    // balanceamento (invariante 4) e ficam fora. A munição é ABSTRATA (ADR 0026 d.3): ela sai
+    // no topo do catálogo, com família, `attack` e preço — não como item de slot.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withWeapons = {
       ...raw,
@@ -87,8 +87,10 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
         ...(raw.items ?? []),
         { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } },
         { id: 'wand', name: 'Wand', kind: 'weapon', slot: 'hand', weight: 19, value: 0, weapon: { kind: 'wand', range: 3, manaPerHit: 2, damage: { min: 8, max: 18 } } },
-        { id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.7, value: 0, attack: 25, price: 1, ammunition: { family: 'arrow' } },
-        { id: 'sniper-arrow', name: 'Sniper Arrow', kind: 'ammo', slot: 'ammo', stackable: true, weight: 0.8, value: 0, attack: 28, price: 5, requires: { level: 20 }, ammunition: { family: 'arrow' } },
+      ],
+      ammunition: [
+        { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 },
+        { id: 'sniper-arrow', name: 'Sniper Arrow', family: 'arrow', attack: 28, price: 5, requires: { level: 20 } },
       ],
     };
     const content = buildContent({ ...withWeapons, appearances: [placeholderAppearances(withWeapons)] });
@@ -97,7 +99,11 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect(catalogue.items.find((item) => item.id === 'bow')).toMatchObject({ twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } });
     const wand = catalogue.items.find((item) => item.id === 'wand');
     expect(wand?.weapon).toEqual({ kind: 'wand', range: 3 });
-    expect(catalogue).not.toHaveProperty('ammunition');
+    expect(catalogue.items.find((item) => item.id === 'arrow')).toBeUndefined();
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'arrow'))
+      .toMatchObject({ family: 'arrow', attack: 25, price: 1, requires: {} });
+    expect(catalogue.ammunition.find((ammo) => ammo.id === 'sniper-arrow'))
+      .toMatchObject({ family: 'arrow', price: 5, requires: { level: 20 } });
   });
 
   it('leva as vocações — ganhos por level e arma inicial — e o level da escolha (#154)', () => {
@@ -162,7 +168,8 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
   it('leva o vocabulário do bot v2, e é ele que a tela oferece (AB-09, RF-10)', () => {
     // A UI do bot não pode ter lista de opções em código: se as duas divergirem, o jogador
     // configura o que o bot recusa — e descobre pelo extrato que não fecha. O v2 substitui o
-    // v1: saem `slots` por categoria e `supplies`; entram conjuntos, teclas, grupos e modelos.
+    // v1: saem `slots` por categoria; entram conjuntos, teclas, grupos, modelos e os suprimentos
+    // ABSTRATOS (`supplies`, com gold no uso).
     const { bot } = buildCatalogue(content);
 
     expect(bot.vocabularyVersion).toBe(content.bot.vocabularyVersion);
@@ -174,7 +181,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       'renew-ring', 'renew-amulet', 'swap-ammo-by-targets', 'swap-weapon-shield-by-hp', 'swap-ring',
     ]);
     expect(bot).not.toHaveProperty('slots');
-    expect(bot).not.toHaveProperty('supplies');
+    expect(bot.supplies.map((supply) => supply.id)).toContain('health-potion');
     expect(bot).not.toHaveProperty('advancedFromLevel');
     expect(bot).not.toHaveProperty('advancedOnly');
   });
@@ -207,36 +214,38 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     expect('vocationId' in (semVocacao ?? {})).toBe(true);
   });
 
-  it('o consumível leva kind, price, group e restock no items[] (AB-09, RF-11)', () => {
-    // O editor de ação do AB-11 filtra por `kind` e mostra o preço de compra e a reposição. A
-    // poção é ITEM desde a AB-01: ela não está mais em `bot.supplies`, e sim em `items[]`.
-    const { items } = buildCatalogue(content);
-    const potion = items.find((item) => item.id === 'health-potion');
+  it('o suprimento leva price, effect, group e requires — e nunca o Base Power (AB-09, RF-11)', () => {
+    // O editor de ação do AB-11 filtra por `effect` e mostra o preço de uso. A poção é SUPPLY
+    // abstrato (FUN-77, §20.1): ela não está em `items[]`, e sim em `bot.supplies[]`.
+    const { bot, items } = buildCatalogue(content);
+    const potion = bot.supplies.find((supply) => supply.id === 'health-potion');
 
+    expect(items.find((item) => item.id === 'health-potion')).toBeUndefined();
     expect(potion).toMatchObject({
-      kind: 'consumable', group: 'potion', price: 45, restock: { batch: 50, min: 10 },
+      price: 45, group: 'potion', effect: 'heal', requires: {},
     });
   });
 
-  it('a runa leva kind/group/restock e os requisitos — e nunca o Base Power (#165, AB-09)', () => {
+  it('a runa leva group e os requisitos — e nunca o Base Power (#165, AB-09)', () => {
     // A tela desabilita a runa abaixo do level, como faz com magia; o BP e a conversão são
     // balanceamento (invariante 4) e ficam fora.
     const { appearances: _placeholder, ...raw } = rawTestContent();
     const withRune = {
       ...raw,
-      items: [
-        ...(raw.items ?? []),
+      supplies: [
+        ...(raw.supplies ?? []),
         {
-          id: 'avalanche-rune', name: 'Avalanche Rune', kind: 'consumable',
-          stackable: true, weight: 1.2, value: 0, price: 14, group: 'attack',
-          restock: { batch: 20, min: 5 }, requires: { level: 30, magicLevel: 4 },
+          id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+          requires: { level: 30, magicLevel: 4 },
           effect: { kind: 'damage', basePower: 45, range: 4, area: { shape: 'circle', radius: 3 } },
         },
       ],
     };
-    const { items } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
-    const rune = items.find((item) => item.id === 'avalanche-rune');
-    expect(rune).toMatchObject({ kind: 'consumable', price: 14, group: 'attack', restock: { batch: 20, min: 5 } });
+    const { bot } = buildCatalogue(buildContent({ ...withRune, appearances: [placeholderAppearances(withRune)] }));
+    const rune = bot.supplies.find((supply) => supply.id === 'avalanche-rune');
+    expect(rune).toMatchObject({
+      price: 14, group: 'attack', effect: 'damage', requires: { level: 30, magicLevel: 4 },
+    });
     expect(JSON.stringify(rune)).not.toContain('basePower');
   });
 

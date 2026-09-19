@@ -20,7 +20,6 @@ export * from './skills.js';
 export * from './bestiary.js';
 export * from './party.js';
 export * from './inventory.js';
-export * from './restock.js';
 export * from './casting.js';
 export * from './area.js';
 export * from './conditions.js';

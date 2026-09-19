@@ -28,7 +28,7 @@ import type {
 import { NO_DEFENSE } from './combat/defense.js';
 import type { DefenseSource } from './combat/defense.js';
 
-/** Teto de empilhamento (§21.5). Munição empilha; espada não empilha por não ser `stackable`. */
+/** Teto de empilhamento (§21.5). Item empilhável enche até aqui; espada não empilha. */
 export const MAX_STACK = 100;
 
 /** Um item carregado. `instanceId` é a IDENTIDADE — a linha de `item_instance` (FUN-76). */
@@ -238,26 +238,6 @@ export class Inventory {
   }
 
   /**
-   * Tira UMA unidade do item equipado no slot e devolve o que sobrou, ou `null` se o slot
-   * esvaziou (#420). Não mexe em container, não conhece conteúdo e não chama o ruleset: quem
-   * puxa a próxima pilha é quem tem o catálogo (o `HuntRuleset`).
-   *
-   * O peso total cai por uma unidade, então não há conferência de capacidade — consumir nunca
-   * estoura. Slot vazio devolve `null`.
-   */
-  consumeEquipped(slot: ItemSlot): CarriedItem | null {
-    const carried = this.#equipped.get(slot);
-    if (carried === undefined) return null;
-    if (carried.quantity > 1) {
-      const left = { ...carried, quantity: carried.quantity - 1 };
-      this.#equipped.set(slot, left);
-      return left;
-    }
-    this.#equipped.delete(slot);
-    return null;
-  }
-
-  /**
    * O peso do que ele carrega — containers MAIS equipado.
    *
    * Equipado conta: uma armadura vestida não fica mais leve por estar no corpo, e a alternativa
@@ -336,42 +316,11 @@ export class Inventory {
   }
 
   /**
-   * A primeira pilha deste item nos containers, ou `null` (#419). Mochila primeiro — é a
-   * mesma ordem de `items()` e a que o jogador vê.
+   * A primeira pilha deste item nos containers, ou `null`. Mochila primeiro — é a mesma ordem
+   * de `items()` e a que o jogador vê.
    */
   findStack(itemId: string): CarriedItem | null {
     for (const item of this.items()) if (item.itemId === itemId) return item;
-    return null;
-  }
-
-  /** Quantas unidades deste item estão nos containers, somando as pilhas (#419). */
-  quantityOf(itemId: string): number {
-    let total = 0;
-    for (const item of this.items()) if (item.itemId === itemId) total += item.quantity;
-    return total;
-  }
-
-  /**
-   * Tira UMA unidade da pilha identificada por `instanceId` (#419). Em zero, a instância sai e
-   * a linha vazia do fim é aparada; acima disso, a pilha só encolhe.
-   *
-   * Devolve o que sobrou da instância, ou `null` se ela não estava lá. O item NUNCA é recriado
-   * com id novo: a identidade é o que carrega a proveniência.
-   */
-  removeOne(instanceId: string): CarriedItem | null {
-    for (const [target, initial] of [[this.#backpack, this.#initial.backpack], [this.#satchel, this.#initial.satchel]] as const) {
-      const index = target.findIndex((carried) => carried?.instanceId === instanceId);
-      if (index < 0) continue;
-      const carried = target[index] as CarriedItem;
-      if (carried.quantity > 1) {
-        const left = { ...carried, quantity: carried.quantity - 1 };
-        target[index] = left;
-        return left;
-      }
-      target[index] = null;
-      this.#trim(target, initial);
-      return null;
-    }
     return null;
   }
 

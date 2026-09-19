@@ -102,18 +102,17 @@ const items = [
     id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', twoHanded: true, weight: 31, value: 0,
     weapon: { kind: 'distance', family: 'distance', range: 6, ammoFamily: 'arrow' },
   },
-  {
-    id: 'arrow', name: 'Arrow', kind: 'ammo', slot: 'ammo', stackable: true,
-    weight: 0.7, value: 0, attack: 25, price: 1, restock: { batch: 100, min: 20 },
-    ammunition: { family: 'arrow' },
-  },
+];
+
+const ammunition = [
+  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 },
 ];
 
 const content = (over: Partial<RawContent> = {}): Content => {
   const base: RawContent = {
     monsters: [dummy, brawler], hunts: [hunt], vocations: [], progression: [progression],
     combat: [combat], stamina: [stamina], party: [party], spells: [], skills, weaponFamilies,
-    items, maps: [map], routes: [route],
+    items, ammunition, maps: [map], routes: [route],
     bot: [{ id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000, slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     ...over,
   };

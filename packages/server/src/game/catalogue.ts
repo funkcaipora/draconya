@@ -64,6 +64,23 @@ export function buildCatalogue(content: Content): Catalogue {
         // O grupo (#155): a tela mostra ao lado do nome; BP e conversão não descem.
         group: spell.group ?? 'attack',
       })),
+      /**
+       * Os suprimentos abstratos (§20.1, ADR 0026 d.3): poção e runa NÃO são itens — usar debita
+       * gold. O `price` e o `group` são o que a tela mostra para escolher.
+       */
+      supplies: [...content.supplies.values()].map((supply) => ({
+        id: supply.id,
+        name: supply.name,
+        price: supply.price,
+        effect: supply.effect.kind,
+        group: supply.group,
+        requires: {
+          ...(supply.requires.level === undefined ? {} : { level: supply.requires.level }),
+          ...(supply.requires.magicLevel === undefined
+            ? {}
+            : { magicLevel: supply.requires.magicLevel }),
+        },
+      })),
       // Os cinco modelos de automação e os parâmetros de cada um (AB-12), do descritor do
       // conteúdo. A engine é dona do mecanismo; o conteúdo, dos rótulos.
       automations: BOT_AUTOMATION_CATALOGUE.map((descriptor) => ({
@@ -92,13 +109,6 @@ export function buildCatalogue(content: Content): Catalogue {
       kind: item.kind,
       // O rótulo curto da barra/Mochila (AB-13), só quando o conteúdo o declara.
       ...(item.shortLabel === undefined ? {} : { shortLabel: item.shortLabel }),
-      // O grupo de cooldown, o preço de COMPRA e a reposição por lote do consumível/munição
-      // (AB-09). Opcionais: um nó anterior manda sem, e o cliente trata ausência como vazio.
-      ...(item.group === undefined ? {} : { group: item.group }),
-      ...(item.price === undefined ? {} : { price: item.price }),
-      ...(item.restock === undefined
-        ? {}
-        : { restock: { batch: item.restock.batch, min: item.restock.min } }),
       // Como a arma bate (#152): tipo, alcance e família — para o tooltip. Mana por golpe e
       // faixa de dano ficam de fora: balanceamento (invariante 4).
       ...(item.weapon === undefined
@@ -110,6 +120,22 @@ export function buildCatalogue(content: Content): Catalogue {
             ...(item.weapon.ammoFamily === undefined ? {} : { ammoFamily: item.weapon.ammoFamily }),
           },
         }),
+    })),
+    /**
+     * A munição abstrata (#152, ADR 0026 d.3): o seletor no slot do escudo lista a família do
+     * bow, com o preço por tiro e o `appearanceId` do ícone. `attack` é o único número de
+     * balanceamento aqui, pela mesma razão do preço do supply: é o que o jogador olha.
+     */
+    ammunition: [...content.ammunition.values()].map((ammo) => ({
+      id: ammo.id,
+      name: ammo.name,
+      family: ammo.family,
+      attack: ammo.attack,
+      price: ammo.price,
+      appearanceId: ammo.appearanceId,
+      requires: {
+        ...(ammo.requires.level === undefined ? {} : { level: ammo.requires.level }),
+      },
     })),
     // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui — a tela não
     // pode ter o 8 em código. Só os ganhos e a arma inicial (id de item); nada de fórmula.
@@ -167,8 +193,8 @@ function groupsOf(content: Content): string[] {
   for (const spell of content.spells.values()) {
     if (spell.group !== undefined) groups.add(spell.group);
   }
-  for (const item of content.items.values()) {
-    if (item.group !== undefined) groups.add(item.group);
+  for (const supply of content.supplies.values()) {
+    groups.add(supply.group);
   }
   return [...groups].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
