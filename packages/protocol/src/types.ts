@@ -172,14 +172,49 @@ export const C2S_SCHEMAS = {
    * recusa é `system-message`, como equipar.
    */
   'move-item': z.object({ from: Place, to: Place }),
+  /**
+   * O líder muda rateio, divisão de lucro, coleta ou venda automática EM TEMPO DE HUNT
+   * (#393, ADR 0033 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
+   * mantém o valor atual — e quem decide se quem mandou é o líder e se os ids do catálogo
+   * existem é o servidor (invariante 4). Sucesso é `party-state` (v2) refletindo o estado
+   * novo; recusa é `system-message`.
+   */
+  'party-settings': z.object({
+    shareCosts: z.boolean().optional(),
+    splitLoot: z.boolean().optional(),
+    /** `null` = coletar tudo; `undefined` = não mexer no que já está configurado. */
+    collect: z.array(z.string().min(1)).nullable().optional(),
+    autoSell: z.array(z.string().min(1)).optional(),
+  }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
-/** Quem está na party (#196): só os PRESENTES; quem saiu some da lista. */
+/** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
 export const PartyState = z.object({
   leaderId: z.string().min(1),
+  /**
+   * @deprecated Espelho de leitura para cliente anterior ao #393: `'shared'` sse os dois
+   * eixos estão ligados. Sai depois de um deploy completo (ADR 0033 d.1) — não remover sem
+   * antes confirmar que nenhum cliente em produção ainda o lê.
+   */
   mode: z.enum(['split', 'shared']),
+  /**
+   * Os dois eixos como o #359 os gravou (PR #366), ainda no topo por um deploy de rolagem —
+   * o agrupamento novo é `settings`. Ausente: nó anterior ao #359.
+   */
   shareCosts: z.boolean().optional(),
   splitLoot: z.boolean().optional(),
+  /** Os dois eixos do líder (§4/§5 do PRD). Ausente: nó anterior ao #393 — leia `mode`. */
+  settings: z.object({
+    shareCosts: z.boolean(),
+    splitLoot: z.boolean(),
+  }).optional(),
+  /** A config de loot do líder e o limite dele (§6-§8, §23.1). Ausente: `splitLoot` desligado ou nó anterior. */
+  loot: z.object({
+    collect: z.array(z.string().min(1)).nullable(),
+    autoSell: z.array(z.string().min(1)),
+    autoSellLimit: z.number().int().nonnegative(),
+    leaderPremium: z.boolean(),
+  }).optional(),
   members: z.array(z.object({
     characterId: z.string().min(1),
     name: z.string().min(1),
@@ -200,25 +235,45 @@ export const PartyState = z.object({
      * Mana em percentual inteiro (0–100, #339, SV-03). Opcional.
      */
     manaPercent: z.number().int().min(0).max(100).optional(),
+    /** Quando entrou nesta hunt (§16.1, elegibilidade; #397 filtra o extrato por isto). */
+    joinedAtMs: z.number().nonnegative().optional(),
+    /** Tem viewer anexado agora — não confundir com "vivo": morto pode estar conectado. */
+    connected: z.boolean().optional(),
   })),
 });
 
-/** A bolsa compartilhada (#196, modo `shared`): itens, gold, e quanto cabe. */
+/** A bolsa compartilhada (#196; v2 no #393): itens, gold, reserva e elegibilidade. */
 export const PartyBag = z.object({
   gold: z.number().int().nonnegative(),
   items: z.array(z.object({
     instanceId: z.string().min(1),
     itemId: z.string().min(1),
     quantity: z.number().int().positive(),
+    /** Presentes no abate que deu este item (§16.1) — só quem entra na venda dele. */
+    eligible: z.array(z.string().min(1)).optional(),
   })),
   weight: z.number().nonnegative(),
   capacity: z.number().nonnegative(),
+  /** Σ value × quantity dos itens da bolsa (§10). Ausente: nó anterior ao #393. */
+  value: z.number().int().nonnegative().optional(),
+  /** `peso > capacidade disponível total` (§14). Ausente: nó anterior, ou nunca calculado. */
+  overweight: z.boolean().optional(),
+  /** Reserva proporcional por membro (§11-§13, ADR 0033 d.3), na ordem de `party-state.members`. */
+  reservations: z.array(z.object({
+    characterId: z.string().min(1),
+    reserved: z.number().nonnegative(),
+    available: z.number().nonnegative(),
+  })).optional(),
 });
 
-/** O settlement da bolsa (#196): quanto rendeu e quem levou quanto. */
+/** O settlement da bolsa (#196; v2 no #393): quanto rendeu, quem levou quanto, e por quê. */
 export const PartySettlement = z.object({
   total: z.number().int().nonnegative(),
   shares: z.array(z.object({ characterId: z.string().min(1), gold: z.number().int().nonnegative() })),
+  /** Ausente: settlement anterior ao #393 (sempre foi saída/fim). */
+  reason: z.enum(['leave', 'end', 'toggle', 'auto-sell']).optional(),
+  /** Só com `reason: 'auto-sell'` — qual item da lista de venda gerou este settlement. */
+  itemId: z.string().min(1).optional(),
 });
 
 /**
@@ -234,6 +289,23 @@ export const PartySpending = z.object({
     goldSpent: z.number(),
     estimatedShare: z.number().int().nonnegative().optional(),
   })),
+});
+
+/** A seção PARTY do analisador (§32, ADR 0033 d.11) — o mesmo bloco nos dois lugares que o usam. */
+export const PartySummary = z.object({
+  players: z.number().int().positive(),
+  uniqueVocations: z.number().int().positive(),
+  xpPercent: z.number().int().nonnegative(),
+  totalXp: z.number().nonnegative(),
+  totalSupplies: z.number().nonnegative(),
+  shareCosts: z.boolean(),
+  splitLoot: z.boolean(),
+  bagValue: z.number().int().nonnegative(),
+  bagWeight: z.number().nonnegative(),
+  autoSell: z.object({
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+  }),
 });
 
 /**
@@ -305,6 +377,11 @@ export const S2C_SCHEMAS = {
     partyBag: PartyBag.optional(),
     partySpending: PartySpending.optional(),
     /**
+     * A seção PARTY do analisador (§32, ADR 0033 d.11) — o MESMO bloco do `analyzer.party`.
+     * Ausente: solo, ou nó `game` anterior ao #393.
+     */
+    partySummary: PartySummary.optional(),
+    /**
      * O total de jogadores online (SV-07) — o mesmo número do `player-count` mais recente,
      * para quem reanexa não ficar sem ele até o próximo ciclo de 30 s. Ausente: nó `game`
      * anterior a esta mudança, ou este processo ainda não completou o primeiro ciclo desde que
@@ -361,6 +438,8 @@ export const S2C_SCHEMAS = {
   analyzer: z.object({
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
+    /** A seção PARTY (§32, ADR 0033 d.11). Ausente: solo, ou nó `game` anterior ao #393. */
+    party: PartySummary.optional(),
   }),
   /**
    * O Bestiário do personagem (§18, FUN-113): `id do monstro → abates`, o valor inteiro e
@@ -530,6 +609,11 @@ export const S2C_SCHEMAS = {
         effect: z.string().min(1),
         /** O grupo do Tibia (#155): `attack`, `healing`, `support`. `default`: nó anterior manda sem. */
         group: z.string().min(1).default('attack'),
+        /**
+         * Pode mirar um amigo (#392, #393)? Opcional SEM `default`: um nó `game` anterior manda
+         * sem, e o cliente novo não pode recusar a mensagem — quem não veio é `self`.
+         */
+        targets: z.enum(['self', 'friend']).optional(),
       })),
       supplies: z.array(z.object({
         id: z.string().min(1),
@@ -541,6 +625,8 @@ export const S2C_SCHEMAS = {
           level: z.number().int().positive().optional(),
           magicLevel: z.number().int().nonnegative().optional(),
         }).default({}),
+        /** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
+        targets: z.enum(['self', 'friend']).optional(),
       })),
     }),
     /**
@@ -708,6 +794,16 @@ export const S2C_SCHEMAS = {
    * isso, e um campo a mais aqui é um campo a mais para versionar depois.
    */
   'player-count': z.object({ count: z.number().int().nonnegative() }),
+  /**
+   * O Follow do bot mudou de estado (#393, ADR 0033 decisão 9): ligou, desligou, ou foi
+   * interrompido porque o alvo morreu, saiu ou ficou inalcançável. Por PERSONAGEM.
+   */
+  'follow-state': z.object({
+    active: z.boolean(),
+    /** O alvo tentado — presente mesmo com `active: false`, para a UI dizer QUEM parou. */
+    targetId: z.string().min(1),
+    reason: z.enum(['dead', 'left', 'unreachable']).optional(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

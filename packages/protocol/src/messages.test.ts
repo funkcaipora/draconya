@@ -765,6 +765,257 @@ describe('party presentation messages (#196, #339, SV-03)', () => {
   });
 });
 
+describe('party-settings (#393)', () => {
+  it('is intention only — a partial patch — and the opcode is 17', () => {
+    // Um opcode só para os quatro campos (ADR 0033 d.1): cada um é opcional, e o servidor
+    // (#400) decide se quem mandou é o líder e se os ids existem no catálogo (invariante 4).
+    // Mutação que mata: tornar qualquer campo obrigatório, ou trocar o número por um ocupado.
+    expect(CLIENT_TO_SERVER['party-settings']).toBe(17);
+    const schema = C2S_SCHEMAS['party-settings'];
+    expect(schema.safeParse({}).success).toBe(true);
+    expect(schema.safeParse({ shareCosts: true }).success).toBe(true);
+    expect(schema.safeParse({ splitLoot: false }).success).toBe(true);
+    expect(schema.safeParse({ collect: null }).success).toBe(true);
+    expect(schema.safeParse({ collect: [] }).success).toBe(true);
+    expect(schema.safeParse({ collect: ['bow'] }).success).toBe(true);
+    expect(schema.safeParse({ autoSell: ['bow'] }).success).toBe(true);
+    // Um campo de resultado no payload não é exigido nem interpretado: o schema descarta o que
+    // não é intenção.
+    expect(schema.safeParse({ shareCosts: true, gold: 10 }).success).toBe(true);
+    // Id vazio não é id de catálogo.
+    expect(schema.safeParse({ autoSell: [''] }).success).toBe(false);
+    expect(schema.safeParse({ collect: [''] }).success).toBe(false);
+  });
+
+  it('keeps null, empty list and absent as three distinct values', () => {
+    // `null` = coletar tudo; `[]` = não coletar nada; ausente = não mexer no que já está
+    // configurado. Quem interpreta é `configureParty` (#394) — o protocolo só preserva a
+    // distinção.
+    const schema = C2S_SCHEMAS['party-settings'];
+    expect(schema.parse({ collect: null }).collect).toBeNull();
+    expect(schema.parse({ collect: [] }).collect).toEqual([]);
+    expect(schema.parse({}).collect).toBeUndefined();
+  });
+});
+
+describe('follow-state (#393)', () => {
+  it('round trips active and interrupted, and the opcode is 30', () => {
+    // Mutação que mata: apagar `follow-state: 30` de SERVER_TO_CLIENT (`decodeS2C` devolve
+    // `null`), ou tirar um dos três motivos do enum.
+    expect(SERVER_TO_CLIENT['follow-state']).toBe(30);
+    const active: S2CMessage = { type: 'follow-state', active: true, targetId: 'p2' };
+    expect(decodeS2C(encodeS2C(active))).toEqual([active]);
+    for (const reason of ['dead', 'left', 'unreachable'] as const) {
+      const stopped: S2CMessage = { type: 'follow-state', active: false, targetId: 'p2', reason };
+      expect(decodeS2C(encodeS2C(stopped))).toEqual([stopped]);
+    }
+  });
+
+  it('rejects an unknown reason and an empty targetId', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'follow-state', active: false, targetId: 'p2', reason: 'gone',
+    } as unknown as S2CMessage))).toBeNull();
+    expect(decodeS2C(encodeS2C({
+      type: 'follow-state', active: true, targetId: '',
+    } as unknown as S2CMessage))).toBeNull();
+  });
+
+  it('is server-to-client only: the client reads the follow, it never reports one', () => {
+    expect('follow-state' in S2C_SCHEMAS).toBe(true);
+    expect('follow-state' in C2S_SCHEMAS).toBe(false);
+  });
+});
+
+describe('party-state v2 (#393)', () => {
+  const v2: S2CMessage = {
+    type: 'party-state',
+    leaderId: 'p1',
+    mode: 'shared',
+    settings: { shareCosts: true, splitLoot: true },
+    loot: { collect: null, autoSell: ['bow'], autoSellLimit: 5, leaderPremium: true },
+    members: [
+      {
+        characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100,
+        vocationId: 'knight', level: 20, manaPercent: 80, joinedAtMs: 1_000, connected: true,
+      },
+      {
+        characterId: 'p2', name: 'Bob', alive: false, healthPercent: 0,
+        vocationId: null, level: 5, manaPercent: 0, joinedAtMs: 2_000, connected: false,
+      },
+    ],
+  };
+
+  it('round trips settings, loot and the member metadata', () => {
+    // Mutação que mata: tirar o `.optional()` de `settings`/`loot`/`joinedAtMs`/`connected`
+    // (o decode do nó anterior devolve `null`).
+    expect(decodeS2C(encodeS2C(v2))).toEqual([v2]);
+  });
+
+  it('decodes a v1 party-state without the new fields', () => {
+    const v1 = {
+      type: 'party-state',
+      leaderId: 'p1',
+      mode: 'split',
+      members: [{ characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(v1)) as Array<Record<string, unknown>> | null;
+    expect(decoded).not.toBeNull();
+    expect(decoded?.[0]).not.toHaveProperty('settings');
+    expect(decoded?.[0]).not.toHaveProperty('loot');
+    const member = (decoded?.[0]?.['members'] as Array<Record<string, unknown>>)[0];
+    expect(member).not.toHaveProperty('joinedAtMs');
+    expect(member).not.toHaveProperty('connected');
+  });
+
+  it('keeps the #359 top-level axes for a node that still reads them', () => {
+    const message: S2CMessage = {
+      type: 'party-state', leaderId: 'p1', mode: 'split',
+      shareCosts: true, splitLoot: false, members: [],
+    };
+    expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+  });
+});
+
+describe('party-bag v2 (#393)', () => {
+  it('round trips value, overweight, reservations and eligible', () => {
+    const v2: S2CMessage = {
+      type: 'party-bag',
+      gold: 100, weight: 12, capacity: 400, value: 340, overweight: false,
+      reservations: [
+        { characterId: 'p1', reserved: 80, available: 20 },
+        { characterId: 'p2', reserved: 40, available: 10 },
+      ],
+      items: [{ instanceId: 'i1', itemId: 'bow', quantity: 1, eligible: ['p1', 'p2'] }],
+    };
+    expect(decodeS2C(encodeS2C(v2))).toEqual([v2]);
+  });
+
+  it('decodes a v1 party-bag without the new fields', () => {
+    const v1 = {
+      type: 'party-bag',
+      gold: 0,
+      items: [{ instanceId: 'i1', itemId: 'bow', quantity: 1 }],
+      weight: 0,
+      capacity: 0,
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(v1)) as Array<Record<string, unknown>> | null;
+    expect(decoded).not.toBeNull();
+    expect(decoded?.[0]).not.toHaveProperty('value');
+    expect(decoded?.[0]).not.toHaveProperty('overweight');
+    expect(decoded?.[0]).not.toHaveProperty('reservations');
+    expect((decoded?.[0]?.['items'] as Array<Record<string, unknown>>)[0]).not.toHaveProperty('eligible');
+  });
+});
+
+describe('party-settlement v2 (#393)', () => {
+  it('round trips the four reasons, and itemId with auto-sell', () => {
+    for (const reason of ['leave', 'end', 'toggle', 'auto-sell'] as const) {
+      const message: S2CMessage = {
+        type: 'party-settlement', total: 30, shares: [{ characterId: 'p1', gold: 30 }], reason,
+        ...(reason === 'auto-sell' ? { itemId: 'bow' } : {}),
+      };
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+  });
+
+  it('decodes a settlement without reason or itemId (previous node)', () => {
+    const v1 = {
+      type: 'party-settlement', total: 30, shares: [{ characterId: 'p1', gold: 30 }],
+    } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(v1)) as Array<Record<string, unknown>> | null;
+    expect(decoded).not.toBeNull();
+    expect(decoded?.[0]).not.toHaveProperty('reason');
+    expect(decoded?.[0]).not.toHaveProperty('itemId');
+  });
+});
+
+describe('the party block of the analyzer and the session state (#393)', () => {
+  const summary = {
+    players: 4, uniqueVocations: 3, xpPercent: 200, totalXp: 1_000, totalSupplies: 120,
+    shareCosts: true, splitLoot: true, bagValue: 340, bagWeight: 12.5,
+    autoSell: { used: 2, limit: 5 },
+  };
+  const aggregates = { durationMs: 1_000, xpGained: 10, goldGained: 5, goldSpent: 1, kills: 1, deaths: 0 };
+
+  it('analyzer carries party, and decodes without it', () => {
+    const withParty: S2CMessage = { type: 'analyzer', aggregates, notableEvents: [], party: summary };
+    expect(decodeS2C(encodeS2C(withParty))).toEqual([withParty]);
+    const decoded = decodeS2C(encodeS2C({ type: 'analyzer', aggregates, notableEvents: [] })) as Array<Record<string, unknown>> | null;
+    expect(decoded).not.toBeNull();
+    expect(decoded?.[0]).not.toHaveProperty('party');
+  });
+
+  it('session-state carries the same block as partySummary', () => {
+    const base = {
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'c1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { mapId: null, creatures: [], groundItems: [] },
+      aggregates,
+      notableEvents: [],
+    };
+    const withSummary = { ...base, partySummary: summary } as unknown as S2CMessage;
+    const decoded = decodeS2C(encodeS2C(withSummary)) as Array<{ partySummary?: unknown }> | null;
+    expect(decoded?.[0]?.partySummary).toEqual(summary);
+    const without = decodeS2C(encodeS2C(base as unknown as S2CMessage)) as Array<Record<string, unknown>> | null;
+    expect(without?.[0]).not.toHaveProperty('partySummary');
+  });
+
+  it('rejects a summary missing a field', () => {
+    expect(S2C_SCHEMAS.analyzer.safeParse({
+      aggregates, notableEvents: [], party: { ...summary, autoSell: { used: 2 } },
+    }).success).toBe(false);
+  });
+});
+
+describe('catalogue bot targets (#393)', () => {
+  const catalogue = (spells: unknown[], supplies: unknown[]): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [], items: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+    bot: {
+      vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
+      advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+      spells, supplies,
+    },
+  } as unknown as S2CMessage);
+
+  it('accepts self and friend, and leaves an older node without them', () => {
+    // Opcional SEM `default`: um nó `game` anterior manda sem, e o cliente lê ausente como
+    // `self` — o mesmo tratamento dos campos novos do #436.
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'exura-sio', name: 'Exura Sio', manaCost: 20, minLevel: 8, vocationId: 'druid', effect: 'heal', targets: 'friend' }],
+      [{ id: 'health-potion', name: 'Health Potion', price: 45, effect: 'heal', targets: 'self' }],
+    ));
+    expect(parsed.bot.spells[0]?.targets).toBe('friend');
+    expect(parsed.bot.supplies[0]?.targets).toBe('self');
+
+    const older = S2C_SCHEMAS.catalogue.parse(catalogue(
+      [{ id: 'exura', name: 'Exura', manaCost: 20, minLevel: 8, vocationId: 'druid', effect: 'heal' }],
+      [{ id: 'health-potion', name: 'Health Potion', price: 45, effect: 'heal' }],
+    ));
+    expect(older.bot.spells[0]?.targets).toBeUndefined();
+    expect(older.bot.supplies[0]?.targets).toBeUndefined();
+  });
+
+  it('rejects a target outside the vocabulary', () => {
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue(
+      [{ id: 'exura', name: 'Exura', manaCost: 20, minLevel: 8, vocationId: 'druid', effect: 'heal', targets: 'enemy' }],
+      [],
+    )).success).toBe(false);
+  });
+});
+
+describe('the #393 opcodes do not burn or duplicate any number', () => {
+  it('adds 17 and 30 and keeps the burned lists empty', () => {
+    expect(CLIENT_TO_SERVER['party-settings']).toBe(17);
+    expect(SERVER_TO_CLIENT['follow-state']).toBe(30);
+    expect(BURNED_OPCODES_C2S).toEqual([]);
+    expect(BURNED_OPCODES_S2C).toEqual([]);
+  });
+});
+
 describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
   it('round trips active-conditions (opcode 27)', () => {
     expect(SERVER_TO_CLIENT['active-conditions']).toBe(27);
