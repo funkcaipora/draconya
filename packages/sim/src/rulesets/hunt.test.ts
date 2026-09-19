@@ -6352,6 +6352,134 @@ describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
   });
 });
 
+describe('auto-target na tela e runa à distância (#444)', () => {
+  const rune = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  };
+  const chosenOf = (ruleset: HuntRuleset, id: string): string | null =>
+    ruleset.getState().runners?.[id]?.chosenTarget ?? null;
+  const chebyshev = (a: { x: number; y: number }, b: { x: number; y: number }): number =>
+    Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+
+  it('um monstro que surge na tela vira alvo — o mais próximo pela política', () => {
+    const { session, hero, ruleset } = start({ difficulty: 'bold' });
+    session.advanceBy(1);
+    expect(ruleset.monsters).toHaveLength(3);
+
+    const chosen = chosenOf(ruleset, hero.id);
+    expect(chosen).not.toBeNull();
+    const target = ruleset.monsters.find((monster) => monster.subject === chosen);
+    expect(target).toBeDefined();
+
+    // A política padrão é `nearest`: nenhum outro vivo está mais perto que o escolhido.
+    const targetDistance = chebyshev(hero.position, target!.position);
+    for (const monster of ruleset.monsters) {
+      if (!monster.alive) continue;
+      expect(targetDistance).toBeLessThanOrEqual(chebyshev(hero.position, monster.position));
+    }
+  });
+
+  it('alvo do auto-target fora do alcance da arma não trava o corpo a corpo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Todos na tela, mas fora do alcance 1: o auto-target guarda o mais próximo (`a`).
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x + 6, y: hero.position.y };
+    c.position = { x: hero.position.x + 7, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+
+    // `b` encosta: o alvo persistente continua `a`, mas o golpe cai em quem está ao alcance.
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+  });
+
+  it('quando o alvo morre, o auto-target passa para o próximo mais próximo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x + 2, y: hero.position.y };
+    c.position = { x: hero.position.x + 3, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+
+    a.receiveDamage(a.health);
+    resolveDeath(session, { kind: 'monster', monster: a });
+    expect(chosenOf(ruleset, hero.id)).toBe(b.subject);
+  });
+
+  it('alvo que sai da tela é limpo e o auto-target pega o próximo', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 1, y: hero.position.y };
+    b.position = { x: hero.position.x + 2, y: hero.position.y };
+    c.position = { x: hero.position.x + 3, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(chosenOf(ruleset, hero.id)).toBe(a.subject);
+
+    a.position = { x: hero.position.x + 20, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+    expect(chosenOf(ruleset, hero.id)).toBe(b.subject);
+  });
+
+  it('o alvo auto-selecionado atravessa o snapshot', () => {
+    const { session, hero, ruleset } = start({ difficulty: 'bold' });
+    session.advanceBy(100);
+    const chosen = chosenOf(ruleset, hero.id);
+    expect(chosen).not.toBeNull();
+
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const resumed = Session.fromSnapshot(
+      snapshot, huntRulesetFromSnapshot(snapshot, content()) as HuntRuleset, Rng.fromSeed('resume'),
+    );
+    expect(chosenOf(resumed.ruleset as HuntRuleset, hero.id)).toBe(chosen);
+  });
+
+  it('a runa alcança a 8 mesmo com alcance de corpo a corpo 1', () => {
+    const config = botConfig({
+      rune: [{ when: { kind: 'targets', op: '>=', count: 1 }, do: { kind: 'supply', supplyId: 'avalanche-rune' } }],
+    });
+    const { session, hero, ruleset } = withSpells(botConfig({}), {
+      gold: 10_000, supplies: [...supplies, rune], health: 5_000,
+    }, 'bold');
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+
+    // Nasce SEM bot: posiciona um alvo a 5 tiles (fora do alcance 1 do corpo a corpo) e os
+    // outros fora da tela, e só então configura a runa.
+    session.advanceBy(1);
+    const monsters = [...ruleset.monsters];
+    const far = monsters[0];
+    if (far === undefined) throw new Error('faltou rato');
+    far.position = { x: hero.position.x + 5, y: hero.position.y };
+    for (const other of monsters.slice(1)) {
+      other.position = { x: hero.position.x + 20, y: hero.position.y };
+    }
+    ruleset.configureBot(session, config, 'hero');
+    expect(chosenOf(ruleset, hero.id)).toBe(far.subject);
+
+    run(session, 200, 100);
+
+    // A runa saiu no alvo a 5 tiles — sem a janela do grupo pelo alcance da runa, `targets >= 1`
+    // contaria zero (a 5 tiles não há ninguém no alcance 1) e nada seria lançado.
+    expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
+    expect(session.aggregates.goldSpent).toBe(session.aggregates.suppliesUsed * 14);
+    const hits = session.drainEvents()
+      .filter((event) => event.kind === 'creature-hit')
+      .map((event) => (event as { creatureId: string }).creatureId);
+    expect(hits).toContain(far.subject);
+  });
+});
+
 // --- o cooldown do supply e o aviso limitado das automações (#420) ---------------------------
 
 describe('o uso de supply inicia o cooldown do grupo (#420)', () => {
