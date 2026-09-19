@@ -22,6 +22,7 @@ import type { OutfitColors } from './outfit.js';
 import { SheetLoader } from './sheet-loader.js';
 import { SpriteCache } from './sprites.js';
 import type { Sprite } from './sprites.js';
+import { NO_DISPLACEMENT, type Displacement } from '../world/walking-tile.js';
 
 /** Quantos bytes de GPU os quadros podem ocupar. 64 MB dá folga para uma tela cheia. */
 const SPRITE_BUDGET_BYTES = 64 * 1024 * 1024;
@@ -40,8 +41,8 @@ const LAYER_BASE = 0;
 const LAYER_TEMPLATE = 1;
 
 /**
- * Lado de um tile em pixels. LOCAL de propósito: `assets/` não importa de `world/` (ciclo com
- * `keys.ts`), e a dimensão em TILES do objeto sai da folha dividida por este número.
+ * Lado de um tile em pixels. LOCAL de propósito: `assets/` não importa `world/camera.ts`
+ * (ciclo com `keys.ts`), e a dimensão em TILES do objeto sai da folha dividida por este número.
  */
 const TILE_PX = 32;
 
@@ -287,6 +288,19 @@ export class AssetPack {
    */
   objectFlags(appearanceId: number): AppearanceFlags {
     return this.#appearances.object.get(appearanceId)?.flags ?? NO_FLAGS;
+  }
+
+  /**
+   * O `shift` de um outfit, em pixels (#386; FUN-117 já o lê do campo 3, mas até aqui só o
+   * objeto o usava). `{0, 0}` quando o outfit não existe ou não tem `shift` — a criatura fica
+   * na âncora do tile. O objeto congelado compartilhado evita alocar por criatura por quadro.
+   */
+  outfitDisplacement(outfitId: number): Displacement {
+    const flags = this.#appearances.outfit.get(outfitId)?.flags;
+    if (flags === undefined) return NO_DISPLACEMENT;
+    const x = flags.shiftX ?? 0;
+    const y = flags.shiftY ?? 0;
+    return x === 0 && y === 0 ? NO_DISPLACEMENT : { x, y };
   }
 
   /**
