@@ -122,7 +122,9 @@ resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: '
 `slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar foi ligado na
 AB-06 (#421). A munição **não é item**: com um bow/crossbow equipado, o slot do **Escudo** passa a
 mostrar a munição escolhida da família e o clique abre o `AmmoPicker`; o slot `ammo` do corpo
-segue genérico, e não há pilha nem contagem.
+segue genérico, e não há pilha nem contagem. **A escolha persiste entre sessões**: viaja no
+extrato, o `jobs` grava em `characters.ammo` e ela volta pelo ticket ao entrar — o mesmo caminho
+da vocação.
 
 ## Inventário e equipamento (FUN-82)
 

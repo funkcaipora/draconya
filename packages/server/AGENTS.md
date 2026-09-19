@@ -503,10 +503,12 @@ A munição é **abstrata** (ADR 0032 decisão 7): a escolha é por família, pe
 `select-ammo`, com `requires.level` conferido em `#requestSelectAmmo` e o sucesso publicado em
 `player-stats.ammo { arrow, bolt }`; a recusa vira `system-message`, como a de equipar. O
 catálogo (`catalogue.ammunition`) e `server.ammunition` levam família, `attack`, `price`,
-`appearanceId` e `requires.level`. O ticket não carrega `ammo`, o extrato não tem
-`SessionReceipt.ammo`, e o ledger não lê nem escreve `characters.ammo` — a coluna `jsonb`
-continua na tabela como **dado morto** até uma issue de limpeza (ADR 0014: descartar dado
-persistido exige tratamento explícito). A escolha viaja no snapshot da sessão, não no banco. O
+`appearanceId` e `requires.level`. **A escolha PERSISTE** (regressão corrigida no code review
+do M18): o extrato leva `SessionReceipt.ammo` (lista de PERMISSÃO em `parseReceipt`), o ledger
+lê e escreve `characters.ammo` (`jsonb`) em `applyProgression`, e o ticket devolve por
+`InitialCharacter.ammo` (validado por `isAmmoSelection`, valor corrompido vira AUSENTE) —
+o mesmo caminho da vocação. `#requestSelectAmmo` marca `hosted.dirty` para o extrato de estado
+durável da Cidade levar a escolha também. O
 projétil do tiro (`shot`) é resolvido em `#presentCombat` pela tabela:
 `appearances.ammunition[ammoId].missile` para a flecha, `appearances.weapons[itemId].missile`
 para wand e rod; sem linha, o tiro é mudo.
