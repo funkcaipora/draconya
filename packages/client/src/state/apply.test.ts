@@ -774,6 +774,25 @@ describe('a party v2 no estado (#405, ADR 0033)', () => {
     }, 1);
     expect(hud.get().analyzer.party).toBeUndefined();
   });
+
+  it('grava `party-end-vote` em vez de descartar (#432)', () => {
+    // Mutação que mata: descartar a mensagem — a tela nunca abriria o diálogo de aprovação.
+    expect(hud.get().partyEndVote).toBeNull();
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    expect(hud.get().partyEndVote).toMatchObject({ active: true, proposedAtMs: 0, approved: ['lead'] });
+  });
+
+  it('`active: false` fecha a votação (#432)', () => {
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    applyMessage({ type: 'party-end-vote', active: false, proposedAtMs: 0, approved: [] }, 1);
+    expect(hud.get().partyEndVote).toMatchObject({ active: false });
+  });
+
+  it('session-state limpa a votação: o servidor a reenvia no attach se ainda correr (#432)', () => {
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    applyMessage(attach(), 1);
+    expect(hud.get().partyEndVote).toBeNull();
+  });
 });
 
 describe('o follow-state do bot (#406, ADR 0033 d.9)', () => {

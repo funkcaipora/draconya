@@ -34,6 +34,14 @@ export const CLIENT_TO_SERVER = {
    * reflete a verdade no próprio `party-state`, e não o eco do que foi mandado.
    */
   'party-settings': 17,
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 decisão 14). INTENÇÃO, como tudo:
+   * `approve: true` é o líder PROPOR (a proposta carrega o sim dele) e é o membro APROVAR a
+   * proposta em curso; `approve: false` é recusar — derruba a votação e a sessão segue. Quem
+   * decide se quem mandou pode propor é o servidor, dentro da sessão dona (invariante 4/9), e a
+   * recusa vira `system-message`. Sair sozinho continua `leave-hunt` (10), livre.
+   */
+  'party-end-vote': 18,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -144,6 +152,13 @@ export const SERVER_TO_CLIENT = {
    * história até o jogador escolher de novo (ou o mesmo alvo voltar a ser válido).
    */
   'follow-state': 30,
+  /**
+   * O estado da votação de encerrar a hunt para todos (#432, ADR 0032 decisão 14): o líder
+   * propôs, `approved` lista quem já aprovou e `active` diz se a janela de 60 s ainda corre.
+   * Sai quando a proposta abre, a cada aprovação, ao expirar e ao ser recusada — e no attach,
+   * para quem reconecta no meio da votação. `active: false` é o fim dela.
+   */
+  'party-end-vote': 31,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

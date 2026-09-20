@@ -1322,6 +1322,19 @@ body {
   gap: 8px;
 }
 .party-footer-leave { height: 22px; font-size: 6.5px; }
+/* Votação de encerrar a caçada para todos (#432, ADR 0032 d.14). */
+.party-end-vote { display: grid; gap: 4px; }
+.party-end-vote-note,
+.party-end-vote-waiting {
+  margin: 0;
+  font: 6.5px var(--font-mono);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.party-end-vote-actions { display: flex; gap: 6px; }
+.party-end-vote-actions > * { flex: 1; }
+.party-end-vote-propose,
+.party-end-vote-cancel { height: 22px; font-size: 6.5px; }
 
 /* Vocação e level de cada companheiro (#347, SV-11): a abreviação leva a cor da vocação. */
 .party-companion-header {

@@ -193,6 +193,33 @@ e na ordem de entrada (`bot.md`). O último a sair encerra a sessão com o motiv
 levou alguém, o motivo é `exit-rule`. Uma party que ficou com um membro vira, na prática, solo:
 morte encerra, loot é do matador sem sorteio.
 
+### Encerrar para todos exige o sim de todos (M20, #432, ADR 0032 d.14)
+
+A nota do painel — "Parar no meio da caçada exige o sim de todos." — é literal. **Ninguém, nem o
+líder, encerra a sessão da party para os outros** por um clique só:
+
+- **Proposta do líder.** O líder manda `party-end-vote` (C2S, opcode 18) com `approve: true`; o
+  `sim` abre uma votação com a aprovação DELE (quem propõe, aprova) e emite `party-end-vote`
+  (S2C, opcode 31) para todos os visualizadores. Só o líder propõe; solo e não-líder recebem
+  `system-message` com recusa tipada. Re-propor reinicia a janela e as aprovações.
+- **Aprovação por membro, 60 s de relógio LÓGICO.** Cada membro presente aprova com
+  `party-end-vote { approve: true }`; recusar (`false`) derruba a votação na hora e a sessão
+  segue. O vencimento da janela é um evento da fila (`END_VOTE_EXPIRE`, `END_VOTE_WINDOW_MS =
+  60_000`), nunca um contador por tick (invariante 2): a 1 Hz e a 10 Hz a proposta vence no
+  mesmo instante lógico. Expirou sem todos os sins, nada muda.
+- **Encerramento com settlement.** Quando **todos os presentes** aprovaram, a sessão encerra com
+  `session.end('party-vote')`: o `onEnd` liquida a bolsa (settlement `reason: 'end'`) e cada
+  membro leva o seu `Receipt` com `reason: 'party-vote'` — a mesma máquina do encerramento por
+  morte/saída, com um motivo novo. Quem sair no meio da votação deixa de contar; se os que
+  ficaram já tinham aprovado todo, a sessão encerra depois do extrato de quem saiu.
+- **Sair sozinho continua livre.** `leave-hunt` (opcode 10) tira só quem pediu, com o extrato
+  dele, e não abre votação nenhuma.
+- **A votação atravessa o snapshot** (`endVote` no estado do ruleset, sem bump de
+  `SNAPSHOT_FORMAT_VERSION`): quem reconecta no meio da janela recebe o estado pelo `party-end-vote`
+  do attach e não perde quem já aprovou.
+
+O ADR 0032 fixa a forma; a janela de 60 s é parâmetro e pode mudar sem ADR.
+
 ### O que o cliente vê
 
 `session-state` leva `party` (líder, membros, vivos, vocação, level, manaPercent), `partySpending`
@@ -200,7 +227,8 @@ morte encerra, loot é do matador sem sorteio.
 composição dos membros com HP, vocação (`vocationId`), level (`level`) e percentual de mana
 (`manaPercent`), reenviado ao vivo sempre que qualquer um desses valores, a composição ou a
 liderança mudam (via `sameParty` no host, #339). `party-bag`, `party-settlement` e
-`party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente). Durante a hunt
+`party-spending` chegam a cada mudança (opcodes 24–26 e 29, só servidor→cliente), e
+`party-end-vote` (opcode 31) leva o estado da votação de encerrar. Durante a hunt
 a coluna esquerda mostra os companheiros com HP, vocação (abreviação de uma letra, colorida pela
 vocação, com o id cru como reserva se o catálogo não reconhecer), level e mana — os dois últimos
 só quando o `party-state` os manda —, num painel fixo (`PartyMembers`, #259, #347); com
@@ -233,6 +261,12 @@ O contrato v2 (ADR 0033) tornou visível no cliente o que antes era só dado no 
   jogadores, vocações únicas, bônus/multiplicador de XP, XP total e a XP do viewer, rateio e
   supplies totais, "Sua parte" (de `party-spending.shares[me].estimatedShare`, DT-03), divisão de
   lucro, valor/peso da bolsa e venda automática `N / limite`.
+- **A votação de encerrar** no rodapé de `PartyMembers` (#432): o líder vê "Encerrar para todos" e
+  manda `party-end-vote { approve: true }`; com a votação ativa, vê a contagem
+  "Encerrando para todos · N/M aprovaram" e pode "Cancelar encerramento" (`approve: false`). O
+  membro não-líder, com a votação ativa e sem ter aprovado, vê "Aprovar" / "Recusar"; depois de
+  aprovar, "Você aprovou · aguardando os demais". O diálogo some com `active: false`. Tudo é
+  intenção: quem decide se a proposta vale e se todos aprovaram é o servidor.
 
 Campo ausente — nó `game` anterior ao #400, ou "não se aplica" — não monta a UI nova: a tela
 continua exatamente o que era, nunca com um número fabricado (D8, invariante 4).
@@ -263,6 +297,9 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 - `itemSchema.value` é obrigatório; `0` é "não se vende" e vai para o líder.
 - Sair e morrer são `leave` com extrato próprio; o último encerra; `party-member-lost` cascateia.
 - Settlement ao sair, no fim e ao desligar `splitLoot`; `reason` no evento.
+- Encerrar para todos exige o sim de todos (`party-end-vote`, C2S 18 / S2C 31): proposta do líder,
+  aprovação de cada presente em 60 s lógicos, `session.end('party-vote')` só com todos os sins.
+  Sair sozinho continua `leave-hunt` (10), livre.
 
 ## Parâmetros de balanceamento
 
@@ -279,6 +316,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 | TTL do convite | 2 min | `packages/server/src/party-store.ts`, `DEFAULT_INVITE_TTL_MS` |
 | TTL na fila de matchmaking | 10 min | `packages/server/src/party-store.ts`, `QUEUE_TTL_MS` |
 | Raio de entrada do 2º+ membro | 3 tiles do ponto de entrada | `packages/sim/src/rulesets/hunt.ts`, `ENTRY_RADIUS` |
+| Janela de aprovação da votação de encerrar | 60 000 ms (lógico) | `packages/sim/src/rulesets/hunt.ts`, `END_VOTE_WINDOW_MS` |
 | Alcance provisório da poção com `target: 'friend'` | 1 tile | `packages/content/data/supplies/{health-potion,mana-potion}.json`, `effect.range` |
 | Intervalo de polling da tela de party | 2 000 ms | `packages/client/src/shell/PartyPanel.tsx`, `POLL_MS` |
 
@@ -374,14 +412,16 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 ## Referências
 
 PRD §15, §22.1, §43.2; ADR 0027 (decisões 1–9, d.5 emendada por #359 e pelo ADR 0033; d.8 e d.9
-emendadas pelo ADR 0033), ADR 0033 (Party v2), ADR 0023 (sessão com muitos personagens),
+emendadas pelo ADR 0033), ADR 0033 (Party v2), ADR 0032 (decisão 14 — DPS/HPS e o sim de todos),
+ADR 0023 (sessão com muitos personagens),
 ADR 0024 (repouso); `docs/party-hunt-plan.md` (M13) e `docs/party-vip-plan.md` (M20, desenho e
 exemplos numéricos);
 `packages/sim/src/party.ts` (`reserveProportionally`, `autoSellLimit`, `settleEntries`),
-`packages/sim/src/rulesets/hunt.ts` (`configureParty`, `partySummary`),
+`packages/sim/src/rulesets/hunt.ts` (`configureParty`, `partySummary`, `proposeEnd`, `approveEnd`,
+`cancelEnd`),
 `packages/sim/src/session.ts` (`leave`, `Receipt`, `joinedAtMs`),
 `packages/content/data/party/baseline.json`,
 `packages/server/src/api/{party,friends}.ts`, `packages/server/src/party-store.ts`,
-`packages/server/src/receipts.ts`, `packages/protocol/src/messages.ts` (17, 24–26, 30),
+`packages/server/src/receipts.ts`, `packages/protocol/src/messages.ts` (17, 18, 24–26, 30, 31),
 `packages/client/src/party/`, `packages/client/src/shell/{PartyPanel,PartyMembers,PartyBag}.tsx`;
 `bot.md` (§13.9, follow e cura com alvo), `analyzer.md`, `economy.md`, `bestiary.md`.

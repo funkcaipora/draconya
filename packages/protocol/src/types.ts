@@ -193,6 +193,12 @@ export const C2S_SCHEMAS = {
     collect: z.array(z.string().min(1)).nullable().optional(),
     autoSell: z.array(z.string().min(1)).optional(),
   }),
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). INTENÇÃO (invariante 4): o
+   * líder manda `approve: true` para propor e os membros para aprovar; `false` recusa. Quem
+   * decide se quem mandou pode propor, e se a sessão encerra, é o servidor.
+   */
+  'party-end-vote': z.object({ approve: z.boolean() }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */
@@ -291,6 +297,17 @@ export const PartySettlement = z.object({
   reason: z.enum(['leave', 'end', 'toggle', 'auto-sell']).optional(),
   /** Só com `reason: 'auto-sell'` — qual item da lista de venda gerou este settlement. */
   itemId: z.string().min(1).optional(),
+});
+
+/**
+ * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). Só S2C: o cliente vê o estado
+ * e manda a intenção por `party-end-vote` C2S. `proposedAtMs` é o instante LÓGICO da proposta
+ * (0 quando não há votação), `approved` quem já aprovou e `active` se a janela de 60 s corre.
+ */
+export const PartyEndVote = z.object({
+  active: z.boolean(),
+  proposedAtMs: z.number().nonnegative(),
+  approved: z.array(z.string().min(1)),
 });
 
 /**
@@ -441,6 +458,7 @@ export const S2C_SCHEMAS = {
   'party-state': PartyState,
   'party-bag': PartyBag,
   'party-settlement': PartySettlement,
+  'party-end-vote': PartyEndVote,
   'party-spending': PartySpending,
   /**
    * O analisador ao vivo (FUN-110): os MESMOS agregados do `session-state`, mandados quando
@@ -790,7 +808,7 @@ export const S2C_SCHEMAS = {
    * personagem rendendo.
    */
   'session-ended': z.object({
-    reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed']),
+    reason: z.enum(['manual-exit', 'exit-rule', 'death', 'drain', 'completed', 'party-vote']),
     aggregates: Aggregates,
     notableEvents: z.array(NotableEvent),
   }),

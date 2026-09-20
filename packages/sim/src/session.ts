@@ -113,7 +113,13 @@ export type EndReason =
   | 'exit-rule'
   | 'death'
   | 'drain'
-  | 'completed';
+  | 'completed'
+  /**
+   * A party votou encerrar para todos (#432, ADR 0032 d.14): o líder propôs, todos os presentes
+   * aprovaram dentro de 60 s. Sair sozinho continua `manual-exit`; isto é o encerramento
+   * coletivo, e é o único motivo novo que o ADR 0032 acrescenta.
+   */
+  | 'party-vote';
 
 export interface NotableEvent {
   readonly atMs: number;

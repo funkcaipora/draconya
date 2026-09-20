@@ -39,6 +39,8 @@ const REASON = {
   death: 'Você morreu',
   drain: 'Sua sessão foi encerrada por manutenção',
   completed: 'Concluído',
+  // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
+  'party-vote': 'A party encerrou a caçada',
 } as const;
 import { missileDuration } from '../world/effects.js';
 import {
@@ -294,6 +296,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           // A sessão acabou: a seção PARTY não existe mais no extrato.
           party: undefined,
         },
+        // A votação de encerrar não sobrevive ao fim da sessão (#432): a tela de retorno não
+        // mostra o diálogo de uma proposta que já cumpriu o efeito.
+        partyEndVote: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
           text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
@@ -364,6 +369,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         party: message.party ?? null,
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
+        // A votação de encerrar (#432) volta a `null`: o servidor a reenvia no attach se ainda
+        // corre, e até ele chegar a tela não mostra o diálogo da sessão anterior.
+        partyEndVote: null,
         // O Follow (#406) volta a `null` na reanexação: o servidor o reenvia no attach, e até
         // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
         followState: null,
@@ -412,6 +420,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // O gasto de cada membro e a prévia de rateio (#354, SV-18). A "Sua parte" do analisador
       // lê daqui (DT-03): era descartado, e o `estimatedShare` se perdia.
       hud.set((state) => ({ ...state, partySpending: message }));
+      return;
+
+    case 'party-end-vote':
+      // A votação de encerrar a hunt para todos (#432). É um PUSH do servidor, como o Follow:
+      // a tela só a espelha, e o `active: false` é o que fecha o diálogo — nunca um clique.
+      hud.set((state) => ({ ...state, partyEndVote: message }));
       return;
 
     case 'follow-state':
