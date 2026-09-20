@@ -94,6 +94,14 @@ describe('FriendsModal (#404)', () => {
     expect(invite).not.toContain('disabled');
   });
 
+  it('offers "Convidar para Party" while the active party is in a hunt', async () => {
+    friends.set((state) => ({ ...state, friends: [friend()] }));
+    party.set((state) => ({ ...state, party: null, activePartyId: 'party-1' }));
+    const html = await render();
+    const invite = buttonFor(html, 'Convidar para Party');
+    expect(invite).not.toContain('disabled');
+  });
+
   it('disables the invite and explains why without a party (RF-05)', async () => {
     friends.set((state) => ({ ...state, friends: [friend()] }));
     const html = await render();

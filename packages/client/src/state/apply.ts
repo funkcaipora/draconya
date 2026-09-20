@@ -12,7 +12,7 @@ import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress }
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
 import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
-import { partyEntered } from '../party/store.js';
+import { partyEntered, partyExited } from '../party/store.js';
 
 /**
  * As três skills que o painel mostra (#340, SV-04), do `skills` de `player-stats`/`session-state`
@@ -297,6 +297,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'session-ended': {
+      partyExited();
       // O extrato. A sessão acabou e o jogador precisa saber POR QUÊ e o que rendeu — sumir
       // sem explicação é como o modo idle perde a confiança de quem deixou o personagem
       // rendendo. O mundo NÃO é limpo: a última coisa verdadeira continua na tela por trás
