@@ -1573,7 +1573,7 @@ export class SessionHost {
     }
 
     this.#botByCharacter.set(viewer.characterId, decision.config);
-    this.#applyBotConfig(hosted, decision.config);
+    this.#applyBotConfig(hosted, decision.config, viewer.characterId);
     // Aplicar continua imediato; confirmar espera o Redis aceitar a pendência.
     // Falha não desfaz a regra em uso, mas permite ao jogador tentar salvar novamente.
     try {
@@ -1648,12 +1648,18 @@ export class SessionHost {
     this.#botByCharacter.set(characterId, decision.config);
   }
 
-  /** Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal. */
-  #applyBotConfig(hosted: HostedSession, config: BotConfig): void {
+  /**
+   * Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal.
+   *
+   * **O `characterId` é obrigatório na party (#203/#407):** sem ele, `configureBot` cai no
+   * PRIMEIRO participante e a configuração de quem falou sobrescreve a do líder. O bot é por
+   * personagem — `#botByCharacter` já é — e o `sim` aceita o id de propósito.
+   */
+  #applyBotConfig(hosted: HostedSession, config: BotConfig, characterId: string): void {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     // A sessão dona é quem escreve (invariante 9), e é ela que está aqui: `configureBot`
     // recompila dentro do ruleset, não de fora.
-    ruleset.configureBot?.(hosted.session, config);
+    ruleset.configureBot?.(hosted.session, config, characterId);
   }
 
   async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {

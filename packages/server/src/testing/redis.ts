@@ -23,11 +23,13 @@
 //  13  api/party.test.ts
 //  14  api/party-exit.postgres.test.ts
 //  15  api/matchmaking.test.ts
+//  16  api/party-v2-exit.postgres.test.ts
 //
-// A spec da #403 reservou o índice 18 (16 do #407, 17 do #402/#400), mas este Redis de teste
-// — e o `redis:7-alpine` do CI — têm só os bancos 0 a 15: `SELECT 18` é `ERR DB index is out
-// of range`, e o teste cairia no banco 0 em silêncio. Enquanto ninguém subir `--databases` na
-// infraestrutura, o único índice livre é o 0, e é ele que `friends.postgres.test.ts` usa.
+// A infraestrutura de teste sobe o Redis com **32 bancos** (`--databases 32`, no CI e no
+// compose local): o padrão de 16 (0 a 15) tornava `SELECT 16` um `ERR DB index is out of
+// range`, e o teste cairia no banco 0 em silêncio. A spec da #403 reservou o 18 (17 do
+// #402/#400); 17 e 18 seguem livres. `friends.postgres.test.ts` continua no 0, que era o
+// único livre antes de a infraestrutura subir os 32 — trocá-lo não é necessário agora.
 //
 // Esta lista já foi violada uma vez, e por isso existe `testing/redis.test.ts`: ele lê os
 // arquivos de teste e reprova se dois pedirem o mesmo índice. Comentário não impede colisão;

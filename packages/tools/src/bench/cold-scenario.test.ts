@@ -30,4 +30,30 @@ describe('the cold-hunts bench scenario (#179)', () => {
     expect((session.ruleset as HuntRuleset).monsters.length).toBeGreaterThanOrEqual(30);
     expect(session.snapshot()).toBeDefined();
   });
+
+  it('PARTY=8: eight characters per instance build and advance without throwing (#407)', () => {
+    // O `bench:hunts PARTY=8` não roda no CI; este teste é o que reprova no PR se o cenário
+    // deixar de aceitar o teto de 8 que o M20 introduz (ADR 0033 D12) — `maxMembers: 8` no
+    // fixture, e oito `enter` na MESMA instância.
+    const content = scenario();
+    expect(content.party.maxMembers).toBe(8);
+    const stats = statsForLevel(1, null, content.progression);
+    const session = createHuntSession({
+      id: 'cold-party', content, huntId: 'cold', difficulty: 'reckless', createdAtMs: 0,
+    });
+    for (let p = 0; p < 8; p++) {
+      session.enter(new CharacterRuntime({
+        id: `p${p}`, position: { x: 0, y: 0, z: 7 },
+        health: stats.maxHealth, maxHealth: stats.maxHealth, mana: 0, maxMana: stats.maxMana,
+        level: 1, xp: 0, vocationId: null, staminaMs: 86_400_000, staminaUpdatedAtMs: 0,
+        goldDelta: 0, alive: true, cooldowns: {},
+      }));
+    }
+    for (let t = 0; t < 10; t++) {
+      session.advanceBy(1_000);
+      session.drainEvents();
+    }
+    expect(session.participants).toHaveLength(8);
+    expect(session.snapshot()).toBeDefined();
+  });
 });
