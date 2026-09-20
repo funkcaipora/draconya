@@ -178,11 +178,13 @@ que o golpe do personagem protege, e que já quebrou uma vez lá.
 | Teto de ações por segundo por personagem | 5 (derivado: 5 categorias × 1 cooldown cada — não é número do PRD, é consequência calculada em `docs/technical-architecture.md` §5) | caminho previsto: `packages/content/bot` |
 | Lure dinâmico — mín/máx | escolha do jogador; mín 4 / máx 8 é o exemplo do PRD | `bot_config.lure` do personagem — não é conteúdo |
 | Ring swap — limiares | escolha do jogador; equipar HP<50%, retirar HP>=60%, Mana<10% é o exemplo do PRD | `bot_config.ringSwap` do personagem — não é conteúdo |
+| Alcance da poção com `target: 'friend'` | 1 tile `[ABERTO — valor provisório: 1]` (ADR 0033 d.10) | `packages/content/data/supplies/{health-potion,mana-potion}.json`, `effect.range` |
 
 ## Em aberto
 
 - Subconjunto exato de opções disponíveis no bot básico (pré-level 50) — deve ser definido a partir do bot completo (§13.2, §43.3). O mecanismo existe e é dado (`advancedOnly` em `bot/baseline.json`); falta o recorte.
 - Vocabulário final de todas as condições possíveis do bot (§43.3).
+- `[ABERTO — valor provisório: 1]` Alcance da poção com `target: 'friend'` (§26, ADR 0033 d.10) — o PRD não fixa alcance de poção; 1 é o mínimo que ainda é "em terceiro", em `packages/content/data/supplies/{health-potion,mana-potion}.json`.
 
 ## Divergências do PRD
 
@@ -299,6 +301,32 @@ Todo campo de `targeting` tem default, e o bloco inteiro tem: uma configuração
 issue continua válida e ganha `nearest` + `stand`, que é o que ela já fazia. Subir
 `BOT_VOCABULARY_VERSION` invalidaria configuração de jogador para acrescentar um campo que ela nem
 precisa ter — o oposto do que o versionamento existe para proteger.
+
+## Follow de membro e cura com alvo (M20, ADR 0033 d.9 e d.10)
+
+O M20 acrescentou duas capacidades cooperativas ao bot, ambas com campo próprio e default que
+preserva a configuração salva (sem subir `BOT_VOCABULARY_VERSION`):
+
+- **`botConfig.follow`** (nenhum / líder / membro) é o follow **de membro da party**, separado da
+  postura `targeting.posture.follow` (que continua sendo "persegue o monstro atual"). Com follow
+  ativo o personagem não anda a rota: dá `greedyStep` em direção ao membro até ficar adjacente e
+  para; o combate continua para monstros em alcance, e a postura contra monstro fica suspensa.
+  Alvo indisponível (morto, ausente da sessão ou sem caminho no raio de `targetSearchRadius`) faz
+  o runner marcar `followInterrupted = true`, voltar à rota e emitir `follow-state
+  { active: false, targetId, reason }` uma vez, sem escolher outro; se o mesmo alvo voltar a ser
+  válido, retoma e emite `active: true`. "Desconectado"/"offline" não existem para o `sim`
+  (invariante 3) — ver a divergência em `party.md`. `validateBotConfig` não conhece a party:
+  aceita qualquer `characterId`, e o `sim` espera.
+- **`rule.target`** (eu / menor HP % / membro) vale em `heal`, `potion` e `support`: com alvo
+  diferente de `self`, a condição `hp` é avaliada sobre o **candidato** e `mana` continua do
+  lançador. `lowest-hp-member` ordena por percentual (`health / maxHealth`, §28), com desempate
+  pela ordem de entrada; `member` usa só ele e, se inválido, não faz nada (§30). `validateBotConfig`
+  recusa `target ≠ self` em `attack` e `rune`. Magia e poção ganham `target: 'self' | 'friend'`
+  com `range`; `castSpell`/`useSupply` recebem `recipient` (default o lançador), quem paga
+  continua sendo quem lança, e a cura é emitida no `recipient`. O `catalogue.bot.spells[]/
+  supplies[]` expõe `targets` para a UI só oferecer o seletor onde cabe.
+
+No fio, o follow sai por `follow-state` (S2C, opcode 30) por personagem.
 
 ## Quando a hunt encerra sozinha (FUN-86)
 

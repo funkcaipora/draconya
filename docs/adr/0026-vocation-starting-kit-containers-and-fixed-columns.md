@@ -1,6 +1,6 @@
 # 0026 — Vocação no level 8, kit inicial, munição e runa como consumíveis, containers do Huntera e as colunas fixas
 
-**Status:** aceito — decisões 3 (munição por família), 4 (skill `melee` única) e 8 (runa como supply de gold) substituídas pelo [ADR 0032](0032-the-rendered-hud-is-the-game-contract.md)
+**Status:** aceito — decisões 3 (munição por família), 4 (skill `melee` única) e 8 (runa como supply de gold) substituídas pelo [ADR 0032](0032-the-rendered-hud-is-the-game-contract.md); decisão 5 (Exura Sio excluída) emendada pelo [ADR 0033](0033-party-v2-runtime-settings-shared-bag-and-live-join.md)
 **Data:** 2026-09-12
 **Contexto técnico:** `content` (itens, munição, vocações, magias, supplies), `sim` (arma,
 munição, containers, buffs, grupos de cooldown), `protocol` (`choose-vocation`, `select-ammo`,

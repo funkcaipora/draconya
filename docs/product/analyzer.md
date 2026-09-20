@@ -138,6 +138,14 @@ Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `
 dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
 `Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.
 
+O M20 (#400, ADR 0033 d.11) acrescentou o bloco **`analyzer.party`** à seção PARTY dos Detalhes da
+Caçada — o mesmo objeto em `session-state.partySummary` (o `party` do `session-state` continua
+sendo o roster, #196): `players`, `uniqueVocations`, `xpPercent`, `totalXp`, `totalSupplies`,
+`shareCosts`, `splitLoot`, `bagValue`, `bagWeight` e `autoSell: { used, limit }`. `autoSell.limit`
+é o limite do **personagem líder** (`autoSellItemTypes`, D2) e `used` é quantos ids ele guardou; a
+"parte estimada" de cada um continua vindo de `party-spending` (`estimatedShare`). Fora do M20:
+DPS/HPS por membro é a PT-01 (ADR 0032 d.14, issue própria) — não existe ainda.
+
 ## Em aberto
 
 - Canais e escopo exatos de eventos notáveis e notificações de fim de sessão/morte/stamina (§16.2).
