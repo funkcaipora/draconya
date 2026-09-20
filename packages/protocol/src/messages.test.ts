@@ -1199,10 +1199,10 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
 });
 
 describe('target protocol (#470, AB-09)', () => {
-  it('allocates S2C 32 and 33, and they do not collide', () => {
-    // Invariante 5: os números vivem só aqui. Mutação que mata: reusar 30/31 ou duplicar 32.
-    expect(SERVER_TO_CLIENT['target-changed']).toBe(32);
-    expect(SERVER_TO_CLIENT['target-cancel']).toBe(33);
+  it('allocates S2C 34 and 35, and they do not collide', () => {
+    // Invariante 5: os números vivem só aqui. 32 é follow-state, 33 é party-end-vote.
+    expect(SERVER_TO_CLIENT['target-changed']).toBe(34);
+    expect(SERVER_TO_CLIENT['target-cancel']).toBe(35);
     expect(CLIENT_TO_SERVER['select-target']).toBe(18);
   });
 
