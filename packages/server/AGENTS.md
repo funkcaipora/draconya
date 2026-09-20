@@ -550,33 +550,51 @@ irrestaurável se perdia).
 
 ## A party é formada no `api`, em Redis, e vira uma sessão de hunt com N donos (#195)
 
-`PartyStore` (`party:{id}`, `:members` ZSET por instante de entrada, `:accounts`, `:invites`,
-`:approved`, `:tickets`, `party:by-char:{characterId}`) é FORMULÁRIO, não estado quente — o
-personagem está na Cidade, que é inerte. Rotas em `api/party.ts`: `POST /api/party`,
-`/:id/invite` (`inviteeId`, porque `characterId` no corpo é o de QUEM fala), `/:id/join`
-(script Lua: convidado, com vaga, em nenhuma outra), `/:id/leave` (líder que sai passa a
-liderança ao mais antigo; sair desaprova todos), `/:id/propose` (só o líder; hunt e dificuldade
-validadas pelo conteúdo), `/:id/approve`, `/:id/start`, `GET /api/party/mine`. O `start` faz
-para N o que `POST /api/tickets` faz para um, nesta ORDEM: tudo o que recusa antes de reservar
-(aprovação de todos, todos na Cidade pelo diretório, liquidação de cada um); um nó só,
-resolvido pelo líder — o `consume` recusa ticket de nó errado; um ticket por membro com o
-MESMO `sessionId` e o mesmo bloco `party` (`TicketClaim.party`, com o `initialCharacter` de
-todos — montado por `initialCharacterOf`, o mesmo do ticket solo), e a falha do k-ésimo
-`revoke`a os k−1 (não há script Lua entre N contas: as chaves são de contas diferentes); só
-depois a party some e cada um pega o SEU ticket pelo `mine`, uma vez. No `game`, `prepare`
-recebe o bloco: se `party.sessionId` já está hospedada, o membro só entra nela; senão a
-`SessionFactory` cria a HUNT com os N (`partyHuntFor` em `sessions.ts`, bot de cada um
-validado ali com o conteúdo) e o host registra o lease dos outros com a conta do ticket —
-o membro que nunca conecta está na hunt do mesmo jeito (invariante 3).
+`PartyStore` (`party:{id}` com `vocationTargets` em JSON, `:members` ZSET por instante de
+entrada, `:accounts`, `:invites`, `:vocations`, `:tickets`, `party:by-char:{characterId}`) é
+FORMULÁRIO, não estado quente — o personagem está na Cidade, que é inerte. Desde a #501 o
+líder CONFIGURA a sala (`POST /:id/configure`: hunt, difficulty, `minLevel`,
+`vocationTargets` — vocação → TOTAL desejado, soma contra `content.party.maxMembers` — e os
+dois eixos, cada um sozinho) e PUBLICA sem corpo: o `publish` valida o estado gravado (hunt,
+level mínimo e pelo menos uma vaga pública). Não existe mais aprovação de membros nem rota
+de aprovar — o `/propose` sobrevive só como shim da MESMA escrita do `/configure`, enquanto
+o cliente antigo o usa. O `start` faz para N o que `POST /api/tickets` faz para um, nesta
+ORDEM: tudo o que recusa antes de reservar (todos na Cidade pelo diretório, liquidação de
+cada um); um nó só, resolvido pelo líder — o `consume` recusa ticket de nó errado; um ticket
+por membro com o MESMO `sessionId` e o mesmo bloco `party` (`TicketClaim.party`, com o
+`initialCharacter` de todos — montado por `initialCharacterOf`, o mesmo do ticket solo), e a
+falha do k-ésimo `revoke`a os k−1 (não há script Lua entre N contas: as chaves são de contas
+diferentes); só depois a party vira `hunting` e cada um pega o SEU ticket pelo `mine`, uma
+vez. No `game`, `prepare` recebe o bloco: se `party.sessionId` já está hospedada, o membro só
+entra nela; senão a `SessionFactory` cria a HUNT com os N (`partyHuntFor` em `sessions.ts`,
+bot de cada um validado ali com o conteúdo) e o host registra o lease dos outros com a conta
+do ticket — o membro que nunca conecta está na hunt do mesmo jeito (invariante 3).
+
+A composição por vocação é válida DENTRO de Lua (DT-01): as vocações dos membros moram no
+HASH `party:{id}:vocations` (`none` para quem não tem vocação) e o script conta `HVALS` no
+mesmo passo em que insere — dois joins na última vaga da mesma vocação não passam os dois,
+nem em formação (`joinParty`) nem em curso (`reserveSlot` no `/join` de party em curso,
+ANTES de emitir o ticket; falha depois da reserva = `releaseSlot` + `revoke`, nunca membro
+fantasma). Convidado (convite explícito) passa LIVRE da composição — convite é decisão do
+líder —, e todo convite só sai de quem está FORA de hunt (`inviter-in-hunt`, pelo diretório,
+DT-02): em hunt ninguém convida, nem tradicional nem social. A busca (`GET /api/party/rooms`)
+exige o personagem na query e FILTRA no servidor: publicada, level ≥ `minLevel`, lotação
+viva, e vaga para a vocação do candidato — sala inelegível some da lista. O convite social
+(`POST /api/party/invites/social`, TTL 15 min) NÃO exige party: o aceite é UM script que usa
+a party do convidador se ele ainda a lidera formando com vaga, CRIA uma com ele de líder se
+não tem (o `SET NX` em `party:by-char:{convidador}` é a trava: dois aceites não criam duas
+parties), ou recusa com erro tipado (`inviter-unavailable`, `in-another-party`,
+`invite-not-found`) — e só consome o convite no sucesso. Os dois convites aparecem na union
+do `invites[]` do `/mine`.
 
 O matchmaking (#199, §15.2) FORMA a party, não a inicia: `POST /api/matchmaking/join` põe o
 personagem em `matchmaking:queue` (ZSET por instante) e casa NA HORA, num script Lua, com quem
 já esperava — na faixa de level de `content.party.matchmakingLevelRange` (`0` é qualquer um),
 livre de outra party, preferindo VOCAÇÕES DISTINTAS (é o que o bônus de XP premia) até
 `maxMembers`, tirando os escolhidos da fila no mesmo passo. A party formada tem o mais antigo
-como líder e segue o fluxo de sempre (propor, aprovar, iniciar). Uma party de dois se forma
-no instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para
-sempre, e o §15.2 admite começar com menos de quatro.
+como líder e segue o fluxo de sempre (configurar e iniciar). Uma party de dois se forma no
+instante em que o segundo chega: esperar "encher" faria dois jogadores esperarem para sempre,
+e o §15.2 admite começar com menos de quatro.
 
 ## A Caixa de Loot vive no Redis porque ela EXPIRA (FUN-88)
 

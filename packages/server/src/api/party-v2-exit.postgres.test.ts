@@ -11,10 +11,11 @@
 // O roteiro, com HTTP, sockets, Postgres e Redis de verdade:
 //
 //   1. oito contas/personagens, dois por vocação; só o líder é Premium
-//   2. a party pelo `api`, proposta com os DOIS eixos, sala publicada com faixa 10–50
-//   3. seis entram e iniciam; o líder conecta (o socket dele cria a hunt) — o 7º entra pela
-//      sala com a hunt EM CURSO e o 8º por convite; os dois recebem ticket de entrada
-//   4. um level 60 tenta a sala e é recusado (`level-out-of-range`)
+//   2. a party pelo `api`, configuração com os DOIS eixos e composição por vocação (2 de cada),
+//      level mínimo 10; sala publicada SEM corpo (RF-03)
+//   3. seis entram (convidados) e iniciam; o líder conecta (o socket dele cria a hunt) — o 7º
+//      entra pela sala com a hunt EM CURSO e o 8º também, cada um pela VAGA da vocação dele
+//   4. um level 5 tenta a sala e é recusado (`room-not-eligible`)
 //   5. o líder configura coleta/autovenda; o limite é o de Premium (20)
 //   6. avançar: a autovenda credita só quem estava no abate; a bolsa reserva proporcional e
 //      enche até OVERWEIGHT sem perder item
@@ -340,6 +341,7 @@ beforeAll(async () => {
     partyLimits: {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
+      vocations: [...content.vocations.keys()],
       difficultiesOf: (huntId) => {
         const hunt = content.hunts.get(huntId);
         return hunt === undefined ? null : Object.keys(hunt.difficulties);
@@ -409,20 +411,23 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     const post = (member: Member, path: string, body: Record<string, unknown> = {}) =>
       request(path, 'POST', member.cookie, { characterId: member.characterId, ...body });
 
-    // --- 2. a party, os DOIS eixos na proposta (D1), e a sala pública 10–50 (D8) ----------
+    // --- 2. a party, a composição por vocação e a sala pública (RF-01..RF-03) -------------
+    // Oito personagens, dois por vocação: o alvo é o TOTAL desejado de cada vocação — e os
+    // oito caem no teto de `maxMembers` (8) do conteúdo (ADR 0035 D12).
     const created = await (await post(leader, '/api/party')).json() as { id: string };
-    expect((await post(leader, `/api/party/${created.id}/propose`, {
-      huntId: 'arena', difficulty: 'cautious', shareCosts: true, splitLoot: true,
+    expect((await post(leader, `/api/party/${created.id}/configure`, {
+      huntId: 'arena', difficulty: 'cautious', minLevel: 10,
+      vocationTargets: { knight: 2, druid: 2, sorcerer: 2, paladin: 2 },
+      shareCosts: true, splitLoot: true,
     })).status).toBe(200);
-    // A sala exige proposta antes (`nothing-proposed` é a régua do `/publish`).
-    expect((await post(leader, `/api/party/${created.id}/publish`, { minLevel: 10, maxLevel: 50 })).status).toBe(200);
+    // A sala pública exige o estado configurado: publicar NÃO recebe corpo (RF-03).
+    expect((await post(leader, `/api/party/${created.id}/publish`)).status).toBe(200);
 
-    // --- 3. os seis primeiros entram e iniciam --------------------------------------------
+    // --- 3. os seis primeiros entram (convidados: o convite passa livre da composição) e iniciam
     for (const member of [a, b, c, d, e]) {
       expect((await post(leader, `/api/party/${created.id}/invite`, { inviteeId: member.characterId })).status).toBe(200);
       expect((await post(member, `/api/party/${created.id}/join`)).status).toBe(200);
     }
-    for (const member of [a, b, c, d, e]) expect((await post(member, `/api/party/${created.id}/approve`)).status).toBe(200);
     const started = await (await post(leader, `/api/party/${created.id}/start`)).json() as { sessionId: string; ticket: { wsUrl: string } | null };
     expect(started.ticket).not.toBeNull();
 
@@ -434,17 +439,17 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     expect(state.party?.members).toHaveLength(6);
     expect(state.party?.settings).toMatchObject({ shareCosts: true, splitLoot: true });
 
-    // --- 4. um level 60 tenta a sala EM CURSO e é recusado --------------------------------
+    // --- 4. um level abaixo do mínimo tenta a sala EM CURSO e é recusado (RF-04/RF-05) ----
     const { cookie: outCookie } = await login();
     const outsider = await (await request('/api/characters', 'POST', outCookie, {
       name: `Forasteiro ${randomUUID().slice(0, 6).replace(/[^a-z]/g, 'a')}`,
     })).json() as { id: string };
-    await db.update(characters).set({ level: 60 }).where(eq(characters.id, String(outsider.id)));
+    await db.update(characters).set({ level: 5 }).where(eq(characters.id, String(outsider.id)));
     const refused = await request(`/api/party/${created.id}/join`, 'POST', outCookie, {
       characterId: String(outsider.id),
     });
     expect(refused.status).toBe(403);
-    expect((await refused.json() as { error: string }).error).toBe('level-out-of-range');
+    expect((await refused.json() as { error: string }).error).toBe('room-not-eligible');
 
     // a, b e e conectam pelos SEUS tickets (o ticket é de uso único): a vira líder adiante,
     // b é o alvo do follow e e é a druida que cura.
@@ -503,12 +508,8 @@ describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
     expect(stateF.party?.members).toHaveLength(7);
     expect(stateF.party?.members.find((member) => member.characterId === f.characterId)?.joinedAtMs ?? 0).toBeGreaterThan(0);
 
-    // --- 8. o 8º entra por CONVITE, visível no `/mine` (D8) -------------------------------
-    expect((await post(leader, `/api/party/${created.id}/invite`, { inviteeId: g.characterId })).status).toBe(200);
-    const mineG = await (await request(
-      `/api/party/mine?characterId=${encodeURIComponent(g.characterId)}`, 'GET', g.cookie,
-    )).json() as { invites?: Array<{ partyId: string }> };
-    expect(mineG.invites?.map((invite) => invite.partyId)).toContain(created.id);
+    // --- 8. o 8º entra com a hunt EM CURSO, pela sala publicada — convite nenhum sai
+    // durante hunt (RF-08), e o paladin ainda tem vaga na composição (1 de 2) --------------
     const joinedG = await post(g, `/api/party/${created.id}/join`);
     expect(joinedG.status).toBe(200);
     const joinedGBody = await joinedG.json() as { ticket: { wsUrl: string } | null };

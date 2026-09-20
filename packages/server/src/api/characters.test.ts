@@ -75,6 +75,9 @@ class MemoryRepository implements GameRepository {
     const character = this.characters.get(characterId);
     return character?.accountId === accountId ? character : null;
   }
+  async getCharacterById(characterId: string) {
+    return this.characters.get(characterId) ?? null;
+  }
   async ownsCharacter(accountId: string, characterId: string) {
     return (await this.getCharacter(accountId, characterId)) !== null;
   }

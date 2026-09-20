@@ -153,6 +153,9 @@ async function main(): Promise<void> {
               partyLimits: {
                 maxMembers: content.party.maxMembers,
                 contentVersion: content.version,
+                // As vocações do catálogo fixado no boot (#501): as chaves da composição da
+                // sala são validadas contra isto ∪ `none`. Do conteúdo, nunca uma lista à mão.
+                vocations: [...content.vocations.keys()],
                 difficultiesOf: (huntId: string) => {
                   const hunt = content.hunts.get(huntId);
                   return hunt === undefined ? null : Object.keys(hunt.difficulties);
