@@ -660,7 +660,7 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
   it('a UH rune escala pelo magic level, debita o gold e tranca o grupo `healing` (RF-02)', () => {
     const user = hero({ level: 50, health: 100, gold: 100 });
     user.maxHealth = 5_000;
-    const result = useSupply(user, uhRune, null, combat, rng(), magic, undefined, 0);
+    const result = useSupply(user, uhRune, null, combat, rng(), magic, undefined, user, 0);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // min = 10 + 40×5.7 + 36 = 274; max = 10 + 40×10.3 + 65 = 487.

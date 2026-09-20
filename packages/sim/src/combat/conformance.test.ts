@@ -661,7 +661,7 @@ describe('oráculos de área e magia (M24-01, #469)', () => {
     const rng = Rng.fromSeed('m24-area-rune');
     const result = useSupply(
       hero, avalanche, { distance: 5, targets }, COMBAT, rng, { skillLevel: 4, powerScale: 1 },
-      ownPurse(hero), 0,
+      ownPurse(hero), hero, 0,
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
