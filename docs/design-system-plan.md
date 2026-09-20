@@ -4,7 +4,9 @@
 seguir o ui_kit na risca (ADR 0030), o que derruba D5 e D6 e emenda D2/D3/D8. O plano vigente é
 [kit-fidelity-plan.md](kit-fidelity-plan.md); este documento continua sendo o registro do M14
 (executado e fechado em 2026-09-16) e a especificação-base das SV-01…SV-17 do M15, que o plano
-novo revisa e estende.
+novo revisa e estende. **Emenda M26 (#504, ADR 0036):** a formação da party saiu do modal de
+caçada — a party tem superfície própria (`PartyModal`); as notas em D6 e DS-16 abaixo registram
+o instante em que o plano ainda a acoplava.
 **PRD:** §5 (plataforma e experiência do client), §8.2 (hotkeys guiadas), §13 (bot)
 **Origem:** o handoff "Design System MMORPG Medieval" gerado pelo Claude Design em 2026-09-15 —
 tokens, quinze primitivos, o fluxo de entrada, o HUD e catorze modais, em HTML/JSX de protótipo.
@@ -140,7 +142,7 @@ barra de ações 2×12 do handoff não entra.
 
 | Fixo (seção da coluna, minimizável, nunca removido) | Modal (scrim + `Panel`, um por vez) |
 |---|---|
-| Bot, Personagem, Party na hunt (esquerda) | Escolha uma caçada, com a formação da party dentro (ADR 0027) |
+| Bot, Personagem, Party na hunt (esquerda) | Escolha uma caçada (ADR 0027 — **emendado em M26, #504/ADR 0036:** a formação da party saiu daqui e tem o modal "Party" próprio) |
 | Set, bolsa, mochila, Batalha, bolsa da party, Analisador (direita) | Cyclopedia (aba Bestiário; Itens no M15) |
 | Chat (janela flutuante fixa no canto inferior esquerdo, abre e fecha pelo topo) | Editor de regra, Lure e alvo, Ring swap, Detalhes da caçada (M15) |
 
@@ -150,11 +152,18 @@ barra de ações 2×12 do handoff não entra.
   navegador.
 - *Descartado:* Bestiário como seção fixa. O design o põe na Cyclopedia; ele é visita, não loop.
   Analisador continua fixo e nasce aberto ("janela que abre minimizada é janela que abre vazia").
-- *Mantido do ADR 0027:* a formação da party mora na escolha de caçada ("propor uma hunt É
-  escolher uma hunt"). O design a separa num modal "Party"; aqui ela é a coluna direita do modal
-  de caçada, e o ícone "Party" do topo abre esse modal já nessa coluna.
-- *Telas do handoff que viram outra coisa:* o modal "Party" (abas Formação / Na hunt) não existe
-  — a formação é a coluna do modal de caçada e "na hunt" é o painel fixo da esquerda (DS-14); o
+- *Mantido do ADR 0027 — **emendado em M26 (#504, ADR 0036)**:* o plano de 2026-09-16 acatava o
+  acoplamento ("a formação da party residia na escolha de caçada — propor uma hunt É escolher
+  uma hunt") e a punha no modal de caçada como uma coluna dele, aberta pelo ícone "Party" do
+  topo. Desde
+  o M26 a party tem superfície PRÓPRIA: o modal "Party" (`PartyModal`, views Criar/Buscar,
+  Minha Party e Busca de salas) é a formação, aberto pela pill "Party" (sempre visível), pela
+  engrenagem de `PartyMembers` e pelo botão "Encontrar Party" do modal de caçadas — que ficou
+  sem coluna de formação.
+- *Telas do handoff que viram outra coisa:* o modal "Party" (abas Formação / Na hunt) não existia
+  no M14 — "na hunt" é o painel fixo da esquerda (DS-14); desde o M26 o modal "Party" existe
+  como o `PartyModal` da superfície própria, sem as abas do handoff (views `home`/`mine`/
+  `search`); o
   modal "Personagem" (abas Personagem / Outfit) vira o painel fixo Personagem (DS-13, completado
   em SV-10) — a aba Outfit espera uma intenção de trocar cor que não existe (§8).
 
@@ -332,7 +341,7 @@ Milestone [4](https://github.com/funkcaipora/draconya/milestone/4), aberto em 20
 
 | # | Issue | Pacotes | Depende de | Tam. | Entrega | Aceite |
 |---|---|---|---|---|---|---|
-| DS-16 | client: escolha de caçada como modal, com a party dentro, e as pills sobre o mundo | client | DS-12, DS-14 | M | `HuntsModal.tsx` (a criar) 860×560: lista com sprite dos outfits, nome, "level N+", "n tamanhos de pull · n drops", seleção de pull, rodapé "Level recomendado é conselho, não trava" e "Entrar na caçada"/"Trocar de caçada"; coluna direita com o `PartyPanel` de formação; `HuntActions.tsx` (a criar): pill "⚔ Escolher caçada" na Cidade, "↩ Sair da caçada »" na hunt; `HuntMenu.tsx` removido; `Bestiary` continua na coluna até SV-08 | `HuntsModal.test.ts` em `prerender` (lista do catálogo, sem estimativa de XP/h); entrar e sair continuam `enter-hunt`/`leave-hunt`; formação da party inalterada; captura na Cidade e na hunt |
+| DS-16 | client: escolha de caçada como modal e as pills sobre o mundo — **emendada em M26 (#504, ADR 0036): sem a formação dentro; a party tem o `PartyModal` próprio, e o modal de caçadas ficou com as pontes "Encontrar Party" e "Iniciar com o time"** | client | DS-12, DS-14 | M | `HuntsModal.tsx` (a criar) 860×560: lista com sprite dos outfits, nome, "level N+", "n tamanhos de pull · n drops", seleção de pull, rodapé "Level recomendado é conselho, não trava" e "Entrar na caçada"/"Trocar de caçada"; ~~coluna direita com o `PartyPanel` de formação~~ aposentada em M26 (#503/#504); `HuntActions.tsx` (a criar): pill "⚔ Escolher caçada" na Cidade, "↩ Sair da caçada »" na hunt; `HuntMenu.tsx` removido; `Bestiary` continua na coluna até SV-08 | `HuntsModal.test.ts` em `prerender` (lista do catálogo, sem estimativa de XP/h); entrar e sair continuam `enter-hunt`/`leave-hunt`; formação da party inalterada (na época do DS-16 — hoje é o `PartyModal`, ADR 0036); captura na Cidade e na hunt |
 | DS-17 | client: popover "Sair sozinho quando…" | client | DS-16 | P | Popover de 262 px no » da pill: HP abaixo de N %, acabar o gold, alguém do grupo sair (os três `kind` reais), gravando `draft.exit` pela store do bot; resumo "Saindo sozinho: …" | Teste em `prerender`; salvar manda `bot-config` com `exit`; captura |
 | DS-18 | client: passe de celular e QA visual do M14 | client, docs | DS-05…DS-17 | M | Cada tela a 375 px (`resize_window`) e a 1440/1920; capturas anexadas às issues de origem; defeitos viram issue própria; `docs/product/*.md` e `AGENTS.md` do cliente conferidos; milestone fechado | Lista de capturas completa; `pnpm check`; "Pronto quando" satisfeito |
 | DS-19 | docs: Configurações como preferências de conta e os sistemas futuros em `docs/product/` | docs | — | P | `docs/product/settings.md` (a criar; preferências de conta: idioma, som, tela — `não implementado`), e uma seção "sistemas futuros" ou arquivos próprios para Amigos, Arena, Bênçãos e Soul (`não implementado`, sem épico até o PRD os absorver); tabela de `docs/product/README.md` atualizada; `economy.md` registra o Market como livro de ordens de compra e venda sem taxa (decisão de 2026-09-16) | `pnpm docs-check` verde; cada arquivo novo com `**Status:**` na primeira linha não vazia |

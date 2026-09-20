@@ -162,10 +162,11 @@ export function Shell() {
               cabeçalho. A configuração é editável em qualquer lugar; a execução é da hunt. */}
           <AutomationsPanel />
           {/* Party na hunt é FIXO à esquerda (#259, `docs/design-system-plan.md` §2 D6 — "Bot,
-              Skills, Party na hunt (esquerda)"). A LISTA de hunts saiu daqui com o antigo
-              menu de hunts; a formação (ADR 0027) virou a coluna direita do `HuntsModal`, e o
-              que sobra aqui são os COMPANHEIROS durante a hunt — `PartyMembers` já se esconde
-              sozinho fora de party (`state.party === null`), então não há `open.*` para ele. */}
+              Skills, Party na hunt (esquerda)"). A formação tem superfície PRÓPRIA desde a #503
+              (ADR 0036): é o modal `PartyModal`, que a pill "Party", a engrenagem abaixo e o
+              "Encontrar Party" do `HuntsModal` abrem — uma instância só. O que sobra aqui são
+              os COMPANHEIROS durante a hunt — `PartyMembers` já se esconde sozinho fora de party
+              (`state.party === null`), então não há `open.*` para ele. */}
           <PartyMembers
             partyLootOpen={partyLootOpen}
             onToggleLoot={() => { setPartyLootOpen((value) => !value); }}

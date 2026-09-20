@@ -5,8 +5,11 @@ formação; #359: `shareCosts`/`splitLoot` na proposta) e **M20 (#391–#407, AD
 mutáveis durante a hunt, coleta e venda automática com limite do personagem líder, bolsa com
 reserva proporcional e OVERWEIGHT, elegibilidade por entrada, entrada na sessão em curso, sala
 pública, Amigos e convites visíveis, follow de membro e cura com alvo. Matchmaking por vocação e
-faixa de level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`).
-**Última atualização:** 2026-09-19
+faixa de level (#199) entrou com a faixa desligada (`matchmakingLevelRange: 0`). **M26 (#501,
+#503; ADR 0036)**: superfície própria da party (`PartyModal`), fim da aprovação pré-start, sala
+com composição por vocação e busca filtrada no servidor, convite social e convite só fora de
+hunt.
+**Última atualização:** 2026-09-20
 **PRD:** §15, §43.2
 **Épico:** E9
 
@@ -21,71 +24,107 @@ sockets abertos, como o solo: o membro que nunca abriu o navegador recebe a mesm
 ### Formação
 
 A formação é do `api`, em Redis, transitória (chaves `party:{id}` com TTL de 30 min; convite com
-TTL de 2 min). O fluxo é o do PRD §15.2 — **procurar/criar → reunir → líder propõe → membros
-aprovam → iniciar** — sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/leave`, `/kick`, `/propose`,
-`/approve`, `/start`, `GET /api/party/mine`). A tela
-(`PartyPanel`, dentro da seleção de hunt) só manda intenção e pergunta o estado a cada 2 s; desde o
-M20 o único opcode cliente→servidor da party é `party-settings` (17), que muda os eixos e a config
-de loot **durante** a hunt (ADR 0035 d.1).
+TTL de 2 min). O fluxo NÃO é o do PRD §15.2 — não há proposta nem aprovação (ADR 0036; a
+divergência está registrada em "Divergências do PRD") —: **procurar/criar → reunir → líder
+configura → iniciar**, sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/leave`, `/kick`,
+`/configure`, `/publish`, `/unpublish`, `/start`, `GET /api/party/mine`; `/approve` foi removida
+e `/propose` sobrevive só como shim da MESMA escrita de `/configure`). A tela é a superfície
+própria da party (#503): o modal "Party" (`PartyModal`) com views `home` (sem party: Criar/
+Buscar), `mine` (roster + configuração do líder) e `search` (salas que o servidor já filtrou),
+aberto pela pill permanente "Party", pela engrenagem de `PartyMembers` e pelo "Encontrar Party"
+do modal de caçadas — UMA instância no `Shell`. Ela só manda intenção e pergunta o estado a cada
+2 s (polling único de `/mine` no `Shell`); desde o M20 o único opcode cliente→servidor da party
+em tempo de hunt é `party-settings` (17), que muda os eixos e a config de loot **durante** a
+hunt (ADR 0035 d.1).
 
-- Quem cria é o líder. Só o líder convida (por id de personagem), expulsa outros membros (`POST
-  /api/party/:id/kick` com `targetId`; #358), propõe `{ huntId, difficulty, mode }`, inicia e
-  muda as configurações de loot em tempo de hunt. Expulsar outro membro desaprova a proposta
-  corrente (a composição mudou), nunca admite auto-kick (para isso existe `leave`) nem expulsar
-  quem não é membro. Convidado entra por id da party; um personagem está em no máximo uma party
-  (`party:by-char:{id}`), e o teto é `maxMembers` (8). Na tela (`PartyPanel.tsx`), o `×` de
-  expulsar só aparece para o líder, num OUTRO membro — nunca em si mesmo, que já tem `leave`.
-- A visão da party (`PartyMemberView`, #358) inclui o nome do personagem (`name`, além de
-  `characterId` e `approved`) resolvido a partir da conta do membro na party.
-- **Iniciar exige**: ≥ 2 membros, todos aprovaram a proposta atual (trocar a proposta zera as
-  aprovações), hunt e dificuldade existentes, todos na Cidade ou em repouso (invariante 8), e o
+- Quem cria é o líder. Só o líder convida (por id de personagem — e só FORA de hunt: quem está
+  caçando recebe `inviter-in-hunt`), expulsa outros membros (`POST /api/party/:id/kick` com
+  `targetId`; #358), configura a sala por `POST /api/party/:id/configure` — patch parcial
+  `{ huntId, difficulty, minLevel, vocationTargets, shareCosts, splitLoot }`, cada eixo mudando
+  sozinho —, abre e fecha as vagas (`/publish`/`/unpublish`, sem corpo) e inicia. Expulsar outro
+  membro muda a composição (não há estado de aprovação a zerar — ADR 0036); nunca admite auto-
+  kick (para isso existe `leave`) nem expulsar quem não é membro. Convidado entra por id da
+  party; um personagem está em no máximo uma party (`party:by-char:{id}`), e o teto é
+  `maxMembers` (8). No modal (`PartyMine`), o `×` de expulsar só aparece para o líder, num OUTRO
+  membro — nunca em si mesmo, que já tem `leave`.
+- A visão da party (`PartyMemberView`, #358) leva `characterId` e `name` — o campo `approved`
+  saiu do contrato junto com a aprovação (ADR 0036). As vagas por vocação (`openSlots`) são
+  calculadas pelo servidor a partir de `party:{id}:vocations`, não repetidas no membro.
+- **Iniciar é do líder, sem aprovação** (ADR 0036): `POST /api/party/:id/start` exige ≥ 2
+  membros, hunt e dificuldade existentes, todos na Cidade ou em repouso (invariante 8), e o
   progresso pendente de cada um liquidado. Aí o `api` escolhe **um nó** (o do líder) e emite um
   ticket por membro com o mesmo `sessionId`; se o k-ésimo ticket falhar, os k−1 anteriores são
   revogados. O primeiro ticket a chegar ao `game` cria a sessão com os N; o líder e quem mais
   estiver com o cliente aberto entram pelo ticket que o `api` devolveu, e quem não estiver entra
-  quando abrir (`GET /api/party/mine` devolve o ticket pendente).
+  quando abrir (`GET /api/party/mine` devolve o ticket pendente). No modal de caçadas, o líder
+  tem "Iniciar com o time" (`shell/party-start.ts`, configure-then-start: o patch só sai se a
+  configuração difere da seleção) e o membro não-líder vê o botão desabilitado com o motivo —
+  NENHUM caminho manda `enter-hunt` solo.
 - **Matchmaking** (#199) forma a party e nada mais: `POST /api/matchmaking/join` põe o personagem
   numa fila (`matchmaking:queue`, TTL de 10 min); o casamento roda no `join`, num script Lua só,
   e escolhe até `maxMembers − 1` companheiros compatíveis **preferindo vocações distintas** — o
   que o bônus de XP premia. Quem casou sai da fila no mesmo passo, o mais antigo lidera, e dali é
-  o fluxo de sempre (propor, aprovar, iniciar). Faixa de level: `|level − meu level| ≤
+  o fluxo de sempre (configurar, iniciar). Faixa de level: `|level − meu level| ≤
   matchmakingLevelRange`; `0` desliga o filtro, e é o valor de hoje.
 
-### Sala pública, Amigos e entrada em curso (M20, #402/#403/#404)
+### Sala pública, Amigos e entrada em curso (M20, #402/#403/#404; sala v2 no M26, #501)
 
-Três caminhos novos de formação e entrada, sobre o mesmo fluxo HTTP:
+Três caminhos de formação e entrada, sobre o mesmo fluxo HTTP:
 
-- **Sala pública** (`publish`/`unpublish`/`rooms`): o líder publica a party com
-  `POST /api/party/:id/publish { minLevel, maxLevel }` (exige `huntId` proposto e
-  `minLevel ≤ maxLevel`), despublica com `POST /api/party/:id/unpublish` e qualquer um lista com
-  `GET /api/party/rooms` — `{ partyId, huntId, difficulty, leader, vocations, members,
-  maxMembers, minLevel, maxLevel, state }`. `join` **sem convite** só entra se a sala está
-  publicada e `minLevel ≤ level ≤ maxLevel`; publicada ou não, a party continua aceitando convite.
-  O índice `party:rooms` (SET) e os campos no hash sustentam a listagem. A fila de matchmaking
-  (#199) **continua existindo como API e botão "Procurar party"** — a sala é o segundo caminho, e
-  `matchmakingLevelRange` fica como está.
+- **Sala pública** (`configure`/`publish`/`unpublish`/`rooms`): o líder configura a sala — caçada,
+  dificuldade, `minLevel` e **composição por vocação** (`vocationTargets`: o TOTAL desejado de
+  cada vocação, incluindo quem já está; chaves do catálogo ∪ `none`; soma ≤ `maxMembers` —
+  recusa `composition-too-large` e `unknown-vocation`) — e publica com
+  `POST /api/party/:id/publish` **sem corpo**: o que se publica é o estado que o `configure`
+  gravou, e o servidor valida — caçada e dificuldade propostas (`nothing-proposed`), `minLevel
+  ≥ 1` (`not-configured`) e pelo menos uma vaga pública (`no-vocation-slot`). Despublicar
+  (`POST /api/party/:id/unpublish`) fecha as vagas sem desfazer a configuração. A listagem é
+  `GET /api/party/rooms?characterId&huntId?` — **o FILTRO é do servidor**, calculado pelo
+  candidato da query: só volta sala publicada, com `level ≥ minLevel`, lotação viva sob
+  `maxMembers` e **vaga aberta para a vocação dele**; o `huntId` da query, quando vem, é
+  casamento exato. Sala inelegível some da lista — não fica desabilitada. Cada sala volta como
+  `RoomView` com `vocationTargets` e `openSlots` (vagas restantes por vocação); `maxLevel` saiu
+  do contrato (lido, nunca escrito) — o que descreve a sala é a composição. O `join` **sem
+  convite** só entra se a sala está publicada, no level e com vaga para a vocação dele — e é a
+  **autoridade final**: o script Lua reconfere a vaga no MESMO passo, contando os membros no hash
+  novo `party:{id}:vocations` (characterId → vocação), o que fecha a corrida — dois joins
+  concorrentes pela última vaga da mesma vocação produzem um `no-vocation-slot`. Filtro de UI é
+  conveniência, nunca segurança (invariante 4). Publicada ou não, a party continua aceitando
+  convite — o convidado passa livre dos filtros públicos. O índice `party:rooms` (SET) sustenta a
+  listagem. A fila de matchmaking (#199) **continua existindo como API e botão "Procurar party"**
+  — a sala é o segundo caminho, e `matchmakingLevelRange` fica como está.
 - **Amigos** (mínimo do §21): tabela `friend (character_id, friend_character_id, created_at)`,
   par único, sem pedidos nem bloqueios. `POST /api/friends { name }`,
   `DELETE /api/friends/:characterId` e `GET /api/friends` →
   `[{ characterId, name, vocationId, level, online, where: 'city' | 'hunt' | null }]` (`online`/
-  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt). O convite fica visível
-  ao convidado por um índice reverso (`party:invited:{characterId}`, TTL do convite);
-  `GET /api/party/mine` passa a devolver `invites: [{ partyId, leaderId, leaderName, huntId,
-  state }]`, e `POST /api/party/:id/decline` recusa. O cliente pergunta `/mine` a cada 2 s em
-  qualquer tela, e o diálogo "Convite para Party — Aceitar / Recusar" aparece onde o jogador
-  estiver. `/invite` também recusa `party-full` quando a lotação viva chegou a `maxMembers`.
+  `where` saem do `directory`, que conhece o tipo da sessão, não a hunt). **Convite tradicional**
+  (com party): o convite fica visível ao convidado por um índice reverso
+  (`party:invited:{characterId}`, TTL do convite); `GET /api/party/mine` devolve `invites[]`, e
+  `POST /api/party/:id/decline` recusa. **Convite social** (M26, #502; sem party):
+  `POST /api/party/invites/social` NÃO exige party — o aceite
+  (`POST /api/party/invites/social/:inviteId/accept`) resolve em UM script Lua: usar a party do
+  convidador (caso A), **criar uma com ele de líder** (caso B) ou recusar tipado — e dois
+  aceites concorrentes não criam duas parties. Convites sociais expiram em 15 min
+  (`SOCIAL_INVITE_TTL_MS`) e chegam no mesmo `invites[]` do `/mine`. **A régua do convidador é a
+  MESMA para os dois caminhos: fora de hunt** (`inviter-in-hunt`, lida pelo `directory`, nunca
+  pela coluna `characters.state`) — quem está caçando não é o ponto de partida de nenhuma party
+  (invariante 8). O cliente pergunta `/mine` a cada 2 s em qualquer tela, e o diálogo "Convite
+  para Party — Aceitar / Recusar" aparece onde o jogador estiver. `/invite` também recusa
+  `party-full` quando a lotação viva chegou a `maxMembers`.
 - **Entrada na instância em curso** (`join` com a party em `state: 'hunting'`): o `api` valida
-  convite ou sala pública (faixa de level), lotação viva, personagem na Cidade/repouso e liquida
-  o progresso pendente dele; resolve o nó **da sessão** (`directory.lookup(leaderId).nodeId`) e
-  emite um ticket com `party: { sessionId, leaderId, join: true, members: [ele] }`. No `game`,
-  o ticket de uma sessão hospedada cujo personagem ainda não é participante chama
-  `hosted.session.enter(...)` no ciclo da sessão dona (invariante 9), `configureBot` com o
-  `botConfig` do ticket e `configureParty` com o premium dele; recusa (`party-full` /
-  `content-version` / `session-not-here`) fecha o socket com motivo e o `api` devolve o erro no
-  `join`. No `sim`, `HuntRuleset.onEnter` recusa o `maxMembers + 1`-ésimo, emite `party-state` e
-  rebalanceia a bolsa; o `Session` guarda `joinedAtMs` por participante e o extrato de quem
-  entrou tarde filtra os eventos notáveis por `atMs >= joinedAtMs`. `enter-hunt` (opcode 9)
-  continua o caminho solo.
+  convite ou sala pública (level e **vaga por vocação**), lotação viva, personagem na Cidade/
+  repouso e liquida o progresso pendente dele; **reserva a vaga ANTES de emitir o ticket**
+  (`reserveSlot` em Lua) e faz rollback — `releaseSlot` + revogação do ticket — se a emissão
+  falhar, para não deixar vaga ocupada por fantasma; resolve o nó **da sessão**
+  (`directory.lookup(leaderId).nodeId`) e emite um ticket com `party: { sessionId, leaderId,
+  join: true, members: [ele] }`. No `game`, o ticket de uma sessão hospedada cujo personagem
+  ainda não é participante chama `hosted.session.enter(...)` no ciclo da sessão dona (invariante
+  9), `configureBot` com o `botConfig` do ticket e `configureParty` com o premium dele; recusa
+  (`party-full` / `no-vocation-slot` / `content-version` / `session-not-here`) fecha o socket com
+  motivo e o `api` devolve o erro no `join`. No `sim`, `HuntRuleset.onEnter` recusa o
+  `maxMembers + 1`-ésimo, emite `party-state` e rebalanceia a bolsa; o `Session` guarda
+  `joinedAtMs` por participante e o extrato de quem entrou tarde filtra os eventos notáveis por
+  `atMs >= joinedAtMs`. `enter-hunt` (opcode 9) continua o caminho solo.
 
 A party **sobrevive ao `start`** (`state: 'hunting'`, `sessionId`) em Redis, com TTL longo
 (`HUNTING_TTL_MS`, 24 h renovado a cada ação) — antes ela era apagada no `start`. O `DISBANDED`
@@ -234,8 +273,9 @@ vocação, com o id cru como reserva se o catálogo não reconhecer), level e ma
 só quando o `party-state` os manda —, num painel fixo (`PartyMembers`, #259, #347); com
 `splitLoot` ligado, a bolsa aparece como a janela flutuante "Party loot" (`PartyLootWindow`, #316) sobre o
 mundo, aberta por padrão durante a hunt e alternável pelo ▣ do cabeçalho da party; a engrenagem ⚙
-do mesmo cabeçalho reabre a formação e as ações da party durante a hunt, no modal "Gerenciar
-party" (#320); o analisador é por personagem (`analyzer.md`).
+do mesmo cabeçalho reabre a party durante a hunt na MESMA instância do modal "Party"
+(`PartyModal`, view `mine`) que a pill "Party" e o "Encontrar Party" do modal de caçadas abrem
+(#503); o analisador é por personagem (`analyzer.md`).
 
 ### Dois eixos mutáveis, bolsa v2 e seção PARTY (M20, #405)
 
@@ -266,7 +306,7 @@ O contrato v2 (ADR 0035) tornou visível no cliente o que antes era só dado no 
   "Encerrando para todos · N/M aprovaram" e pode "Cancelar encerramento" (`approve: false`). O
   membro não-líder, com a votação ativa e sem ter aprovado, vê "Aprovar" / "Recusar"; depois de
   aprovar, "Você aprovou · aguardando os demais". O diálogo some com `active: false`. Tudo é
-  intenção: quem decide se a proposta vale e se todos aprovaram é o servidor.
+  intenção: quem decide se a proposta vale e se cada presente deu o sim é o servidor.
 
 Campo ausente — nó `game` anterior ao #400, ou "não se aplica" — não monta a UI nova: a tela
 continua exatamente o que era, nunca com um número fabricado (D8, invariante 4).
@@ -274,11 +314,14 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 ## Regras
 
 - Party é uma sessão de hunt com N participantes; um personagem está em uma sessão só.
-- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos aprovados, todos na Cidade; entrada em
-  sessão em curso aceita convite ou sala pública, com lotação viva ≤ `maxMembers`.
-- Formação por HTTP no `api`, em Redis com TTL; matchmaking forma, não inicia. Sala pública
-  (`publish`/`unpublish`/`rooms`) e Amigos (`/api/friends`) são caminhos adicionais; convites
-  ficam visíveis em `/mine` com `decline`.
+- Tamanho máximo: `maxMembers` (8). Início com ≥ 2, todos na Cidade — o LÍDER inicia, sem
+  aprovação de membros (ADR 0036); entrada em sessão em curso aceita convite ou sala pública,
+  com lotação viva ≤ `maxMembers` e vaga por vocação.
+- Formação por HTTP no `api`, em Redis com TTL; matchmaking forma, não inicia. Sala pública com
+  composição por vocação, publicada sem corpo e listada com FILTRO NO SERVIDOR
+  (`rooms?characterId&huntId`); Amigos (`/api/friends`) com convite tradicional e convite social
+  (sem party, aceite que cria a party) — os DOIS só fora de hunt (`inviter-in-hunt`); convites
+  ficam visíveis em `/mine` com `decline` (sociais expiram em 15 min).
 - A party sobrevive ao `start` (`state: 'hunting'`, `sessionId`, TTL de 24 h renovado por ação);
   `DISBANDED` é lazy.
 - Um nó por party; um ticket por membro, mesmo `sessionId`; tudo ou nada na emissão. Quem entra em
@@ -309,16 +352,18 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 | Pool de XP por vocações únicas (%) | `{1: 125, 2: 150, 3: 175, 4: 200, 5: 200, 6: 200, 7: 200, 8: 200}` | `packages/content/data/party/baseline.json`, `xpPoolPercentByUniqueVocations` — chaves `1..maxMembers`, não decrescente, ≥ 100 |
 | Limite de tipos na venda automática | `{ free: 5, premium: 20 }`, do personagem **líder** | `packages/content/data/party/baseline.json`, `autoSellItemTypes` |
 | Faixa de level do matchmaking (fila cega, #199) | 0 (desligado, sem mudança no M20) | `packages/content/data/party/baseline.json`, `matchmakingLevelRange` |
-| Faixa de level da sala pública | `minLevel`/`maxLevel` por sala, escolhidos pelo líder no `publish` — não é número de conteúdo | `packages/server/src/api/party.ts` |
+| Level mínimo e composição da sala pública | `minLevel ≥ 1` e `vocationTargets` (soma ≤ `maxMembers`), escolhidos pelo líder no `configure` — não é número de conteúdo | `packages/server/src/api/party.ts` (`/configure`, `/publish`), `deps.limits` (`maxMembers`, `difficultiesOf`, `vocations`) |
 | Preço de venda de cada item (bolsa) | por item — `bow` 130, `machete` 6, `cheese` 0 | `packages/content/data/items/*.json`, campo `value` (`itemSchema.value`, `packages/content/src/schemas.ts`) |
 | TTL da party em formação | 30 min | `packages/server/src/party-store.ts`, `DEFAULT_TTL_MS` |
 | TTL da party em hunt | 24 h, renovado a cada ação | `packages/server/src/party-store.ts`, `HUNTING_TTL_MS` |
 | TTL do convite | 2 min | `packages/server/src/party-store.ts`, `DEFAULT_INVITE_TTL_MS` |
+| TTL do convite social | 15 min | `packages/server/src/party-store.ts`, `SOCIAL_INVITE_TTL_MS` |
 | TTL na fila de matchmaking | 10 min | `packages/server/src/party-store.ts`, `QUEUE_TTL_MS` |
 | Raio de entrada do 2º+ membro | 3 tiles do ponto de entrada | `packages/sim/src/rulesets/hunt.ts`, `ENTRY_RADIUS` |
 | Janela de aprovação da votação de encerrar | 60 000 ms (lógico) | `packages/sim/src/rulesets/hunt.ts`, `END_VOTE_WINDOW_MS` |
 | Alcance provisório da poção com `target: 'friend'` | 1 tile | `packages/content/data/supplies/{health-potion,mana-potion}.json`, `effect.range` |
-| Intervalo de polling da tela de party | 2 000 ms | `packages/client/src/shell/PartyPanel.tsx`, `POLL_MS` |
+| Intervalo de polling de `/mine` | 2 000 ms | `packages/client/src/party/store.ts`, `PARTY_POLL_MS` — dono único do `setInterval`: `Shell.tsx` |
+| Intervalo de polling da busca de salas | 2 000 ms, só com a view de busca montada | `packages/client/src/shell/PartyModal.tsx`, `ROOMS_POLL_MS` |
 
 ## Em aberto
 
@@ -330,11 +375,26 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   decisão 5) — quando `shareCosts` está ligado.
 - ~~[ABERTO — valor provisório: 0, desligado] Critérios exatos de matchmaking de hunt por faixa
   de level (§43.2)~~ → **Resolvido:** a **sala pública** (D8/§7 do ADR 0035) passou a ser o
-  caminho com faixa de level — `publish { minLevel, maxLevel }`, validada no `join` —; a fila
-  cega do #199 continua como caminho separado, ainda com `matchmakingLevelRange: 0`, em
+  caminho com filtro de entrada; no M26 (#501, ADR 0036) ela ficou `minLevel` + composição por
+  vocação (`vocationTargets`), com o filtro correndo NO SERVIDOR em
+  `GET /api/party/rooms?characterId&huntId` e a vaga reconferida em Lua — a faixa superior
+  (`maxLevel`) saiu do contrato; a fila cega do #199 continua como caminho separado, ainda com
+  `matchmakingLevelRange: 0`, em
   `packages/content/data/party/baseline.json`.
 
 ## Divergências do PRD
+
+- **PRD dizia (§15.2):** o fluxo de party é "procurar/criar → reunir → líder propõe → membros
+  aprovam → iniciar", e a formação morava na tela de seleção de hunt.
+  **Implementado:** não há proposta nem aprovação — o líder configura a sala (caçada, dificuldade,
+  `minLevel`, composição por vocação, os dois eixos) e inicia sozinho; a party tem superfície
+  PRÓPRIA (modal "Party": Criar/Buscar, Minha Party, Busca de salas), e o modal de caçadas ficou
+  com as duas pontes ("Encontrar Party" e "Iniciar com o time").
+  **Motivo:** a aprovação era cerimônia sem decisão — o início sempre foi rota do líder, e com
+  dois membros o "sim" da aprovação é o líder destravando o próprio botão (o estado `approved`
+  mentia sobre quem decide). Superfície própria e fim da aprovação são o ADR 0036, emenda à
+  decisão 8 do ADR 0027 e à decisão 6 do ADR 0029 — o acoplamento de localização vinha da
+  referência Huntera (formação na seleção de caçada), e o produto decidiu o contrário.
 
 - **PRD dizia (§15.3):** o sistema aceita uma tabela por número de membros **e** número de
   vocações únicas.
@@ -412,7 +472,9 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 ## Referências
 
 PRD §15, §22.1, §43.2; ADR 0027 (decisões 1–9, d.5 emendada por #359 e pelo ADR 0035; d.8 e d.9
-emendadas pelo ADR 0035), ADR 0035 (Party v2), ADR 0032 (decisão 14 — DPS/HPS e o sim de todos),
+emendadas pelo ADR 0035; d.8 emendada de novo pelo ADR 0036), ADR 0035 (Party v2), **ADR 0036
+(superfície própria, fim da aprovação, sala com composição e convite social)**, ADR 0032
+(decisão 14 — DPS/HPS e o sim de todos),
 ADR 0023 (sessão com muitos personagens),
 ADR 0024 (repouso); `docs/party-hunt-plan.md` (M13) e `docs/party-vip-plan.md` (M20, desenho e
 exemplos numéricos);
@@ -423,5 +485,6 @@ exemplos numéricos);
 `packages/content/data/party/baseline.json`,
 `packages/server/src/api/{party,friends}.ts`, `packages/server/src/party-store.ts`,
 `packages/server/src/receipts.ts`, `packages/protocol/src/messages.ts` (17, 18, 24–26, 30, 31),
-`packages/client/src/party/`, `packages/client/src/shell/{PartyPanel,PartyMembers,PartyBag}.tsx`;
+`packages/client/src/party/`, `packages/client/src/shell/{PartyModal,PartyMembers,PartyBag,
+PartyActions,party-start}.ts{,x}`;
 `bot.md` (§13.9, follow e cura com alvo), `analyzer.md`, `economy.md`, `bestiary.md`.

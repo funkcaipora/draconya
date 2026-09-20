@@ -620,20 +620,37 @@ suba o `pnpm dev` e olhe cada cenário na tela do mundo:
   `AutomationsPanel` para as cinco automações. O interruptor salva sozinho — `bot/store.ts`
   `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), a barra injeta
   o remetente por `setConfigSender` ao montar. O painel Bot v1 foi aposentado no mesmo marco.
-- **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
-  geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
-  `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
-  party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `AutomationsPanel`/`SkillsPanel` (nome, HP % — do
-  `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
-  ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
-  (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`. "Party loot" (#316) é uma janela
-  FLUTUANTE, independente das colunas: nasce aberta durante a hunt quando a party está em
-  `shared`, e o ▣ no cabeçalho de `PartyMembers` a abre/fecha — não compartilha controle com o
+- **A party tem SUPERFÍCIE PRÓPRIA, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
+  #503, ADR 0036 — emenda ao ADR 0029 D6). O `shell/PartyPanel.tsx` foi APOSENTADO: criar, buscar
+  e gerenciar mora num modal só, o `shell/PartyModal.tsx`, com views `home` (sem party: Criar/
+  Buscar), `mine` (roster + configuração do líder) e `search` (salas que o servidor JÁ filtrou
+  para o candidato) — a view inicial e o filtro de hunt nascem dos PROPS a cada montagem, e a
+  navegação interna nunca mora na `party/store.ts` (é UI, não estado de jogo; ADR 0007). UMA
+  instância no `Shell`, aberta por TRÊS pontos: a pill permanente "Party" (`PartyActions`, irmã
+  de `HuntActions`, CSS puro — a party não tem ícone PNG no topo e ícone inventado não é a
+  geografia do kit), a engrenagem de `PartyMembers` e o botão "Encontrar Party" do `HuntsModal`
+  (que fecha o modal de caçadas antes de abrir a busca, filtrada pelo ID da hunt selecionada —
+  nunca pelo nome). Não há aprovação de membros (ADR 0036): o líder configura caçada, dificuldade,
+  `minLevel`, composição por vocação (`vocationTargets`, TOTAL desejado) e os DOIS eixos
+  (`shareCosts`/`splitLoot`, toggles independentes — cada clique manda só o seu patch) por
+  `configure`, abre e fecha vagas por `publish`/`unpublish` sem corpo, e inicia sozinho —
+  "Iniciar com o time" no `HuntsModal` é o configure-then-start de `shell/party-start.ts` (puro;
+  membro não-líder fica desabilitado com o motivo, e NENHUM caminho manda `enter-hunt` solo). A
+  busca de salas é do servidor (`rooms?characterId&huntId`): o cliente não julga elegibilidade —
+  "Entrar" nunca desabilita por conta própria, e sala inelegível nem chega à lista. `PartyMembers`
+  continua o painel FIXO da coluna esquerda, ao lado de `AutomationsPanel`/`SkillsPanel` (nome,
+  HP % — do `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não
+  avisa ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
+  (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`; os DOIS eixos em tempo de hunt
+  são o rodapé DELE (`party-settings`), não do modal. "Party loot" (#316) é uma janela
+  FLUTUANTE, independente das colunas: nasce aberta durante a hunt quando `splitLoot` está
+  ligado, e o ▣ no cabeçalho de `PartyMembers` a abre/fecha — não compartilha controle com o
   toggle "Inventário" (ADR 0030 decisão 3). A formação é HTTP (`party/api.ts`) e a store (`party/store.ts`)
   guarda a última cópia que o servidor devolveu — não importa `net/` (ADR 0007): a casca
   injeta o cliente e o `enterHunt` em `useConnection`. Desde #404 o polling de `mine` a cada
-  2 s subiu para o `Shell` e roda sempre que há personagem (DT-01): o convite de party precisa
+  2 s subiu para o `Shell` e roda sempre que há personagem (DT-01) — o `Shell` é o ÚNICO dono
+  do `setInterval` de `/mine` (o polling de salas é outro, `ROOMS_POLL_MS` no `PartyModal`, e
+  só paga com a view de busca montada): o convite de party precisa
   aparecer em qualquer tela, Cidade ou hunt, e a lista de convites vem no próprio `/mine`.
   **Entrar na hunt é oferecer o ticket à conexão e reconectar**
   (`net/pending-ticket.ts`, `Connection.restart`): o `defaultRequestTicket` pega o oferecido

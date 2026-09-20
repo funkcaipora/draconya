@@ -1,6 +1,6 @@
 # 0035 — Party v2: eixos mutáveis, bolsa com reserva e elegibilidade, entrada em curso e bot cooperativo
 
-**Status:** aceito
+**Status:** aceito — decisão 7 estendida pelo [ADR 0036](0036-party-standalone-surface-and-leader-start.md) (composição por vocação, filtro no servidor e convite social)
 **Data:** 2026-09-18
 **Contexto técnico:** `packages/sim` (`party.ts`, `rulesets/hunt.ts`, `session.ts`, `casting.ts`,
 `bot.ts`), `packages/content` (`party/`, `spells/`, `supplies/`, vocabulário do bot),
