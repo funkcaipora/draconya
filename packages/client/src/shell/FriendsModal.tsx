@@ -7,6 +7,12 @@
 // duas abas vazias afirmaria um sistema que não existe (D8).
 //
 // A amizade é do PERSONAGEM, não da party (DT-04): a store é `friends/`, separada de `party/`.
+//
+// #502: "Convidar para Party" NÃO exige party — sem party e fora de hunt o clique é o convite
+// SOCIAL (RF-01); com party é o convite tradicional de sempre (RF-03). Em hunt NENHUM convite
+// sai (RF-02): o botão desabilita com o motivo, lido do `hud` por `is-hunting.ts` (DT-01, a
+// mesma fonte do `Shell`). O feedback (notice de sucesso, recusa tipada) é da store `party`
+// (DT-03) — renderizado aqui, por ser quem disparou o envio.
 
 import { useEffect, useState } from 'react';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
@@ -15,10 +21,12 @@ import { party, partyActions } from '../party/store.js';
 import type { FriendView } from '../friends/api.js';
 import { Button } from './ui/Button.js';
 import { Input } from './ui/Input.js';
+import { isHunting } from './is-hunting.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 
-const NO_PARTY_HINT = 'Crie uma party primeiro.';
+/** RF-02: por que o botão está desabilitado — em hunt NINGUÉM convida, com party ou sem. */
+const HUNT_HINT = 'Em caçada você não pode convidar — saia da caçada para convidar.';
 
 /** Onde o amigo está. Sem `huntId` no diretório, "Em caçada" é o que o servidor disse — nunca o
  *  nome da hunt, que ele não mandou (D8). */
@@ -30,21 +38,33 @@ function whereLabel(where: FriendView['where']): string {
 
 export function FriendsModal({ onClose }: { onClose: () => void }) {
   const catalogue = useHudSlice((state) => state.catalogue);
+  // DT-01: a mesma fonte do `Shell` (`hud.analyzer.sessionType`) — nada de prop atravessando
+  // o `Shell.tsx`, que é intocado.
+  const sessionType = useHudSlice((state) => state.analyzer.sessionType);
   const friendsView = useStoreSlice(friends, (state) => state.friends);
   const busy = useStoreSlice(friends, (state) => state.busy);
   const error = useStoreSlice(friends, (state) => state.error);
   const current = useStoreSlice(party, (state) => state.party);
   const activePartyId = useStoreSlice(party, (state) => state.activePartyId);
+  const notice = useStoreSlice(party, (state) => state.notice);
+  const partyError = useStoreSlice(party, (state) => state.error);
   const [name, setName] = useState('');
 
   // A lista é do servidor: busca ao abrir, uma vez.
   useEffect(() => { void friendsActions.refresh(); }, []);
 
   const online = friendsView.filter((friend) => friend.online).length;
-  const canInvite = activePartyId !== null || current !== null;
+  // RF-02: a hunt bloqueia TODO convite — o convite social nasce na party do convidador, e quem
+  // está caçando não pode ser ponto de partida de nenhuma (o servidor recusa do mesmo jeito).
+  const hunting = isHunting(sessionType);
+  const canInvite = !hunting;
+  const hasParty = current !== null || activePartyId !== null;
 
+  // DT-02: a escolha do caminho é conveniência de UI — sem party o convite SOCIAL cria a party
+  // no aceite; com party o tradicional. O servidor recusa o caminho errado de qualquer jeito.
   function invite(friend: FriendView): void {
-    void partyActions.invite(friend.characterId);
+    if (hasParty) void partyActions.invite(friend.characterId);
+    else void partyActions.socialInvite(friend.characterId);
   }
 
   function submit(): void {
@@ -103,7 +123,7 @@ export function FriendsModal({ onClose }: { onClose: () => void }) {
                     size="sm"
                     variant="secondary"
                     disabled={!canInvite}
-                    title={canInvite ? `Convidar ${friend.name} para a party` : NO_PARTY_HINT}
+                    title={hunting ? HUNT_HINT : `Convidar ${friend.name} para a party`}
                     onClick={() => { invite(friend); }}
                   >
                     Convidar para Party
@@ -113,7 +133,9 @@ export function FriendsModal({ onClose }: { onClose: () => void }) {
             })}
           </ul>
         )}
+      {notice !== null && <p className="system-ok">{notice}</p>}
       {error !== null && <p className="system-error">{error}</p>}
+      {partyError !== null && <p className="system-error">{partyError}</p>}
     </Modal>
   );
 }

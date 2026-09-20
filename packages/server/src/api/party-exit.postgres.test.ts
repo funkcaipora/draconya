@@ -7,7 +7,7 @@
 // O roteiro, com HTTP, sockets, Postgres e Redis de verdade:
 //
 //   1. quatro contas, quatro personagens de quatro vocações, na Cidade
-//   2. o líder cria a party pelo `api`, convida, os outros entram e aprovam, ele inicia
+//   2. o líder cria a party pelo `api`, convida, os outros entram, ele inicia (sem aprovação)
 //   3. o líder abre o socket com o ticket da party — que CRIA a hunt com os quatro — e FECHA;
 //      os outros três NUNCA conectam (invariante 3)
 //   4. avançar tempo: os quatro caçam; cada rato rende 50 % da XP a cada um; a bolsa enche
@@ -264,6 +264,7 @@ beforeAll(async () => {
     partyLimits: {
       maxMembers: content.party.maxMembers,
       contentVersion: content.version,
+      vocations: [...content.vocations.keys()],
       difficultiesOf: (huntId) => {
         const hunt = content.hunts.get(huntId);
         return hunt === undefined ? null : Object.keys(hunt.difficulties);
@@ -312,13 +313,13 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
       request(path, 'POST', member.cookie, { characterId: member.characterId, ...body });
 
     // --- 2. a party pelo api ---------------------------------------------------------------
+    // Desde a #501 não existe aprovação de membros: o líder configura e inicia direto.
     const created = await (await post(leader, '/api/party')).json() as { id: string };
     for (const member of [b, c, d]) {
       expect((await post(leader, `/api/party/${created.id}/invite`, { inviteeId: member.characterId })).status).toBe(200);
       expect((await post(member, `/api/party/${created.id}/join`)).status).toBe(200);
     }
     expect((await post(leader, `/api/party/${created.id}/propose`, { huntId: 'arena', difficulty: 'cautious', mode: 'shared' })).status).toBe(200);
-    for (const member of [b, c, d]) expect((await post(member, `/api/party/${created.id}/approve`)).status).toBe(200);
     const started = await (await post(leader, `/api/party/${created.id}/start`)).json() as { sessionId: string; ticket: { wsUrl: string } | null };
     expect(started.ticket).not.toBeNull();
 

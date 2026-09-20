@@ -1,17 +1,22 @@
+import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, pullLabel, resolveSelection,
+  HuntsModal, attemptEnter, enterHuntMessage, filterHunts, findPartyDecision, pullLabel, resolveSelection,
 } from './HuntsModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import type { Catalogue, HuntListing } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
+import type { PartyView } from '../party/api.js';
 
-// "Escolha uma caçada" (#259). `prerender` roda a árvore sem DOM e sem eventos — um clique real
-// não dispara (mesmo limite de VocationChoice.test.ts). A decisão em si (que hunt, que pull, se
-// a intenção é enviada e se o modal fecha) mora em funções puras exportadas e testadas direto;
-// aqui só se prende a ESTRUTURA e o que essas funções produzem por padrão.
+// "Escolha uma caçada" (#259, duas colunas desde a #503). `prerender` roda a árvore sem DOM e
+// sem eventos — um clique real não dispara (mesmo limite de VocationChoice.test.ts). A decisão
+// em si (que hunt, que pull, se a intenção é enviada e se o modal fecha) mora em funções puras
+// exportadas e testadas direto; aqui só se prende a ESTRUTURA e o que essas funções produzem
+// por padrão. A formação embutida SAIU (#503): o modal não renderiza PartyPanel, e as duas
+// pontes de party ("Encontrar Party", "Iniciar com o time") são testadas em party-start.test.ts
+// e pela decisão pura `findPartyDecision`.
 
 const hunts: HuntListing[] = [
   {
@@ -32,6 +37,13 @@ const catalogue: Catalogue = {
   bot: { vocabularyVersion: 1, slots: {}, spells: [], supplies: [] },
   items: [], ammunition: [], vocations: [], vocationLevel: 8,
 };
+
+const forming = (over: Partial<PartyView> = {}): PartyView => ({
+  id: 'p', leaderId: 'me', mode: 'split', huntId: null, difficulty: null,
+  minLevel: null, vocationTargets: {}, shareCosts: false, splitLoot: false,
+  openSlots: {}, members: [{ characterId: 'me', name: 'Eu' }, { characterId: 'b', name: 'Bob' }],
+  published: false, state: 'forming', sessionId: null, ...over,
+});
 
 async function render(props: { hunting: boolean; onClose?: () => void }): Promise<string> {
   const { prelude } = await prerender(createElement(HuntsModal, { onClose: () => {}, ...props }));
@@ -69,9 +81,67 @@ describe('HuntsModal', () => {
     expect(html).not.toContain('Loot possível');
   });
 
-  it('RF-06: the right column is the same PartyPanel ("Criar party" is present)', async () => {
+  it('RF-01: the formation column is GONE — no PartyPanel, no third column, no "Criar party"', async () => {
     const html = await render({ hunting: false });
-    expect(html).toContain('Criar party');
+    expect(html).not.toContain('Criar party');
+    expect(html).not.toContain('Procurar party');
+    // Estrutura: duas colunas (lista + detalhe), sem moldura vazia de formação.
+    expect(html).not.toContain('party-panel');
+    // Mutação que mata: re-adicionar o import/render de PartyPanel.
+    const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('PartyPanel');
+    expect(source).not.toContain('PartyPanel.js');
+  });
+
+  it('RF-02: "Encontrar Party" is visible and disabled without a selection (empty catalogue)', async () => {
+    hud.set((state) => ({ ...state, catalogue: { ...catalogue, hunts: [] } }));
+    const html = await render({ hunting: false });
+    expect(html).toContain('Encontrar Party');
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Encontrar Party<\/button>/);
+  });
+
+  it('RF-02: "Encontrar Party" is enabled with a hunt and wired to onFindParty by the selected ID', async () => {
+    const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
+    // A fiação manda o ID, nunca o nome — `findPartyDecision` decide, o clique repassa.
+    expect(source).toContain('onFindParty?.(findParty.huntId)');
+    const html = await render({ hunting: false });
+    expect(html).toContain('>Encontrar Party</button>');
+  });
+
+  it('findPartyDecision (RF-02) decides by ID, never by name', () => {
+    expect(findPartyDecision(hunts[0]!)).toEqual({ enabled: true, huntId: 'rat-cellars' });
+    expect(findPartyDecision(null)).toEqual({ enabled: false, huntId: null });
+    // O id 'rat-cellars' não é o nome 'Rat Cellars' — filtro por nome moraria na busca errada.
+    expect(findPartyDecision(hunts[0]!).huntId).not.toBe(hunts[0]!.name);
+  });
+
+  it('RF-03: "Iniciar com o time" appears with a forming party, disabled for a non-leader', async () => {
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: forming({ leaderId: 'lead' }) }));
+    const html = await render({ hunting: false });
+    expect(html).toContain('Iniciar com o time');
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Iniciar com o time<\/button>/);
+    expect(html).toContain('Só o líder inicia com o time.');
+  });
+
+  it('RF-03: "Iniciar com o time" is enabled for the leader, and never rendered without a forming party', async () => {
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: forming() }));
+    const html = await render({ hunting: false });
+    expect(html).toContain('>Iniciar com o time</button>');
+
+    // Sem party, e com a party já caçando: o botão some (o eixo da hunt é do rodapé do painel).
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me' }));
+    expect(await render({ hunting: false })).not.toContain('Iniciar com o time');
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', party: forming({ state: 'hunting', sessionId: 's1' }) }));
+    expect(await render({ hunting: true })).not.toContain('Iniciar com o time');
+  });
+
+  it('RF-03: the wiring goes configure-then-start, never an enter-hunt intent for the team', async () => {
+    const source = await readFile(new URL('./HuntsModal.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('startWithTeam(formation, me');
+    expect(source).toContain('partyActions.configure(teamStart.patch)');
+    expect(source).toContain('partyActions.start()');
+    // O clique do time NÃO manda `enter-hunt` — essa intenção só existe no `enter` solo.
+    expect(source).not.toContain("type: 'enter-hunt', huntId: teamStart");
   });
 
   it('RF-05: hunting=false shows "Entrar na caçada" and the recommendation note', async () => {

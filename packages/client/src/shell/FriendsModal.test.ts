@@ -10,8 +10,12 @@ import type { FriendView } from '../friends/api.js';
 import type { PartyView } from '../party/api.js';
 
 // Amigos (#404, D8 do ADR 0035): o subconjunto do kit social que o servidor já tem (#403) —
-// listar com online/onde (RF-04), adicionar por nome (RF-04) e convidar para a party atual,
-// desabilitado com o motivo quando não há party (RF-05).
+// listar com online/onde (RF-04), adicionar por nome (RF-04) e convidar para a party atual.
+//
+// #502: "Convidar para Party" NÃO exige party — sem party e fora de hunt é convite SOCIAL
+// (RF-01); com party e fora de hunt é o tradicional de sempre (RF-03); em hunt o botão
+// desabilita com o motivo (RF-02), com party ou sem. O feedback do envio (notice de sucesso,
+// recusa tipada) vem da store `party` e é renderizado aqui (RF-04).
 
 const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [],
@@ -32,8 +36,9 @@ const friend = (over: Partial<FriendView> = {}): FriendView => ({
 
 const formation = (): PartyView => ({
   id: 'p', leaderId: 'me', mode: 'split', huntId: 'arena', difficulty: 'bold',
-  members: [{ characterId: 'me', name: 'Eu', approved: false }],
-  published: false, minLevel: null, maxLevel: null, state: 'forming', sessionId: null,
+  minLevel: null, vocationTargets: {}, shareCosts: false, splitLoot: false,
+  openSlots: {}, members: [{ characterId: 'me', name: 'Eu' }],
+  published: false, state: 'forming', sessionId: null,
 });
 
 async function render(): Promise<string> {
@@ -94,19 +99,35 @@ describe('FriendsModal (#404)', () => {
     expect(invite).not.toContain('disabled');
   });
 
-  it('offers "Convidar para Party" while the active party is in a hunt', async () => {
+  // Era "offers ... while the active party is in a hunt" (#404): a partir da #502 a hunt bloqueia
+  // TODO convite (RF-02) — o convidador não pode ser ponto de partida de party nenhuma.
+  it('does not allow inviting during a hunt, even with a party (RF-02)', async () => {
     friends.set((state) => ({ ...state, friends: [friend()] }));
-    party.set((state) => ({ ...state, party: null, activePartyId: 'party-1' }));
-    const html = await render();
-    const invite = buttonFor(html, 'Convidar para Party');
-    expect(invite).not.toContain('disabled');
-  });
-
-  it('disables the invite and explains why without a party (RF-05)', async () => {
-    friends.set((state) => ({ ...state, friends: [friend()] }));
+    party.set((state) => ({ ...state, party: formation() }));
+    hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'hunt' } }));
     const html = await render();
     const invite = buttonFor(html, 'Convidar para Party');
     expect(invite).toContain('disabled');
-    expect(invite).toContain('Crie uma party primeiro.');
+    expect(invite).toContain('Em caçada você não pode convidar — saia da caçada para convidar.');
+  });
+
+  it('allows inviting WITHOUT a party outside a hunt — the social invite (RF-01)', async () => {
+    friends.set((state) => ({ ...state, friends: [friend()] }));
+    const html = await render();
+    const invite = buttonFor(html, 'Convidar para Party');
+    expect(invite).not.toContain('disabled');
+    expect(html).not.toContain('Crie uma party primeiro.');
+  });
+
+  it('renders the party notice and the party refusal, in words (RF-04)', async () => {
+    friends.set((state) => ({ ...state, friends: [friend()] }));
+    party.set((state) => ({
+      ...state,
+      notice: 'Convite enviado.',
+      error: 'Quem convida precisa estar fora da caçada.',
+    }));
+    const html = await render();
+    expect(html).toContain('Convite enviado.');
+    expect(html).toContain('Quem convida precisa estar fora da caçada.');
   });
 });

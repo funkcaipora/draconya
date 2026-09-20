@@ -167,6 +167,7 @@ export function buildApi(
       authenticate: auth.authenticate.bind(auth),
       ownsCharacter: repository.ownsCharacter.bind(repository),
       getCharacter: repository.getCharacter.bind(repository),
+      getCharacterById: repository.getCharacterById.bind(repository),
       listItemInstances: repository.listItemInstances.bind(repository),
       settleProgress,
       locateSession,

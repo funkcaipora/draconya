@@ -75,6 +75,7 @@ class MemoryRepository implements GameRepository {
   async createCharacter(): Promise<CharacterRecord> { throw new Error('not used'); }
   async listCharacters(): Promise<readonly CharacterRecord[]> { return []; }
   async getCharacter(): Promise<CharacterRecord | null> { return null; }
+  async getCharacterById(): Promise<CharacterRecord | null> { return null; }
   async ownsCharacter(): Promise<boolean> { return false; }
   async getCharacterByName(): Promise<CharacterRecord | null> { return null; }
   async addFriend(): Promise<never> { throw new Error('not used'); }

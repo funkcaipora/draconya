@@ -165,8 +165,8 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
           <IconButton size="sm" title="Party loot" active={partyLootOpen} onClick={onToggleLoot}>
             ▣
           </IconButton>
-          {/* Abre o modal "Gerenciar party" (#320, R3-11/R3-12) — a formação e as ações de
-              party voltam a existir DURANTE a hunt, sem duplicar PartyPanel.tsx. */}
+          {/* Abre o modal "Gerenciar party" (#320, R3-11/R3-12; #503) — a formação, a sala e
+              as ações de party voltam a existir DURANTE a hunt no modal próprio. */}
           <IconButton size="sm" title="Gerenciar party" onClick={onManage}>⚙</IconButton>
         </>
       )}

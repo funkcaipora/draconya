@@ -123,6 +123,12 @@ export interface GameRepository {
   ): Promise<CharacterRecord>;
   listCharacters(accountId: string): Promise<readonly CharacterRecord[]>;
   getCharacter(accountId: string, characterId: string): Promise<CharacterRecord | null>;
+  /**
+   * Resolve um personagem pela CHAVE PRIMÁRIA, sem exigir a conta (DT-07): o convite social
+   * aponta para um personagem que a conta de quem convida não conhece — a posse de quem FALA
+   * já foi conferida pela rota, e o convidado só precisa existir.
+   */
+  getCharacterById(characterId: string): Promise<CharacterRecord | null>;
   ownsCharacter(accountId: string, characterId: string): Promise<boolean>;
   /**
    * Resolve um personagem pelo nome (Amigos, §21). Mesma normalização do índice único
@@ -258,6 +264,15 @@ export class DrizzleGameRepository implements GameRepository {
         eq(characters.accountId, accountId),
         isNull(characters.deletedAt),
       ))
+      .limit(1);
+    return rows[0] === undefined ? null : toCharacter(rows[0]);
+  }
+
+  async getCharacterById(characterId: string): Promise<CharacterRecord | null> {
+    const rows = await this.#db
+      .select()
+      .from(characters)
+      .where(and(eq(characters.id, characterId), isNull(characters.deletedAt)))
       .limit(1);
     return rows[0] === undefined ? null : toCharacter(rows[0]);
   }

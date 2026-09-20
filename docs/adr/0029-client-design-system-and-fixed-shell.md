@@ -1,7 +1,9 @@
 # 0029 — Sistema de design do cliente: tokens do handoff, chrome sobreposto e vidro ferro-forjado no lugar da pedra do pacote
 
 **Status:** parcialmente substituído pelo 0030 — as decisões 5 e 6 caem (barra de ações e
-janelas flutuantes entram), as decisões 2, 3 e 8 são emendadas; 1, 4, 7 e 9 continuam valendo
+janelas flutuantes entram), as decisões 2, 3 e 8 são emendadas; 1, 4, 7 e 9 continuam valendo.
+A parte da decisão 6 que acoplava a formação da party ao modal de escolha de caçada cai com o
+[ADR 0036](0036-party-standalone-surface-and-leader-start.md) — a party tem superfície própria
 **Data:** 2026-09-16
 **Contexto técnico:** `docs` (este ADR e `docs/design-system.md`); `packages/client` (regras que
 as issues DS-02…DS-19 e SV-01…SV-17 do M14/M15 implementam a partir daqui — nenhum arquivo de

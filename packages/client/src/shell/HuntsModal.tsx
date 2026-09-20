@@ -1,22 +1,28 @@
-// "Escolha uma caçada" (#259, ADR 0029 D6). A party de formação mora na coluna direita — ADR
-// 0027: propor uma hunt É escolher uma hunt. Sem abas (Treino/Quests/Arena/Bosses não existem,
-// D8), com busca só por NOME (#324). "Loot possível" e a grade de criaturas ficam fora daqui de
-// propósito (D8) — existem em "Detalhes da caçada" (`HuntDetailsModal.tsx`, #349, SV-13), a tela
-// certa para olhar uma hunt já escolhida; esta é a de ESCOLHER.
+// "Escolha uma caçada" (#259, ADR 0029 D6). Duas colunas: a lista de hunts e o detalhe da
+// selecionada. A formação embutida SAIU (#503, DT-01/DT-02 de #499) — a party tem superfície
+// própria em `PartyModal.tsx`, e daqui saem só as DUAS pontes: "Encontrar Party" (abre a busca
+// filtrada pela hunt selecionada, pelo `onFindParty`) e "Iniciar com o time" (configure-then-
+// start do líder, via `party-start.ts` — nunca `enter-hunt` solo).
+//
+// Sem abas (Treino/Quests/Arena/Bosses não existem, D8), com busca só por NOME (#324). "Loot
+// possível" e a grade de criaturas ficam fora daqui de propósito (D8) — existem em "Detalhes da
+// caçada" (`HuntDetailsModal.tsx`, #349, SV-13), a tela certa para olhar uma hunt já escolhida;
+// esta é a de ESCOLHER.
 //
 // **A lógica de seleção é pura e exportada** (`resolveSelection`, `enterHuntMessage`,
-// `attemptEnter`): `prerender` (`react-dom/static`) roda a árvore sem DOM e sem eventos, então
-// um clique real não dispara em teste — o mesmo limite que `VocationChoice.test.ts` já
-// contorna. Em vez de inspecionar código-fonte por string, aqui a decisão em si é uma função
-// comum, testável direto (o padrão de `resolveChosenVocationId`).
+// `attemptEnter`, `findPartyDecision`): `prerender` (`react-dom/static`) roda a árvore sem DOM e
+// sem eventos, então um clique real não dispara em teste — o mesmo limite que
+// `VocationChoice.test.ts` já contorna. Em vez de inspecionar código-fonte por string, aqui a
+// decisão em si é uma função comum, testável direto (o padrão de `resolveChosenVocationId`).
 
 import { useState } from 'react';
 import type { C2SMessage } from '@draconya/protocol';
 import { sendIntent } from '../net/current.js';
-import { useHudSlice } from '../state/useSlice.js';
+import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import type { HuntListing } from '../state/hud.js';
+import { party, partyActions } from '../party/store.js';
+import { startWithTeam } from './party-start.js';
 import { OutfitSprite } from './OutfitSprite.js';
-import { PartyPanel } from './PartyPanel.js';
 import { Modal } from './ui/Modal.js';
 import { Button } from './ui/Button.js';
 import { Input } from './ui/Input.js';
@@ -91,6 +97,16 @@ export function attemptEnter(
   return entered;
 }
 
+/**
+ * A ponte "Encontrar Party" (RF-02): a busca da party é aberta filtrada pela hunt selecionada,
+ * pelo ID dela — nunca pelo nome (o id é o que o servidor casa, e o nome pode se repetir).
+ */
+export function findPartyDecision(selected: HuntListing | null): { enabled: boolean; huntId: string | null } {
+  return selected === null
+    ? { enabled: false, huntId: null }
+    : { enabled: true, huntId: selected.id };
+}
+
 function HuntRow({ hunt, level, selected, onSelect }: {
   hunt: HuntListing; level: number; selected: boolean; onSelect: () => void;
 }) {
@@ -118,9 +134,18 @@ function HuntRow({ hunt, level, selected, onSelect }: {
   );
 }
 
-export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: () => void }) {
+export function HuntsModal({ hunting, onClose, onFindParty }: {
+  hunting: boolean;
+  onClose: () => void;
+  /** Abre a instância ÚNICA do `PartyModal` em `search`, filtrada pela hunt selecionada. */
+  onFindParty?: (huntId: string) => void;
+}) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
+  const me = useHudSlice((state) => state.characterId);
+  const formation = useStoreSlice(party, (state) => state.party);
+  const partyBusy = useStoreSlice(party, (state) => state.busy);
+  const partyError = useStoreSlice(party, (state) => state.error);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pull, setPull] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -134,15 +159,41 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
     attemptEnter(message, sendIntent, onClose);
   };
 
+  const findParty = findPartyDecision(selected);
+  // "Iniciar com o time" só existe com party EM FORMAÇÃO (RF-03) — depois do start a party é a
+  // sessão de hunt, e os eixos de rateio vivem no rodapé de `PartyMembers`.
+  const teamStart = startWithTeam(formation, me ?? '', selected?.id ?? null, difficulty);
+  // RF-03: patch null = a configuração já confere — o configure é PULADO, e só o start sai.
+  const startTeam = (): void => {
+    if (!teamStart.enabled) return;
+    const started = teamStart.patch !== null
+      ? partyActions.configure(teamStart.patch)
+      : Promise.resolve();
+    void started.then(() => partyActions.start());
+  };
+
   return (
     <Modal open title="Escolha uma caçada" onClose={onClose} width={860} height={560}
       footer={
         <>
+          {partyError !== null && <span className="system-error">{partyError}</span>}
           <span className="hunts-modal-footer-note">
             {hunting
               ? 'Trocar de caçada é sair e entrar de novo · a instância atual é encerrada'
               : 'Level recomendado é conselho, não trava'}
           </span>
+          {formation !== null && formation.state === 'forming' && (
+            <Button variant="secondary" size="sm" disabled={!teamStart.enabled || partyBusy}
+              title={teamStart.reason ?? 'Configura e inicia a caçada com a party inteira'}
+              onClick={startTeam}>
+              Iniciar com o time
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" disabled={!findParty.enabled || onFindParty === undefined}
+            title={findParty.enabled ? `Buscar party para ${selected?.name ?? ''}` : 'Selecione uma caçada'}
+            onClick={() => { if (findParty.huntId !== null) onFindParty?.(findParty.huntId); }}>
+            Encontrar Party
+          </Button>
           <Button variant="primary" size="sm" disabled={selected === null || difficulty === null} onClick={enter}>
             {hunting ? 'Trocar de caçada' : 'Entrar na caçada'}
           </Button>
@@ -185,9 +236,6 @@ export function HuntsModal({ hunting, onClose }: { hunting: boolean; onClose: ()
                   </div>
                 </div>
               )}
-              {/* A formação da party (ADR 0027 decisão 8): mesmo componente de sempre, com a
-                  mesma prop `hunts` — nada muda no comportamento dela nesta issue. */}
-              <PartyPanel hunts={hunts} />
             </div>
           )}
     </Modal>

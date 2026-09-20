@@ -4,10 +4,20 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PartyInviteDialog } from './PartyInviteDialog.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
+import type { SocialInviteView } from '../party/api.js';
 
 // O diálogo de convite de party (#404, D7 do ADR 0035): montado incondicionalmente pelo `Shell`,
 // ele aparece em QUALQUER tela — Cidade ou hunt — porque quem convida pode já estar caçando.
 // Quem decide se há o que desenhar é `party.invites` (RF-06).
+//
+// #502: o `invites[]` do `/mine` é a UNION — o convite SOCIAL (#502) renderiza pelo nome de quem
+// convidou, sem `partyId`, com "Aceitar" (`acceptSocialInvite`) e "Ignorar" (dispensa local,
+// DT-05); o tradicional continua com "Aceitar"/"Recusar" (RF-05). A recusa tipada do aceite
+// (`invite-expired`, `inviter-in-hunt`, …) chega em `party.error` e aparece no corpo (RF-06).
+
+const socialInvite = (over: Partial<SocialInviteView> = {}): SocialInviteView => ({
+  inviteId: 'i1', leaderId: 'lead', leaderName: 'Bia', createdAtMs: 1, ...over,
+});
 
 async function render(): Promise<string> {
   const { prelude } = await prerender(createElement(PartyInviteDialog));
@@ -56,5 +66,32 @@ describe('PartyInviteDialog (#404)', () => {
     const html = await render();
     expect(html).toContain('Alice convidou você');
     expect(html).not.toContain('Bob convidou você');
+  });
+});
+
+describe('PartyInviteDialog (#502): the social invite in the union (RF-05, RF-06)', () => {
+  it('renders the SOCIAL invite by the inviter name, with Aceitar/Ignorar and no Recusar (RF-05)', async () => {
+    party.set((state) => ({ ...state, invites: [socialInvite()] }));
+    const html = await render();
+    expect(html).toContain('Convite para Party — Bia convidou você');
+    expect(html).toContain('>Aceitar<');
+    expect(html).toContain('>Ignorar<');
+    expect(html).not.toContain('>Recusar<');
+  });
+
+  it('renders a typed refusal of the accept in the dialog body (RF-06)', async () => {
+    party.set((state) => ({ ...state, invites: [socialInvite()], error: 'Esse convite expirou.' }));
+    const html = await render();
+    expect(html).toContain('Esse convite expirou.');
+  });
+
+  it('the first of the union decides: a social invite first shows the social dialog (RF-05)', async () => {
+    party.set((state) => ({ ...state, invites: [
+      socialInvite(),
+      { partyId: 'p9', leaderId: 'lead', leaderName: 'Alice', huntId: 'arena', state: 'forming' },
+    ] }));
+    const html = await render();
+    expect(html).toContain('Bia convidou você');
+    expect(html).toContain('>Ignorar<');
   });
 });
