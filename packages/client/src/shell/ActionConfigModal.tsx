@@ -75,14 +75,14 @@ function isSameAction(entry: ActionEntry, action: BotActionV2 | null): boolean {
  * A ação aceita outro personagem como alvo? Vem do catálogo (`targets: 'friend'`, §26-30, ADR
  * 0035 d.10). A tela só oferece o seletor quando o conteúdo declarou — nada é inventado (DT-02).
  */
-function acceptsFriend(entry: ActionEntry): boolean {
+export function acceptsFriend(entry: ActionEntry): boolean {
   return (entry.kind === 'spell' ? entry.spell.targets : entry.supply.targets) === 'friend';
 }
 
 /** Um rascunho com a ação trocada; condições, tecla e automática sobrevivem. Trocar para uma ação
  *  que NÃO aceita amigo zera o alvo — salvar um `target` invisível seria configuração que o
  *  jogador não escolheu (RF-07/DT-03). */
-function withDo(draft: SlotDraft, action: BotActionV2 | null, friend: boolean): SlotDraft {
+export function withDo(draft: SlotDraft, action: BotActionV2 | null, friend: boolean): SlotDraft {
   return {
     do: action,
     when: draft.when,

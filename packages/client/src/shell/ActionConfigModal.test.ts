@@ -3,10 +3,11 @@ import { createElement } from 'react';
 import { prerender } from 'react-dom/static';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { BotSlot } from '@draconya/content';
-import { ActionConfigModal } from './ActionConfigModal.js';
+import { ActionConfigModal, acceptsFriend, withDo } from './ActionConfigModal.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { Catalogue } from '../state/hud.js';
+import type { Catalogue, PartyView } from '../state/hud.js';
 import { INITIAL_BOT, bot, edit } from '../bot/store.js';
+import { draftFromSlot } from '../bot/action-config.js';
 
 // O modal de configuração de slot (AB-11/#426, redesenhado em #437 na régua da imagem do
 // "Configurar ação" do cliente Tibia — anexa à issue #435, ADR 0033): abas, lista e painel de
@@ -259,5 +260,148 @@ describe('ActionConfigModal — trocar de aba não limpa o rascunho (seção 7 d
     expect(source).toContain('onChange={(item) => { setPickedTab(item as ActionTab); }}');
     // A ação escolhida (`draft.do`) só muda ao clicar num item da LISTA, nunca ao trocar de aba.
     expect(source).not.toMatch(/onChange=\{[^}]*setDraft\(withDo\(draft, null\)\)/);
+  });
+});
+
+describe('ActionConfigModal — Alvo da cura/suporte (#406, §26-30, ADR 0035 d.10)', () => {
+  // Catálogo com `targets` declarado (o que o conteúdo publica): só a ação friend oferece alvo.
+  const targetCatalogue = (): Catalogue => ({
+    ...catalogue(),
+    bot: {
+      ...catalogue().bot,
+      spells: [
+        {
+          id: 'exura-sio', name: 'Exura Sio', manaCost: 20, minLevel: 1, vocationId: null,
+          effect: 'heal', group: 'healing', cooldownMs: 1000, targets: 'friend', detail: { amount: 40 },
+        },
+        {
+          id: 'exura', name: 'Exura', manaCost: 20, minLevel: 1, vocationId: null,
+          effect: 'heal', group: 'healing', cooldownMs: 1000, targets: 'self', detail: { amount: 40 },
+        },
+        {
+          id: 'flame', name: 'Flame', manaCost: 20, minLevel: 1, vocationId: null,
+          effect: 'damage', group: 'attack', cooldownMs: 1000, detail: { basePower: 20 },
+        },
+      ],
+      supplies: [
+        {
+          id: 'health-potion', name: 'Poção de Vida', price: 20, effect: 'heal',
+          group: 'potion', requires: {}, groupCooldownMs: 1000, targets: 'friend', detail: { amount: 150 },
+        },
+        {
+          id: 'mana-potion', name: 'Poção de Mana', price: 20, effect: 'mana',
+          group: 'potion', requires: {}, groupCooldownMs: 1000, targets: 'self', detail: { amount: 100 },
+        },
+        {
+          id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, effect: 'damage',
+          group: 'attack', requires: { level: 1 }, groupCooldownMs: 2000,
+          detail: { basePower: 60, range: 4, damageType: 'ice' },
+        },
+      ],
+    },
+  });
+
+  const member = (characterId: string, name: string) => ({
+    characterId, name, alive: true, healthPercent: 100, vocationId: null,
+  });
+  const party = (members: ReturnType<typeof member>[]): PartyView => ({
+    leaderId: members[0]?.characterId ?? 'p1', mode: 'split', members,
+  });
+
+  const spellEntry = (id: string) => {
+    const entry = targetCatalogue().bot.spells.find((spell) => spell.id === id);
+    if (entry === undefined) throw new Error(`spell ${id} ausente`);
+    return { kind: 'spell' as const, spell: entry };
+  };
+  const supplyEntry = (id: string) => {
+    const entry = (targetCatalogue().bot.supplies ?? []).find((supply) => supply.id === id);
+    if (entry === undefined) throw new Error(`supply ${id} ausente`);
+    return { kind: 'supply' as const, supply: entry };
+  };
+
+  beforeEach(() => {
+    hud.set((state) => ({
+      ...state,
+      catalogue: targetCatalogue(),
+      characterId: 'me',
+      party: party([member('me', 'Eu Mesmo'), member('p2', 'Bru')]),
+    }));
+  });
+
+  it('RF-05: `acceptsFriend` só deixa passar `targets: friend` (spell e supply)', () => {
+    // Mutação que mata: oferecer o seletor sem o catálogo marcar (`self`/ausente).
+    expect(acceptsFriend(spellEntry('exura-sio'))).toBe(true);
+    expect(acceptsFriend(supplyEntry('health-potion'))).toBe(true);
+    expect(acceptsFriend(spellEntry('exura'))).toBe(false);
+    expect(acceptsFriend(spellEntry('flame'))).toBe(false);
+    expect(acceptsFriend(supplyEntry('mana-potion'))).toBe(false);
+    expect(acceptsFriend(supplyEntry('avalanche-rune'))).toBe(false);
+  });
+
+  it('RF-05: o Select "Alvo" aparece para uma magia friend, com Eu / menor vida / membro', async () => {
+    withSlot(0, spellSlot({ do: { kind: 'spell', spellId: 'exura-sio' } }));
+    const html = await render(0);
+    expect(html).toContain('action-config-target');
+    expect(html).toContain('>Alvo<');
+    expect(html).toContain('Eu');
+    expect(html).toContain('Membro com menor vida');
+    expect(html).toContain('Membro específico');
+  });
+
+  it('RF-05: some para magia self-only e para magia sem `targets`', async () => {
+    withSlot(0, spellSlot({ do: { kind: 'spell', spellId: 'exura' } }));
+    expect(await render(0)).not.toContain('action-config-target');
+
+    withSlot(0, spellSlot({ do: { kind: 'spell', spellId: 'flame' } }));
+    expect(await render(0)).not.toContain('action-config-target');
+  });
+
+  it('RF-05: aparece para suprimento friend e some para suprimento self/ataque', async () => {
+    withSlot(0, supplySlot({ do: { kind: 'supply', supplyId: 'health-potion' } }));
+    expect(await render(0)).toContain('action-config-target');
+
+    withSlot(0, supplySlot({ do: { kind: 'supply', supplyId: 'mana-potion' } }));
+    expect(await render(0)).not.toContain('action-config-target');
+
+    withSlot(0, supplySlot({ do: { kind: 'supply', supplyId: 'avalanche-rune' } }));
+    expect(await render(0)).not.toContain('action-config-target');
+  });
+
+  it('RF-06: "Membro específico" abre o Select com a party ao vivo, sem o próprio', async () => {
+    withSlot(0, spellSlot({
+      do: { kind: 'spell', spellId: 'exura-sio' },
+      target: { kind: 'member', characterId: 'p2' },
+    }));
+    const html = await render(0);
+    expect(html).toContain('>Membro<');
+    expect(html).toMatch(/<option[^>]*value="p2"[^>]*selected/);
+    expect(html).toContain('>Bru<');
+    // O próprio ("Eu Mesmo", characterId `me`) não entra na lista.
+    expect(html).not.toContain('>Eu Mesmo<');
+  });
+
+  it('RF-07/DT-03: trocar a ação amigo→self zera `target`; self→amigo mantém "Eu"', () => {
+    // Mutação que mata: manter o alvo antigo escondido — salvaria o que o jogador não escolheu.
+    const friend = { kind: 'spell' as const, spellId: 'exura-sio' };
+    const self = { kind: 'spell' as const, spellId: 'exura' };
+
+    const withTarget = (doAction: BotSlot['do'], target: BotSlot['target']) =>
+      draftFromSlot({ do: doAction, when: [], auto: true, target });
+
+    expect(withDo(withTarget(friend, { kind: 'member', characterId: 'p2' }), self, false).target)
+      .toEqual({ kind: 'self' });
+    expect(withDo(withTarget(friend, { kind: 'lowest-hp-member' }), self, false).target)
+      .toEqual({ kind: 'self' });
+
+    // self→amigo: o alvo continua "Eu", nunca um membro que não foi escolhido.
+    expect(withDo(withTarget(self, { kind: 'self' }), friend, true).target).toEqual({ kind: 'self' });
+    // amigo→amigo: a escolha do jogador sobrevive.
+    expect(withDo(withTarget(friend, { kind: 'member', characterId: 'p2' }), friend, true).target)
+      .toEqual({ kind: 'member', characterId: 'p2' });
+  });
+
+  it('RF-07: o clique da lista usa withDo com acceptsFriend (por fonte)', async () => {
+    const source = await readFile(new URL('./ActionConfigModal.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('setDraft(withDo(draft, actionOf(entry), acceptsFriend(entry)))');
   });
 });
