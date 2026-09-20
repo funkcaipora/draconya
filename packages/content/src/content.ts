@@ -541,8 +541,19 @@ export function buildContent(raw: RawContent): Content {
     }
     const effect = spell.effect;
     if (effect.kind === 'heal') {
-      if ((effect.basePower === undefined) === (effect.amount === undefined)) {
-        problems.push(`${where}: cura precisa de basePower OU amount, um dos dois`);
+      // A cura sai de UM mecanismo, como o dano (#475): o número fixo (`amount`) OU a faixa
+      // escalada (`basePower` provisório e/ou a `formula` canônica). Os dois juntos é a mesma
+      // ambiguidade que o dano recusa — a precedência implícita faria a cura sair errada mudo.
+      const fixed = effect.amount !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
+      }
+      // Cura em área é de GRUPO centrada no lançador (Mass Healing): forma no alvo exigiria
+      // mira e alcance que a cura não tem, e a magia não acharia ninguém.
+      if (effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
+        problems.push(`${where}: cura em área precisa ser centrada no lançador`);
       }
     }
     if (effect.kind === 'damage') {
@@ -562,6 +573,17 @@ export function buildContent(raw: RawContent): Content {
       if (!selfOrigin && effect.range === undefined) {
         problems.push(`${where}: dano no alvo precisa de range`);
       }
+    }
+  }
+  // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
+  // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
+  for (const supply of supplies.values()) {
+    const effect = supply.effect;
+    if (effect.kind !== 'heal') continue;
+    const fixed = effect.amount !== undefined;
+    const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+    if (fixed === scaled) {
+      problems.push(`supply/${supply.id}: cura precisa de amount OU basePower/formula, um dos dois`);
     }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa

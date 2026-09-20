@@ -151,9 +151,24 @@ export function secondaryCooldownKey(name: string): string {
 export interface SpellScaling {
   readonly skillLevel: number;
   readonly powerScale: number;
+  /**
+   * O MAGIC LEVEL do conjurador, para a fórmula canônica de CURA (#475): no Tibia a cura escala
+   * pelo magic level em TODA vocação, como a runa — a skill de magia da vocação (`spellSkill`)
+   * não expressa isso no Paladin/Knight. Ausente cai em `skillLevel`, que é o caminho
+   * provisório do `basePower` e mantém o v1 bit a bit.
+   */
+  readonly magicLevel?: number;
 }
 
 const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
+
+/** O efeito de cura que `executeHealing` resolve. Magia e supply satisfazem esta forma. */
+export interface HealEffect {
+  readonly kind: 'heal';
+  readonly basePower?: number | undefined;
+  readonly amount?: number | undefined;
+  readonly formula?: SpellFormula | undefined;
+}
 
 /**
  * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
@@ -162,9 +177,13 @@ const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
  * A magia que declara `formula` (#474) entra pela fórmula canônica; a que não declara continua
  * exatamente no caminho do `basePower` × `combat.spellPower`, bit a bit (ADR 0031). Os dois
  * caminhos consomem UM `rng.integer`, então a ordem de sorteio não muda para ninguém.
+ *
+ * O `skill` da fórmula é o da vocação na magia de DANO e o MAGIC LEVEL na CURA (#475): a mesma
+ * fórmula, dois vocabulários, e é o `kind` do efeito que escolhe.
  */
 function powerOf(
   effect: {
+    readonly kind: string;
     readonly basePower?: number | undefined;
     readonly power?: number | undefined;
     readonly amount?: number | undefined;
@@ -172,13 +191,43 @@ function powerOf(
   },
   caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
 ): number {
-  if (effect.basePower !== undefined || effect.formula !== undefined) {
+  if (effect.formula !== undefined) {
+    const skill = effect.kind === 'heal' ? scaling.magicLevel ?? scaling.skillLevel : scaling.skillLevel;
     const { min, max } = evaluateSpellPower(
-      effect.formula, effect.basePower ?? 0, caster.level, scaling.skillLevel, combat.spellPower,
+      effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
+    );
+    return rng.integer(min, max);
+  }
+  if (effect.basePower !== undefined) {
+    // O caminho provisório do `basePower` (ADR 0026 d.5) NÃO muda (#475): a skill é a da
+    // vocação, como sempre foi — só a fórmula canônica usa o magic level. É o que preserva o
+    // v1 bit a bit para o conteúdo que ainda não declara fórmula (ADR 0031).
+    const { min, max } = evaluateSpellPower(
+      undefined, effect.basePower, caster.level, scaling.skillLevel, combat.spellPower,
     );
     return rng.integer(min, max);
   }
   return Math.round((effect.power ?? effect.amount ?? 0) * scaling.powerScale);
+}
+
+/**
+ * Executa a cura de UM alvo (#475, RF-04): calcula o poder — fórmula canônica, `basePower`
+ * provisório ou `amount` fixo — e aplica, devolvendo o quanto de fato REPÔS (o teto de vida é
+ * clampado em `CharacterRuntime.heal`, então overheal rende zero).
+ *
+ * NÃO desconta mana nem gold e NÃO inicia cooldown: isso é do LANÇADOR, e mora em `castSpell`/
+ * `useSupply`. Aqui é só a matemática de faixa e o clamp — é o que permite a Mass Healing curar
+ * cada aliado sem repetir o portão.
+ */
+export function executeHealing(
+  actor: CharacterRuntime,
+  target: CharacterRuntime,
+  effect: HealEffect,
+  scaling: SpellScaling,
+  combat: Combat,
+  rng: Rng,
+): number {
+  return target.heal(powerOf(effect, actor, scaling, combat, rng));
 }
 
 const NOT_WAITING = 0;
@@ -296,7 +345,7 @@ export function castSpell(
     case 'heal':
       return {
         ok: true,
-        healed: restore(caster, 'health', powerOf(effect, caster, scaling, combat, rng)),
+        healed: executeHealing(caster, caster, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
       };
     case 'heal-over-time':
@@ -404,29 +453,60 @@ export function useSupply(
     return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
   }
 
+  // Runa de cura escalada (#475): a `formula` canônica (ou o `basePower` provisório) escala
+  // pelo magic level. Sem contexto de combate/rng ela não existe — nunca cura sem sorteio — e a
+  // checagem vem ANTES do gold, pela ordem de sempre: recusar antes de debitar.
+  if (supply.effect.kind === 'heal') {
+    const effect = supply.effect;
+    // Requisitos da runa de cura (#475), na mesma ordem da runa de ataque: level e magic level
+    // são conferidos ANTES do gold. Poção não declara nenhum, e passa direto.
+    if (supply.requires.level !== undefined && user.level < supply.requires.level) {
+      return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (supply.requires.magicLevel !== undefined
+      && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
+      return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
+    }
+    if (effect.basePower !== undefined || effect.formula !== undefined) {
+      if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
+      if (!purse.canAfford(supply.price)) {
+        return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+      }
+      purse.pay(supply.price);
+      startSupplyCooldown(user, supply, nowMs);
+      return {
+        ok: true,
+        healed: executeHealing(user, user, effect, scaling, combat, rng),
+        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+      };
+    }
+    if (!purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
+    purse.pay(supply.price);
+    startSupplyCooldown(user, supply, nowMs);
+    // Poção: número fixo, sem sorteio nem contexto de combate — o caminho de sempre.
+    return {
+      ok: true,
+      healed: restore(user, 'health', effect.amount ?? 0),
+      manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+    };
+  }
+
   if (!purse.canAfford(supply.price)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
 
   purse.pay(supply.price);
   startSupplyCooldown(user, supply, nowMs);
-  return supply.effect.kind === 'heal'
-    ? {
-      ok: true,
-      healed: restore(user, 'health', supply.effect.amount),
-      manaRestored: 0,
-      damage: 0,
-      hits: NO_HITS,
-      goldSpent: supply.price,
-    }
-    : {
-      ok: true,
-      healed: 0,
-      manaRestored: restore(user, 'mana', supply.effect.amount),
-      damage: 0,
-      hits: NO_HITS,
-      goldSpent: supply.price,
-    };
+  return {
+    ok: true,
+    healed: 0,
+    manaRestored: restore(user, 'mana', supply.effect.amount),
+    damage: 0,
+    hits: NO_HITS,
+    goldSpent: supply.price,
+  };
 }
 
 /**

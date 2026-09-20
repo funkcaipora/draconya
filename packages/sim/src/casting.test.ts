@@ -523,3 +523,134 @@ describe('quem paga o supply é a Purse (#192, ADR 0027)', () => {
     expect(hero.goldDelta).toBe(-45);
   });
 });
+
+describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
+  // Light Healing (`exura`): min = level/5 + ML×1.4 + 8, max = level/5 + ML×2.0 + 11.
+  const canaryLightHealing: Spell = {
+    ...heal, id: 'light-healing', manaCost: 20, cooldownMs: 1_000,
+    group: 'healing', groupCooldownMs: 1_000, minLevel: 8,
+    effect: {
+      kind: 'heal', basePower: 40,
+      formula: { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 8, baseMax: 11 },
+    },
+  };
+  // Intense Healing (`exura gran`): outra magia do MESMO grupo, para o cooldown de grupo.
+  const canaryIntenseHealing: Spell = {
+    ...canaryLightHealing, id: 'intense-healing',
+    effect: {
+      kind: 'heal', basePower: 120,
+      formula: { levelFactor: 0.2, skillMin: 2.4, skillMax: 3.0, baseMin: 20, baseMax: 30 },
+    },
+  };
+  const canaryFlame: Spell = {
+    ...strike, id: 'flame-strike', group: 'attack', groupCooldownMs: 2_000, cooldownMs: 2_000,
+    effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'fire' },
+  };
+  // Outra magia do MESMO grupo `attack`: com ids distintos, o cooldown individual não mascara
+  // o de grupo — é ele que o teste da independência precisa enxergar.
+  const canaryIce: Spell = {
+    ...canaryFlame, id: 'ice-strike', effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'ice' },
+  };
+  const uhRune: Supply = {
+    id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 35,
+    group: 'healing', groupCooldownMs: 1_000,
+    requires: { level: 24, magicLevel: 4 },
+    effect: {
+      kind: 'heal', range: 4,
+      formula: { levelFactor: 0.2, skillMin: 5.7, skillMax: 10.3, baseMin: 36, baseMax: 65 },
+    },
+  };
+  const ihRune: Supply = {
+    ...uhRune, id: 'intense-healing-rune', price: 20, requires: { level: 8, magicLevel: 1 },
+    effect: {
+      kind: 'heal', range: 4,
+      formula: { levelFactor: 0.2, skillMin: 2.4, skillMax: 3.0, baseMin: 20, baseMax: 30 },
+    },
+  };
+  // A cura escala pelo MAGIC LEVEL, não pela skill de magia da vocação.
+  const magic = { skillLevel: 0, powerScale: 1, magicLevel: 40 };
+  /** Teto alto para a cura não ser clampada: o assunto aqui é a FAIXA, não o overheal. */
+  const mage = (health: number, mana = 1_000): CharacterRuntime => {
+    const caster = hero({ level: 50, health, mana });
+    caster.maxHealth = 5_000;
+    return caster;
+  };
+
+  it('level 50 e ML 40 rendem a faixa Canary 74~101, não a do basePower', () => {
+    const result = castSpell(mage(1), canaryLightHealing, null, 0, combat, rng(), magic);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // min = 10 + 40×1.4 + 8 = 74; max = 10 + 40×2.0 + 11 = 101. Mutação que mata: cair no
+    // `basePower` 40 daria 340~460.
+    expect(result.healed).toBeGreaterThanOrEqual(74);
+    expect(result.healed).toBeLessThanOrEqual(101);
+  });
+
+  it('a fórmula VENCE o basePower — os dois caminhos consomem os MESMOS sorteios', () => {
+    const formulaRng = rng();
+    const baseRng = rng();
+    const withFormula = castSpell(mage(1), canaryLightHealing, null, 0, combat, formulaRng, magic);
+    const onlyBase = castSpell(
+      mage(1),
+      { ...canaryLightHealing, effect: { kind: 'heal', basePower: 40 } },
+      null, 0, combat, baseRng, magic,
+    );
+    expect(withFormula.ok && withFormula.healed).toBeLessThanOrEqual(101);
+    expect(onlyBase.ok && onlyBase.healed).toBeGreaterThan(101);
+    // A ordem de RNG não muda: a fórmula troca o NÚMERO, nunca a quantidade de sorteios.
+    expect(formulaRng.getState()).toEqual(baseRng.getState());
+  });
+
+  it('a cura é limitada ao HP máximo e devolve o que REPÔS, não o que prometia (RF-04)', () => {
+    const caster = hero({ level: 50, health: 95 });
+    const result = castSpell(caster, canaryLightHealing, null, 0, combat, rng(), magic);
+    expect(result).toMatchObject({ ok: true, healed: 5 });
+    expect(caster.health).toBe(100);
+  });
+
+  it('o grupo `healing` (1000ms) é INDEPENDENTE do grupo `attack` (2000ms) (RF-03)', () => {
+    // Cura primeiro: o ataque não espera o livro da cura.
+    const caster = hero({ level: 50, mana: 1_000, health: 1 });
+    expect(castSpell(caster, canaryLightHealing, null, 0, combat, rng(), magic).ok).toBe(true);
+    expect(castSpell(caster, canaryFlame, near(), 500, combat, rng()).ok).toBe(true);
+    // A segunda CURA (outra magia do grupo) espera os 1000ms do livro `healing`.
+    expect(castSpell(caster, canaryIntenseHealing, null, 500, combat, rng(), magic))
+      .toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 500 });
+    expect(castSpell(caster, canaryIntenseHealing, null, 1_000, combat, rng(), magic).ok).toBe(true);
+
+    // Ataque primeiro: a cura não espera o livro do ataque (que tranca 2000ms).
+    const outro = hero({ level: 50, mana: 1_000, health: 1 });
+    expect(castSpell(outro, canaryFlame, near(), 0, combat, rng()).ok).toBe(true);
+    expect(castSpell(outro, canaryLightHealing, null, 500, combat, rng(), magic).ok).toBe(true);
+    expect(castSpell(outro, canaryIce, near(), 1_000, combat, rng()))
+      .toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 1_000 });
+  });
+
+  it('a UH rune escala pelo magic level, debita o gold e tranca o grupo `healing` (RF-02)', () => {
+    const user = hero({ level: 50, health: 100, gold: 100 });
+    user.maxHealth = 5_000;
+    const result = useSupply(user, uhRune, null, combat, rng(), magic, undefined, 0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // min = 10 + 40×5.7 + 36 = 274; max = 10 + 40×10.3 + 65 = 487.
+    expect(result.healed).toBeGreaterThanOrEqual(274);
+    expect(result.healed).toBeLessThanOrEqual(487);
+    expect(result.goldSpent).toBe(35);
+    expect(user.goldDelta).toBe(-35);
+    expect(user.cooldowns.isReady('group:healing', 999)).toBe(false);
+    expect(user.cooldowns.isReady('group:healing', 1_000)).toBe(true);
+  });
+
+  it('a IH rune recusa por magic level e não cura sem contexto — sem cobrar gold', () => {
+    // Abaixo do ML exigido: recusa antes do gold.
+    const fraco = hero({ level: 50, gold: 100 });
+    expect(useSupply(fraco, ihRune, null, combat, rng(), { skillLevel: 0, powerScale: 1, magicLevel: 0 }))
+      .toEqual({ ok: false, reason: 'magic-level-too-low', retryInMs: 0 });
+    expect(fraco.goldDelta).toBe(0);
+    // Sem combate/rng a runa escalada não existe — e o gold NÃO sai.
+    const semContexto = hero({ level: 50, gold: 100 });
+    expect(useSupply(semContexto, ihRune, null, undefined, undefined, magic))
+      .toEqual({ ok: false, reason: 'not-in-catalog', retryInMs: 0 });
+    expect(semContexto.goldDelta).toBe(0);
+  });
+});

@@ -1,0 +1,24 @@
+{
+  "id": "ultimate-healing-rune",
+  "name": "Ultimate Healing Rune",
+  "description": "Cura intensamente o alvo selecionado.",
+  "price": 35,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "requires": {
+    "level": 24,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "heal",
+    "range": 4,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 5.7,
+      "skillMax": 10.3,
+      "baseMin": 36,
+      "baseMax": 65
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula e requisitos do exemplo da #475 (paridade Canary); preço por uso provisório (runa no NPC ÷ cargas). Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

@@ -1530,6 +1530,77 @@ describe('o motor de grupos do bot (AB-07, RP-001…RP-004)', () => {
   });
 });
 
+// --- cura em área (Mass Healing, #475, RF-05) -------------------------------------------------
+
+describe('cura em área — Mass Healing (#475, RF-05)', () => {
+  const massHealing = {
+    id: 'mass-healing', name: 'Mass Healing', manaCost: 20, cooldownMs: 1_000,
+    group: 'healing', groupCooldownMs: 1_000, minLevel: 1,
+    effect: {
+      kind: 'heal', basePower: 200,
+      area: { shape: 'circle', radius: 1, centered: 'caster' },
+      formula: { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 40, baseMax: 60 },
+    },
+  };
+  const healEverything = () => ({
+    heal: [{
+      when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+      do: { kind: 'spell' as const, spellId: 'mass-healing' },
+    }],
+  });
+
+  it('cura o conjurador e os aliados no 3x3, e NÃO quem está fora da área', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, massHealing],
+    }));
+    const session = createHuntSession({
+      id: 'mass-heal', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(healEverything()),
+    });
+    const make = (id: string) => new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: 50, maxHealth: 100, mana: 200, maxMana: 200,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    const caster = make('hero');
+    session.enter(caster);
+    const ally = make('ally');
+    session.enter(ally);
+    const longe = make('far');
+    session.enter(longe);
+    // Posiciona à mão: `enter` coloca "perto", e a área de cura é o 3x3 EXATO. O `far` fica
+    // longe o bastante para o primeiro passo (que move o conjurador 1 tile) não o trazer para
+    // dentro da forma — é ele quem prova que a cura NÃO é da sessão inteira.
+    ally.position = { x: caster.position.x + 1, y: caster.position.y, z: caster.position.z };
+    longe.position = { x: caster.position.x + 4, y: caster.position.y + 2, z: caster.position.z };
+
+    session.advanceBy(50);
+
+    // Cada alvo rola a própria cura (40~60 no level 1): a vida sobe, sem passar do teto.
+    expect(caster.health).toBeGreaterThan(50);
+    expect(caster.health).toBeLessThanOrEqual(100);
+    expect(ally.health).toBeGreaterThan(50);
+    expect(ally.health).toBeLessThanOrEqual(100);
+    // Fora do 3x3 o aliado NÃO é tocado — mutação que mata: curar todo mundo da sessão.
+    expect(longe.health).toBe(50);
+
+    const events = session.drainEvents();
+    const healed = events.filter((e) => e.kind === 'creature-healed')
+      .map((e) => (e.kind === 'creature-healed' ? e.creatureId : ''));
+    // O conjurador PRIMEIRO (o `castSpell` já o curou), depois os aliados na ordem da sessão.
+    expect(healed).toEqual(['hero', 'ally']);
+    const cast = events.find((e) => e.kind === 'spell-cast');
+    expect(cast?.kind === 'spell-cast' && cast.tiles).toHaveLength(9);
+    expect(cast?.kind === 'spell-cast' && cast.targets.map((t) => t.creatureId)).toEqual(['hero', 'ally']);
+  });
+});
+
 // --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
 
 describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {

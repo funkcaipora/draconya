@@ -328,6 +328,12 @@
     },
     "avalanche-rune": {
       "effect": 41
+    },
+    "ultimate-healing-rune": {
+      "effect": 13
+    },
+    "intense-healing-rune": {
+      "effect": 13
     }
   },
   "hits": {

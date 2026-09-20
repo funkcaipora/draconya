@@ -1513,6 +1513,72 @@ describe('a fórmula canônica de dano (#474)', () => {
   });
 });
 
+describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
+  const formula = { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 8, baseMax: 11 };
+  const lightHealing = {
+    id: 'light-healing', name: 'Light Healing', manaCost: 20, cooldownMs: 1_000,
+    group: 'healing', groupCooldownMs: 1_000,
+    effect: { kind: 'heal', basePower: 40, formula },
+  };
+  const massHealing = {
+    ...lightHealing, id: 'mass-healing',
+    effect: {
+      kind: 'heal', basePower: 200, formula,
+      area: { shape: 'circle', radius: 1, centered: 'caster' },
+    },
+  };
+
+  it('aceita a fórmula junto do basePower — a fórmula vence, o BP fica de exibição', () => {
+    const content = buildContent(base({ spells: [lightHealing] }));
+    expect(content.spells.get('light-healing')?.effect)
+      .toMatchObject({ kind: 'heal', basePower: 40, formula: { skillMin: 1.4 } });
+  });
+
+  it('aceita a cura em área 3x3 centrada no lançador (Mass Healing)', () => {
+    const content = buildContent(base({ spells: [massHealing] }));
+    expect(content.spells.get('mass-healing')?.effect)
+      .toMatchObject({ area: { shape: 'circle', radius: 1, centered: 'caster' } });
+  });
+
+  it('recusa `amount` junto de fórmula/basePower: dois mecanismos de cura', () => {
+    // Mutação que mata: aceitar os dois e deixar a precedência implícita — a cura sairia errada.
+    const both = { ...lightHealing, effect: { ...lightHealing.effect, amount: 10 } };
+    expect(() => buildContent(base({ spells: [both] })))
+      .toThrow(/cura precisa de amount OU basePower\/formula/);
+  });
+
+  it('recusa cura sem mecanismo nenhum', () => {
+    const none = { ...lightHealing, effect: { kind: 'heal' } };
+    expect(() => buildContent(base({ spells: [none] })))
+      .toThrow(/cura precisa de amount OU basePower\/formula/);
+  });
+
+  it('recusa cura em área centrada no ALVO: cura não tem mira', () => {
+    const noTarget = {
+      ...massHealing,
+      effect: { ...massHealing.effect, area: { shape: 'circle', radius: 1, centered: 'target' } },
+    };
+    expect(() => buildContent(base({ spells: [noTarget] })))
+      .toThrow(/cura em área precisa ser centrada no lançador/);
+  });
+
+  it('a runa de cura aceita fórmula e recusa dois mecanismos, como a magia', () => {
+    const rune = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 35,
+      group: 'healing', groupCooldownMs: 1_000, requires: { level: 24, magicLevel: 4 },
+      effect: {
+        kind: 'heal', range: 4,
+        formula: { levelFactor: 0.2, skillMin: 5.7, skillMax: 10.3, baseMin: 36, baseMax: 65 },
+      },
+    };
+    expect(buildContent(base({ supplies: [rune] })).supplies.get('ultimate-healing-rune')?.effect)
+      .toMatchObject({ kind: 'heal', formula: { skillMin: 5.7 } });
+    const both = { ...rune, effect: { ...rune.effect, amount: 10 } };
+    expect(() => buildContent(base({ supplies: [both] })))
+      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount OU basePower\/formula/);
+  });
+});
+
 describe('condições e campos declarativos (CMB-07, #334)', () => {
   const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };

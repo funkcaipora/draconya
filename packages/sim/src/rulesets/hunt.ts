@@ -30,7 +30,7 @@ import type {
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import {
-  NOT_IN_CATALOG, balanceOf, castSpell, groupCooldownKey,
+  NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
@@ -793,6 +793,12 @@ export class HuntRuleset implements Ruleset {
   readonly #spellTargets: MutableSpellTarget[] = [];
   /** Os monstros na mesma ordem de `#spellTargets`: é quem leva o dano de cada rolagem. */
   readonly #spellHits: MonsterRuntime[] = [];
+  /**
+   * Os ALIADOS de uma cura em área (#475, Mass Healing), na ordem dos participantes da sessão.
+   * Reaproveitado como `#spellHits`: a cura de grupo roda por lançamento, e o vetor novo só é
+   * o do evento. O conjurador entra nele, mas quem já o curou foi o `castSpell` — o laço pula.
+   */
+  readonly #healAllies: CharacterRuntime[] = [];
   /** Os tiles da forma do último lançamento (#155), para o efeito por tile. Reaproveitado. */
   #aimTiles: WorldPoint[] = [];
   readonly #aim: { distance: number; targets: readonly SpellTarget[] } = {
@@ -2030,6 +2036,12 @@ export class HuntRuleset implements Ruleset {
       : spell.effect.kind === 'damage-over-time'
         ? this.#aimFor(character, spell.effect.range, undefined)
         : null;
+    // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
+    // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
+    const healArea = spell.effect.kind === 'heal'
+      && spell.effect.area !== undefined && isSelfOrigin(spell.effect.area)
+      ? this.#collectHealAllies(session, character, spell.effect.area)
+      : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
@@ -2051,10 +2063,12 @@ export class HuntRuleset implements Ruleset {
       kind: 'spell-cast', casterId: character.id, spellId: spell.id,
       casterPosition: this.#at(character),
       targets: aim === null
-        ? NO_SPELL_TARGETS
+        ? (healArea === null
+          ? NO_SPELL_TARGETS
+          : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })))
         : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
-      tiles: aim === null ? NO_TILES : [...this.#aimTiles],
+      tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
     // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
@@ -2075,11 +2089,46 @@ export class HuntRuleset implements Ruleset {
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
       this.#emitHealed(session, character, result.healed, 'spell');
+      // Mass Healing: os ALIADOS na forma, um a um, na ordem dos participantes. Cada um consome
+      // uma rolagem (o contrato do dano em área), e o conjurador é pulado porque o `castSpell`
+      // já o curou. Overheal rende zero e nenhum evento sai.
+      if (healArea !== null && spell.effect.kind === 'heal') {
+        const scaling = this.#spellScaling(character);
+        for (const ally of this.#healAllies) {
+          if (ally === character || !ally.alive) continue;
+          const healed = executeHealing(
+            character, ally, spell.effect, scaling, this.#options.combat, session.rng,
+          );
+          this.#emitHealed(session, ally, healed, 'spell');
+        }
+      }
       return result;
     }
 
     this.#applyHits(session, character, result.hits);
     return result;
+  }
+
+  /**
+   * Colhe os aliados de uma cura em área (#475): os participantes VIVOS cujo tile cai na forma
+   * centrada no lançador, na ordem de `session.participants`. Devolve os tiles para o evento e
+   * guarda os alvos em `#healAllies` — a mesma divisão de `#aimFor`.
+   *
+   * Só personagens entram: Mass Healing cura jogadores (e invocações, que o motor ainda não
+   * tem), nunca monstros. A ordem é contrato, como a da área de dano.
+   */
+  #collectHealAllies(
+    session: Session, character: CharacterRuntime, area: SpellArea,
+  ): readonly WorldPoint[] {
+    const tiles = areaTiles(area, character.position, character.direction);
+    this.#healAllies.length = 0;
+    const keys = new Set(tiles.map(tileKey));
+    for (const participant of session.participants) {
+      if (!participant.alive) continue;
+      if (!keys.has(tileKey(this.#at(participant)))) continue;
+      this.#healAllies.push(participant);
+    }
+    return tiles;
   }
 
   /**
@@ -2171,17 +2220,21 @@ export class HuntRuleset implements Ruleset {
   /** O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o BP já a conta). */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
-    return { skillLevel: magic === undefined ? 0 : character.skills.levelOf(magic), powerScale: 1 };
+    const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+    return { skillLevel: magicLevel, powerScale: 1, magicLevel };
   }
 
   /** O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por uso. */
   #spellScaling(character: CharacterRuntime): SpellScaling {
     const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
     const skill = this.#options.skills.get(skillId);
+    const magic = this.#options.skills.get('magic');
     return {
       skillLevel: skill === undefined ? 0 : character.skills.levelOf(skill),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
+      // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
+      magicLevel: magic === undefined ? 0 : character.skills.levelOf(magic),
     };
   }
 

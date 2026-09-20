@@ -10,7 +10,13 @@
   "cooldownMs": 1000,
   "effect": {
     "kind": "heal",
-    "basePower": 120
+    "basePower": 120,
+    "formula": {
+      "skillMin": 2.4,
+      "skillMax": 3.0,
+      "baseMin": 20,
+      "baseMax": 30
+    }
   },
   "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma do Paladin (DT-02)."
 }

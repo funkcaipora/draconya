@@ -15,7 +15,7 @@ import type { Spell } from '@draconya/content';
 import { runTrace } from './harness.js';
 import type { CombatTraceEvent, CombatTraceGap } from './types.js';
 import { spellSingleTargetTrace, spellTraces } from './spells.trace.js';
-import { healingGaps, healingTraces } from './healing.trace.js';
+import { healingGaps, healingTraces, lightHealingTrace, ultimateHealingRuneTrace } from './healing.trace.js';
 import {
   CANARY_CIRCLE_RADIUS_3_TILES, avalancheTrace, circleRadiusThreeTiles, runesGaps,
 } from './runes.trace.js';
@@ -198,5 +198,24 @@ describe('lacunas da referência: o número atual e a issue que o muda (RF-05)',
       expect(hit).toBeGreaterThanOrEqual(74);
       expect(hit).toBeLessThanOrEqual(111);
     }
+  });
+
+  it('a cura é a fórmula canônica do Canary e as runas UH/IH existem (#475 fechada)', () => {
+    // Light Healing em level 8, magic 0: `8/5 + 0×1.4 + 8 = 9` a `8/5 + 0×2.0 + 11 = 12`.
+    // Mutação que mata: cair no `basePower` 40 daria 50~69. A UH rune em level 50, ML 40:
+    // `50/5 + 40×5.7 + 36 = 274` a `50/5 + 40×10.3 + 65 = 487`.
+    const healed = (trace: typeof lightHealingTrace): number[] =>
+      trace.run().filter((event) => event.kind === 'creature-healed')
+        .map((event) => Number(event.payload.amount));
+    for (const amount of healed(lightHealingTrace)) {
+      expect(amount).toBeGreaterThanOrEqual(9);
+      expect(amount).toBeLessThanOrEqual(12);
+    }
+    for (const amount of healed(ultimateHealingRuneTrace)) {
+      expect(amount).toBeGreaterThanOrEqual(274);
+      expect(amount).toBeLessThanOrEqual(487);
+    }
+    // A #475 fechou a área, as runas e a fórmula: não sobra lacuna de cura na referência.
+    expect(healingGaps).toEqual([]);
   });
 });

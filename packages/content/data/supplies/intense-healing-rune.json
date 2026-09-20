@@ -1,0 +1,24 @@
+{
+  "id": "intense-healing-rune",
+  "name": "Intense Healing Rune",
+  "description": "Cura o alvo selecionado.",
+  "price": 20,
+  "group": "healing",
+  "groupCooldownMs": 1000,
+  "requires": {
+    "level": 8,
+    "magicLevel": 1
+  },
+  "effect": {
+    "kind": "heal",
+    "range": 4,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 2.4,
+      "skillMax": 3.0,
+      "baseMin": 20,
+      "baseMax": 30
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula (a mesma da Intense Healing, paridade Canary); preço e requisitos provisórios. Aparência: efeito 13 (magic blue) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}
