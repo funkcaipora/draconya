@@ -18,7 +18,10 @@ export interface LoadOptions {
   readonly json: string | null;
   /** Tamanho da party (#198): 1 é solo, o de sempre; N agrupa as sessões de N em N. */
   readonly party: number;
-  readonly partyMode: 'split' | 'shared';
+  /** "Ativar rateio" (§4, ADR 0033 D1) — o antigo `shared` de `--party-mode`. Padrão `true`. */
+  readonly shareCosts: boolean;
+  /** "Dividir lucro" (§5, ADR 0033 D1) — o outro eixo. Padrão `true`. */
+  readonly splitLoot: boolean;
 }
 
 export class ArgumentError extends Error {}
@@ -43,7 +46,8 @@ const DEFAULTS = {
   pingIntervalMs: 1_000,
   rampMs: 2,
   party: 1,
-  partyMode: 'split' as const,
+  shareCosts: true,
+  splitLoot: true,
 };
 
 export function parseArguments(argv: readonly string[], cpuCount: number): LoadOptions {
@@ -74,10 +78,20 @@ export function parseArguments(argv: readonly string[], cpuCount: number): LoadO
     throw new ArgumentError(`--mode é "attached" ou "detached", não "${mode}"`);
   }
 
-  const partyMode = flags.get('party-mode') ?? DEFAULTS.partyMode;
-  if (partyMode !== 'split' && partyMode !== 'shared') {
-    throw new ArgumentError(`--party-mode é "split" ou "shared", não "${partyMode}"`);
-  }
+  // Os dois eixos do ADR 0033 D1 substituem o `--party-mode` (#407, DT-04): o `/propose`
+  // deixou de aceitar `mode`, e o cliente de carga não depende de um campo que está saindo do
+  // fio. Só `"true"`/`"false"` são booleanos válidos — qualquer outra coisa seria `undefined`
+  // silencioso, o mesmo defeito que `--sessions mil` tinha.
+  const boolean = (name: string, fallback: boolean): boolean => {
+    const raw = flags.get(name);
+    if (raw === undefined) return fallback;
+    if (raw !== 'true' && raw !== 'false') {
+      throw new ArgumentError(`--${name} é "true" ou "false", não "${raw}"`);
+    }
+    return raw === 'true';
+  };
+  const shareCosts = boolean('party-share-costs', DEFAULTS.shareCosts);
+  const splitLoot = boolean('party-share-loot', DEFAULTS.splitLoot);
   const party = Math.max(1, Math.floor(number('party', DEFAULTS.party)));
 
   const sessions = Math.floor(number('sessions', DEFAULTS.sessions));
@@ -101,7 +115,8 @@ export function parseArguments(argv: readonly string[], cpuCount: number): LoadO
     rampMs: number('ramp', DEFAULTS.rampMs),
     json: flags.get('json') ?? null,
     party,
-    partyMode,
+    shareCosts,
+    splitLoot,
   };
 }
 
@@ -112,7 +127,8 @@ export const USAGE = `
   --sessions N     quantas sessões abrir (padrão 1000)
   --mode M         attached | detached (padrão detached)
   --party N        agrupa as sessões em parties de N (padrão 1, solo); a sobra vai solo
-  --party-mode M   split | shared (padrão split) — só com --party > 1
+  --party-share-costs B  ativa o rateio de supply (padrão true) — só com --party > 1
+  --party-share-loot B   divide o lucro na bolsa (padrão true) — só com --party > 1
   --duration D     10m, 90s, 1500ms (padrão 60s)
   --workers N      processos worker (padrão: núcleos, no máximo 8)
   --api URL        base do api (padrão http://127.0.0.1:8080)

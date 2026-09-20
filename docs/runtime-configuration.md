@@ -142,9 +142,13 @@ só então restaurar consumidores antigos. O ADR 0021 fica como histórico subst
 
 Antes da entrega, instalar com `pnpm install --frozen-lockfile`, fornecer
 `TEST_REDIS_URL` e `DATABASE_TEST_URL` de serviços descartáveis e rodar `pnpm check` e
-`pnpm build`. Os testes de Redis apagam os bancos 1 a 15 do destino de teste; o 0 continua
-sendo o do desenvolvimento local. Nunca apontar as variáveis de integração para serviços de
-produção. Checks de assets sem pacote/OTBM local avisam que não conferiram esses arquivos.
+`pnpm build`. Os testes de Redis apagam os bancos 1 a 16 do destino de teste; o 0 continua
+sendo o do desenvolvimento local. **O Redis de teste precisa de 32 bancos** (`redis-server
+--databases 32`; o CI sobe por `docker run`, e quem roda a suíte localmente precisa subir o
+`TEST_REDIS_URL` com o mesmo valor) — o `party-v2-exit.postgres.test.ts` usa o banco 16, e o
+padrão de 16 bancos (0–15) faria `SELECT 16` cair no banco 0 em silêncio. Nunca apontar as
+variáveis de integração para serviços de produção. Checks de assets sem pacote/OTBM local
+avisam que não conferiram esses arquivos.
 
 ### Evidência da entrega — 2026-09-16
 

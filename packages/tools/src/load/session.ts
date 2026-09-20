@@ -80,7 +80,7 @@ async function newCharacter(apiUrl: string): Promise<{ cookie: string; character
  * dizer que aquela party não existiu, e não medir `size` solos que nunca caçaram juntos.
  */
 export async function openParty(
-  options: SessionOptions & { readonly size: number; readonly partyMode: 'split' | 'shared' },
+  options: SessionOptions & { readonly size: number; readonly shareCosts: boolean; readonly splitLoot: boolean },
 ): Promise<SyntheticSession[]> {
   const startedAt = performance.now();
   const members: Array<{ cookie: string; characterId: string }> = [];
@@ -104,7 +104,8 @@ export async function openParty(
       if (!joined.ok) return failure(`party join failed: ${joined.status}`);
     }
     const proposed = await post(leader, `/api/party/${party.id}/propose`, {
-      huntId: options.huntId, difficulty: options.difficulty, mode: options.partyMode,
+      huntId: options.huntId, difficulty: options.difficulty,
+      shareCosts: options.shareCosts, splitLoot: options.splitLoot,
     });
     if (!proposed.ok) return failure(`party propose failed: ${proposed.status}`);
     for (const member of others) {
