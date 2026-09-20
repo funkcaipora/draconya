@@ -8,11 +8,16 @@
 
 import { useStoreSlice } from '../state/useSlice.js';
 import { party, partyActions } from '../party/store.js';
+import type { PartyInviteView } from '../party/api.js';
 import { Button } from './ui/Button.js';
 import { Modal } from './ui/Modal.js';
 
 export function PartyInviteDialog() {
-  const invite = useStoreSlice(party, (state) => state.invites[0] ?? null);
+  // O `invites[]` do `/mine` é uma UNION desde a #501: o convite SOCIAL (#502) não tem
+  // `partyId` — a party dele nasce no aceite — e este diálogo só sabe aceitar/recusar o
+  // tradicional. Sem o filtro, um convite social chegava aqui com `partyId === undefined`.
+  const invite = useStoreSlice(party, (state) =>
+    state.invites.find((entry): entry is PartyInviteView => 'partyId' in entry) ?? null);
   if (invite === null) return null;
 
   return (

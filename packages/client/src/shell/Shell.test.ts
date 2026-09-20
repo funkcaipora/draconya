@@ -143,11 +143,30 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(await render()).not.toContain('vendido e dividido ao fim');
   });
 
-  // #320: a engrenagem do painel da party abre o modal "Gerenciar party".
-  it('wires the party gear to the Manage party modal', async () => {
+  // #320 → #503: UMA instância de PartyModal, aberta pela engrenagem, pela pill e pelo
+  // "Encontrar Party" — a view inicial nasce dos props a cada montagem.
+  it('wires the party gear, the pill and onFindParty to the SINGLE PartyModal instance', async () => {
     const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('onManage={() => { setPartyModalOpen(true); }}');
-    expect(source).toContain('{partyModalOpen && (');
+    expect(source).toContain("onManage={() => { openPartyModal('mine'); }}");
+    expect(source).toContain('{partyModal.open && (');
+    // RF-02: "Encontrar Party" fecha o modal de caçadas e abre a busca filtrada pelo ID.
+    expect(source).toContain("openPartyModal('search', huntId)");
+    expect(source).toContain("setOpen((state) => ({ ...state, hunts: false }))");
+    // RF-10: uma instância só — não há segundo `<PartyModal` no arquivo.
+    expect(source.match(/<PartyModal/g) ?? []).toHaveLength(1);
+    // A chave recria o modal quando o ponto de entrada muda com ele aberto.
+    expect(source).toContain('key={`${partyModal.view}:');
+  });
+
+  // #503, RF-11: a pill permanente "Party" existe na Cidade e na hunt — sempre montada.
+  it('mounts the permanent Party pill in the city and during a hunt (RF-11)', async () => {
+    expect(await render()).toContain('party-actions');
+    hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'hunt' } }));
+    expect(await render()).toContain('party-actions');
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('<PartyActions');
+    // Sem party, a pill abre `home`; com, `mine` (DT-02 de #499).
+    expect(source).toContain("openPartyModal(formationParty !== null ? 'mine' : 'home')");
   });
 
   // #348, SV-12: a BuffBar mostra as condições ativas sobre o mundo, logo depois do WorldOverlay.

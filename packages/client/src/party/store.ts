@@ -11,9 +11,14 @@
 // M20 (#402/#403, ADR 0035 D7/D8): `join` numa party EM CURSO devolve um ticket — a entrada é o
 // MESMO caminho de `start`, e é por isso que `acceptInvite` converge nele. `invites[]` é do
 // `/mine`, que agora roda em qualquer tela (o `Shell` é o dono do polling, DT-01).
+//
+// Desde a #501: `configure` substitui `propose` (patch parcial, cada eixo sozinho), `approve`
+// não existe mais (fim da aprovação pré-start), `publish` não recebe faixa nenhuma — o que se
+// publica é o estado que o `configure` gravou — e a busca de salas leva o candidato
+// (`characterId`), porque quem filtra a elegibilidade é o servidor.
 
 import { createStore } from '../state/hud.js';
-import type { JoinResult, PartyClient, PartyInviteView, PartyView, RoomView } from './api.js';
+import type { JoinResult, MineInvite, PartyClient, PartyConfigPatch, PartyView, RoomView } from './api.js';
 
 export interface PartyState {
   /** Quem sou — o personagem selecionado; sem ele nada aqui faz sentido. */
@@ -27,14 +32,14 @@ export interface PartyState {
   /** Na fila do matchmaking (#199), esperando alguém compatível. */
   readonly seeking: boolean;
   /** Convites visíveis a QUALQUER personagem selecionado (D7/D8) — não só a quem está sem party. */
-  readonly invites: readonly PartyInviteView[];
+  readonly invites: readonly MineInvite[];
 }
 
 export const INITIAL_PARTY: PartyState = {
   characterId: null, party: null, activePartyId: null, busy: false, error: null, entering: false, seeking: false, invites: [],
 };
 
-/** O ritmo do polling de `/mine` (DT-01: agora é do Shell, não de `PartyPanel`). */
+/** O ritmo do polling de `/mine` (DT-01: agora é do Shell, não de um painel). */
 export const PARTY_POLL_MS = 2_000;
 
 export const party = createStore<PartyState>(INITIAL_PARTY);
@@ -102,12 +107,19 @@ export const partyActions = {
   join: (partyId: string) => run(async (api, me) => enterOrForm(await api.join(partyId, me), partyId)),
   acceptInvite: (partyId: string) => run(async (api, me) => {
     const result = enterOrForm(await api.join(partyId, me), partyId);
-    party.set((state) => ({ ...state, invites: state.invites.filter((invite) => invite.partyId !== partyId) }));
+    // Convite SOCIAL (#502) não tem `partyId` — o filtro só derruba o tradicional deste id.
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('partyId' in invite) || invite.partyId !== partyId),
+    }));
     return result;
   }),
   declineInvite: (partyId: string) => run(async (api, me) => {
     await api.decline(partyId, me);
-    party.set((state) => ({ ...state, invites: state.invites.filter((invite) => invite.partyId !== partyId) }));
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('partyId' in invite) || invite.partyId !== partyId),
+    }));
     return undefined;
   }),
   leave: () => run(async (api, me) => {
@@ -119,24 +131,29 @@ export const partyActions = {
     const current = party.get().party;
     return current === null ? Promise.resolve(null) : api.kick(current.id, me, targetId);
   }),
-  propose: (proposal: { huntId: string; difficulty: string; mode: 'split' | 'shared' }) => run((api, me) => {
+  /**
+   * O patch do líder (RF-02): cada eixo muda sozinho — o toggle de custos manda SÓ
+   * `shareCosts`, o de lucro SÓ `splitLoot`, e o configure-then-start do `HuntsModal` manda o
+   * que mudou. O `PartyView` que volta é a verdade desenhada (invariante 4).
+   */
+  configure: (patch: PartyConfigPatch) => run((api, me) => {
     const current = party.get().party;
-    return current === null ? Promise.resolve(null) : api.propose(current.id, me, proposal);
+    return current === null ? Promise.resolve(null) : api.configure(current.id, me, patch);
   }),
-  approve: () => run((api, me) => {
+  /** Publicar a sala SEM corpo: o que se publica é o estado que o `configure` gravou (RF-03). */
+  publish: () => run((api, me) => {
     const current = party.get().party;
-    return current === null ? Promise.resolve(null) : api.approve(current.id, me);
+    return current === null ? Promise.resolve(null) : api.publish(current.id, me);
   }),
-  publish: (range: { minLevel: number; maxLevel: number }) => run((api, me) => {
-    const current = party.get().party;
-    return current === null ? Promise.resolve(null) : api.publish(current.id, me, range);
-  }),
-  /** O `api` responde `{ ok: true }`; a cópia local reflete o que o servidor acabou de fazer. */
+  /**
+   * O `api` responde `{ ok: true }`; a cópia local reflete só o que ele fez: fecha as vagas.
+   * O `minLevel` configurado permanece — despublicar não desfaz a configuração (RF-03).
+   */
   unpublish: () => run(async (api, me) => {
     const current = party.get().party;
     if (current === null) return null;
     await api.unpublish(current.id, me);
-    return { ...current, published: false, minLevel: null, maxLevel: null };
+    return { ...current, published: false };
   }),
   start: () => run(async (api, me) => {
     const current = party.get().party;
@@ -187,17 +204,20 @@ export const partyActions = {
 };
 
 /**
- * Sala pública (#402): lida sob demanda pela aba "Encontrar Party", NUNCA por `run`/`busy` — são
+ * Sala pública (#402): lida sob demanda pela view de busca, NUNCA por `run`/`busy` — são
  * OUTRAS parties, não a desta sessão, e marcar `busy` a cada tick de 2 s travaria os botões da
  * própria formação por causa de uma listagem que não muda o estado dela.
  *
  * Falha de rede vira lista vazia, nunca exceção: é leitura de fundo, e travar a tela com erro
  * vermelho a cada 2 s de instabilidade seria pior que uma lista momentaneamente vazia.
+ *
+ * A query leva o CANDIDATO (#501, RF-04): `characterId` é obrigatório, e é dele que o servidor
+ * tira level e vocação para filtrar — sala inelegível não chega ao cliente, nem desabilitada.
  */
-export async function fetchRooms(): Promise<readonly RoomView[]> {
+export async function fetchRooms(query: { readonly characterId: string; readonly huntId?: string }): Promise<readonly RoomView[]> {
   if (client === null) return [];
   try {
-    return await client.rooms();
+    return await client.rooms(query);
   } catch {
     return [];
   }

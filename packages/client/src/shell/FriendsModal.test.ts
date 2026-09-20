@@ -32,8 +32,9 @@ const friend = (over: Partial<FriendView> = {}): FriendView => ({
 
 const formation = (): PartyView => ({
   id: 'p', leaderId: 'me', mode: 'split', huntId: 'arena', difficulty: 'bold',
-  members: [{ characterId: 'me', name: 'Eu', approved: false }],
-  published: false, minLevel: null, maxLevel: null, state: 'forming', sessionId: null,
+  minLevel: null, vocationTargets: {}, shareCosts: false, splitLoot: false,
+  openSlots: {}, members: [{ characterId: 'me', name: 'Eu' }],
+  published: false, state: 'forming', sessionId: null,
 });
 
 async function render(): Promise<string> {

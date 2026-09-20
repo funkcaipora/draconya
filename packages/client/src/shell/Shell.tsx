@@ -18,8 +18,8 @@
 // CSS puro desde #250 — não lê nenhuma variável do pacote. Ver `AssetPackContext`.
 
 import { useEffect, useState } from 'react';
-import { useHudSlice } from '../state/useSlice.js';
-import { partyActions, PARTY_POLL_MS } from '../party/store.js';
+import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
+import { party, partyActions, PARTY_POLL_MS } from '../party/store.js';
 import { sendIntent } from '../net/current.js';
 import { setConfigSender } from '../bot/store.js';
 import { AssetPackContext } from './AssetPackContext.js';
@@ -34,9 +34,11 @@ import { CyclopediaModal } from './CyclopediaModal.js';
 import { HuntsModal } from './HuntsModal.js';
 import { HuntActions } from './HuntActions.js';
 import { ActionBar } from './ActionBar.js';
+import { PartyActions } from './PartyActions.js';
 import { PartyMembers } from './PartyMembers.js';
 import { PartyLootWindow } from './PartyBag.js';
 import { PartyModal } from './PartyModal.js';
+import type { PartyModalView } from './PartyModal.js';
 import { SkillsPanel } from './SkillsPanel.js';
 import { AutomationsPanel } from './AutomationsPanel.js';
 import { CharacterModal } from './CharacterModal.js';
@@ -79,10 +81,17 @@ export function Shell() {
   // Party loot (#316): independente de `open.*` — o ▣ do painel da party controla isto, não a
   // barra do topo. Nasce `true`: a janela existe assim que `hunting` também for verdade.
   const [partyLootOpen, setPartyLootOpen] = useState(true);
-  // "Gerenciar party" (#320): aberto pela engrenagem de PartyMembers, não pela TopBar — por
-  // isso é um estado à parte de `open`/`WindowId`, no mesmo espírito do `open === "party"`
-  // local do App.jsx do kit (não é um dos ícones do topo).
-  const [partyModalOpen, setPartyModalOpen] = useState(false);
+  // "Gerenciar party" (#320 → #503): UMA instância de PartyModal, aberta por TRÊS pontos de
+  // entrada — a pill "Party", a engrenagem de PartyMembers e o "Encontrar Party" do HuntsModal.
+  // A view inicial e o filtro de hunt nascem dos props A CADA montagem (a chave recria o modal
+  // quando o ponto de entrada muda com ele aberto), e a navegação interna é do modal, nunca
+  // daqui — é UI, não estado de jogo (ADR 0007).
+  const [partyModal, setPartyModal] = useState<{ open: boolean; view: PartyModalView; huntFilter?: string }>({
+    open: false, view: 'home',
+  });
+  const openPartyModal = (view: PartyModalView, huntFilter?: string): void => {
+    setPartyModal({ open: true, view, ...(huntFilter !== undefined ? { huntFilter } : {}) });
+  };
   // A marca de visto usa `performance.now()`, o mesmo relógio monotônico de `SystemLine.atMs`.
   // `Date.now()` faria uma mensagem da sessão parecer sempre anterior à época Unix.
   const [chatSeenAtMs, setChatSeenAtMs] = useState(0);
@@ -111,8 +120,10 @@ export function Shell() {
   // onde está (#259, o mesmo cálculo que o menu de hunts de antes já fazia).
   const sessionType = useHudSlice((state) => state.analyzer.sessionType);
   const hunting = sessionType !== null && sessionType !== 'city';
+  // A party de formação (HTTP): decide se a pill abre `mine` ou `home` (DT-02 de #499).
+  const formationParty = useStoreSlice(party, (state) => state.party);
 
-  // O polling de `/mine` (#404, DT-01): subiu de `PartyPanel` para cá e roda SEMPRE que há
+  // O polling de `/mine` (#404, DT-01): é do `Shell` e roda SEMPRE que há
   // personagem — o convite de party precisa aparecer em qualquer tela, Cidade ou hunt (D7).
   // Duplicar o `setInterval` em três componentes correria três `refresh()` a cada 2 s.
   const characterId = useHudSlice((state) => state.characterId);
@@ -158,7 +169,7 @@ export function Shell() {
           <PartyMembers
             partyLootOpen={partyLootOpen}
             onToggleLoot={() => { setPartyLootOpen((value) => !value); }}
-            onManage={() => { setPartyModalOpen(true); }}
+            onManage={() => { openPartyModal('mine'); }}
           />
         </div>
         <div className="windows windows-right" aria-label="janelas à direita">
@@ -189,10 +200,17 @@ export function Shell() {
         {hunting && partyLootOpen && (
           <PartyLootWindow onClose={() => { setPartyLootOpen(false); }} />
         )}
-        {/* "Gerenciar party" (#320): aberto pela engrenagem do painel da party, fora de
-            `open`/`WindowId` — o kit não desenha um ícone de party na TopBar. */}
-        {partyModalOpen && (
-          <PartyModal hunting={hunting} onClose={() => { setPartyModalOpen(false); }} />
+        {/* "Gerenciar party" (#503): UMA instância, aberta por pill, engrenagem e "Encontrar
+            Party". A chave recria o modal quando o ponto de entrada muda com ele aberto — a
+            navegação interna nasce dos props a cada montagem. */}
+        {partyModal.open && (
+          <PartyModal
+            key={`${partyModal.view}:${partyModal.huntFilter ?? ''}`}
+            view={partyModal.view}
+            {...(partyModal.huntFilter !== undefined ? { huntFilter: partyModal.huntFilter } : {})}
+            hunting={hunting}
+            onClose={() => { setPartyModal((state) => ({ ...state, open: false })); }}
+          />
         )}
         {/* Fora das colunas: é uma sobreposição, e as colunas são um contexto de empilhamento
             abaixo da barra do topo — dentro delas o diálogo ficaria por baixo da barra. */}
@@ -207,11 +225,26 @@ export function Shell() {
             MESMO `open.hunts` que a pill aciona, ou pelo ícone "Hunts" do topo — os dois só
             alternam a mesma fatia. */}
         <HuntActions hunting={hunting} onChoose={() => { toggle('hunts'); }} />
+        {/* A pill permanente "Party" (#503, RF-11): na Cidade e na hunt, à direita. Com party
+            ela abre `mine`; sem, `home`. */}
+        <PartyActions onOpen={() => { openPartyModal(formationParty !== null ? 'mine' : 'home'); }} />
         {/* A barra de ações 2 × 12 na fileira de 124 px (AB-10, ADR 0032 d.1–5): montada na
             Cidade e na caçada, como o kit. É a configuração do bot E o disparo manual — a
             tecla manda `use-slot`, o conjunto/alvo e o Shift+clique mandam `bot-config`. */}
         <ActionBar />
-        {open.hunts && <HuntsModal hunting={hunting} onClose={() => { toggle('hunts'); }} />}
+        {/* "Encontrar Party" no modal de caçadas (RF-02): fecha ESTE modal antes de abrir a
+            instância ÚNICA do PartyModal em `search`, filtrada pelo ID da hunt selecionada —
+            nunca empilha os dois, e o filtro é por id, não por nome. */}
+        {open.hunts && (
+          <HuntsModal
+            hunting={hunting}
+            onClose={() => { toggle('hunts'); }}
+            onFindParty={(huntId) => {
+              setOpen((state) => ({ ...state, hunts: false }));
+              openPartyModal('search', huntId);
+            }}
+          />
+        )}
         {open.character && <CharacterModal onClose={() => { toggle('character'); }} />}
         {/* Cyclopedia (#321, RC-08): o mesmo ícone de topo agora abre um modal, não um painel
             da coluna. Só a aba Bestiary é montada enquanto as demais não têm sistema atrás. */}
