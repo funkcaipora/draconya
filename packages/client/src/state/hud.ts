@@ -92,6 +92,12 @@ export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
  */
 export type PartySpendingView = Readonly<S2CProps<'party-spending'>>;
 /**
+ * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). `null` até o servidor mandar o
+ * primeiro `party-end-vote`; `active: false` é o fim da votação, e a tela só mostra o diálogo
+ * enquanto o servidor disser que ela corre.
+ */
+export type PartyEndVoteView = Readonly<S2CProps<'party-end-vote'>>;
+/**
  * O estado do Follow do PRÓPRIO personagem (#406, ADR 0033 d.9/§25.1). `null` até o primeiro
  * `follow-state` desta sessão, ou depois de reanexar sem a mensagem ter chegado de novo ainda —
  * a tela não mostra "interrompido" nesse vazio, só quando o SERVIDOR disse que sim (D8: o
@@ -229,6 +235,11 @@ export interface HudState {
    */
   readonly partySpending: PartySpendingView | null;
   /**
+   * A votação de encerrar a hunt para todos (#432). `null` até chegar; `active: false` é uma
+   * votação que terminou — a tela não fabrica um diálogo que o servidor não abriu.
+   */
+  readonly partyEndVote: PartyEndVoteView | null;
+  /**
    * O Follow do PRÓPRIO personagem (#406, ADR 0033 d.9/§25.1). `null` até o servidor mandar
    * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
    */
@@ -269,6 +280,7 @@ export const INITIAL_HUD: HudState = {
   partyBag: null,
   lastSettlement: null,
   partySpending: null,
+  partyEndVote: null,
   followState: null,
   targetId: null,
   conditions: [],

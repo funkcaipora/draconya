@@ -6978,3 +6978,137 @@ describe('cura e suporte com alvo (§D11, #399)', () => {
   });
 });
 
+describe('encerrar a hunt para todos exige o sim de todos (#432, ADR 0032 d.14)', () => {
+  // Sem spawn e sem regen: a votação é o ÚNICO evento que interessa, e nenhum membro morre no
+  // meio da janela de 60 s — o que encerraria a sessão por morte e não pela votação.
+  const quiet = content({
+    routes: [{ ...route, spawnPoints: [] }],
+    progression: [{ ...progression, regen: { healthPerSecond: 0, manaPerSecond: 0 } }],
+  });
+  const member = (id: string) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      goldDelta: 0, alive: true, cooldowns: {}, capacity: 1_000,
+    });
+  };
+  const make = (ids: readonly string[], hz = 10) => {
+    const session = createHuntSession({
+      id: 'end-vote', content: quiet, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+      partyOptions: { leaderId: ids[0] ?? '', mode: 'split' },
+    });
+    for (const id of ids) session.enter(member(id));
+    return { session, ruleset: session.ruleset as HuntRuleset, stepMs: 1000 / hz };
+  };
+
+  it('proposta do líder + todos os sins → encerra com um Receipt por membro e motivo party-vote', () => {
+    const { session, ruleset } = make(['lead', 'b', 'c', 'd']);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    // Quem propõe já aprova: a proposta carrega o sim do líder.
+    expect(ruleset.endVoteState()).toEqual({ active: true, proposedAtMs: 0, approved: ['lead'] });
+    expect(ruleset.approveEnd(session, 'b')).toEqual({ ok: true });
+    expect(ruleset.approveEnd(session, 'c')).toEqual({ ok: true });
+    // Ainda falta um: o encerramento não antecipa o sim que não veio.
+    expect(session.ended).toBeNull();
+    expect(ruleset.approveEnd(session, 'd')).toEqual({ ok: true });
+    expect(session.ended).toBe('party-vote');
+    // Um extrato por membro, todos com o motivo da votação (invariante 10: `seq` próprio).
+    const receipts = session.receipts();
+    expect(receipts.map((r) => r.characterId)).toEqual(['lead', 'b', 'c', 'd']);
+    expect(receipts.every((r) => r.reason === 'party-vote')).toBe(true);
+    expect(new Set(receipts.map((r) => r.seq)).size).toBe(4);
+    // O estado fecha a votação ao encerrar.
+    expect(ruleset.endVoteState()).toEqual({ active: false, proposedAtMs: 0, approved: [] });
+  });
+
+  it('membro que não é líder não propõe — recusa tipada; solo também não', () => {
+    const { session, ruleset } = make(['lead', 'b']);
+    expect(ruleset.proposeEnd(session, 'b')).toEqual({ ok: false, reason: 'not-leader' });
+    expect(ruleset.endVoteState()).toEqual({ active: false, proposedAtMs: 0, approved: [] });
+
+    const solo = createHuntSession({
+      id: 'solo-end', content: quiet, huntId: 'arena', difficulty: 'bold', createdAtMs: 0,
+    });
+    solo.enter(member('solo'));
+    expect((solo.ruleset as HuntRuleset).proposeEnd(solo, 'solo'))
+      .toEqual({ ok: false, reason: 'not-leader' });
+  });
+
+  it('aprovar ou recusar sem proposta aberta é recusa tipada', () => {
+    const { session, ruleset } = make(['lead', 'b']);
+    expect(ruleset.approveEnd(session, 'b')).toEqual({ ok: false, reason: 'no-proposal' });
+    expect(ruleset.cancelEnd(session, 'b')).toEqual({ ok: false, reason: 'no-proposal' });
+  });
+
+  it('proposta + 2 sins + 60 s → expira, a sessão continua e os membros ficam', () => {
+    const { session, ruleset, stepMs } = make(['lead', 'b', 'c', 'd']);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    expect(ruleset.approveEnd(session, 'b')).toEqual({ ok: true });
+    run(session, 59_000, stepMs);
+    expect(session.ended).toBeNull();
+    expect(ruleset.endVoteState()?.active).toBe(true);
+    run(session, 2_000, stepMs);
+    expect(session.ended).toBeNull();
+    expect(ruleset.endVoteState()).toEqual({ active: false, proposedAtMs: 0, approved: [] });
+    expect(session.participants.map((p) => p.id)).toEqual(['lead', 'b', 'c', 'd']);
+  });
+
+  it('recusar derruba a votação na hora: nada muda e a sessão segue', () => {
+    const { session, ruleset } = make(['lead', 'b', 'c']);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    expect(ruleset.cancelEnd(session, 'b')).toEqual({ ok: true });
+    expect(session.ended).toBeNull();
+    expect(ruleset.endVoteState()).toEqual({ active: false, proposedAtMs: 0, approved: [] });
+    // Os eixos da party continuam os de antes — a votação não é configuração.
+    expect(ruleset.party?.shareCosts).toBe(false);
+    expect(ruleset.party?.splitLoot).toBe(false);
+  });
+
+  it('a votação viaja no snapshot: quem reconecta no meio não perde quem aprovou', () => {
+    const { session, ruleset } = make(['lead', 'b', 'c', 'd']);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    expect(ruleset.approveEnd(session, 'b')).toEqual({ ok: true });
+    const snapshot = JSON.parse(JSON.stringify(session.snapshot())) as SessionSnapshot;
+    const restored = Session.fromSnapshot(
+      snapshot,
+      huntRulesetFromSnapshot(snapshot, quiet) as HuntRuleset,
+      Rng.fromSeed(snapshot.id),
+    ).ruleset as HuntRuleset;
+    expect(restored.endVoteState()).toEqual({ active: true, proposedAtMs: 0, approved: ['lead', 'b'] });
+  });
+
+  it('1 Hz == 10 Hz: a votação vence no mesmo instante lógico e o desfecho é o mesmo', () => {
+    const scenario = (hz: number) => {
+      const { session, ruleset, stepMs } = make(['lead', 'b', 'c', 'd'], hz);
+      ruleset.proposeEnd(session, 'lead');
+      ruleset.approveEnd(session, 'b');
+      ruleset.approveEnd(session, 'c');
+      run(session, 59_000, stepMs);
+      const before = ruleset.endVoteState();
+      run(session, 2_000, stepMs);
+      return { before, ended: session.ended, after: ruleset.endVoteState() };
+    };
+    const slow = scenario(1);
+    const fast = scenario(10);
+    expect(slow).toEqual(fast);
+    // Não-vacuidade: a votação existia e expirou de verdade nas duas taxas.
+    expect(fast.before).toEqual({ active: true, proposedAtMs: 0, approved: ['lead', 'b', 'c'] });
+    expect(fast.after).toEqual({ active: false, proposedAtMs: 0, approved: [] });
+  });
+
+  it('re-propor reinicia a janela e as aprovações, mantendo só a do líder', () => {
+    const { session, ruleset, stepMs } = make(['lead', 'b', 'c', 'd']);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    expect(ruleset.approveEnd(session, 'b')).toEqual({ ok: true });
+    run(session, 30_000, stepMs);
+    expect(ruleset.proposeEnd(session, 'lead')).toEqual({ ok: true });
+    // A proposta velha morreu com a nova: só o líder consta, e a janela de 60 s recomeçou.
+    expect(ruleset.endVoteState()).toEqual({ active: true, proposedAtMs: 30_000, approved: ['lead'] });
+    run(session, 59_000, stepMs);
+    expect(session.ended).toBeNull();
+  });
+});
+

@@ -827,6 +827,55 @@ describe('follow-state (#393)', () => {
   });
 });
 
+describe('party-end-vote (#432, ADR 0032 d.14)', () => {
+  it('the intention is C2S only, opcode 18, and carries just the vote', () => {
+    // O líder propõe e os membros aprovam com a MESMA mensagem; `false` recusa. Quem decide o
+    // que cada um pode fazer é o servidor (invariante 4), e é por isso que o payload não tem
+    // mais nada.
+    // Mutação que mata: trocar o 18 por um opcode ocupado, ou aceitar um payload sem `approve`.
+    expect(CLIENT_TO_SERVER['party-end-vote']).toBe(18);
+    const schema = C2S_SCHEMAS['party-end-vote'];
+    expect(schema.safeParse({ approve: true }).success).toBe(true);
+    expect(schema.safeParse({ approve: false }).success).toBe(true);
+    expect(schema.safeParse({}).success).toBe(false);
+    expect(schema.safeParse({ approve: 'yes' }).success).toBe(false);
+    expect('party-end-vote' in S2C_SCHEMAS).toBe(true);
+  });
+
+  it('the state is S2C only, opcode 31, and round trips active and closed', () => {
+    // Mutação que mata: apagar `party-end-vote: 31` de SERVER_TO_CLIENT (`decodeS2C` devolve
+    // `null`), ou tornar `approved` obrigatório num estado fechado.
+    expect(SERVER_TO_CLIENT['party-end-vote']).toBe(31);
+    expect('party-end-vote' in C2S_SCHEMAS).toBe(true);
+    const active: S2CMessage = {
+      type: 'party-end-vote', active: true, proposedAtMs: 1_000, approved: ['lead', 'b'],
+    };
+    const closed: S2CMessage = {
+      type: 'party-end-vote', active: false, proposedAtMs: 0, approved: [],
+    };
+    expect(decodeS2C(encodeS2C(active))).toEqual([active]);
+    expect(decodeS2C(encodeS2C(closed))).toEqual([closed]);
+  });
+
+  it('rejects a negative instant', () => {
+    expect(decodeS2C(encodeS2C({
+      type: 'party-end-vote', active: true, proposedAtMs: -1, approved: [],
+    } as unknown as S2CMessage))).toBeNull();
+  });
+
+  it('session-ended accepts party-vote as a reason (#432)', () => {
+    const ended: S2CMessage = {
+      type: 'session-ended',
+      reason: 'party-vote',
+      aggregates: {
+        durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
+      },
+      notableEvents: [],
+    };
+    expect(decodeS2C(encodeS2C(ended))).toEqual([ended]);
+  });
+});
+
 describe('party-state v2 (#393)', () => {
   const v2: S2CMessage = {
     type: 'party-state',

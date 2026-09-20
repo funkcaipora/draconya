@@ -104,6 +104,15 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
+/**
+ * O vencimento da votação de encerrar a hunt para todos (#432, ADR 0032 d.14). É um evento da
+ * fila no instante exato em que vence — nunca um contador por tick (invariante 2). O subject é
+ * fixo porque só existe uma votação por vez: re-propor cancela o vencimento anterior.
+ */
+const END_VOTE_EXPIRE = 'end-vote-expire';
+const END_VOTE_SUBJECT = 'end-vote';
+/** A janela de aprovação, em tempo LÓGICO (ADR 0032 d.14). Conteúdo pode mudar sem ADR. */
+export const END_VOTE_WINDOW_MS = 60_000;
 
 type ExitReason = 'manual-exit' | 'exit-rule';
 /**
@@ -478,6 +487,15 @@ export interface PartySettingsPatch {
   readonly autoSell?: readonly string[];
 }
 
+/**
+ * A recusa da votação de encerrar (#432). `not-leader` cobre solo e quem não lidera — como
+ * `configureParty`, uma sessão sem party não tem líder para propor. `no-proposal` é aprovar ou
+ * recusar sem votação aberta; `not-member` é um id que não está presente.
+ */
+export type PartyEndVoteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' | 'not-member' | 'no-proposal' };
+
 /** O bloco PARTY dos Detalhes da Caçada (§32, ADR 0033 decisão 11). */
 export interface PartySummary {
   readonly leaderId: string;
@@ -628,6 +646,12 @@ export interface HuntRulesetState {
   /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.splitLoot`. */
   readonly partyBag?: PartyBagState;
   /**
+   * A votação de encerrar em curso (#432). Opcional: ausente é nenhuma votação, o estado de um
+   * snapshot anterior. O vencimento já vem na fila serializada; isto preserva quem já aprovou
+   * para uma sessão retomada no meio da janela não perder a contagem.
+   */
+  readonly endVote?: { readonly proposedAtMs: number; readonly approved: readonly string[] };
+  /**
    * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
    * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
    */
@@ -742,6 +766,11 @@ export class HuntRuleset implements Ruleset {
   #bagSeq = 0;
   /** Alguém saiu e a cascata do §13.9 ainda não rodou (#193). Ver `onLeave`. */
   #lossPending = false;
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14), ou `null` sem votação.
+   * `approved` guarda quem já aprovou, na ordem; o vencimento é o evento `END_VOTE_EXPIRE`.
+   */
+  #endVote: { proposedAtMs: number; readonly approved: Set<string> } | null = null;
   /**
    * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
    * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
@@ -983,6 +1012,119 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * O líder propõe encerrar a hunt para TODOS (#432, ADR 0032 d.14). Não encerra nada: abre uma
+   * votação com a própria aprovação do líder (quem propõe, aprova), agenda o vencimento de 60 s
+   * na fila e emite `party-end-vote`. Só o líder propõe; solo (sem party) não tem líder, como
+   * em `configureParty`.
+   *
+   * Re-propor REINICIA a janela: cancela o vencimento anterior e esvazia as aprovações, exceto a
+   * do líder. É a leitura literal de "o líder propõe" — quem propõe de novo está propondo de
+   * novo, não confirmando a proposta velha.
+   */
+  proposeEnd(session: Session, byLeaderId: string): PartyEndVoteResult {
+    const party = this.#party;
+    if (party === undefined || byLeaderId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = { proposedAtMs: session.nowMs, approved: new Set([byLeaderId]) };
+    session.scheduleIn(END_VOTE_EXPIRE, END_VOTE_WINDOW_MS, {
+      priority: EventPriority.Housekeeping, subject: END_VOTE_SUBJECT,
+    });
+    this.#emitEndVote(session);
+    // Uma party que virou um só (todos os outros saíram): a proposta do líder já é o sim de
+    // TODOS os presentes, e a sessão encerra na hora.
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Um membro presente aprova a proposta em curso (#432). Quando o último presente aprova, a
+   * sessão encerra com `party-vote` — o settlement e os extratos saem pelo caminho de sempre
+   * (`onEnd` + `Session.end`). Sem proposta aberta é `no-proposal`; id ausente é `not-member`.
+   */
+  approveEnd(session: Session, characterId: string): PartyEndVoteResult {
+    const vote = this.#endVote;
+    if (vote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === characterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    vote.approved.add(characterId);
+    this.#emitEndVote(session);
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Recusa a proposta em curso (#432): qualquer membro presente (ou o próprio líder) derruba a
+   * votação. Como uma recusa impede o "sim de todos", a proposta morre agora e a sessão segue
+   * exatamente como estava — o mesmo desfecho de expirar, sem esperar a janela.
+   */
+  cancelEnd(session: Session, byCharacterId: string): PartyEndVoteResult {
+    if (this.#endVote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === byCharacterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    this.#clearEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * O estado da votação para quem reconecta (#432). `undefined` sem party — não há votação
+   * fora de party. O getter é PURO (sem `emit`), como `partySummary`: o host o chama no attach.
+   */
+  endVoteState(): { active: boolean; proposedAtMs: number; approved: readonly string[] } | undefined {
+    if (this.#party === undefined) return undefined;
+    const vote = this.#endVote;
+    return {
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    };
+  }
+
+  #emitEndVote(session: Session): void {
+    if (this.#party === undefined) return;
+    const vote = this.#endVote;
+    session.emit({
+      kind: 'party-end-vote',
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    });
+  }
+
+  /** Derruba a votação e avisa; o vencimento agendado morre com ela. */
+  #clearEndVote(session: Session): void {
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
+   * Encerra se TODOS os presentes já aprovaram. É o único ponto que decide "o sim de todos": a
+   * aprovação, a entrada e a saída passam por aqui, e a comparação é contra os presentes AGORA —
+   * quem saiu deixa de contar (ver `onLeave`).
+   */
+  #settleEndVote(session: Session): void {
+    const vote = this.#endVote;
+    if (vote === null) return;
+    if (session.participants.some((p) => !vote.approved.has(p.id))) return;
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+    session.end('party-vote');
+  }
+
+  #onEndVoteExpire(session: Session): void {
+    // Sem votação é um vencimento órfão (re-propor cancela o anterior): ignorar é a degradação
+    // certa, e é o que mantém a fila de uma sessão retomada inofensiva.
+    if (this.#endVote === null) return;
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
    * O premium de quem entrou DEPOIS da construção da sessão (#397). `#394` grava
    * `premiumByCharacter` na criação; isto é o único jeito de escrevê-lo para um joiner — sem
    * checagem de líder, porque premium é fato sobre o PRÓPRIO personagem, não configuração da
@@ -1169,6 +1311,10 @@ export class HuntRuleset implements Ruleset {
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
     // teto a bolsa só para de aceitar, até o próximo settlement zerar.
     if (this.#bag !== null) this.#settle(session, [...session.participants, character], 'leave');
+    // A votação de encerrar é dos PRESENTES (#432): quem sai deixa de contar. O vencimento
+    // continua correndo; se quem ficou já tinha aprovado todo, `#flushLoss` encerra — depois do
+    // extrato de quem saiu, pela mesma ordem que a cascata respeita.
+    if (this.#endVote !== null) this.#endVote.approved.delete(character.id);
     // A cascata do §13.9 NÃO roda aqui: `Session.leave` ainda vai emitir o extrato de quem
     // está saindo, e uma cascata dentro do `onLeave` emitiria os extratos dos outros ANTES
     // do dele — `seq` fora de ordem e o `member-left` do primeiro depois dos demais. Fica
@@ -1201,6 +1347,9 @@ export class HuntRuleset implements Ruleset {
       }
     }
     this.#emitPartyState(session);
+    // A saída pode ter completado o "sim de todos" (#432): quem ficou e já tinha aprovado
+    // encerra agora, depois do extrato de quem saiu.
+    this.#settleEndVote(session);
   }
 
   #emitPartyState(session: Session): void {
@@ -1270,6 +1419,7 @@ export class HuntRuleset implements Ruleset {
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
+      case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
@@ -1496,6 +1646,12 @@ export class HuntRuleset implements Ruleset {
           overweight: this.#bag.overweight,
         },
       }),
+      ...(this.#endVote === null ? {} : {
+        endVote: {
+          proposedAtMs: this.#endVote.proposedAtMs,
+          approved: [...this.#endVote.approved],
+        },
+      }),
     };
   }
 
@@ -1567,6 +1723,11 @@ export class HuntRuleset implements Ruleset {
     this.#ammoFallbackTold = new Set(restored.ammoFallbackTold ?? []);
     // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
     this.#party = normalizePartyOptions(restored.partyOptions);
+    // A votação de encerrar volta com quem já aprovou (#432); o vencimento já está na fila do
+    // snapshot. Ausente é nenhuma votação — snapshot anterior a esta issue.
+    this.#endVote = restored.endVote === undefined
+      ? null
+      : { proposedAtMs: restored.endVote.proposedAtMs, approved: new Set(restored.endVote.approved) };
     // A bolsa também migra na leitura (D5): o formato antigo (`gold: number`) vira entradas com
     // `eligible: []`, o sentinel de "presentes no settlement" — a regra de hoje, para uma sessão
     // em voo não perder nem confiscar o que já estava na bolsa.

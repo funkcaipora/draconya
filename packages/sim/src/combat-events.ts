@@ -207,4 +207,26 @@ export interface FollowState {
   readonly reason?: 'dead' | 'left' | 'unreachable';
 }
 
-export type PartyEvent = PartyBagChanged | PartySettlement | PartyState | MemberLeft | FollowState;
+/**
+ * A votação para encerrar a hunt para TODOS (#432, ADR 0032 d.14): o líder propõe e cada membro
+ * presente aprova em até 60 s. `active: false` é o fim da votação — expirou, alguém recusou, ou
+ * a sessão encerrou. `approved` é quem já aprovou, na ordem de aprovação; `proposedAtMs` é o
+ * instante lógico da proposta e vale `0` quando não há votação.
+ *
+ * A votação é da SESSÃO, não de um personagem: o cliente inteiro precisa vê-la, e é por isso que
+ * ela não mora num `party-state.members[]`.
+ */
+export interface PartyEndVote {
+  readonly kind: 'party-end-vote';
+  readonly active: boolean;
+  readonly proposedAtMs: number;
+  readonly approved: readonly string[];
+}
+
+export type PartyEvent =
+  | PartyBagChanged
+  | PartySettlement
+  | PartyState
+  | MemberLeft
+  | FollowState
+  | PartyEndVote;

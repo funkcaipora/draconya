@@ -51,6 +51,7 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
   const catalogue = useHudSlice((state) => state.catalogue);
+  const endVote = useHudSlice((state) => state.partyEndVote);
   const [, tick] = useState(0);
   useEffect(() => {
     if (partyView === null) return;
@@ -61,6 +62,61 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
 
   // O líder é quem muda os dois eixos (PRD §33). O membro VÊ o estado, sem clicar.
   const leader = partyView.leaderId === me;
+  // A votação de encerrar (#432, ADR 0032 d.14): o líder propõe, cada membro presente aprova em
+  // até 60 s. O estado vem do SERVIDOR (`party-end-vote`); a tela nunca decide que a votação
+  // começou nem que ela passou — só espelha e manda intenção (invariante 4).
+  const voteActive = endVote?.active === true;
+  const approved = endVote?.approved ?? [];
+  const iApproved = me !== null && approved.includes(me);
+  const endVoteFooter = voteActive ? (
+    <div className="party-end-vote">
+      <p className="party-end-vote-note">
+        {`Encerrando para todos · ${String(approved.length)}/${String(partyView.members.length)} aprovaram`}
+      </p>
+      {leader ? (
+        <Button
+          variant="danger"
+          size="sm"
+          block
+          className="party-end-vote-cancel"
+          onClick={() => { sendIntent({ type: 'party-end-vote', approve: false }); }}
+        >
+          Cancelar encerramento
+        </Button>
+      ) : iApproved ? (
+        <p className="party-end-vote-waiting">Você aprovou · aguardando os demais</p>
+      ) : (
+        <div className="party-end-vote-actions">
+          <Button
+            variant="gold"
+            size="sm"
+            className="party-end-vote-approve"
+            onClick={() => { sendIntent({ type: 'party-end-vote', approve: true }); }}
+          >
+            Aprovar
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            className="party-end-vote-decline"
+            onClick={() => { sendIntent({ type: 'party-end-vote', approve: false }); }}
+          >
+            Recusar
+          </Button>
+        </div>
+      )}
+    </div>
+  ) : leader ? (
+    <Button
+      variant="danger"
+      size="sm"
+      block
+      className="party-end-vote-propose"
+      onClick={() => { sendIntent({ type: 'party-end-vote', approve: true }); }}
+    >
+      Encerrar para todos
+    </Button>
+  ) : null;
   const footer = (
     <div className="party-footer">
       <p className="party-footer-note">Parar no meio da caçada exige o sim de todos.</p>
@@ -86,6 +142,7 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
             : {})}
         />
       </div>
+      {endVoteFooter}
       <Button
         variant="danger"
         size="sm"

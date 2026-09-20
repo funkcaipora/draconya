@@ -4914,6 +4914,68 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(lead.socket.received().some((m) => m.type === 'system-message')).toBe(false);
   });
 
+  it('o líder propõe encerrar para todos, a votação vai a TODOS e o último sim encerra (#432)', async () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+
+    // Quem não é líder não propõe: recusa tipada e nenhuma votação abre (ADR 0032 d.14).
+    host.handle(b.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    expect(b.socket.received().some((m) => m.type === 'system-message')).toBe(true);
+    expect(b.socket.received().some((m) => m.type === 'party-end-vote')).toBe(false);
+
+    // O líder propõe: os DOIS visualizadores recebem o estado, e a proposta carrega o sim dele.
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    const opened = b.socket.received().filter((m) => m.type === 'party-end-vote').at(-1);
+    if (opened?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(opened).toMatchObject({ active: true, approved: ['lead'] });
+    expect(lead.socket.received().some((m) => m.type === 'party-end-vote' && m.active)).toBe(true);
+
+    // O último sim encerra a sessão com `party-vote`.
+    host.handle(b.viewer, { type: 'party-end-vote', approve: true });
+    runFor(500);
+    // A sucessão roda fora do ciclo e é assíncrona (grava o extrato, depois troca a sessão);
+    // `flush` entrega o `session-ended` que o `#succeed` enfileirou no visualizador.
+    await vi.waitFor(() => {
+      expect(host.sessionFor('lead')?.ruleset.type).toBe('city');
+    });
+    host.flush();
+    const ended = lead.socket.received().filter((m) => m.type === 'session-ended').at(-1);
+    if (ended?.type !== 'session-ended') throw new Error('sem session-ended');
+    expect(ended.reason).toBe('party-vote');
+  });
+
+  it('recusar derruba a votação e a sessão continua (#432)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    host.handle(b.viewer, { type: 'party-end-vote', approve: false });
+    runFor(100);
+    const last = b.socket.received().filter((m) => m.type === 'party-end-vote').at(-1);
+    if (last?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(last.active).toBe(false);
+    expect(session()?.ended).toBeNull();
+  });
+
+  it('quem reanexa no meio da votação recebe o estado dela (#432)', () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    // `b` só aparece depois da proposta: o attach precisa levar a votação em curso.
+    const b = attach(host, 'b');
+    const state = b.socket.received().find((m) => m.type === 'party-end-vote');
+    if (state?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(state).toMatchObject({ active: true, approved: ['lead'] });
+  });
+
   it('#partyBlock monta party-state/party-bag v2 do ruleset — settings, loot, connected, value, overweight, reservations, eligible (#400, RF-03)', () => {
     const { host, runFor, session } = partyHunt({ lootItems: true });
     const lead = attach(host, 'lead');

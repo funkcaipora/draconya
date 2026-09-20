@@ -24,7 +24,8 @@ import type { Ammunition, Appearances, BotConfig, Item, ItemSlot, Monster, Skill
 import { containerRulesFor, PartyFullError } from '@draconya/sim';
 import type {
   CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset, InventoryRefusal,
-  InventoryResult, InventoryState, PartyBagChanged, PartySettingsPatch, Place, VocationRefusal,
+  InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult, PartySettingsPatch, Place,
+  VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory } from '../directory.js';
@@ -575,6 +576,13 @@ function partyRefusalText(decision: Extract<ConfigurePartyResult, { ok: false }>
   if (decision.reason === 'not-leader') return 'Só o líder pode mudar as configurações da party.';
   if (decision.reason === 'unknown-item') return `Item desconhecido: ${decision.itemId}.`;
   return `Item sem valor de venda: ${decision.itemId}.`;
+}
+
+/** A recusa da votação de encerrar em português, para o `system-message` (#432). */
+function partyEndVoteRefusalText(decision: Extract<PartyEndVoteResult, { ok: false }>): string {
+  if (decision.reason === 'not-leader') return 'Só o líder pode propor encerrar a caçada para todos.';
+  if (decision.reason === 'no-proposal') return 'Não há proposta de encerramento em aberto.';
+  return 'Você não está nesta party.';
 }
 
 type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
@@ -1250,6 +1258,11 @@ export class SessionHost {
         // confere liderança e catálogo é `configureParty`, dentro da sessão dona (invariante 9).
         this.#configureParty(viewer, message);
         return;
+      case 'party-end-vote':
+        // INTENÇÃO (invariante 4): o líder propõe e os membros respondem; quem confere quem
+        // pode propor e se todos já aprovaram é o `sim`, dentro da sessão dona (invariante 9).
+        this.#partyEndVote(viewer, message);
+        return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
         // texto de jogador dentro do motor puro só criaria estado para snapshotar sem
@@ -1630,6 +1643,47 @@ export class SessionHost {
   }
 
   /**
+   * `party-end-vote` (#432, ADR 0032 d.14): encerrar a hunt para todos é uma votação do líder,
+   * e não um `end`. A MESMA mensagem serve para propor e aprovar — `approve: true` é proposta
+   * quando quem manda é o líder e aprovação quando é membro —, e `approve: false` é recusa.
+   *
+   * O host não decide nada disso: liderança, presença e "todos aprovaram" são regra de jogo, e
+   * moram no `sim` (invariante 9). O broadcast do estado sai pelo evento `party-end-vote` do
+   * ruleset; a recusa vira `system-message`, como em `party-settings`.
+   */
+  #partyEndVote(
+    viewer: Viewer,
+    message: Extract<C2SMessage, { type: 'party-end-vote' }>,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.proposeEnd === undefined || ruleset.approveEnd === undefined) {
+      return;
+    }
+    let decision: PartyEndVoteResult;
+    if (!message.approve) {
+      decision = ruleset.cancelEnd?.(hosted.session, viewer.characterId)
+        ?? { ok: false, reason: 'no-proposal' };
+    } else if (ruleset.party === undefined || ruleset.party.leaderId === viewer.characterId) {
+      // O líder propõe (e a proposta já carrega o sim dele); solo não tem líder, e cai aqui
+      // para receber `not-leader` em vez de `no-proposal`. Re-propor reinicia a janela.
+      decision = ruleset.proposeEnd(hosted.session, viewer.characterId);
+    } else {
+      decision = ruleset.approveEnd(hosted.session, viewer.characterId);
+    }
+    if (!decision.ok) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: partyEndVoteRefusalText(decision),
+      });
+      return;
+    }
+    // O último sim encerra a sessão AQUI, fora do ciclo — e o ciclo pula sessão já encerrada
+    // (`cycle`), então a sucessão precisa ser disparada daqui: extrato, `session-ended` e
+    // Cidade, na mesma ordem de quando a morte encerra por dentro (FUN-38).
+    if (hosted.session.ended !== null) void this.#succeed(hosted);
+  }
+
+  /**
    * A configuração que veio no ticket (FUN-81). Recusada é IGNORADA, nunca fatal.
    *
    * O caso real é conteúdo mudando debaixo de uma configuração salva: uma magia renomeada, um
@@ -1819,10 +1873,11 @@ export class SessionHost {
         case 'party-bag-changed':
         case 'party-settlement':
         case 'party-state':
+        case 'party-end-vote':
           this.#presentParty(hosted, event);
           continue;
         case 'follow-state':
-          // POR PERSONAGEM (#401) — ao contrário dos três casos acima, que são da SESSÃO
+          // POR PERSONAGEM (#401) — ao contrário dos casos de party acima, que são da SESSÃO
           // inteira (todo membro vê a bolsa e a composição), Follow é configuração de bot de
           // UM personagem: vazar para quem olha outro membro exporia a estratégia de bot de
           // alguém para os companheiros sem que ele tenha pedido isso — o mesmo motivo de
@@ -2252,6 +2307,19 @@ export class SessionHost {
         ...(follow.reason === undefined ? {} : { reason: follow.reason }),
       });
     }
+    // A votação de encerrar em curso (#432) sobrevive à desconexão, como o Follow: quem
+    // reconecta no meio da janela de 60 s precisa ver a proposta e poder aprovar. Só quando há
+    // votação — `endVoteState()` devolve `active: false` fora de proposta, e reenviar isso em
+    // todo attach seria tráfego sem informação nova.
+    const endVote = (hosted.session.ruleset as Partial<HuntRuleset>).endVoteState?.();
+    if (endVote !== undefined && endVote.active) {
+      viewer.send({
+        type: 'party-end-vote',
+        active: endVote.active,
+        proposedAtMs: endVote.proposedAtMs,
+        approved: [...endVote.approved],
+      });
+    }
   }
 
   /**
@@ -2275,9 +2343,9 @@ export class SessionHost {
   }
 
   /**
-   * A party no fio (#196): os três eventos do `sim` viram as três mensagens, para TODOS os
-   * visualizadores da sessão — a party é privada como a hunt, e todo membro vê a bolsa e o
-   * settlement. O HP dos companheiros vai só no `party-state` (attach e mudança de
+   * A party no fio (#196): os eventos do `sim` viram as mensagens, para TODOS os visualizadores
+   * da sessão — a party é privada como a hunt, e todo membro vê a bolsa, o settlement e a
+   * votação de encerrar. O HP dos companheiros vai só no `party-state` (attach e mudança de
    * composição); no meio o cliente já recebe `creature-health` de cada um.
    */
   #presentParty(hosted: HostedSession, event: PartyEvent): void {
@@ -2305,6 +2373,16 @@ export class SessionHost {
           type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })),
           reason: event.reason,
           ...(event.itemId === undefined ? {} : { itemId: event.itemId }),
+        };
+        break;
+      case 'party-end-vote':
+        // O estado da votação (#432) é da SESSÃO: todo membro precisa ver quem já aprovou. O
+        // evento já carrega tudo — não há segundo estado para recompor.
+        message = {
+          type: 'party-end-vote',
+          active: event.active,
+          proposedAtMs: event.proposedAtMs,
+          approved: [...event.approved],
         };
         break;
       case 'member-left':

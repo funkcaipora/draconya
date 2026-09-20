@@ -329,4 +329,63 @@ describe('PartyMembers', () => {
     expect(source).toContain('leaveHunt(sendIntent)');
     expect(source).toMatch(/onClick=\{[^}]*leaveHunt\(sendIntent\)[^}]*\}/);
   });
+
+  it('the leader sees "Encerrar para todos"; a member does not (#432)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    expect(await render()).toContain('Encerrar para todos');
+
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'other', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    expect(await render()).not.toContain('Encerrar para todos');
+  });
+
+  it('an active vote shows the count and the leader can cancel it (#432)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    }, partyEndVote: { active: true, proposedAtMs: 0, approved: ['me'] } }));
+    const html = await render();
+    expect(html).toContain('Encerrando para todos · 1/2 aprovaram');
+    expect(html).toContain('Cancelar encerramento');
+    // O diálogo substitui o botão de propor enquanto a votação corre.
+    expect(html).not.toContain('Encerrar para todos');
+  });
+
+  it('a member approves or declines an active vote; after approving, waits (#432)', async () => {
+    const partyState = {
+      leaderId: 'other', mode: 'shared' as const, members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    };
+    hud.set((state) => ({ ...state, party: partyState, partyEndVote: { active: true, proposedAtMs: 0, approved: [] } }));
+    const pending = await render();
+    expect(pending).toContain('Aprovar');
+    expect(pending).toContain('Recusar');
+
+    hud.set((state) => ({ ...state, party: partyState, partyEndVote: { active: true, proposedAtMs: 0, approved: ['me'] } }));
+    const approved = await render();
+    expect(approved).toContain('Você aprovou');
+    expect(approved).not.toContain('Aprovar<');
+    expect(approved).not.toContain('Recusar');
+  });
+
+  it('sends `party-end-vote` intention, never a resolved outcome (#432)', async () => {
+    // Sem DOM no ambiente de teste, a costura se prova no fonte: aprovar/propor manda
+    // `approve: true` e recusar manda `approve: false` — o servidor é quem decide.
+    const source = await readFile(new URL('./PartyMembers.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'party-end-vote', approve: true })");
+    expect(source).toContain("sendIntent({ type: 'party-end-vote', approve: false })");
+  });
 });
