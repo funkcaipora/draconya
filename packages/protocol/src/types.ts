@@ -8,6 +8,20 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
+ * O TIPO de dano elemental (#479). Espelha `DAMAGE_TYPES` do conteúdo, mas vive aqui pela
+ * mesma razão que todo contrato de rede: o protocolo é a base da pilha e não importa `content`.
+ * A lista é fechada de propósito — um valor fora dela faria o cliente desenhar um número sem
+ * cor, e o `decodeS2C` deve recusar a mensagem inteira em vez de deixar passar.
+ *
+ * `arcane` é o tipo "mágico" do v1 (`kind: magic` do CMB-03). Cura NÃO é um tipo de dano: é o
+ * `kind` da mensagem, e por isso não aparece aqui.
+ */
+export const DamageType = z.enum([
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+]);
+export type DamageType = z.infer<typeof DamageType>;
+
+/**
  * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
  * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
  */
@@ -770,6 +784,13 @@ export const S2C_SCHEMAS = {
     id: z.number().int(),
     amount: z.number().int().nonnegative(),
     kind: z.enum(['melee', 'spell', 'heal']),
+    /**
+     * O ELEMENTO do golpe (#479), quando o servidor o resolveu. Opcional de propósito: um nó
+     * `game` anterior a esta issue manda sem, e o cliente que o exigisse recusaria a mensagem
+     * inteira em silêncio. Ausente, a cor sai do `kind` — melee vermelho, cura verde, magia
+     * roxa —, que é a leitura de antes.
+     */
+    damageType: DamageType.optional(),
   }),
   /**
    * Uma animação de efeito num tile (FUN-109): a explosão da magia, o sangue do golpe, o

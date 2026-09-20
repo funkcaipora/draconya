@@ -148,8 +148,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'creature-hit':
       // Entra mesmo que a criatura já não exista: o texto tem vida própria e some sozinho, e
       // recusar aqui apagaria o número do golpe que matou — que chega no mesmo lote que o
-      // `creature-disappear`, e é o que o jogador mais quer ver.
-      addFloatingText(message.id, message.amount, message.kind, nowMs);
+      // `creature-disappear`, e é o que o jogador mais quer ver. O elemento (#479) viaja junto
+      // quando veio; ausente, a cor sai do `kind`.
+      addFloatingText(message.id, message.amount, message.kind, nowMs, message.damageType);
       return;
 
     // --- HUD: só o que uma pessoa lê ------------------------------------------------------

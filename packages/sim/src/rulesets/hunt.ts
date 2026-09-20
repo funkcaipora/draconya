@@ -2133,7 +2133,10 @@ export class HuntRuleset implements Ruleset {
       return result;
     }
 
-    this.#applyHits(session, character, result.hits);
+    this.#applyHits(
+      session, character, result.hits,
+      spell.effect.kind === 'damage' ? spell.effect.damageType : undefined,
+    );
     return result;
   }
 
@@ -2170,7 +2173,10 @@ export class HuntRuleset implements Ruleset {
    * então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
    * `alive` aqui seria código que nenhum teste alcança.
    */
-  #applyHits(session: Session, character: CharacterRuntime, hits: readonly number[]): void {
+  #applyHits(
+    session: Session, character: CharacterRuntime, hits: readonly number[],
+    damageType: DamageType | undefined,
+  ): void {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
       const damage = hits[i] ?? 0;
@@ -2180,10 +2186,12 @@ export class HuntRuleset implements Ruleset {
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       const applied = monster.receiveDamage(damage);
       recordDamage(monster.contribution, character.id, applied);
-      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`.
+      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
+      // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
       session.emit({
         kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
         amount: applied, source: 'spell', position: this.#at(monster),
+        ...(damageType === undefined ? {} : { damageType }),
       });
       this.#emitHealth(session, monster);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
@@ -2388,6 +2396,7 @@ export class HuntRuleset implements Ruleset {
       session.emit({
         kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
         amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+        damageType: intent.damageType,
       });
       this.#emitCharacterHealth(session, target);
       if (target.health <= 0) session.kill(target);
@@ -2404,6 +2413,7 @@ export class HuntRuleset implements Ruleset {
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -2596,7 +2606,10 @@ export class HuntRuleset implements Ruleset {
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
       if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
-      else this.#applyHits(session, character, result.hits);
+      else this.#applyHits(
+        session, character, result.hits,
+        supply.effect.kind === 'damage' ? supply.effect.damageType : undefined,
+      );
       return result;
     }
 
@@ -3302,6 +3315,7 @@ export class HuntRuleset implements Ruleset {
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
       amount: applied.healthDamage, source, position: this.#at(character),
+      damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
     // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
@@ -3646,6 +3660,7 @@ export class HuntRuleset implements Ruleset {
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
       amount: applied.healthDamage, source, position: this.#at(monster),
+      damageType: outcome.damageType,
     });
     this.#emitHealth(session, monster);
     // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,

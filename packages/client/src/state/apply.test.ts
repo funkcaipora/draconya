@@ -4,7 +4,7 @@ import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
 import { targetTracker } from './target.js';
 import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
-import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
+import { MISSILE_MS_PER_TILE, floatingTextColor } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
@@ -219,13 +219,14 @@ describe('combat transients (FUN-106)', () => {
 
   it('a missile enters with its flight time computed from the distance', () => {
     // A duração é do cliente — o servidor manda de onde para onde, e o tempo de voo é
-    // apresentação (ADR 0007). Mutação que mata: `durationMs: 0` no `case 'missile'`.
+    // apresentação (ADR 0007). A distância é euclidiana: `(3, 1)` são `sqrt(10)` tiles.
+    // Mutação que mata: `durationMs: 0` no `case 'missile'`.
     applyMessage({ type: 'missile', from: at(0, 0), to: at(3, 1), missileId: 5 }, 2_000);
 
     expect(world.missiles).toHaveLength(1);
     expect(world.missiles[0]).toMatchObject({
       from: at(0, 0), to: at(3, 1), missileId: 5, startedAtMs: 2_000,
-      durationMs: MISSILE_BASE_MS + 3 * MISSILE_PER_TILE_MS,
+      durationMs: Math.round(MISSILE_MS_PER_TILE * Math.sqrt(10)),
     });
   });
 
@@ -244,6 +245,39 @@ describe('combat transients (FUN-106)', () => {
     expect(world.texts[0]).toMatchObject({
       creatureId: 1, amount: 37, kind: 'melee', startedAtMs: 1_200, position: { x: 0.5, y: 0, z: 7 },
     });
+  });
+
+  it('two hits on the same tile and color within the window MERGE into one number (RF-05)', () => {
+    // Múltiplos danos no mesmo monstro em menos de 200 ms somam num só sprite, em vez de
+    // borrar um sobre o outro. Mutação que mata: sempre empurrar um texto novo.
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 30, kind: 'melee', damageType: 'physical' }, 100);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 12, kind: 'melee', damageType: 'physical' }, 150);
+
+    expect(world.texts).toHaveLength(1);
+    expect(world.texts[0]).toMatchObject({ amount: 42, startedAtMs: 100, damageType: 'physical' });
+  });
+
+  it('a different element or tile, or outside the window, does NOT merge (RF-05)', () => {
+    // Cores diferentes no mesmo tile não somam: o jogador leria gelo como fogo. E depois da
+    // janela é outro golpe, não o mesmo instante.
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 10, kind: 'spell', damageType: 'ice' }, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 20, kind: 'spell', damageType: 'fire' }, 10);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 30, kind: 'spell', damageType: 'ice' }, 300);
+
+    expect(world.texts).toHaveLength(3);
+  });
+
+  it('the element travels with the number and chooses the color (RF-02)', () => {
+    // Dano de gelo aparece em azul claro, não no roxo que o `kind: spell` daria sozinho.
+    // Mutação que mata: `floatingTextColor(text.kind)` ignorando `damageType`.
+    applyMessage(spawn(1, at(1, 1)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 50, kind: 'spell', damageType: 'ice' }, 0);
+
+    expect(world.texts[0]?.damageType).toBe('ice');
+    const text = world.texts[0];
+    expect(floatingTextColor(text!.kind, text!.damageType)).toBe(0x66ccff);
   });
 
   it('a hit on a creature that already left STILL enters: the killing blow is the one to see', () => {

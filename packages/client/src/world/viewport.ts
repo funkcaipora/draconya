@@ -1114,8 +1114,10 @@ export async function mountViewport(
   }
 
   /**
-   * Os números: sobem da posição INTERPOLADA da criatura, e continuam de onde ela estava se ela
-   * sumir no meio. Não dependem de arte — como o nome, existem no modo sem pacote.
+   * Os números: ancorados ao ponto de IMPACTO, que não muda (RF-04). A posição foi fotografada
+   * por `addFloatingText` quando o golpe chegou, e o texto NÃO segue a criatura — ela pode andar
+   * ou morrer que o número termina de subir onde o golpe caiu, como o `AnimatedText` do OTClient.
+   * Não dependem de arte — como o nome, existem no modo sem pacote.
    */
   function paintTexts(center: { x: number; y: number; z: number }, nowMs: number): void {
     const alive = new Set<number>();
@@ -1129,16 +1131,19 @@ export async function mountViewport(
         list.splice(i, 1);
         continue;
       }
-      const creature = world.creatures.get(text.creatureId);
-      if (creature !== undefined) text.position = interpolate(creature, nowMs);
       // Criatura que este cliente nunca viu: não há onde desenhar, e o texto expira sozinho.
       if (text.position === null) continue;
       let label = textLabels.get(text.id);
       if (label === undefined) {
         // Âncora no TOPO: o número nasce logo acima do tile e sobe dali — a subida é o `dy`.
-        label = createLabel(String(text.amount), floatingTextColor(text.kind), 0);
+        label = createLabel(String(text.amount), floatingTextColor(text.kind, text.damageType), 0);
         textLabels.set(text.id, label);
         overlay.addChild(label);
+      } else {
+        // O valor pode ter MUDADO desde a criação (RF-05, merge): o label é reescrito só
+        // quando diverge, para não custar uma atribuição de textura por quadro.
+        const value = String(text.amount);
+        if (label.text !== value) label.text = value;
       }
       alive.add(text.id);
       const screen = toScreen(text.position, center, view);

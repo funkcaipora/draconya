@@ -1956,7 +1956,12 @@ export class SessionHost {
       case 'creature-hit': {
         const id = hosted.creatureIds.get(String(event.creatureId));
         if (id === undefined) return;
-        messages.push({ type: 'creature-hit', id, amount: event.amount, kind: event.source });
+        // O elemento (#479) vai junto quando o `sim` o resolveu: é ele que colore o número no
+        // cliente. Ausente, o cliente o lê do `kind` — a mesma degradação de sempre.
+        messages.push({
+          type: 'creature-hit', id, amount: event.amount, kind: event.source,
+          ...(event.damageType === undefined ? {} : { damageType: event.damageType }),
+        });
         const blood = appearances?.hits.melee;
         if (event.source === 'melee' && event.amount > 0 && blood !== undefined) {
           messages.push({ type: 'effect', position: event.position, effectId: blood });
