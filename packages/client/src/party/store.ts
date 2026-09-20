@@ -19,6 +19,7 @@ export interface PartyState {
   /** Quem sou — o personagem selecionado; sem ele nada aqui faz sentido. */
   readonly characterId: string | null;
   readonly party: PartyView | null;
+  readonly activePartyId: string | null;
   readonly busy: boolean;
   readonly error: string | null;
   /** O `start` aconteceu e o ticket foi oferecido à conexão: a tela some enquanto reconecta. */
@@ -30,7 +31,7 @@ export interface PartyState {
 }
 
 export const INITIAL_PARTY: PartyState = {
-  characterId: null, party: null, busy: false, error: null, entering: false, seeking: false, invites: [],
+  characterId: null, party: null, activePartyId: null, busy: false, error: null, entering: false, seeking: false, invites: [],
 };
 
 /** O ritmo do polling de `/mine` (DT-01: agora é do Shell, não de `PartyPanel`). */
@@ -65,7 +66,11 @@ async function run(action: (api: PartyClient, characterId: string) => Promise<Pa
   party.set((state) => ({ ...state, busy: true, error: null }));
   try {
     const result = await action(client, characterId);
-    party.set((state) => ({ ...state, busy: false, ...(result === undefined ? {} : { party: result }) }));
+    party.set((state) => ({
+      ...state,
+      busy: false,
+      ...(result === undefined ? {} : { party: result, activePartyId: result?.id ?? null }),
+    }));
   } catch (error) {
     fail(error);
   }
@@ -75,10 +80,10 @@ async function run(action: (api: PartyClient, characterId: string) => Promise<Pa
  * D7: o `join` de uma party em curso devolve um ticket. Oferecê-lo à conexão é o MESMO `enter()`
  * de `start` — nenhum caminho novo de socket — e o formulário some porque a party virou a hunt.
  */
-function enterOrForm(result: JoinResult): PartyView | null {
+function enterOrForm(result: JoinResult, partyId: string | null): PartyView | undefined {
   if (result.kind === 'entered') {
-    enter(result.ticket.wsUrl);
-    return null;
+    enter(result.ticket.wsUrl, partyId);
+    return undefined;
   }
   return result.party;
 }
@@ -86,16 +91,17 @@ function enterOrForm(result: JoinResult): PartyView | null {
 export const partyActions = {
   create: () => run((api, me) => api.create(me)),
   invite: (inviteeId: string) => run(async (api, me) => {
-    const current = party.get().party;
-    if (current === null) return null;
-    await api.invite(current.id, me, inviteeId);
+    const { activePartyId, party: current } = party.get();
+    const partyId = current?.id ?? activePartyId;
+    if (partyId === null) return undefined;
+    await api.invite(partyId, me, inviteeId);
     return undefined;
   }),
   /** "Entrar por id" (formação) E "aceitar convite" convergem aqui — D7: o MESMO endpoint
    *  devolve o formulário ou um ticket, dependendo do estado da party do outro lado. */
-  join: (partyId: string) => run(async (api, me) => enterOrForm(await api.join(partyId, me))),
+  join: (partyId: string) => run(async (api, me) => enterOrForm(await api.join(partyId, me), partyId)),
   acceptInvite: (partyId: string) => run(async (api, me) => {
-    const result = enterOrForm(await api.join(partyId, me));
+    const result = enterOrForm(await api.join(partyId, me), partyId);
     party.set((state) => ({ ...state, invites: state.invites.filter((invite) => invite.partyId !== partyId) }));
     return result;
   }),
@@ -136,8 +142,8 @@ export const partyActions = {
     const current = party.get().party;
     if (current === null) return null;
     const started = await api.start(current.id, me);
-    if (started.ticket !== null) enter(started.ticket.wsUrl);
-    return null;
+    if (started.ticket !== null) enter(started.ticket.wsUrl, current.id);
+    return undefined;
   }),
   /** O matchmaking (#199): entra na fila; casou na hora ou espera (e o polling vê chegar). */
   seek: () => run(async (api, me) => {
@@ -161,12 +167,19 @@ export const partyActions = {
     try {
       const mine = await client.mine(characterId);
       if (mine.ticket !== null) {
-        enter(mine.ticket.wsUrl);
+        const current = party.get();
+        enter(mine.ticket.wsUrl, mine.party?.id ?? current.activePartyId);
         return;
       }
       party.set((state) => (state.entering
         ? state
-        : { ...state, party: mine.party, seeking: state.seeking && mine.party === null, invites: mine.invites }));
+        : {
+          ...state,
+          party: mine.party,
+          activePartyId: mine.party?.id ?? null,
+          seeking: state.seeking && mine.party === null,
+          invites: mine.invites,
+        }));
     } catch (error) {
       fail(error);
     }
@@ -190,12 +203,16 @@ export async function fetchRooms(): Promise<readonly RoomView[]> {
   }
 }
 
-function enter(wsUrl: string): void {
-  party.set((state) => ({ ...state, party: null, busy: false, entering: true }));
+function enter(wsUrl: string, partyId: string | null): void {
+  party.set((state) => ({ ...state, party: null, activePartyId: partyId, busy: false, entering: true }));
   enterHunt?.(wsUrl);
 }
 
 /** A hunt começou de verdade (chegou o `session-state` de uma hunt): a tela de party fecha. */
 export function partyEntered(): void {
   party.set((state) => (state.entering ? { ...state, entering: false } : state));
+}
+
+export function partyExited(): void {
+  party.set((state) => ({ ...state, activePartyId: null }));
 }

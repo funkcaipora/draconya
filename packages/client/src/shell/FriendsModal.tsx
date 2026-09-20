@@ -34,13 +34,14 @@ export function FriendsModal({ onClose }: { onClose: () => void }) {
   const busy = useStoreSlice(friends, (state) => state.busy);
   const error = useStoreSlice(friends, (state) => state.error);
   const current = useStoreSlice(party, (state) => state.party);
+  const activePartyId = useStoreSlice(party, (state) => state.activePartyId);
   const [name, setName] = useState('');
 
   // A lista é do servidor: busca ao abrir, uma vez.
   useEffect(() => { void friendsActions.refresh(); }, []);
 
   const online = friendsView.filter((friend) => friend.online).length;
-  const canInvite = current !== null;
+  const canInvite = activePartyId !== null || current !== null;
 
   function invite(friend: FriendView): void {
     void partyActions.invite(friend.characterId);

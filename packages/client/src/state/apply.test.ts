@@ -4,6 +4,7 @@ import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
 import { targetTracker } from './target.js';
 import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
+import { INITIAL_PARTY, party } from '../party/store.js';
 import { MISSILE_MS_PER_TILE, floatingTextColor } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
@@ -16,6 +17,7 @@ beforeEach(() => {
   clearTransients();
   hud.set(() => INITIAL_HUD);
   bot.set(() => INITIAL_BOT);
+  party.set(() => ({ ...INITIAL_PARTY, characterId: 'me' }));
   // O rastreador de alvo é um singleton da conexão, e o teste compartilha o módulo: sem o
   // reset, o `lastAppliedSeq` de um caso faria o `target-changed { seq: 1 }` do seguinte ser
   // descartado como obsoleto.
@@ -837,6 +839,7 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
   });
 
   it('session-ended limpa a seção PARTY do extrato', () => {
+    party.set(() => ({ ...INITIAL_PARTY, characterId: 'me', activePartyId: 'party-1' }));
     applyMessage(attach({ partySummary }), 0);
     applyMessage({
       type: 'session-ended', reason: 'manual-exit',
@@ -844,6 +847,7 @@ describe('a party v2 no estado (#405, ADR 0035)', () => {
       notableEvents: [],
     }, 1);
     expect(hud.get().analyzer.party).toBeUndefined();
+    expect(party.get().activePartyId).toBeNull();
   });
 
   it('grava `party-end-vote` em vez de descartar (#432)', () => {

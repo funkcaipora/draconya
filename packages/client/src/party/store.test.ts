@@ -66,6 +66,18 @@ describe('party store', () => {
     expect(party.get().party?.huntId).toBe('arena');
     await partyActions.leave();
     expect(party.get().party).toBeNull();
+    expect(party.get().activePartyId).toBeNull();
+  });
+
+  it('invites through the retained active party while the formation copy is gone', async () => {
+    const invite = vi.fn<PartyClient['invite']>().mockResolvedValue();
+    setPartyCharacter('me');
+    setPartyClient(fakeClient({ invite }));
+    party.set((state) => ({ ...state, party: null, activePartyId: 'party-1' }));
+
+    await partyActions.invite('friend');
+
+    expect(invite).toHaveBeenCalledWith('party-1', 'me', 'friend');
   });
 
   it('start with a ticket enters the hunt ONCE: offers the wsUrl and clears the form', async () => {
@@ -78,9 +90,11 @@ describe('party store', () => {
     await partyActions.start();
     expect(entered).toEqual(['ws://n1/?ticket=t']);
     expect(party.get()).toMatchObject({ party: null, entering: true, busy: false });
+    expect(party.get().activePartyId).toBe('party-1');
     // O `session-state` da hunt chegou: a tela fecha.
     partyEntered();
     expect(party.get().entering).toBe(false);
+    expect(party.get().activePartyId).toBe('party-1');
   });
 
   it('join of a FORMING party keeps the old flow: replaces the store copy ("entrar por id")', async () => {
@@ -140,9 +154,11 @@ describe('party store', () => {
     setPartyClient(fakeClient({ mine }));
     await partyActions.refresh();
     expect(party.get().party?.leaderId).toBe('other');
+    expect(party.get().activePartyId).toBe('party-1');
     await partyActions.refresh();
     expect(entered).toEqual(['ws://n1/?ticket=t2']);
     expect(party.get().entering).toBe(true);
+    expect(party.get().activePartyId).toBe('party-1');
   });
 
   it('refresh brings the invites[] the server knows about (D8)', async () => {
