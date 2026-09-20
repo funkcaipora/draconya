@@ -177,11 +177,13 @@ type BotConfigInput = BotConfigV2 | BotConfig;
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
  * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
  *
- * `not-in-catalog` cobre magia/item inexistente e também os requisitos que o manual não passa
- * (level, vocação, magic level): são a mesma resposta para a tela, "essa ação não sai agora".
+ * `not-in-catalog` cobre magia/item inexistente e os requisitos que o manual não passa
+ * (level, vocação): "essa ação não sai agora". O `magic-level-too-low` tem motivo PRÓPRIO
+ * desde a M24-12 (RF-02): a UI precisa dizer POR QUE a runa não rodou, e engolir o requisito
+ * de magic level no genérico fazia o jogador procurar o problema no saldo e no alvo.
  */
 export type SlotRefusal =
-  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog'
+  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
   | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown';
 
@@ -212,8 +214,10 @@ function refusalOf(result: CastRefused): SlotRefusal {
     case 'not-in-catalog':
     case 'level-too-low':
     case 'wrong-vocation':
-    case 'magic-level-too-low':
       return 'not-in-catalog';
+    // Motivo PRÓPRIO (RF-02): o slot-state precisa distinguir o requisito de magic level do
+    // genérico, senão o cliente não consegue explicar por que a runa não rodou.
+    case 'magic-level-too-low': return 'magic-level-too-low';
     case 'on-cooldown': return 'on-cooldown';
     case 'group-cooldown': return 'group-cooldown';
     case 'no-target': return 'no-target';
@@ -2740,7 +2744,10 @@ export class HuntRuleset implements Ruleset {
       const magic = this.#options.skills.get('magic');
       const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
       if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
-        return blocked('not-in-catalog');
+        // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
+        // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
+        // explicação que o requisito da runa pede.
+        return blocked('magic-level-too-low');
       }
       if (this.#targetInRange(character, supply.effect.range) === null) return blocked('no-target');
     }

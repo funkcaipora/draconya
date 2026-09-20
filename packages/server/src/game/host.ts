@@ -230,6 +230,9 @@ const SLOT_REFUSAL: Readonly<Record<SlotRefusal, string>> = {
   'wrong-set': 'Este conjunto não é o ativo — a barra mudou.',
   'disabled': 'Este slot está desligado.',
   'not-in-catalog': 'Essa ação não pode ser usada agora.',
+  // A recusa específica do requisito de magic level (RF-02): a runa não roda por ML, e o
+  // jogador precisa ler isso, não "ação indisponível".
+  'magic-level-too-low': 'Magic level insuficiente.',
   'not-enough-mana': 'Mana insuficiente.',
   'not-enough-gold': 'Gold insuficiente.',
   // Reservado ao consumível FÍSICO (a carga de bênção da M22): supply e magia debitam gold no
@@ -259,7 +262,10 @@ function slotStateMessage(states: readonly SlotState[]): S2CMessage {
       slot: state.slot,
       state: state.state,
       remainingMs: state.remainingMs,
-      ...(state.reason === undefined ? {} : { reason: state.reason }),
+      // O motivo vai em PALAVRAS, como o do `slot-result` (FUN-73): o `sim` devolve o código
+      // tipado e é aqui que ele vira a explicação que o tooltip mostra. Mandar o slug cru
+      // contradizia o contrato do protocolo e deixava o cliente sem como explicar a recusa.
+      ...(state.reason === undefined ? {} : { reason: SLOT_REFUSAL[state.reason] }),
     })),
   };
 }
