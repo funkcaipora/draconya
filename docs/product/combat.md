@@ -409,10 +409,24 @@ inacessível até lá por construção, sem nenhuma regra escrita em outro lugar
 ### Runa é supply de ataque (#165, ADR 0026 decisão 8)
 
 A runa **não é magia**: é suprimento de ataque. A Avalanche Rune
-(`packages/content/data/supplies/avalanche-rune.json`) é a primeira: efeito
-`damage`, Base Power próprio, alcance 4 e círculo de raio 3 no alvo, e um bloco `requires`
-(`level`, `magicLevel`) que a poção não tem. O `price` é debitado do gold **no uso**, por
-`useSupply`, como qualquer suprimento (ADR 0032 d.6).
+(`packages/content/data/supplies/avalanche-rune.json`) foi a primeira, e desde a #476 o catálogo
+tem as runas de ataque do Canary: efeito `damage`, `formula` canônica por runa, alcance 8 e um
+bloco `requires` (`level`, `magicLevel`) que a poção não tem. O `price` é debitado do gold **no
+uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
+
+| Runa | Elemento | Forma | Level / ML | Fórmula (`min` / `max`) |
+|---|---|---|---|---|
+| Avalanche | `ice` | círculo raio 3 (37 tiles) | 30 / 4 | `level/5 + ml×1.2 + 7` / `level/5 + ml×2.8 + 17` |
+| Great Fireball | `fire` | círculo raio 3 (37 tiles) | 30 / 4 | `level/5 + ml×1.2 + 7` / `level/5 + ml×2.8 + 17` |
+| Thunderstorm | `energy` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
+| Stone Shower | `earth` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
+| Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.6 + 32` / `level/5 + ml×7.4 + 48` |
+| Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
+| Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+
+A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
+baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
+continua no caminho provisório do `basePower` × `combat.spellPower`, bit a bit (ADR 0031).
 
 O que difere da magia de ataque, e por quê:
 
@@ -431,20 +445,22 @@ O que difere da magia de ataque, e por quê:
   `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
   há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
   flag de gold por uma recusa que nunca foi sobre gold — o defeito que a #217 corrigiu.
-- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e `damageType: 'arcane'`,
-  `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo.
+- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e o `damageType` do
+  catálogo, `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo. A
+  área é **integral por alvo**: cada um consome uma rolagem própria, sem splitting.
+- **Runa de alvo único não tem `area`.** Sudden Death e Heavy Magic Missile atingem só o alvo
+  principal; o `area` do schema é opcional desde a #476, e a cruz da Explosion é a forma no alvo.
 
 Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
 da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um
-efeito só, no tile de quem bebeu. O id do efeito da Avalanche mora em
-`appearances/baseline.json` (`supplies['avalanche-rune']`, effect 41) e a QA visual dele é
-**por tile** — a auditoria de #242 está bloqueada pela biblioteca parcial (o sprite 160962 não
-tem PNG na máquina) e o id foi mantido; ver
+efeito só, no tile de quem bebeu. Os ids de efeito das runas moram em
+`appearances/baseline.json` (`supplies[...].effect`) e a QA visual deles é **por tile** — a
+auditoria de #242 está bloqueada pela biblioteca parcial (os sprites não têm PNG na máquina) e
+os ids foram mantidos; ver
 [`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
-Os números (preço 14 por uso, Base Power 45, raio 3, level 30, magic level 4) são
-provisórios e estão marcados em `_open` no arquivo; o preço é o da runa no NPC dividido pelas
-4 cargas, arredondado.
+Os números (preços por uso, raios e requisitos) são provisórios e estão marcados em `_open` nos
+arquivos; os preços são o da runa no NPC dividido pelas cargas, arredondado.
 
 ## Como cada arma bate (#152, ADR 0026 decisões 3 e 4)
 

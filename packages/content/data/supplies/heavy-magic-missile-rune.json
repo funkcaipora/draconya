@@ -1,0 +1,25 @@
+{
+  "id": "heavy-magic-missile-rune",
+  "name": "Heavy Magic Missile Rune",
+  "description": "Dispara um projétil de energia concentrada no alvo selecionado.",
+  "price": 7,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "requires": {
+    "level": 25,
+    "magicLevel": 3
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 1.59,
+      "baseMin": 2,
+      "baseMax": 10
+    },
+    "range": 8,
+    "damageType": "energy"
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Runa de ALVO ÚNICO (#476): sem `area`, o dano cai só no alvo principal. Fórmula canônica do Canary: min = level/5 + ml*0.4 + 2, max = level/5 + ml*1.59 + 10; level 25 e magic level 3, 10 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 10 cargas). Aparência: efeito (effect 12, o de energy-strike) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

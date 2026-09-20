@@ -17,7 +17,8 @@ import type { CombatTraceEvent, CombatTraceGap } from './types.js';
 import { spellSingleTargetTrace, spellTraces } from './spells.trace.js';
 import { healingGaps, healingTraces, lightHealingTrace, ultimateHealingRuneTrace } from './healing.trace.js';
 import {
-  CANARY_CIRCLE_RADIUS_3_TILES, avalancheTrace, circleRadiusThreeTiles, runesGaps,
+  CANARY_CIRCLE_RADIUS_3_TILES, CANARY_RUNE_LEVEL, CANARY_RUNE_MAGIC_LEVEL, avalancheTrace,
+  canaryRunes, circleRadiusThreeTiles, runesGaps, suddenDeathRune,
 } from './runes.trace.js';
 import { DAMAGE_ELEMENT_ORACLE, damageEventOrderTrace, resolveOracleCase, resolveOracleOutcome } from './damage.trace.js';
 import {
@@ -176,14 +177,15 @@ describe('lacunas da referência: o número atual e a issue que o muda (RF-05)',
     expect(tileCountOf(supplyUsed as CombatTraceEvent)).toBe(CANARY_CIRCLE_RADIUS_3_TILES);
   });
 
-  it('toda lacuna do M24 nomeia a issue que a fecha', () => {
+  it('toda lacuna do M24 nomeia a issue que a fecha, e as duas listas estão vazias', () => {
     // As lacunas de ALVO que existiam na #469 foram fechadas pela #470 (protocolo e
-    // cancelamento), e o trace deixou de carregá-las. As que restam são de outras issues.
+    // cancelamento); a #475 fechou a cura e a #476 fechou o catálogo e as fórmulas de runa. Não
+    // sobra gap com issue pendente — e um gap novo tem de trazer a sua task.
     const all: readonly CombatTraceGap[] = [
       ...healingGaps, ...runesGaps,
     ];
-    expect(all.length).toBeGreaterThan(0);
     for (const gap of all) expect(gap.task).toMatch(/^#\d+$/);
+    expect(all).toEqual([]);
   });
 
   it('a fórmula de magia é a canônica do Canary, não a conversão provisória (#474 fechada)', () => {
@@ -217,5 +219,63 @@ describe('lacunas da referência: o número atual e a issue que o muda (RF-05)',
     }
     // A #475 fechou a área, as runas e a fórmula: não sobra lacuna de cura na referência.
     expect(healingGaps).toEqual([]);
+  });
+});
+
+describe('as runas de ataque e a fórmula canônica do Canary (#476)', () => {
+  it('level 50 e ML 40 rendem a faixa Canary de cada runa, sem passar pelo basePower', () => {
+    // O oráculo (`rune.min`/`rune.max`) é escrito à mão, não lido do motor. Mutação que mata:
+    // manter o caminho do `basePower`/`spellPowerRange` — a rolagem sairia fora da faixa.
+    for (const rune of canaryRunes) {
+      const events = runTrace({
+        seed: `m24-rune-${rune.supply.id}`,
+        hero: {
+          position: { x: 0, y: 0, z: 7 }, mana: 0, maxMana: 100,
+          level: CANARY_RUNE_LEVEL, gold: 10_000,
+        },
+        monsters: [{ id: 1, monsterId: 'dragon', position: { x: 5, y: 0 }, health: 100_000 }],
+        steps: [{
+          dtMs: 1_000,
+          action: { kind: 'supply', supply: rune.supply, skillLevel: CANARY_RUNE_MAGIC_LEVEL },
+        }],
+      }).events;
+      const hits = events.filter((event) => event.kind === 'creature-hit')
+        .map((event) => Number(event.payload.amount));
+      expect(hits.length, rune.supply.id).toBeGreaterThan(0);
+      for (const hit of hits) {
+        expect(hit, rune.supply.id).toBeGreaterThanOrEqual(rune.min);
+        expect(hit, rune.supply.id).toBeLessThanOrEqual(rune.max);
+      }
+      // O elemento é o do catálogo; o dano da fórmula não o troca no caminho.
+      expect(rune.supply.effect.kind === 'damage' && rune.supply.effect.damageType)
+        .toBe(rune.damageType);
+    }
+  });
+
+  it('a Sudden Death é alvo ÚNICO: dois monstros adjacentes, UM só leva o golpe (#476)', () => {
+    // Com área, o segundo monstro (a 1 tile do principal) cairia no raio; sem área, o
+    // `targets` tem um só e o `tileCount` é zero. Mutação que mata: reintroduzir um círculo
+    // implícito na runa de alvo único.
+    const events = runTrace({
+      seed: 'm24-sd-single',
+      hero: {
+        position: { x: 0, y: 0, z: 7 }, mana: 0, maxMana: 100, level: 45, gold: 10_000,
+      },
+      monsters: [
+        { id: 1, monsterId: 'dragon', position: { x: 5, y: 0 }, health: 100_000 },
+        { id: 2, monsterId: 'dragon', position: { x: 5, y: 1 }, health: 100_000 },
+      ],
+      steps: [{ dtMs: 1_000, action: { kind: 'supply', supply: suddenDeathRune, skillLevel: 15 } }],
+    }).events;
+    const hits = events.filter((event) => event.kind === 'creature-hit');
+    expect(hits.map((event) => event.subject)).toEqual(['m:1']);
+    const used = events.find((event) => event.kind === 'supply-used') as CombatTraceEvent;
+    expect(used.payload.targets).toEqual(['m:1']);
+    expect(used.payload.tileCount).toBe(0);
+    for (const hit of hits) {
+      // Em level 45 / ML 15: min = 9 + 15×4.6 + 32 = 110; max = 9 + 15×7.4 + 48 = 168.
+      expect(Number(hit.payload.amount)).toBeGreaterThanOrEqual(110);
+      expect(Number(hit.payload.amount)).toBeLessThanOrEqual(168);
+    }
   });
 });

@@ -654,3 +654,89 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
     expect(semContexto.goldDelta).toBe(0);
   });
 });
+
+describe('as runas de ataque com a fórmula canônica do Canary (#476)', () => {
+  // Os coeficientes são do Canary (`data/scripts/runes/*.lua`) e a fórmula é a mesma da magia
+  // de dano (#474), escalada pelo magic level. A SD é a runa de ALVO ÚNICO: sem `area`.
+  const suddenDeath: Supply = {
+    id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108,
+    group: 'attack', groupCooldownMs: 2_000,
+    requires: { level: 45, magicLevel: 15 },
+    effect: {
+      kind: 'damage', range: 8, damageType: 'death',
+      formula: { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 },
+    },
+  };
+  const avalanche: Supply = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14,
+    group: 'attack', groupCooldownMs: 2_000,
+    requires: { level: 30, magicLevel: 4 },
+    effect: {
+      kind: 'damage', range: 8, damageType: 'ice',
+      formula: { levelFactor: 0.2, skillMin: 1.2, skillMax: 2.8, baseMin: 7, baseMax: 17 },
+      area: { shape: 'circle', radius: 3, centered: 'target' },
+    },
+  };
+  const at = (supply: Supply, skill: number) => ({ skillLevel: skill, powerScale: 1, magicLevel: skill });
+
+  it('a SD em level 45 / ML 15 bate a faixa Canary 110~168, sem basePower no arquivo', () => {
+    // min = 45/5 + 15×4.6 + 32 = 110; max = 45/5 + 15×7.4 + 48 = 168. Mutação que mata: cair
+    // no caminho do `basePower` — sem BP, `evaluateSpellPower` devolveria a faixa de 0.
+    const user = hero({ level: 45, gold: 1_000 });
+    const result = useSupply(user, suddenDeath, near({ distance: 5 }), combat, rng(), at(suddenDeath, 15));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0]).toBeGreaterThanOrEqual(110);
+    expect(result.hits[0]).toBeLessThanOrEqual(168);
+    expect(result.goldSpent).toBe(108);
+  });
+
+  it('a área da Avalanche atinge 5 alvos com uma rolagem integral por alvo, sem splitting', () => {
+    // A área é aplicada por quem tem os alvos (a hunt); aqui a mira traz os cinco e o dano é
+    // independente por alvo. Se houvesse splitting, cada golpe ficaria abaixo do piso da
+    // fórmula (17 no level 30 / ML 4) — é isso que a asserção prende.
+    const five = {
+      distance: 2,
+      targets: Array.from({ length: 5 }, () => ({ armor: 0, dodgeChance: 0 })),
+    };
+    const result = useSupply(hero({ level: 30, gold: 100 }), avalanche, five, combat, rng(), at(avalanche, 4));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.hits).toHaveLength(5);
+    for (const hit of result.hits) {
+      expect(hit).toBeGreaterThanOrEqual(17);
+      expect(hit).toBeLessThanOrEqual(34);
+    }
+  });
+
+  it('recusa por level e por magic level ANTES do gold e sem entrar em cooldown', () => {
+    // A ordem é a de `castSpell`: requisitos, alvo, e só então gold. A recusa não cobra nem
+    // tranca o grupo — o uso que não saiu não pode consumir o cooldown de quem não o executou.
+    const semLevel = hero({ level: 44, gold: 1_000 });
+    expect(useSupply(semLevel, suddenDeath, null, combat, rng(), at(suddenDeath, 15)))
+      .toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    expect(semLevel.goldDelta).toBe(0);
+    expect(semLevel.cooldowns.isReady('group:attack', 0)).toBe(true);
+
+    const semMagic = hero({ level: 30, gold: 1_000 });
+    expect(useSupply(semMagic, avalanche, near(), combat, rng(), at(avalanche, 3)))
+      .toEqual({ ok: false, reason: 'magic-level-too-low', retryInMs: 0 });
+    expect(semMagic.goldDelta).toBe(0);
+    expect(semMagic.cooldowns.isReady('group:attack', 0)).toBe(true);
+  });
+
+  it('o elemento de cada runa é o do catálogo, e a fórmula não o troca', () => {
+    for (const supply of [suddenDeath, avalanche] as const) {
+      expect(supply.effect.kind).toBe('damage');
+      if (supply.effect.kind !== 'damage') continue;
+      const target = { armor: 0, dodgeChance: 0 };
+      const result = useSupply(
+        hero({ level: supply.requires.level ?? 1, gold: 1_000 }), supply,
+        { distance: 1, targets: [target] }, combat, rng(),
+        at(supply, supply.requires.magicLevel ?? 0),
+      );
+      expect(result.ok).toBe(true);
+    }
+  });
+});

@@ -1,14 +1,16 @@
-// Trace de runas de ataque (RF-05 da #469).
+// Trace de runas de ataque (#469, RF-05; #476).
 //
-// Referência: Avalanche, GFB, Thunderstorm e Stone Shower em círculo de 37 tiles, e Sudden
-// Death em alvo único. Hoje o catálogo tem a Avalanche (círculo de raio 3, Base Power 45), e o
-// círculo do `area.ts` já recorta os cantos pela distância de Manhattan — a paridade com a
-// matriz Canary `AREA_CIRCLE3X3` (37 tiles) fechou na #472; a fórmula Canary de runa é a #476.
+// Referência: Avalanche, Great Fireball, Thunderstorm e Stone Shower em círculo de 37 tiles,
+// Explosion em cruz e Sudden Death / Heavy Magic Missile em alvo único. O catálogo tem as sete
+// runas com a fórmula canônica do Canary desde a #476 — a mesma `formula` da magia de dano
+// (#474), escalada pelo magic level. O `avalancheTrace` continua no caminho do `basePower` de
+// propósito: ele é a regressão do ADR 0031 (conteúdo sem fórmula não muda bit a bit), enquanto
+// `canaryRunes` é o oráculo da paridade nova.
 //
-// O trace fixa o novo número — 37 tiles — e o `gap` da paridade deixou de existir. Quando a
-// #476 mudar a fórmula de dano, ela move o `expected` dos golpes; é o trace que a prende.
+// As lacunas que a #469 abriu — `runes-not-in-catalog`, `canary-rune-formula` e
+// `sudden-death-single-target` — estão fechadas: `runesGaps` é vazio.
 
-import type { Supply } from '@draconya/content';
+import type { DamageType, SpellFormula, Supply } from '@draconya/content';
 import { areaTiles } from '../../area.js';
 import { runTrace } from './harness.js';
 import type { CombatGoldenTrace, CombatTraceGap } from './types.js';
@@ -28,26 +30,118 @@ const AVALANCHE: Supply = {
  */
 export const CANARY_CIRCLE_RADIUS_3_TILES = 37;
 
-export const runesGaps: readonly CombatTraceGap[] = [
+/** A #476 fechou o catálogo, a fórmula e a runa de alvo único: não sobra lacuna de runa. */
+export const runesGaps: readonly CombatTraceGap[] = [];
+
+/** Level e magic level do oráculo de paridade, iguais ao teste da fórmula da magia (#474). */
+export const CANARY_RUNE_LEVEL = 50;
+export const CANARY_RUNE_MAGIC_LEVEL = 40;
+
+/** A forma da runa de ataque: círculo de raio 3, cruz de raio 1 ou alvo único (sem área). */
+export type RuneShape = 'circle-3' | 'cross-1' | 'single';
+
+/** Uma runa do Canary com o ORÁCULO da fórmula escrito à mão — nunca derivado do motor. */
+export interface CanaryRune {
+  readonly supply: Supply;
+  readonly damageType: DamageType;
+  readonly shape: RuneShape;
+  /** Piso da fórmula em `CANARY_RUNE_LEVEL` / `CANARY_RUNE_MAGIC_LEVEL`. */
+  readonly min: number;
+  /** Teto da fórmula em `CANARY_RUNE_LEVEL` / `CANARY_RUNE_MAGIC_LEVEL`. */
+  readonly max: number;
+}
+
+const circle = (radius: number): { shape: 'circle'; radius: number; centered: 'target' } =>
+  ({ shape: 'circle', radius, centered: 'target' });
+
+type DamageEffect = Extract<Supply['effect'], { kind: 'damage' }>;
+
+const damage = (
+  damageType: DamageType, formula: SpellFormula, area?: DamageEffect['area'],
+): DamageEffect => area === undefined
+  ? { kind: 'damage', formula, range: 8, damageType }
+  : { kind: 'damage', formula, range: 8, damageType, area };
+
+/**
+ * As runas de ataque do Canary (#476), auditadas no baseline `d245c95` (ADR 0019). O `min`/`max`
+ * é o oráculo escrito à mão para level 50 / ML 40 — o número que o teste compara com a rolagem
+ * real do motor. `Sudden Death` segue os coeficientes da issue #476.
+ */
+export const canaryRunes: readonly CanaryRune[] = [
   {
-    id: 'runes-not-in-catalog',
-    reference: 'GFB, Thunderstorm, Stone Shower e SD são runas de ataque do Tibia 13.32.',
-    current: 'Só a Avalanche existe no catálogo de suprimentos.',
-    task: '#476',
+    damageType: 'ice', shape: 'circle-3', min: 65, max: 139,
+    supply: {
+      id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 30, magicLevel: 4 },
+      effect: damage('ice',
+        { levelFactor: 0.2, skillMin: 1.2, skillMax: 2.8, baseMin: 7, baseMax: 17 },
+        circle(3)),
+    },
   },
   {
-    id: 'canary-rune-formula',
-    reference: 'Canary: min/max = (level/5) + (maglevel × fator) + base (por magia).',
-    current: 'Fórmula provisória `spellPowerRange` sobre o Base Power (#155).',
-    task: '#476',
+    damageType: 'fire', shape: 'circle-3', min: 65, max: 139,
+    supply: {
+      id: 'great-fireball-rune', name: 'Great Fireball Rune', price: 45, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 30, magicLevel: 4 },
+      effect: damage('fire',
+        { levelFactor: 0.2, skillMin: 1.2, skillMax: 2.8, baseMin: 7, baseMax: 17 },
+        circle(3)),
+    },
   },
   {
-    id: 'sudden-death-single-target',
-    reference: 'Sudden Death é runa de ALVO ÚNICO, sem área.',
-    current: 'O schema de runa de dano exige `area: circle` — não há runa de alvo único.',
-    task: '#476',
+    damageType: 'energy', shape: 'circle-3', min: 56, max: 130,
+    supply: {
+      id: 'thunderstorm-rune', name: 'Thunderstorm Rune', price: 25, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 28, magicLevel: 4 },
+      effect: damage('energy',
+        { levelFactor: 0.2, skillMin: 1, skillMax: 2.6, baseMin: 6, baseMax: 16 },
+        circle(3)),
+    },
+  },
+  {
+    damageType: 'earth', shape: 'circle-3', min: 56, max: 130,
+    supply: {
+      id: 'stone-shower-rune', name: 'Stone Shower Rune', price: 25, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 28, magicLevel: 4 },
+      effect: damage('earth',
+        { levelFactor: 0.2, skillMin: 1, skillMax: 2.6, baseMin: 6, baseMax: 16 },
+        circle(3)),
+    },
+  },
+  {
+    damageType: 'death', shape: 'single', min: 226, max: 354,
+    supply: {
+      id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 45, magicLevel: 15 },
+      effect: damage('death',
+        { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 }),
+    },
+  },
+  {
+    damageType: 'energy', shape: 'single', min: 28, max: 83,
+    supply: {
+      id: 'heavy-magic-missile-rune', name: 'Heavy Magic Missile Rune', price: 7,
+      group: 'attack', groupCooldownMs: 2_000, requires: { level: 25, magicLevel: 3 },
+      effect: damage('energy',
+        { levelFactor: 0.2, skillMin: 0.4, skillMax: 1.59, baseMin: 2, baseMax: 10 }),
+    },
+  },
+  {
+    damageType: 'physical', shape: 'cross-1', min: 10, max: 202,
+    supply: {
+      id: 'explosion-rune', name: 'Explosion Rune', price: 25, group: 'attack',
+      groupCooldownMs: 2_000, requires: { level: 31, magicLevel: 6 },
+      effect: damage('physical',
+        { levelFactor: 0.2, skillMin: 0, skillMax: 4.8, baseMin: 0, baseMax: 0 },
+        { shape: 'cross', radius: 1 }),
+    },
   },
 ];
+
+/** Atalho para o teste: a runa de alvo único (Sudden Death). */
+export const suddenDeathRune: Supply = (canaryRunes.find(
+  (rune) => rune.supply.id === 'sudden-death-rune',
+) as CanaryRune).supply;
 
 /** Avalanche em 4 alvos dentro do raio: alvo principal primeiro, demais na ordem de nascimento. */
 export const avalancheTrace: CombatGoldenTrace = {

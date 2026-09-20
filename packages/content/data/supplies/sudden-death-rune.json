@@ -1,0 +1,25 @@
+{
+  "id": "sudden-death-rune",
+  "name": "Sudden Death Rune",
+  "description": "Causa dano mortal massivo ao alvo selecionado.",
+  "price": 108,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "requires": {
+    "level": 45,
+    "magicLevel": 15
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 4.6,
+      "skillMax": 7.4,
+      "baseMin": 32,
+      "baseMax": 48
+    },
+    "range": 8,
+    "damageType": "death"
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Runa de ALVO ÚNICO (#476): sem `area`, o dano cai só no alvo principal. Fórmula da issue #476 (paridade Canary): min = level/5 + ml*4.6 + 32, max = level/5 + ml*7.4 + 48; level 45, magic level 15 e preço por uso 108 (runa no NPC ÷ 3 cargas). Preço PROVISÓRIO. Aparência: efeito (effect 17, o de death-strike) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}

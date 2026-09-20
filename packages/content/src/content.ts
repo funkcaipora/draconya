@@ -577,13 +577,20 @@ export function buildContent(raw: RawContent): Content {
   }
   // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
+  // A runa de ATAQUE (#476) segue a mesma regra do dano da magia: `basePower` (BP provisório) ou
+  // `formula` canônica, pelo menos um. Sem nenhum o dano sairia zero em silêncio.
   for (const supply of supplies.values()) {
     const effect = supply.effect;
-    if (effect.kind !== 'heal') continue;
-    const fixed = effect.amount !== undefined;
-    const scaled = effect.basePower !== undefined || effect.formula !== undefined;
-    if (fixed === scaled) {
-      problems.push(`supply/${supply.id}: cura precisa de amount OU basePower/formula, um dos dois`);
+    if (effect.kind === 'heal') {
+      const fixed = effect.amount !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`supply/${supply.id}: cura precisa de amount OU basePower/formula, um dos dois`);
+      }
+    }
+    if (effect.kind === 'damage'
+      && effect.basePower === undefined && effect.formula === undefined) {
+      problems.push(`supply/${supply.id}: dano precisa de basePower ou formula`);
     }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa

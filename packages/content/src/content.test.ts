@@ -1579,6 +1579,58 @@ describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
   });
 });
 
+describe('as runas de ataque do Canary (#476)', () => {
+  const suddenDeath = {
+    id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108,
+    group: 'attack', groupCooldownMs: 2_000, requires: { level: 45, magicLevel: 15 },
+    effect: {
+      kind: 'damage', range: 8, damageType: 'death',
+      formula: { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 },
+    },
+  };
+
+  it('aceita a runa de ALVO ÚNICO com fórmula e SEM area (#476)', () => {
+    const content = buildContent(base({ supplies: [suddenDeath] }));
+    expect(content.supplies.get('sudden-death-rune')?.effect)
+      .toMatchObject({ kind: 'damage', damageType: 'death', formula: { skillMin: 4.6 } });
+    expect(content.supplies.get('sudden-death-rune')?.effect).not.toHaveProperty('area');
+  });
+
+  it('aceita a fórmula junto do basePower — a fórmula vence, o BP fica de exibição', () => {
+    const rune = {
+      ...suddenDeath, id: 'avalanche-rune',
+      effect: { ...suddenDeath.effect, basePower: 45, damageType: 'ice' },
+    };
+    expect(buildContent(base({ supplies: [rune] })).supplies.get('avalanche-rune')?.effect)
+      .toMatchObject({ kind: 'damage', basePower: 45, formula: { skillMin: 4.6 } });
+  });
+
+  it('aceita a cruz no alvo (Explosion) e a recusa centrada no lançador', () => {
+    const explosion = {
+      ...suddenDeath, id: 'explosion-rune', damageType: 'physical',
+      effect: { ...suddenDeath.effect, damageType: 'physical', area: { shape: 'cross', radius: 1 } },
+    };
+    expect(buildContent(base({ supplies: [explosion] })).supplies.get('explosion-rune')?.effect)
+      .toMatchObject({ area: { shape: 'cross', radius: 1 } });
+    // Runa é lançada NUM alvo: uma forma que sai do lançador não é representável e o schema
+    // recusa — o erro é de forma, não chega ao boot.
+    const caster = {
+      ...explosion,
+      effect: { ...explosion.effect, area: { shape: 'circle', radius: 1, centered: 'caster' } },
+    };
+    expect(() => buildContent(base({ supplies: [caster] }))).toThrow();
+  });
+
+  it('recusa dano sem mecanismo nenhum (sem basePower e sem formula)', () => {
+    const none = {
+      ...suddenDeath,
+      effect: { kind: 'damage', range: 8, damageType: 'death' },
+    };
+    expect(() => buildContent(base({ supplies: [none] })))
+      .toThrow(/supply\/sudden-death-rune: dano precisa de basePower ou formula/);
+  });
+});
+
 describe('condições e campos declarativos (CMB-07, #334)', () => {
   const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };

@@ -683,6 +683,24 @@ export const spellFormulaSchema = z.object({
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
 
 /**
+ * A forma de uma runa de ATAQUE (#476): círculo de raio `radius` OU cruz no ALVO. Runa é
+ * lançada num alvo, então — ao contrário da magia — não existe forma que saia do lançador:
+ * `centered` é sempre `target`, e a cruz também centra no alvo (`area.ts`). É também por isso
+ * que a cruz não tem `centered`: não há o que escolher.
+ */
+const runeAreaSchema = z.union([
+  z.object({
+    shape: z.literal('circle'),
+    radius: z.number().int().positive(),
+    centered: z.literal('target').default('target'),
+  }),
+  /**
+   * Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles.
+   */
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
+]);
+
+/**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
  * direto, no ato. Por isso supply tem preço e `group` de cooldown, e não tem peso, slot nem
  * instância. O `effect` é a união discriminada por `kind`, fechada como o vocabulário do bot:
@@ -726,19 +744,20 @@ export const supplySchema = z.object({
     }),
     z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
     /**
-     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
-     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
-     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
+     * Runa de ataque (#165, ADR 0026 d.8; #476): o dano sai de UM mecanismo — o Base Power do
+     * TibiaWiki convertido pela mesma fórmula das magias (`combat.spellPower`, #155) ou a
+     * `formula` canônica do Canary (#476), que VENCE o `basePower` (o BP continua sendo o número
+     * de exibição, ADR 0033). Escala SEMPRE pelo magic level, em toda vocação. `area` é
+     * OPCIONAL: o círculo no alvo (Avalanche, Great Fireball, Thunderstorm, Stone Shower), a
+     * cruz no alvo (Explosion) ou NADA, que é a runa de ALVO ÚNICO (Sudden Death, Heavy Magic
+     * Missile). `range` é o alcance até o alvo principal, obrigatório como na magia de dano.
      */
     z.object({
       kind: z.literal('damage'),
-      basePower: z.number().int().positive(),
+      basePower: z.number().int().positive().optional(),
+      formula: spellFormulaSchema.optional(),
       range: z.number().int().positive(),
-      area: z.object({
-        shape: z.literal('circle'),
-        radius: z.number().int().positive(),
-        centered: z.literal('target').default('target'),
-      }),
+      area: runeAreaSchema.optional(),
       /**
        * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
        * Avalanche é gelo, e o arquivo declara.

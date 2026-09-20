@@ -1,7 +1,7 @@
 {
   "id": "avalanche-rune",
   "name": "Avalanche Rune",
-  "description": "Lança um raio de gelo no alvo, causando dano numa área de 7x7 ao redor dele.",
+  "description": "Lança um raio de gelo no alvo, causando dano numa área circular de 37 tiles ao redor dele.",
   "price": 14,
   "group": "attack",
   "groupCooldownMs": 2000,
@@ -12,6 +12,13 @@
   "effect": {
     "kind": "damage",
     "basePower": 45,
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1.2,
+      "skillMax": 2.8,
+      "baseMin": 7,
+      "baseMax": 17
+    },
     "range": 8,
     "damageType": "ice",
     "area": {
@@ -20,5 +27,5 @@
       "centered": "target"
     }
   },
-  "_open": "Suprimento abstrato (gold no uso): level 30, magic level 4, 4 cargas (TibiaWiki, conferir ao gravar); o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. O Base Power (45), o raio (3, a área da Great Fireball) e o alcance (8, o uso de runa do OpenTibia — antes 4) também são provisórios até a leitura da infobox; elemento gelo declarado no efeito desde o CMB-03. Aparência: efeito (effect 41, o mesmo de ice-wave) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, QA por tile pendente e id mantido (ver docs/combat-presentation-audit.md)."
+  "_open": "Suprimento abstrato (gold no uso): level 30, magic level 4, 4 cargas (TibiaWiki, conferir ao gravar); o preço por uso é o da runa no NPC dividido por 4 — 14 é 57 ÷ 4 arredondado e é provisório. Fórmula canônica do Canary (#476): min = level/5 + ml*1.2 + 7, max = level/5 + ml*2.8 + 17; o `basePower` 45 fica só como número de exibição (ADR 0033). O raio 3 (37 tiles) e o alcance 8 são o uso de runa do OpenTibia. Aparência: efeito (effect 41, o mesmo de ice-wave) auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, QA por tile pendente e id mantido (ver docs/combat-presentation-audit.md)."
 }

@@ -329,6 +329,24 @@
     "avalanche-rune": {
       "effect": 41
     },
+    "great-fireball-rune": {
+      "effect": 7
+    },
+    "thunderstorm-rune": {
+      "effect": 12
+    },
+    "stone-shower-rune": {
+      "effect": 17
+    },
+    "sudden-death-rune": {
+      "effect": 17
+    },
+    "heavy-magic-missile-rune": {
+      "effect": 12
+    },
+    "explosion-rune": {
+      "effect": 10
+    },
     "ultimate-healing-rune": {
       "effect": 13
     },

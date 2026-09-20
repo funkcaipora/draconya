@@ -15,7 +15,7 @@
 // cuida do LANÇADOR: portão, custo e cooldown.
 
 import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
-import { evaluateSpellPower, spellPowerRange } from '@draconya/content';
+import { evaluateSpellPower } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -439,8 +439,13 @@ export function useSupply(
     let total = 0;
     for (let i = 0; i < aim.targets.length; i += 1) {
       const target = aim.targets[i] as SpellTarget;
-      // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia.
-      const { min, max } = spellPowerRange(supply.effect.basePower, user.level, scaling.skillLevel, combat.spellPower);
+      // UMA rolagem por alvo, na ordem da mira — o contrato do loot e da magia. A fórmula
+      // canônica (#476) VENCE o `basePower`; sem ela, o caminho do BP provisório continua bit a
+      // bit (ADR 0031), porque os dois consomem exatamente UM `rng.integer`.
+      const { min, max } = evaluateSpellPower(
+        supply.effect.formula, supply.effect.basePower ?? 0, user.level, scaling.skillLevel,
+        combat.spellPower,
+      );
       const power = Math.round(rng.integer(min, max) * user.conditions.damageDealtScale('spell'));
       const result = resolveDamage(
         { rawDamage: power, source: 'rune', damageType: supply.effect.damageType },

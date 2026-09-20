@@ -1,0 +1,30 @@
+{
+  "id": "stone-shower-rune",
+  "name": "Stone Shower Rune",
+  "description": "Faz chover pedras sobre o alvo, causando dano numa área circular de 37 tiles ao redor dele.",
+  "price": 25,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "requires": {
+    "level": 28,
+    "magicLevel": 4
+  },
+  "effect": {
+    "kind": "damage",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 1,
+      "skillMax": 2.6,
+      "baseMin": 6,
+      "baseMax": 16
+    },
+    "range": 8,
+    "damageType": "earth",
+    "area": {
+      "shape": "circle",
+      "radius": 3,
+      "centered": "target"
+    }
+  },
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476) — a mesma da Thunderstorm: min = level/5 + ml*1 + 6, max = level/5 + ml*2.6 + 16; level 28 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 17, o de terra-strike) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+}
