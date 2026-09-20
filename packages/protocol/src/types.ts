@@ -237,6 +237,7 @@ export const C2S_SCHEMAS = {
    * líder manda `approve: true` para propor e os membros para aprovar; `false` recusa. Quem
    * decide se quem mandou pode propor, e se a sessão encerra, é o servidor.
    */
+  'party-end-vote': z.object({ approve: z.boolean() }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196; v2 no #393): só os PRESENTES; quem saiu some da lista. */

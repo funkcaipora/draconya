@@ -249,7 +249,7 @@ export class TraceRuleset implements Ruleset {
       : null;
     const result = useSupply(
       hero, supply, aim, TRACE_COMBAT, session.rng, this.#scaling(action.skillLevel),
-      ownPurse(hero), session.nowMs,
+      ownPurse(hero), hero, session.nowMs,
     );
     if (!result.ok) return;
     this.#emit(session, {
