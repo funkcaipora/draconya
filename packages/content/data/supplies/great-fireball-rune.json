@@ -26,5 +26,5 @@
       "centered": "target"
     }
   },
-  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476) — a mesma da Avalanche: min = level/5 + ml*1.2 + 7, max = level/5 + ml*2.8 + 17; level 30 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 7, o de fire-wave) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476) — a mesma da Avalanche: min = level/5 + ml*1.2 + 7, max = level/5 + ml*2.8 + 17; level 30 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 7, o de fire-wave) e projétil (missile 4, o de flame-strike) — a bola de fogo voa do conjurador ao alvo antes de a área estourar (#478) —, auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprites sem PNG, conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
 }

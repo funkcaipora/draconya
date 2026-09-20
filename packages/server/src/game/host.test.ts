@@ -3282,7 +3282,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     spells: {
       heal: { effect: 13 }, strike: { effect: 12, missile: 5 }, blast: { effect: 15, missile: 6 },
     },
-    supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41 } },
+    supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41, missile: 30 } },
     hits: { melee: 1 },
     // O projétil do tiro (#152): o da flecha é da MUNIÇÃO ABSTRATA (ADR 0026 d.3), o da wand é
     // da ARMA. A munição não tem aparência de item; o `icon` acompanha o `missile` na tabela.
@@ -3765,13 +3765,18 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(hitTiles.length).toBeGreaterThan(0);
   });
 
-  it('a runa de ataque estoura um effect em CADA tile da forma, e a poção só no usuário (#165)', () => {
+  it('a runa de ataque estoura um effect em CADA tile da forma, e a poção só no usuário (#165, #478)', () => {
     // O supply de dano é apresentado como a magia em área: um `effect` por tile do círculo
     // de raio 1 — nove —, com ou sem rato. O gold sai como o da poção, e a forma vem de
     // `tiles` do `supply-used`, que o host desenha uma vez cada.
     //
+    // E a runa de ataque LANÇA o projétil (#478): um `missile` do conjurador ao primeiro alvo,
+    // ANTES dos efeitos da área — a mesma ordem do Tibia/Canary. Um projétil por uso, nunca um
+    // por tile.
+    //
     // Mutação que mata: tratar todo `supply-used` como poção (efeito só em `position`) — a
-    // contagem cai para uma por uso, no tile do herói.
+    // contagem cai para uma por uso, no tile do herói. E não emitir o `missile`, que este
+    // teste conta e ordena.
     const { runFor, received, hero } = hunt({
       tanky: true, monsterCount: 2, gold: 300,
       bot: rules({ rune: [{
@@ -3785,10 +3790,20 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const golpes = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
     expect(golpes.length).toBeGreaterThan(0);
     expect(golpes.length % 2).toBe(0);
-    expect(usos).toHaveLength(9 * (golpes.length / 2));
-    expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
     // A runa é SUPPLY (FUN-77): o gold sai a cada uso, 3 por disparo.
-    expect(hero().goldDelta).toBe(-3 * (golpes.length / 2));
+    const disparos = golpes.length / 2;
+    expect(hero().goldDelta).toBe(-3 * disparos);
+    expect(usos).toHaveLength(9 * disparos);
+    expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
+    // UM projétil por uso, do conjurador ao primeiro alvo, e ANTES dos nove efeitos dele.
+    const lançamentos = ofType(all, 'missile').filter((m) => m.missileId === 30);
+    expect(lançamentos).toHaveLength(disparos);
+    for (const missile of lançamentos) {
+      const at = all.indexOf(missile as S2CMessage);
+      const effect = all.slice(at + 1).find((m) => m.type === 'effect' && m.effectId === 41);
+      expect(effect).toBeDefined();
+      expect(missile.from).not.toEqual(missile.to);
+    }
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {
@@ -4039,6 +4054,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const stats = ofType(all, 'player-stats');
     expect(stats[0]?.gold).toBe(100);
     expect(stats.at(-1)?.gold).toBe(55);
+    // Suprimento sem projétil (RF-05, #478): a poção só tem `effect`, e nenhum `missile` sai.
+    expect(ofType(all, 'missile')).toHaveLength(0);
   });
 
   it('o tiro do bow vira missile com o projétil da FLECHA, entre o herói e o rato (#152)', () => {

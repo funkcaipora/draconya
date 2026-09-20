@@ -206,9 +206,16 @@ export const appearancesSchema = z.object({
     effect: appearanceId.optional(),
     missile: appearanceId.optional(),
   })).default({}),
-  /** `id de supply → efeito no tile de quem usou` (FUN-109). Mesma regra de `spells`. */
+  /**
+   * `id de supply → { effect, missile }` (FUN-109). `effect` é a animação no tile do alvo (ou
+   * no de quem usou, na poção); `missile` é o projétil do conjurador até o primeiro alvo, que a
+   * runa de ataque lança ANTES de a área estourar (#478). Os dois são opcionais e independentes:
+   * a poção tem efeito e não tem projétil, a runa tem os dois, e um supply sem entrada é MUDA.
+   * Mesma regra de `spells`.
+   */
   supplies: z.record(z.string().min(1), z.object({
     effect: appearanceId.optional(),
+    missile: appearanceId.optional(),
   })).default({}),
   /**
    * Efeito do golpe sem magia (FUN-109). `melee` é o sangue do corpo a corpo. Objeto, e não

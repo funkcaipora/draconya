@@ -332,13 +332,15 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       readonly shape?: string;
       readonly skillMin: number;
       readonly skillMax: number;
+      /** O projétil da tabela de aparências (#478): a Explosion fica sem, por ora. */
+      readonly missile?: number;
     }>> = {
-      'avalanche-rune': { damageType: 'ice', shape: 'circle', skillMin: 1.2, skillMax: 2.8 },
-      'great-fireball-rune': { damageType: 'fire', shape: 'circle', skillMin: 1.2, skillMax: 2.8 },
-      'thunderstorm-rune': { damageType: 'energy', shape: 'circle', skillMin: 1, skillMax: 2.6 },
-      'stone-shower-rune': { damageType: 'earth', shape: 'circle', skillMin: 1, skillMax: 2.6 },
-      'sudden-death-rune': { damageType: 'death', skillMin: 4.6, skillMax: 7.4 },
-      'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59 },
+      'avalanche-rune': { damageType: 'ice', shape: 'circle', skillMin: 1.2, skillMax: 2.8, missile: 29 },
+      'great-fireball-rune': { damageType: 'fire', shape: 'circle', skillMin: 1.2, skillMax: 2.8, missile: 4 },
+      'thunderstorm-rune': { damageType: 'energy', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 5 },
+      'stone-shower-rune': { damageType: 'earth', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 30 },
+      'sudden-death-rune': { damageType: 'death', skillMin: 4.6, skillMax: 7.4, missile: 11 },
+      'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
       'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
     };
     for (const [id, want] of Object.entries(expected)) {
@@ -349,6 +351,9 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       expect(effect.formula?.skillMin, id).toBe(want.skillMin);
       expect(effect.formula?.skillMax, id).toBe(want.skillMax);
       expect(effect.area?.shape, id).toBe(want.shape);
+      // A runa de ataque projeta (#478): o id vem da tabela de aparências, nunca do `sim`.
+      // Mutação que mata: trocar o `missile` da Avalanche de 29 para 30 em `baseline.json`.
+      expect(content.appearances?.supplies[id]?.missile, id).toBe(want.missile);
     }
   });
 

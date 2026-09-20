@@ -1937,7 +1937,8 @@ export class SessionHost {
    *   spell-cast       → o projétil do conjurador ao PRIMEIRO alvo (é um projétil, não uma
    *                      rajada), e o efeito em CADA alvo — ou no próprio conjurador quando
    *                      não há alvo, que é a cura;
-   *   supply-used      → o efeito no tile de quem usou.
+   *   supply-used      → o projétil do conjurador ao PRIMEIRO alvo (runa de ataque, #478), e o
+   *                      efeito no tile de cada alvo/tile da forma — ou no usuário, na poção.
    *
    * Magia ou supply SEM linha na tabela é mudo, e é silêncio, não erro: `buildContent` só
    * exige que toda linha aponte para algo que existe, não o contrário. Uma magia nova sem
@@ -1997,8 +1998,19 @@ export class SessionHost {
         break;
       }
       case 'supply-used': {
-        const effectId = appearances?.supplies[event.supplyId]?.effect;
-        if (effectId === undefined) return;
+        const look = appearances?.supplies[event.supplyId];
+        if (look === undefined) return;
+        // Runa de ataque (#478): o projétil sai do conjurador ao PRIMEIRO alvo antes de a área
+        // estourar — o mesmo desenho do `spell-cast`, e a ordem é contrato. Uma runa sem alvo
+        // não chega aqui (o `sim` a recusa em `no-target`), e a poção não tem `missile`.
+        const first = event.targets[0];
+        if (look.missile !== undefined && first !== undefined) {
+          messages.push({
+            type: 'missile', from: event.position, to: first.position, missileId: look.missile,
+          });
+        }
+        const effectId = look.effect;
+        if (effectId === undefined) break;
         // Poção: o efeito no usuário. Runa (#165): um por alvo e um por tile da forma — o
         // mesmo desenho da magia em área.
         if (event.targets.length === 0 && event.tiles.length === 0) {

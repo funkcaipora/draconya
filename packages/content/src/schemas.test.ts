@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema, spellFormulaSchema } from './schemas.js';
+import { appearancesSchema, botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema, spellFormulaSchema } from './schemas.js';
 
 describe('spellFormulaSchema — a fórmula canônica do #474', () => {
   it('aplica o default do levelFactor (1/5) e os bases 0', () => {
@@ -14,6 +14,27 @@ describe('spellFormulaSchema — a fórmula canônica do #474', () => {
   });
 });
 
+
+describe('appearancesSchema — o projétil do supply (#478)', () => {
+  const table = (supplies: unknown): unknown => ({ id: 'baseline', pack: 'tibia-test', supplies });
+
+  it('aceita `missile` ao lado de `effect` numa runa, e os dois são independentes', () => {
+    // A poção declara só `effect`; a runa de ataque declara os dois (#478). Mutação que mata:
+    // remover `missile` do objeto de `supplies` — o Zod o descartaria em silêncio e o projétil
+    // nunca chegaria ao host.
+    const parsed = appearancesSchema.parse(table({
+      'avalanche-rune': { effect: 41, missile: 29 },
+      'health-potion': { effect: 14 },
+    }));
+    expect(parsed.supplies['avalanche-rune']).toEqual({ effect: 41, missile: 29 });
+    expect(parsed.supplies['health-potion']).toEqual({ effect: 14 });
+  });
+
+  it('recusa `missile` não numérico: a linha é id de aparência, nunca caminho de arte', () => {
+    // Invariante 6: o arquivo só carrega `appearanceId`. Um caminho de PNG é recusado aqui.
+    expect(() => appearancesSchema.parse(table({ rune: { missile: 'sprites/rune.png' } }))).toThrow();
+  });
+});
 
 describe('huntSchema (#360)', () => {
   const validHunt = {

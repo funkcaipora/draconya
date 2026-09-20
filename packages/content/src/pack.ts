@@ -81,6 +81,9 @@ export function packProblems(appearances: Appearances, pack: Pack): string[] {
   }
   for (const [id, supply] of Object.entries(appearances.supplies)) {
     check(`supplies.${id}.effect`, 'effect', supply.effect);
+    // O projétil da runa de ataque (#478): a poção não tem linha, e a runa com `missile`
+    // fora do pacote é o mesmo quadrado invisível, agora a cada lançamento.
+    check(`supplies.${id}.missile`, 'missile', supply.missile);
   }
   for (const [id, effect] of Object.entries(appearances.hits)) {
     check(`hits.${id}`, 'effect', effect);

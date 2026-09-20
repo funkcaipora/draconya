@@ -26,5 +26,5 @@
       "centered": "target"
     }
   },
-  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476): min = level/5 + ml*1 + 6, max = level/5 + ml*2.6 + 16; level 28 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 12, o de energy-strike) provisório, auditado em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprite sem PNG, conferência visual pendente e id mantido (ver docs/combat-presentation-audit.md)."
+  "_open": "Suprimento abstrato (gold no uso, ADR 0032 d.6). Fórmula canônica do Canary (#476): min = level/5 + ml*1 + 6, max = level/5 + ml*2.6 + 16; level 28 e magic level 4, 4 cargas. Preço por uso PROVISÓRIO (runa no NPC ÷ 4 cargas). Aparência: efeito (effect 12, o de energy-strike) e projétil (missile 5, o de energy-strike) — a tempestade voa do conjurador ao alvo antes de a área estourar (#478) —, auditados em 2026-09-18 contra a biblioteca local 1332 (parcial) — sprites sem PNG, conferência visual pendente e ids mantidos (ver docs/combat-presentation-audit.md)."
 }
