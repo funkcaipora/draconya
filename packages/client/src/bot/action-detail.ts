@@ -42,10 +42,20 @@ export function actionEntryId(entry: ActionEntry): string {
   return entry.kind === 'spell' ? entry.spell.id : entry.supply.id;
 }
 
-/** Todas as entradas de uma aba, por level exigido e depois por nome. */
-export function entriesOf(catalogue: Catalogue, tab: ActionTab): readonly ActionEntry[] {
+/** Todas as entradas de uma aba, por level exigido e depois por nome. Se a vocação for informada, filtra magias. */
+export function entriesOf(
+  catalogue: Catalogue,
+  tab: ActionTab,
+  vocationId?: string | null,
+): readonly ActionEntry[] {
   const entries: ActionEntry[] = tab === 'Magias'
-    ? catalogue.bot.spells.map((spell) => ({ kind: 'spell', spell }))
+    ? catalogue.bot.spells
+        .filter((spell) => {
+          if (vocationId === undefined) return true;
+          if (vocationId === null) return spell.vocationId === null;
+          return spell.vocationId === null || spell.vocationId === vocationId;
+        })
+        .map((spell) => ({ kind: 'spell', spell }))
     : (catalogue.bot.supplies ?? [])
       .filter((supply) => (tab === 'Runas' ? supply.group === 'attack' : supply.group !== 'attack'))
       .map((supply) => ({ kind: 'supply', supply }));

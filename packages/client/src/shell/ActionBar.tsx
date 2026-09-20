@@ -85,12 +85,16 @@ export function ActionBar() {
               );
             }
             // `exactOptionalPropertyTypes`: só entra na chamada a prop que de fato veio.
+            const classNames = [
+              view.cooldownMs > 0 ? 'action-slot-cooldown' : null,
+              view.auto ? 'action-slot-auto' : null,
+            ].filter(Boolean).join(' ');
             const props: SlotProps = {
               size: 36,
               label: view.label,
               ...(view.hotkey === undefined ? {} : { hotkey: view.hotkey }),
               ...(view.element === undefined ? {} : { element: view.element }),
-              ...(view.cooldownMs > 0 ? { className: 'action-slot-cooldown' } : {}),
+              ...(classNames.length > 0 ? { className: classNames } : {}),
               // O motivo do clique (`slot-result`) vence; sem ele, vale o motivo do BLOQUEIO
               // (`slot-state`, já em palavras desde o #470/RF-02) — é ele que explica por que
               // a runa não rodou antes de o jogador tentar disparar.

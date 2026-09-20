@@ -38,9 +38,11 @@ export interface SlotProps {
   /** Faz do slot o DESTINO de um arrastar nativo — quem chama decide se aceita (`preventDefault`). */
   onDragOver?: DragEventHandler<HTMLButtonElement>;
   onDrop?: DragEventHandler<HTMLButtonElement>;
+  as?: 'button' | 'span';
 }
 
 export function Slot({
+  as = 'button',
   label, hotkey, count, empty, size, kind = 'action', icon, selected, dashed, element, onClick,
   className, title, ariaLabel, draggable, onDragStart, onDragOver, onDrop,
 }: SlotProps) {
@@ -51,6 +53,34 @@ export function Slot({
     selected === true ? 'ui-slot--selected' : null,
     className ?? null,
   ].filter(Boolean).join(' ');
+
+  const content = (
+    <>
+      {icon}
+      {label !== undefined
+        ? <span className="ui-slot-label" data-element={element}>{label}</span>
+        : icon === undefined && empty === true
+          ? <span className="ui-slot-label">+</span>
+          : null}
+      {hotkey !== undefined && <small className="ui-slot-hotkey">{hotkey}</small>}
+      {count !== undefined && count !== null && <b className="ui-slot-count">{count}</b>}
+    </>
+  );
+
+  if (as === 'span') {
+    return (
+      <span
+        className={rootClass}
+        data-kind={kind}
+        title={title}
+        aria-label={ariaLabel}
+        aria-hidden={ariaLabel === undefined ? true : undefined}
+        style={{ '--slot-size': `${String(size)}px` } as CSSProperties}
+      >
+        {content}
+      </span>
+    );
+  }
 
   return (
     <button
@@ -66,14 +96,7 @@ export function Slot({
       onDrop={onDrop}
       style={{ '--slot-size': `${String(size)}px` } as CSSProperties}
     >
-      {icon}
-      {label !== undefined
-        ? <span className="ui-slot-label" data-element={element}>{label}</span>
-        : icon === undefined && empty === true
-          ? <span className="ui-slot-label">+</span>
-          : null}
-      {hotkey !== undefined && <small className="ui-slot-hotkey">{hotkey}</small>}
-      {count !== undefined && count !== null && <b className="ui-slot-count">{count}</b>}
+      {content}
     </button>
   );
 }

@@ -17,7 +17,7 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "bold": {
       "monsterCount": 5,
@@ -27,7 +27,7 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     },
     "reckless": {
       "monsterCount": 8,
@@ -37,7 +37,7 @@
           "weight": 1
         }
       ],
-      "respawnDelayMs": 2000
+      "respawnDelayMs": 30000
     }
   },
   "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs [ABERTO — valor provisório: 2000 ms; na captura do Huntera um rato novo aparece 1,0–2,5 s depois de um sumir]. corpseTtlMs [ABERTO — valor provisório: 10 s; a captura não fechou nenhum par appear→disappear]. spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."

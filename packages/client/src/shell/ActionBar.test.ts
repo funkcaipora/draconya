@@ -92,6 +92,20 @@ describe('ActionBar — a fileira de 124 px (RF-01..RF-04)', () => {
     expect(html).not.toContain('ui-slot-count');
   });
 
+  it('slot com ação automática ganha a classe action-slot-auto', async () => {
+    edit((draft) => ({
+      ...withSlots(0, [
+        [0, { do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, hotkey: '1' }],
+        [1, { do: { kind: 'spell', spellId: 'strike' }, when: [], auto: false, hotkey: '2' }],
+      ]),
+      activeSet: draft.activeSet,
+    }));
+    const html = await render();
+    expect(html).toContain('action-slot-auto');
+    const autoMatches = html.match(/action-slot-auto/g);
+    expect(autoMatches).toHaveLength(1);
+  });
+
   it('renderiza na Cidade e na caçada', async () => {
     hud.set((state) => ({ ...state, analyzer: { ...state.analyzer, sessionType: 'city' } }));
     expect((await render()).match(/class="ui-slot[ "]/g) ?? []).toHaveLength(24);

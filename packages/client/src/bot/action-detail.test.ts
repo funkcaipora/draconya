@@ -386,4 +386,31 @@ describe('entriesOf — por level exigido e depois por nome', () => {
     expect(entriesOf(catalogue, 'Itens').map((entry) => (entry.kind === 'supply' ? entry.supply.id : null)))
       .toEqual(['potion']);
   });
+
+  it('filtra magias por vocationId e preserva magias universais (vocationId null)', () => {
+    const vocCatalogue: Catalogue = {
+      ...catalogue,
+      bot: {
+        ...catalogue.bot,
+        spells: [
+          spell({ id: 'universal', name: 'Universal', minLevel: 1, vocationId: null }),
+          spell({ id: 'haste-knight', name: 'Haste', minLevel: 14, vocationId: 'knight' }),
+          spell({ id: 'haste-sorcerer', name: 'Haste', minLevel: 14, vocationId: 'sorcerer' }),
+          spell({ id: 'buzz', name: 'Buzz', minLevel: 1, vocationId: 'sorcerer' }),
+        ],
+      },
+    };
+
+    const knightEntries = entriesOf(vocCatalogue, 'Magias', 'knight');
+    expect(knightEntries.map((e) => (e.kind === 'spell' ? e.spell.id : null)))
+      .toEqual(['universal', 'haste-knight']);
+
+    const sorcererEntries = entriesOf(vocCatalogue, 'Magias', 'sorcerer');
+    expect(sorcererEntries.map((e) => (e.kind === 'spell' ? e.spell.id : null)))
+      .toEqual(['buzz', 'universal', 'haste-sorcerer']);
+
+    const unvocatedEntries = entriesOf(vocCatalogue, 'Magias', null);
+    expect(unvocatedEntries.map((e) => (e.kind === 'spell' ? e.spell.id : null)))
+      .toEqual(['universal']);
+  });
 });

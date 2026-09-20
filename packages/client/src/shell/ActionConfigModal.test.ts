@@ -164,6 +164,8 @@ describe('ActionConfigModal — a lista (RF-04)', () => {
     const html = await render(0);
     // Level do personagem é 10 (beforeEach); "Magia Avançada" exige 20.
     expect(html).toContain('is-locked');
+    expect(html).toContain('disabled');
+    expect(html).toContain('🔒 Lv. 20');
     expect(html).toContain('Magia Avançada');
   });
 
@@ -172,6 +174,36 @@ describe('ActionConfigModal — a lista (RF-04)', () => {
     withSlot(0, spellSlot());
     const html = await render(0);
     expect(html).not.toContain('is-locked');
+    expect(html).not.toContain('🔒 Lv.');
+  });
+
+  it('filtra magias na lista pela vocação do personagem no hud', async () => {
+    const customCatalogue: Catalogue = {
+      ...catalogue(),
+      bot: {
+        ...catalogue().bot,
+        spells: [
+          {
+            id: 'universal', name: 'Universal', manaCost: 10, minLevel: 1, vocationId: null,
+            effect: 'heal', group: 'healing', cooldownMs: 1000,
+          },
+          {
+            id: 'knight-strike', name: 'Knight Strike', manaCost: 20, minLevel: 1, vocationId: 'knight',
+            effect: 'damage', group: 'attack', cooldownMs: 1000,
+          },
+          {
+            id: 'sorc-strike', name: 'Sorc Strike', manaCost: 20, minLevel: 1, vocationId: 'sorcerer',
+            effect: 'damage', group: 'attack', cooldownMs: 1000,
+          },
+        ],
+      },
+    };
+    hud.set((state) => ({ ...state, catalogue: customCatalogue, vocationId: 'knight' }));
+    withSlot(0, spellSlot({ do: { kind: 'spell', spellId: 'universal' } }));
+    const html = await render(0);
+    expect(html).toContain('Knight Strike');
+    expect(html).toContain('Universal');
+    expect(html).not.toContain('Sorc Strike');
   });
 });
 

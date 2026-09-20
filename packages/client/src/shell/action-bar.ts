@@ -61,6 +61,7 @@ export interface SlotView {
   readonly element: SlotProps['element'] | undefined;
   readonly cooldownMs: number;
   readonly blocked: boolean;
+  readonly auto?: boolean;
 }
 
 /**
@@ -85,6 +86,7 @@ export function slotView(
     element: undefined,
     cooldownMs: state?.remainingMs ?? 0,
     blocked: state?.state === 'blocked',
+    auto: slot.auto,
   };
 }
 

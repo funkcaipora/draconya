@@ -103,6 +103,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
   const magicLevel = useHudSlice((state) => state.skills.magic.level);
   const party = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
+  const vocationId = useHudSlice((state) => state.vocationId);
   const slot = useStoreSlice(bot, (state) => state.draft.sets[set]?.slots[index] ?? null);
   const storedSet = useStoreSlice(bot, (state) => state.draft.sets[set]);
   const [draft, setDraft] = useState<SlotDraft>(() => draftFromSlot(slot));
@@ -127,7 +128,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
   const problem = draftProblem(draft, currentSet, index);
   const selectedEntry = entryOfAction(draft.do, catalogue);
   const tab = pickedTab ?? (selectedEntry === null ? 'Magias' : actionTab(selectedEntry));
-  const entries = entriesOf(catalogue, tab);
+  const entries = entriesOf(catalogue, tab, vocationId);
   const hotkeys = catalogue.bot.hotkeys ?? BOT_HOTKEYS;
   const detail = selectedEntry === null
     ? null
@@ -198,17 +199,24 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
         <ul className="action-config-list" role="listbox" aria-label={tab}>
           {entries.map((entry) => {
             const selected = isSameAction(entry, draft.do);
-            const locked = requiredLevel(entry) > level;
+            const reqLv = requiredLevel(entry);
+            const locked = reqLv > level;
             return (
               <li key={`${entry.kind}-${actionEntryId(entry)}`}>
                 <button
                   type="button"
                   aria-pressed={selected}
+                  disabled={locked}
                   className={locked ? 'is-locked' : undefined}
-                  onClick={() => { setDraft(withDo(draft, actionOf(entry), acceptsFriend(entry))); }}
+                  onClick={() => { if (!locked) setDraft(withDo(draft, actionOf(entry), acceptsFriend(entry))); }}
                 >
-                  <Slot size={30} label={nameOf(entry)} />
-                  <span>{nameOf(entry)}</span>
+                  <Slot as="span" size={30} />
+                  <span className="action-config-item-name">{nameOf(entry)}</span>
+                  {locked && (
+                    <span className="action-config-item-lock" title={`Requer Lv. ${String(reqLv)}`}>
+                      {`🔒 Lv. ${String(reqLv)}`}
+                    </span>
+                  )}
                 </button>
               </li>
             );
@@ -220,15 +228,15 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
           ) : (
             <>
               <header>
-                <Slot size={36} label={detail.title} />
+                <Slot as="span" size={36} />
                 <h3>{detail.title}</h3>
                 <span className="action-config-req">{detail.requirement}</span>
               </header>
               <dl>
                 {detail.rows.map((row) => (
                   <Fragment key={row.label}>
-                    <dt>{row.label}</dt>
-                    <dd>{row.value}</dd>
+                    <dt data-label={row.label}>{row.label}</dt>
+                    <dd data-label={row.label}>{row.value}</dd>
                   </Fragment>
                 ))}
               </dl>
