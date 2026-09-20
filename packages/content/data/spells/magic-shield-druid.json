@@ -1,6 +1,7 @@
 {
   "id": "magic-shield-druid",
   "name": "Magic Shield",
+  "description": "O dano recebido consome mana em vez de vida, por 180 segundos.",
   "vocationId": "druid",
   "minLevel": 14,
   "manaCost": 50,

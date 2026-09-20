@@ -11,13 +11,13 @@ import type { Catalogue } from '../state/hud.js';
 // campos condicionais sem apresentar dado que a sessão não transmitiu (D8).
 
 const mockCatalogue = {
-  hunts: [], monsters: [], ammunition: [],
+  hunts: [], monsters: [],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1, slots: {},
     spells: [], supplies: [],
   },
   items: [],
+  ammunition: [],
   vocations: [
     { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
     { id: 'sorcerer', name: 'Sorcerer', healthPerLevel: 5, manaPerLevel: 30, capacityPerLevel: 10, startingWeaponItemId: 'wand-of-vortex' },
@@ -155,7 +155,7 @@ describe('PartyMembers', () => {
     expect(html).toContain('ui-button-danger');
     expect(html).toContain('party-footer-leave');
     expect(html).toContain('party-footer-toggles');
-    // O modo como TEXTO saiu: os dois eixos do kit (#405, ADR 0033 D1) são os interruptores.
+    // O modo como TEXTO saiu: os dois eixos do kit (#405, ADR 0035 D1) são os interruptores.
     expect(html).not.toContain('Compartilhado');
   });
 

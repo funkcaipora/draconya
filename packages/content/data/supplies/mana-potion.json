@@ -1,7 +1,10 @@
 {
   "id": "mana-potion",
   "name": "Poção de Mana",
+  "description": "Recupera 100 pontos de mana.",
   "price": 50,
+  "group": "potion",
+  "groupCooldownMs": 1000,
   "effect": { "kind": "mana", "amount": 100, "target": "friend", "range": 1 },
-  "_open": "Preço de referência do §20.2. `target`/`range` são §26 — `range: 1` é PROVISÓRIO (o PRD não fixa alcance de poção; 1 é o mínimo que ainda é \"em terceiro\" e evita reaproveitar o alcance de magia sem decisão)."
+  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2. Não é valor final. `target`/`range` são §26 — `range: 1` é PROVISÓRIO (o PRD não fixa alcance de poção; 1 é o mínimo que ainda é \"em terceiro\" e evita reaproveitar o alcance de magia sem decisão)."
 }

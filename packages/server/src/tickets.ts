@@ -36,7 +36,7 @@ export interface PartyTicket {
   readonly sessionId: string;
   readonly leaderId: string;
   /**
-   * Os dois eixos do líder (ADR 0033 D1), no lugar de `mode`. O `mode` continua aceito na
+   * Os dois eixos do líder (ADR 0035 D1), no lugar de `mode`. O `mode` continua aceito na
    * LEITURA por um deploy em rolagem (`parsePartyTicket`) — um `api` antigo ainda o emite, e a
    * migração é a mesma do snapshot: `'shared'` liga os dois, `'split'` desliga os dois.
    */
@@ -45,7 +45,7 @@ export interface PartyTicket {
   readonly huntId: string;
   readonly difficulty: string;
   /**
-   * `true`: ticket de ENTRADA numa hunt já em curso (#402, ADR 0033 D7) — `members` tem
+   * `true`: ticket de ENTRADA numa hunt já em curso (#402, ADR 0035 D7) — `members` tem
    * exatamente UM, e o `game` chama `session.enter` na sessão hospedada em vez de criá-la.
    */
   readonly join?: true;
@@ -149,7 +149,7 @@ export interface InitialCharacter {
    */
   readonly vocation?: string;
   /**
-   * Premium do personagem (ADR 0033 D3), já resolvido contra o relógio pelo `api` — a sessão
+   * Premium do personagem (ADR 0035 D3), já resolvido contra o relógio pelo `api` — a sessão
    * nunca compara datas, só lê um boolean. É o que decide o limite de venda automática do
    * LÍDER e a penalidade de morte de cada membro.
    *
@@ -601,7 +601,7 @@ function parseInitialCharacter(value: unknown): InitialCharacter | undefined {
     ...(typeof initial['vocation'] === 'string' && initial['vocation'].length > 0
       ? { vocation: initial['vocation'] }
       : {}),
-    // O Premium (ADR 0033 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
+    // O Premium (ADR 0035 D3): booleano ou AUSENTE, nunca ticket recusado. Um valor torto vira
     // Free — a mesma régua das cores e do Bestiário —, porque a linha do banco não tem CHECK.
     ...(typeof initial['premium'] === 'boolean' ? { premium: initial['premium'] } : {}),
   };

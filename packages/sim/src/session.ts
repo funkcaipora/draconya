@@ -15,6 +15,7 @@ import type { Rng, RngState } from './rng.js';
 import type { CombatEvent, PartyEvent } from './combat-events.js';
 import type { CreatureMoved, MoveResult } from './movement.js';
 import type { PresenceEvent } from './presence.js';
+import type { EquipmentChanged } from './inventory.js';
 import type { GridPoint } from './monster/step.js';
 import { Schedule } from './schedule.js';
 import type { ScheduleState, ScheduledEvent } from './schedule.js';
@@ -27,7 +28,8 @@ import type { ScheduleState, ScheduledEvent } from './schedule.js';
  * lado que conhece socket — e é isso que mantém a matemática igual entre a hunt anexada e a
  * desanexada: o evento nasce dos dois lados, e só num deles alguém o serializa.
  */
-export type DomainEvent = CreatureMoved | PresenceEvent | CombatEvent | PartyEvent;
+export type DomainEvent =
+  | CreatureMoved | PresenceEvent | CombatEvent | PartyEvent | EquipmentChanged;
 
 /**
  * Teto de eventos de domínio guardados à espera de quem os leia.
@@ -94,7 +96,7 @@ export interface SessionSnapshot {
    */
   readonly aggregatesByCharacter?: Readonly<Record<string, Aggregates>>;
   /**
-   * O instante lógico em que cada participante entrou (#397, ADR 0033 decisão 6). Opcional:
+   * O instante lógico em que cada participante entrou (#397, ADR 0035 decisão 6). Opcional:
    * snapshot anterior não tem, e a ausência de uma chave equivale a `0` — o comportamento de
    * hoje, em que o extrato leva TODOS os eventos notáveis da sessão.
    */

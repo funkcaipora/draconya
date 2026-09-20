@@ -1,6 +1,6 @@
 # Party v2 e Premium — plano de implementação (M20)
 
-**Status:** desenho aprovado pelo PRD "Party e VIP" (2026-09-16); decisões no ADR 0033; as issues
+**Status:** desenho aprovado pelo PRD "Party e VIP" (2026-09-16); decisões no ADR 0035; as issues
 do milestone [M20 · Party e VIP](https://github.com/funkcaipora/draconya/milestone/11) apontam
 para cá.
 **PRD:** `~/Downloads/draconya-prd-party-vip.md` (2026-09-16) — §1–§43; o PRD v0.9 (§15, §22.1,
@@ -35,7 +35,7 @@ C2S); ADR 0026 decisão 5 (Exura Sio excluída).
 
 ---
 
-## 2. Decisões (o que o ADR 0033 fixa)
+## 2. Decisões (o que o ADR 0035 fixa)
 
 ### D1 — Dois eixos, mutáveis, no estado da sessão
 
@@ -361,7 +361,7 @@ por membro e Σ delta = Σ gold que caiu + vendas − supplies. `pnpm load --par
 
 | # | Escopo | Task | Bloqueada por |
 |---|---|---|---|
-| 1 · [#391](https://github.com/funkcaipora/draconya/issues/391) | docs | ADR 0033 + este plano; comentar #359 (completado pelo #394) e #385 | — |
+| 1 · [#391](https://github.com/funkcaipora/draconya/issues/391) | docs | ADR 0035 + este plano; comentar #359 (completado pelo #394) e #385 | — |
 | 2 · [#392](https://github.com/funkcaipora/draconya/issues/392) | content | 8 membros, tabela 5–8, `autoSellItemTypes`, `heal.target/range` + Exura Sio, poção em terceiro, `follow`, `rule.target`, `validateBotConfig` | #391 |
 | 3 · [#393](https://github.com/funkcaipora/draconya/issues/393) | protocol | opcode 17 `party-settings`, 30 `follow-state`; `party-state`/`party-bag`/`party-settlement`/`analyzer` v2; `catalogue.targets`; testes de ida e volta | #392 |
 | 4 · [#394](https://github.com/funkcaipora/draconya/issues/394) | sim | `PartyOptions` mutável: dois eixos em tempo de hunt (completa #359), `configureParty`, líder por tempo, `premiumByCharacter` e penalidade por membro, munição no rateio, migração do snapshot, `partySummary` | #392 |

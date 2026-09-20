@@ -1,4 +1,4 @@
-// O diálogo de convite de party (#404, D7 do ADR 0033): aparece em QUALQUER tela — Cidade ou
+// O diálogo de convite de party (#404, D7 do ADR 0035): aparece em QUALQUER tela — Cidade ou
 // hunt — porque quem convida pode já estar caçando e o convite precisa chegar onde o jogador
 // estiver. Montado incondicionalmente pelo `Shell`, como `VocationChoice`: é o próprio estado
 // (`party.invites`) que decide se há o que desenhar.

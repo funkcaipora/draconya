@@ -1,4 +1,4 @@
-// As contas de apresentação da party v2 (#405, ADR 0033): a reserva proporcional de cada
+// As contas de apresentação da party v2 (#405, ADR 0035): a reserva proporcional de cada
 // membro, o rótulo do bônus/multiplicador de XP e a regra "VENDER implica PEGAR" (D2).
 //
 // Puro: nenhuma função aqui lê estado, socket ou DOM — só formata o número que já chegou do
@@ -34,7 +34,7 @@ export function reservedCapacityOf(
 }
 
 /**
- * Os dois eixos do líder (ADR 0033, D1). `shareCosts`/`splitLoot` são os campos v2; `mode` é o
+ * Os dois eixos do líder (ADR 0035, D1). `shareCosts`/`splitLoot` são os campos v2; `mode` é o
  * espelho derivado que um nó anterior manda — o helper de fallback é o ÚNICO lugar que o lê, e
  * nunca é escrito à mão aqui.
  */

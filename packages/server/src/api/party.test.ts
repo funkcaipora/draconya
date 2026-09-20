@@ -26,7 +26,8 @@ const character = (id: string, accountId: string): CharacterRecord => ({
   id, accountId, name: `Hero ${id}`, vocation: null, level: 10, xp: 0, gold: 50,
   capacity: 400, premiumUntil: null, staminaMs: 86_400_000, staminaUpdatedAt: new Date(),
   state: 'city', sessionId: null, botConfig: null, skills: {}, outfitColors: null, bestiary: null,
-  ammo: null, createdAt: new Date(),
+  ammo: null,
+  createdAt: new Date(),
 });
 
 const NODE = { nodeId: 'n1', sessions: 0, url: 'ws://n1:7171' };
@@ -277,7 +278,7 @@ describe.runIf(available)('as rotas da party (#195, ADR 0027 decisão 8)', () =>
   });
 });
 
-// A party em curso e a sala pública (#402, ADR 0033 D7/D8). O `api` sozinho não decide a
+// A party em curso e a sala pública (#402, ADR 0035 D7/D8). O `api` sozinho não decide a
 // capacidade definitiva — o que se prende aqui é a elegibilidade, o ticket de entrada e os
 // índices; a recusa por lotação de verdade é do `onEnter` no `game` (testado em host.test.ts).
 describe.runIf(available)('a party em curso e a sala pública (#402)', () => {

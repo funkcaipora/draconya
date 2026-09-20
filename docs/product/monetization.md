@@ -21,7 +21,7 @@ Fora do MVP, mas já com preparação de dados exigida: a Fase 2 prevê um marke
 - Coins vendáveis no Market por gold (ver `economy.md`).
 - Pacotes de Premium: 7, 30 ou 90 dias.
 - Benefícios Premium: +10% XP; 12h de treino offline (vs 6h Free); 20 tipos de autovenda (vs 5 Free); +1 slot de Prey; penalidade de morte de 54% (vs 60% Free).
-- O limite de autovenda **de party** (5 free / 20 premium, M20) deriva do Premium do **personagem líder**, não de cada membro — `autoSellItemTypes` em `packages/content/data/party/baseline.json` (ADR 0033 d.2). A linha acima é o limite **individual** do §22.1, ainda não implementado (ver `items.md`).
+- O limite de autovenda **de party** (5 free / 20 premium, M20) deriva do Premium do **personagem líder**, não de cada membro — `autoSellItemTypes` em `packages/content/data/party/baseline.json` (ADR 0035 d.2). A linha acima é o limite **individual** do §22.1, ainda não implementado (ver `items.md`).
 - Terceiro slot de Prey desbloqueável com Coins, independente do slot Premium.
 - Marketplace de dinheiro real para lendários e personagens: fora do MVP, UI "Em breve", mas proveniência e transferibilidade precisam existir no modelo de dados desde o início.
 
@@ -33,7 +33,7 @@ Fora do MVP, mas já com preparação de dados exigida: a Fase 2 prevê um marke
 | Bônus de XP Premium | +10% | caminho previsto: `packages/content/economia` (premium) |
 | Limite de treino offline — Premium | 12h (Free: 6h) | caminho previsto: `packages/content/economia` (premium) |
 | Limite de autovenda — Premium | 20 tipos (Free: 5) | caminho previsto: `packages/content/economia` (premium) |
-| Limite de autovenda **de party** — Free/Premium | 5 / 20 tipos, do **personagem líder** | `packages/content/data/party/baseline.json`, `autoSellItemTypes` (M20, ADR 0033 d.2) |
+| Limite de autovenda **de party** — Free/Premium | 5 / 20 tipos, do **personagem líder** | `packages/content/data/party/baseline.json`, `autoSellItemTypes` (M20, ADR 0035 d.2) |
 | Slots de Prey — Premium | +1 (2º slot) | caminho previsto: `packages/content/economia` (premium) |
 | Penalidade de morte — Premium | 54% (Free: 60%) | caminho previsto: `packages/content/economia` (premium) |
 

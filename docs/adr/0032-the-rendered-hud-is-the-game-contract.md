@@ -1,12 +1,12 @@
 # 0032 — A imagem decide: o HUD renderizado do kit é o contrato do jogo, não só da tela
 
-**Status:** aceito
+**Status:** aceito; emendado pelo [ADR 0033](0033-action-catalogue-carries-display-numbers.md) (régua do `ActionConfigModal`)
 **Data:** 2026-09-18
-**Contexto técnico:** `packages/content` (itens consumíveis, munição, moedas, cargas, vocabulário
-v2 do bot, postura, skills por família, soul, loja), `packages/sim` (estoque, reposição, motor de
-slots, automações, postura, cargas, moedas, loot na mochila, DPS/HPS), `packages/protocol`
-(`use-slot`, `select-target`, `set-stance`, `dispatch-loot`, estado dos slots, gemas),
-`packages/server` (migração v1→v2, compras pelo ledger, loja), `packages/client` (barra de ações,
+**Contexto técnico:** `packages/content` (suprimentos e munição abstratos, moedas, cargas,
+vocabulário v2 do bot, postura, skills por família, soul, loja), `packages/sim` (motor de slots,
+automações, postura, cargas, moedas, loot na mochila, DPS/HPS), `packages/protocol` (`use-slot`,
+`select-target`, `select-ammo`, `set-stance`, `dispatch-loot`, estado dos slots, gemas),
+`packages/server` (migração v1→v2, loja), `packages/client` (barra de ações, `AmmoPicker`,
 Automações, coluna direita, topo); `docs` (este ADR e `docs/hud-contract-plan.md`)
 
 ## Contexto
@@ -50,15 +50,15 @@ construída** (`sim`/`content`/`protocol`), com marco nomeado em `docs/hud-contr
 "Omitido" passa a ser um estado transitório com número de issue, nunca uma decisão. Isto emenda a
 decisão 5 do ADR 0030 e revoga a lista de "decisões permanentes contra o kit" de
 `docs/kit-fidelity-plan.md` §3b no que a imagem mostra (barra do Level, DPS/HPS, Despachar loot,
-Soul Points, contagens de consumível).
+Soul Points).
 
 Do kit, o que é contrato: a composição de `App.jsx`/`Hud.jsx`, o desenho renderizado, e as
-**classes de coisa** que `data.js` declara (moeda como item da bolsa, estoque contável, tecla por
-slot, conjuntos, posturas, bênção, boost de EXP, soul, skill por família de arma). O que continua
-NÃO sendo contrato, como no 0030: os **números** de `data.js` (nunca viram constante), o código
-morto do protótipo e os hacks de render. Quando o kit se contradiz (Utamo Vita e Magic Shield como
-duas pills do mesmo efeito), vence a leitura coerente com a mecânica de referência, registrada no
-plano.
+**classes de coisa** que `data.js` declara (moeda como saldo/ledger, munição selecionada por
+família, tecla por slot, conjuntos, posturas, bênção, boost de EXP, soul, skill por família de
+arma). O que continua NÃO sendo contrato, como no 0030: os **números** de `data.js` (nunca viram
+constante), o código morto do protótipo e os hacks de render. Quando o kit se contradiz (Utamo Vita
+e Magic Shield como duas pills do mesmo efeito), vence a leitura coerente com a mecânica de
+referência, registrada no plano.
 
 **Única classe de exceção:** nome proprietário do Tibia (palavras de magia "exori", "utamo vita";
 nomes de item literais) não entra por causa do limite de licença do ADR 0019/0031 — o slot mostra
@@ -68,7 +68,7 @@ não há "não se aplica".
 ### A barra de ações (rodapé, 124 px)
 
 1. **A barra é a configuração do bot E a superfície de disparo manual — um só vocabulário.**
-   Vinte e quatro slots (2 × 12); cada slot guarda uma ação (`spell` ou `item` consumível) mais
+   Vinte e quatro slots (2 × 12); cada slot guarda uma ação (`spell` ou `supply`) mais
    uma lista de condições (E entre elas), a tecla de atalho e a chave "automática". As cinco
    categorias do bot v1 (`heal/potion/attack/rune/support`, ADR 0002/0026) **deixam de existir**:
    `BOT_VOCABULARY_VERSION` sobe para 2, e o servidor migra a configuração v1 salva de forma
@@ -80,7 +80,7 @@ não há "não se aplica".
    cooldown (os grupos do Tibia já modelados: `attack`/`healing`/`support` para magia, mais
    `potion` para poção e `attack` para runa — vindos do conteúdo, nunca configuráveis por slot) e,
    a cada grupo pronto, tenta os slots ligados em ordem (fileira 1 da esquerda para a direita,
-   depois a fileira 2) e **pula** o que não consegue executar agora — sem mana, sem estoque, sem
+   depois a fileira 2) e **pula** o que não consegue executar agora — sem mana, sem gold, sem
    alvo, em cooldown individual (RP-003/RP-004 do PRD; a lacuna do `select()` v1 registrada em
    #362). Sem tetos por categoria: o teto é 24. As condições são as quatro do v1 (`hp`, `mana`,
    `targets`, `target-hp`) mais `condition` (efeito ativo/ausente — "castar haste só sem haste").
@@ -109,23 +109,25 @@ não há "não se aplica".
    qualquer lugar e a execução acontece na hunt — o `use-slot` fora de uma hunt é recusado com
    motivo, nunca escondido.
 
-### Estoque, munição e cargas
+### Suprimento, munição e cargas
 
-6. **P1 = SIM: suprimento é item.** Poção, runa e carga de bênção são itens empilháveis
-   (`kind: consumable`, peso, `value`, pilha de 100) na mochila; usar consome um; a barra e a
-   Mochila mostram a contagem real (`inventory.backpack[].quantity`, que o protocolo já leva).
-   O catálogo `supplies/` e o débito de gold por uso (ADR 0026 d.8, `economy.md` §20.1) são
-   revogados. **Reposição idle-first:** cada slot de item tem `restock { batch, min }` (default
-   do conteúdo, editável no `ActionConfigModal`); quando a pilha cai abaixo de `min` e há gold, o
-   bot compra `batch` ao preço do conteúdo, num lançamento do ledger (`purchase`, invariante 10),
-   limitado pela capacidade livre — ao entrar na hunt a primeira compra acontece pela mesma regra.
-   Sem gold para o próximo lote, vale a regra de saída "acabar o gold" de sempre. O jogo continua
-   abstraindo a ida ao NPC, como já abstraía o débito por uso.
-7. **P4 = SIM: munição é item no slot `ammo`.** Flecha e virote são itens empilháveis que ocupam
-   o slot de munição do set (pilha de 100; o bot puxa a próxima pilha da mochila — "pega o próximo
-   da mochila principal"), cada tiro consome um, e a reposição é a da decisão 6. O seletor por
-   família sobre o Escudo (ADR 0026 d.3) sai; Escudo e Munição são dois slots, como a imagem.
-   A `arrow` deixa de ser infinita e grátis: tem preço e lote como qualquer consumível.
+6. **P1 = SIM: suprimento é abstrato, e o gold sai no uso.** Poção e runa vivem em
+   `data/supplies/` com `price`, `effect`, `requires` e `group` (o grupo de cooldown do motor v2:
+   poção → `potion`, runa → `attack`). Usar chama `useSupply` (`casting.ts`), que debita `price`
+   do gold do personagem no ato e leva o gasto a `Aggregates.goldSpent`. **Não há pilha, não há
+   compra de lote e não há caminho `purchase` no ledger** — o débito por uso é o desenho do
+   §20.1, e não há reposição a fazer: a próxima poção é paga no uso seguinte. A única
+   exceção é a **carga de bênção**: segue item `kind: 'consumable'` não-empilhável, sem `restock`
+   nem `group` obrigatórios, e quem a consome é a TP-03 (M22).
+7. **P4 = SIM: munição é abstrata, escolhida por família.** Flecha e virote vivem em
+   `data/ammunition/` com `family` (`arrow`/`bolt`), `attack`, `price` (> 0 — **sem fallback
+   grátis**) e `requires.level`. Cada tiro debita `price` do gold. A escolha é por família:
+   opcode 14 `select-ammo` (des-queimado), validada por `requires.level` no servidor e publicada
+   em `player-stats.ammo { arrow, bolt }`; a ausência de uma família cai na **básica da família**
+   (a primeira em ordem de id), que também é paga. Com um bow/crossbow (arma `distance` de duas
+   mãos) equipado, o slot do escudo mostra a munição selecionada; clicar abre o `AmmoPicker` com
+   as opções da família liberadas pelo nível. **Sem pilha, sem `#pullNextAmmo`, sem reposição** —
+   sem gold para o tiro, o tiro não sai e a regra `out-of-gold` encerra a hunt.
 8. **Anel gasta por tempo, colar por carga, e o motor consome.** `durationMs` e `charges` deixam
    de ser campos mortos: o `sim` agenda o vencimento na fila de eventos (invariante 2), destrói o
    item ao esgotar e a automação "Renovar" equipa o próximo da mochila. O conteúdo ganha o primeiro
@@ -167,11 +169,11 @@ não há "não se aplica".
     25) lista item × quantidade × valor. Com a capacidade cheia o bot despacha sozinho (idle-first).
     Party: respeita `shareLoot` (bolsa da party) como hoje.
 13. **Skills são as do Tibia, por família.** `fist`, `club`, `sword`, `axe`, `distance`,
-    `shielding`, `magic` — a skill `melee` única (ADR 0026 d.4) é dividida na migração copiando o
-    progresso para as três famílias. **Soul Points existe:** máximo 100 (200 com Premium),
-    regenera 1 a cada 240 s (120 s Premium), consumido por magia com custo `soul` — o primeiro
-    consumidor é a conjuração de munição do paladino, que cria flechas na mochila (fecha o ciclo
-    com a decisão 7). A barra do Level mostra `xpPercentToNext`, que passa a trafegar. O painel
+     `shielding`, `magic` — a skill `melee` única (ADR 0026 d.4) é dividida na migração copiando o
+     progresso para as três famílias. **Soul Points existe:** máximo 100 (200 com Premium),
+     regenera 1 a cada 240 s (120 s Premium), consumido por magia com custo `soul` — o primeiro
+     consumidor é a conjuração de munição do paladino. A barra do Level mostra `xpPercentToNext`,
+     que passa a trafegar. O painel
     Skills tem as 11 linhas default da imagem e o modal Personalizar lista as 15 que existem
     (Fishing não existe; não entra).
 
@@ -205,22 +207,23 @@ não há "não se aplica".
 ### O que a imagem NÃO decide
 
 Tela de entrada, modais e celular seguem o ADR 0030 (P5 continua NÃO; o toggle PT/EN espera i18n;
-o "+20 % de premium" do modal Personagem continua fora). Os números de balanceamento (preço e lote
-de cada consumível, fatores de postura, fator da bênção, janela de DPS) são
+o "+20 % de premium" do modal Personagem continua fora). Os números de balanceamento (preço do
+supply e do tiro, fatores de postura, fator da bênção, janela de DPS) são
 do conteúdo e podem mudar sem ADR — o que este ADR fixa é a **forma**.
 
 ## Alternativas
 
 - **Manter o 0030 e só "terminar o M18"** — descartado: o M18 como estava (barra como
-  configuração, manual na fase 2, postura inerte, P1/P4 esperando confirmação, sem estoque)
-  produz um HUD que ainda não é a imagem; o dono pediu a imagem.
+  configuração, manual na fase 2, postura inerte, P1/P4 pendentes) produz um HUD que ainda não é
+  a imagem; o dono pediu a imagem.
 - **Contagens, postura e bolsa como decoração** — descartado pelas razões do 0030: inventa
   mecânica; e agora a alternativa honesta (construir a fonte) tem plano e marco.
-- **Estoque sem reposição automática (o jogador compra na Cidade, como no Tibia)** — descartado:
-  quebra o idle-first (a hunt de 18 h com o navegador fechado ficaria sem poção às 2 h). A
-  reposição por lote pelo ledger mantém o débito auditável e o "acabar o gold" com sentido.
-- **Munição como seleção por família (Huntera, ADR 0026 d.3)** — descartado: a imagem mostra
-  ARROW 900 / BURST 300 e a automação de troca por alvos; seleção sem pilha não tem "acabar".
+- **Suprimento como item com reposição por lote pelo ledger** — descartado: o débito por uso
+  mantém a economia auditável e o "acabar o gold" com sentido, sem uma segunda contabilidade de
+  pilha que a imagem não pede.
+- **Munição como item no slot `ammo` (pilha de 100)** — descartado em favor da seleção por
+  família (Huntera, ADR 0026 d.3): o "acabar" fica no gold, não na pilha, e é o que o slot do
+  Escudo da imagem mostra — clicar abre o `AmmoPicker`.
 - **Grupo de cooldown livre por slot (rascunho da #362)** — descartado em favor do grupo vindo do
   conteúdo: é o modelo do Tibia, não exige que o jogador entenda cooldown compartilhado, e
   elimina os tetos por categoria sem inventar uma dimensão nova.
@@ -241,25 +244,27 @@ do conteúdo e podem mudar sem ADR — o que este ADR fixa é a **forma**.
 O que fica mais fácil: cada elemento da imagem tem dono (`docs/hud-contract-plan.md` §1 mapeia
 elemento → decisão → marco → issue); as issues de M18/M21/M22 citam "ADR 0032 decisão n" em vez de
 redecidir; a #362 fecha por este ADR (P1 e P4 confirmadas pela diretriz do dono; o vocabulário v2
-está na decisão 1–3 e 9); `docs/product/*` passa a descrever um jogo com estoque, munição, cargas,
-postura, moedas e soul. O que fica mais difícil: a economia muda de débito por uso para compra por
-lote (balanceamento em `content`, testes de ledger novos, e a capacidade passa a limitar o
-estoque — um cavaleiro leva 160 poções, um mago não); o perfil de combate vira `combat-v2` (postura
+está na decisão 1–3 e 9); `docs/product/*` passa a descrever um jogo com suprimento abstrato,
+munição por família, cargas, postura, moedas e soul. O que fica mais difícil: a economia mantém o
+débito por uso (`goldSpent` no ato) e o gold passa a ser o único limitador do consumo — a poção e o
+tiro param quando o saldo acaba; o perfil de combate vira `combat-v2` (postura
 muda números — conformidade nova, ADR 0031); há uma migração de dados de personagem (bot v1 → v2,
 `melee` → três famílias) que precisa ser idempotente e testada; e a coluna
 `account.coins` deixa de ser inerte, o que puxa o E13 para dentro do plano antes do previsto. O
-que precisa mudar: ADR 0026 recebe "d.3, d.4 e d.8 substituídas pelo 0032"; ADR 0030 recebe
+que precisa mudar: ADR 0026 — d.3 e d.8 voltam a valer (seleção por família e débito por uso), d.4
+é substituída pelo 0032; ADR 0030 recebe
 "emendado pelo 0032 (decisões 2, 4, 5, 6 e 7)"; ADR 0031 ganha a nota de que fight mode entra com
 `combat-v2`; `docs/kit-fidelity-plan.md` passa a instantâneo (executado até o M17; o M18 é
-redesenhado no plano novo); `economy.md` §20.1 deixa de ser [DECIDIDO]; a issue #362 fecha.
+redesenhado no plano novo); `economy.md` §20.1 volta a ser [DECIDIDO]; a issue #362 fecha.
 A PR #409 (Party v2) precisa renumerar o seu ADR para **0033** — 0031 é o de combate, 0032 é este.
 
 ## Invariantes afetados
 
 Nenhum muda; três são exercitados. **4** (o cliente só manda intenção): `use-slot`, `select-target`,
-`set-stance` e `dispatch-loot` são intenções — quem decide elegibilidade, consome estoque, troca
-moeda e vende é o servidor; contagem, cooldown e motivo de bloqueio chegam prontos. **10** (ledger):
-compra por lote, venda do loot, crédito da bolsa e gasto de gemas são lançamentos com
-`(session_id, seq)`; a bolsa física é item, o saldo continua sendo o ledger. **11** (automação
-legítima): a barra é primeiro a vista do bot; o atalho manual é o extra, e a reposição automática
-existe porque o modo default do jogo é ninguém estar olhando.
+`select-ammo`, `set-stance` e `dispatch-loot` são intenções — quem decide elegibilidade, debita
+gold, troca moeda e vende é o servidor; cooldown e motivo de bloqueio chegam prontos. **10**
+(ledger): o débito do supply e o débito do tiro entram em `goldSpent`/`goldGained`, e venda do loot
+e gasto de gemas são lançamentos com `(session_id, seq)`; o saldo continua sendo o ledger.
+**11** (automação
+legítima): a barra é primeiro a vista do bot; o atalho manual é o extra, e o débito no uso existe
+porque o modo default do jogo é ninguém estar olhando.

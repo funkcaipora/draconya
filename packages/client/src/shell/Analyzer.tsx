@@ -18,7 +18,9 @@
 // `Box`/`Line`, e o botão "⤢ Abrir completo" abre o `AnalyzerModal` com as dez linhas do kit.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { Aggregates, NotableEvent, PartySpendingView, PartySummary } from '../state/hud.js';
+import type {
+  Aggregates, BotVocabulary, NotableEvent, PartySpendingView, PartySummary,
+} from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { describeEvent } from './event-text.js';
 import type { EventNames } from './event-text.js';
@@ -125,7 +127,7 @@ function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs:
 }
 
 /**
- * A seção PARTY do analisador (§32, ADR 0033 d.11). Só monta com `analyzer.party` — ausência é
+ * A seção PARTY do analisador (§32, ADR 0035 d.11). Só monta com `analyzer.party` — ausência é
  * solo, ou nó `game` anterior ao #400, nunca "0 jogadores" (D8).
  *
  * "Sua XP" é o agregado do VIEWER (`aggregates.xpGained`), que o host manda por personagem; "Sua
@@ -171,9 +173,10 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
   // conteúdo fixou na sessão — a tradução para o nome é apresentação (FUN-110).
   const catalogue = useHudSlice((state) => state.catalogue);
   if (events.length === 0) return null;
+  const vocabulary = catalogue?.bot as BotVocabulary | undefined;
   const names: EventNames = {
     hunts: new Map(catalogue?.hunts.map((hunt) => [hunt.id, hunt.name]) ?? []),
-    supplies: new Map(catalogue?.bot.supplies.map((supply) => [supply.id, supply.name]) ?? []),
+    supplies: new Map((vocabulary?.supplies ?? []).map((supply) => [supply.id, supply.name])),
     monsters: new Map(catalogue?.monsters.map((monster) => [monster.id, monster.name]) ?? []),
     // O bônus por marco (FUN-113) só entra quando o catálogo o trouxe: a chave ausente é
     // "não sei", e `exactOptionalPropertyTypes` não deixa escrever `undefined` no lugar.

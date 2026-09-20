@@ -4,7 +4,7 @@
 // formulário, não progresso — e não é estado quente: os personagens estão na Cidade, que é
 // inerte, e nada aqui toca `CharacterRuntime` nenhum (invariante 9).
 //
-// Desde o #402 (ADR 0033 D7) ela SOBREVIVE ao `start`: vira `state: 'hunting'` com o
+// Desde o #402 (ADR 0035 D7) ela SOBREVIVE ao `start`: vira `state: 'hunting'` com o
 // `sessionId`, e o TTL longo é renovado a cada ação. O `DISBANDED` passa a ser LAZY — quando o
 // diretório não conhece mais a sessão, `/mine` e `rooms` apagam o registro. A lotação viva é
 // lida do diretório pelo `api`, nunca escrita aqui (invariante 9).
@@ -36,7 +36,7 @@ export interface PartyRecord {
   readonly leaderId: string;
   /** Espelho derivado dos dois eixos (D1), para o cliente antigo. */
   readonly mode: PartyMode;
-  /** Os dois eixos do líder (ADR 0033 D1), mutáveis na hunt por `party-settings`. */
+  /** Os dois eixos do líder (ADR 0035 D1), mutáveis na hunt por `party-settings`. */
   readonly shareCosts: boolean;
   readonly splitLoot: boolean;
   readonly huntId: string | null;
@@ -78,7 +78,7 @@ const DEFAULT_INVITE_TTL_MS = 2 * 60_000;
 /**
  * A party que virou hunt vive muito mais que o formulário: o TTL longo é o que a faz sobreviver
  * a uma hunt longa sem virar lixo permanente no Redis se a sessão nunca for reaproveitada.
- * Renovado em toda ação da party enquanto `state === 'hunting'` (ADR 0033 D7).
+ * Renovado em toda ação da party enquanto `state === 'hunting'` (ADR 0035 D7).
  */
 const HUNTING_TTL_MS = 24 * 60 * 60_000;
 

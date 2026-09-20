@@ -1,4 +1,4 @@
-// O modal "Amigos" (#404, D8 do ADR 0033): o subconjunto do kit que já é verdade do servidor
+// O modal "Amigos" (#404, D8 do ADR 0035): o subconjunto do kit que já é verdade do servidor
 // (#403) — listar com online/onde, adicionar por nome e convidar para a party atual.
 //
 // As abas "Pedidos" e "Bloqueados" do kit (`docs/kit-reference/29-modal-social.png`) ficam de

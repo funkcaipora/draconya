@@ -14,7 +14,7 @@
 // espera SV-18; a linha DPS/HPS chegou com a PT-01 (#431): a taxa e os totais vêm prontos em
 // `party-state.members[]`, e a linha só aparece quando o servidor os mandou.
 //
-// O rodapé ganhou os DOIS interruptores do líder (#405, ADR 0033 D1): "Rateio de custos" e
+// O rodapé ganhou os DOIS interruptores do líder (#405, ADR 0035 D1): "Rateio de custos" e
 // "Dividir loot" leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
 // nunca escrito à mão) e o líder os liga/desliga EM TEMPO DE HUNT. O clique manda INTENÇÃO
 // (`party-settings`, invariante 4); quem decide se aplica é o host, e a tela só reflete o

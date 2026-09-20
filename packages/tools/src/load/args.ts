@@ -18,9 +18,9 @@ export interface LoadOptions {
   readonly json: string | null;
   /** Tamanho da party (#198): 1 é solo, o de sempre; N agrupa as sessões de N em N. */
   readonly party: number;
-  /** "Ativar rateio" (§4, ADR 0033 D1) — o antigo `shared` de `--party-mode`. Padrão `true`. */
+  /** "Ativar rateio" (§4, ADR 0035 D1) — o antigo `shared` de `--party-mode`. Padrão `true`. */
   readonly shareCosts: boolean;
-  /** "Dividir lucro" (§5, ADR 0033 D1) — o outro eixo. Padrão `true`. */
+  /** "Dividir lucro" (§5, ADR 0035 D1) — o outro eixo. Padrão `true`. */
   readonly splitLoot: boolean;
 }
 
@@ -78,7 +78,7 @@ export function parseArguments(argv: readonly string[], cpuCount: number): LoadO
     throw new ArgumentError(`--mode é "attached" ou "detached", não "${mode}"`);
   }
 
-  // Os dois eixos do ADR 0033 D1 substituem o `--party-mode` (#407, DT-04): o `/propose`
+  // Os dois eixos do ADR 0035 D1 substituem o `--party-mode` (#407, DT-04): o `/propose`
   // deixou de aceitar `mode`, e o cliente de carga não depende de um campo que está saindo do
   // fio. Só `"true"`/`"false"` são booleanos válidos — qualquer outra coisa seria `undefined`
   // silencioso, o mesmo defeito que `--sessions mil` tinha.

@@ -1,4 +1,4 @@
-// O critério de saída do M20, ponta a ponta (§5, ADR 0033, #407).
+// O critério de saída do M20, ponta a ponta (§5, ADR 0035, #407).
 //
 // **É o irmão do critério do M13, e existe pela mesma razão.** O do M13 prova que quatro
 // personagens rendem JUNTOS; este prova que OITO personagens de quatro vocações atravessam as
@@ -129,13 +129,13 @@ const raw: RawContent = {
     },
   }],
   // A cura de ALIADO (D10): o alvo `lowest-hp-member` exige um efeito `target: 'friend'` com
-  // alcance — a mesma régua que `validateBotConfig` cobra (ADR 0033 d.10).
+  // alcance — a mesma régua que `validateBotConfig` cobra (ADR 0035 d.10).
   spells: [{ id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000, effect: { kind: 'heal', amount: 60, target: 'friend', range: 30 } }],
-  supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, effect: { kind: 'heal', amount: 80 } }],
+  supplies: [{ id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion', effect: { kind: 'heal', amount: 80 } }],
   party: [{
     ...baseParty,
     maxMembers: 8,
-    // O teto de 8 do M20 (ADR 0033 D12) exige a tabela até "8": 5..8 repetem 200.
+    // O teto de 8 do M20 (ADR 0035 D12) exige a tabela até "8": 5..8 repetem 200.
     xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200 },
   }],
   progression: [{
@@ -382,7 +382,7 @@ function botConfig(over: Partial<{
   };
 }
 
-describe.runIf(ready)('critério de saída do M20 (§5, ADR 0033)', () => {
+describe.runIf(ready)('critério de saída do M20 (§5, ADR 0035)', () => {
   it('oito personagens de quatro vocações formam sala, entram em curso, trocam de líder, vendem, pesam, seguem e curam', async () => {
     await startNode('party-v2-exit-a');
     const db = (database as TestDatabase).database.db;

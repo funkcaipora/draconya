@@ -5,7 +5,7 @@ import { PartyInviteDialog } from './PartyInviteDialog.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import { INITIAL_PARTY, party } from '../party/store.js';
 
-// O diálogo de convite de party (#404, D7 do ADR 0033): montado incondicionalmente pelo `Shell`,
+// O diálogo de convite de party (#404, D7 do ADR 0035): montado incondicionalmente pelo `Shell`,
 // ele aparece em QUALQUER tela — Cidade ou hunt — porque quem convida pode já estar caçando.
 // Quem decide se há o que desenhar é `party.invites` (RF-06).
 

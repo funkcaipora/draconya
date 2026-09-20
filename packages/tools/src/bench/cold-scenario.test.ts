@@ -33,7 +33,7 @@ describe('the cold-hunts bench scenario (#179)', () => {
 
   it('PARTY=8: eight characters per instance build and advance without throwing (#407)', () => {
     // O `bench:hunts PARTY=8` não roda no CI; este teste é o que reprova no PR se o cenário
-    // deixar de aceitar o teto de 8 que o M20 introduz (ADR 0033 D12) — `maxMembers: 8` no
+    // deixar de aceitar o teto de 8 que o M20 introduz (ADR 0035 D12) — `maxMembers: 8` no
     // fixture, e oito `enter` na MESMA instância.
     const content = scenario();
     expect(content.party.maxMembers).toBe(8);

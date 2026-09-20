@@ -75,7 +75,7 @@ mundo em canvas. Nada nela toca `world`.
 
 **É um `Panel dock` FIXO desde #258 (D6).** Antes, a barra do topo montava e desmontava a janela
 inteira (`{open.analyzer && <Analyzer />}`); agora ela está sempre montada na coluna da direita,
-como `BotPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
+como `AutomationsPanel`/`EquipmentPanel` (#161/#162) — o botão da barra só MINIMIZA (`collapsed`), nunca
 remove. **Nasce aberta** (FUN-115; o §16.1 dizia minimizada): quem decide se o corpo aparece é a
 barra do topo, e uma janela que abre minimizada é uma janela que abre vazia. Minimizada, o tempo
 de sessão fica na barra de título (`meta` do `Panel`). Ao encerrar ela reabre sozinha — um
@@ -138,7 +138,7 @@ Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `
 dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
 `Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.
 
-O M20 (#400, ADR 0033 d.11) acrescentou o bloco **`analyzer.party`** à seção PARTY dos Detalhes da
+O M20 (#400, ADR 0035 d.11) acrescentou o bloco **`analyzer.party`** à seção PARTY dos Detalhes da
 Caçada — o mesmo objeto em `session-state.partySummary` (o `party` do `session-state` continua
 sendo o roster, #196): `players`, `uniqueVocations`, `xpPercent`, `totalXp`, `totalSupplies`,
 `shareCosts`, `splitLoot`, `bagValue`, `bagWeight` e `autoSell: { used, limit }`. `autoSell.limit`

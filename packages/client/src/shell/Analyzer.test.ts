@@ -33,13 +33,13 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
 const catalogue: Catalogue = {
   hunts: [{ id: 'rat-cellars', name: 'Rat Cellars', recommendedLevel: 1, difficulties: ['cautious'], difficultyDetails: [], outfitIds: [], lootDrops: 0, monsters: [], loot: [] }],
   monsters: [{ id: 'rat', name: 'Rato' }],
-  ammunition: [], vocations: [], vocationLevel: 8,
+  vocations: [], vocationLevel: 8,
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
-    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', requires: {} }],
+    vocabularyVersion: 1, slots: {},
+    spells: [], supplies: [{ id: 'mana-potion', name: 'Poção de Mana', price: 50, effect: 'mana', group: 'potion', requires: {} }],
   },
   items: [],
+  ammunition: [],
   bestiary: { milestones: [10_000], xpBonusPercentPerMilestone: 1 },
 };
 
@@ -191,7 +191,7 @@ describe('Analyzer — janela flutuante (#315, RF-01..RF-06)', () => {
   });
 });
 
-describe('Analyzer — caixa PARTY (#405, §32, ADR 0033 d.11)', () => {
+describe('Analyzer — caixa PARTY (#405, §32, ADR 0035 d.11)', () => {
   const summary = {
     players: 4, uniqueVocations: 3, xpPercent: 175, totalXp: 10_000,
     totalSupplies: 40, shareCosts: true, splitLoot: true,

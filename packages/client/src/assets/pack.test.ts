@@ -3,6 +3,7 @@ import { outfitColor } from './outfit.js';
 import { AssetPack, DIRECTIONS } from './pack.js';
 import { spriteBytes } from './sprites.js';
 import type { Sprite } from './sprites.js';
+import { NO_DISPLACEMENT } from '../world/walking-tile.js';
 
 /**
  * O pacote inteiro, servido de um objeto em memória.
@@ -21,12 +22,13 @@ class FakeBitmap implements Sprite {
 
 /** Um `.dat` de mentira precisa ser protobuf de verdade — o leitor é o real. */
 import {
-  appearance, appearances as encodeAppearances, frameGroup,
+  appearance, appearances as encodeAppearances, flags, frameGroup,
 } from './testing.js';
 
 const CATALOG = [
   { type: 'appearances', file: 'app.dat' },
   { type: 'sprite', file: 'folha.bmp.lzma', spritetype: 0, firstspriteid: 1, lastspriteid: 288 },
+  { type: 'sprite', file: 'grande.bmp.lzma', spritetype: 3, firstspriteid: 300, lastspriteid: 335 },
 ];
 
 /** Uma faixa de ids consecutivos, para escrever `frameGroup` de 96 quadros sem digitá-los. */
@@ -41,6 +43,9 @@ const ids = (from: number, count: number) => Array.from({ length: count }, (_, i
 const DAT = encodeAppearances({
   object: [
     appearance({ id: 357, frameGroups: [frameGroup({ spriteIds: [10] })] }),
+    // Um objeto grande: o primeiro sprite mora na folha de `spritetype` 3 (64×64), e a
+    // `objectSize` tem que sair em TILES — `{2, 2}`, não `{64, 64}`.
+    appearance({ id: 358, frameGroups: [frameGroup({ spriteIds: [300] })] }),
     // 4×2 e não 4×4 como a grama real: largura e altura DIFERENTES, para um teste poder
     // distinguir "trocou os dois" de "acertou".
     appearance({
@@ -58,6 +63,9 @@ const DAT = encodeAppearances({
           phases: [[100, 100], [100, 100], [100, 100]],
         }),
       ],
+      // O shift do outfit (#386): o walking tile e o desenho do sprite o usam. O 128 fica
+      // SEM, de propósito — é o caso comum e o teste de `{0, 0}`.
+      flags: flags({ shift: { x: 8, y: 8 } }),
     }),
     appearance({
       id: 128,
@@ -241,6 +249,39 @@ describe('AssetPack (FUN-23)', () => {
     expect(pack.objectPattern(355)).toEqual({ width: 4, height: 2 });
     expect(pack.objectPattern(357)).toEqual({ width: 1, height: 1 });
     expect(pack.objectPattern(99_999)).toEqual({ width: 1, height: 1 });
+  });
+
+  it('`objectSize` sai em TILES, pela folha em que mora o PRIMEIRO sprite (M23, D3)', async () => {
+    // A dimensão é a RESERVA da classificação de camada: um objeto passável sem flag que mede
+    // mais de um tile transborda para o vizinho e precisa de ordem espacial. Ela vem da
+    // geometria que o catálogo já declara por `spritetype` — 0 é 32×32, 3 é 64×64 —, então é
+    // síncrona e não baixa folha nenhuma.
+    // Mutação que mata: devolver pixels (`{64, 64}`), ou procurar a folha errada por `<` no
+    // lugar de `<=` na faixa; ou id desconhecido lançando em vez de `{1, 1}`.
+    const { pack, baixadas } = await build();
+    expect(pack.objectSize(358)).toEqual({ width: 2, height: 2 });
+    expect(pack.objectSize(357)).toEqual({ width: 1, height: 1 });
+    expect(pack.objectSize(99_999)).toEqual({ width: 1, height: 1 });
+    expect(baixadas).toEqual(['catalog-content.json', 'app.dat']);
+  });
+
+  it('`outfitDisplacement` devolve o `shift` do OUTFIT, e `{0, 0}` no caso comum (#386)', async () => {
+    // O shift já era lido do `.dat` para toda aparência, mas só o objeto o usava; o walking tile
+    // (#386) o precisa no outfit. Ler `object` em vez de `outfit` daria `{0, 0}` para o 21 (o
+    // objeto 355 não tem shift), e o teste do 128 prende o caso comum.
+    // Mutação que mata: `this.#appearances.object.get(...)` no lugar de `outfit`.
+    const { pack } = await build();
+    expect(pack.outfitDisplacement(21)).toEqual({ x: 8, y: 8 });
+    // O caso comum é o MESMO objeto congelado — nada alocado por criatura por quadro.
+    expect(pack.outfitDisplacement(128)).toBe(NO_DISPLACEMENT);
+    expect(pack.outfitDisplacement(99_999)).toBe(NO_DISPLACEMENT);
+  });
+
+  it('`outfitDisplacement` de id que não existe não lança (#386)', async () => {
+    // Um `?.flags` mal encadeado explodiria no viewport a cada quadro de uma criatura cujo
+    // outfit saiu do pacote — a degradação certa é a âncora, nunca um `TypeError`.
+    const { pack } = await build();
+    expect(pack.outfitDisplacement(355)).toBe(NO_DISPLACEMENT);
   });
 
   it('`outfit` com cores sai PINTADO: o vermelho do template multiplica a cor do corpo', async () => {

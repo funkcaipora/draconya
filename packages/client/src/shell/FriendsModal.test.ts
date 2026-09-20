@@ -9,15 +9,14 @@ import { INITIAL_PARTY, party } from '../party/store.js';
 import type { FriendView } from '../friends/api.js';
 import type { PartyView } from '../party/api.js';
 
-// Amigos (#404, D8 do ADR 0033): o subconjunto do kit social que o servidor já tem (#403) —
+// Amigos (#404, D8 do ADR 0035): o subconjunto do kit social que o servidor já tem (#403) —
 // listar com online/onde (RF-04), adicionar por nome (RF-04) e convidar para a party atual,
 // desabilitado com o motivo quando não há party (RF-05).
 
 const catalogue: Catalogue = {
   hunts: [], monsters: [], ammunition: [],
   bot: {
-    vocabularyVersion: 1, advancedFromLevel: 50, slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
+    vocabularyVersion: 1,
     spells: [], supplies: [],
   },
   items: [],

@@ -125,7 +125,7 @@ function HuntDetailsBody() {
   const monsters = monstersOf(hunt, catalogue?.monsters ?? []);
   const lootItems = lootItemsOf(hunt, catalogue?.items ?? []);
 
-  // A configuração de loot do líder (#405, ADR 0033 D2): só existe com party e `splitLoot`
+  // A configuração de loot do líder (#405, ADR 0035 D2): só existe com party e `splitLoot`
   // ligado — sem bolsa compartilhada não há o que configurar, e o item cai direto na mochila
   // de quem matou, como no solo. `loot` ausente é nó anterior ao #400: some a seção inteira.
   const loot = partyView?.loot;

@@ -1,6 +1,7 @@
 {
   "id": "strike",
   "name": "Golpe Arcano",
+  "description": "Causa 40 de dano mágico no seu alvo atual.",
   "manaCost": 15,
   "cooldownMs": 2000,
   "group": "attack",

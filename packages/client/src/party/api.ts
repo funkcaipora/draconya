@@ -2,7 +2,7 @@
 // personagem — o personagem está na Cidade e o socket não tem nada a ver com isso. Cada
 // chamada leva `characterId`: é o personagem de QUEM fala, e o servidor confere a posse.
 //
-// Desde o M20 (#402/#403, ADR 0033 decisões 6/7/8) a mesma família de rotas cobre a sala
+// Desde o M20 (#402/#403, ADR 0035 decisões 6/7/8) a mesma família de rotas cobre a sala
 // pública (`publish`/`unpublish`/`rooms`), o convite reverso (`invites[]` em `mine` e `decline`)
 // e a entrada numa party EM CURSO — que devolve um TICKET, não o formulário (D7). O cliente
 // manda intenção; quem decide estado, lotação, faixa de level e nó é o `api` (invariante 4).

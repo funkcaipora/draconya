@@ -12,8 +12,10 @@ import {
 import type {
   HuntDifficultyName, InventoryState, Ruleset, SessionSnapshot, SkillsState,
 } from '@draconya/sim';
-import { advancedFeaturesUsed, botConfigSchema, validateBotConfig } from '@draconya/content';
-import type { BotConfig, Content } from '@draconya/content';
+import {
+  BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, migrateBotConfigV1, validateBotConfigV2,
+} from '@draconya/content';
+import type { BotConfigV2, Content } from '@draconya/content';
 import type {
   SessionBuilder, SessionFactory, SessionRestorer, TransitionRequest,
 } from './host.js';
@@ -175,7 +177,7 @@ export function createCitySessionFactory(
 }
 
 /**
- * O personagem de UM recém-chegado numa sessão que já existe (#402, ADR 0033 D7). Mesma costura
+ * O personagem de UM recém-chegado numa sessão que já existe (#402, ADR 0035 D7). Mesma costura
  * de `createSession`: função, e não `Content`, para o host não precisar conhecer balanceamento.
  */
 export function createLateJoiner(
@@ -192,10 +194,10 @@ export function createLateJoiner(
  */
 function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
   const accept = createBotConfigValidator(content);
-  const botConfigs: Record<string, BotConfig> = {};
+const botConfigs: Record<string, BotConfigV2> = {};
   const premiumByCharacter: Record<string, boolean> = {};
   for (const member of party.members) {
-    // O Premium do personagem (ADR 0033 D3) entra no estado da party: o limite de venda é do
+    // O Premium do personagem (ADR 0035 D3) entra no estado da party: o limite de venda é do
     // LÍDER, mas a penalidade de morte é de quem morre. Ausente no ticket é Free.
     premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
     const raw = member.initialCharacter.botConfig;
@@ -410,51 +412,61 @@ function huntFor(
  * vocabulário para rotear uma mensagem, e dar a ele o conteúdo todo seria dar acesso a
  * balanceamento a quem cuida de socket. É a mesma forma do `settleProgress` que o `api` recebe.
  *
- * As três checagens, na ordem em que custam a descobrir:
+ * As duas checagens, na ordem em que custam a descobrir:
  *
  *   1. **forma** — `botConfigSchema` recusa condição fora do vocabulário, operador que não
  *      existe, percentual fora de 0–100;
  *   2. **conteúdo** — slots, versão de vocabulário e referência cruzada de magia, supply e
- *      monstro, tudo contra o `content` deste nó;
- *   3. **level** — §13.2: o bot avançado abre no 50, e o recorte é dado (`advancedOnly`).
+ *      monstro, tudo contra o `content` deste nó.
+ *
+ * O gate de level do §13.2 foi revogado no AB-03 (ADR 0032 d.4): o `level` continua na
+ * assinatura porque o host o carrega, mas não recusa mais nada.
  *
  * A recusa devolve TEXTO, não booleano, porque ele vai direto para o jogador num
  * `system-message`. "Sua configuração é inválida" sem dizer onde é o que faz alguém desistir
  * de configurar o bot.
  */
 export type BotConfigDecision =
-  | { readonly ok: true; readonly config: BotConfig }
+  | { readonly ok: true; readonly config: BotConfigV2 }
   | { readonly ok: false; readonly reason: string };
 
+/**
+ * O juiz único da configuração do bot (FUN-81, AB-09). Migra v1→v2 e valida contra o conteúdo
+ * fixado na sessão (invariante 7). A migração é pura e idempotente (AB-03): v2 volta só
+ * parseada, v1 vira v2. Versão desconhecida é recusa com motivo — o portão de versão.
+ */
 export function createBotConfigValidator(
   content: Content,
 ): (raw: unknown, level: number) => BotConfigDecision {
-  return (raw, level) => {
-    const parsed = botConfigSchema.safeParse(raw);
-    if (!parsed.success) {
-      const first = parsed.error.issues[0];
-      const where = first === undefined || first.path.length === 0
-        ? ''
-        : ` em "${first.path.join('.')}"`;
-      return { ok: false, reason: `configuração fora do vocabulário${where}` };
+  return (raw, _level) => {
+    // O portão de versão ANTES da migração: `migrateBotConfigV1` aceita qualquer v1 bem formado,
+    // e uma config com `version: 99` que trouxesse as cinco categorias migraria em silêncio.
+    const version = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)['version']
+      : undefined;
+    if (version !== BOT_VOCABULARY_VERSION_V1 && version !== BOT_VOCABULARY_VERSION) {
+      return {
+        ok: false,
+        reason: `configuração na versão ${String(version)} de vocabulário; este servidor `
+          + `entende ${BOT_VOCABULARY_VERSION}`,
+      };
     }
 
-    const problems = validateBotConfig(parsed.data, content);
+    let config: BotConfigV2;
+    try {
+      config = migrateBotConfigV1(raw);
+    } catch {
+      return { ok: false, reason: 'configuração fora do vocabulário' };
+    }
+
+    const problems = validateBotConfigV2(config, content);
     if (problems.length > 0) {
       // Só o primeiro problema vai para o socket. A lista inteira é da UI (M10), que consegue
       // apontar slot por slot; numa linha de chat, cinco motivos viram ruído.
       return { ok: false, reason: problems[0] as string };
     }
 
-    const advanced = advancedFeaturesUsed(parsed.data, content.bot);
-    if (advanced.length > 0 && level < content.bot.advancedFromLevel) {
-      return {
-        ok: false,
-        reason: `bot avançado exige level ${content.bot.advancedFromLevel}: `
-          + advanced.join(', '),
-      };
-    }
-    return { ok: true, config: parsed.data };
+    return { ok: true, config };
   };
 }
 

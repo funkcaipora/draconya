@@ -89,24 +89,21 @@ const TEST_RAT = {
   loot: { gold: { chance: 1, min: 2, max: 2 }, items: [] },
 };
 
-/** Uma magia e um supply, para as regras de bot destes testes apontarem para algo que existe. */
+/** Uma magia e os suprimentos abstratos, para as regras de bot apontarem para algo que existe. */
 export const TEST_SPELL = {
   id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1_000,
   effect: { kind: 'heal', amount: 60 },
 };
-export const TEST_SUPPLY = {
-  id: 'health-potion', name: 'Poção de Vida', price: 45,
-  effect: { kind: 'heal', amount: 80 },
-};
-
-/**
- * O recorte do bot avançado neste conteúdo de teste é `lowest-hp` (FUN-81).
- *
- * O conteúdo REAL tem a lista vazia — o §13.2 não decidiu o recorte, e inventá-lo em
- * `bot/baseline.json` seria decidir balanceamento disfarçado de implementação. Aqui ela é
- * preenchida de propósito: o gate é mecanismo, e mecanismo se testa com dado de teste.
- */
-export const TEST_ADVANCED_POLICY = 'lowest-hp';
+export const TEST_SUPPLIES = [
+  {
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+    effect: { kind: 'heal', amount: 80 },
+  },
+];
+/** A munição abstrata (ADR 0026 d.3): família, dano do tiro e preço por disparo. */
+export const TEST_AMMUNITION = [
+  { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 20, price: 1 },
+];
 
 /**
  * O conteúdo de teste ANTES de virar `Content`, para quem precisa trocar uma peça.
@@ -121,11 +118,15 @@ export function rawTestContent(): RawContent {
   const raw: RawContent = {
     monsters: [TEST_RAT], hunts: [TEST_HUNT], vocations: [],
     progression: [TEST_PROGRESSION], combat: [TEST_COMBAT], stamina: [TEST_STAMINA], party: [TEST_PARTY],
-    spells: [TEST_SPELL], supplies: [TEST_SUPPLY], weaponFamilies: TEST_WEAPON_FAMILIES,
- // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
- bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
-    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-    advancedOnly: { targetPolicies: [TEST_ADVANCED_POLICY] } }],
+    spells: [TEST_SPELL], supplies: TEST_SUPPLIES, ammunition: TEST_AMMUNITION,
+    weaponFamilies: TEST_WEAPON_FAMILIES,
+    // Sem itens por padrão: os testes que precisam de peça (colar, anel, espada) acrescentam a
+    // própria na cópia do raw. A lista vazia existe para `[...raw.items]` continuar funcionando.
+    items: [],
+  // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta. O gate de
+  // level saiu no AB-03; aqui o vocabulário é o v2.
+  bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
+    slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     maps: [TEST_MAP, TEST_CITY_MAP], routes: [TEST_ROUTE],
     city: { mapId: 'city', stepDurationMs: 500 },
   };

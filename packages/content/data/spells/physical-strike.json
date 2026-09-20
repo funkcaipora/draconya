@@ -1,6 +1,7 @@
 {
   "id": "physical-strike",
   "name": "Physical Strike",
+  "description": "Causa dano mágico no seu alvo atual.",
   "vocationId": "druid",
   "minLevel": 16,
   "manaCost": 20,

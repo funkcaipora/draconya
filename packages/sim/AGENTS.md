@@ -141,16 +141,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   0027). `#bag` guarda gold e itens; a capacidade é `Σ capacity` dos presentes calculada na
   hora — guardar e somar/subtrair divergia no primeiro level up, que reescreve `capacity`
   pela tabela. O excedente vai para a caixa do líder; `itemsLooted` conta para todo presente.
-  Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no cadáver) e
+Desde o #395 a lista de `collect` filtra DEPOIS do `rollLoot` (item fora fica no cadáver) e
   `autoSell` vira gold no drop, cortado pelo `autoSellLimit` do líder; cada `BagEntry`/
   `GoldEntry` guarda `eligible` = presentes no abate (§16.1), e `#settle` vende por entrada —
   na saída (com quem sai), no fim e ao desligar `splitLoot`, com `reason` no evento.
   O settlement (`#settle`) roda no `onLeave` COM quem sai, no `onEnd` e no `toggle`, antes de a
-  `Session` emitir os extratos — é o que põe o gold neles. O rateio do supply é uma `Purse`
-  (`casting.ts`):
-  `useSupply` confere `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de
-  um (`ownPurse`) é o solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de
-  cada um, o resto do usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou.
+  `Session` emitir os extratos — é o que põe o gold neles. O supply do vocabulário v2 é
+  **abstrato**: usar debita o `price` do gold no ato (`useSupply`, `casting.ts`), sem pilha e
+  sem reposição. O rateio do supply é uma `Purse` (`casting.ts`): `useSupply` confere
+  `canAfford` antes de qualquer efeito e chama `pay` depois, e a bolsa de um (`ownPurse`) é o
+  solo de sempre; a compartilhada (`#sharedPurse`) debita `floor(c/n)` de cada um, o resto do
+  usuário, cobre quem não tem e credita `goldSpent` a cada um pelo que pagou — o extrato de cada
+  membro sai equalizado.
 - **Em party, morrer e disparar regra de saída são `leave`, e a cascata roda DEPOIS do extrato
   de quem saiu** (#193). `#depart` chama `session.leave` — que roda `onLeave` (settlement) e SÓ
   ENTÃO emite o extrato — e emite `member-left` com o extrato e o personagem, porque o
@@ -180,7 +182,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
 - **Magia e supply RECUSAM, nunca lançam** (`casting.ts`). Sem mana, sem gold, em cooldown, fora
   de alcance: a ação não acontece e a sessão segue. Uma exceção aqui derrubaria a hunt por uma
   regra que o jogador escreveu certa. A recusa é tipada, e só a de cooldown carrega prazo — é o
-  que faz a categoria do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
+  que faz o grupo do bot voltar no vencimento em vez de engatilhar e dormir para sempre.
 - **A mana sai por ÚLTIMO.** Level, cooldown, alvo e alcance são conferidos antes de descontar.
   Descontar primeiro é como se perde mana sem lançar nada.
 - **Inventário é POSICIONAL, e `Inventory` não conhece conteúdo** (`inventory.ts`, #160). Mochila
@@ -240,7 +242,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   0027): o shard da Cidade e a party de hunt. Numa sessão de um dono só sair é encerrar.
   `Ruleset.shared` continua dizendo se é shard — o que muda é ter extrato e snapshot.
 - **A hunt hospeda N participantes, e o que é de um vive num `Runner`** (#203). Caminhante da
-  rota, bot compilado, categorias engatilhadas, lure, anel, golpe engatilhado e os três avisos
+  rota, bot compilado, grupos engatilhados, lure, anel, golpe engatilhado e os três avisos
   são POR PARTICIPANTE, num `Map` por id; todo evento de personagem já carrega `subject`, e
   `#runnerOf` encontra o seu. Spawn e regras de saída são da INSTÂNCIA e entram na fila com o
   primeiro a entrar — o segundo não os dobra. O segundo entra por `placeNear` (tile é
@@ -303,13 +305,18 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   `spell`. A ordem dos alvos de uma área é a de ENTRADA e é contrato; morto é pulado. O estado
   "engatilhada OU agendada" é POR ABILITY: a básica em `attackReady`, as declaradas em
   `scheduledAbilities` (opcional no snapshot, sem bump).
-- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05).
-  `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf` lê `weapon.range` dela, e
-  só sem arma vale o alcance do perfil `fist` (`content.unarmed`). `#strike` despacha pelo
-  `weapon.kind`: `melee` como sempre; `distance` atira a MUNIÇÃO — `#ammoFor` devolve a escolhida
-  da família se o gold paga o tiro, senão a grátis, e avisa (`ammo-fallback`) uma vez por sessão —
-  com o `attack` dela pela skill `distance`, debitando `price` em `goldDelta` E `goldSpent` como o
-  supply; `wand` gasta `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
+- **O alcance é da ARMA, e cada tipo bate do seu jeito** (#152, ADR 0026; perfis no CMB-05;
+  munição abstrata desde #420). `Inventory.weapon()` é a definição da arma na mão; `#attackRangeOf`
+  lê `weapon.range` dela, e só sem arma vale o alcance do perfil `fist` (`content.unarmed`).
+  `#strike` despacha pelo `weapon.kind`: `melee` como sempre; `distance` atira a munição
+  ESCOLHIDA da família (ADR 0032 decisão 7): `#ammoFor` devolve a `Ammunition` do `character.ammo`
+  (ou a básica da família, a primeira em ordem de id), e o `attack`/`damageType` do tiro são os
+  dela pela skill `distance`. **Não existe munição grátis:** sem saldo que cubra o `price`, o tiro
+  NÃO sai — nem `shot`, nem dano. Resolvido o golpe, `#strike` debita o `price` no personagem e em
+  `aggregates.goldSpent`, e emite `shot` com o `ammoId`. A escolha é por família, via
+  `CharacterRuntime.selectAmmo`, que valida `requires.level`; o `select-ammo` do host a leva a
+  `player-stats.ammo`. `wand` gasta
+  `manaPerHit`, causa dano MÁGICO por faixa (`rng.integer(min, max)`, uma
   rolagem por golpe — contrato como o loot) e rende `spell-cast` pela mana. **O poder sai de
   `resolveWeaponPower` com o PERFIL da arma** (`WeaponProfile`: família, tipo, alcance, `power` ou
   `fixedDamage`): a família aponta a skill e a prática no conteúdo, e o ruleset não conhece nome de
@@ -318,8 +325,7 @@ equivalência não depende de fórmula nenhuma estar escrita com cuidado.
   **Wand sem mana não bate**: o golpe fica agendado para o intervalo seguinte, sem gastar mana nem
   praticar. A prática é UMA por golpe e não depende do dano final: imune, resistente ou morto no
   impacto ainda pratica. O tiro emite `shot` ANTES do `creature-hit`; o projétil é da tabela,
-  resolvido no hospedeiro (invariante 6). `CharacterState.ammo` (família → id) é opcional e viaja
-  no snapshot; `selectAmmo` só confere o level. `hands-full`: bow com escudo, ou escudo com bow, é
+  resolvido no hospedeiro (invariante 6). `hands-full`: bow com escudo, ou escudo com bow, é
   recusado — nunca trocado.
 - **A defesa é da PEÇA, e a fonte é do `Inventory`** (CMB-04, emenda do ADR 0031).
   `Inventory.defenseSource` escolhe escudo → arma corpo a corpo de uma mão → nenhuma (DT-01/02),

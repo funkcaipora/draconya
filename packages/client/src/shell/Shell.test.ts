@@ -152,8 +152,8 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
 
   // #348, SV-12: a BuffBar mostra as condições ativas sobre o mundo, logo depois do WorldOverlay.
   it('mounts the BuffBar with the active conditions, after the world overlay and before the top bar', async () => {
-    hud.set((state) => ({
-      ...state,
+    hud.set(() => ({
+      ...INITIAL_HUD,
       conditions: [{ kind: 'haste', remainingMs: 60_000 }],
       conditionsReceivedAtMs: performance.now(),
     }));
@@ -164,5 +164,13 @@ it('always mounts the player vitals overlay inside the world stage (#328, RC-15)
     expect(buffBarIndex).toBeGreaterThan(overlayIndex);
     expect(topbarIndex).toBeGreaterThan(buffBarIndex);
     expect(html).toContain('Haste');
+  });
+
+  // #420: o remetente de `bot-config` tem UM dono só — a casca —, senão o cleanup de um painel
+  // condicional zeraria o do outro.
+  it('installs the bot-config sender once, as the single owner of the store singleton', async () => {
+    const source = await readFile(new URL('./Shell.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('setConfigSender');
+    expect(source).toContain("type: 'bot-config'");
   });
 });

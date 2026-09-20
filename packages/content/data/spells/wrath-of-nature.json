@@ -1,6 +1,7 @@
 {
   "id": "wrath-of-nature",
   "name": "Wrath of Nature",
+  "description": "Causa dano de terra numa área de 11x11 ao seu redor.",
   "vocationId": "druid",
   "minLevel": 55,
   "manaCost": 700,

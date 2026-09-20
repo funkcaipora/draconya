@@ -1,26 +1,15 @@
-// Os andares que a tela mostra, e o véu de cada um (FUN-121). Puro: aritmética sobre
-// números, extraída do viewport para ser travada sem Pixi — um sinal errado aqui é o depot
-// desenhado por cima da rua, e só apareceria olhando a tela.
+// O véu de cada andar (FUN-121). Puro: aritmética sobre números, extraída do viewport para ser
+// travada sem Pixi — um sinal errado aqui é o depot desenhado por cima da rua, e só apareceria
+// olhando a tela. Que andares a tela mostra é `visibility.ts` (M23, D7).
 
 /**
- * A superfície: na superfície e acima dela vê-se do andar do jogador até o 7, cada andar de
- * baixo sob um véu; no subsolo (8+) só o andar do jogador. É o que o Huntera faz, e o que o
- * Tibia faz sem telhado.
+ * A superfície: o andar 7. Que andares a tela mostra — acima até a cobertura, abaixo até
+ * aqui; no subsolo dois para cada lado — é `visibility.ts` (M23, D7); aqui fica só o véu.
  */
 export const SURFACE_FLOOR = 7;
 
 /** Quanto cada andar abaixo do jogador escurece: o cinza multiplica a cada nível. */
 export const VEIL_PER_FLOOR = 0.55;
-
-/**
- * Os andares a desenhar para quem está em `z`, entre os que a cena tem, do mais fundo ao do
- * jogador — a ordem de pintura, o de baixo primeiro. Na superfície, do 7 até o dele; no
- * subsolo, só o dele. Andar acima do jogador nunca entra: não há telhado.
- */
-export function floorsBelow(floors: readonly number[], z: number): number[] {
-  const deepest = z <= SURFACE_FLOOR ? SURFACE_FLOOR : z;
-  return floors.filter((floor) => floor >= z && floor <= deepest).sort((a, b) => b - a);
-}
 
 /** O cinza de um andar `below` níveis abaixo do jogador: 0 é o andar dele, sem véu. */
 export function veilTint(below: number): number {

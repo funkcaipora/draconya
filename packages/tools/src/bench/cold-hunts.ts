@@ -36,7 +36,7 @@ import {
 
 const HUNTS = Number(process.env['HUNTS'] ?? 5_000);
 /**
- * Personagens por instância (#407, ADR 0033 D12): 1 é o solo de sempre; 8 é o teto que o M20
+ * Personagens por instância (#407, ADR 0035 D12): 1 é o solo de sempre; 8 é o teto que o M20
  * introduz. É a medição dos laços de até 8 por abate, supply e golpe que o plano §5 prevê.
  */
 const PARTY = Math.max(1, Number(process.env['PARTY'] ?? 1));

@@ -12,7 +12,7 @@
 // (ADR 0030 §6: "o tile GOLD da Bolsa mostra o saldo, nunca um item" — o mesmo padrão que
 // `EquipmentPanel.tsx` já usa para o personagem) e o resto preenchido com `Slot empty`.
 //
-// v2 (#405, ADR 0033 d.3): o valor total, a "sua capacidade reservada" (a MINHA entrada de
+// v2 (#405, ADR 0035 d.3): o valor total, a "sua capacidade reservada" (a MINHA entrada de
 // `bag.reservations`, com o percentual) e o badge OVERWEIGHT quando `bag.overweight === true`.
 // Cada campo só aparece quando o servidor o mandou — ausente é nó `game` anterior ao #400, ou
 // "não se aplica", nunca um zero fabricado (D8). A janela monta por `splitLoot`, não pelo

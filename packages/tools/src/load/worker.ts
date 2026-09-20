@@ -21,7 +21,7 @@ export interface WorkerCommand {
   readonly rampMs: number;
   /** Tamanho da party (#198). 1 é solo. */
   readonly party: number;
-  /** Os dois eixos do ADR 0033 D1 (#407): substituem o antigo `partyMode`. */
+  /** Os dois eixos do ADR 0035 D1 (#407): substituem o antigo `partyMode`. */
   readonly shareCosts: boolean;
   readonly splitLoot: boolean;
 }

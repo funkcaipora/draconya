@@ -1,6 +1,7 @@
 {
   "id": "hells-core",
   "name": "Hell's Core",
+  "description": "Causa dano de fogo numa área de 9x9 ao seu redor.",
   "vocationId": "sorcerer",
   "minLevel": 60,
   "manaCost": 1100,

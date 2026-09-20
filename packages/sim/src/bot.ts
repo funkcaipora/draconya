@@ -1,23 +1,23 @@
-// Compilador de regras do bot (FUN-80, ADR 0002).
+// Compilador de regras do bot (FUN-80, ADR 0002; motor de grupos no AB-07, ADR 0032 d.2).
 //
-// A configuração do jogador chega como DADO — o vocabulário fechado da FUN-73 — e sai daqui
-// como um vetor de funções puras `(view) => boolean`. Interpretar o JSON a cada avaliação é o
-// caminho fácil e errado: com 5.000 hunts e cinco categorias por personagem, cada avaliação
-// alocaria o objeto de condição de novo, e o `AGENTS.md` deste pacote é explícito — "alocação
-// por evento é o que custa caro aqui".
+// A configuração do jogador chega como DADO — o vocabulário v2 — e sai daqui como um vetor de
+// funções puras `(view) => boolean`, agrupado pelo GRUPO DE COOLDOWN do conteúdo. Interpretar o
+// JSON a cada avaliação é o caminho fácil e errado: com 5.000 hunts e dezenas de slots por
+// personagem, cada avaliação alocaria o objeto de condição de novo, e o `AGENTS.md` deste pacote
+// é explícito — "alocação por evento é o que custa caro aqui".
 //
-// O molde já existia: `HuntExitRule.when(view)` é um predicado compilado avaliado por evento,
-// e não por tick. Isto é o mesmo desenho, com a ação junto.
+// **A ordem do slot É a prioridade (RP-002).** O vetor de cada grupo sai na ordem da barra —
+// fileira 1 da esquerda para a direita, depois a fileira 2 —, e quem percorre pula o inelegível
+// no MESMO ciclo (RP-003/RP-004). Quem decide isso é o ruleset, que tem o atuador.
 //
-// **Compilar não é executar.** `select` devolve a ação escolhida; quem a executa é o motor de
-// magia (M7) e o de supply (M8), por uma interface — não por um `if` aqui dentro que cresce a
-// cada categoria nova.
+// **Compilar não é executar.** O compilador entrega os slots agrupados; quem os tenta, em ordem,
+// é o motor de magia e de item, por uma interface — não por um `if` aqui dentro que cresce a
+// cada grupo novo.
 
 import type {
-  BotAction, BotCategory, BotCondition, BotConfig, BotExitRule, BotLure, BotRingSwap,
+  BotActionV2, BotConditionV2, BotConfigV2, BotExitRule, BotLure, BotOperator,
   BotRuleTarget,
 } from '@draconya/content';
-import { BOT_CATEGORIES } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { compileTargeting } from './targeting.js';
 import type { Targeting } from './targeting.js';
@@ -54,9 +54,9 @@ export interface BotView {
   target: BotTarget | null;
   /**
    * O candidato de party sob avaliação por uma regra de alvo != self. `null` fora dessa
-   * avaliação (§26-30, ADR 0033 d.10).
+   * avaliação (§26-30, ADR 0035 d.10).
    *
-   * É a peça que faz "HP < 50%" numa regra `target: 'lowest-hp-member'` filtrar MEMBROS, e não
+   * É a peça que faz "HP < 50%" num slot `target: 'lowest-hp-member'` filtrar MEMBROS, e não
    * o próprio lançador: `compileCondition` lê daqui quando o alvo da regra não é `self`.
    */
   partyTarget: CharacterRuntime | null;
@@ -68,21 +68,32 @@ export interface BotTarget {
   readonly maxHealth: number;
 }
 
-/** Nenhum candidato: regra `target != self` sem resolvedor, ou resolvedor que filtrou todos. */
-const NO_CANDIDATES: readonly CharacterRuntime[] = [];
-
-export interface CompiledRule {
+/**
+ * Um slot compilado da barra v2. `when` é a E das condições do slot (RG-006), `act` é a ação
+ * crua que o atuador executa, `cooldownKey` é o livro que a EXECUÇÃO inicia, e `target` é o
+ * alvo CRU da regra — quem resolve tem `session.participants`, e `bot.ts` não conhece sessão.
+ */
+export interface CompiledSlot {
   readonly when: (view: BotView) => boolean;
-  readonly act: BotAction;
+  readonly act: BotActionV2;
+  /** A chave de cooldown que a execução INICIA: `group:<g>`, `spell:<id>` ou `supply:<id>`. */
+  readonly cooldownKey: string;
   /**
-   * O alvo CRU da regra — como `exit`/`lure` continuam crus: quem resolve tem
-   * `session.participants`, e `bot.ts` não conhece nem sessão nem party.
+   * O alvo CRU do slot (§26-30, ADR 0035 d.10). Como `exit`/`lure`, sai sem resolução: o
+   * ruleset tem a party, e `bot.ts` não conhece nem sessão nem party.
    */
   readonly target: BotRuleTarget;
 }
 
 export interface CompiledBot {
-  readonly categories: ReadonlyMap<BotCategory, readonly CompiledRule[]>;
+  /**
+   * Grupo do conteúdo → slots na ORDEM da barra (RP-002). Substitui as categorias v1.
+   *
+   * A chave é o grupo do CONTEÚDO (`healing`/`attack`/`support`/`potion`), resolvido uma vez na
+   * compilação; ações sem grupo caem num grupo sintético `spell:<id>`/`supply:<id>`, para não
+   * inventar prioridade compartilhada que o conteúdo não declarou (DT-06).
+   */
+  readonly groups: ReadonlyMap<string, readonly CompiledSlot[]>;
   /**
    * Alvo e postura (FUN-85), compilados da MESMA configuração.
    *
@@ -102,40 +113,20 @@ export interface CompiledBot {
   /**
    * O bot AVANÇADO (§13.2, FUN-87), cru como as regras de saída e pela mesma razão: quem os
    * executa precisa do mundo — a rota e o inventário —, e `bot.ts` não conhece ruleset nenhum.
-   *
-   * Ausentes é o bot básico, que é o de todo mundo abaixo do level 50.
    */
   readonly lure: BotLure | undefined;
-  readonly ringSwap: BotRingSwap | undefined;
-  /**
-   * A primeira regra válida da categoria, ou `null` (§13.4).
-   *
-   * "Primeira válida executa" é a ordem do vetor, e a avaliação PARA na primeira que vale —
-   * as demais daquela categoria nem são consultadas. Sem prioridade global entre categorias:
-   * cada uma decide a sua.
-   *
-   * `resolveCandidates` só é chamado para regra com `target.kind !== 'self'`. Devolve a lista
-   * JÁ filtrada (vivo, ao alcance) e, para `lowest-hp-member`, JÁ ordenada por percentual
-   * ascendente — o `select` só decide QUAL delas satisfaz a condição, chamando o MESMO `when`
-   * compilado uma vez por candidato, na ordem em que a lista chegou (§29: "usa o primeiro que
-   * satisfaz"). Ausente: nenhum candidato, que é o mesmo de uma lista vazia.
-   */
-  select(
-    category: BotCategory,
-    view: BotView,
-    resolveCandidates?: (rule: CompiledRule) => readonly CharacterRuntime[],
-  ): { readonly action: BotAction; readonly recipient: CharacterRuntime | null } | null;
 }
 
-/** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply e item). */
+/** Quem sabe executar a ação escolhida. Implementado por M7 (magia) e M8 (supply). */
 export interface BotActuator {
   /**
    * `false` quando a ação não aconteceu — sem mana, sem supply, alvo fora de alcance.
    *
-   * Importa porque uma categoria não pode consumir o cooldown de uma ação que não aconteceu:
-   * seria o bot ficando um segundo parado por ter tentado curar sem mana.
+   * Importa porque um slot não pode consumir o cooldown de uma ação que não aconteceu: seria o
+   * bot parado um segundo por ter tentado curar sem mana. A recusa PULA para o próximo slot do
+   * mesmo grupo no MESMO ciclo (RP-004).
    */
-  perform(action: BotAction, view: BotView): boolean;
+  perform(action: BotActionV2, view: BotView): boolean;
 }
 
 /**
@@ -143,18 +134,25 @@ export interface BotActuator {
  *
  * O `switch` fecha sobre `kind` UMA vez, na compilação, e o que sobra é uma closure que só faz
  * a comparação. É a diferença entre percorrer o JSON por avaliação e chamar uma função.
+ *
+ * O `target` do slot entra porque `hp` com alvo != self lê o HP do CANDIDATO (`view.partyTarget`),
+ * e não o do lançador — é o que faz "cure o membro abaixo de 50%" olhar o membro.
  */
-function compileCondition(condition: BotCondition, target: BotRuleTarget): (view: BotView) => boolean {
+export function compileCondition(
+  condition: BotConditionV2,
+  target: BotRuleTarget = { kind: 'self' },
+): (view: BotView) => boolean {
   switch (condition.kind) {
     case 'hp': {
       const { op, percent } = condition;
       // Alvo != self: quem tem o HP relevante é o candidato resolvido, não o lançador — é
-      // isto que faz "HP < 50%" na regra do §29 filtrar MEMBROS, não o próprio druida.
+      // isto que faz "HP < 50%" no slot de party filtrar MEMBROS, não o próprio druida.
       if (target.kind !== 'self') {
         return (view) => {
           const candidate = view.partyTarget;
           // Sem candidato a condição é FALSA, nunca um erro — a mesma regra de `target-hp`.
-          return candidate !== null && compare(percentOf(candidate.health, candidate.maxHealth), op, percent);
+          return candidate !== null
+            && compare(percentOf(candidate.health, candidate.maxHealth), op, percent);
         };
       }
       return (view) => compare(percentOf(view.self.health, view.self.maxHealth), op, percent);
@@ -180,7 +178,40 @@ function compileCondition(condition: BotCondition, target: BotRuleTarget): (view
         return compare(percentOf(target.health, target.maxHealth), op, percent);
       };
     }
+    case 'condition': {
+      const { conditionId, present } = condition;
+      // O efeito vive no `Conditions` do personagem, com chave SEMÂNTICA (`haste`,
+      // `mana-shield`, `buff`) — não o id da magia. "Castar haste só sem haste" é
+      // `present: false`; com o efeito ativo o predicado é falso e o slot é pulado.
+      return (view) => (view.self.conditions.get(conditionId) !== null) === present;
+    }
   }
+}
+
+const ALWAYS = (): boolean => true;
+const NEVER = (): boolean => false;
+
+/**
+ * A E entre as condições (RG-006): todas verdadeiras, na ordem declarada.
+ *
+ * O `empty` diz o que uma lista VAZIA vale, e é explícito porque os dois donos discordam de
+ * propósito: o `when` do slot é elegível sempre (RG-007, `true`), enquanto o `exit` da
+ * automação nunca sai e o `enter` nunca entra (DT-01, `false`). Deixar isso implícito faria
+ * uma automação sem condição reverter no mesmo ciclo em que entrou.
+ */
+export function compileAll(
+  conditions: readonly BotConditionV2[],
+  empty = true,
+  target: BotRuleTarget = { kind: 'self' },
+): (view: BotView) => boolean {
+  if (conditions.length === 0) return empty ? ALWAYS : NEVER;
+  const predicates = conditions.map((condition) => compileCondition(condition, target));
+  return (view) => {
+    for (let i = 0; i < predicates.length; i += 1) {
+      if (!(predicates[i] as (v: BotView) => boolean)(view)) return false;
+    }
+    return true;
+  };
 }
 
 /** Percentual inteiro, com o zero protegido: `maxHealth` zero é dado quebrado, não divisão. */
@@ -189,7 +220,7 @@ export function percentOf(current: number, max: number): number {
   return (current / max) * 100;
 }
 
-function compare(left: number, op: BotCondition['op'], right: number): boolean {
+function compare(left: number, op: BotOperator, right: number): boolean {
   switch (op) {
     case '<': return left < right;
     case '<=': return left <= right;
@@ -199,79 +230,51 @@ function compare(left: number, op: BotCondition['op'], right: number): boolean {
 }
 
 /**
- * Compila a configuração inteira, uma vez, na entrada da sessão.
+ * Grupo e chave de cooldown de uma ação, resolvidos do CONTEÚDO (puro, DT-01).
  *
- * **Não recebe `Content`, e recebia** (FUN-81). O parâmetro existia para a referência cruzada
- * de magia e supply, que a FUN-74 acabou pondo em `validateBotConfig` — o lugar certo, porque
- * a recusa precisa chegar ao jogador com motivo, e a compilação acontece quando a hunt já vai
- * abrir. O parâmetro ficou sem uso, e sem uso ele passou a ATRAPALHAR: `restore` recompila a
- * configuração vinda do snapshot e não tem conteúdo na mão.
- *
- * A ordem continua sendo: valida com `validateBotConfig` (que tem o conteúdo), compila depois.
+ * Quem tem o catálogo (o ruleset) resolve; `bot.ts` só carrega o par pronto. Ler o conteúdo a
+ * cada avaliação seria a alocação/busca por evento que o `AGENTS.md` do `sim` proíbe — e um
+ * resolvedor não reintroduz o `Content` que a FUN-81 tirou da compilação.
  */
-export function compileBot(config: BotConfig): CompiledBot {
-  const categories = new Map<BotCategory, readonly CompiledRule[]>();
-  for (const category of BOT_CATEGORIES) {
-    categories.set(
-      category,
-      // Regra desligada não vira predicado (#162): custo zero no tick, e a ordem das que ficam
-      // é a ordem de sempre — desligar a segunda faz a terceira ser avaliada logo depois da
-      // primeira.
-      config[category]
-        .filter((rule) => rule.enabled !== false)
-        .map((rule) => ({
-          when: compileCondition(rule.when, rule.target ?? { kind: 'self' }),
-          act: rule.do,
-          target: rule.target ?? { kind: 'self' },
-        })),
-    );
+export type CooldownOfAction = (
+  action: BotActionV2,
+) => { readonly group: string; readonly cooldownKey: string };
+
+/**
+ * Compila a configuração v2 inteira, uma vez, na entrada da sessão.
+ *
+ * **Não recebe `Content`, e não deve** (FUN-81/DT-01): o grupo e a chave de cooldown de cada ação
+ * chegam prontos pelo `cooldownOf`, resolvidos uma vez por slot. O conteúdo é da sessão, e a
+ * sessão é quem o tem — reler o disco aqui seria a versão de conteúdo mudando no meio da hunt
+ * (invariante 7).
+ *
+ * A ordem continua sendo: valida com `validateBotConfigV2` (que tem o conteúdo), compila depois.
+ */
+export function compileBot(config: BotConfigV2, cooldownOf: CooldownOfAction): CompiledBot {
+  const groups = new Map<string, CompiledSlot[]>();
+  // O conjunto ATIVO; a ordem do vetor É a prioridade (RP-002). Fileira 1 (0..11) antes da 2,
+  // porque `sets[activeSet].slots` já é o vetor na ordem da barra.
+  const active = config.sets[config.activeSet];
+  if (active !== undefined) {
+    for (const slot of active.slots) {
+      if (slot === null) continue;
+      if (slot.enabled === false) continue;    // desligado não disputa (RP-004)
+      if (slot.auto === false) continue;       // manual-only não entra no automático (AB-09)
+      const target = slot.target ?? { kind: 'self' };
+      const { group, cooldownKey } = cooldownOf(slot.do);
+      const compiled: CompiledSlot = {
+        when: compileAll(slot.when, true, target), act: slot.do, cooldownKey, target,
+      };
+      const list = groups.get(group);
+      if (list === undefined) groups.set(group, [compiled]);
+      else list.push(compiled);
+    }
   }
 
-  // O resultado REAPROVEITADO, como a `BotView`: `select` roda cinco vezes por segundo por
-  // personagem, e devolver um objeto novo por avaliação é alocação por evento — o custo que
-  // este pacote evita. Quem chama o consome ANTES de chamar de novo (o ruleset lê `action` e
-  // `recipient` na hora), então a referência única é segura.
-  const selection = {
-    action: null as unknown as BotAction,
-    recipient: null as CharacterRuntime | null,
-  };
-
   return {
-    categories,
+    groups,
     targeting: compileTargeting(config.targeting),
     exit: config.exit,
     lure: config.lure,
-    ringSwap: config.ringSwap,
-    select(category, view, resolveCandidates) {
-      const rules = categories.get(category);
-      if (rules === undefined) return null;
-      // Laço indexado, e não `find`: `find` aloca a closure por chamada, e esta é a função
-      // mais chamada do bot — cinco vezes por segundo por personagem, vezes 5.000 sessões.
-      for (let i = 0; i < rules.length; i += 1) {
-        const rule = rules[i] as CompiledRule;
-        if (rule.target.kind === 'self') {
-          view.partyTarget = null;
-          if (rule.when(view)) {
-            selection.action = rule.act;
-            selection.recipient = null;
-            return selection;
-          }
-          continue;
-        }
-        // Alvo != self: tenta cada candidato, NA ORDEM em que chegou (já rankeado por quem
-        // resolveu), até o primeiro cuja condição vale — é o "usa o primeiro válido" do §29.
-        const candidates = resolveCandidates === undefined ? NO_CANDIDATES : resolveCandidates(rule);
-        for (let j = 0; j < candidates.length; j += 1) {
-          const candidate = candidates[j] as CharacterRuntime;
-          view.partyTarget = candidate;
-          if (rule.when(view)) {
-            selection.action = rule.act;
-            selection.recipient = candidate;
-            return selection;
-          }
-        }
-      }
-      return null;
-    },
   };
 }

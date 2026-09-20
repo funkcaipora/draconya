@@ -33,7 +33,13 @@ export interface LedgerSweepResult {
   readonly failed: number;
 }
 
-/** Saldo da sessão. Ganho menos gasto: é o que de fato muda o gold do personagem. */
+/**
+ * O saldo da SESSÃO: `goldGained - goldSpent`.
+ *
+ * Sem compras por lote desde a reversão do modelo abstrato: potagem e munição debitam gold no
+ * USO, e o `goldSpent` já é o total gasto. É a mesma conta que `applyProgression` escreve na
+ * coluna, e as duas têm que bater.
+ */
 export function creditOf(receipt: SessionReceipt): number {
   return receipt.aggregates.goldGained - receipt.aggregates.goldSpent;
 }
@@ -162,7 +168,9 @@ async function applyProgression(
   // Piso de zero: a penalidade de morte chega como número negativo (FUN-37), e XP negativa é
   // um estado impossível que dá erro estranho em todo lugar que a lê depois.
   const xp = Math.max(0, current.xp + receipt.aggregates.xpGained);
-  const gold = Math.max(0, current.gold + creditOf(receipt));
+  // O gold do personagem é o LÍQUIDO da sessão (`goldGained - goldSpent`): `goldSpent` já é o
+  // total debitado no uso (poção, runa e tiro), e a linha de ledger leva o mesmo delta.
+  const gold = Math.max(0, current.gold + receipt.aggregates.goldGained - receipt.aggregates.goldSpent);
 
   // Stamina é valor absoluto, não soma — e por isso vem com guarda de instante: um extrato
   // atrasado, processado fora de ordem, não pode devolver stamina já gasta.

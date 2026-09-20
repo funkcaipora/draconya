@@ -2,7 +2,7 @@
 
 **Status:** parcial — catálogo, `item_instance` (FUN-76), inventário por peso, equipamento e
 capacidade (FUN-82), loot de item por abate e Caixa de Loot da Sessão (FUN-88) e a **tela de
-mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153) e dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) — implementados; resgate da caixa e autovenda ainda não existem
+mochila e equipamento** (FUN-90) e o **kit de nascimento** dado na criação (#153), dois anéis com efeito passivo — Energy Ring e Life Ring (SV-16) —, os **suprimentos e a munição abstratos** (AB-01/AB-02/AB-05, ADR 0032 d.6/d.7), a **carga de bênção como único consumível** e as **cargas e a duração vivas no `sim`** (AB-06) implementados; resgate da caixa e autovenda ainda não existem
 **PRD:** §21, §22, §23, §25, §43.6
 **Épico:** E5 (inventário, autovenda, Caixa de Loot); E7 (imbuement, durabilidade de anéis/colares); E11 (proveniência de lendário)
 
@@ -77,8 +77,56 @@ dois subisse.
 issues seguintes do marco, e é por isso que a regra de bot `item` continua recusada — agora com o
 motivo certo: não falta catálogo, falta inventário.
 
-`charges` e `durationMs` estão declarados no schema e **ninguém os consome** (§21.3). A forma
-entra agora para o catálogo não mudar quando a mecânica existir.
+`charges` e `durationMs` deixaram de ser campos mortos na AB-06 (#421): o `sim` consome a carga
+do colar a cada golpe elemental que ele protege e agenda o vencimento do item de duração na fila
+de eventos (ver "Duração e carga do equipamento", abaixo).
+
+### Suprimentos abstratos no catálogo (AB-01, ADR 0032 decisão 6)
+
+Poção e runa **não são itens físicos**: voltaram a ser o catálogo abstrato `data/supplies/`, com
+`price`, `effect`, `requires` e `group` (grupo de cooldown do motor v2). Usar debita o `price` do
+gold no ato por `useSupply` — **sem pilha, sem reposição por lote e sem caminho `purchase` no
+ledger**. A carga de bênção é a exceção: segue item `kind: 'consumable'` **não-empilhável** em
+`data/items/blessing-charge.json`, sem `restock` nem `group` obrigatórios, e quem a consome é a
+TP-03 (M22). Ver `economy.md` e `bot.md`.
+
+| Suprimento | Efeito | `group` | `price` | Arquivo |
+|---|---|---|---|---|
+| `health-potion` | `heal` 80 | `potion` | 45 | `data/supplies/health-potion.json` |
+| `mana-potion` | `mana` 100 | `potion` | 50 | `data/supplies/mana-potion.json` |
+| `avalanche-rune` | `damage` gelo, BP 45, raio 3, alcance 8, `requires { level: 30, magicLevel: 4 }` | `attack` | 14 | `data/supplies/avalanche-rune.json` |
+
+| Item | Efeito | Arquivo |
+|---|---|---|
+| `blessing-charge` | `blessing` (a TP-03, M22, é quem o executa) | `data/items/blessing-charge.json` |
+
+A aparência de EFEITO continua em `data/appearances/baseline.json` (seção `supplies`), conferida
+de um lado só (FUN-109).
+
+### Munição abstrata, colar e escudo (AB-02, AB-05, ADR 0032 decisão 7)
+
+Flecha e virote voltaram a ser o catálogo abstrato `data/ammunition/`, com `family`
+(`arrow`/`bolt`), `attack`, `price` (> 0 — sem fallback grátis) e `requires.level`. **Cada tiro
+debita o `price` do gold** e o `attack`/`damageType` do tiro são do catálogo; a escolha é por
+família, pelo opcode 14 `select-ammo`, validada por `requires.level` no servidor e publicada em
+`player-stats.ammo`. O ícone do projétil é o `appearanceId` do catálogo de munição, e
+`appearances.ammunition[id]` guarda o **projétil** (`missile`).
+
+| Munição | `family` | `attack` | `price` | `requires` | Arquivo |
+|---|---|---|---|---|---|
+| `arrow` | `arrow` | 25 | 1 | — | `data/ammunition/arrow.json` |
+| `burst-arrow` | `arrow` | 27 | 3 | — | `data/ammunition/burst-arrow.json` |
+| `sniper-arrow` | `arrow` | 28 | 5 | `level: 20` | `data/ammunition/sniper-arrow.json` |
+| `onyx-arrow` | `arrow` | 38 | 7 | `level: 40` | `data/ammunition/onyx-arrow.json` |
+
+O primeiro **colar** (`glacier-amulet`, `kind: 'amulet'`, `slot: 'neck'`, `charges: 20`,
+resistência a gelo 0,2) e o primeiro **escudo real** (`wooden-shield`, `kind: 'shield'`,
+`slot: 'shield'`, `defense: 14`) entram no catálogo; o consumo da carga do colar foi ligado na
+AB-06 (#421). A munição **não é item**: com um bow/crossbow equipado, o slot do **Escudo** passa a
+mostrar a munição escolhida da família e o clique abre o `AmmoPicker`; o slot `ammo` do corpo
+segue genérico, e não há pilha nem contagem. **A escolha persiste entre sessões**: viaja no
+extrato, o `jobs` grava em `characters.ammo` e ela volta pelo ticket ao entrar — o mesmo caminho
+da vocação.
 
 ## Inventário e equipamento (FUN-82)
 
@@ -92,7 +140,7 @@ dobro, e a capacidade deixa de significar o que diz.
 | | |
 |---|---|
 | stack máximo | 100, e pilha cheia começa outra |
-| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não (munição não é item desde o ADR 0026; ver "Decidido" abaixo) |
+| empilha | só o que o conteúdo marca `stackable` — queijo sim, espada não; munição e suprimento não são item |
 | item que não cabe | **recusado**, e vai para a Caixa de Loot da Sessão (issue própria) |
 
 Item não empilhável vira sempre linha nova: duas espadas são duas **identidades**, e é a
@@ -143,17 +191,20 @@ manaPerHit, damage }` —, e o alcance passou a ser da arma: bow 6 com a muniç�
 e rod 3 gastando mana, corpo a corpo 1. Desde o CMB-05 (#333) a arma declara também a
 **família** (`weapon.family`: `sword`, `axe`, `club`, `distance`, `wand`, `rod`), que aponta para
 a skill e a fórmula em `packages/content/data/weapon-families/` — o ruleset não conhece nome de
-item nem vocação. `fist` é o fallback desarmado e não existe como arma. A munição não é item: é
-uma seleção por família (`select-ammo`), com a grátis por padrão e as pagas debitando gold por
-tiro; ver `combat.md` ("Famílias de arma e proficiências"). Arma de duas mãos (`twoHanded`, o bow)
-recusa escudo, e vice-versa.
+item nem vocação. `fist` é o fallback desarmado e não existe como arma. **A munição é abstrata**
+(AB-02/AB-05, ADR 0032 d.7): o bow atira a munição escolhida da família (ou a básica dela), e cada
+tiro debita o `price` do gold — sem pilha, sem munição grátis e sem `pullNextAmmo`. A escolha é
+por família (`select-ammo`), o slot do Escudo a mostra e o `AmmoPicker` a troca. Ver "Munição
+abstrata, colar e escudo" abaixo. Arma de duas mãos (`twoHanded`, o bow) recusa escudo, e
+vice-versa.
 
 Desde o CMB-04 o combate lê também a **defesa** (`defense`) da peça: escudo ou arma corpo a corpo
 de uma mão bloqueia parte do golpe físico. A escolha da fonte é do inventário (`defenseSource`),
 que já conhece os slots e a incompatibilidade bow+escudo; a fórmula e a posição do sorteio estão
 em `combat.md` e no ADR 0031. Bow/twoHanded e wand/rod não têm defesa residual — declarar
-`defense` neles é recusado no boot. Não existe item de escudo no catálogo real ainda; a defesa
-entra pelas armas de uma mão (machete 9, steel axe 10, spike sword 10, provisório).
+`defense` neles é recusado no boot. Desde a AB-02 existe o primeiro **escudo real** no catálogo
+(`wooden-shield`, `defense: 14`), ao lado das armas de uma mão (machete 9, steel axe 10, spike
+sword 10, provisório).
 
 ### Como o item vai e volta do banco
 
@@ -185,12 +236,10 @@ desenhado com o quadrado de pedra do pacote e a pilha com a quantidade; e abaixo
 analisador e o Bestiário. As três são **fixas**: sempre montadas, um botão da barra do topo
 minimiza as três juntas (só o cabeçalho fica), nunca removidas.
 
-**Com uma arma de distância na mão, o slot do escudo é o seletor de munição** (ADR 0026 d.3):
-a célula mostra a munição em uso — a escolhida, ou a grátis, que é o que o servidor atira sem
-escolha — com o preço por tiro; o clique abre o `AmmoPicker`, a lista da família com sprite,
-nome, attack, preço ou "grátis" e level exigido (desabilitado acima do level, só para não
-oferecer o que o servidor vai recusar); um clique manda `select-ammo`, e a escolha aparece
-quando `player-stats.ammo` volta.
+**O slot de munição do set é o `AmmoPicker`** (AB-02/AB-05, ADR 0032 d.7): com um bow/crossbow
+(distance de duas mãos) equipado, o slot do **Escudo** mostra a munição escolhida da família e o
+clique abre o seletor com as opções liberadas pelo nível. O slot `ammo` do corpo continua genérico;
+a munição não é item, e não há pilha nem contagem.
 
 **Arrastar e clicar.** Arrastar (HTML5, nativo) de lugar para lugar manda `move-item`, de lugar
 para slot manda `equip`, de slot para lugar manda `move-item` com `from: { slot }`; o
@@ -251,8 +300,9 @@ consegue resgatar, e isso não aparece em lugar nenhum sem alguém publicar o n�
 ## Anéis com efeito passivo (SV-16, #352)
 
 Os dois primeiros itens `kind: 'ring'` do catálogo. O efeito é passivo: vale enquanto o item
-está equipado no dedo (`slot: 'finger'`), sem carga e sem duração — `charges`/`durationMs`
-continuam declarados no schema e mortos (§21.3); a durabilidade de anéis é E7, issue própria.
+está equipado no dedo (`slot: 'finger'`), sem carga e sem duração. Anéis que gastam por TEMPO
+usam `durationMs`, consumido pelo `sim` desde a AB-06 (#421) — ver "Duração e carga do
+equipamento".
 
 **Energy Ring** — o dano sofrido debita da MANA antes da vida, e só o excedente vai para a vida.
 É a MESMA leitura que a condição `mana-shield` do utamo vita (Magic Shield) já faz — as duas
@@ -266,6 +316,30 @@ modificador de regeneração no jogo, então a conta é direta: 1 ponto vira 4.
 O mecanismo de troca automática por HP/mana (o "ring swap" do bot, §13.8) já existia antes destes
 dois itens e não muda: ele só troca o que está no dedo, e não sabe o que o anel faz — é o efeito
 descrito aqui, lido do catálogo no momento do dano/regeneração, que dá sentido a essa troca.
+
+## Duração e carga do equipamento (AB-06, #421)
+
+`durationMs` e `charges` são mecanismos diferentes, e a AB-06 ligou os dois no `sim` (ADR 0032
+decisão 8).
+
+**Duração é TEMPO EQUIPADO, e o vencimento é um evento.** Ao equipar um item com `durationMs`, o
+`sim` agenda `EQUIP_EXPIRE` para `agora + durationMs` na fila; ao desequipar, mover do slot ou
+destruir, cancela. O item que vence sai do corpo e **não volta para a mochila** — é destruído.
+Duração reinicia cheia ao reequipar: não há `remainingMs` guardado (DT-04), então tirar e vestir
+de novo devolve o prazo inteiro. Como o prazo é um evento no relógio LÓGICO, a hunt desanexada a
+1 Hz vence no MESMO instante que a anexada a 10 Hz (invariante 2, ADR 0020).
+
+**Carga é por GOLPE PROTEGIDO.** O colar equipado no `neck` gasta uma carga a cada golpe de
+monstro cujo tipo ele protege — imunidade explícita ou resistência positiva; resistência negativa
+é vulnerabilidade e não gasta. A carga é da INSTÂNCIA (`CarriedItem.charges`), ausente é "cheio",
+e o total vem de `Item.charges`; em zero o item sai do corpo e não vai para a mochila. O golpe é
+gasto mesmo quando esquivado (DT-03): a mitigação incide no cálculo antes do corte do Dodge.
+
+**A destruição avisa a apresentação.** O `sim` emite `equipment-changed`, e o `server` o mapeia
+para a mensagem `inventory` já existente (opcode 16, sem campo novo — invariante 5): o slot
+destruído aparece vazio. `CarriedItem.charges` é opcional, então snapshot antigo não precisa de
+bump; o `EQUIP_EXPIRE` viaja na fila. **Carga e tempo restante não sobrevivem ao logout** — a
+linha de `item_instance` não tem coluna, e persistir é trabalho à parte (fora do escopo da AB-06).
 
 ## Parâmetros de balanceamento
 
@@ -281,6 +355,11 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
 | Peso do Energy Ring / Life Ring | 2 oz cada `[ABERTO — provisório: sem referência de peso de anel no PRD nem no huntera-observed]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Preço de venda do Energy Ring / Life Ring | 100 gold cada `[ABERTO — provisório, mesma razão]` | `packages/content/data/items/{energy-ring,life-ring}.json` |
 | Bônus de regeneração do Life Ring | +300% da base (fixo, SV-16) | `packages/content/data/items/life-ring.json`, campo `ringEffect.percent` |
+| Suprimentos — `price` / `group` | poção de vida 45 / `potion` `[ABERTO — preço provisório]`; poção de mana 50 / `potion` `[ABERTO — idem]`; avalanche rune 14 / `attack` `[ABERTO — idem]` | `packages/content/data/supplies/*.json` |
+| Carga de bênção — peso / `value` | 1 oz / 0 `[ABERTO — peso e valor provisórios]` | `packages/content/data/items/blessing-charge.json` |
+| Munição — `attack` / `price` / `requires.level` | arrow 25 / 1 / — `[ABERTO — preço provisório]`; burst arrow 27 / 3 / — `[ABERTO — idem]`; sniper arrow 28 / 5 / 20 `[ABERTO — idem]`; onyx arrow 38 / 7 / 40 `[ABERTO — idem]` | `packages/content/data/ammunition/*.json` |
+| Colar — `charges` / resistência / peso / `value` | glacier amulet 20 cargas / gelo 0,2 / 5,5 oz / 0 `[ABERTO — cargas, resistência, peso e valor provisórios]` | `packages/content/data/items/glacier-amulet.json` |
+| Escudo — `defense` / peso / `value` | wooden shield 14 / 40 oz / 0 `[ABERTO — defense, peso e valor provisórios]` | `packages/content/data/items/wooden-shield.json` |
 
 ## Em aberto
 
@@ -299,16 +378,18 @@ descrito aqui, lido do catálogo no momento do dano/regeneração, que dá senti
 
 ## Decidido (ADR 0026): munição, containers e runa
 
-- **Munição é seleção, não item** (decisão 3, o Huntera): o bow mostra no slot do escudo a
-  munição escolhida da família `arrow`; a `arrow` é grátis e cada tiro das outras debita o
-  preço dela do gold, pelo caminho do supply (§20.1). Sem gold, o tiro sai com a grátis. A
-  seleção viaja no extrato e volta pelo ticket. Issues #151, #152, #161.
+- **Munição é seleção, não item** (decisão 3, o Huntera): flecha e virote são selecionadas por
+  família (opcode 14 `select-ammo`), com `price` por tiro e `requires.level`; o slot do Escudo
+  mostra a escolhida e o `AmmoPicker` a troca. Não há pilha, nem fallback grátis. Issues #151,
+  #152, #161, #417, #420.
 - **Mochila e bolsa elásticas** (decisão 6): a mochila é o item no slot `back`, a bolsa é fixa
   do personagem; 20 e 10 lugares iniciais que crescem por linhas sem limite — o único teto é o
   peso. Loot cai na mochila; a bolsa é onde o jogador organiza; a Caixa de Loot fica só para o
   que não cabe no peso. Sem bolsa dentro de mochila. Issues #160, #161.
-- **Runa é supply de ataque** (decisão 8): a Avalanche é a primeira, com `requires { level,
-  magicLevel }` e preço por uso; a categoria `rune` do bot a lança. Issue #165.
+- **Runa é suprimento de ataque** (decisão 8): a Avalanche é a primeira, com
+  `requires { level, magicLevel }` e `price` no uso; o bot a lança por um slot de ação `supply`.
+  Desde a restauração do suprimento abstrato ela vive em `data/supplies/avalanche-rune.json`, e o
+  gold é debitado no uso. Issue #165.
 
 ## A tela (FUN-90)
 
@@ -351,15 +432,13 @@ entrada da mochila (`instanceId`, `itemId`, `quantity`), o cliente resolve a def
 dentro. O extrato que vai ao ledger continua `slot → instanceId`, porque o banco só precisa
 saber onde cada linha está.
 
-### A action bar não entrou, e por quê
+### A action bar entrou no M18 (AB-10, ADR 0032 d.1–d.3)
 
-A FUN-90 pedia "slots com hotkey que disparam a ação como intenção". **Não existe magia manual**:
-o protocolo não tem `cast`, o servidor não tem caminho para ela, e quem lança é o bot. Combate
-manual é o motor da F4 (E10).
-
-Uma barra sem o que disparar seria decoração, e inventar o opcode com o servidor mudo do outro
-lado é contrato antes do uso — o erro que a DT-07 nomeia. Ela entra quando houver o que ela
-dispare.
+A FUN-90 pedia "slots com hotkey que disparam a ação como intenção", e a barra 2 × 12 entrou no
+M18 como a configuração do bot **e** a superfície de disparo manual: a tecla manda `use-slot`, e
+o servidor decide elegibilidade, gold, mana e cooldown (invariante 4). O disparo manual
+substitui o que a FUN-90 chamava de "magia manual" — o opcode `cast` não existe, e quem lança
+continua sendo o servidor. Ver `bot.md` §"A tela".
 - **§21.5 fala em slots fixos; aqui o lugar é elástico** (#160, ADR 0026 decisão 6). Mochila de
   20 e bolsa de 10 são o tamanho INICIAL, e crescem por linha enquanto houver capacidade — decisão
   do usuário: "o lugar não é limite, o peso é". A Caixa de Loot fica só para o que não cabe no

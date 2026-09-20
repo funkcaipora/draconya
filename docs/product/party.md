@@ -1,7 +1,7 @@
 # Party e matchmaking de hunt
 
 **Status:** implementado — M13 (#185–#199, #203; ADR 0027), M15 (#358: kick do líder e nomes na
-formação; #359: `shareCosts`/`splitLoot` na proposta) e **M20 (#391–#407, ADR 0033)**: dois eixos
+formação; #359: `shareCosts`/`splitLoot` na proposta) e **M20 (#391–#407, ADR 0035)**: dois eixos
 mutáveis durante a hunt, coleta e venda automática com limite do personagem líder, bolsa com
 reserva proporcional e OVERWEIGHT, elegibilidade por entrada, entrada na sessão em curso, sala
 pública, Amigos e convites visíveis, follow de membro e cura com alvo. Matchmaking por vocação e
@@ -26,7 +26,7 @@ aprovam → iniciar** — sobre HTTP (`POST /api/party`, `/invite`, `/join`, `/l
 `/approve`, `/start`, `GET /api/party/mine`). A tela
 (`PartyPanel`, dentro da seleção de hunt) só manda intenção e pergunta o estado a cada 2 s; desde o
 M20 o único opcode cliente→servidor da party é `party-settings` (17), que muda os eixos e a config
-de loot **durante** a hunt (ADR 0033 d.1).
+de loot **durante** a hunt (ADR 0035 d.1).
 
 - Quem cria é o líder. Só o líder convida (por id de personagem), expulsa outros membros (`POST
   /api/party/:id/kick` com `targetId`; #358), propõe `{ huntId, difficulty, mode }`, inicia e
@@ -106,7 +106,7 @@ A tabela é `{ 1: 125, 2: 150, 3: 175, 4: 200, 5: 200, 6: 200, 7: 200, 8: 200 }`
 vocação única, teto 200, com as chaves 5–8 repetindo o teto desde o M20 (o máximo de vocações
 únicas continua 5: quatro vocações reais + "nenhuma"). Solo
 (um elegível) é 100 %, sem tabela. Personagem sem vocação (level < 8) conta como uma vocação
-("nenhuma") — inclusive com 8 membros (ADR 0033 d.12). O bônus de Bestiário de cada membro se aplica à **cota** dele, na ordem de sempre
+("nenhuma") — inclusive com 8 membros (ADR 0035 d.12). O bônus de Bestiário de cada membro se aplica à **cota** dele, na ordem de sempre
 (`applyXpBonus` → `grantXp` → `record`), e o abate conta no Bestiário de **todo** elegível
 (decisão 4), não só do matador. Level up e marco de Bestiário são eventos notáveis que dizem de
 quem (`id/level`, `id/monstro/marco`).
@@ -119,7 +119,7 @@ morto nada.
 ### Dois eixos mutáveis de loot e custo (§4, §5, §15.4, §15.5)
 
 O que era um modo único fixado na proposta virou **dois eixos independentes**, mutáveis pelo líder
-em tempo de hunt (ADR 0033 d.1, emenda à decisão 5 do ADR 0027): `shareCosts` decide se o custo do
+em tempo de hunt (ADR 0035 d.1, emenda à decisão 5 do ADR 0027): `shareCosts` decide se o custo do
 supply é rateado e `splitLoot` decide bolsa versus sorteio. O líder os muda por `configureParty`,
 chamado pelo host entre avanços a partir de um opcode C2S `party-settings` (opcode 17) —
 intenção, validada no servidor (líder, catálogo, limite; invariante 4). Recusa é
@@ -179,7 +179,7 @@ Premium do **personagem líder**:
   'leave' | 'end' | 'toggle' | 'auto-sell'`) é notável e chega ao cliente; a bolsa zera.
 
 O líder é quem a party elegeu; se ele saiu, o mais antigo presente vira líder (`leaderId` mutável,
-reescrito no `#flushLoss`), o limite de autovenda é recalculado e `party-state` avisa (ADR 0033
+reescrito no `#flushLoss`), o limite de autovenda é recalculado e `party-state` avisa (ADR 0035
 d.8).
 
 ### Sair, morrer e encerrar (§15.5, §13.9)
@@ -239,7 +239,7 @@ party" (#320); o analisador é por personagem (`analyzer.md`).
 
 ### Dois eixos mutáveis, bolsa v2 e seção PARTY (M20, #405)
 
-O contrato v2 (ADR 0033) tornou visível no cliente o que antes era só dado no fio:
+O contrato v2 (ADR 0035) tornou visível no cliente o que antes era só dado no fio:
 
 - **Os dois interruptores do líder** no rodapé de `PartyMembers` — "Rateio de custos" e
   "Dividir loot". Leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
@@ -286,7 +286,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 - XP: `floor(floor(xp × tabela[únicas] / 100) / elegíveis)`, resto descartado; solo é 100 %.
 - Vocação nula conta como uma; Bestiário aplica-se à cota e conta o abate para todo elegível.
 - Os dois eixos (`shareCosts`/`splitLoot`) são mutáveis pelo líder em tempo de hunt via
-  `party-settings` (C2S 17); `mode` continua no fio como derivado (ADR 0033 d.1). O cliente só
+  `party-settings` (C2S 17); `mode` continua no fio como derivado (ADR 0035 d.1). O cliente só
   manda intenção (invariante 4).
 - `splitLoot` desligado: um destinatário sorteado por monstro, loot com os modificadores dele.
 - `splitLoot` ligado: bolsa com `collect`/`autoSell` do líder; capacidade = Σ disponíveis;
@@ -329,7 +329,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   real, a cada uso de supply, em `packages/sim/src/rulesets/hunt.ts` (`#sharedPurse`; ADR 0027,
   decisão 5) — quando `shareCosts` está ligado.
 - ~~[ABERTO — valor provisório: 0, desligado] Critérios exatos de matchmaking de hunt por faixa
-  de level (§43.2)~~ → **Resolvido:** a **sala pública** (D8/§7 do ADR 0033) passou a ser o
+  de level (§43.2)~~ → **Resolvido:** a **sala pública** (D8/§7 do ADR 0035) passou a ser o
   caminho com faixa de level — `publish { minLevel, maxLevel }`, validada no `join` —; a fila
   cega do #199 continua como caminho separado, ainda com `matchmakingLevelRange: 0`, em
   `packages/content/data/party/baseline.json`.
@@ -350,7 +350,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   rateio no M20.
   **Motivo:** ADR 0027 — settlement no fim pode deixar um membro negativo e exige tabela de
   transferências para auditar; ratear na hora custa o mesmo e o extrato de cada um já sai
-  equalizado. Os dois eixos independentes são a emenda do ADR 0033 (d.1); quem não quer pagar a
+  equalizado. Os dois eixos independentes são a emenda do ADR 0035 (d.1); quem não quer pagar a
   poção do outro tem onde ficar.
 
 - **PRD dizia (§15.5):** mesma chance base para todos, sorteio de loot individual por personagem,
@@ -366,7 +366,7 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
 - **PRD dizia (§22.1):** autovenda limitada a 5 tipos de item (free) ou 20 (premium).
   **Implementado:** a venda **de party** (coleta + venda automática configurada pelo líder) foi
   implementada no M20, com o limite de tipos vindo do Premium do **personagem líder**
-  (`autoSellItemTypes { free: 5, premium: 20 }`, D2/§23.1 do ADR 0033). A autovenda **individual**
+  (`autoSellItemTypes { free: 5, premium: 20 }`, D2/§23.1 do ADR 0035). A autovenda **individual**
   (fora de party) do §22.1 continua não implementada — ver `items.md`.
   **Motivo:** o limite de tipos sempre foi regra do que o jogador configura; no M20 quem configura
   é o líder, e o Premium que o define é do personagem dele, não da conta (ADR 0014 — `characters.
@@ -377,13 +377,13 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   conta.
   **Motivo:** o schema tem `characters.premium_until` por personagem desde a Fase 1 e
   `monetization.md` §34 diz que Premium é comprado por personagem; renomear contrato persistido é
-  caso do ADR 0014, e não há por quê (ADR 0033 d.2/D3).
+  caso do ADR 0014, e não há por quê (ADR 0035 d.2/D3).
 
 - **PRD dizia (§25.1/§30):** "desconectado" e "offline" são alvos inválidos do follow e da cura.
   **Implementado:** "desconectado" **não existe** para o `sim` — a hunt roda sem socket
   (invariante 3). O alvo inválido é morto, ausente da sessão ou sem caminho no raio de
   `targetSearchRadius`; o runner marca `followInterrupted`, volta à rota e emite `follow-state
-  { active: false, targetId, reason }` uma vez, sem escolher outro (ADR 0033 d.9).
+  { active: false, targetId, reason }` uma vez, sem escolher outro (ADR 0035 d.9).
   **Motivo:** o PRD §25.1/§30 lista conexão como estado de jogo, e conexão é apresentação, não
   simulação.
 
@@ -393,26 +393,26 @@ continua exatamente o que era, nunca com um número fabricado (D8, invariante 4)
   desligar `splitLoot` — o cenário "bolsa acima da capacidade depois de uma saída" não acontece,
   porque a bolsa esvazia na saída. O OVERWEIGHT é um estado vivo da bolsa (`overweight = W > ΣB`),
   com item de peso não coletado enquanto durar.
-  **Motivo:** ADR 0033 d.5 (mantido do ADR 0027) — é o que preserva "um extrato por saída"
+  **Motivo:** ADR 0035 d.5 (mantido do ADR 0027) — é o que preserva "um extrato por saída"
   (invariante 10); divergência de mecanismo, não de resultado (nada se perde).
 
 - **PRD dizia (§7/§14):** o que acontece com o item que não é coletado.
   **Implementado:** item fora da lista de coleta (ou com peso em OVERWEIGHT) **fica no cadáver**,
   não conta `itemsLooted` e não vai para caixa nenhuma.
-  **Motivo:** ADR 0033 d.2/d.3 — "coletar com outro nome" era a alternativa descartada; o PRD não
+  **Motivo:** ADR 0035 d.2/d.3 — "coletar com outro nome" era a alternativa descartada; o PRD não
   diz, e a decisão de produto é que não coletar é não coletar.
 
 - **PRD dizia (§3.1):** a contagem de vocações únicas e a tabela de XP.
   **Implementado:** `null` continua contando como uma vocação ("nenhuma") com até 8 membros; o
   máximo de vocações únicas segue 5 (quatro reais + "nenhuma"), então as chaves `5..8` repetem
   200 %.
-  **Motivo:** ADR 0027 d.3 e ADR 0033 d.12 — subir o teto de jogadores não sobe o teto de
+  **Motivo:** ADR 0027 d.3 e ADR 0035 d.12 — subir o teto de jogadores não sobe o teto de
   vocações únicas.
 
 ## Referências
 
-PRD §15, §22.1, §43.2; ADR 0027 (decisões 1–9, d.5 emendada por #359 e pelo ADR 0033; d.8 e d.9
-emendadas pelo ADR 0033), ADR 0033 (Party v2), ADR 0032 (decisão 14 — DPS/HPS e o sim de todos),
+PRD §15, §22.1, §43.2; ADR 0027 (decisões 1–9, d.5 emendada por #359 e pelo ADR 0035; d.8 e d.9
+emendadas pelo ADR 0035), ADR 0035 (Party v2), ADR 0032 (decisão 14 — DPS/HPS e o sim de todos),
 ADR 0023 (sessão com muitos personagens),
 ADR 0024 (repouso); `docs/party-hunt-plan.md` (M13) e `docs/party-vip-plan.md` (M20, desenho e
 exemplos numéricos);

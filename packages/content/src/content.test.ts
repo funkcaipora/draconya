@@ -69,7 +69,7 @@ const base = (over: Partial<RawContent> = {}): RawContent => {
     progression: [baseline], combat: [combat], stamina: [stamina], party: [party],
     skills, weaponFamilies,
     // O bot é o produto (invariante 11): sem `bot/baseline.json` o conteúdo não monta.
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 } }],
     ...over,
   };
@@ -370,7 +370,7 @@ describe('a defesa dos itens e do perfil (CMB-04)', () => {
     // Bow/twoHanded não deixa defesa residual, e wand/rod não bloqueia: os dois são conteúdo
     // quebrado, e o boot é o lugar de descobrir.
     expect(() => buildContent(base({ items: [helmet] }))).toThrow(/defense só vale/);
-    expect(() => buildContent(base({ items: [bow], ammunition: [arrow] })))
+    expect(() => buildContent(base({ items: [bow, arrow] })))
       .toThrow(/defense só vale/);
     expect(() => buildContent(base({ items: [wand] }))).toThrow(/defense só vale/);
   });
@@ -632,11 +632,11 @@ describe('a tabela da party (#188, ADR 0027)', () => {
   });
 });
 
-describe('cura e mana com alvo (§26, ADR 0033 d.10)', () => {
+describe('cura e mana com alvo (§26, ADR 0035 d.10)', () => {
   const spell = (effect: Record<string, unknown>) =>
     ({ id: 'heal', name: 'Cura', manaCost: 20, cooldownMs: 1000, effect });
   const supply = (effect: Record<string, unknown>) =>
-    ({ id: 'potion', name: 'Poção', price: 10, effect });
+    ({ id: 'potion', name: 'Poção', price: 10, group: 'potion', effect });
 
   it('aceita magia self sem range e magia friend com range', () => {
     expect(() => buildContent(base({ spells: [spell({ kind: 'heal', amount: 60 })] }))).not.toThrow();
@@ -704,12 +704,31 @@ describe('o bot com que o personagem nasce (FUN-114)', () => {
     targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' } },
     ...over,
   });
+  const emptySets = () => Array.from({ length: 4 }, () => ({
+    slots: Array.from({ length: 24 }, () => null),
+  }));
   const withDefault = (over: Record<string, unknown> = {}) => base({
     spells: [spell],
-    bot: [{ id: 'baseline', vocabularyVersion: 1, categoryCooldownMs: 1000, advancedFromLevel: 50,
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
       slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
-      advancedOnly: { targetPolicies: ['lowest-hp'] },
       defaultConfig: config(over) }],
+  });
+  const withVocationBaseline = (spellId: string) => base({
+    spells: [spell],
+    bot: [{ id: 'baseline', vocabularyVersion: 2, categoryCooldownMs: 1000,
+      slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
+      defaultConfigByVocation: {
+        knight: {
+          version: 2, activeSet: 0, automations: [], stance: 'balanced',
+          targeting: { policy: 'nearest', prioritize: [], ignore: [], posture: { kind: 'stand' } },
+          exit: [],
+          sets: emptySets().map((set, index) => (index === 0
+            ? { slots: set.slots.map((_, slot) => (slot === 0
+              ? { do: { kind: 'spell', spellId }, when: [] }
+              : null)) }
+            : set)),
+        },
+      } }],
   });
 
   it('é OPCIONAL, e quando existe sai montada em `content.bot.defaultConfig`', () => {
@@ -726,10 +745,13 @@ describe('o bot com que o personagem nasce (FUN-114)', () => {
     }))).toThrow(/defaultConfig: categoria "heal", slot 1: magia "cura-que-nao-existe" não existe/);
   });
 
-  it('e não pode usar recurso do bot avançado: o personagem nasce no level 1', () => {
-    expect(() => buildContent(withDefault({
-      targeting: { policy: 'lowest-hp', prioritize: [], ignore: [], posture: { kind: 'stand' } },
-    }))).toThrow(/defaultConfig: usa recurso do bot avançado \(alvo "lowest-hp"\)/);
+  it('as baselines v2 por vocação passam pelo juiz v2, nomeando conjunto e slot', () => {
+    // Mutação que mata: não validar `defaultConfigByVocation` — o kit de nascimento da vocação
+    // apontaria magia inexistente e o defeito só apareceria no primeiro personagem criado.
+    expect(buildContent(withVocationBaseline('heal')).bot.defaultConfigByVocation?.knight)
+      .toBeDefined();
+    expect(() => buildContent(withVocationBaseline('cura-que-nao-existe')))
+      .toThrow(/defaultConfigByVocation\.knight: conjunto 1, slot 1: magia "cura-que-nao-existe" não existe/);
   });
 });
 
@@ -931,7 +953,7 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     effect: { kind: 'heal', amount: 60 },
   };
   const potion = {
-    id: 'health-potion', name: 'Poção de Vida', price: 45,
+    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
     effect: { kind: 'heal', amount: 80 },
   };
   // Uma magia de DANO, porque é ela que tem projétil: o teste de `missile` precisa de uma
@@ -944,7 +966,8 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
   // A base já traz o placeholder com as três seções vazias; aqui a tabela é EXPLÍCITA, como
   // no bloco da FUN-94, porque é dela que o teste fala.
   const tabela = (over: Record<string, unknown> = {}) => [{
-    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 }, items: {}, ...over,
+    id: 'baseline', pack: 'tibia-1332', monsters: { rat: 21 },
+    items: {}, ...over,
   }];
   const withCatalogue = (over: Partial<RawContent> = {}): RawContent =>
     base({ spells: [heal], supplies: [potion], ...over });
@@ -997,7 +1020,7 @@ describe('effects of spells, supplies and hits in the appearance table (FUN-109)
     // É o que deixa toda fixture que fala de magia continuar montando sem escrever tabela à
     // mão — e o que garante que `appearances.spells` nunca é `undefined` para quem consome.
     // Mutação que mata: apagar `spells: {}` de `placeholderAppearances`.
-    const placeholder = placeholderAppearances({ spells: [heal], supplies: [potion] });
+    const placeholder = placeholderAppearances({ spells: [heal], items: [potion] });
     expect(placeholder.spells).toEqual({});
     expect(placeholder.supplies).toEqual({});
     expect(placeholder.hits).toEqual({});
@@ -1199,25 +1222,34 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     expect(() => buildContent(base({ items: [capacete] }))).toThrow(/twoHanded/);
   });
 
-  it('munição é catálogo próprio, com aparência conferida dos DOIS lados', () => {
-    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  it('a munição é ABSTRATA: família, attack e price > 0, sem item nem pilha (ADR 0026 d.3)', () => {
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const content = buildContent(base({ ammunition: [flecha] }));
-    expect(content.ammunition.get('arrow')?.appearanceId).toBeGreaterThan(0);
-    // Sem linha na tabela é erro, como item; linha órfã também.
+    expect(content.ammunition.get('arrow')?.attack).toBe(25);
+    expect(content.ammunition.get('arrow')?.price).toBe(1);
+    // A aparência guarda ícone e projétil, os dois resolvidos no boot.
+    expect(content.ammunition.get('arrow')?.appearanceId).toBe(1);
+    expect(content.ammunition.get('arrow')?.missileId).toBe(1);
+    // Sem item: a flecha não está no catálogo de itens.
+    expect(content.items.has('arrow')).toBe(false);
+    // Não existe munição grátis: `price` > 0 é exigido, sem fallback.
+    expect(() => buildContent(base({ ammunition: [{ ...flecha, price: 0 }] })))
+      .toThrow(ContentError);
+  });
+
+  it('a munição sem aparência e a linha órfã em appearances.ammunition são recusadas', () => {
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const raw = base({ ammunition: [flecha] });
-    const semLinha = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
-    expect(() => buildContent(semLinha)).toThrow(/munição "arrow" não tem aparência/);
+    const semAparencia = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: {} }] };
+    expect(() => buildContent(semAparencia)).toThrow(/não tem aparência/);
     const orfa = {
       ...raw,
       appearances: [{
         ...placeholderAppearances(raw),
-        ammunition: { arrow: { icon: 1, missile: 1 }, bolt: { icon: 2, missile: 2 } },
+        ammunition: { bolt: { icon: 1, missile: 2 } },
       }],
     };
-    expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia munição "bolt"/);
-    // Ícone E projétil, os dois obrigatórios (#152): tiro sem projétil é vida sumindo do nada.
-    const semProjetil = { ...raw, appearances: [{ ...placeholderAppearances(raw), ammunition: { arrow: { icon: 1 } } }] };
-    expect(() => buildContent(semProjetil)).toThrow(ContentError);
+    expect(() => buildContent(orfa)).toThrow(/appearances.ammunition mapeia munição "bolt", que não existe no conteúdo/);
   });
 
   it('como a arma bate é da arma: corpo a corpo por padrão, distância exige família com munição, wand exige mana e faixa (#152)', () => {
@@ -1226,7 +1258,7 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
       kind: 'melee', family: 'sword', range: 1, damageType: 'physical',
       power: { base: 10, levelFactor: 0, skillFactor: 0, skillStartingLevel: 10, spread: 0 },
     });
-    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     expect(buildContent(base({ items: [arco], ammunition: [flecha] })).items.get('bow')?.weapon?.range).toBe(6);
     // Distância sem família, e família sem munição no catálogo, são as duas formas de um bow que
@@ -1253,23 +1285,11 @@ describe('a mochila, as duas mãos e a munição no catálogo (ADR 0026, #151)',
     const orfa = { ...raw, appearances: [{ ...placeholderAppearances(raw), weapons: { helmet: { missile: 5 } } }] };
     expect(() => buildContent(orfa)).toThrow(/appearances.weapons mapeia "helmet"/);
   });
-
-  it('toda família de munição precisa da grátis — é o que o bow dispara quando o gold acaba', () => {
-    const paga = { id: 'onyx-arrow', name: 'Onyx Arrow', family: 'arrow', attack: 38, price: 7 };
-    expect(() => buildContent(base({ ammunition: [paga] }))).toThrow(/não tem munição grátis/);
-    const gratis = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
-    expect(buildContent(base({ ammunition: [paga, gratis] })).ammunition.size).toBe(2);
-  });
-
-  it('a aparência NÃO mora na munição: escrevê-la ali é recusado', () => {
-    const comAparencia = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0, appearanceId: 3447 };
-    expect(() => buildContent(base({ ammunition: [comAparencia] }))).toThrow(ContentError);
-  });
 });
 
 describe('famílias de arma e proficiências (CMB-05, #333)', () => {
   const espada = { id: 'sword', name: 'Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 0, attack: 10 };
-  const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+  const flecha = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
   const arco = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
 
   it('a arma SEM família recebe o default do `kind`: melee→sword, distance→distance, wand→wand', () => {
@@ -1386,7 +1406,7 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
   it('recusa arma de duas mãos com escudo: o kit não passa por `equip`, então a regra das mãos vale aqui', () => {
     const bow = { id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' } };
     const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0 };
-    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 0 };
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
     const withArmory = (startingKit: unknown) =>
       base({ items: [bow, shield], ammunition: [arrow], progression: [{ ...baseline, startingKit }] });
     expect(() => buildContent(withArmory([
@@ -1394,6 +1414,25 @@ describe('o kit de nascimento é conteúdo, e o boot confere (#153, ADR 0026 dec
     ]))).toThrow(/duas mãos e escudo/);
     expect(buildContent(withArmory([{ itemId: 'bow', slot: 'hand' }])).progression.startingKit)
       .toHaveLength(1);
+  });
+
+  it('aceita o colar e o escudo no kit: sem `requires`, eles vestem no level 1 (RF-08)', () => {
+    // O primeiro colar e o primeiro escudo reais (ADR 0032 d.8): sem exigência de level nem
+    // vocação, são o que o personagem pode vestir ao nascer.
+    const amulet = {
+      id: 'glacier-amulet', name: 'Glacier Amulet', kind: 'amulet', slot: 'neck',
+      weight: 5.5, value: 0, charges: 20, mitigation: { resistances: { ice: 0.2 } },
+    };
+    const shield = {
+      id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield',
+      weight: 40, value: 0, defense: 14,
+    };
+    const content = buildContent(withKit([
+      { itemId: 'glacier-amulet', slot: 'neck' }, { itemId: 'wooden-shield', slot: 'shield' },
+    ], [amulet, shield]));
+    expect(content.progression.startingKit).toHaveLength(2);
+    expect(content.items.get('glacier-amulet')?.charges).toBe(20);
+    expect(content.items.get('wooden-shield')?.defense).toBe(14);
   });
 
   it('recusa duas peças no mesmo slot: o banco recusaria na criação, e o boot é o lugar', () => {

@@ -1,6 +1,7 @@
 {
   "id": "chill-out",
   "name": "Chill Out",
+  "description": "Lança uma onda de gelo à sua frente.",
   "vocationId": "druid",
   "minLevel": 1,
   "manaCost": 8,

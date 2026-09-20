@@ -9,7 +9,7 @@
 // tocam o React.
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
-import { appendCapped, hud, type PlayerSkills, type SkillProgress } from './hud.js';
+import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
 
@@ -169,6 +169,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         staminaMs: message.staminaMs,
         // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
         targetId: message.targetId,
+        // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
         speed: message.speed,
@@ -194,7 +195,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
             ? state.analyzer.notableEvents
             : [...state.analyzer.notableEvents, ...message.notableEvents],
           receivedAtMs: nowMs,
-          // A seção PARTY (§32, ADR 0033 d.11): o bloco vem no MESMO `analyzer` que os
+          // A seção PARTY (§32, ADR 0035 d.11): o bloco vem no MESMO `analyzer` que os
           // agregados. `undefined` é solo/nó anterior — a caixa não monta (D8).
           party: message.party,
         },
@@ -233,7 +234,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           monsters: message.monsters,
           bot: message.bot,
           items: message.items,
-          // A munição (#152): o seletor no slot do escudo lista a família do bow por aqui.
+          // A munição abstrata (#152): o seletor do slot do escudo lista a família do bow por aqui.
           ammunition: message.ammunition,
           // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui.
           vocations: message.vocations,
@@ -361,7 +362,7 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           notableEvents: message.notableEvents,
           receivedAtMs: nowMs,
           ended: false,
-          // A seção PARTY (§32, ADR 0033 d.11): `session-state.party` já é o roster, então o
+          // A seção PARTY (§32, ADR 0035 d.11): `session-state.party` já é o roster, então o
           // bloco do analisador viaja como `partySummary`. `undefined` é solo/nó anterior (D8).
           party: message.partySummary,
         },
@@ -384,6 +385,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         difficulty: message.difficulty ?? null,
         conditions: [],
         conditionsReceivedAtMs: nowMs,
+        // A reanexação zera o que era da sessão anterior: o estado de slot e a recusa da tecla
+        // não podem sobreviver a uma sessão que já não é esta (o servidor reenvia `slot-state`).
+        slotStates: {},
+        slotResults: {},
       }));
       // A hunt da party começou de verdade (#197): a tela de formação fecha.
       if (message.party !== undefined) partyEntered();
@@ -429,11 +434,43 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'follow-state':
-      // O estado do Follow do bot (#406, ADR 0033 d.9). É um PUSH do servidor, não a resposta de
+      // O estado do Follow do bot (#406, ADR 0035 d.9). É um PUSH do servidor, não a resposta de
       // uma intenção: mora no `hud` (como `party`/`active-conditions`), e a tela só o espelha —
       // nunca decide sozinha que o follow parou (DT-01).
       hud.set((state) => ({ ...state, followState: message }));
       return;
+
+    // `slot-state` (AB-10): o estado do conjunto ATIVO por slot. SUBSTITUI o mapa — o servidor
+    // manda o estado inteiro, não um delta — e limpa a recusa dos slots que ele reavaliou: o
+    // `slot-result` velho não pode sobreviver a um estado novo do servidor.
+    case 'slot-state': {
+      const states: Record<string, SlotState> = {};
+      for (const state of message.slots) states[slotKey(state.set, state.slot)] = state;
+      hud.set((current) => {
+        const results = { ...current.slotResults };
+        for (const key of Object.keys(states)) delete results[key];
+        return { ...current, slotStates: states, slotResults: results };
+      });
+      return;
+    }
+
+    // `slot-result` (AB-10): a recusa do `use-slot`. `ok:true` limpa o motivo do slot; `ok:false`
+    // guarda o texto do servidor para o tooltip (a barra lê `slotResults`).
+    case 'slot-result': {
+      const key = slotKey(message.set, message.slot);
+      hud.set((current) => {
+        if (message.ok) {
+          const results = { ...current.slotResults };
+          delete results[key];
+          return { ...current, slotResults: results };
+        }
+        return {
+          ...current,
+          slotResults: { ...current.slotResults, [key]: message.reason ?? '' },
+        };
+      });
+      return;
+    }
 
     default:
       // `never` de propósito: mensagem nova no protocolo quebra a COMPILAÇÃO aqui, em vez de

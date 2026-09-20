@@ -8,7 +8,7 @@
 // **A store não importa `net/`** (ADR 0007): quem manda é injetado por `setPartyClient` e
 // `setEnterHunt`, como a do bot recebe o remetente.
 //
-// M20 (#402/#403, ADR 0033 D7/D8): `join` numa party EM CURSO devolve um ticket — a entrada é o
+// M20 (#402/#403, ADR 0035 D7/D8): `join` numa party EM CURSO devolve um ticket — a entrada é o
 // MESMO caminho de `start`, e é por isso que `acceptInvite` converge nele. `invites[]` é do
 // `/mine`, que agora roda em qualquer tela (o `Shell` é o dono do polling, DT-01).
 

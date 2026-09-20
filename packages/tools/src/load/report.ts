@@ -48,7 +48,7 @@ export interface LoadReport {
     apiUrl: string; huntId: string; difficulty: string;
     /** Parties de N (#198). Ausente ou 1 é solo. */
     party?: number;
-    /** Os dois eixos do ADR 0033 D1 (#407): substituem o `partyMode` derivado. */
+    /** Os dois eixos do ADR 0035 D1 (#407): substituem o `partyMode` derivado. */
     shareCosts?: boolean;
     splitLoot?: boolean;
   };

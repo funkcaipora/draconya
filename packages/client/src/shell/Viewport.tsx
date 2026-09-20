@@ -1,12 +1,28 @@
 import { useEffect, useRef } from 'react';
+import type { MouseEvent } from 'react';
 import type { AssetPack } from '../assets/pack.js';
+import { sendIntent } from '../net/current.js';
+import { useHudSlice } from '../state/useSlice.js';
+import { world } from '../state/world.js';
 import { TextureBook } from '../world/textures.js';
 import { loadStackMap, sceneFromStack } from '../world/scene.js';
 import type { Scene } from '../world/scene.js';
 import { mountViewport } from '../world/viewport.js';
-import type { ViewportHandle } from '../world/viewport.js';
+import type { ViewportHandle, ViewportStats } from '../world/viewport.js';
 import { useAssetPack } from './AssetPackContext.js';
 import { WorldStatusOverlay } from './WorldStatusOverlay.js';
+
+/**
+ * O global de desenvolvimento (M23 §40, D8): em `import.meta.env.DEV`, quem estiver com o
+ * console aberto lê `window.__draconya.renderStats()` e vê os contadores do renderer. É
+ * leitura sob demanda — o laço do Pixi nunca avisa ninguém (ADR 0007) —, e em produção o
+ * objeto nunca é escrito.
+ */
+declare global {
+  interface Window {
+    __draconya?: { renderStats: () => ViewportStats };
+  }
+}
 
 /**
  * De onde vem a cena de um `mapId`: de `things/<versão>/maps/<id>.json` — o mesmo caminho das
@@ -60,6 +76,23 @@ export function Viewport() {
   const bookRef = useRef<TextureBook | null>(null);
   /** O último pacote que o contexto entregou — para o Pixi que ainda estava subindo. */
   const packRef = useRef<AssetPack | null>(null);
+  /** O último alvo que o HUD entregou — para o Pixi que ainda estava subindo. */
+  const targetRef = useRef<number | null>(null);
+  const targetId = useHudSlice((state) => state.targetId);
+
+  useEffect(() => {
+    targetRef.current = targetId;
+    handleRef.current?.setTargetId(targetId);
+  }, [targetId]);
+
+  const onCanvasClick = (event: MouseEvent<HTMLDivElement>): void => {
+    // O canvas é filho do Pixi; o overlay de status é irmão React. Só o clique no canvas escolhe.
+    if (!(event.target instanceof HTMLCanvasElement)) return;
+    const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
+    if (id === null || id === world.selfId) return;
+    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido.
+    sendIntent({ type: 'select-target', creatureId: id });
+  };
 
   useEffect(() => {
     const parent = holder.current;
@@ -78,13 +111,18 @@ export function Viewport() {
         return;
       }
       handleRef.current = mounted;
+      // O global aponta para o handle VIVO: o StrictMode monta duas vezes e a primeira
+      // montagem apaga o dela no cleanup, então a segunda reescreve o global.
+      if (import.meta.env.DEV) window.__draconya = { renderStats: () => mounted.stats() };
       // O pacote pode ter chegado enquanto o Pixi subia: o efeito de pacote já rodou, não
       // tinha a quem entregar, e deixou aqui.
       mounted.setPack(packRef.current);
+      mounted.setTargetId(targetRef.current);
     })();
 
     return () => {
       cancelled = true;
+      if (import.meta.env.DEV) delete window.__draconya;
       handleRef.current?.destroy();
       handleRef.current = null;
       bookRef.current = null;
@@ -111,7 +149,7 @@ export function Viewport() {
   }, [loaded]);
 
   return (
-    <div className="viewport" ref={holder}>
+    <div className="viewport" ref={holder} onClick={onCanvasClick}>
       {/* O canvas é anexado pelo Pixi; este filho React absoluto pinta o status por cima dele. */}
       <WorldStatusOverlay handleRef={handleRef} />
     </div>

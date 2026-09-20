@@ -46,16 +46,14 @@ const huntWithoutDesc: HuntListing = { ...huntWithDesc, description: undefined }
 const catalogue: Catalogue = {
   hunts: [huntWithDesc],
   monsters: [ratMonster, caveRatMonster],
-  ammunition: [],
   bot: {
     vocabularyVersion: 1,
-    advancedFromLevel: 50,
     slots: {},
-    advancedOnly: { conditions: [], targetPolicies: [], postures: [] },
     spells: [],
     supplies: [],
   },
   items: [cheeseItem, goldCoinItem],
+  ammunition: [],
   vocations: [],
   vocationLevel: 8,
 };
@@ -171,7 +169,7 @@ describe('HuntDetailsModal (#325, #349, SV-05, SV-13)', () => {
   });
 });
 
-describe('configuração de loot da party (#405, ADR 0033 D2)', () => {
+describe('configuração de loot da party (#405, ADR 0035 D2)', () => {
   // Só há config com party E `splitLoot` ligado: sem bolsa compartilhada não há o que
   // configurar. `value: 0` é ignorado pelo servidor (D2).
   const member = { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null };

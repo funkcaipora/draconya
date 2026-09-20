@@ -1,6 +1,7 @@
 {
   "id": "divine-barrage",
   "name": "Divine Barrage",
+  "description": "Lança um ataque sagrado no alvo, causando dano numa área de 3x3 ao redor dele.",
   "vocationId": "paladin",
   "minLevel": 70,
   "manaCost": 175,

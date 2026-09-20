@@ -192,7 +192,7 @@ export interface MemberLeft {
 }
 
 /**
- * O follow de UM personagem mudou de estado (ADR 0033 d.9, §D10, #398): ligou/retomou, ou foi
+ * O follow de UM personagem mudou de estado (ADR 0035 d.9, §D10, #398): ligou/retomou, ou foi
  * INTERROMPIDO sem escolher outro alvo. `targetId` é sempre o alvo CONFIGURADO — inclusive ao
  * desligar, para o cliente saber qual follow parou. `reason` só acompanha `active: false`.
  *

@@ -10,7 +10,7 @@
 // na coluna esquerda (nome, estrela de líder, HP, "caiu"), só que dentro do modal — por isso o
 // percentual de HP vem da mesma função pura (`party-member-view.ts`) extraída de PartyMembers.
 //
-// A terceira aba, "Encontrar Party" (#404, ADR 0033 D8), publica a sala do líder com faixa de
+// A terceira aba, "Encontrar Party" (#404, ADR 0035 D8), publica a sala do líder com faixa de
 // level e lista as salas publicadas, entrando pela mesma `join` da formação (o `api` decide se a
 // resposta é o formulário ou um ticket). A listagem é de OUTRAS parties: mora fora da `PartyState`
 // e fora de `run`/`busy` (DT-03) — só a aba montada paga o polling de 2 s (RF-02).

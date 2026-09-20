@@ -100,10 +100,11 @@ cada uma das 42 mil aparências. O leitor dirigido pula a submensagem lendo um v
 
 **O que é lido, e o que é pulado.** Lidos: `id`, `frame_group`, e de `sprite_info` os
 `pattern_*`, `layers`, `sprite_id`, `bounding_square` e as durações das fases; e, de `flags`
-(FUN-117, ADR 0025), só o que bloqueio e pilha precisam — `bank` (com `waypoints`, a
-velocidade do chão), `clip`, `bottom`, `top`, `unpass`, `unmove`, `unsight`, `avoid`,
-`no_movement_animation`, `take`, `hang`, `hook`, `shift`, `height`, `lying_object`,
-`animate_always`, `fullbank` — booleanos e três números por aparência, com os números de campo
+(FUN-117, ADR 0025), só o que bloqueio, pilha e VISIBILIDADE DE ANDAR precisam — `bank` (com
+`waypoints`, a velocidade do chão), `clip`, `bottom`, `top`, `unpass`, `unmove`, `unsight`,
+`avoid`, `no_movement_animation`, `take`, `hang`, `dont_hide`, `hook`, `shift`, `height`,
+`lying_object`, `animate_always`, `fullbank` — booleanos e três números por aparência, com os
+números de campo
 conferidos contra o pacote 1332 real (`appearances.pack.test.ts`). Pulados: o resto das flags
 (mercado, NPC, cyclopedia, vocação, luz, minimapa), `name`, `description`,
 `bounding_box_per_direction`, `is_opaque` — e todo campo que uma versão futura trouxer, **pelo
@@ -255,7 +256,11 @@ pnpm tsx scripts/make-sheet-fixture.ts
   escolheu, ou monstro, que nunca traz. Reserva e não "sem pintar" porque um template que sobra
   sem multiplicar é um boneco de cores primárias na tela; e para monstro passar cores é
   inofensivo, o pacote devolve a base como está. O que era de antes continua: câmera do tamanho
-  do canvas, camadas, ordem de desenho por `y`, pool e interpolação.
+  do canvas, camadas, ordem de desenho por `y`, pool e interpolação, e três janelas de câmera em
+  `camera.ts` — visível (0), render (`RENDER_OVERSCAN_TILES` = 3, o que o viewport pinta) e
+  prefetch (`PREFETCH_TILES` = 5, o que o viewport aquece) — porque a textura de uma coluna
+  pedida no quadro em que ela entra na tela chega tarde; a janela de render é o que compra a
+  antecedência, e o prefetch contínuo (M23, D5) mantém a dela pronta antes.
 - **Efeito, projétil e número flutuante são listas no `world`, e o VIEWPORT é quem as expira**
   (`state/world.ts` — `effects`, `missiles`, `texts`; FUN-106). Chegam dezenas por segundo numa
   hunt, então o caminho deles é o mesmo do movimento: `apply.ts` carimba o instante LOCAL em que
@@ -282,32 +287,68 @@ pnpm tsx scripts/make-sheet-fixture.ts
   em `things/<versão>/maps/<id>.json`, buscada pelo `mapId` da sessão (`Viewport.tsx`,
   `loadScene`) quando o laço de quadro nota `world.mapId` mudar — o `world` não avisa ninguém
   (ADR 0007). As regras, lidas no OTClient (MIT — formato e regra, nunca código): **ordem**
-  chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top` (num container
-  ACIMA das criaturas: o arco cobre quem passa); **elevação** `height.elevation` acumula pelos
+  chão → `clip` → `bottom` → comuns na ordem do arquivo → criaturas → `top`. **Desde #385
+  (ADR 0034) cada ANDAR tem três containers — `ground` → `scene` → `top` —, e parede, objeto
+  alto e criatura moram no MESMO `scene`**, com `sortableChildren` e
+  `zIndex = sceneZIndex(x, y, slot)` (`world/depth.ts`, puro): a profundidade de um tile é a
+  anti-diagonal `x + y`, e dentro dela `x` — o resultado da varredura do `MapView` do OTClient,
+  como função, e NÃO `y * M + x` (a parede a sudoeste de um dragão cobriria a metade esquerda
+  dele). Os itens de `scene` do tile ocupam os slots 0–62 na ordem da pilha; a criatura é o
+  slot 63. `ground` e `top` seguem a ordem de inserção. O andar de baixo é anexado antes, sob o
+  véu, e a criatura é reparentada para o `scene` do andar dela; fora da janela de render ela
+  fica invisível, nunca destruída; **camada** (`layerOf`): chão e `clip` são
+  `ground`; `bottom`, `unpass`/`unsight` e o que mede mais de um tile — a dimensão da folha do
+  catálogo, consultada só como RESERVA, nunca antes das flags — são `scene`; `top` é `top`. A
+  partir do primeiro `scene` do tile, todo item não-`top` que vem depois também é `scene` — o
+  quadro pendurado na parede é parte dela e, sozinho, seria chão. **elevação**
+  `height.elevation` acumula pelos
   itens com teto de 24 px e sobe o que vem depois — e a criatura — para cima e para a
   esquerda, `top` ignora; **shift** desloca o próprio item; **padrão** por `(x % w, y % h)`,
   por CONTAGEM para o empilhável que veio com contagem E tem o padrão de 4×2 da tabela (1–4
   na primeira linha, 5/10/25/50 na segunda — a moeda de 4×3 do 13.x volta à posição, como o
   cliente do Tibia faz), pelo GANCHO da parede do mesmo tile para o pendurável (sul → coluna
   1, leste → 2); **âncora** no canto inferior direito do tile, como já era. **Andares**
-  (`world/floors.ts`, puro): na superfície desenha-se do andar do jogador até o 7, o de baixo
-  primeiro, cada nível abaixo deslocado um tile para baixo e para a direita — o
-  `transformPositionTo2D` do OTClient — e sob um véu (`VEIL_PER_FLOOR`, também sobre os
-  retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da arte); no
-  subsolo, só o andar do jogador; quem está ACIMA do jogador não aparece — não há telhado. A
+  (`world/visibility.ts`, puro; `world/floors.ts` é só o véu; M23, D7): desenha-se
+  `visibleFloors(first, last)`, o de baixo primeiro. `last` é o 7 na superfície e `z + 2` no
+  subsolo; `first` é 0 na superfície e `max(z − 2, 8)` no subsolo, **subindo até a primeira
+  cobertura** — a regra de `calcFirstVisibleFloor` do OTClient, em números: nos 3×3 em volta da
+  posição LÓGICA do jogador (o centro sempre, os ortogonais só com vista livre, a diagonal
+  nunca), o tile fisicamente acima `(x, y, z−1)` ou o geometricamente acima `(x+1, y+1, z−1)`
+  cuja primeira coisa é chão, ou `bottom` (com `unsight` quando o tile de baixo tem vista
+  livre), e que não é `dontHide`, limita a vista em `z`. Cada andar ABAIXO do jogador aparece
+  deslocado um tile para baixo e para a direita por nível e sob um véu (`VEIL_PER_FLOOR`, também
+  sobre os retângulos de reserva e as criaturas sem quadro: o véu é da profundidade, não da
+  arte); cada andar ACIMA, um tile para cima e para a esquerda, **sem véu** — é o telhado da casa
+  e o topo da montanha, e a criatura que está lá aparece. Entrar em casa cobre: o andar de cima
+  some numa rampa de `FLOOR_FADE_MS` no alpha do container dele (`floorAlpha`), e volta na mesma
+  rampa ao sair; trocar de andar é teleporte e não tem rampa. A rua (7) nunca entra no subsolo. A
   criatura em cima de uma caixa sobe a elevação do tile, INTERPOLADA ao longo do passo — lida
-  só pelo tile arredondado ela pulava 24 px no meio do passo. A ordem de desenho das criaturas
-  é pela posição de TELA (deslocada pelo andar). `ambience: 'cavern'` do `instance-enter` é um
-  tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**
+  só pelo tile arredondado ela pulava 24 px no meio do passo. `ambience: 'cavern'` do
+  `instance-enter` é um tom sobre as camadas inteiras — a Rat Cellars o declara no conteúdo. **Os itens do chão**
   (`world.groundItems`, FUN-123 — os cadáveres) entram na pilha do tile como itens comuns, por
   cima do que o mapa tem, e `groundItemsVersion` entra na chave da repintura: um cadáver que
   cai repinta o tile dele sem varrer o mapa a cada quadro. Chegam por `ground-item-appear` /
   `ground-item-disappear` e no `session-state.world.groundItems`, que substitui. **Mapa autorado à mão** (a adega de
   teste) vira pilha SINTÉTICA — `[chão]` no livre, `[peça pela vizinhança]` no bloqueado
   (`sceneFromTilemap`) — e passa pelo MESMO pintor: um caminho de desenho, duas origens. Cena
-  ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. Ao
-  receber a cena, `AssetPack.warmObjects` aquece as folhas dos ids da janela inicial, como
-  `warmOutfit` faz com os monstros.
+  ausente (sem `VITE_THINGS_URL`, 404) é a grade lisa de reserva, nunca tela preta. **O
+  prefetch é CONTÍNUO** (M23, D5): o viewport aquece a janela INTEIRA de prefetch
+  (`PREFETCH_TILES` = 5, dois tiles além da de render) quando cena, pacote, andar ou `resize`
+  mudam, e a cada tile cruzado pede ao pacote só a faixa que ENTROU (`tilesEntering`, uma
+  chamada a `AssetPack.warmObjects`); o outfit de cada criatura dentro dessa janela é aquecido
+  uma vez por pacote (`warmOutfitsNear`, deduplicado por `appearanceId`, o `Set` zerado em
+  `setPack`). A folga de dois tiles entre a janela de render e a de prefetch é o tempo que uma
+  folha tem para sair do Worker antes de ser desenhada — é o que tira o retângulo de reserva da
+  borda da tela.
+- **A criatura pertence ao WALKING TILE, não ao tile arredondado** (`world/walking-tile.ts`,
+  puro; #386). Durante o passo, a ordem dela na `spatialScene` é a do tile que contém o canto
+  inferior direito do corpo de 32×32, deslocado pelo `shift` do outfit
+  (`AssetPack.outfitDisplacement`) — a regra do `updateWalkingTile()` do OTClient, em números,
+  nunca código: para leste/sul a troca é aos 50 % com o displacement de 8 px que os outfits
+  têm, para norte/oeste aos 75 %, sempre dentro do 3×3 em volta do destino. O sprite é
+  desenhado `displacement` px acima e à esquerda da âncora; **barra e nome ficam no tile**.
+  Sprite de 64×64 não muda nada: a âncora é o mesmo canto. Parada, a criatura é do próprio
+  tile, seja qual for o displacement.
 - **Setas e WASD andam, e a repetição da tecla presa é do CLIENTE** (`shell/walk-keys.ts`,
   puro; `shell/useWalkKeys.ts`, a casca; FUN-122). Só as quatro cardeais, a última tecla
   pressionada vence, nunca diagonal — o que o Huntera faz. O hook ouve a JANELA (o canvas
@@ -340,9 +381,13 @@ pnpm tsx scripts/make-sheet-fixture.ts
   de `wallsOf` é RETANGULAR de propósito — num mapa quadrado, trocar `width` por `height`
   passa em silêncio. A chave de textura continua sendo id + célula do padrão: as peças têm
   padrão 2×1 e 1×2, e `tileTexture` já resolve isso.
-- **A ordem de desenho só é recalculada quando alguém troca de tile.** Dentro de um passo as
-  criaturas deslizam sem se ultrapassar, então reordenar a cada quadro é refazer o mesmo
-  trabalho 60 vezes por segundo.
+- **A ordem de desenho é um número por objeto, e o Pixi só reordena quando um `zIndex` muda.**
+  Não há varredura de ordenação por quadro nem reordenação de filho por índice: o `scene` de cada
+  andar tem `sortableChildren`, e o Pixi ordena os filhos uma vez por render quando algum entrou
+  ou trocou de `zIndex` (`sortDirty`). O zIndex da criatura sai do WALKING TILE (386) — muda no
+  meio do passo, e é aí que ela passa para trás ou para a frente da parede. A troca é **uma por
+  passo**, não reordenação por quadro: acontece aos 50 % para leste/sul e aos 75 % para
+  norte/oeste, e só quando o tile muda é que o `zIndex` é escrito.
 - **Reconectar é REANEXAR** (`net/connection.ts`). Não recarrega a página, não recria
   personagem e **não limpa o store**: pede ticket novo e volta para a mesma sessão, que nunca
   parou de rodar. A tela continua mostrando a última coisa verdadeira até o `session-state`
@@ -383,6 +428,56 @@ project reference, e o `vite build` usa esbuild, que remove tipo sem checar. Dav
 O teste de desempenho que importa — com 40 criaturas se movendo, os commits do React ficam
 próximos de zero — é medido no `apply.test.ts` uma camada abaixo: commit só acontece se alguém
 for avisado, então o teste conta AVISOS, e o número esperado é zero, não "baixo".
+
+**As métricas do renderer (M23 §40) se leem no console, em desenvolvimento.** Com o `pnpm dev`
+rodando e a tela do mundo montada, `window.__draconya.renderStats()` devolve a fotografia dos
+contadores de `ViewportHandle.stats()` — `renderedTiles`, `prefetchedIds`, `sceneSprites`,
+`textureHits`, `textureMisses`, `terrainRepaints`, `frames` e `lastFrameMs`. É leitura sob
+demanda: `stats()` não dispara render nem escreve no `world` (ADR 0007), e o global só existe
+quando `import.meta.env.DEV` é verdadeiro — em produção `window.__draconya` nunca é escrito, e
+o cleanup da montagem o apaga. Serve para responder com NÚMERO a "houve regressão de FPS?" e
+"algum tile entrou sem textura?" em vez de olhar a tela.
+
+### Regressão visual do mundo espacial (M23, #389)
+
+`src/world/scenarios.test.ts` prende dez DECISÕES do renderer — camada, `zIndex`/ordem, alpha,
+instante do pedido de textura, contador —, não pixels, sobre o harness de #381 e a arte sintética
+com latência. O nome de cada `describe` é o do PRD (§39, CA-01 a CA-08):
+
+- `01-walk-open-field` — a textura entra 3 tiles (overscan) antes da tela e é aquecida 5 antes;
+  nenhum retângulo de reserva na área visível depois do primeiro segundo.
+- `02-walk-next-to-horizontal-wall` — criatura ao norte da parede desenha antes; ao sul, depois;
+  o walking tile troca ao cruzar a abertura.
+- `03-walk-next-to-vertical-wall` — idem no eixo x.
+- `04-walk-around-column` — norte/oeste atrás; sul/leste na frente (anti-diagonal, #385).
+- `05-walk-around-large-object` — a árvore de 2×2 é `scene`, não `ground`.
+- `06-enter-building` — o andar de cima some numa rampa de 250 ms (1 → ~0,5 → 0) ao entrar.
+- `07-exit-building` — e volta na mesma rampa (0 → ~0,5 → 1), sem sair de [0, 1].
+- `08-change-floor` — trocar de andar reparenta o sprite e aquece os ids do andar novo.
+- `09-elevation-object` — o parcel sobe a criatura 0, −2, −4, −6, −8 px, sem mexer no `zIndex`.
+- `10-fast-continuous-walk` — 31 aquecimentos (1 + 1 por passo), só a coluna nova, sem pedido
+  repetido, 31 repinturas.
+
+**Por que não há baseline de PNG.** O pacote de arte (`things/`) não é versionado e não está em
+CI; um teste que só rodasse com ele seria desligado no primeiro PR vermelho. Baseline de pixels
+fica como dívida declarada (PRD §39). O critério de aceite HUMANO do milestone é o roteiro
+abaixo, com sprites reais, quando `things/` existir.
+
+**Roteiro manual (com `THINGS_DIR`/`pnpm dev`).** `pnpm assets:fetch:1098` popula `things/`;
+suba o `pnpm dev` e olhe cada cenário na tela do mundo:
+
+| Cenário | Mapa / posição | O que olhar |
+|---|---|---|
+| 01 campo aberto | Thais, rua 7, ande 30 tiles em linha reta | o chão nunca vira retângulo na área visível; a arte aparece já na borda |
+| 02 parede horizontal | Thais, ao lado de um muro de leste-oeste | passar por cima/sob o muro: a criatura some atrás quando está ao norte, na frente quando ao sul |
+| 03 parede vertical | Thais, ao lado de um muro de norte-sul | idem, no eixo x; na abertura a troca é no meio do passo |
+| 04 coluna | qualquer pilar/estátua | contornar o pilar: a ordem norte/oeste vs sul/leste não pisca |
+| 05 objeto grande | uma árvore de 2×2 | a copa cobre a criatura ao sul; a criatura cobre a base quando está ao norte |
+| 06 entrar em casa | qualquer casa de telhado | ao entrar o telhado esmaece ~250 ms e some; o personagem continua visível |
+| 07 sair de casa | a mesma casa | ao sair o telhado volta em ~250 ms, sem piscar |
+| 08 trocar de andar | uma escada/bueiro | o chão do andar antigo sai da tela; o sprite segue para o andar novo |
+| 09 elevação | um `parcel`/caixote de 8 px | a criatura sobe suave ao pisar, sem saltar, e não troca de profundidade |
+| 10 caminhada rápida | Thais, andando sem parar | sem engasgo nem retângulo na borda; `renderStats().terrainRepaints` acompanha o passo |
 
 ## Armadilhas conhecidas
 
@@ -490,9 +585,10 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   à mesma sessão (ADR 0001): o que se perde é o clique, não o estado.
 - **O catálogo de hunts SUBSTITUI a lista, nunca acumula.** Reconectar reenvia a mesma lista, e
   concatenar daria hunts duplicadas a cada queda de rede.
-- **A UI do bot não tem lista de opções em código** (FUN-89). Categorias, slots, magias e
-  supplies vêm do catálogo (`state/hud.ts`, `catalogue`). Divergir do servidor faz o jogador
-  configurar o que o bot recusa — e descobrir pelo extrato que não fecha.
+- **A UI do bot não tem lista de opções em código** (AB-10…AB-13). Conjuntos, slots, teclas,
+  grupos de cooldown, magias, itens e modelos de automação vêm do catálogo (`state/hud.ts`,
+  `catalogue`). Divergir do servidor faz o jogador configurar o que o bot recusa — e descobrir
+  pelo extrato que não fecha.
 - **Salvar é intenção, e a recusa NÃO descarta o rascunho.** Apagar o que o jogador escreveu é a
   pior resposta a "corrija isto". `bot-config-result` é tipado justamente para a tela não ter de
   casar com o texto de um `system-message`.
@@ -507,21 +603,22 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   atividade faz o jogador procurar a poção no meio da luta. **Set, mochila e bolsa são seções
   FIXAS da direita desde #161** (`EquipmentPanel`, `ContainerWindow` × 2): sempre montadas, o
   botão do próprio `EquipmentPanel` minimiza as três (`collapsed` esconde tudo menos o cabeçalho,
-  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. Com bow na mão o escudo é o
-  seletor de munição (`AmmoPicker`). Arrastar é DnD
+  RC-09/#322 — antes era um ícone na barra do topo), nunca remove. **A munição é abstrata**
+  (ADR 0026 d.3, restaurada na M18): com um bow/crossbow na mão, o slot do Escudo vira o
+  `AmmoPicker` — a seleção por família, com preço por tiro e level — e o slot `ammo` do corpo
+  segue genérico. Não há pilha nem contagem de munição. Arrastar é DnD
   nativo por cima de `shell/drag-intent.ts`, que é puro: `dropIntent`/`clickIntent` decidem a
   MENSAGEM e os testes (`prerender`, sem evento) testam a decisão; o `dataTransfer` carrega só o
-  lugar de origem. **O bot é uma seção FIXA da esquerda desde #162** (o vBot): sempre montada,
-  minimizável pelo próprio cabeçalho (RC-09/#322 — antes era a barra do topo; `collapsed` esconde
-  tudo menos o cabeçalho), nunca removida; uma linha compacta por regra com o interruptor
-  (`enabled`), e a edição fina por cima no `RuleEditor`. O interruptor salva sozinho — `bot/store.ts`
-  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), o painel injeta
-  o remetente por `setConfigSender` ao montar.
+  lugar de origem. **A barra de ações 2 × 12 é a configuração do bot desde o M18** (AB-10…AB-13):
+  montada na Cidade e na caçada, com o `ActionConfigModal` para editar o slot e o
+  `AutomationsPanel` para as cinco automações. O interruptor salva sozinho — `bot/store.ts`
+  `scheduleSave` com debounce de 300 ms; a store não importa `net/` (ADR 0007), a barra injeta
+  o remetente por `setConfigSender` ao montar. O painel Bot v1 foi aposentado no mesmo marco.
 - **A party mora na seleção de hunt, e entra na hunt pelo `connect` de sempre** (#197, ADR 0027;
   geografia desde #259, ADR 0029 D6). `shell/PartyPanel.tsx` é a coluna DIREITA do
   `shell/HuntsModal.tsx` — modal "Escolha uma caçada", não mais fixo na Cidade (o Huntera põe a
   party na seleção de caçada: propor uma hunt É escolher uma hunt) —, e `PartyMembers` é um
-  painel FIXO da coluna esquerda, ao lado de `BotPanel`/`SkillsPanel` (nome, HP % — do
+  painel FIXO da coluna esquerda, ao lado de `AutomationsPanel`/`SkillsPanel` (nome, HP % — do
   `party-state` e, no meio, do `world` por nome, lido num intervalo, porque o mundo não avisa
   ninguém): sempre montado, sem `open.*` — ele mesmo se esconde fora de party
   (`state.party === null`), o mesmo padrão de `BattlePanel.tsx`. "Party loot" (#316) é uma janela
@@ -554,9 +651,9 @@ for avisado, então o teste conta AVISOS, e o número esperado é zero, não "ba
   os seis ícones PNG das janelas, na ORDEM DO KIT (Personagem, Hunts, Analisador, Cyclopedia,
   Amigos desde #404, Chat — nunca
   emoji, D9; RC-09/#322 revoga DS-08, que tinha Bot e Inventário aqui — eles se minimizam pelo
-  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até o rodapé — sem a
-  faixa inferior de 124 px do handoff, porque a barra de ações que ela hospedava não entra neste
-  marco (D5). A geografia continua a mesma de sempre, só a moldura mudou de pele.
+  próprio cabeçalho agora), colunas de 232 px com fundo opaco (`--ash-1`) indo do topo até a
+  fileira inferior de 124 px, que é a **barra de ações** entregue no M18 (AB-10, ADR 0032 d.1–5;
+  o D5 do ADR 0029 a adiava). A geografia continua a mesma de sempre, só a moldura mudou de pele.
   Analisador e Bestiário nascem ABERTOS: quem decide se a janela existe é a barra, e janela que
   abre minimizada é janela que abre vazia. **Hunts é EXCEÇÃO desde #259** (ADR 0029 D6): não é
   mais uma seção da coluna, é o `HuntsModal` — modal sob demanda, fechado por padrão

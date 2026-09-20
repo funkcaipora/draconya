@@ -1,6 +1,7 @@
 {
   "id": "groundshaker",
   "name": "Groundshaker",
+  "description": "Causa dano mágico numa área de 7x7 ao seu redor.",
   "vocationId": "knight",
   "minLevel": 33,
   "manaCost": 200,

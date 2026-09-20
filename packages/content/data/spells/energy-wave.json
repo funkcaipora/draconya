@@ -1,6 +1,7 @@
 {
   "id": "energy-wave",
   "name": "Energy Wave",
+  "description": "Lança uma onda de energia à sua frente.",
   "vocationId": "sorcerer",
   "minLevel": 38,
   "manaCost": 170,

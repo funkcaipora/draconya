@@ -1,6 +1,7 @@
 {
   "id": "ultimate-healing-sorcerer",
   "name": "Ultimate Healing",
+  "description": "Cura você.",
   "vocationId": "sorcerer",
   "minLevel": 30,
   "manaCost": 160,

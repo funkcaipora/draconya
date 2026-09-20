@@ -46,7 +46,7 @@ describe('argumentos', () => {
 
 describe('parties no cliente de carga (#198)', () => {
   it('reads --party and the two axes, defaults to solo with both on, and refuses a non-boolean', () => {
-    // ADR 0033 D1 (#407, DT-04): o `--party-mode` saiu junto com o `mode` do `/propose`; o
+    // ADR 0035 D1 (#407, DT-04): o `--party-mode` saiu junto com o `mode` do `/propose`; o
     // cliente de carga passou a mandar os dois eixos.
     expect(parseArguments([], 4)).toMatchObject({ party: 1, shareCosts: true, splitLoot: true });
     expect(parseArguments(['--party', '4', '--party-share-loot', 'false'], 4))

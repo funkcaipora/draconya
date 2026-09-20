@@ -1,6 +1,7 @@
 {
   "id": "light-healing-druid",
   "name": "Light Healing",
+  "description": "Cura você.",
   "vocationId": "druid",
   "minLevel": 8,
   "manaCost": 20,

@@ -1,6 +1,7 @@
 {
   "id": "divine-caldera",
   "name": "Divine Caldera",
+  "description": "Causa dano sagrado numa área de 7x7 ao seu redor.",
   "vocationId": "paladin",
   "minLevel": 50,
   "manaCost": 160,

@@ -492,6 +492,55 @@ describe.runIf(ready)('a coluna `gold` bate com o ledger (FUN-57)', () => {
     expect((await characterRow(database, characterId)).gold)
       .not.toBe(await foldLedger(database, characterId));
   });
+
+  it('com gasto no uso, a linha do extrato leva o líquido e a coluna continua batendo', async () => {
+    // Sem compras por lote (reversão do modelo abstrato): o `goldSpent` já é o total debitado no
+    // uso, e a linha do extrato leva o líquido `goldGained - goldSpent`. O que este teste prende:
+    // (a) uma linha por extrato, com `(session_id, seq)`; (b) retry não duplica; (c) a coluna
+    // `characters.gold` é a projeção dobrada no piso.
+    const database = db as NonNullable<typeof db>;
+    const characterId = await seedCharacter(database);
+    const receipts = new ReceiptStore(redis);
+    const aggs = (goldGained: number, goldSpent: number) => ({
+      durationMs: 1_000, xpGained: 0, goldGained, goldSpent,
+      kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+    });
+
+    await receipts.save(receiptOf(randomUUID(), characterId, {
+      aggregates: aggs(500, 0),
+    }));
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const sessionId = randomUUID();
+    const spent = receiptOf(sessionId, characterId, { seq: 3, aggregates: aggs(100, 90) });
+    await receipts.save(spent);
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+
+    const rows = await database.database.db
+      .select({ type: ledger.type, seq: ledger.seq, delta: ledger.delta })
+      .from(ledger)
+      .where(eq(ledger.sessionId, sessionId))
+      .orderBy(asc(ledger.seq));
+    expect(rows.map((row) => [row.type, row.seq, row.delta])).toEqual([
+      ['session-drain', 3, 10],
+    ]);
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    expect((await characterRow(database, characterId)).gold).toBe(510);
+    expect((await characterRow(database, characterId)).gold)
+      .toBe(await foldLedger(database, characterId));
+
+    // Retry do MESMO extrato: a chave única recusa a linha e nada muda.
+    await receipts.save(spent);
+    await writePendingReceipts({
+      database: database.database.db, receipts, logger, progression,
+    });
+    expect(await countLedgerRows(database.database.db, sessionId)).toBe(1);
+    expect((await characterRow(database, characterId)).gold).toBe(510);
+  });
 });
 
 describe.runIf(ready)('liquidação de um personagem só (FUN-56)', () => {

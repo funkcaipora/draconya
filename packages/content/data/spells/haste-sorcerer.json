@@ -1,6 +1,7 @@
 {
   "id": "haste-sorcerer",
   "name": "Haste",
+  "description": "Aumenta a sua velocidade de movimento em 30% por 30 segundos.",
   "vocationId": "sorcerer",
   "minLevel": 14,
   "manaCost": 60,

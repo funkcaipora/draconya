@@ -1,6 +1,7 @@
 {
   "id": "intense-healing-paladin",
   "name": "Intense Healing",
+  "description": "Cura você.",
   "vocationId": "paladin",
   "minLevel": 20,
   "manaCost": 70,

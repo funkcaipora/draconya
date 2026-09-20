@@ -19,29 +19,48 @@ export const CLIENT_TO_SERVER = {
   'bot-config': 11,
   equip: 12,
   unequip: 13,
+  /**
+   * Escolher a munição (#152, ADR 0026 decisão 3). INTENÇÃO: o cliente diz QUAL munição, e
+   * quem decide se o level basta é o servidor (invariante 4). A escolha aparece de volta em
+   * `player-stats.ammo`; a recusa vira `system-message`, como a de equipar.
+   */
   'select-ammo': 14,
-  /** Escolher a vocação (#154, ADR 0026 decisão 1). 15: o 14 foi do `select-ammo` (#152). */
+  /** Escolher a vocação (#154, ADR 0026 decisão 1). 15: o 14 é do `select-ammo` (#152). */
   'choose-vocation': 15,
   /** Mover um item entre lugares (#160, ADR 0026 decisão 6). */
   'move-item': 16,
   /**
+   * Disparo manual de um slot da barra (AB-09, ADR 0032 d.3). INTENÇÃO: o cliente diz QUAL
+   * slot; elegibilidade, estoque, mana, cooldown e recusa são do servidor (invariante 4).
+   */
+  'use-slot': 17,
+  /**
+   * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
+   * criatura pelo id numérico do servidor; quem decide se é alvo válido é o servidor.
+   */
+  'select-target': 18,
+  /**
    * O líder muda rateio, divisão de lucro, coleta ou venda automática EM TEMPO DE HUNT
-   * (#393, ADR 0033 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
+   * (#393, ADR 0035 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
    * mantém o valor atual — e quem decide se quem mandou é o líder e se os ids do catálogo
    * existem é o servidor (invariante 4). Sucesso é `party-state` (v2) refletindo o estado
    * novo; recusa (`not-leader`, item fora do catálogo, `value: 0` na venda) é
    * `system-message` — não existe um `party-settings-result` dedicado, porque a tela já
    * reflete a verdade no próprio `party-state`, e não o eco do que foi mandado.
+   *
+   * 19: o 17 e o 18 são do `use-slot` e do `select-target` (AB-09), que chegaram antes.
    */
-  'party-settings': 17,
+  'party-settings': 19,
   /**
    * A votação de encerrar a hunt para todos (#432, ADR 0032 decisão 14). INTENÇÃO, como tudo:
    * `approve: true` é o líder PROPOR (a proposta carrega o sim dele) e é o membro APROVAR a
    * proposta em curso; `approve: false` é recusar — derruba a votação e a sessão segue. Quem
    * decide se quem mandou pode propor é o servidor, dentro da sessão dona (invariante 4/9), e a
    * recusa vira `system-message`. Sair sozinho continua `leave-hunt` (10), livre.
+   *
+   * 20: o 19 é do `party-settings`.
    */
-  'party-end-vote': 18,
+  'party-end-vote': 20,
 } as const;
 
 export const SERVER_TO_CLIENT = {
@@ -106,13 +125,13 @@ export const SERVER_TO_CLIENT = {
   'ground-item-appear': 22,
   'ground-item-disappear': 23,
   /**
-   * A party (#196, ADR 0027; v2 no #393, ADR 0033). Quatro mensagens só S2C: quem está nela
+   * A party (#196, ADR 0027; v2 no #393, ADR 0035). Quatro mensagens só S2C: quem está nela
    * (`party-state` — sai no attach e quando composição, liderança ou configuração mudam), o
    * que há na bolsa compartilhada (`party-bag` — a cada mudança), o que o settlement pagou
    * (`party-settlement` — a cada saída, no fim, ao desligar `splitLoot`, e a cada venda
    * automática) e — desde o #393 — como o Follow do bot está (`follow-state`, por
    * personagem). C2S: sair é `leave-hunt` (10); mudar configuração em tempo de hunt é
-   * `party-settings` (17). Formar a party continua HTTP (ADR 0027 decisão 8).
+   * `party-settings` (19). Formar a party continua HTTP (ADR 0027 decisão 8).
    */
   'party-state': 24,
   'party-bag': 25,
@@ -146,19 +165,32 @@ export const SERVER_TO_CLIENT = {
    */
   'party-spending': 29,
   /**
-   * O Follow do bot mudou de estado (#393, ADR 0033 decisão 9): ligou, desligou, ou foi
+   * O estado de cada slot do conjunto ATIVO (AB-09, ADR 0032 d.3). Só S2C: a CONTAGEM não vem
+   * aqui — ela é do `inventory` (invariante 4, o servidor manda o número, não a regra). Sai no
+   * attach e quando o par `(state, reason)` de algum slot muda; o `remainingMs` é o instante da
+   * entrega, e o cliente anima o cooldown localmente.
+   */
+  'slot-state': 30,
+  /** A resposta ao `use-slot` (AB-09, ADR 0032 d.3): `ok:false` carrega o motivo para o tooltip. */
+  'slot-result': 31,
+  /**
+   * O Follow do bot mudou de estado (#393, ADR 0035 decisão 9): ligou, desligou, ou foi
    * interrompido porque o alvo morreu, saiu ou ficou inalcançável. Por PERSONAGEM — cada
    * membro segue quem quiser. Nunca escolhe outro alvo sozinho: `active: false` é o fim da
    * história até o jogador escolher de novo (ou o mesmo alvo voltar a ser válido).
+   *
+   * 32: o 30 e o 31 são do `slot-state` e do `slot-result` (AB-09), que chegaram antes.
    */
-  'follow-state': 30,
+  'follow-state': 32,
   /**
    * O estado da votação de encerrar a hunt para todos (#432, ADR 0032 decisão 14): o líder
    * propôs, `approved` lista quem já aprovou e `active` diz se a janela de 60 s ainda corre.
    * Sai quando a proposta abre, a cada aprovação, ao expirar e ao ser recusada — e no attach,
    * para quem reconecta no meio da votação. `active: false` é o fim dela.
+   *
+   * 33: o 32 é do `follow-state`.
    */
-  'party-end-vote': 31,
+  'party-end-vote': 33,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

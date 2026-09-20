@@ -1,4 +1,4 @@
-# 0033 — Party v2: eixos mutáveis, bolsa com reserva e elegibilidade, entrada em curso e bot cooperativo
+# 0035 — Party v2: eixos mutáveis, bolsa com reserva e elegibilidade, entrada em curso e bot cooperativo
 
 **Status:** aceito
 **Data:** 2026-09-18

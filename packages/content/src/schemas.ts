@@ -145,10 +145,10 @@ export const appearancesSchema = z.object({
   /** `id de item → appearanceId`. */
   items: z.record(z.string().min(1), appearanceId).default({}),
   /**
-   * `id de munição → { icon, missile }` (ADR 0026, decisão 3; #152). `icon` é o objeto da
-   * flecha no pacote — o que o seletor mostra no slot do escudo —, `missile` é o projétil do
-   * tiro. Os dois obrigatórios e conferidos dos dois lados, como item: munição sem ícone não
-   * tem como ser escolhida, e tiro sem projétil é um monstro perdendo vida do nada.
+   * `id de munição → { icon, missile }` (#152, ADR 0026 decisão 3). A munição é ABSTRATA, não
+   * item: o seletor do slot do escudo lista a família do bow, e o tiro é o projétil. O ícone é
+   * `icon` (não há mais `appearances.items[id]` para a munição) e `missile` é o projétil — a
+   * linha tem dois números, e `resolveAmmunition` confere os dois lados.
    */
   ammunition: z.record(z.string().min(1), z.object({
     icon: appearanceId,
@@ -471,6 +471,35 @@ export const ITEM_ORIGINS = [
 export type ItemOrigin = (typeof ITEM_ORIGINS)[number];
 
 /**
+ * Os grupos de cooldown do consumível (ADR 0032 d.2/d.6). O motor v2 os lê: o uso do supply
+ * tranca o livro do grupo, como a magia tranca o dela.
+ */
+export const CONSUMABLE_GROUPS = ['potion', 'attack', 'healing', 'support'] as const;
+export type ConsumableGroup = (typeof CONSUMABLE_GROUPS)[number];
+
+/**
+ * O efeito do consumível. `blessing` entra agora (a TP-03 a consome em M22); o `sim` v1 a
+ * recusa até lá — a projeção `Supply` a deixa de fora justamente por isso.
+ */
+export const consumableEffectSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('heal'), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+  z.object({
+    kind: z.literal('damage'),
+    basePower: z.number().int().positive(),
+    range: z.number().int().positive(),
+    area: z.object({
+      shape: z.literal('circle'),
+      radius: z.number().int().positive(),
+      centered: z.literal('target').default('target'),
+    }),
+    damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+  }),
+  z.object({ kind: z.literal('blessing') }),
+]);
+export type ConsumableEffect = z.infer<typeof consumableEffectSchema>;
+
+/**
  * A DEFINIÇÃO de um item (§21.2, FUN-76).
  *
  * **Estrito, ao contrário dos outros schemas** (FUN-94). Zod DESCARTA chave desconhecida em
@@ -490,11 +519,20 @@ export const itemSchema = z.strictObject({
   id: z.string().min(1),
   name: z.string().min(1),
   /**
-   * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
-   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). Munição
-   * NÃO é item (decisão 3): é `ammunitionSchema`, uma seleção que debita gold por tiro.
+   * O rótulo curto da barra/Mochila (AB-13, #424). Opcional: só o item que precisa de uma
+   * forma abreviada o declara, e a tela cai no `name` quando ele falta. É APRESENTAÇÃO de
+   * texto, não arte (invariante 6).
    */
-  kind: z.enum(['weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other']),
+  shortLabel: z.string().min(1).optional(),
+  /**
+   * `container` é a mochila (ADR 0026, decisão 6): o item que se veste nas costas e dentro do
+   * qual o loot cai — os lugares dele entram com o container no `sim` (issue #160). `consumable`
+   * é o único tipo que sobrevive ao modelo abstrato (a `blessing-charge`, M22): poção, runa e
+   * munição NÃO são itens — são `supply`/`ammunition`, uma seleção que debita gold no uso/tiro.
+   */
+  kind: z.enum([
+    'weapon', 'armor', 'shield', 'ring', 'amulet', 'container', 'other', 'consumable',
+  ]),
   slot: z.enum(ITEM_SLOTS).optional(),
   /**
    * Ocupa as duas mãos (o bow): equipar recusa escudo, e vice-versa — a regra é do `sim`
@@ -521,8 +559,8 @@ export const itemSchema = z.strictObject({
    */
   value: z.number().int().nonnegative(),
   /**
-   * Empilha na mesma linha de inventário? Queijo empilha; espada não. Munição não é item
-   * (#151) — nem tem este campo.
+   * Empilha na mesma linha de inventário? Queijo empilha; espada não. A `blessing-charge` NÃO
+   * empilha — é carga única, e o schema não impõe mais `stackable: true` a consumível.
    */
   stackable: z.boolean().default(false),
   attack: z.number().int().nonnegative().default(0),
@@ -544,6 +582,8 @@ export const itemSchema = z.strictObject({
   requires: z.object({
     level: z.number().int().positive().optional(),
     vocationId: z.string().min(1).optional(),
+    /** O `magicLevel` da runa (#165). Hoje só o supply de dano o usa. */
+    magicLevel: z.number().int().nonnegative().optional(),
   }).default(() => ({})),
   /**
    * Cargas e duração (§21.3). **Declarados, e ainda não consumidos por ninguém.**
@@ -562,20 +602,99 @@ export const itemSchema = z.strictObject({
   mitigation: mitigationSchema.default(() => ({ resistances: {}, immunities: [] })),
   /** Efeito passivo de anel, ativo enquanto vestido (§13.9, SV-16). Só em `kind: 'ring'`. */
   ringEffect: ringEffectSchema.optional(),
+  /** O efeito do consumível (M22). Só em `kind: 'consumable'` — a `blessing-charge`. */
+  effect: consumableEffectSchema.optional(),
   _open: z.string().optional(),
+}).superRefine((item, ctx) => {
+  // O schema de campo opcional não sabe do `kind`; é aqui que a forma de um tipo não invade o
+  // outro. Um `effect` num anel seria descartado em silêncio se o schema fosse aberto.
+  if (item.kind === 'consumable') {
+    if (item.effect === undefined) ctx.addIssue({ code: 'custom', message: 'consumível sem `effect`' });
+  } else if (item.effect !== undefined) {
+    ctx.addIssue({ code: 'custom', message: 'só `kind: consumable` tem `effect`' });
+  }
 });
 
 /** O item como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
+/**
+ * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
+ * direto, no ato. Por isso supply tem preço e `group` de cooldown, e não tem peso, slot nem
+ * instância. O `effect` é a união discriminada por `kind`, fechada como o vocabulário do bot:
+ * o `sim` só executa o que conhece. `group` é o grupo de cooldown do motor v2 (poção → `potion`,
+ * runa de ataque → `attack`).
+ */
+export const supplySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  /**
+   * O texto de apresentação do suprimento (#436, ADR 0033), em português — o que o
+   * `ActionConfigModal` mostra abaixo dos números. Opcional: a sub-issue das descrições
+   * preenche os arquivos reais; sem o campo, o cliente cai no fallback fixo por Tipo.
+   */
+  description: z.string().min(1).optional(),
+  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
+  price: z.number().int().nonnegative(),
+  /** Grupo de cooldown do motor v2 (ADR 0032 d.2). O mesmo vocabulário de `spell.group`. */
+  group: z.enum(CONSUMABLE_GROUPS),
+  /**
+   * Por quanto tempo o uso tranca o livro do grupo (ADR 0032 d.2/d.6), como
+   * `spell.groupCooldownMs`. O supply não tem cooldown individual separado: o grupo É o livro
+   * dele. Default 1000: o passo do Tibia para poção e a cadência que o pool `potion` já
+   * respeitava; a runa de `attack` declara o dela para se alinhar às magias de ataque.
+   */
+  groupCooldownMs: z.number().int().positive().default(1_000),
+  effect: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('heal'), amount: z.number().int().positive(),
+      /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10). */
+      target: z.enum(['self', 'friend']).optional(),
+      /** Obrigatório com `target: 'friend'`, proibido com `'self'` — `buildContent` confere. */
+      range: z.number().int().positive().optional(),
+    }),
+    z.object({
+      kind: z.literal('mana'), amount: z.number().int().positive(),
+      target: z.enum(['self', 'friend']).optional(),
+      range: z.number().int().positive().optional(),
+    }),
+    /**
+     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
+     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
+     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
+     */
+    z.object({
+      kind: z.literal('damage'),
+      basePower: z.number().int().positive(),
+      range: z.number().int().positive(),
+      area: z.object({
+        shape: z.literal('circle'),
+        radius: z.number().int().positive(),
+        centered: z.literal('target').default('target'),
+      }),
+      /**
+       * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
+       * Avalanche é gelo, e o arquivo declara.
+       */
+      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+    }),
+  ]),
+  /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
+  requires: z.object({
+    level: z.number().int().positive().optional(),
+    magicLevel: z.number().int().nonnegative().optional(),
+  }).default(() => ({})),
+  _open: z.string().optional(),
+});
+
+export type Supply = z.infer<typeof supplySchema>;
 
 /**
  * Munição (ADR 0026, decisão 3 — o modelo do Huntera). NÃO é item: não tem peso, pilha nem
- * instância. É uma SELEÇÃO por família, mostrada no slot do escudo com o bow na mão; a grátis
- * (`price: 0`) é o padrão da família, e cada tiro das outras debita `price` do gold do
- * personagem, pelo caminho do supply (§20.1). Quem atira é o `sim` (issue #152); aqui ficam
- * os números. Estrito, como o item, e pela mesma razão: `appearanceId` escrito aqui por hábito
- * iria para lugar nenhum em silêncio.
+ * instância. É uma SELEÇÃO por família, mostrada no slot do escudo com o bow na mão; cada tiro
+ * debita `price` do gold do personagem. O `attack` do tiro é este `attack` pela skill de
+ * distância — o bow não tem attack próprio. Estrito, como o item, e pela mesma razão:
+ * `appearanceId` escrito aqui por hábito iria para lugar nenhum em silêncio.
  */
 export const ammunitionSchema = z.strictObject({
   id: z.string().min(1),
@@ -585,8 +704,8 @@ export const ammunitionSchema = z.strictObject({
   attack: z.number().int().nonnegative(),
   /** O tipo de dano do tiro (CMB-03). Ausente é `physical`, o default que preserva o v1. */
   damageType: z.enum(DAMAGE_TYPES).default('physical'),
-  /** Gold debitado por tiro. Zero é a munição grátis, e toda família precisa de uma. */
-  price: z.number().int().nonnegative(),
+  /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
+  price: z.number().int().positive(),
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
@@ -1259,7 +1378,7 @@ export const partySchema = z.object({
   /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
   matchmakingLevelRange: z.number().int().nonnegative().default(0),
   /**
-   * Quantos TIPOS de item o líder pode marcar para venda automática (§8, §42.1, ADR 0033 d.2).
+   * Quantos TIPOS de item o líder pode marcar para venda automática (§8, §42.1, ADR 0035 d.2).
    * `free`/`premium` são o status do PERSONAGEM líder (D3 do plano) — a conta não entra aqui.
    * OPCIONAL no TIPO e preenchido com `{ free: 5, premium: 20 }` no parse: fixtures antigas de
    * `RawContent` (content.test.ts, server/testing, tools/bench) não conhecem VIP e continuam
@@ -1350,7 +1469,30 @@ export type Bestiary = z.infer<typeof bestiarySchema>;
  * registries tipados, e **Lua adiada** até haver evidência de que conteúdo exige deploy para
  * mudança trivial. Não há.
  */
-export const BOT_VOCABULARY_VERSION = 1;
+export const BOT_VOCABULARY_VERSION = 2;
+
+/**
+ * A v1 continua existindo como ENTRADA da migração.
+ *
+ * O vocabulário do CONTEÚDO subiu para 2 (a barra é a configuração) e o motor lê a v2; a config
+ * que o jogador salvou e que o `sim` ainda aceita continua na v1 — e é `migrateBotConfigV1` quem
+ * a converte no boundary.
+ */
+export const BOT_VOCABULARY_VERSION_V1 = 1;
+
+/** Quatro conjuntos (loadouts) de 24 slots cada (ADR 0032 d.1/d.4). */
+export const BOT_SET_COUNT = 4;
+export const BOT_SLOTS_PER_SET = 24;
+/** Rótulos do kit (ADR 0032 d.4): são do cliente, não mecânica. */
+export const BOT_SET_NAMES = ['Energia', 'Fogo', 'Gelo', 'Sagrado'] as const;
+
+/** 1–9, 0, F1–F12 = 22 teclas para 24 slots: `hotkey` é OPCIONAL por isso (DT-02). */
+export const BOT_HOTKEYS = [
+  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
+  'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+] as const;
+export const botHotkeySchema = z.enum(BOT_HOTKEYS);
+export type BotHotkey = z.infer<typeof botHotkeySchema>;
 
 /** Os quatro comparadores do §13.3. Sem `==`: comparar percentual exato é armadilha. */
 const botOperator = z.enum(['<', '<=', '>', '>=']);
@@ -1413,11 +1555,14 @@ export const skillSchema = z.object({
 
 export type Skill = z.infer<typeof skillSchema>;
 
-/** Os quatro tipos de condição, como lista — é o que o gate do bot básico nomeia (FUN-81). */
+/** Os quatro tipos de condição da v1, como lista (FUN-81). */
 export const BOT_CONDITION_KINDS = ['hp', 'mana', 'targets', 'target-hp'] as const;
 export type BotConditionKind = (typeof BOT_CONDITION_KINDS)[number];
 
-export const botConditionSchema = z.discriminatedUnion('kind', [
+/**
+ * A condição da v1: HP, mana, alvos e vida do alvo. É o INPUT da migração — o motor executa a v2.
+ */
+export const botConditionSchemaV1 = z.discriminatedUnion('kind', [
   /** HP do personagem, em percentual do máximo. */
   z.object({
     kind: z.literal('hp'), op: botOperator, percent: z.number().int().min(0).max(100),
@@ -1436,6 +1581,35 @@ export const botConditionSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+/** Os cinco tipos de condição da v2 (ADR 0032 d.2). */
+export const BOT_CONDITION_KINDS_V2 = ['hp', 'mana', 'targets', 'target-hp', 'condition'] as const;
+export type BotConditionKindV2 = (typeof BOT_CONDITION_KINDS_V2)[number];
+
+/**
+ * A condição da v2. As quatro da v1 mais `condition` — efeito ativo/ausente ("castar haste só
+ * sem haste"). `conditionId` é o id semântico do efeito no conteúdo; o catálogo de conditions
+ * entra com o motor do AB-07.
+ */
+export const botConditionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('hp'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+  z.object({
+    kind: z.literal('mana'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+  z.object({
+    kind: z.literal('targets'), op: botOperator, count: z.number().int().nonnegative(),
+  }),
+  z.object({
+    kind: z.literal('target-hp'), op: botOperator, percent: z.number().int().min(0).max(100),
+  }),
+  z.object({
+    kind: z.literal('condition'),
+    conditionId: z.string().min(1),
+    present: z.boolean().default(true),
+  }),
+]);
+
 /**
  * O que uma regra dispara.
  *
@@ -1450,6 +1624,19 @@ export const botActionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('item'), itemId: z.string().min(1) }),
 ]);
 
+/** A ação da v1, com `supply`, `spell` e `item` — a config salva ainda a usa e a migração a converte. */
+export const botActionV1Schema = botActionSchema;
+
+/**
+ * A ação da v2: `spell` ou `supply`. O suprimento voltou a ser ABSTRATO (gold no uso), então o
+ * token `supplyId` volta ao vocabulário; o `item` de slot saiu — item de equipamento é das
+ * automações, não de um slot da barra.
+ */
+export const botActionV2Schema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('spell'), spellId: z.string().min(1) }),
+  z.object({ kind: z.literal('supply'), supplyId: z.string().min(1) }),
+]);
+
 /**
  * Como o bot ESCOLHE o alvo (§13.6).
  *
@@ -1458,7 +1645,7 @@ export const botActionSchema = z.discriminatedUnion('kind', [
  * que está quase morto" e "bata no mais gordo primeiro" são estratégias diferentes, e escolher
  * entre elas é do jogador.
  */
-export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp']);
+export const botTargetPolicySchema = z.enum(['nearest', 'lowest-hp', 'highest-hp', 'follow']);
 
 /**
  * Como o personagem se POSICIONA em relação ao alvo (§13.6).
@@ -1594,7 +1781,7 @@ export const botRingSwapSchema = z.object({
   'removeAbove precisa ser maior que equipBelow: limiares iguais trocam o anel a cada golpe',
 );
 
-/** O alvo de uma regra de cura/suporte (§26-30, ADR 0033 d.10). */
+/** O alvo de uma regra de cura/suporte (§26-30, ADR 0035 d.10). */
 export const botRuleTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('self') }),
   z.object({ kind: z.literal('lowest-hp-member') }),
@@ -1602,8 +1789,11 @@ export const botRuleTargetSchema = z.discriminatedUnion('kind', [
 ]);
 export type BotRuleTarget = z.infer<typeof botRuleTargetSchema>;
 
-/** Uma linha de slot: a condição e o que fazer quando ela vale. */
-export const botRuleSchema = z.object({
+/**
+ * Uma linha de slot da v1: a condição e o que fazer quando ela vale. Preservada com outro nome
+ * porque é o INPUT da migração — o motor executa a v2.
+ */
+export const botRuleV1Schema = z.object({
   /**
    * O interruptor da linha (#162, ADR 0026 d.7 — o `BotSwitch` do vBot). Desligada, a regra
    * fica na configuração e no slot, e sai só da avaliação. Opcional, e AUSENTE É LIGADA: toda
@@ -1611,10 +1801,10 @@ export const botRuleSchema = z.object({
    * o óbvio — quem lê é `compileBot`, e só ele.
    */
   enabled: z.boolean().optional(),
-  when: botConditionSchema,
-  do: botActionSchema,
+  when: botConditionSchemaV1,
+  do: botActionV1Schema,
   /**
-   * Quem recebe a ação (§26-30, ADR 0033 d.10). Só faz sentido em `heal`/`potion`/`support` —
+   * Quem recebe a ação (§26-30, ADR 0035 d.10). Só faz sentido em `heal`/`potion`/`support` —
    * `validateBotConfig` recusa `target ≠ self` em `attack`/`rune` e em ação cujo efeito não
    * aceita amigo. Com alvo ≠ `self`, a condição `hp` do `when` passa a ler o HP do CANDIDATO
    * (o `sim` resolve isso — aqui é só a forma).
@@ -1626,28 +1816,158 @@ export const botRuleSchema = z.object({
   target: botRuleTargetSchema.optional(),
 }).transform((rule): {
   enabled?: boolean | undefined;
-  when: z.infer<typeof botConditionSchema>;
-  do: z.infer<typeof botActionSchema>;
+  when: z.infer<typeof botConditionSchemaV1>;
+  do: z.infer<typeof botActionV1Schema>;
   target?: BotRuleTarget | undefined;
 } => ({
   ...rule,
   target: rule.target ?? { kind: 'self' },
 }));
 
+/** Alias da v1, para o motor e os leitores que ainda não migraram. */
+export const botRuleSchema = botRuleV1Schema;
+
 /**
  * As cinco categorias do §13.5. Independentes: uma ação de poção não consome o cooldown de
  * runa, e não há prioridade global entre elas — cada uma avalia os próprios slots de cima
  * para baixo, e a primeira regra válida executa.
+ *
+ * **Saem no AB-07**: a barra v2 usa a ORDEM do slot e o grupo do conteúdo (ADR 0032 d.2). Aqui
+ * elas continuam só como vocabulário da v1, que a migração converte.
  */
 export const BOT_CATEGORIES = ['heal', 'potion', 'attack', 'rune', 'support'] as const;
 export type BotCategory = (typeof BOT_CATEGORIES)[number];
 
 /**
+ * Um slot da barra. `do` só existe quando o slot está ocupado; `null` é slot vazio (a barra
+ * desenha os 24 sempre, AB-10). `when` vazio é ação sem condição — elegível sempre (RG-007).
+ */
+export const botSlotSchema = z.object({
+  /** Ausente é ligada — mantém a v1. */
+  enabled: z.boolean().optional(),
+  /** `spell` | `supply` (o suprimento voltou a ser abstrato; o `item` de slot saiu). */
+  do: botActionV2Schema,
+  /** E entre elas (RG-006). */
+  when: z.array(botConditionSchema).default([]),
+  hotkey: botHotkeySchema.optional(),
+  auto: z.boolean().default(true),
+/**
+   * Quem recebe a ação (§26-30, ADR 0035 d.10). OPCIONAL: a barra v2 nasce da migração e as
+   * fixtures montam o slot à mão; ausente é `self` (quem compila resolve com `?? { kind: 'self' }`).
+   * Com alvo ≠ `self`, a condição `hp` de `when` lê o HP do CANDIDATO resolvido pelo ruleset.
+   */
+  target: botRuleTargetSchema.optional(),
+});
+export type BotSlot = z.infer<typeof botSlotSchema>;
+
+/** Um conjunto: 24 posições; tecla é única DENTRO do conjunto (ADR 0032 d.1/d.3). */
+export const botSetSchema = z.object({
+  slots: z.array(botSlotSchema.nullable()).length(BOT_SLOTS_PER_SET),
+}).superRefine((set, ctx) => {
+  const seen = new Set<string>();
+  set.slots.forEach((slot, index) => {
+    if (slot === null) return;
+    if (slot.hotkey !== undefined) {
+      if (seen.has(slot.hotkey)) {
+        ctx.addIssue({
+          code: 'custom', path: ['slots', index, 'hotkey'],
+          message: `tecla ${slot.hotkey} repetida no conjunto (slot ${index + 1})`,
+        });
+      }
+      seen.add(slot.hotkey);
+    }
+  });
+});
+
+/** Os cinco modelos do catálogo fechado (ADR 0032 d.9). */
+export const BOT_AUTOMATION_MODELS = [
+  'renew-ring', 'renew-amulet', 'swap-ammo-by-targets',
+  'swap-weapon-shield-by-hp', 'swap-ring',
+] as const;
+export type BotAutomationModel = (typeof BOT_AUTOMATION_MODELS)[number];
+
+const automationCommon = {
+  enabled: z.boolean().optional(),
+  /** Entrada em OU (ADR 0032 d.9): basta uma verdadeira para a automação agir. */
+  enter: z.array(botConditionSchema).default([]),
+  /** Saída em E: todas precisam ser verdadeiras para desfazer. */
+  exit: z.array(botConditionSchema).default([]),
+};
+
+export const botAutomationSchema = z.discriminatedUnion('model', [
+  z.object({
+    model: z.literal('renew-ring'), ...automationCommon,
+    params: z.object({ itemId: z.string().min(1) }),
+  }),
+  z.object({
+    model: z.literal('renew-amulet'), ...automationCommon,
+    params: z.object({ itemId: z.string().min(1) }),
+  }),
+  z.object({
+    model: z.literal('swap-ammo-by-targets'), ...automationCommon,
+    params: z.object({ ammoA: z.string().min(1), ammoB: z.string().min(1) }),
+  }),
+  z.object({
+    model: z.literal('swap-weapon-shield-by-hp'), ...automationCommon,
+    params: z.object({
+      oneHanded: z.string().min(1), shield: z.string().min(1), twoHanded: z.string().min(1),
+    }),
+  }),
+  z.object({
+    model: z.literal('swap-ring'), ...automationCommon,
+    params: z.object({
+      itemId: z.string().min(1),
+      manaFloor: z.number().int().min(0).max(100).default(0),
+      restorePrevious: z.boolean().default(true),
+    }),
+  }),
+]);
+export type BotAutomation = z.infer<typeof botAutomationSchema>;
+
+export const botStanceSchema = z.enum(['offensive', 'balanced', 'defensive']);
+export type BotStance = z.infer<typeof botStanceSchema>;
+
+/**
+ * Quem o personagem segue (§24-25, ADR 0035 d.9). Campo SEPARADO da postura
+ * (`targeting.posture.kind === 'follow'` continua "persegue o monstro atual") — não é
+ * renomeação, é vocabulário novo. `characterId` não é conferido contra a party aqui: a
+ * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
+ */
+export const botFollowSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
+  z.object({ kind: z.literal('leader') }),
+  z.object({ kind: z.literal('member'), characterId: z.string().min(1) }),
+]);
+export type BotFollow = z.infer<typeof botFollowSchema>;
+
+/**
+ * A configuração v2 (ADR 0032 d.1): quatro conjuntos de 24 slots, automações, postura, e o
+ * `targeting`/`exit`/`lure` herdados da v1 (a migração os copia intactos).
+ */
+export const botConfigV2Schema = z.object({
+  version: z.literal(BOT_VOCABULARY_VERSION),
+  activeSet: z.number().int().min(0).max(BOT_SET_COUNT - 1).default(0),
+  sets: z.array(botSetSchema).length(BOT_SET_COUNT),
+  automations: z.array(botAutomationSchema).default(() => []),
+  stance: botStanceSchema.default('balanced'),
+  targeting: botTargetingSchema.default(defaultTargeting),
+  exit: z.array(botExitRuleSchema).default(() => []),
+  lure: botLureSchema.optional(),
+  /**
+   * Quem o personagem segue (§24-25, ADR 0035 d.9), herança da v1 (a migração o copia intacto).
+   * Campo SEPARADO da postura. `characterId` não é conferido contra a party aqui: a
+   * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
+   */
+  follow: botFollowSchema.default({ kind: 'none' }),
+});
+export type BotConfigV2 = z.infer<typeof botConfigV2Schema>;
+
+/**
  * Os limites do bot, em CONTEÚDO e não em código (§13.3).
  *
  * Quantos slots cada categoria tem é balanceamento, e balanceamento mora onde um designer o
- * alcança sem deploy. O `_open` registra que o subconjunto do bot básico (até o level 49)
- * continua `[ABERTO]` no PRD §13.2.
+ * alcança sem deploy. **Sai no AB-07** (DT-06): a v1 carrega `categoryCooldownMs` e `slots`,
+ * que só a migração lê. O gate de level do bot avançado foi REVOGADO no AB-03 (ADR 0032 d.4).
  */
 export const botSchema = z.object({
   id: z.literal('baseline'),
@@ -1655,28 +1975,6 @@ export const botSchema = z.object({
   vocabularyVersion: z.number().int().positive(),
   /** Cooldown de cada categoria, independente das outras. §13.5: 1 s. */
   categoryCooldownMs: z.number().int().positive(),
-  /** A partir de qual level o bot avançado abre. §13.2: 50. */
-  advancedFromLevel: z.number().int().positive(),
-  /**
-   * O que só o bot AVANÇADO pode usar (§13.2, FUN-81).
-   *
-   * O gate é por LEVEL: abaixo de `advancedFromLevel` a configuração é recusada se usar
-   * qualquer coisa listada aqui. Uma lista de exceções, e não uma lista do que o básico
-   * permite, porque o básico é a regra e o avançado é o recorte — descrever a regra por
-   * enumeração faria toda adição ao vocabulário exigir uma edição aqui para continuar
-   * funcionando, e esquecer essa edição travaria o recurso novo para todo mundo abaixo do 50.
-   *
-   * **Vazia hoje, e isso é deliberado.** O subconjunto exato do bot básico é `[ABERTO]` no PRD
-   * §13.2, e o que o §13.2 cita como avançado — lure dinâmico e ring swap — é vocabulário que
-   * ainda não existe (FUN-87). Inventar um recorte aqui seria decidir balanceamento por conta
-   * própria e disfarçá-lo de implementação. O mecanismo entra agora; o recorte entra quando o
-   * PRD o decidir, editando dado.
-   */
-  advancedOnly: z.object({
-    conditions: z.array(z.enum(BOT_CONDITION_KINDS)).default([]),
-    targetPolicies: z.array(botTargetPolicySchema).default([]),
-    postures: z.array(z.enum(['stand', 'follow', 'keep-distance'])).default([]),
-  }).default(() => ({ conditions: [], targetPolicies: [], postures: [] })),
   /**
    * Até que distância, em tiles, o bot ENXERGA um alvo (FUN-85).
    *
@@ -1700,6 +1998,12 @@ export const botSchema = z.object({
    * `botConfigSchema` é declarado mais abaixo.
    */
   defaultConfig: z.lazy(() => botConfigSchema).optional(),
+  /**
+   * As baselines v2 por vocação (ADR 0032 d.4): com que kit cada vocação nasce no vocabulário
+   * novo. Opcional — o conteúdo de teste não fala de onboarding —, e o conteúdo real a tem.
+   * Validado no boot por `validateBotConfigV2`.
+   */
+  defaultConfigByVocation: z.record(z.string(), z.lazy(() => botConfigV2Schema)).optional(),
   /** Slots por categoria. §13.3: cura 3, poção 4, ataque 10, runa 10, suporte 10. */
   slots: z.object({
     heal: z.number().int().nonnegative(),
@@ -1721,13 +2025,16 @@ export const botSchema = z.object({
 });
 
 /**
- * A configuração que o JOGADOR salva. Não é conteúdo — é dado dele —, mas o schema mora aqui
- * porque quem define o que é aceitável é o vocabulário, e o vocabulário é conteúdo.
+ * A configuração v1 que o JOGADOR salvou. Não é conteúdo — é dado dele —, mas o schema mora
+ * aqui porque quem define o que é aceitável é o vocabulário, e o vocabulário é conteúdo.
+ *
+ * Preservada com outro nome porque é o INPUT de `migrateBotConfigV1`; o motor executa a v2 e
+ * `botConfigSchema` continua sendo o alias dela para os leitores que ainda não migraram.
  *
  * Os limites de slot NÃO são checados aqui: eles vêm de `bot/baseline.json`, que o schema não
  * enxerga. Quem cruza os dois é `validateBotConfig`.
  */
-export const botConfigSchema = z.object({
+export const botConfigV1Schema = z.object({
   version: z.number().int().positive(),
   /** Alvo e postura (FUN-85). Ausente é `nearest` + `stand`, o comportamento de sempre. */
   targeting: botTargetingSchema.default(defaultTargeting),
@@ -1737,35 +2044,37 @@ export const botConfigSchema = z.object({
    */
   exit: z.array(botExitRuleSchema).default(() => []),
   /**
-   * O bot AVANÇADO (§13.2, FUN-87). Ausente é o bot básico, que é o de todo mundo abaixo do
-   * level 50 — e de quem, acima dele, não configurou nada disso.
+   * O bot AVANÇADO (§13.2, FUN-87). Ausente é o bot básico. O gate de level foi revogado no
+   * AB-03; `lure` e `ringSwap` continuam existindo como vocabulário da v1, que a migração
+   * converte para as automações v2.
    */
   lure: botLureSchema.optional(),
   ringSwap: botRingSwapSchema.optional(),
   /**
-   * Quem o personagem segue (§24-25, ADR 0033 d.9). Campo SEPARADO da postura
+   * Quem o personagem segue (§24-25, ADR 0035 d.9). Campo SEPARADO da postura
    * (`targeting.posture.kind === 'follow'` continua "persegue o monstro atual") — não é
-   * renomeação, é vocabulário novo. `characterId` não é conferido contra a party aqui: a
-   * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
+   * renomeação, é vocabulário novo.
    */
-  follow: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('none') }),
-    z.object({ kind: z.literal('leader') }),
-    z.object({ kind: z.literal('member'), characterId: z.string().min(1) }),
-  ]).default({ kind: 'none' }),
-  heal: z.array(botRuleSchema),
-  potion: z.array(botRuleSchema),
-  attack: z.array(botRuleSchema),
-  rune: z.array(botRuleSchema),
-  support: z.array(botRuleSchema),
+  follow: botFollowSchema.default({ kind: 'none' }),
+  heal: z.array(botRuleV1Schema),
+  potion: z.array(botRuleV1Schema),
+  attack: z.array(botRuleV1Schema),
+  rune: z.array(botRuleV1Schema),
+  support: z.array(botRuleV1Schema),
 });
 
+/** Alias da v1, para o motor e os leitores que ainda não migraram. */
+export const botConfigSchema = botConfigV1Schema;
+
 export type BotOperator = z.infer<typeof botOperator>;
-export type BotCondition = z.infer<typeof botConditionSchema>;
+/** O tipo da condição v1 — o que o motor v1 ainda compila (sem `condition`). */
+export type BotCondition = z.infer<typeof botConditionSchemaV1>;
+export type BotConditionV2 = z.infer<typeof botConditionSchema>;
 export type BotAction = z.infer<typeof botActionSchema>;
-export type BotRule = z.infer<typeof botRuleSchema>;
+export type BotActionV2 = z.infer<typeof botActionV2Schema>;
+export type BotRule = z.infer<typeof botRuleV1Schema>;
 export type BotLimits = z.infer<typeof botSchema>;
-export type BotConfig = z.infer<typeof botConfigSchema>;
+export type BotConfig = z.infer<typeof botConfigV1Schema>;
 
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
@@ -1777,7 +2086,7 @@ export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as
  * precisarem declarar o default.
  */
 export const spellEffectSchema = z.discriminatedUnion('kind', [
-  /** Cura o próprio lançador, ou um membro da party com `target: 'friend'` (§26, ADR 0033 d.10). */
+  /** Cura o próprio lançador, ou um membro da party com `target: 'friend'` (§26, ADR 0035 d.10). */
   z.object({
     kind: z.literal('heal'),
     basePower: z.number().int().positive().optional(),
@@ -1861,6 +2170,12 @@ export type SpellEffect = z.infer<typeof spellEffectSchema>;
 export const spellSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  /**
+   * O texto de apresentação da magia (#436, ADR 0033), em português — o que o
+   * `ActionConfigModal` mostra abaixo dos números. Opcional: a sub-issue das descrições
+   * preenche os 78 arquivos reais; sem o campo, o cliente cai no fallback fixo por Tipo.
+   */
+  description: z.string().min(1).optional(),
   /** Mana gasta ao lançar. Sem mana, o lançamento é RECUSADO — não fica devendo. */
   manaCost: z.number().int().nonnegative(),
   /** O cooldown DA MAGIA. Evento na fila, nunca acumulador (ADR 0020). */
@@ -1896,79 +2211,7 @@ export const spellSchema = z.object({
   _open: z.string().optional(),
 });
 
-/**
- * O efeito de um supply, como o ARQUIVO o descreve. Separado de `supplySchema` porque o campo
- * `effect` o transforma depois: `target` é OPCIONAL no TIPO e preenchido com `self` no parse
- * (ver `supplySchema`), para as fixtures de `sim`/cliente que montam um `Supply` à mão não
- * precisarem declarar o default.
- */
-export const supplyEffectSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('heal'), amount: z.number().int().positive(),
-    /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0033 d.10). */
-    target: z.enum(['self', 'friend']).optional(),
-    /** Obrigatório com `target: 'friend'`, proibido com `'self'` — `buildContent` confere. */
-    range: z.number().int().positive().optional(),
-  }),
-  z.object({
-    kind: z.literal('mana'), amount: z.number().int().positive(),
-    target: z.enum(['self', 'friend']).optional(),
-    range: z.number().int().positive().optional(),
-  }),
-  /**
-   * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
-   * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
-   * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
-   */
-  z.object({
-    kind: z.literal('damage'),
-    basePower: z.number().int().positive(),
-    range: z.number().int().positive(),
-    area: z.object({
-      shape: z.literal('circle'),
-      radius: z.number().int().positive(),
-      centered: z.literal('target').default('target'),
-    }),
-    /**
-     * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
-     * Avalanche é gelo, e o arquivo declara.
-     */
-    damageType: z.enum(DAMAGE_TYPES).default('arcane'),
-  }),
-]);
-export type SupplyEffect = z.infer<typeof supplyEffectSchema>;
-
-/**
- * Um supply (FUN-77, §20.1 **[DECIDIDO]**).
- *
- * Poção e runa **não são itens físicos**: usar debita gold direto. Por isso supply tem preço e
- * não tem peso, slot nem instância — e por isso ele mora aqui, e não no catálogo de itens que
- * ainda não existe.
- */
-export const supplySchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  /** Gold debitado por uso. Sem gold, o uso é RECUSADO — o saldo nunca fica negativo. */
-  price: z.number().int().nonnegative(),
-  /**
-   * O efeito, com `target` preenchido com `self` no parse quando ausente — o comportamento de
-   * `.default('self')`, mas OPCIONAL no tipo, pela razão registrada em `supplyEffectSchema`.
-   */
-  effect: supplyEffectSchema.transform((effect): SupplyEffect =>
-    effect.kind === 'heal' || effect.kind === 'mana'
-      ? { ...effect, target: effect.target ?? 'self' }
-      : effect,
-  ),
-  /** O que o personagem precisa para usar (§20.1). `magicLevel` é o level da skill `magic`. */
-  requires: z.object({
-    level: z.number().int().positive().optional(),
-    magicLevel: z.number().int().nonnegative().optional(),
-  }).default(() => ({})),
-  _open: z.string().optional(),
-});
-
 export type Spell = z.infer<typeof spellSchema>;
-export type Supply = z.infer<typeof supplySchema>;
 
 /** O monstro como o ARQUIVO o descreve — sem aparência, que vive na tabela (FUN-94). */
 export type MonsterDefinition = z.infer<typeof monsterSchema>;

@@ -1,6 +1,7 @@
 {
   "id": "sharpshooter",
   "name": "Sharpshooter",
+  "description": "Aumenta o dano à distância causado em 32%, por 10 segundos.",
   "vocationId": "paladin",
   "minLevel": 20,
   "manaCost": 250,

@@ -59,7 +59,7 @@ const Propose = z.object({
   difficulty: z.string().min(1).max(64),
   /**
    * O `mode` legado de um cliente anterior ao #400; os dois eixos são o formato novo
-   * (ADR 0033 D1). Um dos dois tem de vir: o `mode` sozinho migra para os eixos, e os eixos
+   * (ADR 0035 D1). Um dos dois tem de vir: o `mode` sozinho migra para os eixos, e os eixos
    * sozinhos derivam o `mode` — as duas formas produzem o mesmo ticket.
    */
   mode: z.enum(['split', 'shared']).optional(),
@@ -135,7 +135,7 @@ async function view(
 }
 
 /**
- * A entrada numa party em CURSO (#402, ADR 0033 D7). O cliente manda só a intenção; quem
+ * A entrada numa party em CURSO (#402, ADR 0035 D7). O cliente manda só a intenção; quem
  * decide elegibilidade, lotação, versão de conteúdo e o nó é este processo. O teto aqui é
  * OTIMISTA — a recusa definitiva é o `onEnter` do `sim`, dentro do ciclo da sessão dona (DT-02).
  */

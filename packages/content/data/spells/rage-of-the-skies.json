@@ -1,6 +1,7 @@
 {
   "id": "rage-of-the-skies",
   "name": "Rage of the Skies",
+  "description": "Causa dano de energia numa área de 11x11 ao seu redor.",
   "vocationId": "sorcerer",
   "minLevel": 55,
   "manaCost": 600,

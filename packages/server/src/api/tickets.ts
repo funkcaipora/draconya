@@ -204,7 +204,7 @@ export function initialCharacterOf(
     ...(isAmmoSelection(character.ammo) ? { ammo: character.ammo } : {}),
     // E a vocação (#154): escrita uma vez pelo `jobs`, lida aqui a cada entrada.
     ...(character.vocation === null ? {} : { vocation: character.vocation }),
-    // E o Premium (ADR 0033 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
+    // E o Premium (ADR 0035 D3): derivado AQUI contra o relógio — a sessão nunca compara datas,
     // só lê um boolean já resolvido. `null` ou vencido é Free, e ausente é o que o ticket
     // carrega: a sessão trata ausência como `false` (a regra do Bestiário, degradação).
     ...(character.premiumUntil !== null && character.premiumUntil.getTime() > Date.now()

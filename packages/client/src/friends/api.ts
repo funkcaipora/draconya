@@ -1,4 +1,4 @@
-// Amigos é o mínimo do §21 (ADR 0033 decisão 8): adicionar por nome, listar com online/onde e
+// Amigos é o mínimo do §21 (ADR 0035 decisão 8): adicionar por nome, listar com online/onde e
 // remover. MESMO padrão de `party/api.ts` — `call`/`post` locais e o `REFUSAL` local: cada
 // `api.ts` é dono do seu dicionário (não há helper HTTP compartilhado no repositório; ver
 // `party/api.ts` e `account/api.ts`).

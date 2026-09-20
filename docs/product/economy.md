@@ -1,18 +1,35 @@
-# Economia, supply e Market
+# Economia, consumíveis e Market
 
-**Status:** parcial — gold por abate (FUN-63), supply abstrato debitando gold (FUN-77) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
+**Status:** parcial — gold por abate (FUN-63), suprimento abstrato com gold no uso e munição abstrata com gold no tiro (AB-01/AB-04/AB-05, ADR 0032 d.6/d.7) e loot de item com Caixa de Loot da Sessão (FUN-88) implementados; autovenda, Market e Coins não implementados
 **PRD:** §20, §32, §33, §43.5
-**Épico:** E5 (supply abstrato, ledger); E13 (Market, Coins por gold)
+**Épico:** E5 (consumível, ledger); E13 (Market, Coins por gold)
 
 ## Comportamento
 
-Poções, runas e munições comuns não existem como itens físicos carregados durante a hunt: usar um supply desconta gold diretamente, sem gerenciar pilha nem reposição. Quando um monstro "dropa" um item desse tipo, o valor correspondente entra na economia como gold, não como pilha física de consumível. Os preços de poções e runas usam o Tibia como referência inicial de balanceamento. A munição tem catálogo próprio desde o ADR 0026 (decisão 3, #151): é uma seleção por família, a `arrow` é grátis e cada tiro das outras debita o preço dela — o modelo do Huntera, ver `items.md`. Todos os valores devem ser configuráveis.
+Poção e runa são **suprimento abstrato** (ADR 0032 d.6): vivem em `data/supplies/` com `price`,
+`effect`, `requires` e `group`, e usar **debita o gold no ato** por `useSupply` — não há item
+físico, pilha nem reposição por lote. A munição é **abstrata** pela mesma razão (ADR 0032 d.7):
+cada tiro debita o `price` da munição escolhida da família, sem pilha e sem munição grátis. O
+único item `consumable` que resta é a `blessing-charge` (a TP-03, M22, é quem a consome). Os
+preços usam o Tibia como referência inicial de balanceamento, e todos os valores são
+configuráveis.
 
-Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar os supplies necessários e pode morrer (ver `bot.md`, §13.9).
+Se o gold do personagem acabar durante a hunt: com a regra "sair quando o gold acabar" ativa no
+bot, ele sai da hunt; sem essa regra, ele permanece, mas deixa de conseguir pagar o próximo
+supply e o próximo tiro, e pode morrer (ver `bot.md`, §13.9).
 
-Gold entra na economia principalmente por loot/venda de itens, autovenda, e recompensas de quest quando aplicável — daily quests com pequenas recompensas podem existir depois, mas não são pilar econômico do MVP. Gold sai por supplies abstratos, taxa de imbuement, rerolls adicionais de Prey, compras de itens/Coins no Market, e futuramente pela Forja.
+Gold entra na economia principalmente por loot/venda de itens, autovenda, e recompensas de quest
+quando aplicável — daily quests com pequenas recompensas podem existir depois, mas não são pilar
+econômico do MVP. Gold sai no uso de suprimento e de munição, taxa de imbuement,
+rerolls adicionais de Prey, compras de itens/Coins no Market, e futuramente pela Forja.
 
-O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não cobra taxa de listagem nem comissão sobre venda. Todo item físico negociável pode ser colocado à venda por gold, respeitando as regras de existência de cada item; supplies abstratos, por não existirem fisicamente, não são listados como pilha tradicional. Coins — que pertencem à conta, não ao personagem — também podem ser vendidas no Market por gold, transferidas de conta vendedora para conta compradora. Essa venda cria a ponte oficial entre dinheiro real e economia de gold, e por isso a transação precisa ser altamente auditável e consistente.
+O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não cobra taxa de
+listagem nem comissão sobre venda. Todo item físico negociável pode ser colocado à venda por
+gold, respeitando as regras de existência de cada item. Coins — que pertencem à conta, não ao
+personagem — também podem
+ser vendidas no Market por gold, transferidas de conta vendedora para conta compradora. Essa
+venda cria a ponte oficial entre dinheiro real e economia de gold, e por isso a transação precisa
+ser altamente auditável e consistente.
 
 ## Regras
 
@@ -30,9 +47,16 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 - A tabela de loot separa moeda de item: `gold` é campo, `items` é lista — desde a FUN-76/FUN-88
   cada linha de `items` é conferida contra o catálogo, e o carregador recusa só o que não existe
   nele (ver "Divergências" abaixo).
-- Supplies comuns (poções, runas) não existem fisicamente; uso debita gold diretamente. Munição também não existe fisicamente: é uma seleção (`packages/content/data/ammunition/`), e cada tiro da munição paga debita o preço dela.
-- Drop de supply por monstro credita gold, não gera pilha física.
-- Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar supplies, podendo morrer.
+- Suprimento é abstrato: usar **debita o gold no ato** por `useSupply` (`price` do
+  `data/supplies/`), e o gasto vira `aggregates.goldSpent` e entra no extrato (ADR 0032 decisão 6,
+  invariante 10). Não há estoque a conferir nem lote a comprar: o limitador é o saldo, e o débito
+  nunca deixa o saldo negativo — a recusa vem antes, não a correção depois.
+- Munição é abstrata (ADR 0032 decisão 7): cada tiro debita o `price` da munição escolhida da
+  família, sem pilha e sem fallback grátis; sem saldo que cubra o preço, o tiro não sai.
+- Drop de consumível por monstro **não existe**: suprimento e munição não são itens de
+  `loot.items`.
+- Sem regra de saída por gold zerado ativa: personagem permanece na hunt, sem conseguir pagar o
+  próximo supply nem o próximo tiro, podendo morrer.
 - Com a regra ativa: personagem sai da hunt quando o gold acaba.
 - Market sem taxa de listagem e sem comissão sobre venda.
 - O Market é um **livro de ordens de compra e venda** (bid/ask), não uma vitrine de listagem
@@ -45,7 +69,7 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
   muda; o que esta linha fecha é o MECANISMO, que o PRD (§33.2) deixava em aberto.
 - Coins são vendáveis no Market por gold, transferindo-se de conta para conta.
 - Supplies abstratos não são listados no Market como pilha tradicional (não existem como item físico).
-- Em party (M20, ADR 0033), o supply é rateado na hora — `floor(c/n)` de cada presente, resto do
+- Em party (M20, ADR 0035), o supply é rateado na hora — `floor(c/n)` de cada presente, resto do
   usuário — quando `shareCosts` está ligado, e o loot cai numa bolsa quando `splitLoot` está
   ligado. Cada entrada da bolsa (item ou gold) leva `eligible` = `session.participants` no
   instante do abate: é **regra de runtime**, calculada a cada drop, não um campo novo em
@@ -62,49 +86,53 @@ O Market é global, acessível a partir de qualquer cidade/PZ relevante, e não 
 | Taxa de listagem no Market | 0% | caminho previsto: `packages/content/economia` |
 | Comissão sobre venda no Market | 0% | caminho previsto: `packages/content/economia` |
 | Preço de venda de cada item ao NPC | `value` por item — `bow` 130, `machete` 6, `cheese` 0 (não se vende); mochila `[ABERTO — 5, provisório]` | `packages/content/data/items/*.json`, campo `value` (#188, ADR 0027) |
-| Preço da Poção de Vida | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json` |
-| Preço da Poção de Mana | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json` |
-| Preço por tiro da munição | arrow 0 (grátis), sniper arrow 5 `[ABERTO — valor provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — valor provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/*.json`, `price` |
+| Preço da Poção de Vida (gold no uso) | 45 `[ABERTO — valor provisório: 45]` | `packages/content/data/supplies/health-potion.json`, campo `price` |
+| Preço da Poção de Mana (gold no uso) | 50 `[ABERTO — valor provisório: 50]` | `packages/content/data/supplies/mana-potion.json`, campo `price` |
+| Preço por tiro da munição | arrow 1 `[ABERTO — provisório: 1]`, burst arrow 3 `[ABERTO — provisório: 3]`, sniper arrow 5 `[ABERTO — provisório: 5, preço do NPC no Tibia]`, onyx arrow 7 `[ABERTO — provisório: 7, preço do NPC no Tibia]` | `packages/content/data/ammunition/{arrow,burst-arrow,sniper-arrow,onyx-arrow}.json`, `price` |
+| Preço da Avalanche Rune (gold no uso) | 14 `[ABERTO — valor provisório: 14]` | `packages/content/data/supplies/avalanche-rune.json`, campo `price` |
 
 ## Em aberto
 
-- ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a arrow é grátis e as outras debitam por tiro (ADR 0026, decisão 3); os valores 5 e 7 são provisórios, em `packages/content/data/ammunition/`.
+- ~~[ABERTO] Preço de arrows e demais munições (§20.2, §43.5)~~ → **Resolvido:** a munição é
+  abstrata, com `price` por tiro (ADR 0032 d.7, AB-02/AB-05); a `arrow` tem preço maior que zero
+  (ponto de partida 1), e os valores 1, 3, 5 e 7 são provisórios, em
+  `packages/content/data/ammunition/*.json`.
 
-## Supply abstrato, na prática (FUN-77)
+## Suprimento abstrato, na prática (FUN-77, ADR 0032 d.6)
 
-§20.1 **[DECIDIDO]**: poção e runa não existem fisicamente — usar debita gold direto. Por isso um
-supply tem `price` e não tem peso, slot nem instância, e por isso ele mora em
-`packages/content/data/supplies/` e não no catálogo de itens.
+§20.1 **continua `[DECIDIDO]`**: o suprimento abstrato debita gold por uso e não existe como
+pilha. Poção e runa vivem em `data/supplies/` com `price`, `effect`, `requires` e `group`; o uso
+chama `useSupply`, que debita `price` do saldo e leva o gasto a `aggregates.goldSpent`. Não há
+compra de lote nem caminho `purchase` no ledger — o débito por uso é o desenho.
 
-O saldo que a sessão enxerga é o **gold de entrada mais o delta da sessão**. Duas consequências:
+O que vale do desenho original:
 
-- o loot desta hunt já dá para virar poção, sem passar pelo banco. Exigir o contrário faria a
-  poção só chegar depois de encerrar a sessão, que é o oposto do idle-first;
-- o gold de entrada vem do **ticket**, nunca do cliente (invariante 4). Um saldo vindo do socket
-  seria poção de graça, e não haveria como distinguir isso de um jogador rico. Ticket emitido por
-  um `api` antigo, sem o campo, entra com zero e recusa gasto — degrada para o lado seguro.
-
-**O saldo nunca fica negativo**, e a garantia é a ordem: o débito é recusado antes, não corrigido
-depois. O `Math.max(0, …)` que o ledger aplica ao creditar continua lá, mas como rede de
-segurança — não como a regra.
-
-O gasto vira `aggregates.goldSpent` na sessão, e o extrato leva ganho e gasto ao ledger na mesma
-linha (`goldGained - goldSpent`), com `(session_id, seq)` único: retry nunca duplica
-(invariante 10).
-
-**Gold zerado não encerra a hunt** (§20.3, sem a regra de saída): o personagem fica, não paga o
-supply e pode morrer. É comportamento, não erro — mas a hunt que acabou em morte precisa ter
-explicação na tela de retorno, então a primeira recusa por falta de gold vira uma linha
-(`supply-unaffordable`) no extrato. **Uma** linha, não uma por tentativa: a categoria de poção
-tenta a cada mudança do mundo, e uma linha por tentativa encheria a lista curta até ela deixar de
-ser lista. É a mesma escolha do aviso de stamina zerada. A regra de saída "sair quando o gold
-acabar" é da FUN-86.
+- O saldo que a sessão enxerga é o **gold de entrada mais o delta da sessão**: o loot desta hunt
+  já dá para pagar a próxima poção, sem passar pelo banco. Exigir o contrário faria a poção só
+  chegar depois de encerrar a sessão, que é o oposto do idle-first.
+- O gold de entrada vem do **ticket**, nunca do cliente (invariante 4). Ticket emitido por um `api`
+  antigo, sem o campo, entra com zero e recusa o uso — degrada para o lado seguro.
+- **O saldo nunca fica negativo**, e a garantia é a ordem: o débito é recusado antes, não
+  corrigido depois. O `Math.max(0, …)` que o ledger aplica ao creditar continua como rede de
+  segurança.
+- O gasto vira `aggregates.goldSpent` na sessão, e o extrato leva ganho e gasto ao ledger na mesma
+  linha (`goldGained - goldSpent`), com `(session_id, seq)` único: retry nunca duplica
+  (invariante 10).
+- **Gold zerado não encerra a hunt** (§20.3, sem a regra de saída): o personagem fica, não paga o
+  próximo supply e pode morrer. É comportamento, não erro — mas a primeira recusa por falta vira
+  **uma** linha (`supply-unaffordable`) no extrato, não uma por tentativa. A regra de saída "sair
+  quando o gold acabar" é da FUN-86.
 
 ## Divergências do PRD
 
 ~~**Loot de item não cai, e a tabela recusa tentar.**~~ → **Resolvido (FUN-76, FUN-88):** existe
 catálogo, `loot.items` é conferido contra ele, e o item cai — mochila se couber, Caixa de Loot da
 Sessão se não. Ver [`items.md`](./items.md).
+
+**O §20.1 está de volta.** O PRD tratava o supply como abstração que debitava gold por uso, e é o
+que a implementação faz hoje: poção, runa e munição não são itens físicos; usar um supply
+desconta gold direto, sem pilha nem reposição (§20.1, `[DECIDIDO]`). A única exceção é a
+`blessing-charge`, que segue item `consumable` para a TP-03 (M22) consumir.
 
 **O Market não é uma vitrine de listagem simples — é um livro de ordens (2026-09-16).** O PRD
 (§33.2) diz só que "todo item físico negociável pode ser colocado no Market por gold", sem

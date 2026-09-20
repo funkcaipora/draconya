@@ -15,13 +15,14 @@ import type { AppearanceFlags } from './appearances.js';
 import type { AppearanceCatalogue, FrameGroup } from './appearances.js';
 import { SheetCache, sheetKey } from './cache.js';
 import type { SheetStore } from './cache.js';
-import { readCatalog } from './catalog.js';
+import { readCatalog, sheetFor } from './catalog.js';
 import type { Catalog } from './catalog.js';
 import { OutfitComposer } from './outfit.js';
 import type { OutfitColors } from './outfit.js';
 import { SheetLoader } from './sheet-loader.js';
 import { SpriteCache } from './sprites.js';
 import type { Sprite } from './sprites.js';
+import { NO_DISPLACEMENT, type Displacement } from '../world/walking-tile.js';
 
 /** Quantos bytes de GPU os quadros podem ocupar. 64 MB dá folga para uma tela cheia. */
 const SPRITE_BUDGET_BYTES = 64 * 1024 * 1024;
@@ -38,6 +39,12 @@ const OUTFIT_BUDGET_BYTES = 16 * 1024 * 1024;
 /** A camada do desenho e a do template de cor, na ordem em que o pacote as guarda. */
 const LAYER_BASE = 0;
 const LAYER_TEMPLATE = 1;
+
+/**
+ * Lado de um tile em pixels. LOCAL de propósito: `assets/` não importa `world/camera.ts`
+ * (ciclo com `keys.ts`), e a dimensão em TILES do objeto sai da folha dividida por este número.
+ */
+const TILE_PX = 32;
 
 /**
  * As quatro direções, na ordem em que o pacote as guarda dentro de `patternWidth`.
@@ -281,6 +288,37 @@ export class AssetPack {
    */
   objectFlags(appearanceId: number): AppearanceFlags {
     return this.#appearances.object.get(appearanceId)?.flags ?? NO_FLAGS;
+  }
+
+  /**
+   * O `shift` de um outfit, em pixels (#386; FUN-117 já o lê do campo 3, mas até aqui só o
+   * objeto o usava). `{0, 0}` quando o outfit não existe ou não tem `shift` — a criatura fica
+   * na âncora do tile. O objeto congelado compartilhado evita alocar por criatura por quadro.
+   */
+  outfitDisplacement(outfitId: number): Displacement {
+    const flags = this.#appearances.outfit.get(outfitId)?.flags;
+    if (flags === undefined) return NO_DISPLACEMENT;
+    const x = flags.shiftX ?? 0;
+    const y = flags.shiftY ?? 0;
+    return x === 0 && y === 0 ? NO_DISPLACEMENT : { x, y };
+  }
+
+  /**
+   * A dimensão de um objeto em TILES, pela folha em que mora o PRIMEIRO sprite dele — é a
+   * geometria que o catálogo já declara por `spritetype` (`SPRITE_TYPES`), então não custa
+   * baixar nada. `{1, 1}` para id desconhecido, grupo sem sprite ou id fora de qualquer folha.
+   * É a RESERVA da classificação (`world/tile-stack.ts`): o objeto sem flag que ainda assim
+   * mede mais de um tile transborda para o tile de cima e o da esquerda.
+   */
+  objectSize(appearanceId: number): { width: number; height: number } {
+    const group = this.#appearances.object.get(appearanceId)?.frameGroups[0];
+    const first = group?.spriteIds[0];
+    if (first === undefined) return { width: 1, height: 1 };
+    // A folha do PRIMEIRO sprite: todo quadro de um grupo mora em folhas do mesmo `spritetype`
+    // — o pacote não mistura 32 e 64 num objeto —, então um id basta, e a busca é binária.
+    const sheet = sheetFor(this.#catalog, first);
+    if (sheet === null) return { width: 1, height: 1 };
+    return { width: sheet.width / TILE_PX, height: sheet.height / TILE_PX };
   }
 
   /**
