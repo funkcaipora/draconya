@@ -274,6 +274,8 @@ body {
    essas telas não são o chat e não usam o prefixo `chat-`. */
 .system-warning { color: var(--warn); }
 .system-error { color: var(--danger); }
+/* O aviso de SUCESSO ("Convite enviado.", #502 RF-04) — o verde do online (`--ok`). */
+.system-ok { color: var(--ok); }
 
 /* O corpo do chat (`bodyClassName` do `Panel`, #252): rolagem própria, limitada, barra fina —
    `.ui-panel-body` já declara `overflow: auto`/`scrollbar-width: thin` (`ui.css`), aqui só o

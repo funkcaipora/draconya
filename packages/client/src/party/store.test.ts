@@ -36,6 +36,8 @@ function fakeClient(over: Partial<PartyClient> = {}): PartyClient {
     create: async () => view(),
     mine: async () => ({ party: view(), ticket: null, invites: [] }),
     invite: async () => {},
+    socialInvite: async () => {},
+    acceptSocialInvite: async () => ({ kind: 'formed', party: view({ leaderId: 'lead' }) }),
     join: async () => ({ kind: 'formed', party: view({ leaderId: 'other' }) }),
     leave: async () => {},
     kick: async () => view(),
@@ -220,6 +222,91 @@ describe('party store', () => {
     await partyActions.kick('target');
     expect(kick).toHaveBeenCalledWith('party-1', 'me', 'target');
     expect(party.get().party?.members).toHaveLength(1);
+  });
+});
+
+describe('social invite (#502)', () => {
+  it('socialInvite calls the API without a party and announces the success (RF-01, RF-04)', async () => {
+    const socialInvite = vi.fn<PartyClient['socialInvite']>().mockResolvedValue();
+    setPartyCharacter('me');
+    setPartyClient(fakeClient({ socialInvite }));
+    await partyActions.socialInvite('friend');
+    expect(socialInvite).toHaveBeenCalledWith('me', 'friend');
+    expect(party.get()).toMatchObject({ notice: 'Convite enviado.', error: null, busy: false });
+  });
+
+  it('a typed refusal of the social invite lands in `error`, in words, never in `notice` (RF-04)', async () => {
+    setPartyCharacter('me');
+    setPartyClient(fakeClient({
+      socialInvite: async () => { throw new Error('Quem convida precisa estar fora da caçada.'); },
+    }));
+    await partyActions.socialInvite('friend');
+    expect(party.get()).toMatchObject({
+      error: 'Quem convida precisa estar fora da caçada.', notice: null, busy: false, party: null,
+    });
+  });
+
+  it('the next action clears the notice (DT-03)', async () => {
+    setPartyCharacter('me');
+    setPartyClient(fakeClient());
+    await partyActions.socialInvite('friend');
+    expect(party.get().notice).toBe('Convite enviado.');
+    await partyActions.create();
+    expect(party.get().notice).toBeNull();
+  });
+
+  it('acceptSocialInvite keeps the formed party and drops ONLY the accepted invite (RF-05)', async () => {
+    // Mutação que mata: remover o convite ERRADO — os outros (tradicional ou social) ficam.
+    const social: SocialInviteView = { inviteId: 'i1', leaderId: 'lead', leaderName: 'Bia', createdAtMs: 1 };
+    const other: SocialInviteView = { inviteId: 'i2', leaderId: 'lead2', leaderName: 'Caio', createdAtMs: 2 };
+    setPartyCharacter('me');
+    setPartyClient(fakeClient({
+      acceptSocialInvite: async () => ({ kind: 'formed', party: view({ id: 'party-new', leaderId: 'lead' }) }),
+    }));
+    party.set((state) => ({ ...state, invites: [invite(), social, other] }));
+    await partyActions.acceptSocialInvite('i1');
+    expect(party.get().party?.id).toBe('party-new');
+    expect(party.get().entering).toBe(false);
+    expect(party.get().invites.map((entry) => ('inviteId' in entry ? entry.inviteId : entry.partyId)))
+      .toEqual(['party-9', 'i2']);
+  });
+
+  it('acceptSocialInvite of a party in course enters by the ticket — the same enterOrForm (DT-04)', async () => {
+    const entered: string[] = [];
+    const social: SocialInviteView = { inviteId: 'i1', leaderId: 'lead', leaderName: 'Bia', createdAtMs: 1 };
+    setPartyCharacter('me');
+    setEnterHunt((wsUrl) => { entered.push(wsUrl); });
+    setPartyClient(fakeClient({
+      acceptSocialInvite: async () => ({
+        kind: 'entered',
+        ticket: { ticket: 't', wsUrl: 'ws://n1/?ticket=t', expiresAtMs: 1, sessionId: 's1' },
+      }),
+    }));
+    party.set((state) => ({ ...state, invites: [social] }));
+    await partyActions.acceptSocialInvite('i1');
+    expect(entered).toEqual(['ws://n1/?ticket=t']);
+    expect(party.get()).toMatchObject({ entering: true, party: null, invites: [] });
+  });
+
+  it('dismissSocialInvite is LOCAL (no network), and refresh does not bring it back (DT-05)', async () => {
+    const social = (over: Partial<SocialInviteView> = {}): SocialInviteView =>
+      ({ inviteId: 'i1', leaderId: 'lead', leaderName: 'Bia', createdAtMs: 1, ...over });
+    const mine = vi.fn<PartyClient['mine']>()
+      .mockResolvedValue({ party: null, ticket: null, invites: [invite(), social()] });
+    setPartyCharacter('me');
+    setPartyClient(fakeClient({ mine }));
+    party.set((state) => ({ ...state, invites: [invite(), social()] }));
+
+    partyActions.dismissSocialInvite('i1');
+    expect(party.get().dismissedSocial).toEqual(['i1']);
+    expect(party.get().invites.map((entry) => ('inviteId' in entry ? entry.inviteId : entry.partyId)))
+      .toEqual(['party-9']);
+
+    // O `/mine` do polling continua trazendo — o filtro da store é quem esconde o dispensado;
+    // o convite TRADICIONAL nunca é filtrado por isso.
+    await partyActions.refresh();
+    expect(party.get().invites.map((entry) => ('inviteId' in entry ? entry.inviteId : entry.partyId)))
+      .toEqual(['party-9']);
   });
 });
 

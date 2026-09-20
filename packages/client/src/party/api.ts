@@ -202,6 +202,14 @@ export interface PartyClient {
   rooms(query: RoomsQuery): Promise<readonly RoomView[]>;
   /** O convidado recusa o convite sem liderança nenhuma (D8). */
   decline(partyId: string, characterId: string): Promise<void>;
+  /** O convite SOCIAL (#502, RF-09): NÃO exige party — a party nasce, se precisar, no aceite. */
+  socialInvite(characterId: string, inviteeId: string): Promise<void>;
+  /**
+   * O aceite do convite social: o `api` resolve — usa a party do convidador ou cria uma com ele
+   * de líder — e devolve o `PartyView` FORMANDO, nunca ticket (a party social nasce em
+   * formação). A forma é a do `join` (D7), então o `enterOrForm` da store serve como está.
+   */
+  acceptSocialInvite(inviteId: string, characterId: string): Promise<JoinResult>;
 }
 
 export const partyApi: PartyClient = {
@@ -238,4 +246,9 @@ export const partyApi: PartyClient = {
     return call<{ rooms: RoomView[] }>(`/api/party/rooms?${params.toString()}`).then((data) => data.rooms);
   },
   decline: async (partyId, characterId) => { await post(`/api/party/${partyId}/decline`, { characterId }); },
+  socialInvite: async (characterId, inviteeId) => { await post('/api/party/invites/social', { characterId, inviteeId }); },
+  acceptSocialInvite: async (inviteId, characterId) => ({
+    kind: 'formed',
+    party: await post<PartyView>(`/api/party/invites/social/${inviteId}/accept`, { characterId }),
+  }),
 };

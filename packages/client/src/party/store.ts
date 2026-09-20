@@ -16,6 +16,11 @@
 // não existe mais (fim da aprovação pré-start), `publish` não recebe faixa nenhuma — o que se
 // publica é o estado que o `configure` gravou — e a busca de salas leva o candidato
 // (`characterId`), porque quem filtra a elegibilidade é o servidor.
+//
+// Desde a #502: o convite SOCIAL (#502) não exige party — `socialInvite` manda a intenção e o
+// sucesso é `notice` (DT-03); "Ignorar" é dispensa LOCAL (`dismissedSocial`, DT-05 — sem
+// endpoint novo; o TTL do servidor é o termo real do convite) e o `refresh` filtra os
+// dispensados, para o `/mine` não os trazer de volta a cada 2 s.
 
 import { createStore } from '../state/hud.js';
 import type { JoinResult, MineInvite, PartyClient, PartyConfigPatch, PartyView, RoomView } from './api.js';
@@ -33,11 +38,19 @@ export interface PartyState {
   readonly seeking: boolean;
   /** Convites visíveis a QUALQUER personagem selecionado (D7/D8) — não só a quem está sem party. */
   readonly invites: readonly MineInvite[];
+  /** "Convite enviado." (RF-04): o último sucesso de convite social; limpa na próxima ação (DT-03). */
+  readonly notice: string | null;
+  /** Convites sociais dispensados localmente ("Ignorar", DT-05) — o `/mine` ainda os traz até o TTL. */
+  readonly dismissedSocial: readonly string[];
 }
 
 export const INITIAL_PARTY: PartyState = {
-  characterId: null, party: null, activePartyId: null, busy: false, error: null, entering: false, seeking: false, invites: [],
+  characterId: null, party: null, activePartyId: null, busy: false, error: null, entering: false,
+  seeking: false, invites: [], notice: null, dismissedSocial: [],
 };
+
+/** RF-04: a frase do convite social enviado — constante aqui para não haver texto solto na tela. */
+export const INVITE_SENT_NOTICE = 'Convite enviado.';
 
 /** O ritmo do polling de `/mine` (DT-01: agora é do Shell, não de um painel). */
 export const PARTY_POLL_MS = 2_000;
@@ -68,7 +81,8 @@ function fail(error: unknown): void {
 async function run(action: (api: PartyClient, characterId: string) => Promise<PartyView | null | void>): Promise<void> {
   const { characterId } = party.get();
   if (client === null || characterId === null) return;
-  party.set((state) => ({ ...state, busy: true, error: null }));
+  // O `notice` de "Convite enviado." (DT-03) vale até a PRÓXIMA ação — e a próxima ação é esta.
+  party.set((state) => ({ ...state, busy: true, error: null, notice: null }));
   try {
     const result = await action(client, characterId);
     party.set((state) => ({
@@ -102,6 +116,16 @@ export const partyActions = {
     await api.invite(partyId, me, inviteeId);
     return undefined;
   }),
+  /**
+   * O convite SOCIAL (#502, RF-01): SEM party pré-existente — a party nasce, se precisar, no
+   * aceite. Sucesso é `notice` (DT-03); a recusa tipada (`inviter-in-hunt`, `invite-self`, …)
+   * cai em `error` pelo `fail()` do `run`, com a frase do `REFUSAL` do `api`.
+   */
+  socialInvite: (inviteeId: string) => run(async (api, me) => {
+    await api.socialInvite(me, inviteeId);
+    party.set((state) => ({ ...state, notice: INVITE_SENT_NOTICE }));
+    return undefined;
+  }),
   /** "Entrar por id" (formação) E "aceitar convite" convergem aqui — D7: o MESMO endpoint
    *  devolve o formulário ou um ticket, dependendo do estado da party do outro lado. */
   join: (partyId: string) => run(async (api, me) => enterOrForm(await api.join(partyId, me), partyId)),
@@ -122,6 +146,31 @@ export const partyActions = {
     }));
     return undefined;
   }),
+  /**
+   * O aceite do convite social (#502, RF-05): o MESMO `enterOrForm` do tradicional (DT-04) — o
+   * comum é o formulário da party nova (ou a do convidador); um ticket entraria pela reconexão
+   * de sempre. Remove SÓ o convite aceito; os outros ficam para o polling.
+   */
+  acceptSocialInvite: (inviteId: string) => run(async (api, me) => {
+    const result = enterOrForm(await api.acceptSocialInvite(inviteId, me), null);
+    party.set((state) => ({
+      ...state,
+      invites: state.invites.filter((invite) => !('inviteId' in invite) || invite.inviteId !== inviteId),
+    }));
+    return result;
+  }),
+  /**
+   * "Ignorar" (DT-05): dispensa LOCAL, sem rede — o `api` da #501 não tem decline de convite
+   * social; o TTL de 15 min é o termo real, e a tela não mente sobre isso. Gravar o id em
+   * `dismissedSocial` é o que faz o `refresh` não trazê-lo de volta a cada 2 s.
+   */
+  dismissSocialInvite: (inviteId: string): void => {
+    party.set((state) => ({
+      ...state,
+      dismissedSocial: [...state.dismissedSocial, inviteId],
+      invites: state.invites.filter((invite) => !('inviteId' in invite) || invite.inviteId !== inviteId),
+    }));
+  },
   leave: () => run(async (api, me) => {
     const current = party.get().party;
     if (current !== null) await api.leave(current.id, me);
@@ -195,7 +244,10 @@ export const partyActions = {
           party: mine.party,
           activePartyId: mine.party?.id ?? null,
           seeking: state.seeking && mine.party === null,
-          invites: mine.invites,
+          // O dispensado ("Ignorar", DT-05) o servidor ainda manda até o TTL — o filtro é quem
+          // o esconde. O convite TRADICIONAL nunca é filtrado: recusa nele é `declineInvite`.
+          invites: mine.invites.filter((invite) =>
+            !('inviteId' in invite) || !state.dismissedSocial.includes(invite.inviteId)),
         }));
     } catch (error) {
       fail(error);

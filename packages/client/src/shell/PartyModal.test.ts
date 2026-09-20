@@ -61,7 +61,7 @@ function fakeClient(over: Partial<PartyClient> = {}): PartyClient {
   return {
     create: noop, mine: noop, invite: noop, join: noop, leave: noop, kick: noop, configure: noop,
     start: noop, seek: noop, stopSeeking: noop, publish: noop, unpublish: noop,
-    rooms: async () => [], decline: noop, ...over,
+    rooms: async () => [], decline: noop, socialInvite: noop, acceptSocialInvite: noop, ...over,
   };
 }
 
