@@ -61,6 +61,20 @@ export type DamageSource = 'basic-attack' | 'spell' | 'rune' | 'monster-attack';
  */
 export type { DamageType };
 
+/**
+ * Um componente ADICIONAL de um golpe composto (primary/secondary, #473). Carrega só o que o
+ * resolver precisa para rodar os MESMOS estágios sobre ele — poder e tipo —, herdando a ORIGEM
+ * (`source`) do intent: um golpe composto vem de um atacante só.
+ *
+ * É o que a referência §18 não cobre: o Canary resolve um `CombatDamage` por vez. O campo é uma
+ * extensão original do Draconya para o dia em que um golpe tiver dois componentes; a unidade
+ * desta task é ESTRUTURAR o suporte, sem nenhum conteúdo declará-lo (o v1 segue bit a bit).
+ */
+export interface SecondaryDamage {
+  readonly rawDamage: number;
+  readonly damageType: DamageType;
+}
+
 /** O que o atacante entrega ao resolver. A entrada fica preservada no outcome. */
 export interface DamageIntent {
   /** Poder bruto, antes de qualquer mitigação. */
@@ -72,6 +86,12 @@ export interface DamageIntent {
    * o default NEUTRO — nenhum sorteio novo é consumido e o resultado é bit a bit o do v1.
    */
   readonly modifiers?: DamageModifiers | undefined;
+  /**
+   * O componente secundário de um golpe composto (#473). Ausente é o default NEUTRO: nenhuma
+   * rolagem extra é consumida e o resultado é bit a bit o do v1. Declarado, ele passa pelos
+   * MESMOS estágios do primário contra o mesmo defensor — inclusive a própria rolagem de Dodge.
+   */
+  readonly secondary?: SecondaryDamage | undefined;
 }
 
 /**
@@ -109,6 +129,12 @@ export interface DamageOutcome {
   readonly critical: boolean;
   /** O que sobrou depois de tudo, arredondado só no fim. É o que o ruleset aplica. */
   readonly resolvedDamage: number;
+  /**
+   * O componente secundário resolvido (#473), quando o intent declara `secondary`. Cada
+   * componente tem o próprio `resolvedDamage` e os próprios estágios (armadura/mitigação por
+   * tipo); quem aplica continua somando os dois `resolvedDamage`. Ausente no v1.
+   */
+  readonly secondaryOutcome?: DamageOutcome;
 }
 
 /** Chance de esquiva que de fato vale, dado onde a luta acontece. */
@@ -130,7 +156,9 @@ export function effectiveDodge(defender: Defender, context: CombatContext): numb
  *   7. imunidade explícita, que zera sem o piso revogar;
  *   8. corte do Dodge, se a rolagem ativou;
  *   9. multiplicador do crítico, se ativou;
- *  10. arredondamento só no fim, com piso em zero.
+ *  10. arredondamento só no fim, com piso em zero;
+ *  11. componente secundário (#473), se o intent o declara — resolvido pelos mesmos estágios,
+ *      depois do primário inteiro, com a própria rolagem de Dodge.
  *
  * A ordem difere da do Tibia (defesa antes de tudo) porque a POSIÇÃO DO SORTEIO é do Draconya:
  * a rolagem é o primeiro ato para que nenhum estágio novo a desloque. Um estágio que mude a
@@ -188,6 +216,22 @@ function resolveCombatV1(
   // documentada (ADR 0031, emenda CMB-08). A imunidade zera e nenhum crítico a revoga.
   const afterCrit = critical ? afterImmunity * (criticalModifier?.multiplier ?? 1) : afterImmunity;
   const damage = dodged ? afterCrit * combat.dodgeMultiplier : afterCrit;
+
+  // O componente secundário (#473) é resolvido por ÚLTIMO, depois de todas as rolagens do
+  // primário: a sequência do gerador é primário inteiro, e só então o secundário. O intent
+  // sintetizado NÃO herda `modifiers` nem `secondary` — o crítico e o leech do golpe são do
+  // primário, e o secundário não pode recursar. Ausente, nada é consumido e o v1 não muda.
+  const secondaryOutcome = intent.secondary === undefined
+    ? undefined
+    : resolveDamage(
+      {
+        rawDamage: intent.secondary.rawDamage,
+        source: intent.source,
+        damageType: intent.secondary.damageType,
+      },
+      defender, context, combat, rng,
+    );
+
   // Arredonda no FIM: arredondar antes do dodge faria 50% de 3 virar 2, e o jogador veria
   // uma esquiva que reduziu um terço.
   return {
@@ -203,6 +247,7 @@ function resolveCombatV1(
     dodged,
     critical,
     resolvedDamage: Math.max(0, Math.round(damage)),
+    ...(secondaryOutcome === undefined ? {} : { secondaryOutcome }),
   };
 }
 

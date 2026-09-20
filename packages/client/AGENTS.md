@@ -268,9 +268,15 @@ pnpm tsx scripts/make-sheet-fixture.ts
   porque não há caminho dele até o React. O laço de quadro é o único lugar que sabe que horas
   são, então é ele quem remove da lista o que acabou de tocar — e destrói o sprite junto. A
   conta é pura (`world/effects.ts`): fase pelo tempo decorrido, projétil interpolado de A a B,
-  número subindo da posição INTERPOLADA da criatura e continuando de onde ela estava se ela
-  sumir no meio — o golpe que mata chega no mesmo lote que o `creature-disappear`, e é o número
-  que o jogador mais quer ver. **O instante é o da chegada, não o do servidor:** um lote aplicado
+  número ANCORADO ao ponto de IMPACTO — ele não segue a criatura, e termina de subir onde o golpe
+  caiu mesmo que ela ande ou morra (RF-04, #479). O golpe que mata chega no mesmo lote que o
+  `creature-disappear`, e é o número que o jogador mais quer ver; a posição é fotografada por
+  `addFloatingText`, não a cada quadro. Os timings e as cores são os do OTClient v8 desde a #479:
+  o projétil leva `150 * sqrt(dx² + dy²)` ms (piso de 50), o texto sobe 48 px ao longo da vida com
+  fade no último sexto, a cor sai do `damageType` quando o servidor o manda (gelo azul, fogo
+  laranja, …) e cai no mapa por `kind` quando não manda, e números do MESMO tile e MESMA cor
+  dentro de 200 ms somam num só (`FLOATING_TEXT_MERGE_WINDOW_MS`). **O instante é o da chegada,
+  não o do servidor:** um lote aplicado
   de uma vez ao voltar de aba de fundo toca junto e acaba junto, em vez de reproduzir dez minutos
   de golpes; e cada lista tem teto (`TRANSIENT_CAP`) porque em aba de fundo o socket anda e o
   `requestAnimationFrame` não. O texto não depende de arte; efeito e projétil viram retângulo

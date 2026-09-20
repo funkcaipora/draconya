@@ -330,6 +330,106 @@ describe('outcomes avançados: crítico e leech (CMB-08)', () => {
   });
 });
 
+describe('pipeline canônico elemental, físico e mitigações (#473)', () => {
+  const ELEMENTS: readonly DamageType[] = ['ice', 'fire', 'energy', 'earth', 'holy', 'death'];
+
+  it('RF-01: os seis elementos ignoram armadura E escudo', () => {
+    // A armadura vale 0 fora de `physical` (baseline), e o escudo só aprova `physical` em
+    // `blockTypes`. Um alvo de armadura 100 e escudo 100 leva o golpe elemental integral: não é
+    // exceção no código, é o conteúdo dizendo qual coluna incide em qual tipo.
+    const withShield: Combat = {
+      ...combat,
+      defense: { skillId: 'shielding', blockChance: 1, blockTypes: ['physical'] },
+    };
+    const tank = { armor: 100, dodgeChance: 0, defense: { kind: 'shield' as const, defense: 100 } };
+    for (const type of ELEMENTS) {
+      const result = resolveDamage(hit(100, type), tank, 'pve', withShield, rigged(false));
+      expect(result.afterDefense).toBe(100);
+      expect(result.armorReduction).toBe(0);
+      expect(result.resolvedDamage).toBe(100);
+    }
+  });
+
+  it('RF-02: imunidade explícita zera cada elemento', () => {
+    // `100 % de resistência` é recusado no boot (ADR 0031, DT-02); a imunidade é o mecanismo
+    // EXPLÍCITO, e nenhum piso a revoga.
+    for (const type of ELEMENTS) {
+      const target = {
+        armor: 0, dodgeChance: 0,
+        mitigation: compileMitigation({ resistances: {}, immunities: [type] }),
+      };
+      const result = resolveDamage(hit(100, type), target, 'pve', combat, rigged(false));
+      expect(result.immune).toBe(true);
+      expect(result.resolvedDamage).toBe(0);
+    }
+  });
+
+  it('RF-03: fraqueza de 10 % rende exatamente 110 % de dano', () => {
+    const target = {
+      armor: 0, dodgeChance: 0,
+      mitigation: compileMitigation({ resistances: { fire: -0.1 }, immunities: [] }),
+    };
+    expect(resolveDamage(hit(100, 'fire'), target, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(110);
+  });
+
+  it('#473: golpe composto resolve o secundário com os mesmos estágios', () => {
+    // Primário físico sofre armadura 20; o secundário de fogo passa intacto. Cada componente
+    // tem o próprio `resolvedDamage`, e o secundário NÃO recursa.
+    const composite: DamageIntent = {
+      rawDamage: 100, source: 'spell', damageType: 'physical',
+      secondary: { rawDamage: 50, damageType: 'fire' },
+    };
+    const result = resolveDamage(composite, plate, 'pve', combat, rigged(false));
+    expect(result.resolvedDamage).toBe(80);
+    expect(result.secondaryOutcome?.damageType).toBe('fire');
+    expect(result.secondaryOutcome?.resolvedDamage).toBe(50);
+    expect(result.secondaryOutcome?.secondaryOutcome).toBeUndefined();
+  });
+
+  it('#473: o secundário respeita resistência e imunidade do próprio tipo', () => {
+    const target = {
+      armor: 0, dodgeChance: 0,
+      mitigation: compileMitigation({ resistances: { fire: 0.5 }, immunities: ['ice'] }),
+    };
+    const result = resolveDamage(
+      { rawDamage: 40, source: 'spell', damageType: 'ice', secondary: { rawDamage: 40, damageType: 'fire' } },
+      target, 'pve', combat, rigged(false),
+    );
+    expect(result.resolvedDamage).toBe(0);
+    expect(result.secondaryOutcome?.resolvedDamage).toBe(20);
+  });
+
+  it('#473: sem secundário o outcome NÃO carrega o campo, e é bit a bit o v1', () => {
+    const result = resolveDamage(swing, plate, 'pve', combat, rigged(false));
+    expect(result.secondaryOutcome).toBeUndefined();
+    expect('secondaryOutcome' in result).toBe(false);
+  });
+
+  it('#473: declarar secundário consome a rolagem de Dodge dele', () => {
+    // O primário continua o primeiro a rolar; o secundário é resolvido depois do primário
+    // inteiro, com a própria rolagem — por isso o estado do RNG avança.
+    const composed = Rng.fromSeed('x');
+    const plain = Rng.fromSeed('x');
+    const result = resolveDamage(
+      { ...swing, secondary: { rawDamage: 50, damageType: 'fire' } }, plate, 'pve', combat, composed,
+    );
+    const only = resolveDamage(swing, plate, 'pve', combat, plain);
+    expect(result.resolvedDamage).toBe(only.resolvedDamage);
+    expect(composed.getState()).not.toEqual(plain.getState());
+  });
+
+  it('#473: o golpe composto é determinístico para a mesma semente', () => {
+    const run = () => {
+      const rng = Rng.fromSeed('composto-1');
+      return Array.from({ length: 5 }, () => resolveDamage(
+        { ...swing, secondary: { rawDamage: 30, damageType: 'ice' } }, plate, 'pve', combat, rng,
+      ));
+    };
+    expect(run()).toEqual(run());
+  });
+});
+
 describe('effectiveDodge', () => {
   it('gives the Bestiary bonus in PvE only', () => {
     // §18.5: bônus de Bestiário são PvE-only. O contexto é o que impede a Guild War de

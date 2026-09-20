@@ -30,7 +30,7 @@ import type {
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
 import {
-  NOT_IN_CATALOG, balanceOf, castSpell, groupCooldownKey,
+  NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
 } from '../casting.js';
 import type { CastRefused, CastResult, Purse, SpellAim, SpellScaling, SpellTarget } from '../casting.js';
@@ -69,7 +69,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep } from '../monster/step.js';
-import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
+import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -189,11 +189,13 @@ type BotConfigInput = BotConfigV2 | BotConfig;
  * Por que o disparo manual de um slot não aconteceu (AB-09, ADR 0032 d.3). Tipada porque o
  * jogador merece saber qual foi — e porque o host traduz cada uma para o tooltip do slot.
  *
- * `not-in-catalog` cobre magia/item inexistente e também os requisitos que o manual não passa
- * (level, vocação, magic level): são a mesma resposta para a tela, "essa ação não sai agora".
+ * `not-in-catalog` cobre magia/item inexistente e os requisitos que o manual não passa
+ * (level, vocação): "essa ação não sai agora". O `magic-level-too-low` tem motivo PRÓPRIO
+ * desde a M24-12 (RF-02): a UI precisa dizer POR QUE a runa não rodou, e engolir o requisito
+ * de magic level no genérico fazia o jogador procurar o problema no saldo e no alvo.
  */
 export type SlotRefusal =
-  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog'
+  | 'empty-slot' | 'wrong-set' | 'disabled' | 'not-in-catalog' | 'magic-level-too-low'
   | 'not-enough-mana' | 'not-enough-gold' | 'not-enough-item' | 'no-target' | 'out-of-range'
   | 'on-cooldown' | 'group-cooldown';
 
@@ -224,8 +226,10 @@ function refusalOf(result: CastRefused): SlotRefusal {
     case 'not-in-catalog':
     case 'level-too-low':
     case 'wrong-vocation':
-    case 'magic-level-too-low':
       return 'not-in-catalog';
+    // Motivo PRÓPRIO (RF-02): o slot-state precisa distinguir o requisito de magic level do
+    // genérico, senão o cliente não consegue explicar por que a runa não rodou.
+    case 'magic-level-too-low': return 'magic-level-too-low';
     case 'on-cooldown': return 'on-cooldown';
     case 'group-cooldown': return 'group-cooldown';
     case 'no-target': return 'no-target';
@@ -293,8 +297,12 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.automationWarned.size === 0
       ? {}
       : { automationWarned: Object.fromEntries(runner.automationWarned) }),
-    ...(runner.chosenTarget === null ? {} : { chosenTarget: runner.chosenTarget }),
-    ...(runner.chosenTargetPinned ? { chosenTargetPinned: true } : {}),
+    ...(runner.attackTarget === null && runner.botCandidate === null
+      ? {}
+      : { chosenTarget: runner.attackTarget ?? runner.botCandidate }),
+    ...(runner.attackTarget === null || !runner.attackTargetPinned
+      ? {}
+      : { chosenTargetPinned: true }),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
     ...(runner.followInterrupted ? { followInterrupted: true } : {}),
@@ -816,20 +824,32 @@ interface Runner {
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
   playerAttackReady: boolean;
   /**
-   * O alvo ESCOLHIDO, por subject do monstro (`m:<id>`). É o override do jogador (AB-09, ADR
-   * 0032 d.5) E o alvo do auto-target (#444): ao surgir um monstro na tela (raio de busca) o
-   * alvo é preenchido automaticamente com o melhor da política, e sobrevive a snapshots até
-   * morrer ou sair da tela.
-   */
-  chosenTarget: string | null;
-  /**
-   * O alvo escolhido é do JOGADOR (`true`, AB-09) ou do auto-target (`false`, #444)?
+   * O alvo de ATAQUE explícito, por subject do monstro (`m:<id>`): o override do jogador
+   * (AB-09, ADR 0032 d.5) e o alvo que o bot decide seguir (#480). É EXCLUSIVO — quem mandou
+   * seguir um não quer bater em outro no caminho —, e `setAttackTarget` é a única porta de
+   * escrita, o que põe jogador e bot no mesmo pipeline (#470).
    *
-   * A diferença é o que fazer quando ele sai do alcance: o alvo do jogador é EXCLUSIVO — quem
-   * mandou seguir um não quer bater em outro no caminho —, enquanto o do auto-target é só a
-   * mira corrente, e o golpe cai no que estiver ao alcance enquanto ele se aproxima.
+   * Separado de `botCandidate` (#470): antes os dois dividiam `chosenTarget` mais um booleano
+   * `chosenTargetPinned`, e a apresentação usava o alvo de ATAQUE — que é recortado pelo
+   * alcance da arma e fazia o alvo sumir da tela fora do corpo a corpo.
    */
-  chosenTargetPinned: boolean;
+  attackTarget: string | null;
+  /**
+   * O alvo de ataque foi PINADO pelo jogador (AB-09) ou apenas eleito pelo bot (#480)?
+   *
+   * O bot entra pela MESMA porta (`setAttackTarget`), mas com `pinned: false`: o alvo dele é
+   * uma eleição da política, e fora do alcance a política reassume — só o clique do jogador é
+   * exclusivo (ADR 0032 d.5). Sem esta distinção, o alvo que o auto-target guarda na tela
+   * travaria o corpo a corpo, que é justamente o que a #444 não pode regredir.
+   */
+  attackTargetPinned: boolean;
+  /**
+   * O candidato do AUTO-TARGET (#444): o melhor monstro na tela, escolhido pela política,
+   * quando não há alvo de ataque válido. É só a mira corrente — sai do alcance e a política
+   * reassume —, e `selectedTargetOf` o expõe para a apresentação independentemente do alcance
+   * da arma (RF-05).
+   */
+  botCandidate: string | null;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
   running: boolean;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
@@ -880,12 +900,17 @@ export interface RunnerState {
    */
   readonly automationWarned?: Readonly<Record<string, string>>;
   /**
-   * O alvo escolhido/auto-selecionado (#444). Precisa entrar no snapshot: o alvo persiste no
-   * runner até morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem
-   * alvo" — snapshot anterior, que cai na política no primeiro evento.
+   * O alvo selecionado (#444). Precisa entrar no snapshot: o alvo persiste no runner até
+   * morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem alvo" —
+   * snapshot anterior, que cai na política no primeiro evento.
+   *
+   * O NOME do campo é o do formato persistido e não mudou com o #470: na memória ele virou
+   * `attackTarget` + `botCandidate`, e `#runnerStateOf`/`#newRunner` fazem a tradução. Renomear
+   * a chave do snapshot exigiria bump de formato e tolerância de leitura por uma mudança que
+   * não altera o que é gravado (ADR 0014).
    */
   readonly chosenTarget?: string | null;
-  /** O alvo é do jogador (AB-09) ou do auto-target (#444)? Ausente é auto (`false`). */
+  /** O alvo é do jogador (AB-09/#480) ou do auto-target (#444)? Ausente é auto (`false`). */
   readonly chosenTargetPinned?: boolean;
   readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
@@ -1020,6 +1045,12 @@ export class HuntRuleset implements Ruleset {
   readonly #spellTargets: MutableSpellTarget[] = [];
   /** Os monstros na mesma ordem de `#spellTargets`: é quem leva o dano de cada rolagem. */
   readonly #spellHits: MonsterRuntime[] = [];
+  /**
+   * Os ALIADOS de uma cura em área (#475, Mass Healing), na ordem dos participantes da sessão.
+   * Reaproveitado como `#spellHits`: a cura de grupo roda por lançamento, e o vetor novo só é
+   * o do evento. O conjurador entra nele, mas quem já o curou foi o `castSpell` — o laço pula.
+   */
+  readonly #healAllies: CharacterRuntime[] = [];
   /** Os tiles da forma do último lançamento (#155), para o efeito por tile. Reaproveitado. */
   #aimTiles: WorldPoint[] = [];
   readonly #aim: { distance: number; targets: readonly SpellTarget[] } = {
@@ -1164,12 +1195,55 @@ export class HuntRuleset implements Ruleset {
   chooseTarget(session: Session, characterId: string, subject: string): boolean {
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return false;
-    const runner = this.#runners.get(characterId);
-    if (runner === undefined) return false;
-    runner.chosenTarget = subject;
-    // Clique do jogador: o alvo é EXCLUSIVO e não cai na política se sair do alcance (AB-09).
-    runner.chosenTargetPinned = true;
+    const character = findById(session.participants, characterId);
+    if (character === null) return false;
+    this.setAttackTarget(character, monster);
     return true;
+  }
+
+  /**
+   * O monstro vivo por subject, ou `null` (#470). É a ponte do host: o `select-target` chega
+   * com o id numérico do fio, e quem o traduz para o runtime é `#subjectOfCreature` do host;
+   * aqui ele resolve o subject validado no runtime que `setAttackTarget` recebe.
+   */
+  monsterBySubject(subject: string): MonsterRuntime | null {
+    const monster = this.#monsterBySubject.get(subject);
+    return monster !== undefined && monster.alive ? monster : null;
+  }
+
+  /**
+   * O alvo de ATAQUE explícito (#470): o jogador (AB-09) e o bot (#480). `null` limpa — é o
+   * cancelamento do `creatureId: 0`. É a ÚNICA porta de escrita do `attackTarget`, para jogador
+   * e bot não terem dois pipelines que divergem (§42: o bot manda os mesmos comandos).
+   *
+   * `pinned` distingue quem escreveu: o clique do jogador é EXCLUSIVO (fora do alcance não cai
+   * na política), a eleição do bot não é — ela é uma mirada corrente, e a política reassume
+   * quando ela sai do alcance. Quem chama com a assinatura de dois argumentos é o jogador, e
+   * por isso o padrão é `true`; o bot passa `false` explicitamente.
+   *
+   * Não valida: quem valida é quem resolve o runtime (o host contra o id do fio, o bot contra a
+   * política), e o alvo morto é limpo na primeira leitura por `#attackTargetOfRunner`.
+   */
+  setAttackTarget(
+    character: CharacterRuntime, target: MonsterRuntime | null, pinned = true,
+  ): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return;
+    runner.attackTarget = target === null ? null : target.subject;
+    runner.attackTargetPinned = target !== null && pinned;
+  }
+
+  /**
+   * O alvo SELECIONADO para a apresentação (#470, RF-05): o alvo de ataque se houver, senão o
+   * candidato do auto-target. **Não é recortado pelo alcance da arma** — é o que mantém o
+   * alvo na tela enquanto a criatura está viva e na sessão (o raio de busca), mesmo fora do
+   * corpo a corpo. Não muta: apresentação não escreve estado quente (invariante 3).
+   */
+  selectedTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return null;
+    return this.#liveTargetOf(runner.attackTarget, character)
+      ?? this.#liveTargetOf(runner.botCandidate, character);
   }
 
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
@@ -1644,8 +1718,11 @@ export class HuntRuleset implements Ruleset {
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
       playerAttackReady: state?.playerAttackReady ?? true,
-      chosenTarget: state?.chosenTarget ?? null,
-      chosenTargetPinned: state?.chosenTargetPinned ?? false,
+      // O snapshot guarda um alvo só (#470): `chosenTargetPinned` dizia se ele era do
+      // jogador. Na memória ele vira `attackTarget` (explícito) ou `botCandidate` (auto).
+      attackTarget: state?.chosenTargetPinned === true ? (state.chosenTarget ?? null) : null,
+      botCandidate: state?.chosenTargetPinned === true ? null : (state?.chosenTarget ?? null),
+      attackTargetPinned: state?.chosenTargetPinned === true,
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
@@ -2594,12 +2671,20 @@ const slots = bot.groups.get(group);
     // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
     // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
     // O alcance é o do GRUPO (#444): um grupo com runa enxerga a 8, não no alcance da arma.
-    const view = this.#botViewOf(character, this.#groupRange(slots, character));
+    const reach = this.#groupRange(slots, character);
+    const view = this.#botViewOf(character, reach);
     const external = this.#options.actuator;
 
     let retryInMs = 0;
     for (let i = 0; i < slots.length; i += 1) {
       const slot = slots[i] as CompiledSlot;
+      // O `targets` é da AÇÃO avaliada, não do grupo (#480): uma runa de área conta quem cai
+      // no FOOTPRINT dela sobre o alvo primário, e uma ação sem área no alcance. Recalcular
+      // por slot evita que o slot seguinte herde a contagem do anterior — a view é a mesma, o
+      // instante é o mesmo, só a mira muda.
+      view.targetCount = this.#targetCountFor(
+        character, reach, this.#actionArea(slot.act), this.#actionRange(slot.act),
+      );
       // Alvo != self resolve o RECIPIENTE ANTES de avaliar: a condição `hp` lê o CANDIDATO, e o
       // slot pode valer para ele mesmo com o lançador de vida cheia (§26-30, ADR 0035 d.10).
       // Tenta os candidatos NA ORDEM em que chegaram (já rankeada por `#resolveRuleTarget`) e
@@ -2750,6 +2835,12 @@ const slots = bot.groups.get(group);
       : spell.effect.kind === 'damage-over-time'
         ? this.#aimFor(character, spell.effect.range, undefined)
         : null;
+    // Cura em ÁREA (Mass Healing, #475): a forma sai do lançador e os aliados são colhidos
+    // ANTES de emitir, como a mira de dano — a ordem dos alvos é contrato de RNG.
+    const healArea = spell.effect.kind === 'heal'
+      && spell.effect.area !== undefined && isSelfOrigin(spell.effect.area)
+      ? this.#collectHealAllies(session, character, spell.effect.area)
+      : null;
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
@@ -2771,10 +2862,12 @@ const slots = bot.groups.get(group);
       kind: 'spell-cast', casterId: character.id, spellId: spell.id,
       casterPosition: this.#at(character),
       targets: aim === null
-        ? NO_SPELL_TARGETS
+        ? (healArea === null
+          ? NO_SPELL_TARGETS
+          : this.#healAllies.map((ally) => ({ creatureId: ally.id, position: this.#at(ally) })))
         : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
       // Os tiles da forma (#155): vetor NOVO pela razão de `targets`.
-      tiles: aim === null ? NO_TILES : [...this.#aimTiles],
+      tiles: aim === null ? (healArea ?? NO_TILES) : [...this.#aimTiles],
     });
     // Condição (#155, CMB-07): o `castSpell` devolve, e quem agenda é quem tem a fila. O DOT
     // mira o ALVO principal da mira; haste, postura, magic shield e Recovery valem no LANÇADOR.
@@ -2792,16 +2885,53 @@ const slots = bot.groups.get(group);
       return result;
     }
     if (aim === null) {
-      // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
       // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou. O HPS, ao
       // contrário, é de QUEM lançou (#431) — por isso o `character.id` como curador.
       this.#emitHealed(session, recipient, result.healed, 'spell', character.id);
+      // Mass Healing: os ALIADOS na forma, um a um, na ordem dos participantes. Cada um consome
+      // uma rolagem (o contrato do dano em área), e o conjurador é pulado porque o `castSpell`
+      // já o curou. Overheal rende zero e nenhum evento sai.
+      if (healArea !== null && spell.effect.kind === 'heal') {
+        const scaling = this.#spellScaling(character);
+        for (const ally of this.#healAllies) {
+          if (ally === character || !ally.alive) continue;
+          const healed = executeHealing(
+            character, ally, spell.effect, scaling, this.#options.combat, session.rng,
+          );
+          this.#emitHealed(session, ally, healed, 'spell', character.id);
+        }
+      }
       return result;
     }
 
-    this.#applyHits(session, character, result.hits);
+    this.#applyHits(
+      session, character, result.hits,
+      spell.effect.kind === 'damage' ? spell.effect.damageType : undefined,
+    );
     return result;
+  }
+
+  /**
+   * Colhe os aliados de uma cura em área (#475): os participantes VIVOS cujo tile cai na forma
+   * centrada no lançador, na ordem de `session.participants`. Devolve os tiles para o evento e
+   * guarda os alvos em `#healAllies` — a mesma divisão de `#aimFor`.
+   *
+   * Só personagens entram: Mass Healing cura jogadores (e invocações, que o motor ainda não
+   * tem), nunca monstros. A ordem é contrato, como a da área de dano.
+   */
+  #collectHealAllies(
+    session: Session, character: CharacterRuntime, area: SpellArea,
+  ): readonly WorldPoint[] {
+    const tiles = areaTiles(area, character.position, character.direction);
+    this.#healAllies.length = 0;
+    const keys = new Set(tiles.map(tileKey));
+    for (const participant of session.participants) {
+      if (!participant.alive) continue;
+      if (!keys.has(tileKey(this.#at(participant)))) continue;
+      this.#healAllies.push(participant);
+    }
+    return tiles;
   }
 
   /**
@@ -2815,7 +2945,10 @@ const slots = bot.groups.get(group);
    * então não há como um deles já estar morto quando chega a vez dele. Uma conferência de
    * `alive` aqui seria código que nenhum teste alcança.
    */
-  #applyHits(session: Session, character: CharacterRuntime, hits: readonly number[]): void {
+  #applyHits(
+    session: Session, character: CharacterRuntime, hits: readonly number[],
+    damageType: DamageType | undefined,
+  ): void {
     for (let i = 0; i < this.#spellHits.length; i += 1) {
       const monster = this.#spellHits[i] as MonsterRuntime;
       const damage = hits[i] ?? 0;
@@ -2828,10 +2961,12 @@ const slots = bot.groups.get(group);
       // entra na conta do dano causado.
       session.creditDamage(character.id, applied);
       recordDamage(monster.contribution, character.id, applied);
-      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`.
+      // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
+      // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
       session.emit({
         kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
         amount: applied, source: 'spell', position: this.#at(monster),
+        ...(damageType === undefined ? {} : { damageType }),
       });
       this.#emitHealth(session, monster);
       if (!monster.alive) resolveDeath(session, { kind: 'monster', monster });
@@ -2896,17 +3031,21 @@ const slots = bot.groups.get(group);
   /** O que escala a runa (#165): a skill `magic` de toda vocação, sem o multiplicador por uso (o BP já a conta). */
   #runeScaling(character: CharacterRuntime): SpellScaling {
     const magic = this.#options.skills.get('magic');
-    return { skillLevel: magic === undefined ? 0 : character.skills.levelOf(magic), powerScale: 1 };
+    const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
+    return { skillLevel: magicLevel, powerScale: 1, magicLevel };
   }
 
   /** O que escala a magia deste personagem (#155): a skill da vocação (`spellSkill`), e as por uso. */
   #spellScaling(character: CharacterRuntime): SpellScaling {
     const skillId = this.#vocationOf(character)?.spellSkill ?? 'magic';
     const skill = this.#options.skills.get(skillId);
+    const magic = this.#options.skills.get('magic');
     return {
       skillLevel: skill === undefined ? 0 : character.skills.levelOf(skill),
       // A skill de magia escala o poder FIXO, como a de arma escala o golpe (FUN-75).
       powerScale: this.#scaledPower(character, 'spell-cast', 1),
+      // A fórmula canônica de CURA (#475) escala pelo magic level, em toda vocação.
+      magicLevel: magic === undefined ? 0 : character.skills.levelOf(magic),
     };
   }
 
@@ -3033,6 +3172,7 @@ const slots = bot.groups.get(group);
       session.emit({
         kind: 'creature-hit', creatureId: target.id, attackerId: attacker,
         amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+        damageType: intent.damageType,
       });
       this.#emitCharacterHealth(session, target);
       if (target.health <= 0) session.kill(target);
@@ -3049,6 +3189,7 @@ const slots = bot.groups.get(group);
     session.emit({
       kind: 'creature-hit', creatureId: target.subject, attackerId: attacker,
       amount: applied.healthDamage, source: 'spell', position: this.#at(target),
+      damageType: intent.damageType,
     });
     this.#emitHealth(session, target);
     if (!target.alive) resolveDeath(session, { kind: 'monster', monster: target });
@@ -3244,7 +3385,10 @@ const slots = bot.groups.get(group);
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
       if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
-      else this.#applyHits(session, character, result.hits);
+      else this.#applyHits(
+        session, character, result.hits,
+        supply.effect.kind === 'damage' ? supply.effect.damageType : undefined,
+      );
       return result;
     }
 
@@ -3375,7 +3519,10 @@ const slots = bot.groups.get(group);
       const magic = this.#options.skills.get('magic');
       const magicLevel = magic === undefined ? 0 : character.skills.levelOf(magic);
       if (supply.requires.magicLevel !== undefined && magicLevel < supply.requires.magicLevel) {
-        return blocked('not-in-catalog');
+        // Motivo PRÓPRIO (RF-02): o `#perform` devolve `magic-level-too-low`, e o espelho do
+        // `slotStates` tem de coincidir com ele (DT-08) — genérico aqui é o cliente sem a
+        // explicação que o requisito da runa pede.
+        return blocked('magic-level-too-low');
       }
       if (this.#targetInRange(character, supply.effect.range) === null) return blocked('no-target');
     }
@@ -3401,10 +3548,15 @@ const slots = bot.groups.get(group);
    */
   #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
     const maxDistance = range ?? 1;
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) {
-      if (distance(character.position, chosen.position) <= maxDistance) return chosen;
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      if (distance(character.position, attack.position) <= maxDistance) return attack;
       if (this.#isPinned(character)) return null;
+    }
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= maxDistance) {
+      return candidate;
     }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, maxDistance,
@@ -3422,9 +3574,7 @@ const slots = bot.groups.get(group);
     const reach = range ?? this.#attackRangeOf(character);
     const target = this.#targetInRange(character, reach);
     this.#botView.self = character;
-    this.#botView.targetCount = countTargets(
-      this.#targetingOf(character), this.#monsters, character.position, reach,
-    );
+    this.#botView.targetCount = this.#targetCountFor(character, reach, undefined, null);
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
@@ -3432,6 +3582,42 @@ const slots = bot.groups.get(group);
     // cada regra, então um valor da avaliação anterior nunca vaza para a próxima.
     this.#botView.partyTarget = null;
     return this.#botView;
+  }
+
+  /**
+   * Quantos alvos VÁLIDOS a condição `targets` enxerga para uma AÇÃO do bot (#216, #444, #480).
+   *
+   * - **Sem área**: os monstros no `reach` — o alcance do grupo, o da ação de dano à distância
+   *   (uma runa de alcance 8 conta a 8), ou o da arma. É o comportamento da #216/#444.
+   * - **Com área que sai do lançador** (onda, cleave, feixe, círculo em volta): os monstros nos
+   *   tiles da forma projetada a partir do personagem — a área não tem alvo primário, e a
+   *   contagem tem de ser a mesma que `#aimFor` vai colher.
+   * - **Com área centrada no alvo** (Avalanche, Explosion, cruz): projeta a forma sobre o alvo
+   *   primário e conta quem cai nela. Sem alvo primário não há forma, e a contagem é 0 — a
+   *   condição não dispara.
+   *
+   * Ignorado não conta em nenhum dos caminhos (RF-03): a condição não pode ser satisfeita por
+   * quem o jogador mandou deixar em paz.
+   */
+  #targetCountFor(
+    character: CharacterRuntime, reach: number, area: SpellArea | undefined,
+    actionRange: number | null,
+  ): number {
+    const targeting = this.#targetingOf(character);
+    if (area === undefined) {
+      return countTargets(targeting, this.#monsters, character.position, reach);
+    }
+    if (isSelfOrigin(area)) {
+      return countAreaTargets(
+        targeting, this.#monsters, areaTiles(area, character.position, character.direction),
+      );
+    }
+    const primary = this.#targetInRange(character, actionRange ?? reach);
+    if (primary === null) return 0;
+    return countAreaTargets(
+      targeting, this.#monsters,
+      areaTiles(area, character.position, character.direction, this.#at(primary)),
+    );
   }
 
   /**
@@ -3462,6 +3648,19 @@ const slots = bot.groups.get(group);
     const supply = this.#options.supplies.get(action.supplyId);
     if (supply === undefined || supply.effect.kind !== 'damage') return null;
     return supply.effect.range ?? null;
+  }
+
+  /**
+   * A forma de área declarada por uma ação de DANO do bot, ou `undefined` (#480). Magia de cura
+   * e ação sem área devolvem `undefined`, e o `targets` cai na contagem por alcance.
+   */
+  #actionArea(action: BotActionV2): SpellArea | undefined {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      return spell?.effect.kind === 'damage' ? spell.effect.area : undefined;
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    return supply?.effect.kind === 'damage' ? supply.effect.area : undefined;
   }
 
   #maxHealthOf(monster: MonsterRuntime): number {
@@ -3901,6 +4100,7 @@ const slots = bot.groups.get(group);
     session.emit({
       kind: 'creature-hit', creatureId: character.id, attackerId: subject,
       amount: applied.healthDamage, source, position: this.#at(character),
+      damageType: outcome.damageType,
     });
     this.#emitCharacterHealth(session, character);
     // Shielding sobe pelo USO (CMB-04): uma vez por ataque físico ELEGÍVEL recebido — há fonte
@@ -4264,6 +4464,7 @@ const slots = bot.groups.get(group);
     session.emit({
       kind: 'creature-hit', creatureId: monster.subject, attackerId: character.id,
       amount: applied.healthDamage, source, position: this.#at(monster),
+      damageType: outcome.damageType,
     });
     this.#emitHealth(session, monster);
     // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
@@ -4449,8 +4650,9 @@ const slots = bot.groups.get(group);
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
-    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e é
-    // `#chosenMonsterOf` quem o limpa — não há um segundo lugar para esquecer de limpar.
+    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e são
+    // `#attackTargetOfRunner`/`#botCandidateOf` que o limpam — não há um segundo lugar para
+    // esquecer de limpar.
     for (const character of session.participants) this.#autoSelectTarget(session, character);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
@@ -4925,12 +5127,24 @@ const slots = bot.groups.get(group);
    * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) {
-      if (distance(character.position, chosen.position) <= this.#attackRangeOf(character)) {
-        return chosen;
+    // O alvo explícito (jogador ou bot, #470/#480) vem primeiro. O pinned do JOGADOR é
+    // EXCLUSIVO: fora do alcance devolve `null` em vez de cair na política. O eleito pelo bot
+    // NÃO é — fora do alcance ele cede para o candidato/política, e é isso que mantém o corpo
+    // a corpo batendo no monstro colado enquanto o bot mira um alvo distante (#444).
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      if (distance(character.position, attack.position) <= this.#attackRangeOf(character)) {
+        return attack;
       }
       if (this.#isPinned(character)) return null;
+    }
+    // O candidato do auto-target (#444) é só a mira corrente: fora do alcance da arma, o golpe
+    // cai no melhor da política, e é isso que mantém o corpo a corpo batendo no monstro colado
+    // enquanto a runa espera o alvo distante.
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= this.#attackRangeOf(character)) {
+      return candidate;
     }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
@@ -4938,29 +5152,44 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O alvo ESCOLHIDO vivo, dentro do raio de busca; senão limpa e devolve `null` (AB-09). O
-   * getter também limpa se o monstro sumiu — cinto e suspensório como o `#luring`.
+   * O monstro vivo, dentro do raio de busca; senão `null`. **NÃO muta** — é a leitura que
+   * `selectedTargetOf` usa para a apresentação (invariante 3).
    */
-  #chosenMonsterOf(character: CharacterRuntime): MonsterRuntime | null {
-    const runner = this.#runners.get(character.id);
-    if (runner === undefined || runner.chosenTarget === null) return null;
-    const monster = this.#monsterBySubject.get(runner.chosenTarget);
-    if (monster === undefined || !monster.alive) {
-      runner.chosenTarget = null;
-      runner.chosenTargetPinned = false;
-      return null;
-    }
+  #liveTargetOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
+    if (subject === null) return null;
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return null;
     if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
-      runner.chosenTarget = null;
-      runner.chosenTargetPinned = false;
       return null;
     }
     return monster;
   }
 
-  /** O alvo corrente é do JOGADOR (AB-09)? Sem runner, não há alvo — e não há o que fixar. */
+  /** O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há. */
+  #attackTargetOfRunner(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.attackTarget === null) return null;
+    const monster = this.#liveTargetOf(runner.attackTarget, character);
+    if (monster === null) {
+      runner.attackTarget = null;
+      runner.attackTargetPinned = false;
+    }
+    return monster;
+  }
+
+  /** O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. */
+  #botCandidateOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.botCandidate === null) return null;
+    const monster = this.#liveTargetOf(runner.botCandidate, character);
+    if (monster === null) runner.botCandidate = null;
+    return monster;
+  }
+
+  /** O alvo corrente é do JOGADOR (AB-09), ou só uma eleição do bot (#480)? */
   #isPinned(character: CharacterRuntime): boolean {
-    return this.#runners.get(character.id)?.chosenTargetPinned === true;
+    const runner = this.#runners.get(character.id);
+    return runner !== undefined && runner.attackTarget !== null && runner.attackTargetPinned;
   }
 
   /**
@@ -4982,35 +5211,42 @@ const slots = bot.groups.get(group);
    * expresso — quem já está ao alcance não precisa ser seguido.
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) return chosen;
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) return attack;
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null) return candidate;
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
   }
 
   /**
-   * Auto-target (#444): sem alvo escolhido válido, seleciona o melhor monstro na TELA — o raio
-   * de busca, o mesmo de `#approachTarget` — e o guarda em `chosenTarget`. É o que faz um
-   * monstro que surge ao longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva
-   * até lá é `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
+   * Auto-target (#444): sem alvo de ataque válido, seleciona o melhor monstro na TELA — o raio
+   * de busca, o mesmo de `#approachTarget` — e o guarda. É o que faz um monstro que surge ao
+   * longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva até lá é
+   * `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
    *
-   * NÃO sobrepõe o clique do jogador: com um alvo vivo e na tela, sai sem tocar em nada. Quando
-   * ele morre ou sai da tela, `#chosenMonsterOf` limpa o campo e a chamada seguinte já reavalia
-   * para o próximo mais próximo.
+   * A eleição passa por `setAttackTarget(..., pinned: false)` (#480, §42): o bot entra pelo
+   * MESMO pipeline do jogador, mas sem pinar — fora do alcance a política reassume. O
+   * `botCandidate` continua sendo a mira de tela, e é ele que sobrevive ao cancelamento do
+   * jogador. NÃO sobrepõe o alvo pinado do jogador: com um `attackTarget` vivo e na tela, sai
+   * sem tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e
+   * a chamada seguinte já reavalia para o próximo mais próximo.
    */
   #autoSelectTarget(session: Session, character: CharacterRuntime): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || !character.alive) return;
-    // Valida e limpa o alvo atual; com um vivo na tela, não há o que reavaliar.
-    if (this.#chosenMonsterOf(character) !== null) return;
+    // Valida e limpa os dois campos; com um alvo explícito ou um candidato vivo, nada a fazer.
+    if (this.#attackTargetOfRunner(character) !== null) return;
+    if (this.#botCandidateOf(character) !== null) return;
 
     const best = this.#approachTarget(character);
     const next = best === null ? null : best.subject;
-    if (next === runner.chosenTarget) return;
-    runner.chosenTarget = next;
-    // Alvo do motor, não do jogador: sai do alcance e a política reassume (`#attackTarget`).
-    runner.chosenTargetPinned = false;
+    if (next === runner.botCandidate) return;
+    runner.botCandidate = next;
+    // A troca de alvo do bot entra pela porta única (#480): jogador e bot não têm pipelines
+    // que divergem. `false` porque é eleição de política, não clique.
+    this.setAttackTarget(character, best, false);
     if (next === null) return;
     // O alvo novo pode destravar uma regra e um golpe engatilhados: reavalia agora, e não no
     // próximo múltiplo de um relógio.

@@ -85,6 +85,16 @@ describe('packProblems', () => {
     ]);
   });
 
+  it('confere o projétil da runa de ataque, e aceita o supply sem `missile` (#478)', () => {
+    // A poção não declara `missile` — só `effect`, e não há o que conferir. A runa declara, e o
+    // id é conferido no registro de MISSILES. Mutação que mata: apagar o check de `missile` em
+    // `supplies` — a Avalanche com id fora do pacote viraria o quadrado invisível a cada uso.
+    expect(packProblems(table({ supplies: { rune: { effect: 12, missile: 5 } } }), pack)).toEqual([]);
+    expect(packProblems(table({ supplies: { 'health-potion': { effect: 14 } } }), pack)).toEqual([]);
+    expect(packProblems(table({ supplies: { rune: { effect: 12, missile: 43 } } }), pack))
+      .toEqual(['appearances.supplies.rune.missile: missile 43 não existe no pacote tibia-test']);
+  });
+
   it('aceita a tabela cujos ids existem todos no pacote', () => {
     expect(packProblems(table({
       monsters: { rat: 21 }, characters: { default: 128 },

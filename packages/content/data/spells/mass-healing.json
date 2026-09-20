@@ -10,7 +10,18 @@
   "cooldownMs": 2000,
   "effect": {
     "kind": "heal",
-    "basePower": 200
+    "basePower": 200,
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "caster"
+    },
+    "formula": {
+      "skillMin": 1.4,
+      "skillMax": 2.0,
+      "baseMin": 40,
+      "baseMax": 60
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. em área raio 4 com party no Tibia; hoje cura o lançador."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Coeficientes da fórmula provisórios (Canary não publica os de Mass Healing na referência usada); a área é o 3x3 centrado no lançador (#475)."
 }

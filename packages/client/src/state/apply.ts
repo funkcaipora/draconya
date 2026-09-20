@@ -10,6 +10,7 @@
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
 
@@ -126,6 +127,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
 
     case 'creature-disappear':
       world.creatures.delete(message.id);
+      // Morte/despawn limpa a moldura NA HORA (RF-05), sem depender do ciclo do alvo: o
+      // cadáver some e o alvo junto, e não há servidor a esperar para isso.
+      targetTracker.handleTargetGone(message.id);
       return;
 
     // --- transitórios do combate (FUN-106): entram com o instante local, e é o viewport quem
@@ -146,8 +150,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
     case 'creature-hit':
       // Entra mesmo que a criatura já não exista: o texto tem vida própria e some sozinho, e
       // recusar aqui apagaria o número do golpe que matou — que chega no mesmo lote que o
-      // `creature-disappear`, e é o que o jogador mais quer ver.
-      addFloatingText(message.id, message.amount, message.kind, nowMs);
+      // `creature-disappear`, e é o que o jogador mais quer ver. O elemento (#479) viaja junto
+      // quando veio; ausente, a cor sai do `kind`.
+      addFloatingText(message.id, message.amount, message.kind, nowMs, message.damageType);
       return;
 
     // --- HUD: só o que uma pessoa lê ------------------------------------------------------
@@ -167,14 +172,27 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
-        // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
-        targetId: message.targetId,
+        // O alvo NÃO vem mais daqui (#470): ele tem `target-changed`, logo abaixo. Manter um
+        // `targetId` neste `set` reintroduziria o batimento geral que a DT-01 aposentou.
         // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
       }));
+      return;
+
+    // `target-changed` (#470/#471): o alvo autoritativo, confirmado ou trocado pelo auto-target.
+    // O rastreador aplica a confirmação e descarta o ack obsoleto por `seq` (RF-03); `null` é
+    // cancelamento confirmado e LIMPA a moldura.
+    case 'target-changed':
+      targetTracker.handleTargetChanged(message.creatureId, message.seq);
+      return;
+
+    // `target-cancel` (#471): a recusa do `select-target`. Desfaz a seleção otimista e devolve a
+    // moldura ao último alvo confirmado pelo servidor (RF-03/RF-04), nunca à tentativa recusada.
+    case 'target-cancel':
+      targetTracker.handleTargetCancel(message.seq);
       return;
 
     case 'experience-gain':
@@ -344,6 +362,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // A configuração de bot em vigor (FUN-111), para a tela abrir com o que a hunt executa.
       // Store própria, pela mesma razão do resto do bot: o HP mexendo não redesenha um campo.
       if (message.botConfig !== undefined) loadConfig(message.botConfig);
+      // A reanexação zera a sequência do alvo: um `target-cancel` atrasado da sessão anterior
+      // não pode fazer rollback para um alvo que já não existe (#471).
+      targetTracker.reset();
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,
@@ -377,9 +398,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
         followState: null,
         onlinePlayers: message.onlinePlayers ?? null,
-        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats` e
-        // `active-conditions` logo depois dele, no mesmo attach (#341, SV-05). Zerar aqui é o
-        // que impede a moldura e a barra de uma sessão anterior de sobreviverem à reanexação.
+        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
+        // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
+        // (#341, SV-05). Zerar aqui é o que impede a moldura e a barra de uma sessão anterior
+        // de sobreviverem à reanexação.
         targetId: null,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,

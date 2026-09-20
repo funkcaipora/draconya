@@ -191,6 +191,24 @@ export const SERVER_TO_CLIENT = {
    * 33: o 32 é do `follow-state`.
    */
   'party-end-vote': 33,
+  /**
+   * O alvo autoritativo do jogador (#470, AB-09). Confirma a seleção (`creatureId` positivo)
+   * ou o cancelamento aceito (`creatureId: null`), e substitui `player-stats.targetId` — que
+   * era batimento geral e mascarava confirmação e recusa de input (DT-01). `seq` devolve o
+   * número do `select-target` que originou a confirmação, para o cliente descartar ack
+   * obsoleto (RF-02). Sem `seq`, a mudança veio do auto-target do servidor (#444).
+   *
+   * 34: o 32 é do `follow-state` e o 33 é do `party-end-vote` (#432).
+   */
+  'target-changed': 34,
+  /**
+   * A recusa do `select-target` (#470): a criatura não é alvo válido, e nada mudou. É
+   * deliberadamente distinta de `target-changed { creatureId: null }` — uma é recusa, a outra
+   * é cancelamento confirmado (RF-04).
+   *
+   * 35: o 34 é do `target-changed`.
+   */
+  'target-cancel': 35,
 } as const;
 
 /** Números que já pertenceram a uma mensagem removida. Nunca reutilize. */

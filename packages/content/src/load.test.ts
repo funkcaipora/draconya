@@ -20,6 +20,18 @@ describe('loadContent', () => {
     expect(content.version).toMatch(/^[0-9a-f]{8}$/);
   });
 
+  it('o baseline aplica armadura e escudo SÓ ao físico (#473)', () => {
+    // A coluna de armadura e a lista de bloqueio são CONTEÚDO, nunca lógica (§12.1): `physical`
+    // vale 1 e todo elemento vale 0, e `blockTypes` aprova só o físico. Sem esta trava, ligar a
+    // armadura em um elemento passaria despercebido e o dano elemental já entregue mudaria.
+    const { combat } = loadContent(DATA);
+    expect(combat.armorEffectiveness.physical).toBe(1);
+    for (const [type, value] of Object.entries(combat.armorEffectiveness)) {
+      if (type !== 'physical') expect(value, `tipo "${type}"`).toBe(0);
+    }
+    expect(combat.defense?.blockTypes).toEqual(['physical']);
+  });
+
   it('carrega o Bestiário real: cinco marcos crescentes e +1 % por marco (FUN-113, §18)', () => {
     // Opcional no `buildContent` (fixture), obrigatório no conteúdo de verdade: sem ele o
     // abate conta e nunca vale nada. Mutação que mata: apagar `bestiary/` de `load.ts`.
@@ -312,6 +324,41 @@ describe('a tabela de aparências é a ÚNICA dona dos ids (FUN-94)', () => {
       effect: { kind: 'damage', basePower: 45, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
     });
     expect(content.supplies.get('health-potion')?.requires).toEqual({});
+  });
+
+  it('carrega as runas de ataque do Canary com fórmula, área e alvo único (#476)', () => {
+    // O catálogo completo da #476: cada runa com o SEU elemento, a SUA fórmula e a SUA forma.
+    // `area` ausente é a runa de ALVO ÚNICO (Sudden Death, Heavy Magic Missile); a Explosion é
+    // a cruz. Mutação que mata: trocar o `damageType` da Thunderstorm para `ice`.
+    const content = loadContent(DATA);
+    const expected: Readonly<Record<string, {
+      readonly damageType: string;
+      readonly shape?: string;
+      readonly skillMin: number;
+      readonly skillMax: number;
+      /** O projétil da tabela de aparências (#478): a Explosion fica sem, por ora. */
+      readonly missile?: number;
+    }>> = {
+      'avalanche-rune': { damageType: 'ice', shape: 'circle', skillMin: 1.2, skillMax: 2.8, missile: 29 },
+      'great-fireball-rune': { damageType: 'fire', shape: 'circle', skillMin: 1.2, skillMax: 2.8, missile: 4 },
+      'thunderstorm-rune': { damageType: 'energy', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 5 },
+      'stone-shower-rune': { damageType: 'earth', shape: 'circle', skillMin: 1, skillMax: 2.6, missile: 30 },
+      'sudden-death-rune': { damageType: 'death', skillMin: 4.6, skillMax: 7.4, missile: 11 },
+      'heavy-magic-missile-rune': { damageType: 'energy', skillMin: 0.4, skillMax: 1.59, missile: 5 },
+      'explosion-rune': { damageType: 'physical', shape: 'cross', skillMin: 0, skillMax: 4.8 },
+    };
+    for (const [id, want] of Object.entries(expected)) {
+      const effect = content.supplies.get(id)?.effect;
+      expect(effect?.kind, id).toBe('damage');
+      if (effect?.kind !== 'damage') continue;
+      expect(effect.damageType, id).toBe(want.damageType);
+      expect(effect.formula?.skillMin, id).toBe(want.skillMin);
+      expect(effect.formula?.skillMax, id).toBe(want.skillMax);
+      expect(effect.area?.shape, id).toBe(want.shape);
+      // A runa de ataque projeta (#478): o id vem da tabela de aparências, nunca do `sim`.
+      // Mutação que mata: trocar o `missile` da Avalanche de 29 para 30 em `baseline.json`.
+      expect(content.appearances?.supplies[id]?.missile, id).toBe(want.missile);
+    }
   });
 
   it('blessing-charge é o ÚNICO item consumable: não-empilhável, sem group nem restock (ADR 0026 d.3)', () => {

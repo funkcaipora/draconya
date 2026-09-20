@@ -91,7 +91,10 @@ export function ActionBar() {
               ...(view.hotkey === undefined ? {} : { hotkey: view.hotkey }),
               ...(view.element === undefined ? {} : { element: view.element }),
               ...(view.cooldownMs > 0 ? { className: 'action-slot-cooldown' } : {}),
-              title: slotTitle(view, slotResults[key] ?? null),
+              // O motivo do clique (`slot-result`) vence; sem ele, vale o motivo do BLOQUEIO
+              // (`slot-state`, já em palavras desde o #470/RF-02) — é ele que explica por que
+              // a runa não rodou antes de o jogador tentar disparar.
+              title: slotTitle(view, slotResults[key] ?? slotStates[key]?.reason ?? null),
               ariaLabel: `slot ${String(index + 1)}`,
               // Shift+clique desliga o automático; o clique simples abre o `ActionConfigModal`
               // (AB-11/#426).

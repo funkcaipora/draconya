@@ -15,7 +15,8 @@ describe('a fiação do alvo no Viewport (#428)', () => {
     const code = await source('./Viewport.tsx');
     expect(code).toContain('onClick={onCanvasClick}');
     expect(code).toContain('handleRef.current?.creatureAt(event.clientX, event.clientY)');
-    expect(code).toContain("sendIntent({ type: 'select-target', creatureId: id })");
+    // #471: a intenção passa pelo rastreador, que antecipa a moldura e decide o toggle.
+    expect(code).toContain('targetTracker.selectTarget(id, sendIntent)');
   });
 
   it('o clique ignora o overlay e o próprio personagem (RF-08)', async () => {

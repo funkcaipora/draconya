@@ -3,9 +3,11 @@
 //
 // Segue o padrão que `PartyMembers.tsx` já usa (ADR 0007): `world` não tem `subscribe` — um
 // `creature-move` não pode causar render de React —, então a lista é amostrada por INTERVALO,
-// no mesmo `HEALTH_POLL_MS` de 1 s. `targetId` chega em `player-stats` e é limpo a cada
-// `session-state` (#341, SV-05): a criatura que o bot está batendo ganha a moldura
-// `.battle-row-selected` (#348, SV-12) — nenhuma linha é clicável nesta issue.
+// no mesmo `HEALTH_POLL_MS` de 1 s. `targetId` chega em `target-changed` (#470) e é limpo a
+// cada `session-state` (#341, SV-05): a criatura que o bot está batendo ganha a moldura
+// `.battle-row-selected` (#348, SV-12). Desde #471 a linha é clicável e divide o MESMO
+// `hud.targetId` do Viewport: o clique passa pelo `targetTracker` (otimista, toggle no mesmo
+// alvo, reconciliação por `seq`).
 //
 // Não existe, no protocolo de hoje, um campo que diga "isto é um monstro" — `creature-appear`
 // não carrega tipo, e `catalogue.monsters` só tem `id`/`name` (packages/protocol/src/types.ts).
@@ -18,6 +20,7 @@
 
 import { useEffect, useState } from 'react';
 import { sendIntent } from '../net/current.js';
+import { targetTracker } from '../state/target.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
@@ -119,8 +122,10 @@ export function BattlePanel() {
                   type="button"
                   className={row.id === targetId ? 'battle-row battle-row-selected' : 'battle-row'}
                   onClick={() => {
-                    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido.
-                    sendIntent({ type: 'select-target', creatureId: row.id });
+                    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O
+                    // rastreador compartilha o MESMO `hud.targetId` do Viewport (#471) e o
+                    // segundo clique no alvo atual cancela.
+                    targetTracker.selectTarget(row.id, sendIntent);
                   }}
                 >
                   <span className="battle-icon" aria-hidden="true" />

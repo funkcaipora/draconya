@@ -2,8 +2,9 @@ import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
+import { targetTracker } from './target.js';
 import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
-import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
+import { MISSILE_MS_PER_TILE, floatingTextColor } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
 
 const at = (x: number, y: number, z = 7) => ({ x, y, z });
@@ -15,6 +16,10 @@ beforeEach(() => {
   clearTransients();
   hud.set(() => INITIAL_HUD);
   bot.set(() => INITIAL_BOT);
+  // O rastreador de alvo é um singleton da conexão, e o teste compartilha o módulo: sem o
+  // reset, o `lastAppliedSeq` de um caso faria o `target-changed { seq: 1 }` do seguinte ser
+  // descartado como obsoleto.
+  targetTracker.reset();
 });
 
 function spawn(id: number, position = at(0, 0)): S2CMessage {
@@ -214,13 +219,14 @@ describe('combat transients (FUN-106)', () => {
 
   it('a missile enters with its flight time computed from the distance', () => {
     // A duração é do cliente — o servidor manda de onde para onde, e o tempo de voo é
-    // apresentação (ADR 0007). Mutação que mata: `durationMs: 0` no `case 'missile'`.
+    // apresentação (ADR 0007). A distância é euclidiana: `(3, 1)` são `sqrt(10)` tiles.
+    // Mutação que mata: `durationMs: 0` no `case 'missile'`.
     applyMessage({ type: 'missile', from: at(0, 0), to: at(3, 1), missileId: 5 }, 2_000);
 
     expect(world.missiles).toHaveLength(1);
     expect(world.missiles[0]).toMatchObject({
       from: at(0, 0), to: at(3, 1), missileId: 5, startedAtMs: 2_000,
-      durationMs: MISSILE_BASE_MS + 3 * MISSILE_PER_TILE_MS,
+      durationMs: Math.round(MISSILE_MS_PER_TILE * Math.sqrt(10)),
     });
   });
 
@@ -239,6 +245,39 @@ describe('combat transients (FUN-106)', () => {
     expect(world.texts[0]).toMatchObject({
       creatureId: 1, amount: 37, kind: 'melee', startedAtMs: 1_200, position: { x: 0.5, y: 0, z: 7 },
     });
+  });
+
+  it('two hits on the same tile and color within the window MERGE into one number (RF-05)', () => {
+    // Múltiplos danos no mesmo monstro em menos de 200 ms somam num só sprite, em vez de
+    // borrar um sobre o outro. Mutação que mata: sempre empurrar um texto novo.
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 30, kind: 'melee', damageType: 'physical' }, 100);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 12, kind: 'melee', damageType: 'physical' }, 150);
+
+    expect(world.texts).toHaveLength(1);
+    expect(world.texts[0]).toMatchObject({ amount: 42, startedAtMs: 100, damageType: 'physical' });
+  });
+
+  it('a different element or tile, or outside the window, does NOT merge (RF-05)', () => {
+    // Cores diferentes no mesmo tile não somam: o jogador leria gelo como fogo. E depois da
+    // janela é outro golpe, não o mesmo instante.
+    applyMessage(spawn(1, at(2, 2)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 10, kind: 'spell', damageType: 'ice' }, 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 20, kind: 'spell', damageType: 'fire' }, 10);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 30, kind: 'spell', damageType: 'ice' }, 300);
+
+    expect(world.texts).toHaveLength(3);
+  });
+
+  it('the element travels with the number and chooses the color (RF-02)', () => {
+    // Dano de gelo aparece em azul claro, não no roxo que o `kind: spell` daria sozinho.
+    // Mutação que mata: `floatingTextColor(text.kind)` ignorando `damageType`.
+    applyMessage(spawn(1, at(1, 1)), 0);
+    applyMessage({ type: 'creature-hit', id: 1, amount: 50, kind: 'spell', damageType: 'ice' }, 0);
+
+    expect(world.texts[0]?.damageType).toBe('ice');
+    const text = world.texts[0];
+    expect(floatingTextColor(text!.kind, text!.damageType)).toBe(0x66ccff);
   });
 
   it('a hit on a creature that already left STILL enters: the killing blow is the one to see', () => {
@@ -352,7 +391,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
@@ -370,7 +408,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 125,
@@ -410,7 +447,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 140, maxHealth: 185, mana: 25, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
@@ -427,21 +463,17 @@ describe('HUD deltas', () => {
     });
   });
 
-  it('clears the target when player-stats says there is none', () => {
+  it('clears the target when target-changed says there is none (#470)', () => {
     hud.set((state) => ({ ...state, targetId: 7 }));
-    applyMessage(
-      {
-        type: 'player-stats',
-        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
-        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
-        ammo: { arrow: null, bolt: null },
-        vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
-      },
-      0,
-    );
+    // `null` é cancelamento CONFIRMADO, e limpa a moldura.
+    applyMessage({ type: 'target-changed', creatureId: null }, 0);
     expect(hud.get().targetId).toBeNull();
+
+    // A seleção confirmada grava o id; a recusa (`target-cancel`) NÃO mexe no alvo.
+    applyMessage({ type: 'target-changed', creatureId: 42, seq: 1 }, 0);
+    expect(hud.get().targetId).toBe(42);
+    applyMessage({ type: 'target-cancel', seq: 3 }, 0);
+    expect(hud.get().targetId).toBe(42);
   });
 
   it('measures latency from the round trip', () => {
@@ -458,6 +490,41 @@ describe('HUD deltas', () => {
     const chat = hud.get().chat;
     expect(chat).toHaveLength(200);
     expect(chat[chat.length - 1]?.text).toBe('249');
+  });
+});
+
+describe('o alvo e a reconciliação por seq no apply (#471)', () => {
+  it('descarta o ack obsoleto: o seq mais novo manda', () => {
+    // seq 2 confirmado antes do seq 1 (latência/ordem): o ack antigo não pode voltar a moldura.
+    // Mutação que mata: aplicar `target-changed` sem consultar o `seq` (o `case` da #470).
+    applyMessage({ type: 'target-changed', creatureId: 2, seq: 2 }, 0);
+    applyMessage({ type: 'target-changed', creatureId: 1, seq: 1 }, 0);
+
+    expect(hud.get().targetId).toBe(2);
+  });
+
+  it('target-cancel desfaz a seleção otimista e devolve o alvo confirmado (RF-04)', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    // O clique pinta a moldura antes do servidor; a recusa é o que faz voltar.
+    targetTracker.selectTarget(9, () => {});
+    expect(hud.get().targetId).toBe(9);
+
+    applyMessage({ type: 'target-cancel', seq: 1 }, 0);
+    expect(hud.get().targetId).toBe(5);
+  });
+
+  it('creature-disappear limpa o alvo da criatura que sumiu (RF-05)', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    applyMessage({ type: 'creature-disappear', id: 5 }, 0);
+
+    expect(hud.get().targetId).toBeNull();
+  });
+
+  it('creature-disappear de OUTRA criatura não mexe no alvo', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    applyMessage({ type: 'creature-disappear', id: 6 }, 0);
+
+    expect(hud.get().targetId).toBe(5);
   });
 });
 

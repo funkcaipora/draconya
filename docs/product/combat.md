@@ -91,6 +91,10 @@ interface DamageIntent {
   readonly rawDamage: number;
   readonly source: DamageSource;
   readonly damageType: DamageType;
+  readonly secondary?: {         // dano composto (#473); ausente é o default neutro
+    readonly rawDamage: number;
+    readonly damageType: DamageType;
+  };
 }
 
 interface DamageOutcome {
@@ -106,6 +110,7 @@ interface DamageOutcome {
   readonly dodged: boolean;
   readonly critical: boolean;        // crítico rolou e ativou (CMB-08)
   readonly resolvedDamage: number;   // o que o ruleset aplica
+  readonly secondaryOutcome?: DamageOutcome; // o componente secundário, se declarado (#473)
 }
 ```
 
@@ -113,6 +118,23 @@ O outcome é **efêmero**: nunca vai ao cliente e nunca entra no snapshot. O rul
 aplicando só `resolvedDamage` — `receiveDamage`, atribuição, `creature-hit` e `resolveDeath` não
 mudaram. O resolver não cobra mana nem gold, não agenda evento, não escreve vida, não atribui
 dano e não decide morte.
+
+### O pipeline canônico e o dano composto (#473)
+
+A #473 consolidou o pipeline sem mudar número nenhum — é aditiva sob o mesmo `combat-v1`:
+
+- **Armadura e escudo incidem SÓ onde o conteúdo manda.** `armorEffectiveness` vale 1 apenas em
+  `physical` e 0 em todo o resto, e `defense.blockTypes` aprova só `physical`. Dano elemental
+  atravessa os dois estágios — sem consumir a rolagem de bloqueio — e aplica a tabela de
+  resistência/fraqueza/imunidade do alvo.
+- **Sem splitting em área.** Em magia e runa de área o poder é rolado e aplicado de forma
+  independente por alvo: o primeiro alvo leva o mesmo golpe com um ou com cinco monstros na
+  forma, e o total cresce com a contagem de alvos.
+- **O `damageType` resolvido fica no outcome** (RF-05), e o `secondaryOutcome` estrutura o dano
+  composto para o dia em que um golpe tiver dois componentes: declarado, o secundário passa
+  pelos mesmos estágios contra o mesmo defensor — inclusive a própria rolagem de Dodge — e é
+  resolvido depois do primário inteiro. **Nenhum conteúdo o declara ainda**, e ausente ele não
+  consome rolagem nenhuma: o v1 segue bit a bit.
 
 ### A taxonomia de dano (CMB-03)
 
@@ -309,8 +331,11 @@ que o mantém correto do outro lado de um snapshot.
 
 ### Magia em área (FUN-92)
 
-Uma magia de dano pode declarar `area: { radius }`, em tiles a partir do **alvo** — distância de
-Chebyshev, a mesma métrica da grade. Raio 1 pega o alvo mais os oito vizinhos.
+Uma magia de dano pode declarar `area: { radius }`, em tiles a partir do **alvo**. Raio 1 pega o
+alvo mais os oito vizinhos (o 3x3 completo); do raio 2 em diante os cantos são recortados pela
+distância de Manhattan (`|dx| + |dy| <= radius + ⌊radius/2⌋`), a geometria que reproduz a
+`AREA_CIRCLE3X3` do Canary — o raio 3 rende 37 tiles, em linhas 3/5/7/7/7/5/3, como fórmula e
+nunca como matriz copiada (#472, ADR 0019).
 
 Três coisas que a área traz e o alvo único não tinha:
 
@@ -335,8 +360,10 @@ família de forma, com o portão que essa decisão previa (sem alvo, sem alcance
 O motor expressa o catálogo instantâneo do Tibia até o level 80; os números de cada magia são
 das issues por vocação (#156–#159). O que o motor ganhou:
 
-- **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (Chebyshev, centrado
-  no alvo ou no lançador), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
+- **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (centrado no alvo ou no
+  lançador; raio 1 é o 3x3 completo, raio ≥ 2 recorta os cantos por Manhattan — #472),
+  `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
+  a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
   5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os três tiles à
   frente) e `beam` (linha reta). Onda, cleave, feixe e o círculo no lançador são **self-origin**:
   não exigem alvo nem alcance (o boot recusa `range` nelas), e recusam `no-target` só quando
@@ -382,10 +409,24 @@ inacessível até lá por construção, sem nenhuma regra escrita em outro lugar
 ### Runa é supply de ataque (#165, ADR 0026 decisão 8)
 
 A runa **não é magia**: é suprimento de ataque. A Avalanche Rune
-(`packages/content/data/supplies/avalanche-rune.json`) é a primeira: efeito
-`damage`, Base Power próprio, alcance 4 e círculo de raio 3 no alvo, e um bloco `requires`
-(`level`, `magicLevel`) que a poção não tem. O `price` é debitado do gold **no uso**, por
-`useSupply`, como qualquer suprimento (ADR 0032 d.6).
+(`packages/content/data/supplies/avalanche-rune.json`) foi a primeira, e desde a #476 o catálogo
+tem as runas de ataque do Canary: efeito `damage`, `formula` canônica por runa, alcance 8 e um
+bloco `requires` (`level`, `magicLevel`) que a poção não tem. O `price` é debitado do gold **no
+uso**, por `useSupply`, como qualquer suprimento (ADR 0032 d.6).
+
+| Runa | Elemento | Forma | Level / ML | Fórmula (`min` / `max`) |
+|---|---|---|---|---|
+| Avalanche | `ice` | círculo raio 3 (37 tiles) | 30 / 4 | `level/5 + ml×1.2 + 7` / `level/5 + ml×2.8 + 17` |
+| Great Fireball | `fire` | círculo raio 3 (37 tiles) | 30 / 4 | `level/5 + ml×1.2 + 7` / `level/5 + ml×2.8 + 17` |
+| Thunderstorm | `energy` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
+| Stone Shower | `earth` | círculo raio 3 (37 tiles) | 28 / 4 | `level/5 + ml×1 + 6` / `level/5 + ml×2.6 + 16` |
+| Sudden Death | `death` | **alvo único** | 45 / 15 | `level/5 + ml×4.6 + 32` / `level/5 + ml×7.4 + 48` |
+| Heavy Magic Missile | `energy` | **alvo único** | 25 / 3 | `level/5 + ml×0.4 + 2` / `level/5 + ml×1.59 + 10` |
+| Explosion | `physical` | **cruz** raio 1 | 31 / 6 | `level/5` (aprox.) / `level/5 + ml×4.8` |
+
+A `formula` é a mesma da magia de dano (#474): `min = level × levelFactor + ml × skillMin +
+baseMin` (idem `max`), com `levelFactor` 0,2 — o `level / 5` da referência. Runa sem `formula`
+continua no caminho provisório do `basePower` × `combat.spellPower`, bit a bit (ADR 0031).
 
 O que difere da magia de ataque, e por quê:
 
@@ -404,20 +445,22 @@ O que difere da magia de ataque, e por quê:
   `out-of-range` são a mira falhando a cada vencimento da categoria, esperado toda vez que não
   há monstro à vista ou fora do alcance da runa. Misturar as cinco no mesmo aviso queimava o
   flag de gold por uma recusa que nunca foi sobre gold — o defeito que a #217 corrigiu.
-- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e `damageType: 'arcane'`,
-  `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo.
+- **O dano é o mesmo pipeline** (`resolveDamage` com `source: 'rune'` e o `damageType` do
+  catálogo, `#applyHits` da hunt — o mesmo que a magia usa), com atribuição e morte por alvo. A
+  área é **integral por alvo**: cada um consome uma rolagem própria, sem splitting.
+- **Runa de alvo único não tem `area`.** Sudden Death e Heavy Magic Missile atingem só o alvo
+  principal; o `area` do schema é opcional desde a #476, e a cruz da Explosion é a forma no alvo.
 
 Apresentação: `supply-used` carrega `targets` e `tiles`, e o host desenha um efeito por tile
 da forma, como o `spell-cast` em área. A poção continua com `targets` e `tiles` vazios e um
-efeito só, no tile de quem bebeu. O id do efeito da Avalanche mora em
-`appearances/baseline.json` (`supplies['avalanche-rune']`, effect 41) e a QA visual dele é
-**por tile** — a auditoria de #242 está bloqueada pela biblioteca parcial (o sprite 160962 não
-tem PNG na máquina) e o id foi mantido; ver
+efeito só, no tile de quem bebeu. Os ids de efeito das runas moram em
+`appearances/baseline.json` (`supplies[...].effect`) e a QA visual deles é **por tile** — a
+auditoria de #242 está bloqueada pela biblioteca parcial (os sprites não têm PNG na máquina) e
+os ids foram mantidos; ver
 [`combat-presentation-audit.md`](../combat-presentation-audit.md).
 
-Os números (preço 14 por uso, Base Power 45, raio 3, level 30, magic level 4) são
-provisórios e estão marcados em `_open` no arquivo; o preço é o da runa no NPC dividido pelas
-4 cargas, arredondado.
+Os números (preços por uso, raios e requisitos) são provisórios e estão marcados em `_open` nos
+arquivos; os preços são o da runa no NPC dividido pelas cargas, arredondado.
 
 ## Como cada arma bate (#152, ADR 0026 decisões 3 e 4)
 

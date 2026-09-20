@@ -1530,6 +1530,77 @@ describe('o motor de grupos do bot (AB-07, RP-001…RP-004)', () => {
   });
 });
 
+// --- cura em área (Mass Healing, #475, RF-05) -------------------------------------------------
+
+describe('cura em área — Mass Healing (#475, RF-05)', () => {
+  const massHealing = {
+    id: 'mass-healing', name: 'Mass Healing', manaCost: 20, cooldownMs: 1_000,
+    group: 'healing', groupCooldownMs: 1_000, minLevel: 1,
+    effect: {
+      kind: 'heal', basePower: 200,
+      area: { shape: 'circle', radius: 1, centered: 'caster' },
+      formula: { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 40, baseMax: 60 },
+    },
+  };
+  const healEverything = () => ({
+    heal: [{
+      when: { kind: 'hp' as const, op: '<=' as const, percent: 100 },
+      do: { kind: 'spell' as const, spellId: 'mass-healing' },
+    }],
+  });
+
+  it('cura o conjurador e os aliados no 3x3, e NÃO quem está fora da área', () => {
+    const loaded = buildContent(raw({
+      progression: [{
+        ...progression, startingMana: 200, regen: { healthPerSecond: 0, manaPerSecond: 0 },
+      }],
+      routes: [{ ...route, spawnPoints: [] }],
+      spells: [...spells, massHealing],
+    }));
+    const session = createHuntSession({
+      id: 'mass-heal', content: loaded, huntId: 'arena', difficulty: 'cautious',
+      createdAtMs: 0, botConfig: botConfig(healEverything()),
+    });
+    const make = (id: string) => new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: 50, maxHealth: 100, mana: 200, maxMana: 200,
+      level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    const caster = make('hero');
+    session.enter(caster);
+    const ally = make('ally');
+    session.enter(ally);
+    const longe = make('far');
+    session.enter(longe);
+    // Posiciona à mão: `enter` coloca "perto", e a área de cura é o 3x3 EXATO. O `far` fica
+    // longe o bastante para o primeiro passo (que move o conjurador 1 tile) não o trazer para
+    // dentro da forma — é ele quem prova que a cura NÃO é da sessão inteira.
+    ally.position = { x: caster.position.x + 1, y: caster.position.y, z: caster.position.z };
+    longe.position = { x: caster.position.x + 4, y: caster.position.y + 2, z: caster.position.z };
+
+    session.advanceBy(50);
+
+    // Cada alvo rola a própria cura (40~60 no level 1): a vida sobe, sem passar do teto.
+    expect(caster.health).toBeGreaterThan(50);
+    expect(caster.health).toBeLessThanOrEqual(100);
+    expect(ally.health).toBeGreaterThan(50);
+    expect(ally.health).toBeLessThanOrEqual(100);
+    // Fora do 3x3 o aliado NÃO é tocado — mutação que mata: curar todo mundo da sessão.
+    expect(longe.health).toBe(50);
+
+    const events = session.drainEvents();
+    const healed = events.filter((e) => e.kind === 'creature-healed')
+      .map((e) => (e.kind === 'creature-healed' ? e.creatureId : ''));
+    // O conjurador PRIMEIRO (o `castSpell` já o curou), depois os aliados na ordem da sessão.
+    expect(healed).toEqual(['hero', 'ally']);
+    const cast = events.find((e) => e.kind === 'spell-cast');
+    expect(cast?.kind === 'spell-cast' && cast.tiles).toHaveLength(9);
+    expect(cast?.kind === 'spell-cast' && cast.targets.map((t) => t.creatureId)).toEqual(['hero', 'ally']);
+  });
+});
+
 // --- a contagem de "targets" usa o alcance da ARMA (#216) -------------------------------------
 
 describe('a condição "targets >= N" conta pelo alcance da ARMA, não pelo desarmado (#216)', () => {
@@ -4642,7 +4713,7 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
     expect(uses).toBeLessThanOrEqual(61);
     const used = session.drainEvents().filter((e) => e.kind === 'supply-used');
     expect(used.length).toBe(uses);
-    expect(used.every((e) => e.kind === 'supply-used' && e.targets.length > 0 && e.tiles.length === 49)).toBe(true);
+    expect(used.every((e) => e.kind === 'supply-used' && e.targets.length > 0 && e.tiles.length === 37)).toBe(true);
   });
 
   it('below the level the rune never fires and never charges; the same at 10 Hz and at 1 Hz', () => {
@@ -4687,6 +4758,66 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
     expect(session.aggregates.suppliesUsed).toBe(0);
     expect(session.aggregates.goldSpent).toBe(0);
     expect(session.notableEvents.filter((e) => e.type === 'supply-unaffordable')).toHaveLength(0);
+  });
+});
+
+// --- a densidade REAL da área governa "targets >= N" (#480) -----------------------------------
+
+describe('a condição "targets >= N" conta o FOOTPRINT da área, não um círculo no jogador (#480)', () => {
+  const rune = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  };
+  const rule = {
+    rune: [{ when: { kind: 'targets' as const, op: '>=' as const, count: 3 }, do: { kind: 'supply' as const, supplyId: 'avalanche-rune' } }],
+  };
+
+  /**
+   * Nasce SEM bot, posiciona os ratos e só então configura a regra — mesma coreografia da
+   * #444: com o bot já no ar, a primeira avaliação (t=0) usaria as posições de spawn e a regra
+   * poderia disparar antes de o teste arrumar o campo.
+   */
+  const board = () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), {
+      gold: 10_000, supplies: [...supplies, rune], health: 5_000,
+    }, 'bold');
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+    session.advanceBy(1);
+    return { session, hero, ruleset };
+  };
+
+  it('três monstros dispersos, só um na área: a runa NÃO sai', () => {
+    const { session, hero, ruleset } = board();
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Os três estão a <= 8 do herói — o círculo genérico de antes contaria 3 e dispararia. Só
+    // `a` cai no círculo de raio 3 projetado sobre ele: `b` e `c` ficam a 5 e 6 tiles na
+    // perpendicular, fora dos 37 tiles da Avalanche.
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x, y: hero.position.y + 5 };
+    c.position = { x: hero.position.x, y: hero.position.y + 6 };
+    ruleset.configureBot(session, botConfig(rule), 'hero');
+
+    run(session, 3_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBe(0);
+  });
+
+  it('três monstros no mesmo punhado, todos na área: a runa SAI', () => {
+    const { session, hero, ruleset } = board();
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // O controle positivo: a mesma condição, agora com a densidade real satisfeita.
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x + 5, y: hero.position.y + 1 };
+    c.position = { x: hero.position.x + 5, y: hero.position.y + 2 };
+    ruleset.configureBot(session, botConfig(rule), 'hero');
+
+    run(session, 3_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
   });
 });
 
@@ -7589,6 +7720,71 @@ describe('estado dos slots (AB-09, UC-BAR-003)', () => {
 });
 
 describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
+  it('selectedTargetOf mantém o alvo fora do alcance da arma; attackTargetOf não (#470, RF-05)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Só `a` na TELA: a 3 tiles, fora do alcance 1 do corpo a corpo e dentro do raio de busca.
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    // A apresentação enxerga o alvo; o combate corpo a corpo, não. É a separação do #470.
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+  });
+
+  it('setAttackTarget seleciona e cancela; o candidato do auto-target sobrevive ao cancelamento (#470)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    // Alvo explícito fora do corpo a corpo é EXCLUSIVO: não cai na política.
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+
+    // Cancelar limpa o alvo de ATAQUE; o candidato do auto-target (#444) continua na tela.
+    ruleset.setAttackTarget(hero, null);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+  });
+
+  it('a eleição do bot entra por setAttackTarget, sem pinar; o clique pina (#480)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    // O auto-target elege `a` pela política e o registra pelo MESMO campo do jogador (#480) —
+    // mas sem pinar: `chosenTargetPinned` não sai no snapshot, e o corpo a corpo continua
+    // caindo na política enquanto `a` está fora de alcance.
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTarget).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+
+    // `b` encosta: o alvo eleito é só mirada corrente, então quem bate é `b`.
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+
+    // O clique no MESMO alvo eleito passa a ser EXCLUSIVO.
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+  });
+
   it('sobrepõe a política enquanto vive; a morte cai no mais próximo (RF-05/RF-06)', () => {
     const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
     // Um tique para os três ratos nascerem.

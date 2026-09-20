@@ -647,10 +647,11 @@ describe('session host', () => {
 
     host.handle(viewer, { type: 'session-attach' });
     expect(socket.frames).toHaveLength(0);
-    // Quatro: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
-    // e stamina só viajam na segunda —, as condições ativas (`active-conditions`, #341) e o
-    // Bestiário (`bestiary`, FUN-113), que só viaja na quarta. Os quatro na FILA, nenhum no fio.
-    expect(viewer.queued).toBe(4);
+    // Cinco: o mundo (`session-state`), os vitais (`player-stats`, FUN-109) — gold, capacidade
+    // e stamina só viajam na segunda —, o alvo (`target-changed`, #470), as condições ativas
+    // (`active-conditions`, #341) e o Bestiário (`bestiary`, FUN-113). Os cinco na FILA,
+    // nenhum no fio.
+    expect(viewer.queued).toBe(5);
 
     host.flush();
     const state = socket.received().find((m) => m.type === 'session-state');
@@ -3282,7 +3283,7 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     spells: {
       heal: { effect: 13 }, strike: { effect: 12, missile: 5 }, blast: { effect: 15, missile: 6 },
     },
-    supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41 } },
+    supplies: { 'health-potion': { effect: 14 }, rune: { effect: 41, missile: 30 } },
     hits: { melee: 1 },
     // O projétil do tiro (#152): o da flecha é da MUNIÇÃO ABSTRATA (ADR 0026 d.3), o da wand é
     // da ARMA. A munição não tem aparência de item; o `icon` acompanha o `missile` na tabela.
@@ -3641,10 +3642,11 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(hero().xp).toBeGreaterThan(0);
     expect(stats.at(-1)?.xp).toBe(hero().xp);
     expect(stats.length).toBeGreaterThan(1);
-    // E foi SÓ a XP (e o alvo do combate enquanto o monstro esteve vivo): os outros campos são os do `session-attach`.
+    // E foi SÓ a XP: os outros campos são os do `session-attach`. O alvo não entra mais aqui
+    // (#470) — ele tem `target-changed` próprio.
     for (const s of stats) {
-      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs), targetId: null })
-        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs), targetId: null });
+      expect({ ...s, xp: 0, staminaMs: staminaMinute(s.staminaMs) })
+        .toEqual({ ...first, xp: 0, staminaMs: staminaMinute(first.staminaMs) });
     }
   });
 
@@ -3764,13 +3766,18 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(hitTiles.length).toBeGreaterThan(0);
   });
 
-  it('a runa de ataque estoura um effect em CADA tile da forma, e a poção só no usuário (#165)', () => {
+  it('a runa de ataque estoura um effect em CADA tile da forma, e a poção só no usuário (#165, #478)', () => {
     // O supply de dano é apresentado como a magia em área: um `effect` por tile do círculo
     // de raio 1 — nove —, com ou sem rato. O gold sai como o da poção, e a forma vem de
     // `tiles` do `supply-used`, que o host desenha uma vez cada.
     //
+    // E a runa de ataque LANÇA o projétil (#478): um `missile` do conjurador ao primeiro alvo,
+    // ANTES dos efeitos da área — a mesma ordem do Tibia/Canary. Um projétil por uso, nunca um
+    // por tile.
+    //
     // Mutação que mata: tratar todo `supply-used` como poção (efeito só em `position`) — a
-    // contagem cai para uma por uso, no tile do herói.
+    // contagem cai para uma por uso, no tile do herói. E não emitir o `missile`, que este
+    // teste conta e ordena.
     const { runFor, received, hero } = hunt({
       tanky: true, monsterCount: 2, gold: 300,
       bot: rules({ rune: [{
@@ -3784,10 +3791,20 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const golpes = ofType(all, 'creature-hit').filter((h) => h.kind === 'spell');
     expect(golpes.length).toBeGreaterThan(0);
     expect(golpes.length % 2).toBe(0);
-    expect(usos).toHaveLength(9 * (golpes.length / 2));
-    expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
     // A runa é SUPPLY (FUN-77): o gold sai a cada uso, 3 por disparo.
-    expect(hero().goldDelta).toBe(-3 * (golpes.length / 2));
+    const disparos = golpes.length / 2;
+    expect(hero().goldDelta).toBe(-3 * disparos);
+    expect(usos).toHaveLength(9 * disparos);
+    expect(new Set(usos.map((e) => `${e.position.x},${e.position.y}`)).size).toBeGreaterThanOrEqual(9);
+    // UM projétil por uso, do conjurador ao primeiro alvo, e ANTES dos nove efeitos dele.
+    const lançamentos = ofType(all, 'missile').filter((m) => m.missileId === 30);
+    expect(lançamentos).toHaveLength(disparos);
+    for (const missile of lançamentos) {
+      const at = all.indexOf(missile as S2CMessage);
+      const effect = all.slice(at + 1).find((m) => m.type === 'effect' && m.effectId === 41);
+      expect(effect).toBeDefined();
+      expect(missile.from).not.toEqual(missile.to);
+    }
   });
 
   it('a magia SEM linha na tabela é muda: nenhum effect, nenhum missile, nenhum erro', () => {
@@ -4038,6 +4055,8 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     const stats = ofType(all, 'player-stats');
     expect(stats[0]?.gold).toBe(100);
     expect(stats.at(-1)?.gold).toBe(55);
+    // Suprimento sem projétil (RF-05, #478): a poção só tem `effect`, e nenhum `missile` sai.
+    expect(ofType(all, 'missile')).toHaveLength(0);
   });
 
   it('o tiro do bow vira missile com o projétil da FLECHA, entre o herói e o rato (#152)', () => {
@@ -5385,59 +5404,39 @@ describe('targetId, active conditions and hunt identity (#341, SV-05)', () => {
     };
   }
 
-  it('targetId in player-stats reflects targeted monster creatureId, null when no target', () => {
-    const { runFor, received, host, hero } = createHuntFixture({ tanky: true });
-    // On attach at t=0, no monster has spawned yet; targetId is null
-    const initialStats = ofType(received(), 'player-stats').at(-1);
-    expect(initialStats).toBeDefined();
-    expect(initialStats?.targetId).toBeNull();
+  it('target-changed acompanha o auto-target no ciclo, e null quando não há alvo (#470)', () => {
+    const { runFor, received, host } = createHuntFixture({ tanky: true });
+    // No attach, nenhum monstro nasceu: o alvo é null.
+    const initial = ofType(received(), 'target-changed').at(-1);
+    expect(initial).toBeDefined();
+    expect(initial?.creatureId).toBeNull();
 
-    // Advance so the monster spawns and is targeted by the hero
+    // Avança para o monstro nascer e o auto-target (#444) escolhê-lo.
     runFor(200);
+    const withTarget = ofType(received(), 'target-changed').find((m) => m.creatureId !== null);
+    expect(withTarget).toBeDefined();
+    expect(withTarget!.creatureId!).toBeGreaterThan(0);
 
-    const statsWithTarget = ofType(received(), 'player-stats').find((s) => s.targetId !== null);
-    expect(statsWithTarget).toBeDefined();
-    expect(typeof statsWithTarget?.targetId).toBe('number');
-    expect(statsWithTarget!.targetId!).toBeGreaterThan(0);
-
-    // Verify creatureId matches the monster creatureId
+    // Mata o monstro: o alvo é limpo, e a tela é avisada — sem depender de `player-stats`.
     const session = host.sessionFor('hero');
-    const huntRuleset = session?.ruleset as unknown as { attackTargetOf: (c: CharacterRuntime) => { subject: string; health: number } | null };
-    const targetMonster = huntRuleset.attackTargetOf(hero());
-    expect(targetMonster).not.toBeNull();
-
-    // Now kill the monster so target is cleared
-    targetMonster!.health = 0;
+    const huntRuleset = session?.ruleset as unknown as { monsters: readonly { health: number }[] };
+    for (const monster of huntRuleset.monsters) monster.health = 0;
     runFor(100);
-
-    const finalStats = ofType(received(), 'player-stats').at(-1);
-    expect(finalStats?.targetId).toBeNull();
+    expect(ofType(received(), 'target-changed').at(-1)?.creatureId).toBeNull();
   });
 
-  it('sameStats correctly sends player-stats when ONLY targetId changes', () => {
-    // Disable regen and set rat attack to 0, ensuring health and mana do not change
+  it('uma mudança SÓ de alvo NÃO gera player-stats — o alvo tem mensagem própria (#470)', () => {
+    // Regen off e rato com ataque 0: nada muda nos vitais. O auto-target adquire um alvo, e o
+    // que sai é `target-changed`; `player-stats` fica com o único pacote do `session-attach`.
+    // Mutação que mata: reintroduzir `targetId` em `sameStats` — o segundo `player-stats` sai.
     const { runFor, received } = createHuntFixture({ tanky: true, regen: false, ratAttack: 0 });
-    const initialStats = ofType(received(), 'player-stats').at(-1);
-    expect(initialStats).toBeDefined();
-    expect(initialStats?.targetId).toBeNull();
+    const before = ofType(received(), 'player-stats').length;
+    expect(before).toBe(1);
 
-    // Advance until target is acquired
     runFor(200);
 
-    const statsList = ofType(received(), 'player-stats');
-    expect(statsList.length).toBeGreaterThanOrEqual(2);
-    const updatedStats = statsList.at(-1)!;
-    expect(updatedStats.targetId).not.toBeNull();
-
-    // All other stats remain identical — ONLY targetId changed!
-    expect(updatedStats.health).toBe(initialStats!.health);
-    expect(updatedStats.maxHealth).toBe(initialStats!.maxHealth);
-    expect(updatedStats.mana).toBe(initialStats!.mana);
-    expect(updatedStats.maxMana).toBe(initialStats!.maxMana);
-    expect(updatedStats.level).toBe(initialStats!.level);
-    expect(updatedStats.xp).toBe(initialStats!.xp);
-    expect(updatedStats.gold).toBe(initialStats!.gold);
-    expect(updatedStats.speed).toBe(initialStats!.speed);
+    expect(ofType(received(), 'player-stats')).toHaveLength(before);
+    expect(ofType(received(), 'target-changed').some((m) => m.creatureId !== null)).toBe(true);
   });
 
   it('active-conditions is sent when condition applied, when expired, and not sent when no change', () => {
@@ -5927,7 +5926,7 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     expect(stats?.type === 'player-stats' && stats.mana).toBe(30);
   });
 
-  it('select-target muda o player-stats.targetId; id inválido não muda nada (RF-05)', async () => {
+  it('select-target confirma com target-changed, cancela com 0 e recusa id inválido com target-cancel (#470)', async () => {
     const { host, socket, viewer, runFor, send } = realHunt(true);
     // Um tique para o rato nascer, e o estado completo para descobrir o id numérico dele.
     runFor(200);
@@ -5939,14 +5938,24 @@ describe('use-slot, select-target e slot-state pelo socket (AB-09)', () => {
     expect(rat).toBeDefined();
     const ratId = rat?.id as number;
 
-    await send({ type: 'select-target', creatureId: ratId });
-    const chosen = socket.received().filter((m) => m.type === 'player-stats').at(-1);
-    expect(chosen?.type === 'player-stats' && chosen.targetId).toBe(ratId);
+    // Seleção válida: `target-changed` com o id confirmado e o `seq` de volta.
+    await send({ type: 'select-target', creatureId: ratId, seq: 1 });
+    expect(socket.received()).toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 1 });
 
-    // Id inventado é ignorado em silêncio: nenhum `player-stats` novo.
-    const before = socket.received().filter((m) => m.type === 'player-stats').length;
-    await send({ type: 'select-target', creatureId: 999_999 });
-    expect(socket.received().filter((m) => m.type === 'player-stats')).toHaveLength(before);
+    // `creatureId: 0` é cancelamento explícito (RF-01): confirma com null, e NÃO é recusa.
+    await send({ type: 'select-target', creatureId: 0, seq: 2 });
+    expect(socket.received()).toContainEqual({ type: 'target-changed', creatureId: null, seq: 2 });
+    expect(socket.received()).not.toContainEqual({ type: 'target-cancel', seq: 2 });
+
+    // Id inventado é RECUSA (RF-04): `target-cancel` com o seq, e nada muda.
+    const before = socket.received().filter((m) => m.type === 'target-changed').length;
+    await send({ type: 'select-target', creatureId: 999_999, seq: 3 });
+    expect(socket.received()).toContainEqual({ type: 'target-cancel', seq: 3 });
+    expect(socket.received().filter((m) => m.type === 'target-changed')).toHaveLength(before);
+
+    // `seq` anterior a um já processado é mensagem atrasada: ignorada em silêncio.
+    await send({ type: 'select-target', creatureId: ratId, seq: 2 });
+    expect(socket.received()).not.toContainEqual({ type: 'target-changed', creatureId: ratId, seq: 2 });
   });
 
   it('slot-state sai no primeiro ciclo e só muda quando o par (state, reason) muda (RF-09)', async () => {

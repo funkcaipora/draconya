@@ -206,9 +206,16 @@ export const appearancesSchema = z.object({
     effect: appearanceId.optional(),
     missile: appearanceId.optional(),
   })).default({}),
-  /** `id de supply → efeito no tile de quem usou` (FUN-109). Mesma regra de `spells`. */
+  /**
+   * `id de supply → { effect, missile }` (FUN-109). `effect` é a animação no tile do alvo (ou
+   * no de quem usou, na poção); `missile` é o projétil do conjurador até o primeiro alvo, que a
+   * runa de ataque lança ANTES de a área estourar (#478). Os dois são opcionais e independentes:
+   * a poção tem efeito e não tem projétil, a runa tem os dois, e um supply sem entrada é MUDA.
+   * Mesma regra de `spells`.
+   */
   supplies: z.record(z.string().min(1), z.object({
     effect: appearanceId.optional(),
+    missile: appearanceId.optional(),
   })).default({}),
   /**
    * Efeito do golpe sem magia (FUN-109). `melee` é o sangue do corpo a corpo. Objeto, e não
@@ -619,6 +626,88 @@ export const itemSchema = z.strictObject({
 export type ItemDefinition = z.infer<typeof itemSchema>;
 
 /**
+ * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
+ * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
+ * exige alvo nem alcance; `cross` (Explosion) é centrado no alvo, sem direção.
+ *
+ * Mora aqui, antes de supply, porque o efeito de CURA do supply a referencia (#475) e porque a
+ * ability de monstro (CMB-06) reusa a MESMA geometria: a forma é conteúdo, e a matriz não se
+ * copia de engine nenhuma (ADR 0019).
+ */
+export const spellAreaSchema = z.discriminatedUnion('shape', [
+  z.object({
+    shape: z.literal('circle'),
+    /**
+     * Raio 1 é o 3x3 completo (9 tiles); do raio 2 em diante os cantos caem pela distância de
+     * Manhattan (`|dx| + |dy| <= radius + ⌊radius/2⌋`) — o raio 3 rende os 37 tiles da
+     * `AREA_CIRCLE3X3` do Canary (#472, ADR 0019).
+     */
+    radius: z.number().int().positive(),
+    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
+    centered: z.enum(['target', 'caster']).default('target'),
+  }),
+  /** Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles. */
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
+  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
+  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
+  /** Os três tiles imediatamente à frente (Front Sweep). */
+  z.object({ shape: z.literal('cleave') }),
+  /** Linha reta de `length` tiles à frente, largura 1. */
+  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
+]);
+
+export type SpellArea = z.infer<typeof spellAreaSchema>;
+
+/**
+ * A fórmula canônica de uma magia de dano (#474) OU de cura (#475, ADR 0019 e ADR 0026 d.5).
+ *
+ * O mecanismo é do motor; os coeficientes são do conteúdo. A fórmula é a mesma que o Canary
+ * registra por `onGetFormulaValues`:
+ *
+ * ```text
+ * min = level × levelFactor + skill × skillMin + baseMin
+ * max = level × levelFactor + skill × skillMax + baseMax
+ * ```
+ *
+ * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência). Na magia de DANO o `skill` é
+ * a skill que a vocação usa (`vocation.spellSkill` — `magic`, e `distance` no Paladin, `melee` no
+ * Knight); na magia e na runa de CURA é sempre o MAGIC LEVEL. Sem `formula`, o efeito continua no
+ * caminho provisório de `basePower` × `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ */
+export const spellFormulaSchema = z.object({
+  /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
+  levelFactor: z.number().default(0.2),
+  /** Coeficiente do skill no piso da faixa. */
+  skillMin: z.number(),
+  /** Coeficiente do skill no teto da faixa. */
+  skillMax: z.number(),
+  /** Constante somada ao piso. Default `0`. */
+  baseMin: z.number().default(0),
+  /** Constante somada ao teto. Default `0`. */
+  baseMax: z.number().default(0),
+});
+
+export type SpellFormula = z.infer<typeof spellFormulaSchema>;
+
+/**
+ * A forma de uma runa de ATAQUE (#476): círculo de raio `radius` OU cruz no ALVO. Runa é
+ * lançada num alvo, então — ao contrário da magia — não existe forma que saia do lançador:
+ * `centered` é sempre `target`, e a cruz também centra no alvo (`area.ts`). É também por isso
+ * que a cruz não tem `centered`: não há o que escolher.
+ */
+const runeAreaSchema = z.union([
+  z.object({
+    shape: z.literal('circle'),
+    radius: z.number().int().positive(),
+    centered: z.literal('target').default('target'),
+  }),
+  /**
+   * Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles.
+   */
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
+]);
+
+/**
  * Um SUPRIMENTO (FUN-77, §20.1). Poção e runa **não são itens físicos**: usar debita gold
  * direto, no ato. Por isso supply tem preço e `group` de cooldown, e não tem peso, slot nem
  * instância. O `effect` é a união discriminada por `kind`, fechada como o vocabulário do bot:
@@ -646,12 +735,22 @@ export const supplySchema = z.object({
    */
   groupCooldownMs: z.number().int().positive().default(1_000),
   effect: z.discriminatedUnion('kind', [
+    /**
+     * Cura o usuário (poção) ou o alvo selecionado (runa de cura, #475). Os três mecanismos são
+     * os mesmos da magia de cura — `amount` fixo, `basePower` provisório ou `formula` canônica —
+     * e a runa escala pelo MAGIC LEVEL. `range` é o alcance da runa (catalogado; no motor v1 a
+     * runa de cura cura o próprio usuário, como a poção).
+     * `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10).
+     */
     z.object({
-      kind: z.literal('heal'), amount: z.number().int().positive(),
+      kind: z.literal('heal'),
+      amount: z.number().int().positive().optional(),
+      basePower: z.number().int().positive().optional(),
+      formula: spellFormulaSchema.optional(),
       /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10). */
       target: z.enum(['self', 'friend']).optional(),
-      /** Obrigatório com `target: 'friend'`, proibido com `'self'` — `buildContent` confere. */
       range: z.number().int().positive().optional(),
+      area: spellAreaSchema.optional(),
     }),
     z.object({
       kind: z.literal('mana'), amount: z.number().int().positive(),
@@ -659,19 +758,20 @@ export const supplySchema = z.object({
       range: z.number().int().positive().optional(),
     }),
     /**
-     * Runa de ataque (#165, ADR 0026 d.8): o Base Power do TibiaWiki, convertido pela mesma
-     * fórmula das magias (`combat.spellPower`, #155) com a skill `magic`; alcance até o alvo e
-     * o círculo ao redor dele. Só `circle` centrado no alvo: runa é lançada NUM alvo.
+     * Runa de ataque (#165, ADR 0026 d.8; #476): o dano sai de UM mecanismo — o Base Power do
+     * TibiaWiki convertido pela mesma fórmula das magias (`combat.spellPower`, #155) ou a
+     * `formula` canônica do Canary (#476), que VENCE o `basePower` (o BP continua sendo o número
+     * de exibição, ADR 0033). Escala SEMPRE pelo magic level, em toda vocação. `area` é
+     * OPCIONAL: o círculo no alvo (Avalanche, Great Fireball, Thunderstorm, Stone Shower), a
+     * cruz no alvo (Explosion) ou NADA, que é a runa de ALVO ÚNICO (Sudden Death, Heavy Magic
+     * Missile). `range` é o alcance até o alvo principal, obrigatório como na magia de dano.
      */
     z.object({
       kind: z.literal('damage'),
-      basePower: z.number().int().positive(),
+      basePower: z.number().int().positive().optional(),
+      formula: spellFormulaSchema.optional(),
       range: z.number().int().positive(),
-      area: z.object({
-        shape: z.literal('circle'),
-        radius: z.number().int().positive(),
-        centered: z.literal('target').default('target'),
-      }),
+      area: runeAreaSchema.optional(),
       /**
        * O TIPO de dano da runa (CMB-03). Ausente é `arcane`, o default que preserva o v1; a
        * Avalanche é gelo, e o arquivo declara.
@@ -734,31 +834,8 @@ export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
   readonly mitigation: CompiledMitigation;
 };
 
-/**
- * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
- * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
- * exige alvo nem alcance.
- *
- * Mora aqui, antes de monstro, porque a ability de monstro (CMB-06) reusa a MESMA geometria:
- * a forma é conteúdo, e a matriz não se copia de engine nenhuma (ADR 0019).
- */
-export const spellAreaSchema = z.discriminatedUnion('shape', [
-  z.object({
-    shape: z.literal('circle'),
-    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
-    radius: z.number().int().positive(),
-    /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
-    centered: z.enum(['target', 'caster']).default('target'),
-  }),
-  /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
-  z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
-  /** Os três tiles imediatamente à frente (Front Sweep). */
-  z.object({ shape: z.literal('cleave') }),
-  /** Linha reta de `length` tiles à frente, largura 1. */
-  z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
-]);
-
-export type SpellArea = z.infer<typeof spellAreaSchema>;
+// `spellAreaSchema`/`SpellArea` foram movidos para antes de `supplySchema`: o efeito de cura do
+// supply o referencia (#475), e uma `const` não é içada — usá-la antes da inicialização quebra.
 
 /** Um percentual por FONTE de dano: a postura do Knight sobe o corpo a corpo, a do Paladin o tiro. */
 export const damagePercentBySource = z.object({
@@ -2086,15 +2163,18 @@ export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as
  * precisarem declarar o default.
  */
 export const spellEffectSchema = z.discriminatedUnion('kind', [
-  /** Cura o próprio lançador, ou um membro da party com `target: 'friend'` (§26, ADR 0035 d.10). */
+  /** Cura o próprio lançador, ou um membro da party com `target: 'friend'` (§26, ADR 0035 d.10), ou aliados em área (Mass Healing, #475). */
   z.object({
     kind: z.literal('heal'),
     basePower: z.number().int().positive().optional(),
     amount: z.number().int().positive().optional(),
+    formula: spellFormulaSchema.optional(),
     /** `self` cura quem lança (o de hoje); `friend` cura um membro da party. */
     target: z.enum(['self', 'friend']).optional(),
     /** Obrigatório com `target: 'friend'`, proibido com `'self'` — `buildContent` confere. */
     range: z.number().int().positive().optional(),
+    /** Forma de grupo (Mass Healing): `circle` centrado no lançador. `buildContent` confere. */
+    area: spellAreaSchema.optional(),
   }),
   /**
    * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
@@ -2106,6 +2186,12 @@ export const spellEffectSchema = z.discriminatedUnion('kind', [
     kind: z.literal('damage'),
     basePower: z.number().int().positive().optional(),
     power: z.number().int().positive().optional(),
+    /**
+     * A fórmula canônica (#474). Presente, ela VENCE o `basePower` na hora do cálculo; o
+     * `basePower` continua sendo o número de exibição do catálogo (ADR 0033). Ausente, o
+     * caminho é o `basePower` × `combat.spellPower` de sempre, bit a bit.
+     */
+    formula: spellFormulaSchema.optional(),
     range: z.number().int().positive().optional(),
     area: spellAreaSchema.optional(),
     /**
@@ -2165,7 +2251,8 @@ export type SpellEffect = z.infer<typeof spellEffectSchema>;
  * conhece, e uma magia com efeito desconhecido é recusada no boot em vez de virar uma linha
  * morta que ninguém explica. Dano e cura vêm por `basePower` (o BP do TibiaWiki, convertido
  * por `combat.spellPower`) OU por número fixo (`power`/`amount`) — um dos dois, nunca ambos
- * (`buildContent` confere).
+ * (`buildContent` confere). Dano de ataque pode declarar ainda a `formula` canônica (#474), que
+ * vence o `basePower` no cálculo; ela é ADITIVA e não muda a magia que não a declara.
  */
 export const spellSchema = z.object({
   id: z.string().min(1),

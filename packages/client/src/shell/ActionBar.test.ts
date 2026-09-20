@@ -124,6 +124,19 @@ describe('ActionBar — CONJUNTO, ALVO, ⌖ e a legenda (RF-08..RF-12)', () => {
     expect(html).toContain('Strike');
     expect(html).not.toContain('Cura');
   });
+
+  it('o motivo do slot-state bloqueado vai ao title do slot (RF-02)', async () => {
+    // É o caminho que explica por que a runa não rodou: o host manda a frase em palavras no
+    // `slot-state`, e a barra a leva ao tooltip — sem `slot-result` nenhum.
+    edit((draft) => ({ ...withSlots(0, [[0, spell('heal')]]), activeSet: draft.activeSet }));
+    hud.set((state) => ({
+      ...state,
+      slotStates: {
+        '0:0': { set: 0, slot: 0, state: 'blocked', remainingMs: 0, reason: 'Magic level insuficiente.' },
+      },
+    }));
+    expect(await render()).toContain('Magic level insuficiente.');
+  });
 });
 
 describe('ActionBar — "Salva automaticamente" reflete o estado (RF-10)', () => {

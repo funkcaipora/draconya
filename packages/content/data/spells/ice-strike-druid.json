@@ -12,7 +12,13 @@
     "kind": "damage",
     "basePower": 45,
     "range": 3,
-    "damageType": "ice"
+    "damageType": "ice",
+    "formula": {
+      "skillMin": 1.403,
+      "skillMax": 2.203,
+      "baseMin": 8,
+      "baseMax": 13
+    }
   },
   "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. a mesma do Sorcerer (DT-02); elemento declarado no efeito (CMB-03)."
 }

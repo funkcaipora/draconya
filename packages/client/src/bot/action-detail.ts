@@ -105,6 +105,7 @@ function areaLabel(area: Area | undefined): string {
     case 'wave': return `Onda ${String(area.length)}`;
     case 'beam': return `Feixe ${String(area.length)}`;
     case 'cleave': return 'Frontal 3';
+    case 'cross': return `Cruz ${String(area.radius)}`;
   }
 }
 

@@ -1523,6 +1523,157 @@ describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
   });
 });
 
+describe('a fórmula canônica de dano (#474)', () => {
+  const formula = { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 };
+  const iceStrike = {
+    id: 'ice-strike', name: 'Ice Strike', manaCost: 12, cooldownMs: 2000,
+    effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'ice', formula },
+  };
+
+  it('aceita basePower junto da fórmula — a fórmula vence, o BP fica de exibição', () => {
+    const content = buildContent(base({ spells: [iceStrike] }));
+    expect(content.spells.get('ice-strike')?.effect)
+      .toMatchObject({ basePower: 45, formula: { skillMin: 1.403 } });
+  });
+
+  it('aceita a fórmula sozinha, sem basePower', () => {
+    const only = { ...iceStrike, effect: { kind: 'damage', range: 3, damageType: 'ice', formula } };
+    expect(() => buildContent(base({ spells: [only] }))).not.toThrow();
+  });
+
+  it('recusa `power` junto de fórmula/basePower: dois mecanismos de dano', () => {
+    // Mutação que mata: aceitar os dois e deixar a precedência implícita — a magia sairia com
+    // o dano errado sem nada acusar.
+    const both = { ...iceStrike, effect: { ...iceStrike.effect, power: 10 } };
+    expect(() => buildContent(base({ spells: [both] })))
+      .toThrow(/power OU basePower\/formula/);
+  });
+
+  it('recusa dano sem mecanismo nenhum', () => {
+    const none = { ...iceStrike, effect: { kind: 'damage', range: 3, damageType: 'ice' } };
+    expect(() => buildContent(base({ spells: [none] })))
+      .toThrow(/power OU basePower\/formula/);
+  });
+});
+
+describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
+  const formula = { levelFactor: 0.2, skillMin: 1.4, skillMax: 2.0, baseMin: 8, baseMax: 11 };
+  const lightHealing = {
+    id: 'light-healing', name: 'Light Healing', manaCost: 20, cooldownMs: 1_000,
+    group: 'healing', groupCooldownMs: 1_000,
+    effect: { kind: 'heal', basePower: 40, formula },
+  };
+  const massHealing = {
+    ...lightHealing, id: 'mass-healing',
+    effect: {
+      kind: 'heal', basePower: 200, formula,
+      area: { shape: 'circle', radius: 1, centered: 'caster' },
+    },
+  };
+
+  it('aceita a fórmula junto do basePower — a fórmula vence, o BP fica de exibição', () => {
+    const content = buildContent(base({ spells: [lightHealing] }));
+    expect(content.spells.get('light-healing')?.effect)
+      .toMatchObject({ kind: 'heal', basePower: 40, formula: { skillMin: 1.4 } });
+  });
+
+  it('aceita a cura em área 3x3 centrada no lançador (Mass Healing)', () => {
+    const content = buildContent(base({ spells: [massHealing] }));
+    expect(content.spells.get('mass-healing')?.effect)
+      .toMatchObject({ area: { shape: 'circle', radius: 1, centered: 'caster' } });
+  });
+
+  it('recusa `amount` junto de fórmula/basePower: dois mecanismos de cura', () => {
+    // Mutação que mata: aceitar os dois e deixar a precedência implícita — a cura sairia errada.
+    const both = { ...lightHealing, effect: { ...lightHealing.effect, amount: 10 } };
+    expect(() => buildContent(base({ spells: [both] })))
+      .toThrow(/cura precisa de amount OU basePower\/formula/);
+  });
+
+  it('recusa cura sem mecanismo nenhum', () => {
+    const none = { ...lightHealing, effect: { kind: 'heal' } };
+    expect(() => buildContent(base({ spells: [none] })))
+      .toThrow(/cura precisa de amount OU basePower\/formula/);
+  });
+
+  it('recusa cura em área centrada no ALVO: cura não tem mira', () => {
+    const noTarget = {
+      ...massHealing,
+      effect: { ...massHealing.effect, area: { shape: 'circle', radius: 1, centered: 'target' } },
+    };
+    expect(() => buildContent(base({ spells: [noTarget] })))
+      .toThrow(/cura em área precisa ser centrada no lançador/);
+  });
+
+  it('a runa de cura aceita fórmula e recusa dois mecanismos, como a magia', () => {
+    const rune = {
+      id: 'ultimate-healing-rune', name: 'Ultimate Healing Rune', price: 35,
+      group: 'healing', groupCooldownMs: 1_000, requires: { level: 24, magicLevel: 4 },
+      effect: {
+        kind: 'heal', range: 4,
+        formula: { levelFactor: 0.2, skillMin: 5.7, skillMax: 10.3, baseMin: 36, baseMax: 65 },
+      },
+    };
+    expect(buildContent(base({ supplies: [rune] })).supplies.get('ultimate-healing-rune')?.effect)
+      .toMatchObject({ kind: 'heal', formula: { skillMin: 5.7 } });
+    const both = { ...rune, effect: { ...rune.effect, amount: 10 } };
+    expect(() => buildContent(base({ supplies: [both] })))
+      .toThrow(/supply\/ultimate-healing-rune: cura precisa de amount OU basePower\/formula/);
+  });
+});
+
+describe('as runas de ataque do Canary (#476)', () => {
+  const suddenDeath = {
+    id: 'sudden-death-rune', name: 'Sudden Death Rune', price: 108,
+    group: 'attack', groupCooldownMs: 2_000, requires: { level: 45, magicLevel: 15 },
+    effect: {
+      kind: 'damage', range: 8, damageType: 'death',
+      formula: { levelFactor: 0.2, skillMin: 4.6, skillMax: 7.4, baseMin: 32, baseMax: 48 },
+    },
+  };
+
+  it('aceita a runa de ALVO ÚNICO com fórmula e SEM area (#476)', () => {
+    const content = buildContent(base({ supplies: [suddenDeath] }));
+    expect(content.supplies.get('sudden-death-rune')?.effect)
+      .toMatchObject({ kind: 'damage', damageType: 'death', formula: { skillMin: 4.6 } });
+    expect(content.supplies.get('sudden-death-rune')?.effect).not.toHaveProperty('area');
+  });
+
+  it('aceita a fórmula junto do basePower — a fórmula vence, o BP fica de exibição', () => {
+    const rune = {
+      ...suddenDeath, id: 'avalanche-rune',
+      effect: { ...suddenDeath.effect, basePower: 45, damageType: 'ice' },
+    };
+    expect(buildContent(base({ supplies: [rune] })).supplies.get('avalanche-rune')?.effect)
+      .toMatchObject({ kind: 'damage', basePower: 45, formula: { skillMin: 4.6 } });
+  });
+
+  it('aceita a cruz no alvo (Explosion) e a recusa centrada no lançador', () => {
+    const explosion = {
+      ...suddenDeath, id: 'explosion-rune', damageType: 'physical',
+      effect: { ...suddenDeath.effect, damageType: 'physical', area: { shape: 'cross', radius: 1 } },
+    };
+    expect(buildContent(base({ supplies: [explosion] })).supplies.get('explosion-rune')?.effect)
+      .toMatchObject({ area: { shape: 'cross', radius: 1 } });
+    // Runa é lançada NUM alvo: uma forma que sai do lançador não é representável e o schema
+    // recusa — o erro é de forma, não chega ao boot.
+    const caster = {
+      ...explosion,
+      effect: { ...explosion.effect, area: { shape: 'circle', radius: 1, centered: 'caster' } },
+    };
+    expect(() => buildContent(base({ supplies: [caster] }))).toThrow();
+  });
+
+  it('recusa dano sem mecanismo nenhum (sem basePower e sem formula)', () => {
+    const none = {
+      ...suddenDeath,
+      effect: { kind: 'damage', range: 8, damageType: 'death' },
+    };
+    expect(() => buildContent(base({ supplies: [none] })))
+      .toThrow(/supply\/sudden-death-rune: dano precisa de basePower ou formula/);
+  });
+});
+
 describe('condições e campos declarativos (CMB-07, #334)', () => {
   const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };

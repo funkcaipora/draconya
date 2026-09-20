@@ -16,10 +16,12 @@
 // o 7.
 
 import { buildContent, compileMitigation, placeholderAppearances } from '@draconya/content';
-import type { Combat, DamageModifiers, RawContent } from '@draconya/content';
+import type { Combat, DamageModifiers, RawContent, Spell, Supply } from '@draconya/content';
 import { describe, expect, it } from 'vitest';
 import { CharacterRuntime } from '../character.js';
 import type { CharacterState } from '../character.js';
+import { areaTiles } from '../area.js';
+import { balanceOf, castSpell, ownPurse, useSupply } from '../casting.js';
 import { applyDamageOutcome } from './outcome.js';
 import { resolveDamage } from './damage.js';
 import type { DamageIntent, Defender } from './damage.js';
@@ -605,5 +607,76 @@ describe('conformance de modificadores: semente, taxas e retomada (CMB-08)', () 
     expect(compareObservations(
       conformanceObservationOf(straight), conformanceObservationOf(resumed),
     )).toEqual([]);
+  });
+});
+
+// --- oráculos de área e magia (M24-01, #469) --------------------------------------------------
+//
+// O elo entre a conformance do CMB-10 e os golden traces do M24: a ordem e o custo de uma
+// magia/runa de área, agora como oráculo EXPLÍCITO neste arquivo. A geometria em si vive em
+// `area.test.ts`; aqui o que se prende é que cada alvo consome UMA rolagem (a ordem é
+// contrato) e que a mana/gold são cobrados UMA vez, não por alvo.
+
+describe('oráculos de área e magia (M24-01, #469)', () => {
+  const areaSpell: Spell = {
+    id: 'blast', name: 'Blast', manaCost: 20, cooldownMs: 4_000, minLevel: 1,
+    effect: {
+      kind: 'damage', power: 30, range: 4, damageType: 'fire',
+      area: { shape: 'circle', radius: 1, centered: 'target' },
+    },
+  };
+  const avalanche: Supply = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+    groupCooldownMs: 2_000, requires: { level: 30, magicLevel: 4 },
+    effect: {
+      kind: 'damage', basePower: 45, range: 8, damageType: 'ice',
+      area: { shape: 'circle', radius: 3, centered: 'target' },
+    },
+  };
+  const caster = (mana: number, gold: number): CharacterRuntime => new CharacterRuntime({
+    id: 'hero', position: { x: 0, y: 0, z: 7 },
+    health: 100, maxHealth: 100, mana, maxMana: 1_000,
+    level: 30, xp: 0, gold, goldDelta: 0, alive: true, cooldowns: {},
+  });
+  const targets = [
+    { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 }, { armor: 0, dodgeChance: 0 },
+  ];
+
+  it('magia de área: uma rolagem por alvo, mana cobrada uma vez', () => {
+    const hero = caster(100, 0);
+    const rng = Rng.fromSeed('m24-area-spell');
+    const result = castSpell(
+      hero, areaSpell, { distance: 2, targets }, 0, COMBAT, rng,
+    );
+    expect(result).toMatchObject({ ok: true, damage: 90, hits: [30, 30, 30] });
+    expect(hero.mana).toBe(80);
+    // Um Dodge por alvo: três rolagens, nenhuma a mais.
+    const consumed = Rng.fromSeed('m24-area-spell');
+    for (let i = 0; i < 3; i += 1) consumed.chance(1);
+    expect(rng.getState()).toEqual(consumed.getState());
+  });
+
+  it('runa de área: gold cobrado uma vez e uma rolagem por alvo', () => {
+    const hero = caster(0, 100);
+    const rng = Rng.fromSeed('m24-area-rune');
+    const result = useSupply(
+      hero, avalanche, { distance: 5, targets }, COMBAT, rng, { skillLevel: 4, powerScale: 1 },
+      ownPurse(hero), hero, 0,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.goldSpent).toBe(14);
+    expect(result.hits).toHaveLength(3);
+    expect(result.damage).toBe(result.hits.reduce((total, hit) => total + hit, 0));
+    expect(balanceOf(hero)).toBe(86);
+  });
+
+  it('a geometria do círculo: raio 1 são 9 tiles; raio 3 são os 37 da AREA_CIRCLE3X3', () => {
+    const origin = { x: 0, y: 0, z: 7 };
+    expect(areaTiles({ shape: 'circle', radius: 1, centered: 'target' }, origin, 'south', origin))
+      .toHaveLength(9);
+    // Referência Canary `AREA_CIRCLE3X3`: 37 tiles, linhas 3/5/7/7/7/5/3 (#472, ADR 0019).
+    expect(areaTiles({ shape: 'circle', radius: 3, centered: 'target' }, origin, 'south', origin))
+      .toHaveLength(37);
   });
 });

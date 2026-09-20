@@ -8,6 +8,20 @@ const Point = z.object({ x: z.number().int(), y: z.number().int(), z: z.number()
 const Direction = z.enum(['north', 'east', 'south', 'west']);
 
 /**
+ * O TIPO de dano elemental (#479). Espelha `DAMAGE_TYPES` do conteúdo, mas vive aqui pela
+ * mesma razão que todo contrato de rede: o protocolo é a base da pilha e não importa `content`.
+ * A lista é fechada de propósito — um valor fora dela faria o cliente desenhar um número sem
+ * cor, e o `decodeS2C` deve recusar a mensagem inteira em vez de deixar passar.
+ *
+ * `arcane` é o tipo "mágico" do v1 (`kind: magic` do CMB-03). Cura NÃO é um tipo de dano: é o
+ * `kind` da mensagem, e por isso não aparece aqui.
+ */
+export const DamageType = z.enum([
+  'physical', 'energy', 'earth', 'fire', 'ice', 'holy', 'death', 'arcane',
+]);
+export type DamageType = z.infer<typeof DamageType>;
+
+/**
  * Um lugar do inventário (#160): posição num container, ou um slot do corpo. O slot vem como
  * string e é conferido pelo CONTEÚDO no servidor, como em `unequip`.
  */
@@ -196,9 +210,14 @@ export const C2S_SCHEMAS = {
   /**
    * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
    * criatura pelo id numérico do servidor; quem decide se ela é alvo válido é o servidor
-   * (invariante 4).
+   * (invariante 4). `creatureId: 0` é o CANCELAMENTO explícito (#470, RF-01), como no Canary.
+   * `seq` é monotônico por cliente e volta no ack (`target-changed`/`target-cancel`) para o
+   * cliente descartar resposta obsoleta (RF-02). Opcional: um cliente anterior não o manda.
    */
-  'select-target': z.object({ creatureId: z.number().int().nonnegative() }),
+  'select-target': z.object({
+    creatureId: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
   /**
    * O líder muda rateio, divisão de lucro, coleta ou venda automática EM TEMPO DE HUNT
    * (#393, ADR 0035 decisão 1). INTENÇÃO, sempre: um patch parcial — cada campo ausente
@@ -393,6 +412,7 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
     radius: z.number().int().positive(),
     centered: z.enum(['target', 'caster']),
   }),
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
@@ -885,6 +905,13 @@ export const S2C_SCHEMAS = {
     id: z.number().int(),
     amount: z.number().int().nonnegative(),
     kind: z.enum(['melee', 'spell', 'heal']),
+    /**
+     * O ELEMENTO do golpe (#479), quando o servidor o resolveu. Opcional de propósito: um nó
+     * `game` anterior a esta issue manda sem, e o cliente que o exigisse recusaria a mensagem
+     * inteira em silêncio. Ausente, a cor sai do `kind` — melee vermelho, cura verde, magia
+     * roxa —, que é a leitura de antes.
+     */
+    damageType: DamageType.optional(),
   }),
   /**
    * Uma animação de efeito num tile (FUN-109): a explosão da magia, o sangue do golpe, o
@@ -903,7 +930,11 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
-    targetId: z.number().int().nonnegative().nullable().default(null),
+    /**
+     * O alvo NÃO mora mais aqui (#470, DT-01). Ele era batimento geral e mascarava a
+     * confirmação e a recusa do `select-target`; agora viaja em `target-changed` /
+     * `target-cancel`, que dizem exatamente o que o jogador fez.
+     */
     /**
      * A munição escolhida por família (#152, ADR 0026 decisão 3), a forma do Huntera
      * (`ammo-selection`): `null` é "nenhuma escolhida". `default`: um nó `game` anterior manda
@@ -980,6 +1011,26 @@ export const S2C_SCHEMAS = {
     /** O alvo tentado — presente mesmo com `active: false`, para a UI dizer QUEM parou. */
     targetId: z.string().min(1),
     reason: z.enum(['dead', 'left', 'unreachable']).optional(),
+  }),
+  /**
+   * O alvo autoritativo do jogador (#470, RF-03/RF-04). `creatureId` positivo é a criatura
+   * selecionada; `null` é o cancelamento CONFIRMADO (o cliente mandou `creatureId: 0`). Não é
+   * recusa — a recusa é `target-cancel`, e misturar as duas faria o cliente não saber se o
+   * alvo caiu porque ele cancelou ou porque o servidor recusou.
+   *
+   * `seq` é o número do `select-target` que originou a mudança; ausente quando a troca veio do
+   * auto-target do servidor (#444) ou de um nó `game` anterior.
+   */
+  'target-changed': z.object({
+    creatureId: z.number().int().positive().nullable(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * A recusa do `select-target` (#470, RF-04): criatura desconhecida ou morta. Nada mudou, e o
+   * `seq` permite ao cliente saber QUAL tentativa foi recusada (edge case de ack obsoleto).
+   */
+  'target-cancel': z.object({
+    seq: z.number().int().nonnegative().optional(),
   }),
 } as const satisfies Record<S2CName, z.ZodType>;
 

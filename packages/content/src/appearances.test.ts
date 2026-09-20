@@ -57,7 +57,7 @@ function combatPresentationReferences(appearances: Appearances): CombatPresentat
     push(`spell:${id}`, { effect: spell.effect, missile: spell.missile });
   }
   for (const [id, supply] of Object.entries(appearances.supplies)) {
-    push(`supply:${id}`, { effect: supply.effect });
+    push(`supply:${id}`, { effect: supply.effect, missile: supply.missile });
   }
   for (const [id, ammo] of Object.entries(appearances.ammunition)) {
     push(`ammunition:${id}`, { missile: ammo.missile });

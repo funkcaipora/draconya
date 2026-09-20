@@ -541,8 +541,19 @@ export function buildContent(raw: RawContent): Content {
     }
     const effect = spell.effect;
     if (effect.kind === 'heal') {
-      if ((effect.basePower === undefined) === (effect.amount === undefined)) {
-        problems.push(`${where}: cura precisa de basePower OU amount, um dos dois`);
+      // A cura sai de UM mecanismo, como o dano (#475): o número fixo (`amount`) OU a faixa
+      // escalada (`basePower` provisório e/ou a `formula` canônica). Os dois juntos é a mesma
+      // ambiguidade que o dano recusa — a precedência implícita faria a cura sair errada mudo.
+      const fixed = effect.amount !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
+      }
+      // Cura em área é de GRUPO centrada no lançador (Mass Healing): forma no alvo exigiria
+      // mira e alcance que a cura não tem, e a magia não acharia ninguém.
+      if (effect.area !== undefined
+        && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
+        problems.push(`${where}: cura em área precisa ser centrada no lançador`);
       }
       if (effect.target === 'friend' && effect.range === undefined) {
         problems.push(`${where}: cura em outro personagem precisa de range`);
@@ -552,8 +563,13 @@ export function buildContent(raw: RawContent): Content {
       }
     }
     if (effect.kind === 'damage') {
-      if ((effect.basePower === undefined) === (effect.power === undefined)) {
-        problems.push(`${where}: dano precisa de basePower OU power, um dos dois`);
+      // O dano sai de UM mecanismo: o número fixo (`power`) OU a faixa escalada (`basePower`
+      // e/ou a `formula` canônica da #474). Fixo junto de escalado é ambiguidade — qual vence
+      // ninguém sabe, e a magia sairia com o dano errado em silêncio.
+      const fixed = effect.power !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`${where}: dano precisa de power OU basePower/formula, um dos dois`);
       }
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
@@ -565,12 +581,27 @@ export function buildContent(raw: RawContent): Content {
       }
     }
   }
+  // O supply de cura (#475): a runa UH/IH sai de UM mecanismo, como a magia — `amount` fixo
+  // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
+  // A runa de ATAQUE (#476) segue a mesma regra do dano da magia: `basePower` (BP provisório) ou
+  // `formula` canônica, pelo menos um. Sem nenhum o dano sairia zero em silêncio.
   // O par `target`/`range` do supply (cura e mana) copia a MESMA regra do dano da magia: um
   // efeito que alcança outro personagem precisa de alcance, e um que cura quem usa não tem
   // nenhum. Sem isto, uma poção `target: 'friend'` sem `range` subiria muda.
   for (const supply of supplies.values()) {
     const where = `supply/${supply.id}`;
     const effect = supply.effect;
+    if (effect.kind === 'heal') {
+      const fixed = effect.amount !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
+      }
+    }
+    if (effect.kind === 'damage'
+      && effect.basePower === undefined && effect.formula === undefined) {
+      problems.push(`${where}: dano precisa de basePower ou formula`);
+    }
     if (effect.kind === 'heal' || effect.kind === 'mana') {
       if (effect.target === 'friend' && effect.range === undefined) {
         problems.push(`${where}: efeito em outro personagem precisa de range`);

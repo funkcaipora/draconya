@@ -322,6 +322,15 @@ configuração.
 `follow` é o alvo que o jogador escolheu clicando no mundo/Batalha (intenção `select-target`,
 AB-09): o override vale enquanto o monstro vive e, ao morrer, cai em `nearest`.
 
+**O alvo tem protocolo próprio desde #470.** O servidor confirma a seleção com `target-changed`
+(o id numérico da criatura) e o cancelamento com `target-changed { creatureId: null }`; criatura
+desconhecida ou morta é recusa, com `target-cancel`. O `player-stats` deixou de carregar
+`targetId` — ele era batimento geral e mascarava confirmação e recusa de input. O `select-target`
+aceita `creatureId: 0` como cancelamento explícito (como o `creatureId == 0` do Canary) e um `seq`
+monotônico que volta no ack, para o cliente descartar resposta obsoleta. A apresentação usa
+`selectedTargetOf`, que **não** é recortado pelo alcance da arma: o alvo continua na tela fora do
+corpo a corpo, e quem decide se ele é visto é o raio de busca.
+
 **O alvo também é escolhido sozinho** (#444): ao surgir um monstro na tela — o raio de busca, os
 mesmos 8 tiles — o motor o guarda como alvo pela política corrente, mesmo fora do alcance da arma.
 É o que permite a uma runa de alcance 8 ser lançada num alvo a 5 tiles com arma corpo a corpo na
@@ -523,8 +532,10 @@ mana e inicia cooldown é o servidor.
 | Mensagem | Direção | O que carrega |
 |---|---|---|
 | `use-slot` | C2S | `{ set, slot }` — dispara o slot na hora; `set` defasado é recusa (`wrong-set`) |
-| `select-target` | C2S | `{ creatureId }` — escolhe o alvo clicando no mundo/Batalha |
+| `select-target` | C2S | `{ creatureId, seq? }` — escolhe o alvo clicando no mundo/Batalha; `creatureId: 0` cancela, `seq` monotônico volta no ack (#470) |
 | `select-ammo` | C2S | `{ ammoId }` — escolhe a munição da família; o servidor valida `requires.level` e responde em `player-stats.ammo` |
+| `target-changed` | S2C | o alvo autoritativo: `creatureId` positivo ou `null` (cancelamento confirmado), com o `seq` de volta quando veio de um `select-target` (#470) |
+| `target-cancel` | S2C | a recusa do `select-target` (criatura desconhecida ou morta); nada mudou (#470) |
 | `slot-state` | S2C | o estado dos 24 slots do conjunto ativo: `ready`/`cooldown`/`blocked`/`empty`, `remainingMs` e o motivo em palavras |
 | `slot-result` | S2C | a resposta ao `use-slot`: `ok` e, quando falso, o motivo para o tooltip |
 

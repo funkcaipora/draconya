@@ -136,3 +136,35 @@ export function countTargets<M extends TargetLike>(
   }
   return count;
 }
+
+/**
+ * Quantos alvos VÁLIDOS caem no FOOTPRINT de uma forma de área (#480, DT-01).
+ *
+ * É a contagem que a condição `targets >= N` usa quando a ação avaliada tem `area`: contar num
+ * círculo genérico ao redor do jogador fazia a runa disparar sem acertar a densidade que o
+ * jogador estipulou. Aqui entra a lista de tiles que `areaTiles` projetou — círculo no alvo,
+ * cruz, onda, o que for —, e a resposta é exata.
+ *
+ * Ignorado não conta pela mesma razão de `countTargets`: um monstro que o jogador mandou o bot
+ * deixar em paz não pode satisfazer a condição que manda atacar em área. A chave do tile é a
+ * MESMA de `area.ts` (`x,y,z`), para a conferência bater com a mira de `#aimFor`.
+ *
+ * A lista de chaves é a única alocação, do tamanho da forma — como na mira de magia.
+ */
+export function countAreaTargets<M extends TargetLike>(
+  targeting: Targeting, monsters: readonly M[], tiles: readonly GridPoint[],
+): number {
+  const keys = new Set<string>();
+  for (let i = 0; i < tiles.length; i += 1) {
+    const tile = tiles[i] as GridPoint;
+    keys.add(`${String(tile.x)},${String(tile.y)}`);
+  }
+  let count = 0;
+  for (let i = 0; i < monsters.length; i += 1) {
+    const monster = monsters[i] as M;
+    if (!monster.alive) continue;
+    if (targeting.ignore.has(monster.monsterId)) continue;
+    if (keys.has(`${String(monster.position.x)},${String(monster.position.y)}`)) count += 1;
+  }
+  return count;
+}

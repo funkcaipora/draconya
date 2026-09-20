@@ -19,6 +19,7 @@
 import type { WorldPoint } from './movement.js';
 import type { CarriedItem } from './inventory.js';
 import type { Departure } from './session.js';
+import type { DamageType } from '@draconya/content';
 
 /**
  * Alguém levou dano. `amount` é o APLICADO — `min(dano, vida)` —, o que a barra perdeu.
@@ -32,6 +33,15 @@ export interface CreatureHit {
   readonly attackerId: string | number;
   readonly amount: number;
   readonly source: 'melee' | 'spell';
+  /**
+   * O elemento RESOLVIDO do golpe (#479), quando há um. É o que a apresentação usa para a cor
+   * do número — gelo azul, fogo laranja —, e viaja até o cliente em `creature-hit`.
+   *
+   * Opcional para não obrigar emissores e fixtures antigos: sem ele, o cliente cai no mapa por
+   * `source` (corpo a corpo vermelho, magia roxa), que é a leitura de antes. Cura nunca o traz,
+   * porque cura não é dano.
+   */
+  readonly damageType?: DamageType;
   readonly position: WorldPoint;
 }
 
