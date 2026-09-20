@@ -4760,6 +4760,66 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
   });
 });
 
+// --- a densidade REAL da área governa "targets >= N" (#480) -----------------------------------
+
+describe('a condição "targets >= N" conta o FOOTPRINT da área, não um círculo no jogador (#480)', () => {
+  const rune = {
+    id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack',
+    requires: { level: 30, magicLevel: 0 },
+    effect: { kind: 'damage', basePower: 400, range: 8, area: { shape: 'circle', radius: 3, centered: 'target' } },
+  };
+  const rule = {
+    rune: [{ when: { kind: 'targets' as const, op: '>=' as const, count: 3 }, do: { kind: 'supply' as const, supplyId: 'avalanche-rune' } }],
+  };
+
+  /**
+   * Nasce SEM bot, posiciona os ratos e só então configura a regra — mesma coreografia da
+   * #444: com o bot já no ar, a primeira avaliação (t=0) usaria as posições de spawn e a regra
+   * poderia disparar antes de o teste arrumar o campo.
+   */
+  const board = () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), {
+      gold: 10_000, supplies: [...supplies, rune], health: 5_000,
+    }, 'bold');
+    hero.level = 30;
+    hero.xp = totalXpForLevel(30, progression as Progression);
+    session.advanceBy(1);
+    return { session, hero, ruleset };
+  };
+
+  it('três monstros dispersos, só um na área: a runa NÃO sai', () => {
+    const { session, hero, ruleset } = board();
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Os três estão a <= 8 do herói — o círculo genérico de antes contaria 3 e dispararia. Só
+    // `a` cai no círculo de raio 3 projetado sobre ele: `b` e `c` ficam a 5 e 6 tiles na
+    // perpendicular, fora dos 37 tiles da Avalanche.
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x, y: hero.position.y + 5 };
+    c.position = { x: hero.position.x, y: hero.position.y + 6 };
+    ruleset.configureBot(session, botConfig(rule), 'hero');
+
+    run(session, 3_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBe(0);
+  });
+
+  it('três monstros no mesmo punhado, todos na área: a runa SAI', () => {
+    const { session, hero, ruleset } = board();
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // O controle positivo: a mesma condição, agora com a densidade real satisfeita.
+    a.position = { x: hero.position.x + 5, y: hero.position.y };
+    b.position = { x: hero.position.x + 5, y: hero.position.y + 1 };
+    c.position = { x: hero.position.x + 5, y: hero.position.y + 2 };
+    ruleset.configureBot(session, botConfig(rule), 'hero');
+
+    run(session, 3_000, 100);
+
+    expect(session.aggregates.suppliesUsed).toBeGreaterThan(0);
+  });
+});
+
 describe('a hunt hospeda N participantes (#203, ADR 0027)', () => {
   // Cada um com o próprio `Runner`: caminhante, bot, golpe engatilhado, lure, anel, avisos. O
   // que se prende é que o estado de um NÃO vaza para o outro — e que o solo continua o solo.
@@ -6411,6 +6471,33 @@ describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
     ruleset.setAttackTarget(hero, null);
     expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
     expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+  });
+
+  it('a eleição do bot entra por setAttackTarget, sem pinar; o clique pina (#480)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    // O auto-target elege `a` pela política e o registra pelo MESMO campo do jogador (#480) —
+    // mas sem pinar: `chosenTargetPinned` não sai no snapshot, e o corpo a corpo continua
+    // caindo na política enquanto `a` está fora de alcance.
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTarget).toBe(a.subject);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+
+    // `b` encosta: o alvo eleito é só mirada corrente, então quem bate é `b`.
+    b.position = { x: hero.position.x + 1, y: hero.position.y };
+    expect(ruleset.attackTargetOf(hero)?.subject).toBe(b.subject);
+
+    // O clique no MESMO alvo eleito passa a ser EXCLUSIVO.
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
   });
 
   it('sobrepõe a política enquanto vive; a morte cai no mais próximo (RF-05/RF-06)', () => {

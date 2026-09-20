@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { botTargetingSchema } from '@draconya/content';
-import { DEFAULT_TARGETING, compileTargeting, countTargets, selectTarget } from './targeting.js';
+import { DEFAULT_TARGETING, compileTargeting, countAreaTargets, countTargets, selectTarget } from './targeting.js';
 import type { TargetLike } from './targeting.js';
 
 const at = (monsterId: string, x: number, health = 100): TargetLike =>
   ({ monsterId, health, alive: true, position: { x, y: 0 } });
+
+/** Como `at`, mas com o tile completo — a contagem de área é por COORDENADA, não por raio. */
+const atTile = (monsterId: string, x: number, y: number, health = 100): TargetLike =>
+  ({ monsterId, health, alive: true, position: { x, y } });
 
 const HERE = { x: 0, y: 0 };
 
@@ -130,5 +134,35 @@ describe('contagem de alvos', () => {
   it('o raio é inclusivo na borda', () => {
     expect(countTargets(targeting(), [at('rat', 3)], HERE, 3)).toBe(1);
     expect(countTargets(targeting(), [at('rat', 4)], HERE, 3)).toBe(0);
+  });
+});
+
+describe('contagem de alvos por ÁREA (#480)', () => {
+  // A lista de tiles chega como `areaTiles` a devolve; aqui ela é escrita à mão para o teste
+  // falar do que a contagem faz, não da forma de uma magia específica.
+  const tiles = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+
+  it('conta só quem cai nos tiles da forma', () => {
+    // Três monstros no mapa, um na área: é o caso que reprovava contar num círculo genérico
+    // ao redor do jogador — ali os três entrariam.
+    const campo = [atTile('rat', 0, 0), atTile('wolf', 5, 5), atTile('bear', 6, 6)];
+    expect(countAreaTargets(targeting(), campo, tiles)).toBe(1);
+  });
+
+  it('ignorado dentro da área não soma (RF-03)', () => {
+    const campo = [atTile('rat', 0, 0), atTile('wolf', 1, 0), atTile('bear', 5, 5)];
+    expect(countAreaTargets(targeting({ ignore: ['rat'] }), campo, tiles)).toBe(1);
+  });
+
+  it('morto não soma, e dois no MESMO tile contam os dois', () => {
+    const campo = [
+      atTile('rat', 0, 0), atTile('wolf', 0, 0),
+      { ...atTile('bear', 1, 0), alive: false },
+    ];
+    expect(countAreaTargets(targeting(), campo, tiles)).toBe(2);
+  });
+
+  it('tile fora da forma não conta, mesmo colado', () => {
+    expect(countAreaTargets(targeting(), [atTile('rat', 2, 0)], tiles)).toBe(0);
   });
 });

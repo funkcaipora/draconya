@@ -66,7 +66,7 @@ import type { MonsterState, Prey } from '../monster/monster.js';
 import { abilityTargets, abilityTiles, isMeleeAbility } from '../monster/ability.js';
 import type { Blocked, GridPoint } from '../monster/step.js';
 import { distance, fleeStep, greedyStep } from '../monster/step.js';
-import { DEFAULT_TARGETING, countTargets, selectTarget } from '../targeting.js';
+import { DEFAULT_TARGETING, countAreaTargets, countTargets, selectTarget } from '../targeting.js';
 import type { Targeting } from '../targeting.js';
 import { applyDeathPenalty, grantXp, statsForLevel } from '../progression.js';
 import { Rng } from '../rng.js';
@@ -284,7 +284,9 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.attackTarget === null && runner.botCandidate === null
       ? {}
       : { chosenTarget: runner.attackTarget ?? runner.botCandidate }),
-    ...(runner.attackTarget === null ? {} : { chosenTargetPinned: true }),
+    ...(runner.attackTarget === null || !runner.attackTargetPinned
+      ? {}
+      : { chosenTargetPinned: true }),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
@@ -631,6 +633,15 @@ interface Runner {
    */
   attackTarget: string | null;
   /**
+   * O alvo de ataque foi PINADO pelo jogador (AB-09) ou apenas eleito pelo bot (#480)?
+   *
+   * O bot entra pela MESMA porta (`setAttackTarget`), mas com `pinned: false`: o alvo dele é
+   * uma eleição da política, e fora do alcance a política reassume — só o clique do jogador é
+   * exclusivo (ADR 0032 d.5). Sem esta distinção, o alvo que o auto-target guarda na tela
+   * travaria o corpo a corpo, que é justamente o que a #444 não pode regredir.
+   */
+  attackTargetPinned: boolean;
+  /**
    * O candidato do AUTO-TARGET (#444): o melhor monstro na tela, escolhido pela política,
    * quando não há alvo de ataque válido. É só a mira corrente — sai do alcance e a política
    * reassume —, e `selectedTargetOf` o expõe para a apresentação independentemente do alcance
@@ -960,17 +971,25 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O alvo de ATAQUE explícito (#470): o jogador (AB-09) e, a partir da #480, o bot. `null`
-   * limpa — é o cancelamento do `creatureId: 0`. É a ÚNICA porta de escrita do `attackTarget`,
-   * para jogador e bot não terem dois pipelines que divergem.
+   * O alvo de ATAQUE explícito (#470): o jogador (AB-09) e o bot (#480). `null` limpa — é o
+   * cancelamento do `creatureId: 0`. É a ÚNICA porta de escrita do `attackTarget`, para jogador
+   * e bot não terem dois pipelines que divergem (§42: o bot manda os mesmos comandos).
+   *
+   * `pinned` distingue quem escreveu: o clique do jogador é EXCLUSIVO (fora do alcance não cai
+   * na política), a eleição do bot não é — ela é uma mirada corrente, e a política reassume
+   * quando ela sai do alcance. Quem chama com a assinatura de dois argumentos é o jogador, e
+   * por isso o padrão é `true`; o bot passa `false` explicitamente.
    *
    * Não valida: quem valida é quem resolve o runtime (o host contra o id do fio, o bot contra a
    * política), e o alvo morto é limpo na primeira leitura por `#attackTargetOfRunner`.
    */
-  setAttackTarget(character: CharacterRuntime, target: MonsterRuntime | null): void {
+  setAttackTarget(
+    character: CharacterRuntime, target: MonsterRuntime | null, pinned = true,
+  ): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined) return;
     runner.attackTarget = target === null ? null : target.subject;
+    runner.attackTargetPinned = target !== null && pinned;
   }
 
   /**
@@ -1214,6 +1233,7 @@ export class HuntRuleset implements Ruleset {
       // jogador. Na memória ele vira `attackTarget` (explícito) ou `botCandidate` (auto).
       attackTarget: state?.chosenTargetPinned === true ? (state.chosenTarget ?? null) : null,
       botCandidate: state?.chosenTargetPinned === true ? null : (state?.chosenTarget ?? null),
+      attackTargetPinned: state?.chosenTargetPinned === true,
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
@@ -1970,12 +1990,20 @@ export class HuntRuleset implements Ruleset {
     // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
     // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
     // O alcance é o do GRUPO (#444): um grupo com runa enxerga a 8, não no alcance da arma.
-    const view = this.#botViewOf(character, this.#groupRange(slots, character));
+    const reach = this.#groupRange(slots, character);
+    const view = this.#botViewOf(character, reach);
     const external = this.#options.actuator;
 
     let retryInMs = 0;
     for (let i = 0; i < slots.length; i += 1) {
       const slot = slots[i] as CompiledSlot;
+      // O `targets` é da AÇÃO avaliada, não do grupo (#480): uma runa de área conta quem cai
+      // no FOOTPRINT dela sobre o alvo primário, e uma ação sem área no alcance. Recalcular
+      // por slot evita que o slot seguinte herde a contagem do anterior — a view é a mesma, o
+      // instante é o mesmo, só a mira muda.
+      view.targetCount = this.#targetCountFor(
+        character, reach, this.#actionArea(slot.act), this.#actionRange(slot.act),
+      );
       if (!slot.when(view)) continue;                    // condição falsa → PULA (RP-003)
       if (external !== undefined) {
         if (!external.perform(slot.act, view)) continue; // recusou → próximo no mesmo ciclo
@@ -2751,13 +2779,47 @@ export class HuntRuleset implements Ruleset {
     const reach = range ?? this.#attackRangeOf(character);
     const target = this.#targetInRange(character, reach);
     this.#botView.self = character;
-    this.#botView.targetCount = countTargets(
-      this.#targetingOf(character), this.#monsters, character.position, reach,
-    );
+    this.#botView.targetCount = this.#targetCountFor(character, reach, undefined, null);
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
     return this.#botView;
+  }
+
+  /**
+   * Quantos alvos VÁLIDOS a condição `targets` enxerga para uma AÇÃO do bot (#216, #444, #480).
+   *
+   * - **Sem área**: os monstros no `reach` — o alcance do grupo, o da ação de dano à distância
+   *   (uma runa de alcance 8 conta a 8), ou o da arma. É o comportamento da #216/#444.
+   * - **Com área que sai do lançador** (onda, cleave, feixe, círculo em volta): os monstros nos
+   *   tiles da forma projetada a partir do personagem — a área não tem alvo primário, e a
+   *   contagem tem de ser a mesma que `#aimFor` vai colher.
+   * - **Com área centrada no alvo** (Avalanche, Explosion, cruz): projeta a forma sobre o alvo
+   *   primário e conta quem cai nela. Sem alvo primário não há forma, e a contagem é 0 — a
+   *   condição não dispara.
+   *
+   * Ignorado não conta em nenhum dos caminhos (RF-03): a condição não pode ser satisfeita por
+   * quem o jogador mandou deixar em paz.
+   */
+  #targetCountFor(
+    character: CharacterRuntime, reach: number, area: SpellArea | undefined,
+    actionRange: number | null,
+  ): number {
+    const targeting = this.#targetingOf(character);
+    if (area === undefined) {
+      return countTargets(targeting, this.#monsters, character.position, reach);
+    }
+    if (isSelfOrigin(area)) {
+      return countAreaTargets(
+        targeting, this.#monsters, areaTiles(area, character.position, character.direction),
+      );
+    }
+    const primary = this.#targetInRange(character, actionRange ?? reach);
+    if (primary === null) return 0;
+    return countAreaTargets(
+      targeting, this.#monsters,
+      areaTiles(area, character.position, character.direction, this.#at(primary)),
+    );
   }
 
   /**
@@ -2788,6 +2850,19 @@ export class HuntRuleset implements Ruleset {
     const supply = this.#options.supplies.get(action.supplyId);
     if (supply === undefined || supply.effect.kind !== 'damage') return null;
     return supply.effect.range ?? null;
+  }
+
+  /**
+   * A forma de área declarada por uma ação de DANO do bot, ou `undefined` (#480). Magia de cura
+   * e ação sem área devolvem `undefined`, e o `targets` cai na contagem por alcance.
+   */
+  #actionArea(action: BotActionV2): SpellArea | undefined {
+    if (action.kind === 'spell') {
+      const spell = this.#options.spells.get(action.spellId);
+      return spell?.effect.kind === 'damage' ? spell.effect.area : undefined;
+    }
+    const supply = this.#options.supplies.get(action.supplyId);
+    return supply?.effect.kind === 'damage' ? supply.effect.area : undefined;
   }
 
   #maxHealthOf(monster: MonsterRuntime): number {
@@ -4094,12 +4169,16 @@ export class HuntRuleset implements Ruleset {
    * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
-    // O alvo explícito (jogador ou bot, #470) vem primeiro e é EXCLUSIVO.
+    // O alvo explícito (jogador ou bot, #470/#480) vem primeiro. O pinned do JOGADOR é
+    // EXCLUSIVO: fora do alcance devolve `null` em vez de cair na política. O eleito pelo bot
+    // NÃO é — fora do alcance ele cede para o candidato/política, e é isso que mantém o corpo
+    // a corpo batendo no monstro colado enquanto o bot mira um alvo distante (#444).
     const attack = this.#attackTargetOfRunner(character);
     if (attack !== null) {
-      return distance(character.position, attack.position) <= this.#attackRangeOf(character)
-        ? attack
-        : null;
+      if (distance(character.position, attack.position) <= this.#attackRangeOf(character)) {
+        return attack;
+      }
+      if (this.#isPinned(character)) return null;
     }
     // O candidato do auto-target (#444) é só a mira corrente: fora do alcance da arma, o golpe
     // cai no melhor da política, e é isso que mantém o corpo a corpo batendo no monstro colado
@@ -4133,7 +4212,10 @@ export class HuntRuleset implements Ruleset {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || runner.attackTarget === null) return null;
     const monster = this.#liveTargetOf(runner.attackTarget, character);
-    if (monster === null) runner.attackTarget = null;
+    if (monster === null) {
+      runner.attackTarget = null;
+      runner.attackTargetPinned = false;
+    }
     return monster;
   }
 
@@ -4146,9 +4228,10 @@ export class HuntRuleset implements Ruleset {
     return monster;
   }
 
-  /** O alvo corrente é EXPLÍCITO — do jogador (AB-09) ou do bot (#480)? */
+  /** O alvo corrente é do JOGADOR (AB-09), ou só uma eleição do bot (#480)? */
   #isPinned(character: CharacterRuntime): boolean {
-    return (this.#runners.get(character.id)?.attackTarget ?? null) !== null;
+    const runner = this.#runners.get(character.id);
+    return runner !== undefined && runner.attackTarget !== null && runner.attackTargetPinned;
   }
 
   /**
@@ -4181,13 +4264,16 @@ export class HuntRuleset implements Ruleset {
 
   /**
    * Auto-target (#444): sem alvo de ataque válido, seleciona o melhor monstro na TELA — o raio
-   * de busca, o mesmo de `#approachTarget` — e o guarda em `botCandidate`. É o que faz um
-   * monstro que surge ao longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva
-   * até lá é `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
+   * de busca, o mesmo de `#approachTarget` — e o guarda. É o que faz um monstro que surge ao
+   * longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva até lá é
+   * `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
    *
-   * NÃO sobrepõe o alvo do jogador nem de #480: com um `attackTarget` vivo e na tela, sai sem
-   * tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e a
-   * chamada seguinte já reavalia para o próximo mais próximo.
+   * A eleição passa por `setAttackTarget(..., pinned: false)` (#480, §42): o bot entra pelo
+   * MESMO pipeline do jogador, mas sem pinar — fora do alcance a política reassume. O
+   * `botCandidate` continua sendo a mira de tela, e é ele que sobrevive ao cancelamento do
+   * jogador. NÃO sobrepõe o alvo pinado do jogador: com um `attackTarget` vivo e na tela, sai
+   * sem tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e
+   * a chamada seguinte já reavalia para o próximo mais próximo.
    */
   #autoSelectTarget(session: Session, character: CharacterRuntime): void {
     const runner = this.#runners.get(character.id);
@@ -4200,6 +4286,9 @@ export class HuntRuleset implements Ruleset {
     const next = best === null ? null : best.subject;
     if (next === runner.botCandidate) return;
     runner.botCandidate = next;
+    // A troca de alvo do bot entra pela porta única (#480): jogador e bot não têm pipelines
+    // que divergem. `false` porque é eleição de política, não clique.
+    this.setAttackTarget(character, best, false);
     if (next === null) return;
     // O alvo novo pode destravar uma regra e um golpe engatilhados: reavalia agora, e não no
     // próximo múltiplo de um relógio.
