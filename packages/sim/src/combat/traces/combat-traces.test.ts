@@ -122,18 +122,15 @@ describe('casos de borda: morte no meio de uma área não corrompe os alvos segu
 });
 
 describe('lacunas da referência: o número atual e a issue que o muda (RF-05)', () => {
-  it('o círculo de raio 3 é 49 tiles hoje; o Canary fixa 37 na #472', () => {
-    // Este teste é o tripwire da #472: quando o `area.ts` recortar os cantos, ele passa a
-    // reprovar e a issue precisa atualizar o oráculo do trace — que é exatamente o contrato.
-    expect(circleRadiusThreeTiles()).toHaveLength(49);
-    expect(CANARY_CIRCLE_RADIUS_3_TILES).toBe(37);
+  it('o círculo de raio 3 entrega os 37 tiles da AREA_CIRCLE3X3 (#472 fechada)', () => {
+    // A #472 recortou os cantos pela distância de Manhattan; o oráculo agora é a paridade.
+    expect(circleRadiusThreeTiles()).toHaveLength(CANARY_CIRCLE_RADIUS_3_TILES);
   });
 
-  it('o supply-used da Avalanche carrega 49 tiles hoje; a referência é 37', () => {
+  it('o supply-used da Avalanche carrega os 37 tiles da referência', () => {
     const supplyUsed = avalancheTrace.run().find((event) => event.kind === 'supply-used');
     expect(supplyUsed).toBeDefined();
-    expect(tileCountOf(supplyUsed as CombatTraceEvent)).toBe(49);
-    expect(CANARY_CIRCLE_RADIUS_3_TILES).toBe(37);
+    expect(tileCountOf(supplyUsed as CombatTraceEvent)).toBe(CANARY_CIRCLE_RADIUS_3_TILES);
   });
 
   it('toda lacuna do M24 nomeia a issue que a fecha', () => {

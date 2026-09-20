@@ -727,7 +727,7 @@ export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
 /**
  * A forma da área (#155, ADR 0026 decisão 5; referência §19). `wave`, `cleave` e `beam` saem
  * do LANÇADOR na direção dele; `circle` é centrado no alvo — ou no lançador, e aí a magia não
- * exige alvo nem alcance.
+ * exige alvo nem alcance; `cross` (Explosion) é centrado no alvo, sem direção.
  *
  * Mora aqui, antes de monstro, porque a ability de monstro (CMB-06) reusa a MESMA geometria:
  * a forma é conteúdo, e a matriz não se copia de engine nenhuma (ADR 0019).
@@ -735,11 +735,17 @@ export type Item = Omit<ItemDefinition, 'weapon' | 'mitigation'> & {
 export const spellAreaSchema = z.discriminatedUnion('shape', [
   z.object({
     shape: z.literal('circle'),
-    /** Chebyshev: raio 1 são os oito vizinhos mais o centro. */
+    /**
+     * Raio 1 é o 3x3 completo (9 tiles); do raio 2 em diante os cantos caem pela distância de
+     * Manhattan (`|dx| + |dy| <= radius + ⌊radius/2⌋`) — o raio 3 rende os 37 tiles da
+     * `AREA_CIRCLE3X3` do Canary (#472, ADR 0019).
+     */
     radius: z.number().int().positive(),
     /** `target` exige alvo e alcance; `caster` não exige nenhum dos dois. */
     centered: z.enum(['target', 'caster']).default('target'),
   }),
+  /** Cruz de `radius` tiles nos quatro eixos cardeais mais o centro (Explosion) — 1 → 5 tiles. */
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
   /** Os três tiles imediatamente à frente (Front Sweep). */

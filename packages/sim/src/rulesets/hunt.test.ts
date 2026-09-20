@@ -4641,7 +4641,7 @@ describe('a runa Avalanche abstrata (#165, ADR 0026 decisão 8)', () => {
     expect(uses).toBeLessThanOrEqual(61);
     const used = session.drainEvents().filter((e) => e.kind === 'supply-used');
     expect(used.length).toBe(uses);
-    expect(used.every((e) => e.kind === 'supply-used' && e.targets.length > 0 && e.tiles.length === 49)).toBe(true);
+    expect(used.every((e) => e.kind === 'supply-used' && e.targets.length > 0 && e.tiles.length === 37)).toBe(true);
   });
 
   it('below the level the rune never fires and never charges; the same at 10 Hz and at 1 Hz', () => {

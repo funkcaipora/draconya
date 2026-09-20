@@ -671,13 +671,12 @@ describe('oráculos de área e magia (M24-01, #469)', () => {
     expect(balanceOf(hero)).toBe(86);
   });
 
-  it('a geometria do círculo: raio 1 são 9 tiles; raio 3 ainda é o quadrado 7x7 (49)', () => {
+  it('a geometria do círculo: raio 1 são 9 tiles; raio 3 são os 37 da AREA_CIRCLE3X3', () => {
     const origin = { x: 0, y: 0, z: 7 };
     expect(areaTiles({ shape: 'circle', radius: 1, centered: 'target' }, origin, 'south', origin))
       .toHaveLength(9);
-    // Referência Canary `AREA_CIRCLE3X3`: 37 tiles. O recorte dos cantos é a #472 — este
-    // oráculo vira 37 quando ela chegar, e é por isso que ele está escrito aqui.
+    // Referência Canary `AREA_CIRCLE3X3`: 37 tiles, linhas 3/5/7/7/7/5/3 (#472, ADR 0019).
     expect(areaTiles({ shape: 'circle', radius: 3, centered: 'target' }, origin, 'south', origin))
-      .toHaveLength(49);
+      .toHaveLength(37);
   });
 });

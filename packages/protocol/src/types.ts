@@ -292,6 +292,7 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
     radius: z.number().int().positive(),
     centered: z.enum(['target', 'caster']),
   }),
+  z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
   z.object({ shape: z.literal('cleave') }),
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),

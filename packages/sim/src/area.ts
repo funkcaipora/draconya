@@ -7,6 +7,12 @@
 //
 // O cone é `2·⌊k/2⌋+1` por fileira — 1, 3, 3, 5, 5 —, que reproduz a forma da onda do Tibia
 // como fato observável, sem copiar matriz nenhuma do TFS (GPL, ADR 0019).
+//
+// O círculo de raio ≥ 2 recorta os cantos pela distância de Manhattan
+// (`|dx| + |dy| <= radius + ⌊radius/2⌋`), que reproduz a `AREA_CIRCLE3X3` do Canary — 37 tiles
+// no raio 3, linhas 3/5/7/7/7/5/3 — como fórmula fechada, nunca como matriz GPL (#472, ADR
+// 0019). O raio 1 é o 3x3 completo: a fórmula daria a cruz de 5 tiles, e o Tibia usa os oito
+// vizinhos.
 
 import type { SpellArea } from '@draconya/content';
 import type { WorldPoint } from './movement.js';
@@ -31,17 +37,25 @@ const SIDE: Readonly<Record<Direction, WorldPoint>> = {
 
 /**
  * A forma sai do LANÇADOR — sem alvo, sem alcance? `wave`, `cleave`, `beam` e o círculo
- * centrado no lançador. Alvo único (sem área) e o círculo no alvo são o outro caso.
+ * centrado no lançador. Alvo único (sem área), o círculo no alvo e a cruz no alvo são o outro
+ * caso.
  */
 export function isSelfOrigin(area: SpellArea | undefined): boolean {
   if (area === undefined) return false;
-  return area.shape !== 'circle' || area.centered === 'caster';
+  switch (area.shape) {
+    case 'circle': return area.centered === 'caster';
+    // A cruz é centrada no alvo (Explosion) — como o círculo no alvo, exige mira e alcance.
+    case 'cross': return false;
+    case 'wave':
+    case 'cleave':
+    case 'beam': return true;
+  }
 }
 
 /**
  * Os tiles de uma forma, a partir do lançador (`origin`) e da direção dele; `target` só
- * importa para o círculo centrado no alvo. Sem conferência de mapa: tile fora do mapa não tem
- * ninguém em cima, e conferir aqui seria acoplar geometria a mundo.
+ * importa para o círculo e a cruz centrados no alvo. Sem conferência de mapa: tile fora do mapa
+ * não tem ninguém em cima, e conferir aqui seria acoplar geometria a mundo.
  */
 export function areaTiles(
   shape: SpellArea, origin: WorldPoint, direction: Direction, target?: WorldPoint,
@@ -52,10 +66,26 @@ export function areaTiles(
     case 'circle': {
       const centre = shape.centered === 'caster' || target === undefined ? origin : target;
       const tiles: WorldPoint[] = [];
+      // Raio 1 é o 3x3 completo; do raio 2 em diante os cantos caem pelo limite de Manhattan.
+      const maxManhattan = shape.radius >= 2
+        ? shape.radius + Math.floor(shape.radius / 2)
+        : Number.POSITIVE_INFINITY;
       for (let dy = -shape.radius; dy <= shape.radius; dy += 1) {
         for (let dx = -shape.radius; dx <= shape.radius; dx += 1) {
+          if (Math.abs(dx) + Math.abs(dy) > maxManhattan) continue;
           tiles.push({ x: centre.x + dx, y: centre.y + dy, z: centre.z });
         }
+      }
+      return tiles;
+    }
+    case 'cross': {
+      const centre = target ?? origin;
+      const tiles: WorldPoint[] = [{ ...centre }];
+      for (let d = 1; d <= shape.radius; d += 1) {
+        tiles.push({ x: centre.x + d, y: centre.y, z: centre.z });
+        tiles.push({ x: centre.x - d, y: centre.y, z: centre.z });
+        tiles.push({ x: centre.x, y: centre.y + d, z: centre.z });
+        tiles.push({ x: centre.x, y: centre.y - d, z: centre.z });
       }
       return tiles;
     }

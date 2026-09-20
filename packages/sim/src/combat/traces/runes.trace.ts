@@ -2,12 +2,11 @@
 //
 // Referência: Avalanche, GFB, Thunderstorm e Stone Shower em círculo de 37 tiles, e Sudden
 // Death em alvo único. Hoje o catálogo tem a Avalanche (círculo de raio 3, Base Power 45), e o
-// círculo do `area.ts` ainda é o QUADRADO 7×7 (49 tiles). A paridade com a matriz Canary
-// `AREA_CIRCLE3X3` (37 tiles) é a #472; a fórmula Canary de runa é a #476.
+// círculo do `area.ts` já recorta os cantos pela distância de Manhattan — a paridade com a
+// matriz Canary `AREA_CIRCLE3X3` (37 tiles) fechou na #472; a fórmula Canary de runa é a #476.
 //
-// O trace fixa o que existe — incluindo os 49 tiles — e o `gap` diz, com número, o que a
-// referência exige. Quando a #472 mudar o `area.ts`, ela muda o `expected` (o `tileCount`) e
-// derruba o `gap`; é para isso que o trace é o contrato dela.
+// O trace fixa o novo número — 37 tiles — e o `gap` da paridade deixou de existir. Quando a
+// #476 mudar a fórmula de dano, ela move o `expected` dos golpes; é o trace que a prende.
 
 import type { Supply } from '@draconya/content';
 import { areaTiles } from '../../area.js';
@@ -25,17 +24,11 @@ const AVALANCHE: Supply = {
 
 /**
  * O número que a referência Canary fixa para o círculo de raio 3: 3, 5, 7, 7, 7, 5, 3.
- * O `area.ts` de hoje devolve 49 — ver `runesGaps` e o teste de lacuna.
+ * O `area.ts` recorta os cantos por Manhattan desde a #472 — ver `circleRadiusThreeTiles`.
  */
 export const CANARY_CIRCLE_RADIUS_3_TILES = 37;
 
 export const runesGaps: readonly CombatTraceGap[] = [
-  {
-    id: 'circle-radius-3-37-tiles',
-    reference: `Canary AREA_CIRCLE3X3: 37 tiles (${String(CANARY_CIRCLE_RADIUS_3_TILES)}), linhas 3/5/7/7/7/5/3, |dx| + |dy| <= 4.`,
-    current: 'Círculo Chebyshev completo: 49 tiles (quadrado 7×7).',
-    task: '#472',
-  },
   {
     id: 'runes-not-in-catalog',
     reference: 'GFB, Thunderstorm, Stone Shower e SD são runas de ataque do Tibia 13.32.',
@@ -68,7 +61,7 @@ export const avalancheTrace: CombatGoldenTrace = {
   seed: 'm24-avalanche',
   advancePlanMs: [1000, 1000, 1000],
   expected: [
-    { atMs: 0, kind: 'supply-used', subject: 'hero', payload: { characterId: 'hero', supplyId: 'avalanche-rune', targets: ['m:1', 'm:2', 'm:3', 'm:4'], tileCount: 49 } },
+    { atMs: 0, kind: 'supply-used', subject: 'hero', payload: { characterId: 'hero', supplyId: 'avalanche-rune', targets: ['m:1', 'm:2', 'm:3', 'm:4'], tileCount: 37 } },
     { atMs: 0, kind: 'creature-hit', subject: 'm:1', payload: { creatureId: 'm:1', attackerId: 'hero', amount: 134, source: 'spell', position: { x: 5, y: 0, z: 7 } } },
     { atMs: 0, kind: 'creature-health', subject: 'm:1', payload: { creatureId: 'm:1', health: 366, maxHealth: 500 } },
     { atMs: 0, kind: 'creature-hit', subject: 'm:2', payload: { creatureId: 'm:2', attackerId: 'hero', amount: 171, source: 'spell', position: { x: 5, y: 1, z: 7 } } },
@@ -100,9 +93,9 @@ export const avalancheTrace: CombatGoldenTrace = {
 };
 
 /**
- * O círculo da referência, medido no `area.ts` direto. É o oráculo do `gap` acima escrito como
- * dado: `expected` é o número do Canary e `current` o que o motor devolve. Enquanto a #472 não
- * chegar, o teste de lacuna afirma o atual e imprime a referência.
+ * O círculo da referência, medido no `area.ts` direto. O oráculo do trace escrito como dado:
+ * `CANARY_CIRCLE_RADIUS_3_TILES` é o número do Canary e o resultado do motor tem que bater com
+ * ele — é a paridade que a #472 fechou.
  */
 export function circleRadiusThreeTiles(): ReturnType<typeof areaTiles> {
   return areaTiles(

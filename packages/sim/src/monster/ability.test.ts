@@ -228,7 +228,9 @@ describe('a ability de monstro no motor (CMB-06)', () => {
     const cast = events.find((e) => e.kind === 'monster-ability-cast');
     if (cast?.kind !== 'monster-ability-cast') throw new Error('sem lançamento de área');
     expect(cast.targets.map((t) => t.creatureId)).toEqual(['h1', 'h2']);
-    expect(cast.tiles.length).toBe(41 * 41);
+    // Raio 20 com o recorte de Manhattan (`|dx| + |dy| <= 30`): 1.461 tiles, não o 41x41
+    // cheio — a mesma geometria da magia vale para a ability de monstro (#472).
+    expect(cast.tiles.length).toBe(1_461);
 
     const monster = (session.ruleset as HuntRuleset).monsters[0];
     if (monster === undefined) throw new Error('sem monstro');

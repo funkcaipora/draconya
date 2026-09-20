@@ -42,21 +42,43 @@ describe('areaTiles', () => {
     expect(keys(areaTiles({ shape: 'beam', length: 3 }, origin, 'south'))).toEqual(['10,11,7', '10,12,7', '10,13,7']);
   });
 
-  it('circle: radius 1 around the caster is 9 tiles; around the target it moves with the target', () => {
+  it('circle: radius 1 is the full 3x3 (9 tiles); radius 3 clips the corners to 37', () => {
     const around = areaTiles({ shape: 'circle', radius: 1, centered: 'caster' }, origin, 'north');
     expect(around).toHaveLength(9);
     expect(keys(around)).toContain('10,10,7');
     const onTarget = areaTiles({ shape: 'circle', radius: 3, centered: 'target' }, origin, 'north', { x: 20, y: 20, z: 7 });
-    expect(onTarget).toHaveLength(49);
-    expect(onTarget.every((t) => Math.max(Math.abs(t.x - 20), Math.abs(t.y - 20)) <= 3)).toBe(true);
+    expect(onTarget).toHaveLength(37);
+    // Linhas 3/5/7/7/7/5/3 — o recorte de Manhattan reproduz a `AREA_CIRCLE3X3` (ADR 0019).
+    const rows = new Map<number, number>();
+    for (const tile of onTarget) rows.set(tile.y, (rows.get(tile.y) ?? 0) + 1);
+    expect([...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, count]) => count))
+      .toEqual([3, 5, 7, 7, 7, 5, 3]);
+    // O canto (x+3, y+3) NÃO pertence à área; a borda cardinal (x+3, y) pertence.
+    expect(keys(onTarget)).not.toContain('23,23,7');
+    expect(keys(onTarget)).toContain('23,20,7');
     // Sem alvo, o círculo no alvo cai no lançador em vez de em lugar nenhum.
     expect(areaTiles({ shape: 'circle', radius: 1, centered: 'target' }, origin, 'north')[4]).toEqual(origin);
+  });
+
+  it('circle: radius 2 uses the same Manhattan clip (21 tiles)', () => {
+    expect(areaTiles({ shape: 'circle', radius: 2, centered: 'caster' }, origin, 'north'))
+      .toHaveLength(21);
+  });
+
+  it('cross: radius 1 is the five cardinal tiles; radius 2 extends each axis', () => {
+    const cross = areaTiles({ shape: 'cross', radius: 1 }, origin, 'north', { x: 20, y: 20, z: 7 });
+    expect(keys(cross)).toEqual(['20,20,7', '21,20,7', '19,20,7', '20,21,7', '20,19,7']);
+    const wider = areaTiles({ shape: 'cross', radius: 2 }, origin, 'north', { x: 20, y: 20, z: 7 });
+    expect(wider).toHaveLength(9);
+    // Sem alvo, a cruz cai no lançador em vez de em lugar nenhum.
+    expect(areaTiles({ shape: 'cross', radius: 1 }, origin, 'north')[0]).toEqual(origin);
   });
 
   it('knows which shapes leave the caster without a target', () => {
     expect(isSelfOrigin(undefined)).toBe(false);
     expect(isSelfOrigin({ shape: 'circle', radius: 1, centered: 'target' })).toBe(false);
     expect(isSelfOrigin({ shape: 'circle', radius: 1, centered: 'caster' })).toBe(true);
+    expect(isSelfOrigin({ shape: 'cross', radius: 1 })).toBe(false);
     expect(isSelfOrigin({ shape: 'wave', length: 3 })).toBe(true);
     expect(isSelfOrigin({ shape: 'cleave' })).toBe(true);
     expect(isSelfOrigin({ shape: 'beam', length: 5 })).toBe(true);

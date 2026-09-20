@@ -309,8 +309,11 @@ que o mantém correto do outro lado de um snapshot.
 
 ### Magia em área (FUN-92)
 
-Uma magia de dano pode declarar `area: { radius }`, em tiles a partir do **alvo** — distância de
-Chebyshev, a mesma métrica da grade. Raio 1 pega o alvo mais os oito vizinhos.
+Uma magia de dano pode declarar `area: { radius }`, em tiles a partir do **alvo**. Raio 1 pega o
+alvo mais os oito vizinhos (o 3x3 completo); do raio 2 em diante os cantos são recortados pela
+distância de Manhattan (`|dx| + |dy| <= radius + ⌊radius/2⌋`), a geometria que reproduz a
+`AREA_CIRCLE3X3` do Canary — o raio 3 rende 37 tiles, em linhas 3/5/7/7/7/5/3, como fórmula e
+nunca como matriz copiada (#472, ADR 0019).
 
 Três coisas que a área traz e o alvo único não tinha:
 
@@ -335,8 +338,10 @@ família de forma, com o portão que essa decisão previa (sem alvo, sem alcance
 O motor expressa o catálogo instantâneo do Tibia até o level 80; os números de cada magia são
 das issues por vocação (#156–#159). O que o motor ganhou:
 
-- **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (Chebyshev, centrado
-  no alvo ou no lançador), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
+- **Formas** (`effect.area.shape`, `packages/sim/src/area.ts`): `circle` (centrado no alvo ou no
+  lançador; raio 1 é o 3x3 completo, raio ≥ 2 recorta os cantos por Manhattan — #472),
+  `cross` (cruz de `radius` tiles nos quatro eixos cardeais mais o centro, centrada no alvo —
+  a Explosion), `wave` (cone à frente: fileira k tem largura `2⌊k/2⌋+1` — 1, 3, 3,
   5, 5, a onda do Tibia como fato observável, sem matriz copiada), `cleave` (os três tiles à
   frente) e `beam` (linha reta). Onda, cleave, feixe e o círculo no lançador são **self-origin**:
   não exigem alvo nem alcance (o boot recusa `range` nelas), e recusam `no-target` só quando
