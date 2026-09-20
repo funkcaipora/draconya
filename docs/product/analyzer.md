@@ -138,6 +138,21 @@ Os eventos notáveis são os da sessão, para todos, e em party dizem de quem: `
 dividida (ao sair alguém e no fim). O extrato final (`session-ended`) é o de quem saiu: um
 `Receipt` por membro, com `seq` próprio, e a tela de retorno mostra o dele. Ver `party.md`.
 
+O M20 (#400, ADR 0035 d.11) acrescentou o bloco **`analyzer.party`** à seção PARTY dos Detalhes da
+Caçada — o mesmo objeto em `session-state.partySummary` (o `party` do `session-state` continua
+sendo o roster, #196): `players`, `uniqueVocations`, `xpPercent`, `totalXp`, `totalSupplies`,
+`shareCosts`, `splitLoot`, `bagValue`, `bagWeight` e `autoSell: { used, limit }`. `autoSell.limit`
+é o limite do **personagem líder** (`autoSellItemTypes`, D2) e `used` é quantos ids ele guardou; a
+"parte estimada" de cada um continua vindo de `party-spending` (`estimatedShare`).
+
+A **PT-01** (#431, ADR 0032 d.14) acrescentou **DPS e HPS por membro**: `party-state.members[].{
+dps, hps, damageDealt, healingDone}` e `analyzer.aggregates.{damageDealt, healingDone}` (todos
+opcionais). O `sim` acumula dano causado e cura feita por EVENTO, com carimbo lógico, e mantém uma
+janela de 60 s aparada na LEITURA — nunca por tick (invariante 2). `dps`/`hps` são a taxa da
+janela; `damageDealt`/`healingDone` são os totais da sessão. O dano contado é o **aplicado**
+(overkill e mana shield ficam de fora), e a janela não viaja no snapshot: uma sessão retomada
+recomeça a janela, os totais continuam. O painel da party mostra a linha "DPS · HPS" por membro.
+
 ## Em aberto
 
 - Canais e escopo exatos de eventos notáveis e notificações de fim de sessão/morte/stamina (§16.2).

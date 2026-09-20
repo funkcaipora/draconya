@@ -14,19 +14,20 @@
 
 import { performance } from 'node:perf_hooks';
 import type {
-  Aggregates, CombatEvent, EndReason, GridPoint, MemberLeft, PartyEvent, PresenceEvent, Receipt, Session,
-  SessionSnapshot, SessionType, SkillProgress,
+  Aggregates, CombatEvent, EndReason, FollowState, GridPoint, MemberLeft, PartyEvent, PresenceEvent,
+  Receipt, Session, SessionSnapshot, SessionType, SkillProgress,
 } from '@draconya/sim';
 import { ACTIVE_CONDITION_KINDS } from '@draconya/protocol';
 import type { ActiveConditionKind, C2SMessage, OutfitColors, S2CMessage, S2CProps } from '@draconya/protocol';
 import { ITEM_SLOTS, isBotConfigV2 } from '@draconya/content';
 import type {
-  Appearances, Ammunition, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
+  Ammunition, Appearances, BotConfigV2, Item, ItemSlot, Monster, Skill, Vocation,
 } from '@draconya/content';
-import { containerRulesFor, shareCostsOf, splitLootOf } from '@draconya/sim';
+import { containerRulesFor, PartyFullError, shareCostsOf, splitLootOf } from '@draconya/sim';
 import type {
-  AmmoRefusal, CarriedItem, CharacterRuntime, ContainerRules, HuntRuleset,
-  InventoryRefusal, InventoryResult, InventoryState, Place, SlotRefusal, SlotState, VocationRefusal,
+  AmmoRefusal, CarriedItem, CharacterRuntime, ConfigurePartyResult, ContainerRules, HuntRuleset,
+  InventoryRefusal, InventoryResult, InventoryState, PartyBagChanged, PartyEndVoteResult,
+  PartySettingsPatch, Place, SlotRefusal, SlotState, VocationRefusal,
 } from '@draconya/sim';
 import type { Progression } from '@draconya/content';
 import type { SessionDirectory } from '../directory.js';
@@ -86,6 +87,12 @@ export interface SessionHostOptions {
   readonly nodeId: string;
   readonly contentVersion: string;
   readonly createSession: SessionFactory;
+  /**
+   * Constrói UM personagem para entrar numa sessão que JÁ existe (#402, ADR 0035 D7). É a
+   * costura equivalente a `createSession`, mas para o recém-chegado: o host chama `session.enter`
+   * com ele DENTRO do ciclo da sessão dona (invariante 9), sem conhecer balanceamento.
+   */
+  readonly createParticipant?: (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime;
   readonly logger: Logger;
   readonly directory?: SessionDirectory;
   /** Onde as sessões são guardadas para sobreviver à queda do processo (FUN-28). */
@@ -274,6 +281,7 @@ function slotStateMessage(states: readonly SlotState[]): S2CMessage {
 const EMPTY_AGGREGATES: Aggregates = {
   durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
   itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+  damageDealt: 0, healingDone: 0,
 };
 
 /**
@@ -440,6 +448,8 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
 interface SentAnalyzer {
   readonly aggregates: Aggregates;
   readonly eventCount: number;
+  /** A seção PARTY do analisador entregue por último (ADR 0035 d.11). `undefined` em solo. */
+  readonly party: S2CProps<'analyzer'>['party'];
 }
 
 /** O extrato DESTE personagem entre os que a sessão emitiu (#187). `null` enquanto ela vive. */
@@ -458,7 +468,28 @@ function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: nu
     && a.itemsLooted === aggregates.itemsLooted
     && a.suppliesUsed === aggregates.suppliesUsed
     && a.bestBasicHit === aggregates.bestBasicHit
-    && a.bestSpellHit === aggregates.bestSpellHit;
+    && a.bestSpellHit === aggregates.bestSpellHit
+    && a.damageDealt === aggregates.damageDealt
+    && a.healingDone === aggregates.healingDone;
+}
+
+/** Compara as duas seções PARTY entregues por último, campo a campo — como `sameAnalyzer`. */
+function samePartySummary(
+  a: S2CProps<'analyzer'>['party'],
+  b: S2CProps<'analyzer'>['party'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.players === b.players
+    && a.uniqueVocations === b.uniqueVocations
+    && a.xpPercent === b.xpPercent
+    && a.totalXp === b.totalXp
+    && a.totalSupplies === b.totalSupplies
+    && a.shareCosts === b.shareCosts
+    && a.splitLoot === b.splitLoot
+    && a.bagValue === b.bagValue
+    && a.bagWeight === b.bagWeight
+    && a.autoSell.used === b.autoSell.used
+    && a.autoSell.limit === b.autoSell.limit;
 }
 
 /** Um share de `party-spending` (#354, SV-18): o gasto do membro, e a prévia dele se pedir agora. */
@@ -494,6 +525,39 @@ function sameSpending(a: readonly PartySpendingShare[], b: readonly PartySpendin
   return true;
 }
 
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11), do `partySummary` do `sim` (DT-03: getter
+ * puro, sem `emit()`). O host só TRADUZ o que o `sim` calculou — jogadores, vocações únicas,
+ * pool de XP, valor/peso da bolsa e limite de venda — e soma XP/supplies por participante dos
+ * agregados que a própria sessão já mantém. `undefined` em solo (D8): nada a mandar.
+ */
+function partySummaryOf(hosted: HostedSession): S2CProps<'analyzer'>['party'] {
+  const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+  const summary = ruleset.partySummary?.(hosted.session);
+  if (summary === undefined) return undefined;
+  let totalXp = 0;
+  let totalSupplies = 0;
+  for (const member of summary.members) {
+    const aggregates = hosted.session.aggregatesOf(member);
+    totalXp += aggregates.xpGained;
+    totalSupplies += aggregates.suppliesUsed;
+  }
+  return {
+    players: summary.members.length,
+    uniqueVocations: summary.uniqueVocations,
+    xpPercent: summary.xpPoolPercent,
+    // A penalidade de morte pode deixar um `xpGained` negativo; o protocolo não aceita total
+    // negativo, e o piso em zero é a mesma régua do saldo de gold.
+    totalXp: Math.max(0, totalXp),
+    totalSupplies: Math.max(0, totalSupplies),
+    shareCosts: summary.shareCosts,
+    splitLoot: summary.splitLoot,
+    bagValue: summary.bagValue,
+    bagWeight: summary.bagWeight,
+    autoSell: { used: summary.autoSell.configured, limit: summary.autoSell.limit },
+  };
+}
+
 /** A stamina como o HUD a mostra: em minutos inteiros. */
 const staminaMinute = (staminaMs: number): number => Math.floor(staminaMs / 60_000);
 
@@ -511,8 +575,37 @@ function bestiaryTotal(counts: Readonly<Record<string, number>>): number {
   return total;
 }
 
+/** Igualdade de lista de ids de item, com `null` = coletar tudo (§6, D2). */
+function sameIdList(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+function samePartySettings(
+  a: S2CProps<'party-state'>['settings'],
+  b: S2CProps<'party-state'>['settings'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.shareCosts === b.shareCosts && a.splitLoot === b.splitLoot;
+}
+
+function samePartyLoot(
+  a: S2CProps<'party-state'>['loot'],
+  b: S2CProps<'party-state'>['loot'],
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.autoSellLimit === b.autoSellLimit
+    && a.leaderPremium === b.leaderPremium
+    && sameIdList(a.collect, b.collect)
+    && sameIdList(a.autoSell, b.autoSell);
+}
+
 function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): boolean {
-  if (a.leaderId !== b.leaderId || a.mode !== b.mode || a.members.length !== b.members.length) {
+  if (a.leaderId !== b.leaderId || a.mode !== b.mode
+    || a.shareCosts !== b.shareCosts || a.splitLoot !== b.splitLoot
+    || a.members.length !== b.members.length
+    || !samePartySettings(a.settings, b.settings)
+    || !samePartyLoot(a.loot, b.loot)) {
     return false;
   }
   for (let i = 0; i < a.members.length; i++) {
@@ -523,9 +616,28 @@ function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): bool
       || x.characterId !== y.characterId || x.name !== y.name || x.alive !== y.alive
       || x.healthPercent !== y.healthPercent || x.vocationId !== y.vocationId
       || x.level !== y.level || x.manaPercent !== y.manaPercent
+      || x.joinedAtMs !== y.joinedAtMs || x.connected !== y.connected
+      // DPS/HPS (#431): a taxa da janela muda quando a amostra vence ou um golpe entra — é
+      // exatamente a variação que precisa reenviar o `party-state` ao vivo.
+      || x.dps !== y.dps || x.hps !== y.hps
+      || x.damageDealt !== y.damageDealt || x.healingDone !== y.healingDone
     ) return false;
   }
   return true;
+}
+
+/** A recusa de `configureParty` em português, para o `system-message` (D12). */
+function partyRefusalText(decision: Extract<ConfigurePartyResult, { ok: false }>): string {
+  if (decision.reason === 'not-leader') return 'Só o líder pode mudar as configurações da party.';
+  if (decision.reason === 'unknown-item') return `Item desconhecido: ${decision.itemId}.`;
+  return `Item sem valor de venda: ${decision.itemId}.`;
+}
+
+/** A recusa da votação de encerrar em português, para o `system-message` (#432). */
+function partyEndVoteRefusalText(decision: Extract<PartyEndVoteResult, { ok: false }>): string {
+  if (decision.reason === 'not-leader') return 'Só o líder pode propor encerrar a caçada para todos.';
+  if (decision.reason === 'no-proposal') return 'Não há proposta de encerramento em aberto.';
+  return 'Você não está nesta party.';
 }
 
 type ConditionsSnapshot = ReadonlyMap<ActiveConditionKind, number>;
@@ -658,6 +770,15 @@ interface HostedSession {
   /** O último `party-state` ENTREGUE aos visualizadores (#339, SV-03). */
   sentParty: S2CProps<'party-state'> | null;
   /**
+   * O último `party-bag-changed` do `sim` (#400), guardado mesmo sem visualizador.
+   *
+   * `getState().partyBag` guarda gold, itens (com elegibilidade), capacidade e OVERWEIGHT, mas
+   * o PESO, o VALOR e as RESERVAS só existem no evento — `#rebalanceBag` os calcula e não os
+   * persiste. O host NUNCA os recalcula (PRD §34): ele guarda o que o `sim` mandou para o
+   * `session-state` de quem reanexa não perder as reservas.
+   */
+  lastPartyBag: PartyBagChanged | null;
+  /**
    * Os shares de `party-spending` ENTREGUES por último (#354, SV-18) — por SESSÃO, como
    * `party-bag`, não por personagem: a mensagem é UMA SÓ, para todos os visualizadores. `null`
    * é "ninguém recebeu ainda" ou "sessão sem party" (D8); o primeiro ciclo com visualizador, ou
@@ -706,6 +827,12 @@ interface HostedSession {
 /** `created` diz se ESTA chamada trouxe a sessão à existência — ver `prepare`. */
 export interface PrepareResult {
   readonly created: boolean;
+  /**
+   * Presente só quando a admissão FOI recusada (#402) — `created` fica `false` junto, e o
+   * handshake do WebSocket fecha com o status do motivo. Aditivo de propósito (DT-03): os
+   * consumidores antigos continuam lendo `created` como booleano direto.
+   */
+  readonly refused?: 'party-full' | 'content-version' | 'session-not-here';
 }
 
 /**
@@ -904,6 +1031,12 @@ export class SessionHost {
       return { created: false };
     }
 
+    // Ticket de ENTRADA (#402): o personagem NÃO tem sessão local e a party já está em curso.
+    // A sessão é achada pelo id dela neste nó; sessão ausente é recusa tipada, não sessão nova.
+    if (party?.join === true) {
+      return this.#admitLateJoiner(characterId, initialCharacter, accountId, party);
+    }
+
     const pending = this.#preparations.get(characterId);
     if (pending !== undefined) {
       await pending;
@@ -921,6 +1054,53 @@ export class SessionHost {
         this.#preparations.delete(characterId);
       }
     }
+    return { created: true };
+  }
+
+  /**
+   * Um personagem NOVO numa hunt que JÁ existe neste nó (#402, ADR 0035 D7, PRD §22).
+   *
+   * A sessão é achada pelo `sessionId` do ticket — o nó certo foi resolvido pelo `api` a partir
+   * do diretório. Aqui dentro, `session.enter` roda na sessão DONA (invariante 9): é o `onEnter`
+   * do #397 que aplica o teto de `maxMembers` e recusa acima dele, e é por isso que a lotação
+   * otimista do `api` não basta (DT-02).
+   */
+  async #admitLateJoiner(
+    characterId: string,
+    initialCharacter: InitialCharacter | undefined,
+    accountId: string | undefined,
+    party: PartyTicket,
+  ): Promise<PrepareResult> {
+    const hosted = this.#sessions.get(party.sessionId);
+    if (hosted === undefined) return { created: false, refused: 'session-not-here' };
+    if (hosted.session.contentVersion !== this.#options.contentVersion) {
+      return { created: false, refused: 'content-version' };
+    }
+    const member = party.members[0];
+    const newcomer = member === undefined || this.#options.createParticipant === undefined
+      ? undefined
+      : this.#options.createParticipant(member.characterId, member.initialCharacter);
+    if (newcomer === undefined) return { created: false, refused: 'session-not-here' };
+    try {
+      hosted.session.enter(newcomer);
+    } catch (error) {
+      // Teto de `maxMembers` do conteúdo (#397): recusa ESPERADA, não falha de sessão.
+      if (error instanceof PartyFullError) return { created: false, refused: 'party-full' };
+      throw error;
+    }
+    // O premium de quem entra DEPOIS do `start` é fato sobre o personagem, não configuração da
+    // party (#400): sem ele, a penalidade de morte do recém-chegado usaria o default do líder.
+    const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
+    ruleset.setMemberPremium?.(hosted.session, characterId, member?.initialCharacter.premium ?? false);
+    // Registro sob lease ANTES do local: registro recusado não pode deixar rastro.
+    await this.#register(characterId, hosted.session, accountId);
+    // Nome e cores ANTES de `#createLocal`, como no caminho da party nova (FUN-104).
+    if (initialCharacter?.name !== undefined) this.#nameByCharacter.set(characterId, initialCharacter.name);
+    if (initialCharacter?.outfitColors !== undefined) {
+      this.#colorsByCharacter.set(characterId, initialCharacter.outfitColors);
+    }
+    this.#createLocal(characterId, hosted.session, accountId);
+    this.#adoptTicketBotConfig(characterId, hosted.session, initialCharacter);
     return { created: true };
   }
 
@@ -1174,6 +1354,16 @@ export class SessionHost {
         // INTENÇÃO (invariante 4): o jogador manda as REGRAS, e quem decide se elas valem —
         // vocabulário, slots, catálogo e gate de level — é o servidor.
         void this.#configureBot(viewer, message.config);
+        return;
+      case 'party-settings':
+        // INTENÇÃO (invariante 4): os campos já vêm tipados pelo protocolo (#393); quem
+        // confere liderança e catálogo é `configureParty`, dentro da sessão dona (invariante 9).
+        this.#configureParty(viewer, message);
+        return;
+      case 'party-end-vote':
+        // INTENÇÃO (invariante 4): o líder propõe e os membros respondem; quem confere quem
+        // pode propor e se todos já aprovaram é o `sim`, dentro da sessão dona (invariante 9).
+        this.#partyEndVote(viewer, message);
         return;
       case 'say':
         // Chat NÃO passa pelo `sim`: ele não muda resultado de simulação nenhuma, e pôr
@@ -1604,7 +1794,7 @@ export class SessionHost {
     }
 
     this.#botByCharacter.set(viewer.characterId, decision.config);
-    this.#applyBotConfig(hosted, decision.config);
+    this.#applyBotConfig(hosted, decision.config, viewer.characterId);
     // Aplicar continua imediato; confirmar espera o Redis aceitar a pendência.
     // Falha não desfaz a regra em uso, mas permite ao jogador tentar salvar novamente.
     try {
@@ -1620,6 +1810,78 @@ export class SessionHost {
         reason: 'A configuração vale nesta sessão, mas não pôde ser salva. Tente salvar de novo.',
       });
     }
+  }
+
+  /**
+   * `party-settings` (ADR 0035 D1/D2). Ao contrário de `#configureBot`, não há vocabulário para
+   * validar aqui — os campos já vêm tipados pelo protocolo (#393) — e não há persistência
+   * própria: o estado é do ruleset, e viaja no MESMO snapshot da sessão (D1, sem bump).
+   *
+   * A recusa é `system-message` (D12); não existe `party-settings-result`. O sucesso não manda
+   * ack: o próximo `#presentPartyLive` vê a mudança e broadcasta o `party-state` novo, o mesmo
+   * caminho que a saída de um membro usa.
+   */
+  #configureParty(
+    viewer: Viewer,
+    message: Extract<C2SMessage, { type: 'party-settings' }>,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.configureParty === undefined) return;
+    // As chaves ausentes ficam AUSENTES, nunca `undefined` explícito: `PartySettingsPatch` sob
+    // `exactOptionalPropertyTypes` distingue as duas, e o `sim` usa `??` para não mexer no eixo.
+    const patch: PartySettingsPatch = {
+      ...(message.shareCosts === undefined ? {} : { shareCosts: message.shareCosts }),
+      ...(message.splitLoot === undefined ? {} : { splitLoot: message.splitLoot }),
+      ...(message.collect === undefined ? {} : { collect: message.collect }),
+      ...(message.autoSell === undefined ? {} : { autoSell: message.autoSell }),
+    };
+    const decision = ruleset.configureParty(hosted.session, patch, viewer.characterId);
+    if (!decision.ok) {
+      viewer.send({ type: 'system-message', level: 'warning', text: partyRefusalText(decision) });
+      return;
+    }
+  }
+
+  /**
+   * `party-end-vote` (#432, ADR 0032 d.14): encerrar a hunt para todos é uma votação do líder,
+   * e não um `end`. A MESMA mensagem serve para propor e aprovar — `approve: true` é proposta
+   * quando quem manda é o líder e aprovação quando é membro —, e `approve: false` é recusa.
+   *
+   * O host não decide nada disso: liderança, presença e "todos aprovaram" são regra de jogo, e
+   * moram no `sim` (invariante 9). O broadcast do estado sai pelo evento `party-end-vote` do
+   * ruleset; a recusa vira `system-message`, como em `party-settings`.
+   */
+  #partyEndVote(
+    viewer: Viewer,
+    message: Extract<C2SMessage, { type: 'party-end-vote' }>,
+  ): void {
+    const hosted = this.#hostedSession(viewer.characterId);
+    const ruleset = hosted?.session.ruleset as Partial<HuntRuleset> | undefined;
+    if (hosted === undefined || ruleset?.proposeEnd === undefined || ruleset.approveEnd === undefined) {
+      return;
+    }
+    let decision: PartyEndVoteResult;
+    if (!message.approve) {
+      decision = ruleset.cancelEnd?.(hosted.session, viewer.characterId)
+        ?? { ok: false, reason: 'no-proposal' };
+    } else if (ruleset.party === undefined || ruleset.party.leaderId === viewer.characterId) {
+      // O líder propõe (e a proposta já carrega o sim dele); solo não tem líder, e cai aqui
+      // para receber `not-leader` em vez de `no-proposal`. Re-propor reinicia a janela.
+      decision = ruleset.proposeEnd(hosted.session, viewer.characterId);
+    } else {
+      decision = ruleset.approveEnd(hosted.session, viewer.characterId);
+    }
+    if (!decision.ok) {
+      viewer.send({
+        type: 'system-message', level: 'warning', text: partyEndVoteRefusalText(decision),
+      });
+      return;
+    }
+    // O último sim encerra a sessão AQUI, fora do ciclo — e o ciclo pula sessão já encerrada
+    // (`cycle`), então a sucessão precisa ser disparada daqui: extrato, `session-ended` e
+    // Cidade, na mesma ordem de quando a morte encerra por dentro (FUN-38).
+    if (hosted.session.ended !== null) void this.#succeed(hosted);
   }
 
   /**
@@ -1654,12 +1916,18 @@ export class SessionHost {
     }
   }
 
-  /** Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal. */
-  #applyBotConfig(hosted: HostedSession, config: BotConfigV2): void {
+/**
+   * Troca a configuração da hunt em curso. Ruleset que não tem bot ignora, e é o normal.
+   *
+   * **O `characterId` é obrigatório na party (#203/#407):** sem ele, `configureBot` cai no
+   * PRIMEIRO participante e a configuração de quem falou sobrescreve a do líder. O bot é por
+   * personagem — `#botByCharacter` já é — e o `sim` aceita o id de propósito.
+   */
+  #applyBotConfig(hosted: HostedSession, config: BotConfigV2, characterId: string): void {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     // A sessão dona é quem escreve (invariante 9), e é ela que está aqui: `configureBot`
     // recompila dentro do ruleset, não de fora.
-    ruleset.configureBot?.(hosted.session, config);
+    ruleset.configureBot?.(hosted.session, config, characterId);
   }
 
   async #requestTransition(viewer: Viewer, request: TransitionRequest): Promise<void> {
@@ -1782,7 +2050,13 @@ export class SessionHost {
     // Sem ninguém olhando nada é apresentado — mas a saída de um membro (#194) não é
     // apresentação: é extrato e Cidade, e acontece haja ou não visualizador (invariante 3).
     if (hosted.viewers.size === 0) {
-      for (const event of events) if (event.kind === 'member-left') hosted.departures.push(event);
+      for (const event of events) {
+        if (event.kind === 'member-left') hosted.departures.push(event);
+        // A bolsa é ESTADO, não apresentação (#400): sem ninguém olhando, o último
+        // `party-bag-changed` ainda é guardado para o `session-state` de quem reanexar levar
+        // as reservas — `getState()` não as carrega.
+        else if (event.kind === 'party-bag-changed') hosted.lastPartyBag = event;
+      }
       return;
     }
 
@@ -1810,7 +2084,16 @@ export class SessionHost {
         case 'party-bag-changed':
         case 'party-settlement':
         case 'party-state':
+        case 'party-end-vote':
           this.#presentParty(hosted, event);
+          continue;
+        case 'follow-state':
+          // POR PERSONAGEM (#401) — ao contrário dos casos de party acima, que são da SESSÃO
+          // inteira (todo membro vê a bolsa e a composição), Follow é configuração de bot de
+          // UM personagem: vazar para quem olha outro membro exporia a estratégia de bot de
+          // alguém para os companheiros sem que ele tenha pedido isso — o mesmo motivo de
+          // `player-stats` (FUN-109) e `active-conditions` serem por personagem.
+          this.#presentFollow(hosted, event);
           continue;
         case 'member-left':
           // Alguém saiu por dentro do `sim` (#193): extrato e volta à Cidade são I/O, e o
@@ -2162,20 +2445,26 @@ export class SessionHost {
   #presentAnalyzer(hosted: HostedSession): void {
     if (hosted.viewers.size === 0) return;
     const { notableEvents } = hosted.session;
+    const party = partySummaryOf(hosted);
     for (const character of hosted.session.participants) {
       if (this.#watchers(hosted, character.id) === 0) continue;
       const aggregates = hosted.session.aggregatesOf(character.id);
       const sent = hosted.sentAnalyzer.get(character.id);
-      if (sent !== undefined && sameAnalyzer(sent, aggregates, notableEvents.length)) continue;
+      if (sent !== undefined
+        && sameAnalyzer(sent, aggregates, notableEvents.length)
+        && samePartySummary(sent.party, party)) continue;
       // Só os eventos NOVOS desde a última entrega: a lista é acumulativa e sem teto, e
       // mandá-la inteira a cada abate custava 13 MB numa hunt de oito horas — quase tudo
       // repetição. Sem entrega anterior (ninguém recebeu nada ainda) vai tudo.
       const since = sent?.eventCount ?? 0;
-      hosted.sentAnalyzer.set(character.id, { aggregates: { ...aggregates }, eventCount: notableEvents.length });
+      hosted.sentAnalyzer.set(character.id, {
+        aggregates: { ...aggregates }, eventCount: notableEvents.length, party,
+      });
       const message: S2CMessage = {
         type: 'analyzer',
         aggregates: { ...aggregates },
         notableEvents: notableEvents.slice(since).map((event) => ({ ...event })),
+        ...(party === undefined ? {} : { party }),
       };
       for (const viewer of hosted.viewers) {
         if (viewer.characterId === character.id) viewer.send(message);
@@ -2255,7 +2544,9 @@ export class SessionHost {
       });
     }
     const state = this.#sessionState(hosted, characterId);
-    if ('party' in state && state.party !== undefined) hosted.sentParty = state.party;
+    // `state.type`, e não `'party' in state`: desde o #393 `analyzer.party` também existe, e o
+    // `in` deixaria de estreitar só para `session-state`. Aqui o `party` é o roster (#196).
+    if (state.type === 'session-state' && state.party !== undefined) hosted.sentParty = state.party;
     viewer.send(state);
     hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
@@ -2293,13 +2584,65 @@ export class SessionHost {
     hosted.sentAnalyzer.set(characterId, {
       aggregates: { ...hosted.session.aggregatesOf(characterId) },
       eventCount: hosted.session.notableEvents.length,
+      party: partySummaryOf(hosted),
+    });
+    // O Follow interrompido sobrevive à desconexão (#401): `#presentMoves` DESCARTA o evento
+    // `follow-state` quando ninguém olha — a apresentação é o que se perde, nunca o resultado da
+    // simulação (invariante 3). Sem isto, quem reconecta depois de o alvo morrer veria o Follow
+    // como se ainda estivesse ativo até o PRÓXIMO evento — que pode nunca vir, porque "voltou a
+    // ficar inválido" não é uma transição que se repete sozinha.
+    //
+    // Só quando INTERROMPIDO: quando o Follow está ativo, o cliente já sabe — foi ele que
+    // configurou — e reenviar toda vez seria tráfego sem informação nova no attach mais comum
+    // (o de sempre, hunt correndo, nada de errado).
+    const follow = (hosted.session.ruleset as Partial<HuntRuleset>).followStateOf?.(characterId);
+    if (follow !== undefined && !follow.active) {
+      viewer.send({
+        type: 'follow-state',
+        active: false,
+        targetId: follow.targetId,
+        ...(follow.reason === undefined ? {} : { reason: follow.reason }),
+      });
+    }
+    // A votação de encerrar em curso (#432) sobrevive à desconexão, como o Follow: quem
+    // reconecta no meio da janela de 60 s precisa ver a proposta e poder aprovar. Só quando há
+    // votação — `endVoteState()` devolve `active: false` fora de proposta, e reenviar isso em
+    // todo attach seria tráfego sem informação nova.
+    const endVote = (hosted.session.ruleset as Partial<HuntRuleset>).endVoteState?.();
+    if (endVote !== undefined && endVote.active) {
+      viewer.send({
+        type: 'party-end-vote',
+        active: endVote.active,
+        proposedAtMs: endVote.proposedAtMs,
+        approved: [...endVote.approved],
+      });
+    }
+  }
+
+  /**
+   * O Follow do bot no fio, por PERSONAGEM (#401): quem configurou o Follow é quem precisa saber
+   * que o alvo sumiu — nunca os outros visualizadores da sessão. `#presentParty`, ao lado, manda
+   * para `hosted.viewers` inteiro porque bolsa e composição SÃO da sessão; Follow não é.
+   *
+   * Sem comparação com "o último entregue" (ao contrário de `#presentStats`/`#presentAnalyzer`,
+   * que reamostram todo ciclo): o `sim` já emite este evento UMA VEZ por transição — interrompeu,
+   * ou retomou (#398, §D10) —, então não há nada aqui para deduplicar. Duplicar a dedução no
+   * host criaria uma segunda fonte de verdade sobre "o que já foi entregue" que o `sim` já
+   * resolveu sozinho.
+   */
+  #presentFollow(hosted: HostedSession, event: FollowState): void {
+    this.#sendToViewersOf(hosted, event.characterId, {
+      type: 'follow-state',
+      active: event.active,
+      targetId: event.targetId,
+      ...(event.reason === undefined ? {} : { reason: event.reason }),
     });
   }
 
   /**
-   * A party no fio (#196): os três eventos do `sim` viram as três mensagens, para TODOS os
-   * visualizadores da sessão — a party é privada como a hunt, e todo membro vê a bolsa e o
-   * settlement. O HP dos companheiros vai só no `party-state` (attach e mudança de
+   * A party no fio (#196): os eventos do `sim` viram as mensagens, para TODOS os visualizadores
+   * da sessão — a party é privada como a hunt, e todo membro vê a bolsa, o settlement e a
+   * votação de encerrar. O HP dos companheiros vai só no `party-state` (attach e mudança de
    * composição); no meio o cliente já recebe `creature-health` de cada um.
    */
   #presentParty(hosted: HostedSession, event: PartyEvent): void {
@@ -2312,16 +2655,38 @@ export class SessionHost {
         message = { type: 'party-state', ...block.party };
         break;
       }
-      case 'party-bag-changed':
+      case 'party-bag-changed': {
+        hosted.lastPartyBag = event;
+        // A bolsa v2 vem do MESMO `#partyBlock` do `session-state`: elegibilidade por item e
+        // reservas só existem ali (`getState()` + último evento), e as duas mensagens não podem
+        // divergir sobre o que há na bolsa.
+        const bag = this.#partyBlock(hosted).partyBag;
+        if (bag === undefined) return;
+        message = { type: 'party-bag', ...bag };
+        break;
+      }
+      case 'party-settlement':
         message = {
-          type: 'party-bag', gold: event.gold, weight: event.weight, capacity: event.capacity,
-          items: event.items.map((item) => ({ instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity })),
+          type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })),
+          reason: event.reason,
+          ...(event.itemId === undefined ? {} : { itemId: event.itemId }),
         };
         break;
-      case 'party-settlement':
-        message = { type: 'party-settlement', total: event.total, shares: event.shares.map((share) => ({ ...share })) };
+      case 'party-end-vote':
+        // O estado da votação (#432) é da SESSÃO: todo membro precisa ver quem já aprovou. O
+        // evento já carrega tudo — não há segundo estado para recompor.
+        message = {
+          type: 'party-end-vote',
+          active: event.active,
+          proposedAtMs: event.proposedAtMs,
+          approved: [...event.approved],
+        };
         break;
       case 'member-left':
+        return;
+      case 'follow-state':
+        // POR PERSONAGEM (#401): `#presentMoves` o intercepta antes e chama `#presentFollow` —
+        // nunca este broadcast. O caso existe só para a união `PartyEvent` ficar fechada.
         return;
     }
     for (const viewer of hosted.viewers) viewer.send(message);
@@ -2356,42 +2721,84 @@ export class SessionHost {
     for (const viewer of hosted.viewers) viewer.send(message);
   }
 
-  /** O bloco `party`/`partyBag` do `session-state` (#196), do estado do ruleset. Vazio em solo. */
+  /**
+   * O bloco `party`/`partyBag` do `session-state` (#196; v2 no #400), montado do estado do
+   * ruleset. Vazio em solo.
+   *
+   * Nada é somado aqui (PRD §34): peso, valor, OVERWEIGHT e reservas vêm do `sim` — peso/valor
+   * do `partySummary`, OVERWEIGHT/capacidade do `getState().partyBag` e as reservas do último
+   * `party-bag-changed`, que é onde `#rebalanceBag` as calcula. O `joinedAtMs` é opcional: um
+   * `sim` sem o acessor o omite (D12), e o campo é opcional no protocolo.
+   */
   #partyBlock(hosted: HostedSession): { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } {
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
     const party = ruleset.party;
     if (party === undefined) return {};
     const state = ruleset.getState?.();
+    const summary = ruleset.partySummary?.(hosted.session);
     const leaderId = hosted.session.participants.some((p) => p.id === party.leaderId)
       ? party.leaderId
       : hosted.session.participants[0]?.id ?? party.leaderId;
+    const joinTimes = hosted.session as Session & {
+      joinedAtMsOf?: (characterId: string) => number | undefined;
+    };
     const block: { party?: S2CProps<'party-state'>; partyBag?: S2CProps<'party-bag'> } = {
       party: {
         leaderId,
-        mode: party.mode,
-        shareCosts: shareCostsOf(party),
-        splitLoot: splitLootOf(party),
-        members: hosted.session.participants.map((member) => ({
-          characterId: member.id,
-          name: this.#nameByCharacter.get(member.id) ?? member.id,
-          alive: member.alive,
-          healthPercent: member.maxHealth > 0 ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100))) : 0,
-          vocationId: member.vocationId,
-          level: member.level,
-          manaPercent: member.maxMana > 0 ? Math.max(0, Math.min(100, Math.round((member.mana / member.maxMana) * 100))) : 0,
-        })),
+        // Derivado (D1) — tolerância de um deploy para o cliente antigo.
+        mode: party.shareCosts && party.splitLoot ? 'shared' : 'split',
+        // Os campos achatados do #359 continuam no topo pelo mesmo deploy de rolagem.
+        shareCosts: party.shareCosts,
+        splitLoot: party.splitLoot,
+        settings: { shareCosts: party.shareCosts, splitLoot: party.splitLoot },
+        loot: {
+          collect: party.collect === null ? null : [...party.collect],
+          autoSell: [...party.autoSell],
+          autoSellLimit: summary?.autoSell.limit ?? 0,
+          leaderPremium: party.premiumByCharacter[leaderId] ?? false,
+        },
+        members: hosted.session.participants.map((member) => {
+          const joinedAtMs = joinTimes.joinedAtMsOf?.(member.id);
+          const totals = hosted.session.aggregatesOf(member.id);
+          return {
+            characterId: member.id,
+            name: this.#nameByCharacter.get(member.id) ?? member.id,
+            alive: member.alive,
+            healthPercent: member.maxHealth > 0
+              ? Math.max(0, Math.min(100, Math.round((member.health / member.maxHealth) * 100)))
+              : 0,
+            vocationId: member.vocationId,
+            level: member.level,
+            manaPercent: member.maxMana > 0
+              ? Math.max(0, Math.min(100, Math.round((member.mana / member.maxMana) * 100)))
+              : 0,
+            ...(joinedAtMs === undefined ? {} : { joinedAtMs }),
+            connected: this.#watchers(hosted, member.id) > 0,
+            // DPS/HPS (#431): a janela é lida AGORA, no instante do ciclo — o `sim` não mantém
+            // taxa nenhuma, só amostras carimbadas, e a taxa sai da divisão de 60 s.
+            dps: hosted.session.dpsOf(member.id, hosted.session.nowMs),
+            hps: hosted.session.hpsOf(member.id, hosted.session.nowMs),
+            damageDealt: totals.damageDealt,
+            healingDone: totals.healingDone,
+          };
+        }),
       },
     };
     const bag = state?.partyBag;
     if (bag !== undefined) {
-      let weight = 0;
-      for (const item of bag.items) weight += (this.#options.itemCatalog?.get(item.itemId)?.weight ?? 0) * item.quantity;
-      // A capacidade é a soma dos PRESENTES agora — o snapshot guarda a última calculada.
-      let capacity = 0;
-      for (const member of hosted.session.participants) capacity += member.capacity;
       block.partyBag = {
-        gold: bag.gold, weight, capacity,
-        items: bag.items.map((item) => ({ instanceId: item.instanceId, itemId: item.itemId, quantity: item.quantity })),
+        // O `gold` da entrada é a soma dos lançamentos; a bolsa v2 (`#395`) guarda entradas com
+        // elegibilidade, e é ela que vai no fio agora.
+        gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+        weight: summary?.bagWeight ?? 0,
+        capacity: bag.capacity,
+        value: summary?.bagValue ?? 0,
+        overweight: bag.overweight,
+        reservations: (hosted.lastPartyBag?.reservations ?? []).map((reservation) => ({ ...reservation })),
+        items: bag.items.map((entry) => ({
+          instanceId: entry.item.instanceId, itemId: entry.item.itemId, quantity: entry.item.quantity,
+          eligible: [...entry.eligible],
+        })),
       };
     }
     return block;
@@ -2721,6 +3128,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,
+      lastPartyBag: null,
       sentConditions: new Map(),
       sentSlotState: new Map(),
       slotStateAtMs: 0,
@@ -3186,6 +3594,9 @@ export class SessionHost {
     }
 
     const spendingShares = partySpendingSharesOf(hosted);
+    // A seção PARTY do analisador (§32, ADR 0035 d.11) — o MESMO bloco do `analyzer.party`,
+    // porque `session-state` já tem `party` como o roster (#196). Ausente em solo (D8).
+    const partySummary = partySummaryOf(hosted);
     return {
       type: 'session-state',
       sessionType: session.ruleset.type,
@@ -3221,6 +3632,7 @@ export class SessionHost {
       notableEvents: session.notableEvents.map((event) => ({ ...event })),
       // A party (#196): quem está nela e a bolsa, do estado do ruleset. Ausente em solo.
       ...this.#partyBlock(hosted),
+      ...(partySummary === undefined ? {} : { partySummary }),
       ...(spendingShares === undefined ? {} : { partySpending: { shares: spendingShares } }),
       // A configuração de bot EM VIGOR (FUN-111): a do ticket ou a última `bot-config` aceita.
       // É o que a tela mostra ao abrir; sem isto ela nascia vazia a cada carregamento, e um
@@ -3436,6 +3848,7 @@ export class SessionHost {
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,
+      lastPartyBag: null,
       sentConditions: new Map(),
       sentSlotState: new Map(),
       slotStateAtMs: 0,

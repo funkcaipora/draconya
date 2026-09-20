@@ -17,14 +17,78 @@ export interface PartyMember {
   readonly vocationId: string | null;
 }
 
-/** A bolsa do modo compartilhado. O ruleset é quem mantém `capacity` (Σ dos presentes). */
-export interface PartyBagState {
-  gold: number;
-  readonly items: CarriedItem[];
-  capacity: number;
+/** Uma entrada de item da bolsa, com quem estava na party no instante do abate (§16.1). */
+export interface BagEntry {
+  readonly item: CarriedItem;
+  /**
+   * Quem estava na party quando este item caiu (§16.1). Vazio é o sinal de bolsa MIGRADA de
+   * um snapshot anterior a esta task: nesse caso o settlement usa `present` como elegível —
+   * a regra de hoje, preservada só para quem já estava em voo.
+   */
+  readonly eligible: readonly string[];
 }
 
-export interface BagSettlement {
+/** Uma entrada de gold da bolsa (o gold BASE do drop), com a mesma elegibilidade do item. */
+export interface GoldEntry {
+  readonly amount: number;
+  readonly eligible: readonly string[];
+}
+
+/** A bolsa do modo compartilhado. O ruleset é quem mantém `capacity` (Σ das disponíveis). */
+export interface PartyBagState {
+  gold: GoldEntry[];
+  readonly items: BagEntry[];
+  /** Σ da capacidade DISPONÍVEL dos presentes (não a total) — #396. */
+  capacity: number;
+  /** `peso > Σ disponível` (§14). Persistido para a transição não disparar falso no resume. */
+  overweight: boolean;
+}
+
+/** A capacidade disponível de um membro para a reserva proporcional (§12). */
+export interface MemberCapacity {
+  readonly id: string;
+  readonly available: number;
+}
+
+/**
+ * A reserva proporcional de cada membro (§12): `R_i = W × B_i / ΣB`, em ponto flutuante (peso é
+ * float no conteúdo). `B_i` é a capacidade DISPONÍVEL (`capacity − inventory.weight`), nunca a
+ * total — bolsa e mochila contam a mesma capacidade duas vezes sem isto (D4).
+ *
+ * Σ reservas = `min(weight, ΣB)`: em OVERWEIGHT cada membro reserva TODA a disponível que tem, e
+ * o excedente da bolsa fica sem reserva de ninguém (§14: quem chama decide não coletar, não
+ * "sobrar" para alguém). Disponível `0` ou negativa não gera reserva negativa nem `NaN`.
+ *
+ * Pura: sem RNG, sem I/O, sem relógio — como o resto de `party.ts`.
+ */
+export function reserveProportionally(
+  weight: number,
+  members: readonly MemberCapacity[],
+): Map<string, number> {
+  const totalAvailable = members.reduce((sum, m) => sum + Math.max(0, m.available), 0);
+  const reserved = new Map<string, number>();
+  if (weight <= 0 || totalAvailable <= 0) {
+    for (const m of members) reserved.set(m.id, 0);
+    return reserved;
+  }
+  const capped = Math.min(weight, totalAvailable);
+  for (const m of members) {
+    const available = Math.max(0, m.available);
+    reserved.set(m.id, (capped * available) / totalAvailable);
+  }
+  return reserved;
+}
+
+/** Quanto a bolsa vende hoje (PRD §10) — leitura pura do que já existe, sem consumir sorteio. */
+export function bagValue(bag: PartyBagState, catalog: ReadonlyMap<string, Item>): number {
+  let total = bag.gold.reduce((sum, entry) => sum + entry.amount, 0);
+  for (const entry of bag.items) {
+    total += (catalog.get(entry.item.itemId)?.value ?? 0) * entry.item.quantity;
+  }
+  return total;
+}
+
+export interface EntrySettlement {
   /** Gold de cada presente, na ordem dada; o resto vai um a um para os primeiros. */
   readonly shares: ReadonlyMap<string, number>;
   /** O que não se vende (`value: 0`): vai para o líder, não para o gold. */
@@ -88,31 +152,72 @@ export function splitEqually(total: number, n: number): number[] {
 }
 
 /**
- * Vende a bolsa e divide entre `presentIds`, na ordem dada (que é a ordem de entrada).
+ * O limite de TIPOS de venda automática do líder (D2/§23.1): o Premium é do PERSONAGEM líder,
+ * nunca do usuário do item. A lista guarda além do limite; só os `limite` primeiros vendem.
+ * O conteúdo manda os números (`party.autoSellItemTypes`); esta função só escolhe o do líder.
+ */
+export function autoSellLimit(
+  premiumByCharacter: Readonly<Record<string, boolean>>,
+  leaderId: string,
+  limits: PartyConfig['autoSellItemTypes'],
+): number {
+  const resolved = limits ?? { free: 0, premium: 0 };
+  return premiumByCharacter[leaderId] === true ? resolved.premium : resolved.free;
+}
+
+/**
+ * Vende a bolsa ENTRADA por entrada e divide cada uma entre `eligible ∩ presentIds`.
+ *
+ * Cada item e cada gold da bolsa registram quem estava presente no drop (§16.1, D4): quem
+ * entrou depois não recebe daquela entrada. `eligible` vazio é o sentinel de entrada
+ * MIGRADA de um snapshot anterior a esta task (D5) — aí valem todos os presentes, a regra
+ * de hoje.
  *
  * Item com `value: 0` — ou fora do catálogo — não vira gold: vai em `unsold`, e o ruleset o
  * entrega ao líder. Vender por zero seria sumir com o item, e "não se vende" é diferente de
  * "não vale nada".
  */
-export function settleBag(
+export function settleEntries(
   bag: PartyBagState,
   presentIds: readonly string[],
   catalog: ReadonlyMap<string, Item>,
-): BagSettlement {
-  let total = bag.gold;
+): EntrySettlement {
+  const present = new Set(presentIds);
+  const shares = new Map<string, number>();
+  const credit = (id: string, amount: number): void => {
+    if (amount === 0) return;
+    shares.set(id, (shares.get(id) ?? 0) + amount);
+  };
+  const payout = (amount: number, eligible: readonly string[]): void => {
+    // `eligible.length === 0` é o sentinel de entrada MIGRADA (D5): todo mundo presente na
+    // hora do settlement é elegível — a regra de hoje, para não confiscar bolsa em voo.
+    const recipients = eligible.length === 0 ? presentIds : eligible.filter((id) => present.has(id));
+    // A interseção nunca é vazia para uma entrada NOVA (a bolsa liquida a cada saída — D5);
+    // pode ser vazia numa entrada migrada só se `presentIds` também for vazio, e `#settle`
+    // já recusa `present.length === 0` antes de chamar esta função.
+    if (recipients.length === 0) return;
+    splitEqually(amount, recipients.length).forEach((share, i) => {
+      const id = recipients[i];
+      if (id !== undefined) credit(id, share);
+    });
+  };
+
+  let total = 0;
+  for (const entry of bag.gold) {
+    payout(entry.amount, entry.eligible);
+    total += entry.amount;
+  }
+
   const unsold: CarriedItem[] = [];
-  for (const item of bag.items) {
-    const value = catalog.get(item.itemId)?.value ?? 0;
+  for (const entry of bag.items) {
+    const value = catalog.get(entry.item.itemId)?.value ?? 0;
     if (value === 0) {
-      unsold.push(item);
+      unsold.push(entry.item);
       continue;
     }
-    total += value * item.quantity;
+    const amount = value * entry.item.quantity;
+    payout(amount, entry.eligible);
+    total += amount;
   }
-  const shares = new Map<string, number>();
-  splitEqually(total, presentIds.length).forEach((gold, index) => {
-    const id = presentIds[index];
-    if (id !== undefined) shares.set(id, gold);
-  });
   return { shares, unsold, total };
 }

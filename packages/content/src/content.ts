@@ -555,6 +555,12 @@ export function buildContent(raw: RawContent): Content {
         && (effect.area.shape !== 'circle' || effect.area.centered === 'target')) {
         problems.push(`${where}: cura em área precisa ser centrada no lançador`);
       }
+      if (effect.target === 'friend' && effect.range === undefined) {
+        problems.push(`${where}: cura em outro personagem precisa de range`);
+      }
+      if (effect.target === 'self' && effect.range !== undefined) {
+        problems.push(`${where}: cura em si mesmo não tem alcance`);
+      }
     }
     if (effect.kind === 'damage') {
       // O dano sai de UM mecanismo: o número fixo (`power`) OU a faixa escalada (`basePower`
@@ -579,18 +585,30 @@ export function buildContent(raw: RawContent): Content {
   // (poção) OU `basePower`/`formula` (runa). O `mana` não entra aqui: ele sempre foi fixo.
   // A runa de ATAQUE (#476) segue a mesma regra do dano da magia: `basePower` (BP provisório) ou
   // `formula` canônica, pelo menos um. Sem nenhum o dano sairia zero em silêncio.
+  // O par `target`/`range` do supply (cura e mana) copia a MESMA regra do dano da magia: um
+  // efeito que alcança outro personagem precisa de alcance, e um que cura quem usa não tem
+  // nenhum. Sem isto, uma poção `target: 'friend'` sem `range` subiria muda.
   for (const supply of supplies.values()) {
+    const where = `supply/${supply.id}`;
     const effect = supply.effect;
     if (effect.kind === 'heal') {
       const fixed = effect.amount !== undefined;
       const scaled = effect.basePower !== undefined || effect.formula !== undefined;
       if (fixed === scaled) {
-        problems.push(`supply/${supply.id}: cura precisa de amount OU basePower/formula, um dos dois`);
+        problems.push(`${where}: cura precisa de amount OU basePower/formula, um dos dois`);
       }
     }
     if (effect.kind === 'damage'
       && effect.basePower === undefined && effect.formula === undefined) {
-      problems.push(`supply/${supply.id}: dano precisa de basePower ou formula`);
+      problems.push(`${where}: dano precisa de basePower ou formula`);
+    }
+    if (effect.kind === 'heal' || effect.kind === 'mana') {
+      if (effect.target === 'friend' && effect.range === undefined) {
+        problems.push(`${where}: efeito em outro personagem precisa de range`);
+      }
+      if (effect.target === 'self' && effect.range !== undefined) {
+        problems.push(`${where}: efeito em si mesmo não tem alcance`);
+      }
     }
   }
   // A família de arma que o schema sozinho não fecha (CMB-05): ela aponta uma skill que precisa

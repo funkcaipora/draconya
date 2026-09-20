@@ -40,6 +40,8 @@ const REASON = {
   death: 'Você morreu',
   drain: 'Sua sessão foi encerrada por manutenção',
   completed: 'Concluído',
+  // O encerramento coletivo (#432, ADR 0032 d.14): todos os presentes aprovaram.
+  'party-vote': 'A party encerrou a caçada',
 } as const;
 import { missileDuration } from '../world/effects.js';
 import {
@@ -211,6 +213,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
             ? state.analyzer.notableEvents
             : [...state.analyzer.notableEvents, ...message.notableEvents],
           receivedAtMs: nowMs,
+          // A seção PARTY (§32, ADR 0035 d.11): o bloco vem no MESMO `analyzer` que os
+          // agregados. `undefined` é solo/nó anterior — a caixa não monta (D8).
+          party: message.party,
         },
       }));
       return;
@@ -307,7 +312,12 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           notableEvents: message.notableEvents,
           receivedAtMs: nowMs,
           ended: true,
+          // A sessão acabou: a seção PARTY não existe mais no extrato.
+          party: undefined,
         },
+        // A votação de encerrar não sobrevive ao fim da sessão (#432): a tela de retorno não
+        // mostra o diálogo de uma proposta que já cumpriu o efeito.
+        partyEndVote: null,
         systemMessages: appendCapped(state.systemMessages, {
           level: 'warning',
           text: `${REASON[message.reason]} · ${Math.round(aggregates.durationMs / 60_000)} min`
@@ -373,11 +383,20 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
           notableEvents: message.notableEvents,
           receivedAtMs: nowMs,
           ended: false,
+          // A seção PARTY (§32, ADR 0035 d.11): `session-state.party` já é o roster, então o
+          // bloco do analisador viaja como `partySummary`. `undefined` é solo/nó anterior (D8).
+          party: message.partySummary,
         },
         // A party (#196): o estado SUBSTITUI, como o inventário. Ausente é solo.
         party: message.party ?? null,
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
+        // A votação de encerrar (#432) volta a `null`: o servidor a reenvia no attach se ainda
+        // corre, e até ele chegar a tela não mostra o diálogo da sessão anterior.
+        partyEndVote: null,
+        // O Follow (#406) volta a `null` na reanexação: o servidor o reenvia no attach, e até
+        // ele chegar a tela NÃO deve mostrar o "interrompido" da sessão anterior (§7).
+        followState: null,
         onlinePlayers: message.onlinePlayers ?? null,
         // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
         // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
@@ -425,6 +444,22 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       return;
 
     case 'party-spending':
+      // O gasto de cada membro e a prévia de rateio (#354, SV-18). A "Sua parte" do analisador
+      // lê daqui (DT-03): era descartado, e o `estimatedShare` se perdia.
+      hud.set((state) => ({ ...state, partySpending: message }));
+      return;
+
+    case 'party-end-vote':
+      // A votação de encerrar a hunt para todos (#432). É um PUSH do servidor, como o Follow:
+      // a tela só a espelha, e o `active: false` é o que fecha o diálogo — nunca um clique.
+      hud.set((state) => ({ ...state, partyEndVote: message }));
+      return;
+
+    case 'follow-state':
+      // O estado do Follow do bot (#406, ADR 0035 d.9). É um PUSH do servidor, não a resposta de
+      // uma intenção: mora no `hud` (como `party`/`active-conditions`), e a tela só o espelha —
+      // nunca decide sozinha que o follow parou (DT-01).
+      hud.set((state) => ({ ...state, followState: message }));
       return;
 
     // `slot-state` (AB-10): o estado do conjunto ATIVO por slot. SUBSTITUI o mapa — o servidor

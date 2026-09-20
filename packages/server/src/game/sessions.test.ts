@@ -1,7 +1,8 @@
 import { buildContent } from '@draconya/content';
 import { CharacterRuntime, createHuntSession, totalXpForLevel } from '@draconya/sim';
 import {
-  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA, testContent,
+  TEST_COMBAT, TEST_HUNT, TEST_PARTY, TEST_PROGRESSION, TEST_STAMINA,
+  rawTestContent, testContent,
 } from '../testing/content.js';
 import { BOT_SET_COUNT, BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigV2Schema } from '@draconya/content';
 import type { Progression } from '@draconya/content';
@@ -30,9 +31,10 @@ describe('city session factory', () => {
 
 describe('party session factory (#195, ADR 0027)', () => {
   const party = {
-    sessionId: 's-party', leaderId: 'p1', mode: 'shared' as const, huntId: TEST_HUNT.id, difficulty: 'cautious',
+    sessionId: 's-party', leaderId: 'p1', shareCosts: true, splitLoot: true,
+    huntId: TEST_HUNT.id, difficulty: 'cautious',
     members: [
-      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: totalXpForLevel(10, TEST_PROGRESSION as Progression), gold: 30 } },
+      { characterId: 'p1', accountId: 'a1', initialCharacter: { level: 10, xp: totalXpForLevel(10, TEST_PROGRESSION as Progression), gold: 30, premium: true } },
       // Um bot válido e um que o vocabulário recusa: só o válido compila.
       { characterId: 'p2', accountId: 'a2', initialCharacter: { level: 12, xp: totalXpForLevel(12, TEST_PROGRESSION as Progression), botConfig: { version: BOT_VOCABULARY_VERSION_V1, heal: [], potion: [], attack: [], rune: [], support: [] } } },
       { characterId: 'p3', accountId: 'a3', initialCharacter: { level: 1, xp: 0, botConfig: { version: 999 } } },
@@ -46,11 +48,27 @@ describe('party session factory (#195, ADR 0027)', () => {
     expect(session.ruleset.type).toBe('hunt');
     expect(session.participants.map((p) => [p.id, p.level, p.gold])).toEqual([['p1', 10, 30], ['p2', 12, 0], ['p3', 1, 0]]);
     const ruleset = session.ruleset as HuntRuleset;
-    expect(ruleset.party).toEqual({ leaderId: 'p1', mode: 'shared' });
+    expect(ruleset.party).toEqual({
+      leaderId: 'p1', mode: 'shared', shareCosts: true, splitLoot: true,
+      collect: null, autoSell: [],
+      // O Premium de cada membro entra no estado da party (ADR 0035 D3): ausente no ticket é Free.
+      premiumByCharacter: { p1: true, p2: false, p3: false },
+    });
     expect(Object.keys(ruleset.getState().runners ?? {}).sort()).toEqual(['p1', 'p2', 'p3']);
     expect(ruleset.getState().runners?.['p2']?.botConfig).toBeDefined();
     expect(ruleset.getState().runners?.['p3']?.botConfig).toBeUndefined();
     expect(ruleset.getState().partyBag).toBeDefined();
+  });
+
+  it('os dois eixos vêm do ticket, e o líder Premium decide o limite de venda (#400)', () => {
+    const session = createCitySessionFactory(testContent())('p2', party.members[1]?.initialCharacter, {
+      ...party, shareCosts: false, splitLoot: true,
+    });
+    const ruleset = session.ruleset as HuntRuleset;
+    expect(ruleset.party?.shareCosts).toBe(false);
+    expect(ruleset.party?.splitLoot).toBe(true);
+    expect(ruleset.party?.premiumByCharacter['p1']).toBe(true);
+    expect(ruleset.partySummary(session)?.autoSell.limit).toBeGreaterThan(0);
   });
 
   it('without a party block it is the city of always', () => {
@@ -512,6 +530,32 @@ describe('aceitar ou recusar a configuração do bot (FUN-81, AB-09)', () => {
     expect(accept(base({ targeting: { policy: 'follow' } }), 1).ok).toBe(true);
     expect(accept(base({ lure: { min: 2, max: 5 } }), 1).ok).toBe(true);
     expect(accept(base(), 1).ok).toBe(true);
+  });
+
+  it('aceita `follow` e `rule.target` sem mudar de assinatura (#400, RF-06)', () => {
+    // O validador não conhece a party (D10): aceita qualquer `characterId` e qualquer alvo de
+    // membro. O vocabulário novo (#392) passa por ele porque ele delega inteiramente ao
+    // `content` — este teste é o que impede alguém de recortar os campos aqui.
+    const comAmigo = buildContent({
+      ...rawTestContent(),
+      spells: [
+        ...(rawTestContent().spells ?? []),
+        { id: 'heal-friend', name: 'Cura em Amigo', manaCost: 25, cooldownMs: 1_000, effect: { kind: 'heal', amount: 50, target: 'friend', range: 4 } },
+      ],
+    });
+    const accept = createBotConfigValidator(comAmigo);
+    const decision = accept({
+      version: BOT_VOCABULARY_VERSION_V1,
+      follow: { kind: 'member', characterId: 'qualquer-um' },
+      heal: [{
+        when: { kind: 'hp', op: '<=', percent: 50 },
+        do: { kind: 'spell', spellId: 'heal-friend' },
+        target: { kind: 'lowest-hp-member' },
+      }],
+      potion: [], attack: [], rune: [], support: [],
+    }, 1);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.config.follow).toEqual({ kind: 'member', characterId: 'qualquer-um' });
   });
 });
 

@@ -16,6 +16,7 @@
 
 import type {
   BotActionV2, BotConditionV2, BotConfigV2, BotExitRule, BotLure, BotOperator,
+  BotRuleTarget,
 } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { compileTargeting } from './targeting.js';
@@ -51,6 +52,14 @@ export interface BotView {
    * view sabe os dois.
    */
   target: BotTarget | null;
+  /**
+   * O candidato de party sob avaliação por uma regra de alvo != self. `null` fora dessa
+   * avaliação (§26-30, ADR 0035 d.10).
+   *
+   * É a peça que faz "HP < 50%" num slot `target: 'lowest-hp-member'` filtrar MEMBROS, e não
+   * o próprio lançador: `compileCondition` lê daqui quando o alvo da regra não é `self`.
+   */
+  partyTarget: CharacterRuntime | null;
 }
 
 /** O que uma condição precisa saber do alvo. Nada além disto. */
@@ -61,14 +70,19 @@ export interface BotTarget {
 
 /**
  * Um slot compilado da barra v2. `when` é a E das condições do slot (RG-006), `act` é a ação
- * crua que o atuador executa, e `cooldownKey` é o livro que a EXECUÇÃO inicia — `group:<g>` para
- * o grupo do conteúdo, ou `spell:<id>`/`supply:<id>` para a ação fora de grupo.
+ * crua que o atuador executa, `cooldownKey` é o livro que a EXECUÇÃO inicia, e `target` é o
+ * alvo CRU da regra — quem resolve tem `session.participants`, e `bot.ts` não conhece sessão.
  */
 export interface CompiledSlot {
   readonly when: (view: BotView) => boolean;
   readonly act: BotActionV2;
   /** A chave de cooldown que a execução INICIA: `group:<g>`, `spell:<id>` ou `supply:<id>`. */
   readonly cooldownKey: string;
+  /**
+   * O alvo CRU do slot (§26-30, ADR 0035 d.10). Como `exit`/`lure`, sai sem resolução: o
+   * ruleset tem a party, e `bot.ts` não conhece nem sessão nem party.
+   */
+  readonly target: BotRuleTarget;
 }
 
 export interface CompiledBot {
@@ -120,14 +134,32 @@ export interface BotActuator {
  *
  * O `switch` fecha sobre `kind` UMA vez, na compilação, e o que sobra é uma closure que só faz
  * a comparação. É a diferença entre percorrer o JSON por avaliação e chamar uma função.
+ *
+ * O `target` do slot entra porque `hp` com alvo != self lê o HP do CANDIDATO (`view.partyTarget`),
+ * e não o do lançador — é o que faz "cure o membro abaixo de 50%" olhar o membro.
  */
-export function compileCondition(condition: BotConditionV2): (view: BotView) => boolean {
+export function compileCondition(
+  condition: BotConditionV2,
+  target: BotRuleTarget = { kind: 'self' },
+): (view: BotView) => boolean {
   switch (condition.kind) {
     case 'hp': {
       const { op, percent } = condition;
+      // Alvo != self: quem tem o HP relevante é o candidato resolvido, não o lançador — é
+      // isto que faz "HP < 50%" no slot de party filtrar MEMBROS, não o próprio druida.
+      if (target.kind !== 'self') {
+        return (view) => {
+          const candidate = view.partyTarget;
+          // Sem candidato a condição é FALSA, nunca um erro — a mesma regra de `target-hp`.
+          return candidate !== null
+            && compare(percentOf(candidate.health, candidate.maxHealth), op, percent);
+        };
+      }
       return (view) => compare(percentOf(view.self.health, view.self.maxHealth), op, percent);
     }
     case 'mana': {
+      // Mana continua SEMPRE do lançador (D11): quem paga o cast é quem lança, alvo != self
+      // não muda isso.
       const { op, percent } = condition;
       return (view) => compare(percentOf(view.self.mana, view.self.maxMana), op, percent);
     }
@@ -170,9 +202,10 @@ const NEVER = (): boolean => false;
 export function compileAll(
   conditions: readonly BotConditionV2[],
   empty = true,
+  target: BotRuleTarget = { kind: 'self' },
 ): (view: BotView) => boolean {
   if (conditions.length === 0) return empty ? ALWAYS : NEVER;
-  const predicates = conditions.map(compileCondition);
+  const predicates = conditions.map((condition) => compileCondition(condition, target));
   return (view) => {
     for (let i = 0; i < predicates.length; i += 1) {
       if (!(predicates[i] as (v: BotView) => boolean)(view)) return false;
@@ -227,8 +260,11 @@ export function compileBot(config: BotConfigV2, cooldownOf: CooldownOfAction): C
       if (slot === null) continue;
       if (slot.enabled === false) continue;    // desligado não disputa (RP-004)
       if (slot.auto === false) continue;       // manual-only não entra no automático (AB-09)
+      const target = slot.target ?? { kind: 'self' };
       const { group, cooldownKey } = cooldownOf(slot.do);
-      const compiled: CompiledSlot = { when: compileAll(slot.when), act: slot.do, cooldownKey };
+      const compiled: CompiledSlot = {
+        when: compileAll(slot.when, true, target), act: slot.do, cooldownKey, target,
+      };
       const list = groups.get(group);
       if (list === undefined) groups.set(group, [compiled]);
       else list.push(compiled);

@@ -15,7 +15,7 @@
 
 import { Fragment, useState } from 'react';
 import { BOT_HOTKEYS } from '@draconya/content';
-import type { BotActionV2, BotHotkey } from '@draconya/content';
+import type { BotActionV2, BotHotkey, BotRuleTarget } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import type { Catalogue } from '../state/hud.js';
 import { bot, setSlot } from '../bot/store.js';
@@ -71,25 +71,38 @@ function isSameAction(entry: ActionEntry, action: BotActionV2 | null): boolean {
     : entry.kind === 'supply' && action.kind === 'supply' && entry.supply.id === action.supplyId;
 }
 
-/** Um rascunho com a ação trocada; condições, tecla e automática sobrevivem. */
-function withDo(draft: SlotDraft, action: BotActionV2 | null): SlotDraft {
+/**
+ * A ação aceita outro personagem como alvo? Vem do catálogo (`targets: 'friend'`, §26-30, ADR
+ * 0035 d.10). A tela só oferece o seletor quando o conteúdo declarou — nada é inventado (DT-02).
+ */
+export function acceptsFriend(entry: ActionEntry): boolean {
+  return (entry.kind === 'spell' ? entry.spell.targets : entry.supply.targets) === 'friend';
+}
+
+/** Um rascunho com a ação trocada; condições, tecla e automática sobrevivem. Trocar para uma ação
+ *  que NÃO aceita amigo zera o alvo — salvar um `target` invisível seria configuração que o
+ *  jogador não escolheu (RF-07/DT-03). */
+export function withDo(draft: SlotDraft, action: BotActionV2 | null, friend: boolean): SlotDraft {
   return {
     do: action,
     when: draft.when,
     auto: draft.auto,
+    target: friend ? draft.target : { kind: 'self' },
     ...(draft.hotkey === undefined ? {} : { hotkey: draft.hotkey }),
   };
 }
 
 /** O rascunho sem tecla — a opção "sem tecla" do ATALHO (22 teclas para 24 slots). */
 function withoutHotkey(draft: SlotDraft): SlotDraft {
-  return { do: draft.do, when: draft.when, auto: draft.auto };
+  return { do: draft.do, when: draft.when, auto: draft.auto, target: draft.target };
 }
 
 export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProps) {
   const catalogue = useHudSlice((state) => state.catalogue);
   const level = useHudSlice((state) => state.level);
   const magicLevel = useHudSlice((state) => state.skills.magic.level);
+  const party = useHudSlice((state) => state.party);
+  const me = useHudSlice((state) => state.characterId);
   const slot = useStoreSlice(bot, (state) => state.draft.sets[set]?.slots[index] ?? null);
   const storedSet = useStoreSlice(bot, (state) => state.draft.sets[set]);
   const [draft, setDraft] = useState<SlotDraft>(() => draftFromSlot(slot));
@@ -192,7 +205,7 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
                   type="button"
                   aria-pressed={selected}
                   className={locked ? 'is-locked' : undefined}
-                  onClick={() => { setDraft(withDo(draft, actionOf(entry))); }}
+                  onClick={() => { setDraft(withDo(draft, actionOf(entry), acceptsFriend(entry))); }}
                 >
                   <Slot size={30} label={nameOf(entry)} />
                   <span>{nameOf(entry)}</span>
@@ -226,6 +239,44 @@ export function ActionConfigModal({ set, index, onClose }: ActionConfigModalProp
       </div>
 
       <div className="action-config-conditions-head"><Kicker tone="muted">Condições</Kicker></div>
+      {selectedEntry !== null && acceptsFriend(selectedEntry) && (
+        <div className="action-config-target">
+          <Select
+            label="Alvo"
+            size="sm"
+            options={[
+              { value: 'self', label: 'Eu' },
+              { value: 'lowest-hp-member', label: 'Membro com menor vida' },
+              ...(party === null || party.members.filter((m) => m.characterId !== me).length === 0
+                ? []
+                : [{ value: 'member', label: 'Membro específico' }]),
+            ]}
+            value={draft.target.kind}
+            onChange={(value) => {
+              const first = party?.members.find((member) => member.characterId !== me);
+              const next: BotRuleTarget = value === 'member' && first !== undefined
+                ? { kind: 'member', characterId: first.characterId }
+                : value === 'lowest-hp-member'
+                  ? { kind: 'lowest-hp-member' }
+                  : { kind: 'self' };
+              setDraft({ ...draft, target: next });
+            }}
+          />
+          {draft.target.kind === 'member' && party !== null && (
+            <Select
+              label="Membro"
+              size="sm"
+              options={party.members
+                .filter((member) => member.characterId !== me)
+                .map((member) => ({ value: member.characterId, label: member.name }))}
+              value={draft.target.characterId}
+              onChange={(characterId) => {
+                setDraft({ ...draft, target: { kind: 'member', characterId } });
+              }}
+            />
+          )}
+        </div>
+      )}
       <ConditionList
         hint="Todas as condições precisam bater. Sem condições, dispara sempre."
         conditions={draft.when}

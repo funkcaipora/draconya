@@ -7,9 +7,12 @@
 // "Seu recorde" é uma decisão de produto permanente: XP/h e gp/h não são métricas oficiais.
 
 import { useHudSlice } from '../state/useSlice.js';
+import { sendIntent } from '../net/current.js';
 import type { HuntListing, ItemDefinition, MonsterListing } from '../state/hud.js';
 import { ItemSprite } from './ItemSprite.js';
+import { splitLootOf } from './party-loot-format.js';
 import { Button } from './ui/Button.js';
+import { Checkbox } from './ui/Checkbox.js';
 import { Kicker } from './ui/Kicker.js';
 import { Modal } from './ui/Modal.js';
 import { StatRow } from './ui/StatRow.js';
@@ -106,6 +109,8 @@ function LootRow({ item }: { item: ItemDefinition }) {
 function HuntDetailsBody() {
   const catalogue = useHudSlice((state) => state.catalogue);
   const huntId = useHudSlice((state) => state.huntId);
+  const partyView = useHudSlice((state) => state.party);
+  const me = useHudSlice((state) => state.characterId);
   const hunt = huntId === null ? null : (catalogue?.hunts.find((entry) => entry.id === huntId) ?? null);
 
   if (hunt === null) {
@@ -119,6 +124,18 @@ function HuntDetailsBody() {
   const pulls = pullSizesOf(hunt);
   const monsters = monstersOf(hunt, catalogue?.monsters ?? []);
   const lootItems = lootItemsOf(hunt, catalogue?.items ?? []);
+
+  // A configuração de loot do líder (#405, ADR 0035 D2): só existe com party e `splitLoot`
+  // ligado — sem bolsa compartilhada não há o que configurar, e o item cai direto na mochila
+  // de quem matou, como no solo. `loot` ausente é nó anterior ao #400: some a seção inteira.
+  const loot = partyView?.loot;
+  const leader = partyView !== null && partyView.leaderId === me;
+  const collect = loot?.collect ?? null;
+  const autoSell = loot?.autoSell ?? [];
+  const isCollected = (itemId: string): boolean => collect === null || collect.includes(itemId);
+  const send = (patch: { collect?: string[] | null; autoSell?: string[] }): void => {
+    sendIntent({ type: 'party-settings', ...patch });
+  };
 
   return (
     <div className="hunt-details-modal-grid">
@@ -162,6 +179,62 @@ function HuntDetailsBody() {
             <div className="hunt-details-loot">
               {lootItems.map((item) => <LootRow key={item.id} item={item} />)}
             </div>
+          </section>
+        )}
+        {partyView !== null && splitLootOf(partyView) && loot !== undefined && (
+          <section className="hunt-details-modal-info">
+            <Kicker tone="muted">Configuração de loot da party</Kicker>
+            <div className="hunt-details-loot-config">
+              {lootItems.map((item) => {
+                const collected = isCollected(item.id);
+                const sold = autoSell.includes(item.id);
+                // D2: `value: 0` (ou ausente) é ignorado pelo servidor — não oferecer o
+                // controle evita a recusa.
+                const sellable = item.value !== undefined && item.value > 0;
+                return (
+                  <div key={item.id} className="hunt-details-loot-config-row">
+                    <span>{item.name}</span>
+                    <Checkbox
+                      label="PEGAR"
+                      size={13}
+                      checked={collected}
+                      disabled={!leader}
+                      onChange={(checked) => {
+                        if (!leader) return;
+                        // `collect === null` é "coleta tudo": desmarcar UM vira a lista
+                        // explícita de todos MENOS ele, nunca uma lista vazia por engano.
+                        const next = collect === null
+                          ? lootItems.map((entry) => entry.id).filter((id) => id !== item.id)
+                          : checked
+                            ? [...collect, item.id]
+                            : collect.filter((id) => id !== item.id);
+                        send({
+                          collect: next,
+                          autoSell: checked ? autoSell : autoSell.filter((id) => id !== item.id),
+                        });
+                      }}
+                    />
+                    <Checkbox
+                      label="VENDER"
+                      size={13}
+                      checked={sold}
+                      disabled={!leader || !collected || !sellable}
+                      onChange={(checked) => {
+                        if (!leader) return;
+                        send({
+                          autoSell: checked
+                            ? [...autoSell, item.id]
+                            : autoSell.filter((id) => id !== item.id),
+                        });
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <p className="entry-meta">
+              {`Venda automática: ${String(autoSell.length)} / ${String(loot.autoSellLimit)}`}
+            </p>
           </section>
         )}
       </div>

@@ -255,12 +255,15 @@ beforeAll(async () => {
     auth, repository, tickets,
     isCharacterActive: (accountId, characterId) => directory.isActive(accountId, characterId),
     locateSession: (characterId) => directory.lookup(characterId),
+    // A lotação viva e o nó do líder do `/join` em curso (#402).
+    directory,
     settleProgress,
     listItemInstances: (characterId) => repository.listItemInstances(characterId),
     // A party (#195), montada como o `main.ts` monta.
     party: new PartyStore(redis),
     partyLimits: {
       maxMembers: content.party.maxMembers,
+      contentVersion: content.version,
       difficultiesOf: (huntId) => {
         const hunt = content.hunts.get(huntId);
         return hunt === undefined ? null : Object.keys(hunt.difficulties);
@@ -351,8 +354,11 @@ describe.runIf(ready)('critério de saída do M13 (§44.4, ADR 0027)', () => {
     inbox.send({ type: 'leave-hunt' });
     const ended = await inbox.waitForNext('session-ended');
     expect(ended.reason).toBe('manual-exit');
-    // A cota dele: a bolsa vendida no instante da saída, dividida por quatro.
-    expect(ended.aggregates.goldGained).toBeGreaterThanOrEqual(Math.floor(bagValue / 4));
+    // A cota dele: a bolsa é vendida no instante da saída, ENTRADA por entrada (#395, D4) —
+    // cada drop divide só entre quem estava presente no abate. O que importa aqui é que ele
+    // leva a parte DELE; a conservação total (Σ ledger = Σ ganho) é conferida no fechamento.
+    expect(ended.aggregates.goldGained).toBeGreaterThan(0);
+    expect(ended.aggregates.goldGained).toBeLessThanOrEqual(bagValue);
     inbox.close();
     expect((await directory.lookup(c.characterId))?.type).toBe('city');
     for (const member of [leader, b, d]) {

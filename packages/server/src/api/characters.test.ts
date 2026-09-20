@@ -78,6 +78,19 @@ class MemoryRepository implements GameRepository {
   async ownsCharacter(accountId: string, characterId: string) {
     return (await this.getCharacter(accountId, characterId)) !== null;
   }
+  async getCharacterByName(name: string) {
+    return [...this.characters.values()]
+      .find((character) => character.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+  async addFriend(): Promise<never> {
+    throw new Error('friends do not pass through this file');
+  }
+  async listFriends() {
+    return [];
+  }
+  async removeFriend() {
+    return false;
+  }
   async withOwnedCharacter<T>(
     accountId: string,
     characterId: string,

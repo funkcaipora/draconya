@@ -177,14 +177,29 @@ export function createCitySessionFactory(
 }
 
 /**
+ * O personagem de UM recém-chegado numa sessão que já existe (#402, ADR 0035 D7). Mesma costura
+ * de `createSession`: função, e não `Content`, para o host não precisar conhecer balanceamento.
+ */
+export function createLateJoiner(
+  content: Content,
+  now: () => number = () => Date.now(),
+): (characterId: string, initialCharacter: InitialCharacter) => CharacterRuntime {
+  return (characterId, initialCharacter) => characterFromTicket(content, characterId, initialCharacter, now);
+}
+
+/**
  * A hunt de uma party, com os N membros dentro (#195): o mesmo `createHuntSession` da
  * transição, com `partyOptions` fixadas e o bot de cada um — validado AQUI, com o conteúdo,
  * porque chega cru do ticket como o solo chega, e o host só valida o do personagem que entrou.
  */
 function partyHuntFor(content: Content, party: PartyTicket, now: () => number): Session {
   const accept = createBotConfigValidator(content);
-  const botConfigs: Record<string, BotConfigV2> = {};
+const botConfigs: Record<string, BotConfigV2> = {};
+  const premiumByCharacter: Record<string, boolean> = {};
   for (const member of party.members) {
+    // O Premium do personagem (ADR 0035 D3) entra no estado da party: o limite de venda é do
+    // LÍDER, mas a penalidade de morte é de quem morre. Ausente no ticket é Free.
+    premiumByCharacter[member.characterId] = member.initialCharacter.premium ?? false;
     const raw = member.initialCharacter.botConfig;
     if (raw === undefined) continue;
     const decision = accept(raw, member.initialCharacter.level);
@@ -196,7 +211,12 @@ function partyHuntFor(content: Content, party: PartyTicket, now: () => number): 
     huntId: party.huntId,
     difficulty: party.difficulty as HuntDifficultyName,
     createdAtMs: now(),
-    partyOptions: { leaderId: party.leaderId, mode: party.mode },
+    partyOptions: {
+      leaderId: party.leaderId,
+      // Coleta/venda nascem vazias — o líder configura depois de entrar, por `party-settings`.
+      settings: { shareCosts: party.shareCosts, splitLoot: party.splitLoot, collect: null, autoSell: [] },
+      premiumByCharacter,
+    },
     botConfigs,
   });
   for (const member of party.members) {
@@ -206,7 +226,7 @@ function partyHuntFor(content: Content, party: PartyTicket, now: () => number): 
 }
 
 /** O `CharacterRuntime` que um ticket descreve (FUN-12 … #154): o que o `api` leu do banco. */
-function characterFromTicket(
+export function characterFromTicket(
   content: Content, characterId: string, initialCharacter: InitialCharacter, now: () => number,
 ): CharacterRuntime {
   {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BotConfigV2, BotSlot } from '@draconya/content';
+import type { BotConfigV2, BotRuleTarget, BotSlot } from '@draconya/content';
 import {
   BOT_SLOTS_PER_SET, BOT_VOCABULARY_VERSION, botConfigV2Schema, botSlotSchema,
 } from '@draconya/content';
@@ -32,7 +32,7 @@ const hero = (health: number, maxHealth = 100, mana = 100, maxMana = 100) =>
   });
 
 const view = (over: Partial<BotView> = {}): BotView => ({
-  self: hero(100), targetCount: 0, target: null, ...over,
+  self: hero(100), targetCount: 0, target: null, partyTarget: null, ...over,
 });
 
 /** Um conjunto da barra: 24 posições, com as dadas na frente e o resto vazio. */
@@ -79,7 +79,7 @@ describe('as condições viram predicado (FUN-80, RG-006)', () => {
     ]), cooldownOf);
     const slot = bot.groups.get('attack')?.[0];
 
-    expect(slot?.when(view({ target: null }))).toBe(false);
+expect(slot?.when(view({ target: null }))).toBe(false);
     expect(slot?.when(view({ target: { health: 20, maxHealth: 100 } }))).toBe(true);
   });
 
@@ -213,5 +213,49 @@ describe('a política `follow` cai na comparação `nearest` (AB-09, ADR 0032 d.
       policy: 'follow', prioritize: [], ignore: [], posture: { kind: 'stand' },
     });
     expect(selectTarget(targeting, monsters, { x: 0, y: 0 }, 8)?.monsterId).toBe('perto');
+  });
+});
+
+describe('cura com alvo de party (§D11, #399; alvo do slot v2)', () => {
+  const targeted = (target: BotRuleTarget): BotConfigV2 => config([{
+    do: { kind: 'spell', spellId: 'cure' },
+    when: [{ kind: 'hp', op: '<=', percent: 50 }],
+    target,
+  }]);
+
+  it('alvo != self avalia o hp do CANDIDATO, e self continua lendo view.self (RF-03)', () => {
+    // O candidato a 40% satisfaz "HP <= 50%" MESMO com o lançador a 90%: é o que a regra
+    // "cure o membro abaixo de 50%" pede. Com `target: 'self'` a mesma condição reprova.
+    const candidate = hero(40, 100);
+    const wounded = compileBot(targeted({ kind: 'member', characterId: 'b' }), cooldownOf)
+      .groups.get('healing')?.[0]?.when;
+    const ownHp = compileBot(targeted({ kind: 'self' }), cooldownOf)
+      .groups.get('healing')?.[0]?.when;
+
+    expect(wounded?.(view({ self: hero(90, 100), partyTarget: candidate }))).toBe(true);
+    expect(ownHp?.(view({ self: hero(90, 100), partyTarget: candidate }))).toBe(false);
+  });
+
+  it('sem candidato a condição é FALSA, nunca um erro', () => {
+    // `partyTarget` nulo é o estado de um slot de party sem candidato resolvido — a mesma regra
+    // de `target-hp` sem alvo: não vale, e não derruba a sessão.
+    const when = compileBot(targeted({ kind: 'lowest-hp-member' }), cooldownOf)
+      .groups.get('healing')?.[0]?.when;
+    expect(when?.(view({ self: hero(10, 100), partyTarget: null }))).toBe(false);
+  });
+
+  it('o slot carrega o alvo CRU para o ruleset resolver os candidatos', () => {
+    // `bot.ts` não conhece sessão nem party: o alvo sai cru, como `exit`/`lure`, e quem resolve
+    // `session.participants` é o `hunt.ts`.
+    const slot = compileBot(targeted({ kind: 'lowest-hp-member' }), cooldownOf)
+      .groups.get('healing')?.[0];
+    expect(slot?.target).toEqual({ kind: 'lowest-hp-member' });
+    expect(slot?.act).toEqual({ kind: 'spell', spellId: 'cure' });
+  });
+
+  it('alvo self nunca lê o candidato, mesmo com `partyTarget` preenchido', () => {
+    const when = compileBot(targeted({ kind: 'self' }), cooldownOf)
+      .groups.get('healing')?.[0]?.when;
+    expect(when?.(view({ self: hero(10, 100), partyTarget: hero(90, 100) }))).toBe(true);
   });
 });

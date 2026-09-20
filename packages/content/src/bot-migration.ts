@@ -61,6 +61,7 @@ export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
         do: action,
         when: [rule.when],       // a condição única da v1 vira a lista E de um
         auto: true,              // a chave automática nasce ligada (o manual é o extra)
+        target: rule.target,     // alvo de party preservado (§26-30, ADR 0035 d.10)
       }));
     }
   }
@@ -111,6 +112,7 @@ export function migrateBotConfigV1(raw: unknown): BotConfigV2 {
     stance: 'balanced',
     targeting: v1.targeting,   // intactos
     exit: v1.exit,
+    follow: v1.follow,         // #406: quem seguir, intacto
     ...(v1.lure === undefined ? {} : { lure: v1.lure }),
   });
 }

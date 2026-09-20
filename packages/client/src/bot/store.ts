@@ -39,6 +39,12 @@ export interface BotDraft {
   readonly targeting: BotTargeting;
   readonly exit: BotConfigV2['exit'];
   /**
+   * Quem seguir na party (#406, ADR 0035 d.9). Campo SEPARADO da postura —
+   * `targeting.posture.follow` continua "persegue o monstro". `undefined` só antes do primeiro
+   * `loadConfig`; o schema tem default `{ kind: 'none' }`, então `toConfig` sempre manda algo.
+   */
+  readonly follow?: BotConfigV2['follow'];
+  /**
    * O lure dinâmico (SV-09, §13.8): histerese min/max. `undefined` até o jogador tocar — é
    * assim que o bot básico continua sem lure algum.
    */
@@ -74,6 +80,7 @@ export function emptyDraft(): BotDraft {
       ignore: [],
       posture: { kind: 'stand' },
     },
+follow: { kind: 'none' },
     exit: [],
     lure: undefined,
   };
@@ -100,6 +107,7 @@ export function toConfig(draft: BotDraft): BotConfigV2 {
     stance: draft.stance,
     targeting: draft.targeting,
     exit: draft.exit,
+    follow: draft.follow ?? { kind: 'none' },
     ...(draft.lure === undefined ? {} : { lure: draft.lure }),
   };
 }
@@ -256,9 +264,16 @@ export function draftFrom(config: BotConfigV2): BotDraft {
     stance: config.stance,
     automations: config.automations,
     targeting: config.targeting,
+    follow: config.follow,
     exit: config.exit,
     ...(config.lure === undefined ? {} : { lure: config.lure }),
   };
+}
+
+/** Troca quem o bot segue (#406, ADR 0035 d.9) e salva com debounce — mesmo padrão de `setPosture`. */
+export function setFollow(follow: BotConfigV2['follow']): void {
+  edit((draft) => ({ ...draft, follow }));
+  scheduleSave();
 }
 
 /** Edita o lure dinâmico (SV-09, §13.8) e salva com debounce. `undefined` volta o bot a não usar lure. */

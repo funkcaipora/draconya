@@ -39,7 +39,7 @@ import { conditionFromSpec, sameTick, specTickIntervalMs, tickOf } from '../cond
 import type { NormalizedTick } from '../conditions.js';
 import { Fields } from '../fields.js';
 import type { TileFieldState } from '../fields.js';
-import type { CreatureHealed, SpellCastTarget } from '../combat-events.js';
+import type { CreatureHealed, PartyBagChanged, SpellCastTarget } from '../combat-events.js';
 import { resolveDamage } from '../combat/damage.js';
 import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
@@ -51,11 +51,14 @@ import type { BestiaryConfig } from '../bestiary.js';
 import { Spawner } from '../hunt/spawner.js';
 import type { SpawnerState } from '../hunt/spawner.js';
 import { rollLoot } from '../loot.js';
-import { settleBag, shareCostsOf, splitLootOf, xpShare } from '../party.js';
-import type { PartyBagState } from '../party.js';
+import {
+  autoSellLimit, bagValue, reserveProportionally, settleEntries, shareCostsOf, splitEqually,
+  splitLootOf, uniqueVocations, xpShare,
+} from '../party.js';
+import type { MemberCapacity, PartyBagState } from '../party.js';
 import type { LootItem } from '../loot.js';
-import type { CarriedItem, ContainerRules, EquipmentObserver } from '../inventory.js';
-import { compileBot } from '../bot.js';
+import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
+import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
 import { compileAutomations } from '../automation.js';
 import type { AutomationActuator, CompiledAutomations } from '../automation.js';
@@ -110,6 +113,15 @@ const SPAWN = 'spawn';
 const CORPSE = 'corpse';
 const EXIT_RULES = 'exit-rules';
 const EXIT_COUNTDOWN = 'exit-countdown';
+/**
+ * O vencimento da votação de encerrar a hunt para todos (#432, ADR 0032 d.14). É um evento da
+ * fila no instante exato em que vence — nunca um contador por tick (invariante 2). O subject é
+ * fixo porque só existe uma votação por vez: re-propor cancela o vencimento anterior.
+ */
+const END_VOTE_EXPIRE = 'end-vote-expire';
+const END_VOTE_SUBJECT = 'end-vote';
+/** A janela de aprovação, em tempo LÓGICO (ADR 0032 d.14). Conteúdo pode mudar sem ADR. */
+export const END_VOTE_WINDOW_MS = 60_000;
 
 /**
  * O vencimento de um item equipado por TEMPO (ADR 0032 d.8): o anel que gasta por duração. É
@@ -293,12 +305,17 @@ function runnerState(runner: Runner): RunnerState {
       : { chosenTargetPinned: true }),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
+    ...(runner.followInterrupted ? { followInterrupted: true } : {}),
+    ...(runner.followTargetId === undefined ? {} : { followTargetId: runner.followTargetId }),
+    ...(runner.followReason === undefined ? {} : { followReason: runner.followReason }),
   };
 }
 
 const NO_TILES: readonly WorldPoint[] = [];
 const NO_MEMBERS: readonly CharacterRuntime[] = [];
 const NO_SPELL_TARGETS: readonly SpellCastTarget[] = [];
+/** Nenhum candidato de party para a regra (alvo inválido, fora de alcance ou efeito self-only). */
+const NO_CANDIDATES: readonly CharacterRuntime[] = [];
 
 export type HuntDifficultyName = keyof Hunt['difficulties'];
 
@@ -406,6 +423,17 @@ export function compileExitRules(
   });
 }
 
+/**
+ * A configuração tem algum slot do conjunto ativo com alvo != self? É a pergunta que
+ * `#armHealersOf` faz por participante (só cura/mana aceitam amigo; `validateBotConfigV2` já
+ * recusou qualquer outro alvo, e o parse preenche `self` quando ausente).
+ */
+function hasNonSelfHealRule(config: BotConfigV2): boolean {
+  const active = config.sets[config.activeSet];
+  if (active === undefined) return false;
+  return active.slots.some((slot) => slot !== null && (slot.target?.kind ?? 'self') !== 'self');
+}
+
 export interface HuntRulesetOptions {
   readonly hunt: Hunt;
   readonly difficulty: HuntDifficultyName;
@@ -475,7 +503,7 @@ export interface HuntRulesetOptions {
    */
   readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191, ADR 0027). Ausente é solo. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Cooldown de FALLBACK de um grupo sem livro próprio (§13.5: 1 s). Parâmetro, não constante. */
   readonly botCooldownMs?: number;
   /**
@@ -506,13 +534,177 @@ type ConditionTarget = CharacterRuntime | MonsterRuntime;
 /** Como a party divide loot e custo (ADR 0027 decisão 5). */
 export type PartyMode = 'split' | 'shared';
 
-/** A party desta instância (#191). Ausente é solo. FIXADA na sessão e no snapshot. */
+/**
+ * Os dois eixos do líder, mais a config de loot (§4, §5, ADR 0035 decisão 1).
+ *
+ * Vive ao lado dos campos achatados de `PartyOptions` para quem preferir o bloco — a migração
+ * de `{ settings }` preenche os mesmos eixos. `collect`/`autoSell` só são lidos por `partySummary`
+ * nesta issue; o filtro e a venda de fato são do #395.
+ */
+export interface PartySettings {
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  /** `null` = coletar tudo. Filtro de fato é do #395. */
+  readonly collect: readonly string[] | null;
+  /** Ordem configurada; só os `limit` primeiros valem (aplicação de fato é do #395). */
+  readonly autoSell: readonly string[];
+}
+
+/**
+ * A party desta instância (#191). Ausente é solo. MUTÁVEL desde o #394 — antes era fixada na
+ * sessão; o líder muda por `configureParty`.
+ *
+ * `mode` continua como espelho LEGADO (o `host` o lê até o #400): nasce da combinação dos dois
+ * eixos e não é reescrito por `configureParty` — quem manda é `shareCosts`/`splitLoot`.
+ */
 export interface PartyOptions {
+  leaderId: string;
+  readonly mode: PartyMode;
+  shareCosts: boolean;
+  splitLoot: boolean;
+  collect: readonly string[] | null;
+  autoSell: readonly string[];
+  premiumByCharacter: Record<string, boolean>;
+}
+
+/**
+ * O que `HuntRulesetOptions`/`HuntSessionOptions`/`HuntRulesetState.partyOptions` aceitam: o
+ * formato novo (`PartyOptions`, achatado), o bloco `{ settings }` do desenho, OU o legado que
+ * `packages/server` ainda constrói com `mode` até o #400 modernizar o ticket.
+ */
+export type PartyOptionsInput =
+  | PartyOptions
+  | {
+      readonly leaderId: string;
+      readonly settings: PartySettings;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    }
+  | {
+      readonly leaderId: string;
+      readonly mode: PartyMode;
+      readonly shareCosts?: boolean;
+      readonly splitLoot?: boolean;
+      readonly premiumByCharacter?: Readonly<Record<string, boolean>>;
+    };
+
+export type ConfigurePartyResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' }
+  | { readonly ok: false; readonly reason: 'unknown-item'; readonly itemId: string }
+  | { readonly ok: false; readonly reason: 'unsellable-item'; readonly itemId: string };
+
+export interface PartySettingsPatch {
+  readonly shareCosts?: boolean;
+  readonly splitLoot?: boolean;
+  readonly collect?: readonly string[] | null;
+  readonly autoSell?: readonly string[];
+}
+
+/**
+ * A recusa da votação de encerrar (#432). `not-leader` cobre solo e quem não lidera — como
+ * `configureParty`, uma sessão sem party não tem líder para propor. `no-proposal` é aprovar ou
+ * recusar sem votação aberta; `not-member` é um id que não está presente.
+ */
+export type PartyEndVoteResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'not-leader' | 'not-member' | 'no-proposal' };
+
+/** O bloco PARTY dos Detalhes da Caçada (§32, ADR 0035 decisão 11). */
+export interface PartySummary {
   readonly leaderId: string;
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
+  readonly members: readonly string[];
+  readonly uniqueVocations: number;
+  readonly xpPoolPercent: number;
+  readonly bagValue: number;
+  readonly bagWeight: number;
+  readonly autoSell: { readonly configured: number; readonly limit: number };
+}
+
+/** Migra o formato legado (`mode` + eixos opcionais) para os campos do `PartyOptions`. */
+function partySettingsFromLegacy(input: {
   readonly mode: PartyMode;
   readonly shareCosts?: boolean;
   readonly splitLoot?: boolean;
+}): PartySettings {
+  return {
+    shareCosts: shareCostsOf(input),
+    splitLoot: splitLootOf(input),
+    collect: null,
+    autoSell: [],
+  };
 }
+
+/**
+ * Uma função só migra as duas entradas (construção E snapshot): o formato novo achatado, o
+ * bloco `{ settings }` ou o legado `{ mode }`. Sem bump de `SNAPSHOT_FORMAT_VERSION`.
+ */
+function normalizePartyOptions(input: PartyOptionsInput | undefined): PartyOptions | undefined {
+  if (input === undefined) return undefined;
+  const premiumByCharacter = { ...(input.premiumByCharacter ?? {}) };
+  const settings = (input as { readonly settings?: PartySettings }).settings;
+  if (settings !== undefined) {
+    return {
+      leaderId: input.leaderId,
+      mode: settings.shareCosts && settings.splitLoot ? 'shared' : 'split',
+      shareCosts: settings.shareCosts,
+      splitLoot: settings.splitLoot,
+      collect: settings.collect,
+      autoSell: [...settings.autoSell],
+      premiumByCharacter,
+    };
+  }
+  const flat = input as Partial<PartyOptions>;
+  if (flat.collect !== undefined || flat.autoSell !== undefined) {
+    // Já é o `PartyOptions` achatado — cópia, para o snapshot não compartilhar referência.
+    return {
+      leaderId: input.leaderId,
+      mode: (input as { readonly mode: PartyMode }).mode,
+      shareCosts: flat.shareCosts === true,
+      splitLoot: flat.splitLoot === true,
+      collect: flat.collect ?? null,
+      autoSell: [...(flat.autoSell ?? [])],
+      premiumByCharacter,
+    };
+  }
+  const legacy = input as {
+    readonly leaderId: string;
+    readonly mode: PartyMode;
+    readonly shareCosts?: boolean;
+    readonly splitLoot?: boolean;
+  };
+  const migrated = partySettingsFromLegacy(legacy);
+  return {
+    leaderId: legacy.leaderId,
+    mode: legacy.mode,
+    shareCosts: migrated.shareCosts,
+    splitLoot: migrated.splitLoot,
+    collect: migrated.collect,
+    autoSell: [...migrated.autoSell],
+    premiumByCharacter,
+  };
+}
+
+/**
+ * Nenhuma venda automática efetiva. Fica fora das opções porque o conjunto é derivado do
+ * líder a cada abate; criá-lo vazio é o que evita alocar um `Set` por item de quem não vende.
+ */
+const EMPTY_AUTO_SELL: ReadonlySet<string> = new Set();
+
+/**
+ * O formato ANTIGO da bolsa no snapshot (`gold: number`, `items: CarriedItem[]`), lido só
+ * pelo `restore` para migrar uma sessão em voo para entradas com `eligible: []` — o sentinel
+ * de "presentes no settlement" (D5, sem bump de `SNAPSHOT_FORMAT_VERSION`).
+ */
+interface LegacyPartyBagState {
+  readonly gold: number;
+  readonly items: readonly CarriedItem[];
+  readonly capacity: number;
+}
+
+const isLegacyBag = (bag: unknown): bag is LegacyPartyBagState =>
+  typeof (bag as LegacyPartyBagState).gold === 'number';
 
 export interface HuntRulesetState {
   readonly huntId: string;
@@ -560,10 +752,16 @@ export interface HuntRulesetState {
    * lidos quando esta chave falta: é o snapshot anterior, de um dono só, sem bump.
    */
   readonly runners?: Readonly<Record<string, RunnerState>>;
-  /** A party, fixada (#191). Ausente é solo — inclusive todo snapshot anterior ao M13. */
-  readonly partyOptions?: PartyOptions;
-  /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.mode === 'shared'`. */
+  /** A party (#191): achatada no formato novo, ou o legado `{mode}` de um snapshot anterior. */
+  readonly partyOptions?: PartyOptionsInput;
+  /** A bolsa do modo compartilhado (#192). Só existe com `partyOptions.splitLoot`. */
   readonly partyBag?: PartyBagState;
+  /**
+   * A votação de encerrar em curso (#432). Opcional: ausente é nenhuma votação, o estado de um
+   * snapshot anterior. O vencimento já vem na fila serializada; isto preserva quem já aprovou
+   * para uma sessão retomada no meio da janela não perder a contagem.
+   */
+  readonly endVote?: { readonly proposedAtMs: number; readonly approved: readonly string[] };
   /**
    * Os campos de tile ativos (CMB-07). Opcional: ausente é nenhum campo, que é o estado de um
    * snapshot anterior a esta issue. Os eventos de tique e vencimento já vêm na fila serializada.
@@ -659,6 +857,30 @@ interface Runner {
   warnedExhausted: boolean;
   warnedFullBackpack: boolean;
   warnedNoGold: boolean;
+  /** Já reportamos `active:false` para este follow e ainda não retomou (§D10, "uma vez"). */
+  followInterrupted: boolean;
+  /**
+   * O alvo CONFIGURADO do follow, guardado no último `#reportFollow` (#401). Existe para o
+   * `followStateOf` devolver a verdade ATUAL a quem reconecta: o evento `follow-state` só é
+   * emitido na TRANSIÇÃO, e `kind: 'leader'` resolve o líder a cada vencimento — guardar o id
+   * aqui é o que dispensa uma segunda resolução de liderança no hospedeiro.
+   */
+  followTargetId: string | undefined;
+  /** Por que o follow está interrompido (#401): o `reason` do último `follow-state` inativo. */
+  followReason: 'dead' | 'left' | 'unreachable' | undefined;
+}
+
+/**
+ * A reserva morde a mochila sem tocar em `inventory.ts` (§11, #396): um `Wearer` com a
+ * capacidade PESSOAL já descontada do que a party reservou. Objeto NOVO — nunca escreve
+ * `character.capacity` (invariante 9), e `Inventory.add` continua vendo o dono real depois.
+ */
+function withReservedCapacity(character: CharacterRuntime, reserved: number): Wearer {
+  return {
+    level: character.level,
+    vocationId: character.vocationId,
+    capacity: Math.max(0, character.capacity - reserved),
+  };
 }
 
 /** O `Runner` serializado. Ver `HuntRulesetState.runners`. */
@@ -692,6 +914,15 @@ export interface RunnerState {
   readonly chosenTargetPinned?: boolean;
   readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
+  /**
+   * Já reportamos `active:false` para o follow deste participante (#398). Opcional e OMITIDO
+   * quando `false`: um snapshot de hunt sem follow configurado não muda de tamanho.
+   */
+  readonly followInterrupted?: boolean;
+  /** O alvo do follow (#401). Opcional: snapshot anterior a esta issue não o tem. */
+  readonly followTargetId?: string;
+  /** A razão da interrupção do follow (#401). Opcional pelo mesmo motivo. */
+  readonly followReason?: 'dead' | 'left' | 'unreachable';
 }
 
 export class HuntRuleset implements Ruleset {
@@ -703,16 +934,22 @@ export class HuntRuleset implements Ruleset {
   /** A party (#191): modo e líder. `undefined` é solo. Vem das opções ou do snapshot. */
   #party: PartyOptions | undefined;
   /**
-   * A bolsa do modo compartilhado (#192, ADR 0027 decisão 5): todo loot cai aqui, com
-   * capacidade igual à soma das capacidades dos presentes; o excedente vai para a caixa de
-   * loot do líder. `#bagWeight` é derivado e recalculado na retomada; `#bagSeq` dá o id das
-   * instâncias (`sessionId:bag:n`), que precisam ser únicas na sessão.
+   * A bolsa do modo compartilhado (#192, ADR 0027 decisão 5; #396): todo loot cai aqui, com
+   * capacidade igual à soma das capacidades DISPONÍVEIS dos presentes; em OVERWEIGHT o item com
+   * peso que não cabe fica no cadáver — não vai para a caixa do líder. `#bagWeight` é derivado e
+   * recalculado na retomada; `#bagSeq` dá o id das instâncias (`sessionId:bag:n`), que precisam
+   * ser únicas na sessão.
    */
   #bag: PartyBagState | null = null;
   #bagWeight = 0;
   #bagSeq = 0;
   /** Alguém saiu e a cascata do §13.9 ainda não rodou (#193). Ver `onLeave`. */
   #lossPending = false;
+  /**
+   * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14), ou `null` sem votação.
+   * `approved` guarda quem já aprovou, na ordem; o vencimento é o evento `END_VOTE_EXPIRE`.
+   */
+  #endVote: { proposedAtMs: number; readonly approved: Set<string> } | null = null;
   /**
    * O que o `restore` leu e ainda não pôde materializar: os participantes só existem depois
    * dele, e `onResume` é quem os casa com o estado. `legacy` é o snapshot de um dono só.
@@ -753,7 +990,7 @@ export class HuntRuleset implements Ruleset {
 
   /** A view do bot, reaproveitada (FUN-80): montar uma por avaliação é alocar por evento. */
   readonly #botView: BotView = {
-    self: null as unknown as CharacterRuntime, targetCount: 0, target: null,
+    self: null as unknown as CharacterRuntime, targetCount: 0, target: null, partyTarget: null,
   };
 
   /**
@@ -839,8 +1076,8 @@ export class HuntRuleset implements Ruleset {
       );
     }
     this.#options = options;
-    this.#party = options.partyOptions;
-    if (this.#party !== undefined && splitLootOf(this.#party)) this.#bag = { gold: 0, items: [], capacity: 0 };
+    this.#party = normalizePartyOptions(options.partyOptions);
+    if (this.#party?.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
     this.#difficulty = difficulty;
     this.#injectedExitRules = options.exitRules ?? [];
     this.#skillsByGain = {
@@ -1045,9 +1282,219 @@ export class HuntRuleset implements Ruleset {
    * e em solo (`#party` ausente) — D8: sistema/dado inexistente é omitido, nunca um zero fabricado.
    */
   partySpendingPreview(session: Session): ReadonlyMap<string, number> | undefined {
-    if (this.#party === undefined || !splitLootOf(this.#party) || this.#bag === null) return undefined;
+    if (this.#party === undefined || !this.#party.splitLoot || this.#bag === null) return undefined;
     const presentIds = session.participants.map((p) => p.id);
-    return settleBag(this.#bag, presentIds, this.#options.items).shares;
+    return settleEntries(this.#bag, presentIds, this.#options.items).shares;
+  }
+
+  /**
+   * Muda a configuração da party (D1, D2). Só o líder pode; a validação de catálogo acontece
+   * ANTES de qualquer mutação — ou tudo se aplica, ou nada (como `configureBot`, mas com recusa
+   * tipada porque aqui a recusa é visível ao jogador, não só um no-op silencioso).
+   *
+   * Chamado pelo host ENTRE avanços, a partir do opcode C2S `party-settings` (#400) — nunca
+   * dentro de `advanceBy` (invariante 2). O cliente manda intenção crua; quem valida é aqui.
+   */
+  configureParty(
+    session: Session, patch: PartySettingsPatch, byCharacterId: string,
+  ): ConfigurePartyResult {
+    const party = this.#party;
+    if (party === undefined || byCharacterId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    if (patch.collect !== undefined && patch.collect !== null) {
+      for (const itemId of patch.collect) {
+        if (!this.#options.items.has(itemId)) return { ok: false, reason: 'unknown-item', itemId };
+      }
+    }
+    if (patch.autoSell !== undefined) {
+      for (const itemId of patch.autoSell) {
+        const item = this.#options.items.get(itemId);
+        if (item === undefined) return { ok: false, reason: 'unknown-item', itemId };
+        if (item.value === 0) return { ok: false, reason: 'unsellable-item', itemId };
+      }
+    }
+    const next: PartySettings = {
+      shareCosts: patch.shareCosts ?? party.shareCosts,
+      splitLoot: patch.splitLoot ?? party.splitLoot,
+      collect: patch.collect === undefined ? party.collect : patch.collect,
+      autoSell: patch.autoSell ?? party.autoSell,
+    };
+    // Ligar: nasce vazia, igual ao construtor. Desligar: liquida com quem está presente AGORA
+    // vendendo entrada por entrada (#395) e descarta. Nada se perde: vira gold ou vai para o
+    // líder (`value: 0`, `unsold` de `settleEntries`).
+    if (next.splitLoot && !party.splitLoot) this.#bag = { gold: [], items: [], capacity: 0, overweight: false };
+    if (!next.splitLoot && party.splitLoot && this.#bag !== null) {
+      this.#settle(session, session.participants, 'toggle');
+      this.#bag = null;
+    }
+    party.shareCosts = next.shareCosts;
+    party.splitLoot = next.splitLoot;
+    party.collect = next.collect;
+    party.autoSell = next.autoSell;
+    // `configureParty` é um dos gatilhos do §13: ligar/desligar `splitLoot` muda o conjunto de
+    // reservas, e mudar a lista de coleta/venda muda o que entra — rebalanceia e emite.
+    this.#rebalanceBag(session);
+    return { ok: true };
+  }
+
+  /**
+   * O líder propõe encerrar a hunt para TODOS (#432, ADR 0032 d.14). Não encerra nada: abre uma
+   * votação com a própria aprovação do líder (quem propõe, aprova), agenda o vencimento de 60 s
+   * na fila e emite `party-end-vote`. Só o líder propõe; solo (sem party) não tem líder, como
+   * em `configureParty`.
+   *
+   * Re-propor REINICIA a janela: cancela o vencimento anterior e esvazia as aprovações, exceto a
+   * do líder. É a leitura literal de "o líder propõe" — quem propõe de novo está propondo de
+   * novo, não confirmando a proposta velha.
+   */
+  proposeEnd(session: Session, byLeaderId: string): PartyEndVoteResult {
+    const party = this.#party;
+    if (party === undefined || byLeaderId !== party.leaderId) {
+      return { ok: false, reason: 'not-leader' };
+    }
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = { proposedAtMs: session.nowMs, approved: new Set([byLeaderId]) };
+    session.scheduleIn(END_VOTE_EXPIRE, END_VOTE_WINDOW_MS, {
+      priority: EventPriority.Housekeeping, subject: END_VOTE_SUBJECT,
+    });
+    this.#emitEndVote(session);
+    // Uma party que virou um só (todos os outros saíram): a proposta do líder já é o sim de
+    // TODOS os presentes, e a sessão encerra na hora.
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Um membro presente aprova a proposta em curso (#432). Quando o último presente aprova, a
+   * sessão encerra com `party-vote` — o settlement e os extratos saem pelo caminho de sempre
+   * (`onEnd` + `Session.end`). Sem proposta aberta é `no-proposal`; id ausente é `not-member`.
+   */
+  approveEnd(session: Session, characterId: string): PartyEndVoteResult {
+    const vote = this.#endVote;
+    if (vote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === characterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    vote.approved.add(characterId);
+    this.#emitEndVote(session);
+    this.#settleEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * Recusa a proposta em curso (#432): qualquer membro presente (ou o próprio líder) derruba a
+   * votação. Como uma recusa impede o "sim de todos", a proposta morre agora e a sessão segue
+   * exatamente como estava — o mesmo desfecho de expirar, sem esperar a janela.
+   */
+  cancelEnd(session: Session, byCharacterId: string): PartyEndVoteResult {
+    if (this.#endVote === null) return { ok: false, reason: 'no-proposal' };
+    if (!session.participants.some((p) => p.id === byCharacterId)) {
+      return { ok: false, reason: 'not-member' };
+    }
+    this.#clearEndVote(session);
+    return { ok: true };
+  }
+
+  /**
+   * O estado da votação para quem reconecta (#432). `undefined` sem party — não há votação
+   * fora de party. O getter é PURO (sem `emit`), como `partySummary`: o host o chama no attach.
+   */
+  endVoteState(): { active: boolean; proposedAtMs: number; approved: readonly string[] } | undefined {
+    if (this.#party === undefined) return undefined;
+    const vote = this.#endVote;
+    return {
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    };
+  }
+
+  #emitEndVote(session: Session): void {
+    if (this.#party === undefined) return;
+    const vote = this.#endVote;
+    session.emit({
+      kind: 'party-end-vote',
+      active: vote !== null,
+      proposedAtMs: vote?.proposedAtMs ?? 0,
+      approved: vote === null ? [] : [...vote.approved],
+    });
+  }
+
+  /** Derruba a votação e avisa; o vencimento agendado morre com ela. */
+  #clearEndVote(session: Session): void {
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
+   * Encerra se TODOS os presentes já aprovaram. É o único ponto que decide "o sim de todos": a
+   * aprovação, a entrada e a saída passam por aqui, e a comparação é contra os presentes AGORA —
+   * quem saiu deixa de contar (ver `onLeave`).
+   */
+  #settleEndVote(session: Session): void {
+    const vote = this.#endVote;
+    if (vote === null) return;
+    if (session.participants.some((p) => !vote.approved.has(p.id))) return;
+    session.cancelEvent(END_VOTE_EXPIRE, END_VOTE_SUBJECT);
+    this.#endVote = null;
+    this.#emitEndVote(session);
+    session.end('party-vote');
+  }
+
+  #onEndVoteExpire(session: Session): void {
+    // Sem votação é um vencimento órfão (re-propor cancela o anterior): ignorar é a degradação
+    // certa, e é o que mantém a fila de uma sessão retomada inofensiva.
+    if (this.#endVote === null) return;
+    this.#endVote = null;
+    this.#emitEndVote(session);
+  }
+
+  /**
+   * O premium de quem entrou DEPOIS da construção da sessão (#397). `#394` grava
+   * `premiumByCharacter` na criação; isto é o único jeito de escrevê-lo para um joiner — sem
+   * checagem de líder, porque premium é fato sobre o PRÓPRIO personagem, não configuração da
+   * party. Ausência de party é no-op: solo não tem `premiumByCharacter`.
+   */
+  setMemberPremium(session: Session, characterId: string, premium: boolean): void {
+    if (this.#party === undefined) return;
+    this.#party = {
+      ...this.#party,
+      premiumByCharacter: { ...this.#party.premiumByCharacter, [characterId]: premium },
+    };
+  }
+
+  /**
+   * O bloco PARTY dos Detalhes da Caçada (§32, ADR 0035 decisão 11). Getter PURO, sem `emit()`:
+   * o host o chama por ciclo, como `partySpendingPreview` (DT-03). `undefined` fora de party.
+   *
+   * `autoSell.limit` é o do PERSONAGEM líder (D3): o conteúdo manda os números, a sessão só lê.
+   * `autoSell.configured` é quantos ids o líder guardou — a aplicação de fato é do #395.
+   */
+  partySummary(session: Session): PartySummary | undefined {
+    const party = this.#party;
+    if (party === undefined) return undefined;
+    const present = session.participants.map((p) => ({ id: p.id, vocationId: this.#vocationOf(p)?.id ?? null }));
+    const unique = uniqueVocations(present);
+    const xpPoolPercent = this.#options.party.xpPoolPercentByUniqueVocations[String(unique)] ?? 100;
+    const value = this.#bag === null ? 0 : bagValue(this.#bag, this.#options.items);
+    // O conteúdo sempre preenche (`partySchema` transforma com `{ free: 5, premium: 20 }`); o
+    // tipo é opcional por causa das fixtures antigas de `RawContent`.
+    const limit = autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
+    return {
+      leaderId: party.leaderId,
+      shareCosts: party.shareCosts,
+      splitLoot: party.splitLoot,
+      members: session.participants.map((p) => p.id),
+      uniqueVocations: unique,
+      xpPoolPercent,
+      bagValue: value,
+      bagWeight: this.#bagWeight,
+      autoSell: { configured: party.autoSell.length, limit },
+    };
   }
 
   /** O índice na rota do PRIMEIRO participante (#203) — o solo de sempre; `-1` sem ninguém. */
@@ -1073,6 +1520,14 @@ export class HuntRuleset implements Ruleset {
   }
 
   onEnter(session: Session, character: CharacterRuntime): void {
+    // Recusa o (maxMembers + 1)-ésimo (§22, #397) ANTES de qualquer efeito colateral — criar o
+    // runner, resetar a ocupação do mundo — para que a reversão em `Session.enter` não precise
+    // desfazer nada além do próprio push. `character` já está em `session.participants`
+    // (empurrado por `Session.enter` antes de chamar `onEnter`): por isso o teste é `>`, não
+    // `>=`, contra o limite do CONTEÚDO da party (#392), não um valor fixo da issue.
+    if (this.#party !== undefined && session.participants.length > this.#options.party.maxMembers) {
+      throw new PartyFullError(this.#options.hunt.id, this.#options.party.maxMembers);
+    }
     // Um `Runner` por participante (#203): o caminhante, o bot e o resto do que era campo da
     // classe quando a hunt hospedava um só. O bot é o DELE — por id, ou o da opção solo para
     // o primeiro a entrar.
@@ -1153,6 +1608,15 @@ export class HuntRuleset implements Ruleset {
     this.#armBot(session, character.id);
     // As automações (AB-08) seguem a mesma regra: só quem habilitou alguma entra na fila.
     this.#armAutomations(session, character.id);
+    // Só depois de tudo pronto (runner armado, posição válida): quem já está OLHANDO a sessão
+    // precisa saber que a lotação mudou, e a bolsa precisa recalcular reserva por membro — um
+    // join em curso muda `ΣB` (#396) do mesmo jeito que uma saída muda. O aviso é incondicional
+    // em party (#397, DT-05): numa hunt tranquila o próximo evento de party pode nunca chegar
+    // antes do fim, e os outros presentes precisam ver o novo membro agora.
+    if (this.#party !== undefined) this.#emitPartyState(session);
+    // `onEnter` é gatilho do §13: quem entra muda a capacidade disponível (e a reserva) dos
+    // outros. Depois de tudo montado, para o participante novo já contar.
+    this.#rebalanceBag(session);
   }
 
   /**
@@ -1167,6 +1631,10 @@ export class HuntRuleset implements Ruleset {
     // guarda coordenada, não dono — é a armadilha da FUN-72, registrada no `onLeave` da Cidade.
     this.#occupancyStale = true;
     this.#runners.delete(character.id);
+    // Quem seguia `character` para de seguir AGORA (§D10, #398). É AQUI — e não de forma lazy
+    // no próximo `#holdFollow` — porque depois do `splice` de `Session.leave` morte e saída
+    // manual ficam indistinguíveis por presença, e `character.alive` só é confiável antes dele.
+    this.#interruptFollowersOf(session, character);
     // O observer sai com ele: a Cidade não simula, e uma closure apontando para a sessão que
     // ele deixou vazaria. A carga/duração dele não o segue (fora do escopo, §12).
     character.inventory.setEquipmentObserver(null);
@@ -1176,7 +1644,11 @@ export class HuntRuleset implements Ruleset {
     // do que caiu enquanto estava — `Session.leave` emite o extrato dele depois disto, e é o
     // que põe o gold do settlement nele. A capacidade encolhe sem descartar nada: acima do
     // teto a bolsa só para de aceitar, até o próximo settlement zerar.
-    if (this.#bag !== null) this.#settle(session, [...session.participants, character]);
+    if (this.#bag !== null) this.#settle(session, [...session.participants, character], 'leave');
+    // A votação de encerrar é dos PRESENTES (#432): quem sai deixa de contar. O vencimento
+    // continua correndo; se quem ficou já tinha aprovado todo, `#flushLoss` encerra — depois do
+    // extrato de quem saiu, pela mesma ordem que a cascata respeita.
+    if (this.#endVote !== null) this.#endVote.approved.delete(character.id);
     // A cascata do §13.9 NÃO roda aqui: `Session.leave` ainda vai emitir o extrato de quem
     // está saindo, e uma cascata dentro do `onLeave` emitiria os extratos dos outros ANTES
     // do dele — `seq` fora de ordem e o `member-left` do primeiro depois dos demais. Fica
@@ -1186,8 +1658,10 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * A cascata pendente do §13.9 e a liderança que passa (#193): `#leader` já cai para o mais
-   * antigo presente; o que muda é avisar. Sem ninguém, nada a anunciar — a sessão encerra.
+   * A cascata pendente do §13.9 e a liderança por TEMPO de party (#193, D9): `participants[0]`
+   * já é o mais antigo, e `leaderId` passa a ser reescrito quando o líder sai — não só lido com
+   * fallback. A troca entra no extrato (`leader-changed`) e o `party-state` avisa.
+   * Sem ninguém, nada a anunciar — a sessão encerra.
    */
   #flushLoss(session: Session, reason: 'death' | 'exit-rule' | 'manual-exit'): void {
     if (!this.#lossPending) return;
@@ -1198,7 +1672,18 @@ export class HuntRuleset implements Ruleset {
       if (session.ended === null) session.end(cascaded > 0 ? 'exit-rule' : reason);
       return;
     }
+    const party = this.#party;
+    if (party !== undefined && !session.participants.some((p) => p.id === party.leaderId)) {
+      const next = session.participants[0];
+      if (next !== undefined) {
+        party.leaderId = next.id;
+        session.record('leader-changed', next.id);
+      }
+    }
     this.#emitPartyState(session);
+    // A saída pode ter completado o "sim de todos" (#432): quem ficou e já tinha aprovado
+    // encerra agora, depois do extrato de quem saiu.
+    this.#settleEndVote(session);
   }
 
   #emitPartyState(session: Session): void {
@@ -1243,6 +1728,9 @@ export class HuntRuleset implements Ruleset {
       warnedExhausted: state?.warnedExhausted ?? false,
       warnedFullBackpack: state?.warnedFullBackpack ?? false,
       warnedNoGold: state?.warnedNoGold ?? false,
+      followInterrupted: state?.followInterrupted ?? false,
+      followTargetId: state?.followTargetId,
+      followReason: state?.followReason,
     };
     // O atuador fecha sobre o PRÓPRIO runner (o `ringReplaced` das automações), então só pode
     // ser montado depois que o objeto existe — e é a razão de ele não entrar no literal.
@@ -1293,6 +1781,7 @@ export class HuntRuleset implements Ruleset {
       case CORPSE: return this.#onCorpseDecay(session, event.subject);
       case EXIT_RULES: return this.#onExitRules(session);
       case EXIT_COUNTDOWN: return this.#onExitCountdown(session, event.subject);
+      case END_VOTE_EXPIRE: return this.#onEndVoteExpire(session);
       case CONDITION_TICK: return this.#onConditionTick(session, event.subject);
       case CONDITION_EXPIRE: return this.#onConditionExpire(session, event.subject);
       case FIELD_TICK: return this.#onFieldTick(session, event.subject);
@@ -1392,10 +1881,12 @@ export class HuntRuleset implements Ruleset {
     this.#cancelConditions(session, character);
 
     // A penalidade sai AQUI, na morte, e não no encerramento: quem morre paga, e uma hunt que
-    // termina por saída manual ou por regra não custa XP nenhuma (§26.2).
+    // termina por saída manual ou por regra não custa XP nenhuma (§26.2). O Premium é do
+    // PERSONAGEM morto (D3); fora de party cai para o `premium` de sessão, como no solo.
+    const premium = this.#party?.premiumByCharacter[character.id] ?? this.#options.premium ?? false;
     const penalty = applyDeathPenalty(
       character,
-      { premium: this.#options.premium ?? false },
+      { premium },
       this.#vocationOf(character),
       this.#options.progression,
     );
@@ -1468,7 +1959,7 @@ export class HuntRuleset implements Ruleset {
     // com o gold dentro. Fora isso nada a desfazer: a instância morre com a sessão. Todo
     // encerramento produz extrato, inclusive o que acontece sem ninguém assistindo — e é
     // exatamente por isso que ele não depende de nada feito aqui.
-    if (this.#bag !== null) this.#settle(session, session.participants);
+    if (this.#bag !== null) this.#settle(session, session.participants, 'end');
   }
 
   getState(): HuntRulesetState {
@@ -1502,8 +1993,33 @@ export class HuntRuleset implements Ruleset {
       ringReplaced: state.ringReplaced,
       ...(state.botConfig === undefined ? {} : { botConfig: state.botConfig }),
       runners,
-      ...(this.#party === undefined ? {} : { partyOptions: this.#party }),
-      ...(this.#bag === null ? {} : { partyBag: { gold: this.#bag.gold, items: [...this.#bag.items], capacity: this.#bag.capacity } }),
+      // Sempre no formato NOVO (achatado). O campo continua opcional e sem bump: um nó antigo
+      // que leia `partyOptions.mode`/`shareCosts`/`splitLoot` ainda encontra os três.
+      ...(this.#party === undefined ? {} : {
+        partyOptions: {
+          leaderId: this.#party.leaderId,
+          mode: this.#party.mode,
+          shareCosts: this.#party.shareCosts,
+          splitLoot: this.#party.splitLoot,
+          collect: this.#party.collect,
+          autoSell: this.#party.autoSell,
+          premiumByCharacter: this.#party.premiumByCharacter,
+        },
+      }),
+      ...(this.#bag === null ? {} : {
+        partyBag: {
+          gold: [...this.#bag.gold],
+          items: this.#bag.items.map((entry) => ({ item: entry.item, eligible: [...entry.eligible] })),
+          capacity: this.#bag.capacity,
+          overweight: this.#bag.overweight,
+        },
+      }),
+      ...(this.#endVote === null ? {} : {
+        endVote: {
+          proposedAtMs: this.#endVote.proposedAtMs,
+          approved: [...this.#endVote.approved],
+        },
+      }),
     };
   }
 
@@ -1537,6 +2053,10 @@ export class HuntRuleset implements Ruleset {
         this.#armBot(session, character.id);
       }
     }
+    // A reserva é DERIVADA e não vai no snapshot (DT-02): o primeiro rebalanceamento depois de
+    // retomar sai daqui, quando os participantes já existem. Chamá-lo em `restore` quebraria
+    // porque lá `session.participants` ainda está vazio.
+    if (this.#bag !== null) this.#rebalanceBag(session);
   }
 
   restore(state: unknown): void {
@@ -1578,16 +2098,42 @@ export class HuntRuleset implements Ruleset {
     this.#fields = Fields.fromState(restored.fields);
     this.#nextGroundItemId = restored.nextGroundItemId ?? 1;
     this.#staminaAnchorMs = restored.staminaAnchorMs;
-    this.#party = restored.partyOptions;
-    this.#bag = restored.partyBag === undefined
-      ? (this.#party !== undefined && splitLootOf(this.#party) ? { gold: 0, items: [], capacity: 0 } : null)
-      : { gold: restored.partyBag.gold, items: [...restored.partyBag.items], capacity: restored.partyBag.capacity };
+    // Migração na LEITURA (DT-02): snapshot antigo traz `{mode}`, o novo traz os eixos. Sem bump.
+    this.#party = normalizePartyOptions(restored.partyOptions);
+    // A votação de encerrar volta com quem já aprovou (#432); o vencimento já está na fila do
+    // snapshot. Ausente é nenhuma votação — snapshot anterior a esta issue.
+    this.#endVote = restored.endVote === undefined
+      ? null
+      : { proposedAtMs: restored.endVote.proposedAtMs, approved: new Set(restored.endVote.approved) };
+    // A bolsa também migra na leitura (D5): o formato antigo (`gold: number`) vira entradas com
+    // `eligible: []`, o sentinel de "presentes no settlement" — a regra de hoje, para uma sessão
+    // em voo não perder nem confiscar o que já estava na bolsa.
+    const restoredBag = restored.partyBag as unknown;
+    this.#bag = restoredBag === undefined
+      ? (this.#party?.splitLoot ? { gold: [], items: [], capacity: 0, overweight: false } : null)
+      : isLegacyBag(restoredBag)
+        ? {
+            gold: restoredBag.gold > 0 ? [{ amount: restoredBag.gold, eligible: [] }] : [],
+            items: restoredBag.items.map((item) => ({ item, eligible: [] })),
+            capacity: restoredBag.capacity,
+            // Snapshot anterior ao #396: sem a flag, o primeiro rebalanceamento a recalcula.
+            overweight: false,
+          }
+        : {
+            gold: [...(restoredBag as PartyBagState).gold],
+            items: (restoredBag as PartyBagState).items.map(
+              (entry) => ({ item: entry.item, eligible: [...entry.eligible] }),
+            ),
+            capacity: (restoredBag as PartyBagState).capacity,
+            // Opcional na leitura: snapshot anterior ao #396 não tem a chave.
+            overweight: (restoredBag as PartyBagState).overweight ?? false,
+          };
     // O peso é derivado; o próximo id de instância continua depois do maior que já existe.
     this.#bagWeight = 0;
     this.#bagSeq = 0;
-    for (const item of this.#bag?.items ?? []) {
-      this.#bagWeight += (this.#options.items.get(item.itemId)?.weight ?? 0) * item.quantity;
-      const n = Number(item.instanceId.split(':').at(-1));
+    for (const entry of this.#bag?.items ?? []) {
+      this.#bagWeight += (this.#options.items.get(entry.item.itemId)?.weight ?? 0) * entry.item.quantity;
+      const n = Number(entry.item.instanceId.split(':').at(-1));
       if (Number.isFinite(n) && n >= this.#bagSeq) this.#bagSeq = n + 1;
     }
     // O estado por participante espera `onResume` (#203): os participantes ainda não existem —
@@ -1746,6 +2292,15 @@ export class HuntRuleset implements Ruleset {
       return null;
     }
 
+    // Follow de membro (ADR 0035 d.9, §D10, #398): substitui a rota E a postura contra monstro
+    // enquanto ativo. O combate já rodou acima — é ele, não isto, que decide se o personagem
+    // para para bater; seguir não impede atacar quem estiver ao alcance da arma.
+    const follow = this.#holdFollow(session, runner, character);
+    if (follow !== false) {
+      this.#armPlayerAttack(session, character);
+      return follow;
+    }
+
     // Ninguém ao alcance, e a postura pode mandar ele SAIR DA ROTA atrás do alvo (FUN-85).
     // Com `stand` — o padrão — isto não roda, e o comportamento é o de sempre.
     const posture = this.#holdPosture(session, runner, character);
@@ -1837,6 +2392,128 @@ export class HuntRuleset implements Ruleset {
 
     runner.walker.stop();
     return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * Follow de membro (ADR 0035 d.9, §D10, #398). Passo guloso até ficar ADJACENTE (distância 1,
+   * Chebyshev — a mesma grade do resto do movimento) do alvo configurado; parado quando já está.
+   *
+   * `kind: 'leader'` resolve `#leader(session)` a CADA vencimento — nunca guarda o id — pela
+   * mesma razão de `#approachTarget` nunca guardar o monstro escolhido: a mira certa é a de
+   * agora. `#leader` já cai para o mais antigo presente quando o líder muda (#394), então uma
+   * troca de liderança no meio da hunt já reflete aqui sem nenhum código extra.
+   *
+   * Devolve `false` quando não há follow ativo — E quando o follow está INTERROMPIDO —, para
+   * `#playerStep` cair na postura contra monstro e na rota, exatamente como sem follow nenhum.
+   */
+  #holdFollow(session: Session, runner: Runner, character: CharacterRuntime): MoveResult | null | false {
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return false;
+
+    const targetId = follow.kind === 'leader' ? (this.#leader(session)?.id ?? null) : follow.characterId;
+    const target = targetId === null ? null : findById(session.participants, targetId);
+
+    // Alvo ausente: nunca deveria chegar aqui por morte ou saída — `#interruptFollowersOf` já
+    // reportou no MESMO evento em que o alvo saiu (`onLeave`) —, mas cair no mesmo `false` por
+    // segurança nunca escolhe outro, que é a garantia que importa.
+    if (target === null || target.id === character.id) return false;
+
+    const from = character.position;
+    const d = distance(from, target.position);
+    const radius = this.#options.targetSearchRadius ?? 8;
+
+    if (d > radius) {
+      this.#reportFollow(session, runner, character.id, target.id, false, 'unreachable');
+      return false;
+    }
+    // Em alcance: reporta a RETOMADA se estava interrompido (não-op se já estava ativo). Fica
+    // ANTES do "já adjacente" porque retomar e já estar adjacente são independentes: o alvo pode
+    // ter voltado ao alcance parado.
+    this.#reportFollow(session, runner, character.id, target.id, true);
+
+    if (d === 1) return null;
+
+    const to = greedyStep(from, target.position, this.#blockedFor(character));
+    // Empacado — mesmo comportamento de `#holdPosture`: esperar este vencimento, não é
+    // interrupção. "Sem caminho" vira `unreachable` só pela DISTÂNCIA (acima), não por um passo
+    // bloqueado — senão contornar uma parede piscaria o follow a cada vencimento.
+    if (to === null) return null;
+
+    runner.walker.stop();
+    return this.#step(session, character, { ...to, z: from.z }, character.id);
+  }
+
+  /**
+   * Emite `follow-state` só na TRANSIÇÃO (§D10: "uma vez"). `runner.followInterrupted` é o que
+   * faz cada chamada custar uma comparação em vez de um evento — `#holdFollow` chama isto a CADA
+   * vencimento enquanto o alvo está em alcance, e só a primeira depois de uma mudança produz
+   * `session.emit`.
+   */
+  #reportFollow(
+    session: Session, runner: Runner, characterId: string, targetId: string, active: boolean,
+    reason?: 'dead' | 'left' | 'unreachable',
+  ): void {
+    // A verdade ATUAL é gravada ANTES do curto-circuito de transição: o evento só sai uma vez,
+    // mas o `followStateOf` precisa responder "onde o Follow está agora" mesmo quando nada mudou
+    // desde o último vencimento (#401).
+    runner.followTargetId = targetId;
+    runner.followReason = active ? undefined : reason;
+    if (runner.followInterrupted === !active) return;
+    runner.followInterrupted = !active;
+    session.emit({
+      kind: 'follow-state', characterId, targetId, active,
+      ...(reason === undefined ? {} : { reason }),
+    });
+  }
+
+  /**
+   * O estado ATUAL do Follow de um personagem (#401), para o hospedeiro reenviar a quem
+   * reconecta. O evento `follow-state` só é emitido na TRANSIÇÃO (#398), e sem visualizador ele
+   * é descartado pelo hospedeiro — esta leitura síncrona é o que faz a verdade sobreviver ao
+   * descarte (invariante 3), em vez de o host guardar uma segunda cópia do estado.
+   *
+   * `undefined` sem Follow configurado (`kind: 'none'`) ou sem alvo resolvido ainda — os dois
+   * casos em que o cliente não tem nada a corrigir.
+   */
+  followStateOf(characterId: string): {
+    readonly active: boolean;
+    readonly targetId: string;
+    readonly reason?: 'dead' | 'left' | 'unreachable';
+  } | undefined {
+    const runner = this.#runners.get(characterId);
+    if (runner === undefined) return undefined;
+    const follow = runner.botConfig?.follow;
+    if (follow === undefined || follow.kind === 'none') return undefined;
+    const targetId = runner.followTargetId
+      ?? (follow.kind === 'member' ? follow.characterId : this.#party?.leaderId);
+    if (targetId === undefined) return undefined;
+    const active = !runner.followInterrupted;
+    return {
+      active,
+      targetId,
+      ...(active || runner.followReason === undefined ? {} : { reason: runner.followReason }),
+    };
+  }
+
+  /**
+   * O alvo de um follow saiu da sessão (§D10, #398): quem o seguia é interrompido AGORA, no mesmo
+   * evento da saída — é o único lugar em que dá para diferenciar `'dead'` de `'left'`, porque
+   * `character.alive` já está `false` antes de `onLeave` rodar. `kind: 'leader'` usa
+   * `this.#party?.leaderId` — o valor de ANTES desta saída, porque #394 só o reescreve depois, em
+   * `#flushLoss` — para saber se o `departed` ERA o líder.
+   */
+  #interruptFollowersOf(session: Session, departed: CharacterRuntime): void {
+    const reason = departed.alive ? 'left' : 'dead';
+    const wasLeader = departed.id === this.#party?.leaderId;
+    for (const [followerId, runner] of this.#runners) {
+      const follow = runner.botConfig?.follow;
+      if (follow === undefined || follow.kind === 'none') continue;
+      const followedId = follow.kind === 'leader'
+        ? (wasLeader ? departed.id : null)
+        : follow.characterId;
+      if (followedId !== departed.id) continue;
+      this.#reportFollow(session, runner, followerId, departed.id, false, reason);
+    }
   }
 
   /**
@@ -1989,7 +2666,7 @@ export class HuntRuleset implements Ruleset {
     const bot = runner.bot;
     if (bot === undefined || !character.alive) return;
 
-    const slots = bot.groups.get(group);
+const slots = bot.groups.get(group);
     if (slots === undefined) return;
     // A view é montada UMA vez por vencimento: todos os slots do grupo decidem sobre o MESMO
     // instante. Reavaliar por slot depois de uma recusa é o atuador que decide, não o mundo.
@@ -2008,13 +2685,31 @@ export class HuntRuleset implements Ruleset {
       view.targetCount = this.#targetCountFor(
         character, reach, this.#actionArea(slot.act), this.#actionRange(slot.act),
       );
-      if (!slot.when(view)) continue;                    // condição falsa → PULA (RP-003)
+      // Alvo != self resolve o RECIPIENTE ANTES de avaliar: a condição `hp` lê o CANDIDATO, e o
+      // slot pode valer para ele mesmo com o lançador de vida cheia (§26-30, ADR 0035 d.10).
+      // Tenta os candidatos NA ORDEM em que chegaram (já rankeada por `#resolveRuleTarget`) e
+      // para no primeiro cujo `when` vale — o "usa o primeiro válido" do §29.
+      let recipient = character;
+      if (slot.target.kind !== 'self') {
+        const candidates = this.#resolveRuleTarget(session, character, slot);
+        let matched = false;
+        for (let j = 0; j < candidates.length; j += 1) {
+          const candidate = candidates[j] as CharacterRuntime;
+          view.partyTarget = candidate;
+          if (slot.when(view)) { recipient = candidate; matched = true; break; }
+        }
+        view.partyTarget = null;
+        if (!matched) continue;
+      } else {
+        view.partyTarget = null;
+        if (!slot.when(view)) continue;                  // condição falsa → PULA (RP-003)
+      }
       if (external !== undefined) {
         if (!external.perform(slot.act, view)) continue; // recusou → próximo no mesmo ciclo
         this.#scheduleBot(session, group, characterId, this.#botCooldownMs());
         return;
       }
-      const result = this.#perform(session, character, slot.act);
+      const result = this.#perform(session, character, slot.act, recipient);
       if (result.ok) {
         // O grupo trancou: o próximo vencimento é o cooldown DELE (do conteúdo), não um 1 s
         // fixo. A magia já iniciou `group:<g>` no `castSpell`; o item sem livro cai no fallback.
@@ -2024,8 +2719,9 @@ export class HuntRuleset implements Ruleset {
         // já resolvido. Uma poção de mana que não acorda a cura é o bot esperando dano novo
         // para usar a mana que acabou de repor.
         this.#armBot(session, characterId);
-        // E o anel sai quando a cura devolve o HP, ou quando a magia derruba a mana abaixo do
-        // piso — os dois lados da máquina do §13.8 dependem do que a ação acabou de mudar.
+        // As automações (AB-08) reagem ao mesmo mundo: o anel sai quando a cura devolve o HP,
+        // ou quando a magia derruba a mana abaixo do piso — os dois lados da máquina do §13.8
+        // dependem do que a ação acabou de mudar.
         this.#armAutomations(session, character.id);
         return;
       }
@@ -2045,10 +2741,13 @@ export class HuntRuleset implements Ruleset {
    * pipeline de morte. Uma classe separada receberia os quatro por parâmetro e não ganharia
    * nada em troca.
    */
-  #perform(session: Session, character: CharacterRuntime, action: BotAction): CastResult {
+  #perform(
+    session: Session, character: CharacterRuntime, action: BotAction,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     switch (action.kind) {
-      case 'spell': return this.#castSpell(session, character, action.spellId);
-      case 'supply': return this.#useSupply(session, character, action.supplyId);
+      case 'spell': return this.#castSpell(session, character, action.spellId, recipient);
+      case 'supply': return this.#useSupply(session, character, action.supplyId, recipient);
       // O item de slot saiu no vocabulário v2 (AB-03): o consumível abstrato é `supply`, com
       // gold no uso, e o item de equipamento é das automações.
       case 'item': return NOT_IN_CATALOG;
@@ -2056,10 +2755,78 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
+   * Alcance do EFEITO de cura da ação — nunca o de ataque. `null` quando a ação não é magia/
+   * supply de cura, OU o efeito é `self`-only: é a checagem em profundidade do RF-05
+   * (`validateBotConfig` já recusa a combinação na configuração; aqui a resposta é "sem
+   * candidato", nunca uma exceção — a mesma filosofia de toda outra recusa deste arquivo).
+   */
+  #healRangeOf(action: BotAction): number | null {
+    if (action.kind === 'spell') {
+      const effect = this.#options.spells.get(action.spellId)?.effect;
+      if (effect === undefined || effect.kind !== 'heal' || effect.target !== 'friend') return null;
+      return effect.range ?? null;
+    }
+    if (action.kind === 'supply') {
+      const effect = this.#options.supplies.get(action.supplyId)?.effect;
+      if (effect === undefined || (effect.kind !== 'heal' && effect.kind !== 'mana')
+        || effect.target !== 'friend') {
+        return null;
+      }
+      return effect.range ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Os candidatos de uma regra com alvo != self (D11, ADR 0035 decisão 10).
+   *
+   * `member` usa SÓ o id pedido: morto, fora da sessão ou fora do alcance devolve lista vazia e
+   * a regra não age (§30 — nunca substitui por outro vivo). `lowest-hp-member` devolve todo
+   * participante vivo ao alcance ordenado por percentual ASCENDENTE (§28); o próprio lançador
+   * entra como candidato de si mesmo, então numa hunt solo "menor vida da party" é ele.
+   */
+  #resolveRuleTarget(
+    session: Session, character: CharacterRuntime, rule: CompiledSlot,
+  ): readonly CharacterRuntime[] {
+    const range = this.#healRangeOf(rule.act);
+    if (range === null) return NO_CANDIDATES;
+
+    if (rule.target.kind === 'member') {
+      const member = findById(session.participants, rule.target.characterId);
+      if (member === null || !member.alive) return NO_CANDIDATES;
+      if (distance(character.position, member.position) > range) return NO_CANDIDATES;
+      return [member];
+    }
+
+    // `session.participants` já está na ordem de entrada, e `Array#sort` é ESTÁVEL: o desempate
+    // cai de graça.
+    return session.participants
+      .filter((p) => p.alive && distance(character.position, p.position) <= range)
+      .sort((a, b) => percentOf(a.health, a.maxHealth) - percentOf(b.health, b.maxHealth));
+  }
+
+  /**
+   * Acorda o bot de todo participante com ao menos uma regra heal/potion/support de alvo !=
+   * self — não só de quem apanhou (RF-06). Custo N por golpe, só com party (ADR 0035,
+   * consequências: "aceito").
+   */
+  #armHealersOf(session: Session): void {
+    if (session.participants.length <= 1) return;
+    for (const participant of session.participants) {
+      const runner = this.#runners.get(participant.id);
+      if (runner === undefined || runner.bot === undefined || runner.botConfig === undefined) continue;
+      if (hasNonSelfHealRule(runner.botConfig)) this.#armBot(session, participant.id);
+    }
+  }
+
+  /**
    * Lança a magia. O alvo é o mesmo do golpe — o monstro mais próximo —, e o alcance é o da
    * MAGIA, não o da arma: uma magia de alcance 3 alcança de onde o corpo a corpo não alcança.
    */
-  #castSpell(session: Session, character: CharacterRuntime, spellId: string): CastResult {
+  #castSpell(
+    session: Session, character: CharacterRuntime, spellId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const spell = this.#options.spells.get(spellId);
     if (spell === undefined) return NOT_IN_CATALOG;
 
@@ -2077,7 +2844,7 @@ export class HuntRuleset implements Ruleset {
 
     const result = castSpell(
       character, spell, aim, session.nowMs, this.#options.combat, session.rng,
-      this.#spellScaling(character),
+      this.#spellScaling(character), recipient,
     );
     if (!result.ok) return result;
     // A magia SAIU: a mana gasta é o que ela rende de skill (§9.4). Recusa não rende nada —
@@ -2118,9 +2885,10 @@ export class HuntRuleset implements Ruleset {
       return result;
     }
     if (aim === null) {
-      // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
-      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar.
-      this.#emitHealed(session, character, result.healed, 'spell');
+      // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
+      // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou. O HPS, ao
+      // contrário, é de QUEM lançou (#431) — por isso o `character.id` como curador.
+      this.#emitHealed(session, recipient, result.healed, 'spell', character.id);
       // Mass Healing: os ALIADOS na forma, um a um, na ordem dos participantes. Cada um consome
       // uma rolagem (o contrato do dano em área), e o conjurador é pulado porque o `castSpell`
       // já o curou. Overheal rende zero e nenhum evento sai.
@@ -2131,7 +2899,7 @@ export class HuntRuleset implements Ruleset {
           const healed = executeHealing(
             character, ally, spell.effect, scaling, this.#options.combat, session.rng,
           );
-          this.#emitHealed(session, ally, healed, 'spell');
+          this.#emitHealed(session, ally, healed, 'spell', character.id);
         }
       }
       return result;
@@ -2189,6 +2957,9 @@ export class HuntRuleset implements Ruleset {
       session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       const applied = monster.receiveDamage(damage);
+      // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
+      // entra na conta do dano causado.
+      session.creditDamage(character.id, applied);
       recordDamage(monster.contribution, character.id, applied);
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`. O elemento
       // (#479) vai junto quando a magia o declara: é ele que escolhe a cor do número.
@@ -2376,7 +3147,8 @@ export class HuntRuleset implements Ruleset {
     if (!target.alive) return;
     if (tick.kind === 'heal') {
       if (target instanceof CharacterRuntime) {
-        this.#emitHealed(session, target, target.heal(tick.amount), 'spell');
+        // A cura feita é de quem aplicou a condição (`sourceId`), não de quem a carrega (#431).
+        this.#emitHealed(session, target, target.heal(tick.amount), 'spell', condition.sourceId);
       }
       return;
     }
@@ -2575,7 +3347,10 @@ export class HuntRuleset implements Ruleset {
   }
 
   /** Usa o supply e leva o gasto ao extrato. O débito em si é do `useSupply`. */
-  #useSupply(session: Session, character: CharacterRuntime, supplyId: string): CastResult {
+  #useSupply(
+    session: Session, character: CharacterRuntime, supplyId: string,
+    recipient: CharacterRuntime = character,
+  ): CastResult {
     const supply = this.#options.supplies.get(supplyId);
     if (supply === undefined) return NOT_IN_CATALOG;
 
@@ -2586,11 +3361,11 @@ export class HuntRuleset implements Ruleset {
       : null;
     // Quem paga (#192): em solo o usuário; no modo compartilhado, o rateio entre os presentes
     // — e é a bolsa quem credita `goldSpent` a cada um pelo que pagou.
-    const shared = this.#party !== undefined && shareCostsOf(this.#party) && session.participants.length > 1;
+    const shared = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
     const purse = shared ? this.#sharedPurse(session, character) : ownPurse(character);
     const result = useSupply(
       character, supply, aim, this.#options.combat, session.rng, this.#runeScaling(character), purse,
-      session.nowMs,
+      recipient, session.nowMs,
     );
     if (result.ok) {
       // Gold gasto é agregado da SESSÃO, como `goldGained` é no abate: o extrato leva os dois
@@ -2609,7 +3384,7 @@ export class HuntRuleset implements Ruleset {
           : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
-      if (aim === null) this.#emitHealed(session, character, result.healed, 'supply');
+      if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(
         session, character, result.hits,
         supply.effect.kind === 'damage' ? supply.effect.damageType : undefined,
@@ -2803,6 +3578,9 @@ export class HuntRuleset implements Ruleset {
     this.#botView.target = target === null
       ? null
       : { health: target.health, maxHealth: this.#maxHealthOf(target) };
+    // Sem candidato até que `select` avalie uma regra de alvo != self — e `select` o reescreve a
+    // cada regra, então um valor da avaliação anterior nunca vaza para a próxima.
+    this.#botView.partyTarget = null;
     return this.#botView;
   }
 
@@ -3337,6 +4115,9 @@ export class HuntRuleset implements Ruleset {
     // um relógio para curar quem está caindo é a mesma perda que o golpe engatilhado da
     // FUN-68 corrigiu do outro lado — só que aqui ela custa a vida do personagem.
     this.#armBot(session, character.id);
+    // E os curandeiros da party: quem tem regra de alvo != self precisa acordar AGORA, sem
+    // esperar o próprio ciclo de golpe — o HP que caiu é de OUTRO membro (RF-06).
+    this.#armHealersOf(session);
     // E as automações defensivas (§13.8, AB-08): este é o instante em que o anel existe para
     // servir, e é a antecipação que faz o swap acontecer no golpe, não no próximo ciclo.
     this.#armAutomations(session, character.id);
@@ -3426,9 +4207,15 @@ export class HuntRuleset implements Ruleset {
    */
   #emitHealed(
     session: Session, character: CharacterRuntime, amount: number,
-    source: CreatureHealed['source'],
+    source: CreatureHealed['source'], healerId?: string,
   ): void {
     if (amount <= 0) return;
+    // A cura FEITA conta para quem lançou (#431): o evento acende a barra do RECIPIENT, mas o
+    // HPS é do healer. O guarda de participante descarta um `sourceId` que não seja personagem
+    // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
+    if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
+      session.creditHealing(healerId, amount);
+    }
     session.emit({
       kind: 'creature-healed', creatureId: character.id, amount, source,
       position: this.#at(character),
@@ -3534,9 +4321,19 @@ export class HuntRuleset implements Ruleset {
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
       if (ammo === null) return;
-      // O gold do tiro sai no ato, no personagem E no agregado da sessão, como o supply (§20.1).
-      character.goldDelta -= ammo.price;
-      session.credit(character.id, 'goldSpent', ammo.price);
+      if (ammo.price > 0) {
+        // O rateio do §4 inclui a MUNIÇÃO paga (#394): com `shareCosts` ligado quem paga é a
+        // purse compartilhada — a MESMA do supply, com o resto do atirador. O `#ammoFor` já
+        // conferiu `canAfford` pela purse; aqui só se debita. Sem rateio, o comportamento de
+        // sempre: gold do personagem E agregado da sessão (§20.1).
+        const shareCosts = this.#party !== undefined && this.#party.shareCosts && session.participants.length > 1;
+        if (shareCosts) {
+          this.#sharedPurse(session, character).pay(ammo.price);
+        } else {
+          character.goldDelta -= ammo.price;
+          session.credit(character.id, 'goldSpent', ammo.price);
+        }
+      }
       session.emit({
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
@@ -3673,11 +4470,14 @@ export class HuntRuleset implements Ruleset {
     // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
     // ou alvo integralmente absorvido pela mana, informa zero e não emite evento — o número
     // verde não mente.
-    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech');
+    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
     session.credit(character.id, 'bestBasicHit', outcome.resolvedDamage);
+    // O DPS, ao contrário do recorde, soma o APLICADO (#431): overkill e absorção por mana
+    // shield não são dano que saiu da barra de ninguém.
+    session.creditDamage(character.id, applied.healthDamage);
   }
 
   /**
@@ -3780,9 +4580,13 @@ export class HuntRuleset implements Ruleset {
       // Só com alguém elegível: um monstro que morreu com todo mundo morto não paga ninguém.
       if (eligible.length > 0) {
         const loot = rollLoot(definition.loot, session.rng);
-        this.#bag.gold += loot.gold;
+        // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+        // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+        const presentAtDrop = session.participants.map((p) => p.id);
+        if (loot.gold > 0) this.#bag.gold.push({ amount: loot.gold, eligible: presentAtDrop });
+        // `#deliverToBag` rebalanceia e emite SEMPRE (mesmo sem itens: o gold muda o `value`),
+        // então o `#emitBag` que existia aqui para o drop de gold puro sumiu (DT-03).
         this.#deliverToBag(session, loot.items);
-        if (loot.gold > 0 && loot.items.length === 0) this.#emitBag(session);
       }
     } else if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
@@ -3900,6 +4704,9 @@ export class HuntRuleset implements Ruleset {
         // máximo velho até o próximo golpe ou regeneração — e de vida cheia a regeneração não
         // anuncia nada, então "até a reanexação".
         this.#emitCharacterHealth(session, member);
+        // Level up REESCREVE `capacity` pela tabela (`retarget`, progression.ts): é gatilho do
+        // §13 — a disponível do membro cresce, e as reservas mudam com ela.
+        this.#rebalanceBag(session);
       }
       // O abate conta no Bestiário de TODO elegível (ADR 0027 decisão 4), pela MESMA condição
       // que paga a XP (§18.6): stamina zero não conta abate. E fechar um marco é evento
@@ -3959,86 +4766,201 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O loot cai na bolsa (#192): pelo peso, contra a capacidade somada; o que não cabe vai
-   * para a caixa de loot do LÍDER (§21.6). `itemsLooted` conta para todo presente — "quantos
-   * itens caíram" é a pergunta do §16.1, e caíram para a party (DT-03).
+   * O limite de tipos vendáveis do LÍDER (D2/§23.1): o Premium é do PERSONAGEM líder, nunca do
+   * usuário do item. O conteúdo manda os números; a sessão só lê.
+   */
+  #autoSellLimit(): number {
+    const party = this.#party;
+    if (party === undefined) return 0;
+    return autoSellLimit(
+      party.premiumByCharacter, party.leaderId, this.#options.party.autoSellItemTypes,
+    );
+  }
+
+  /** Os ids que de fato vendem: só os `autoSellLimit` PRIMEIROS da lista configurada (§23.1). */
+  #effectiveAutoSell(): ReadonlySet<string> {
+    const party = this.#party;
+    if (party === undefined) return EMPTY_AUTO_SELL;
+    return new Set(party.autoSell.slice(0, this.#autoSellLimit()));
+  }
+
+  /**
+   * O loot cai na bolsa (#192, #396): pelo PESO, contra a capacidade DISPONÍVEL somada
+   * (`capacity − inventory.weight`), não a total — bolsa e mochila contavam a mesma capacidade
+   * duas vezes. `itemsLooted` conta para todo presente — "quantos itens caíram" é a pergunta do
+   * §16.1, e caíram para a party (DT-03) —, mas SÓ o que de fato é coletado.
+   *
+   * A lista de COLETA filtra DEPOIS de `rollLoot` (§7, D2): zero RNG a mais (FUN-63), e o item
+   * fora da lista fica no cadáver — sem `itemsLooted`, sem caixa de ninguém. A VENDA AUTOMÁTICA
+   * é um subconjunto lógico da coleta: o item vendável nunca pesa nem entra na bolsa, vira gold
+   * na hora dividido pelos presentes no abate (§8, D2/§16.1).
+   *
+   * Em OVERWEIGHT (§14, DT-01) um item com `weight > 0` que não cabe NÃO é coletado: fica no
+   * cadáver — nem bolsa, nem caixa do líder (a caixa é coletar com outro destinatário). Item de
+   * peso `0` sempre entra, gold sempre entra, autovenda sempre vende.
    */
   #deliverToBag(session: Session, items: readonly LootItem[]): void {
     const bag = this.#bag;
-    if (bag === null || items.length === 0) return;
-    const leader = this.#leader(session);
+    const party = this.#party;
+    if (bag === null || party === undefined) return;
+    // A capacidade DISPONÍVEL é lida uma vez por abate: itens de um mesmo drop só aumentam
+    // `#bagWeight`, então o teto não muda no meio do laço.
+    const totalAvailable = this.#availableCapacities(session)
+      .reduce((sum, m) => sum + m.available, 0);
+    // Elegibilidade da bolsa (D4/§16.1): TODOS os presentes no instante do abate — o mesmo
+    // conjunto que paga o rateio, não o `eligible` (vivo + stamina) que decide XP.
+    const presentAtDrop = session.participants.map((p) => p.id);
+    const effectiveAutoSell = this.#effectiveAutoSell();
+
     for (const rolled of items) {
       const definition = this.#options.items.get(rolled.itemId);
       if (definition === undefined) continue;
+
+      // Filtro de coleta (§7, D2), DEPOIS de `rollLoot` — zero RNG a mais (FUN-63). Fora da
+      // lista, o item não existe para a party: sem `itemsLooted`, sem caixa de ninguém.
+      if (party.collect !== null && !party.collect.includes(rolled.itemId)) {
+        continue;
+      }
+
+      // Venda automática (§8, D2): subconjunto lógico da coleta — nunca pesa, nunca entra na
+      // bolsa. `value: 0` na lista é ignorado aqui como defesa (configureParty já recusa
+      // configurar assim; isto cobre conteúdo que mudou de valor sob uma sessão em voo).
+      if (effectiveAutoSell.has(rolled.itemId) && definition.value > 0) {
+        const amount = definition.value * rolled.quantity;
+        const split = splitEqually(amount, presentAtDrop.length);
+        const shares = presentAtDrop.map((characterId, i) => ({ characterId, gold: split[i] ?? 0 }));
+        for (const { characterId, gold } of shares) {
+          if (gold === 0) continue;
+          const member = findById(session.participants, characterId);
+          if (member === null) continue;
+          member.goldDelta += gold;
+          session.credit(member.id, 'goldGained', gold);
+        }
+        for (const p of session.participants) session.credit(p.id, 'itemsLooted', rolled.quantity);
+        // Venda automática NÃO é evento notável (D2): a lista curta da tela de retorno não leva
+        // uma linha por dragon ham — só `party-settlement` de saída/fim/toggle entra ali.
+        session.emit({
+          kind: 'party-settlement', total: amount, reason: 'auto-sell', itemId: rolled.itemId, shares,
+        });
+        continue;
+      }
+
+      const weight = definition.weight * rolled.quantity;
+      // OVERWEIGHT (§14): item com peso que não cabe não é coletado — fica no cadáver, sem
+      // virar instância, sem contar `itemsLooted`, sem caixa de ninguém. Peso `0` sempre passa.
+      if (weight > 0 && this.#bagWeight + weight > totalAvailable) continue;
+
       const carried: CarriedItem = {
         instanceId: `${session.id}:bag:${String(this.#bagSeq++)}`,
         itemId: rolled.itemId, quantity: rolled.quantity,
       };
+      bag.items.push({ item: carried, eligible: presentAtDrop });
+      this.#bagWeight += weight;
       for (const p of session.participants) session.credit(p.id, 'itemsLooted', carried.quantity);
-      const weight = definition.weight * carried.quantity;
-      if (this.#bagWeight + weight <= this.#bagCapacity(session)) {
-        bag.items.push(carried);
-        this.#bagWeight += weight;
-        continue;
-      }
-      leader?.lootBox.push(carried);
     }
-    this.#emitBag(session);
+    // `#rebalanceBag` é o ÚNICO emissor de `party-bag-changed` (DT-03) e roda mesmo com `items`
+    // vazio, porque um drop só de gold muda o `value` da bolsa.
+    this.#rebalanceBag(session);
+  }
+
+  /** A capacidade DISPONÍVEL de cada presente: `max(0, capacity − inventory.weight)` (§12, D4). */
+  #availableCapacities(session: Session): MemberCapacity[] {
+    return session.participants.map((p) => ({
+      id: p.id,
+      available: Math.max(0, p.capacity - p.inventory.weight(this.#options.items)),
+    }));
   }
 
   /**
-   * A capacidade da bolsa é a SOMA das capacidades dos presentes, calculada na hora: cresce
-   * com quem entra, cai com quem sai — e acompanha o level up, que reescreve `capacity`
-   * pela tabela. Guardar um número e somar/subtrair divergia no primeiro level up.
+   * O ÚNICO ponto que recalcula disponível/reservas/OVERWEIGHT e emite `party-bag-changed`
+   * (§11-§15, #396). Chamado só nos gatilhos do §13: `onEnter`, `onLeave` (via `#settle`),
+   * `#deliverToBag`, `#deliverLoot`, level up que reescreve `capacity`, `#settle`, autovenda
+   * (dentro de `#deliverToBag`) e `configureParty`. NUNCA por tick — é o que faz 1 Hz e 10 Hz
+   * rebalancearem no mesmo evento lógico, não no mesmo instante de relógio (invariante 2).
    */
-  #bagCapacity(session: Session): number {
-    let total = 0;
-    for (const p of session.participants) total += p.capacity;
-    if (this.#bag !== null) this.#bag.capacity = total;
-    return total;
+  #rebalanceBag(session: Session): void {
+    const bag = this.#bag;
+    if (bag === null) return;
+    const members = this.#availableCapacities(session);
+    const totalAvailable = members.reduce((sum, m) => sum + m.available, 0);
+    const reservedById = reserveProportionally(this.#bagWeight, members);
+    const reservations = members.map((m) => ({
+      characterId: m.id, reserved: reservedById.get(m.id) ?? 0, available: m.available,
+    }));
+    // OVERWEIGHT: a bolsa está CHEIA — não há mais espaço para item com peso. O ADR escreve
+    // `W > ΣB`, mas como só se adiciona o que cabe, `W` nunca ultrapassa `ΣB` por drop; a
+    // igualdade é o estado de "cheio" do plano §3 (bolsa 1 500 com disponível 1 500), e é o que
+    // o gatilho de recusa enxerga. Bolsa vazia (peso 0) NUNCA é OVERWEIGHT, mesmo com ΣB = 0.
+    const overweight = this.#bagWeight > 0 && this.#bagWeight >= totalAvailable;
+    // Uma linha por TRANSIÇÃO: comparar com o valor JÁ PERSISTIDO em `bag.overweight` é o que
+    // evita um `party-overweight` falso logo depois de um `onResume` (DT-02/§7).
+    if (overweight !== bag.overweight) {
+      session.record('party-overweight', overweight ? 'on' : 'off');
+    }
+    bag.overweight = overweight;
+    bag.capacity = totalAvailable;
+    this.#emitBag(session, reservations);
   }
 
-  #emitBag(session: Session): void {
+  #emitBag(session: Session, reservations: PartyBagChanged['reservations'] = []): void {
     const bag = this.#bag;
     if (bag === null) return;
     session.emit({
-      kind: 'party-bag-changed', gold: bag.gold, items: [...bag.items],
-      weight: this.#bagWeight, capacity: this.#bagCapacity(session),
+      kind: 'party-bag-changed',
+      gold: bag.gold.reduce((sum, entry) => sum + entry.amount, 0),
+      items: bag.items.map((entry) => entry.item),
+      weight: this.#bagWeight, capacity: bag.capacity,
+      value: bagValue(bag, this.#options.items),
+      overweight: bag.overweight,
+      reservations,
     });
   }
 
   /**
-   * Vende a bolsa e divide entre `present` (#192, ADR 0027 decisão 5): ao sair alguém — com
-   * quem sai incluído — e no fim. Cada um recebe a cota em `goldDelta` e `goldGained`; o
-   * resto vai um gold por membro na ordem de entrada; o que não se vende (`value: 0`) vai
-   * para a mochila do líder, e o que não couber para a caixa dele. Registrado no extrato —
-   * "vendeu nada" também é informação.
+   * Vende a bolsa ENTRADA por entrada (#192, ADR 0027 decisão 5; #395, D4/D6): ao sair alguém
+   * — com quem sai incluído —, no fim, e ao desligar `splitLoot`. Cada entrada é dividida só
+   * entre `eligible ∩ present`; cada um recebe a cota em `goldDelta` e `goldGained`; o resto vai
+   * um gold por membro na ordem de entrada. O que não se vende (`value: 0`) vai para a mochila
+   * do líder, e o que não couber para a caixa dele. Registrado no extrato — "vendeu nada" também
+   * é informação.
    */
-  #settle(session: Session, present: readonly CharacterRuntime[]): void {
+  #settle(
+    session: Session, present: readonly CharacterRuntime[], reason: 'leave' | 'end' | 'toggle',
+  ): void {
     const bag = this.#bag;
     if (bag === null || present.length === 0) return;
-    const { shares, unsold, total } = settleBag(bag, present.map((p) => p.id), this.#options.items);
+    if (bag.gold.length === 0 && bag.items.length === 0) {
+      // Nada a vender, mas a composição pode ter mudado (saída): rebalanceia mesmo assim.
+      this.#rebalanceBag(session);
+      return;
+    }
+    const { shares, unsold, total } = settleEntries(bag, present.map((p) => p.id), this.#options.items);
     for (const member of present) {
       const gold = shares.get(member.id) ?? 0;
+      if (gold === 0) continue;
       member.goldDelta += gold;
       session.credit(member.id, 'goldGained', gold);
     }
+    // A bolsa foi VENDIDA: a reserva que ela impunha à mochila cai junto, ANTES de devolver o
+    // que não vendeu. Senão a própria reserva recusaria o item que a bolsa guardava — o líder
+    // recebe os `unsold` com a capacidade cheia (RF-05: "settlement libera a reserva").
+    bag.gold = [];
+    bag.items.length = 0;
+    this.#bagWeight = 0;
     const leader = this.#leader(session) ?? present[0];
     if (leader !== undefined) {
+      const wearer = withReservedCapacity(leader, 0);
       for (const item of unsold) {
-        if (leader.inventory.add(item, this.#options.items, leader, this.#containerRules(leader)).ok) continue;
+        if (leader.inventory.add(item, this.#options.items, wearer, this.#containerRules(leader)).ok) continue;
         leader.lootBox.push(item);
       }
     }
     session.record('party-settlement', `${String(total)}/${String(present.length)}`);
     session.emit({
-      kind: 'party-settlement', total,
+      kind: 'party-settlement', total, reason,
       shares: present.map((p) => ({ characterId: p.id, gold: shares.get(p.id) ?? 0 })),
     });
-    bag.gold = 0;
-    bag.items.length = 0;
-    this.#bagWeight = 0;
-    this.#emitBag(session);
+    this.#rebalanceBag(session);
   }
 
   /**
@@ -4056,7 +4978,7 @@ export class HuntRuleset implements Ruleset {
     if (this.#party === undefined || session.participants.length < 2) {
       return killer !== null && killer.alive && !isExhausted(killer) ? killer : null;
     }
-    if (splitLootOf(this.#party)) return null;
+    if (this.#party.splitLoot) return null;
     if (eligible.length === 0) return null;
     return eligible[session.rng.integer(0, eligible.length - 1)] ?? null;
   }
@@ -4073,6 +4995,14 @@ export class HuntRuleset implements Ruleset {
   #deliverLoot(
     session: Session, character: CharacterRuntime, items: readonly LootItem[],
   ): void {
+    // O loot PESSOAL entra na mochila com a capacidade já descontada da reserva que a party fez
+    // dele (§11, DT-05). Hoje `#deliverLoot` só roda quando `#bag` é `null` (o modo compartilhado
+    // entrega pela bolsa), então `reserved` é 0; o `Wearer` derivado fica pela consistência e
+    // blinda o código se uma issue futura mudar quando este caminho roda com bolsa ativa.
+    const reserved = this.#bag === null
+      ? 0
+      : (reserveProportionally(this.#bagWeight, this.#availableCapacities(session)).get(character.id) ?? 0);
+    const wearer = withReservedCapacity(character, reserved);
     for (const rolled of items) {
       // O catálogo é conferido ANTES de gastar um id. `buildContent` recusa loot de item
       // inexistente no boot, então isto só acontece com o conteúdo mudando sob uma sessão em
@@ -4082,8 +5012,11 @@ export class HuntRuleset implements Ruleset {
 
       // O id é determinístico (`sessionId:n`, FUN-88) e vira chave primária de `item_instance`.
       // `lootSeq` é do PERSONAGEM, então em party (#191) o id leva o dono no meio — dois
-      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre.
-      const instanceId = session.participants.length > 1
+      // membros com `lootSeq` 0 colidiriam. Em solo o formato é o de sempre. O critério é o
+      // TIPO de sessão, não a contagem de presentes (DT-03, #397): uma party pode ficar
+      // momentaneamente com 1 presente e depois crescer de novo por join em curso, e o formato
+      // de solo colidiria com o de quem entrar depois.
+      const instanceId = this.#party !== undefined
         ? `${session.id}:${character.id}:${String(character.lootSeq++)}`
         : `${session.id}:${String(character.lootSeq++)}`;
       const carried: CarriedItem = {
@@ -4095,7 +5028,7 @@ export class HuntRuleset implements Ruleset {
       // o §16.1 chama de loot. Contar só o que coube faria a mochila cheia parecer hunt ruim.
       session.credit(character.id, 'itemsLooted', carried.quantity);
 
-      if (character.inventory.add(carried, this.#options.items, character, this.#containerRules(character)).ok) continue;
+      if (character.inventory.add(carried, this.#options.items, wearer, this.#containerRules(character)).ok) continue;
 
       // Não coube: vai para a caixa. Ela é da SESSÃO — encerrar começa o relógio de 30
       // minutos —, e por isso o item ainda não é uma instância no banco: expirar precisa
@@ -4109,6 +5042,9 @@ export class HuntRuleset implements Ruleset {
       // mochila encheu, não qual das trinta flechas ficou de fora.
       session.record('backpack-full', character.id);
     }
+    // Gatilho do §13: o loot pessoal mudou o peso da mochila, e com ele a capacidade disponível
+    // e as reservas da party. No-op quando não há bolsa, que é o caso de hoje.
+    this.#rebalanceBag(session);
   }
 
   /** Os tamanhos de container deste personagem (#160): a mochila que ele veste, e a tabela. */
@@ -4409,7 +5345,7 @@ export interface HuntSessionOptions {
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }
@@ -4418,6 +5354,22 @@ export class HuntUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'HuntUnavailableError';
+  }
+}
+
+/**
+ * `onEnter` recusa join além do limite do conteúdo (#397, §22): TIPADO, ao contrário do
+ * `throw new Error` de colocação (linha 1033) — aquele é falha de CONTEÚDO (o primeiro tile da
+ * rota não existe; nunca deveria acontecer em produção); este é um caminho ESPERADO em toda
+ * hunt de party madura, e o hospedeiro precisa distingui-lo para recusar o ticket em vez de
+ * derrubar a sessão.
+ */
+export class PartyFullError extends Error {
+  readonly maxMembers: number;
+  constructor(huntId: string, maxMembers: number) {
+    super(`party da hunt "${huntId}" já tem ${String(maxMembers)} membros (limite do conteúdo)`);
+    this.name = 'PartyFullError';
+    this.maxMembers = maxMembers;
   }
 }
 
@@ -4435,7 +5387,7 @@ export interface HuntRulesetExtras {
   /** A de cada participante, por id (#203). Ver `HuntRulesetOptions.botConfigs`. */
   readonly botConfigs?: Readonly<Record<string, BotConfigInput>>;
   /** A party desta instância (#191). Ver `HuntRulesetOptions.partyOptions`. */
-  readonly partyOptions?: PartyOptions;
+  readonly partyOptions?: PartyOptionsInput;
   /** Substitui o atuador embutido. Ver `HuntRulesetOptions.actuator`. */
   readonly actuator?: BotActuator;
 }

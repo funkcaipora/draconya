@@ -783,6 +783,127 @@ describe('o analisador ao vivo (FUN-110)', () => {
   });
 });
 
+describe('a party v2 no estado (#405, ADR 0035)', () => {
+  const partySummary = {
+    players: 4, uniqueVocations: 3, xpPercent: 175, totalXp: 10_000,
+    totalSupplies: 40, shareCosts: true, splitLoot: true,
+    bagValue: 1_300, bagWeight: 120, autoSell: { used: 2, limit: 5 },
+  };
+  const attach = (over: Record<string, unknown> = {}): S2CMessage => ({
+    type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+    self: {
+      creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+      level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+    },
+    world: { groundItems: [], mapId: null, creatures: [] },
+    aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+    notableEvents: [],
+    ...over,
+  } as S2CMessage);
+
+  it('guarda `party-spending` em vez de descartar (RF-08, regressão do `return;`)', () => {
+    // Era `case 'party-spending': return;` — o `estimatedShare` da "Sua parte" se perdia.
+    applyMessage({
+      type: 'party-spending',
+      shares: [{ characterId: 'me', goldSpent: 20, estimatedShare: 44 }],
+    }, 0);
+    expect(hud.get().partySpending?.shares).toEqual([
+      { characterId: 'me', goldSpent: 20, estimatedShare: 44 },
+    ]);
+  });
+
+  it('session-state copia `partySummary` para `analyzer.party` (RF-07)', () => {
+    applyMessage(attach({ partySummary }), 0);
+    expect(hud.get().analyzer.party).toEqual(partySummary);
+  });
+
+  it('analyzer copia `.party` para `analyzer.party` (RF-07)', () => {
+    applyMessage(attach(), 0);
+    applyMessage({
+      type: 'analyzer',
+      aggregates: {
+        durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120,
+        kills: 13, deaths: 0, itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+      },
+      notableEvents: [],
+      party: partySummary,
+    }, 1);
+    expect(hud.get().analyzer.party).toEqual(partySummary);
+  });
+
+  it('sem o bloco, `analyzer.party` fica `undefined` — nunca "0 jogadores" (D8)', () => {
+    applyMessage(attach(), 0);
+    expect(hud.get().analyzer.party).toBeUndefined();
+  });
+
+  it('session-ended limpa a seção PARTY do extrato', () => {
+    applyMessage(attach({ partySummary }), 0);
+    applyMessage({
+      type: 'session-ended', reason: 'manual-exit',
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 1);
+    expect(hud.get().analyzer.party).toBeUndefined();
+  });
+
+  it('grava `party-end-vote` em vez de descartar (#432)', () => {
+    // Mutação que mata: descartar a mensagem — a tela nunca abriria o diálogo de aprovação.
+    expect(hud.get().partyEndVote).toBeNull();
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    expect(hud.get().partyEndVote).toMatchObject({ active: true, proposedAtMs: 0, approved: ['lead'] });
+  });
+
+  it('`active: false` fecha a votação (#432)', () => {
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    applyMessage({ type: 'party-end-vote', active: false, proposedAtMs: 0, approved: [] }, 1);
+    expect(hud.get().partyEndVote).toMatchObject({ active: false });
+  });
+
+  it('session-state limpa a votação: o servidor a reenvia no attach se ainda correr (#432)', () => {
+    applyMessage({ type: 'party-end-vote', active: true, proposedAtMs: 0, approved: ['lead'] }, 0);
+    applyMessage(attach(), 1);
+    expect(hud.get().partyEndVote).toBeNull();
+  });
+});
+
+describe('o follow-state do bot (#406, ADR 0035 d.9)', () => {
+  it('grava a mensagem INTEIRA em `state.followState`', () => {
+    // Mutação que mata: descartar o `follow-state` (era `return;` antes desta issue) — a tela
+    // nunca saberia que o follow parou.
+    expect(hud.get().followState).toBeNull();
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'unreachable' }, 0);
+    expect(hud.get().followState).toMatchObject({ active: false, targetId: 'p2', reason: 'unreachable' });
+  });
+
+  it('`active: true` substitui o estado anterior — o follow retomou', () => {
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'dead' }, 0);
+    applyMessage({ type: 'follow-state', active: true, targetId: 'p2' }, 1);
+    expect(hud.get().followState).toMatchObject({ active: true, targetId: 'p2' });
+  });
+
+  it('é PUSH do servidor: mora no `hud`, não no `bot` (DT-01)', () => {
+    const before = bot.get().save;
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'left' }, 0);
+    expect(hud.get().followState).not.toBeNull();
+    expect(bot.get().save).toBe(before);
+  });
+
+  it('session-state limpa o follow-state: a reanexação não mostra o "interrompido" antigo (§7)', () => {
+    applyMessage({ type: 'follow-state', active: false, targetId: 'p2', reason: 'dead' }, 0);
+    applyMessage({
+      type: 'session-state', sessionType: 'hunt', elapsedMs: 0,
+      self: {
+        creatureId: 1, characterId: 'char-1', health: 1, maxHealth: 1, mana: 0, maxMana: 0,
+        level: 1, xp: 0, vocationId: null, speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
+      },
+      world: { groundItems: [], mapId: null, creatures: [] },
+      aggregates: { durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0 },
+      notableEvents: [],
+    }, 1);
+    expect(hud.get().followState).toBeNull();
+  });
+});
+
 describe('a configuração do bot no session-state (FUN-111)', () => {
   const state = (over: Record<string, unknown> = {}): S2CMessage => ({
     type: 'session-state', sessionType: 'hunt', elapsedMs: 0,

@@ -5,6 +5,6 @@
   "price": 45,
   "group": "potion",
   "groupCooldownMs": 1000,
-  "effect": { "kind": "heal", "amount": 80 },
-  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2 (preços do Tibia como ponto de partida). Não é valor final."
+  "effect": { "kind": "heal", "amount": 80, "target": "friend", "range": 1 },
+  "_open": "Suprimento abstrato (gold no uso): preço de referência do §20.2 (preços do Tibia como ponto de partida). Não é valor final. `target`/`range` são §26 — `range: 1` é PROVISÓRIO (o PRD não fixa alcance de poção; 1 é o mínimo que ainda é \"em terceiro\" e evita reaproveitar o alcance de magia sem decisão)."
 }

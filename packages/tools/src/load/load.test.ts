@@ -45,11 +45,17 @@ describe('argumentos', () => {
 });
 
 describe('parties no cliente de carga (#198)', () => {
-  it('reads --party and --party-mode, defaults to solo, and refuses a mode that does not exist', () => {
-    expect(parseArguments([], 4)).toMatchObject({ party: 1, partyMode: 'split' });
-    expect(parseArguments(['--party', '4', '--party-mode', 'shared'], 4)).toMatchObject({ party: 4, partyMode: 'shared' });
+  it('reads --party and the two axes, defaults to solo with both on, and refuses a non-boolean', () => {
+    // ADR 0035 D1 (#407, DT-04): o `--party-mode` saiu junto com o `mode` do `/propose`; o
+    // cliente de carga passou a mandar os dois eixos.
+    expect(parseArguments([], 4)).toMatchObject({ party: 1, shareCosts: true, splitLoot: true });
+    expect(parseArguments(['--party', '4', '--party-share-loot', 'false'], 4))
+      .toMatchObject({ party: 4, shareCosts: true, splitLoot: false });
     expect(parseArguments(['--party', '0'], 4).party).toBe(1);
-    expect(() => parseArguments(['--party-mode', 'pooled'], 4)).toThrow(ArgumentError);
+    // Flag não booleana vira `undefined`/`NaN` silencioso sem a recusa — o defeito de
+    // `--sessions mil`, por outra porta.
+    expect(() => parseArguments(['--party-share-costs', 'pooled'], 4)).toThrow(ArgumentError);
+    expect(() => parseArguments(['--party-share-loot', 'sim'], 4)).toThrow(ArgumentError);
   });
 
   it('never splits a party across workers: whole parties per worker, the remainder solo in the last', () => {
@@ -66,9 +72,9 @@ describe('parties no cliente de carga (#198)', () => {
   it('the report says how many parties of what size were formed, and the remainder that went solo', () => {
     const report = buildReport({
       sessions: 10, mode: 'detached', durationMs: 1_000, workers: 1, apiUrl: 'http://x',
-      huntId: 'arena', difficulty: 'cautious', party: 4, partyMode: 'shared',
+      huntId: 'arena', difficulty: 'cautious', party: 4, shareCosts: true, splitLoot: true,
     }, [], { before: { heapBytes: null, sessions: null, tickDurationUs: null }, after: { heapBytes: null, sessions: null, tickDurationUs: null } });
-    expect(formatReport(report)).toContain('2 de 4 (shared) + 2 solo');
+    expect(formatReport(report)).toContain('2 de 4 (rateio on, lucro on) + 2 solo');
   });
 });
 

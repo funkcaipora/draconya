@@ -542,6 +542,81 @@ describe('mitigação e conteúdo congelado (CMB-03)', () => {
   });
 });
 
+describe('entrada em curso: reversão e joinedAtMs (#397, ADR 0035 decisão 6)', () => {
+  const joinedRuleset = (): Ruleset => ({
+    type: 'hunt',
+    hz: () => 1,
+    onEnter: (session, character) => {
+      if (character.id === 'refused') throw new Error('party cheia');
+      session.scheduleIn('tick', 1000, { subject: character.id });
+    },
+    onCreatureDied: () => {},
+    onEnd: () => {},
+    onEvent: () => {},
+  });
+
+  it('reverte o push quando onEnter lança, sem deixar joinedAtMs órfão', () => {
+    const session = new Session({
+      id: 'join', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('join'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.advanceBy(500);
+    expect(() => session.enter(character('refused'))).toThrow('party cheia');
+    expect(session.participants.map((p) => p.id)).toEqual(['a']);
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0 });
+    // E a sessão segue aceitando quem couber, com o instante certo.
+    session.advanceBy(500);
+    session.enter(character('b'));
+    expect(session.participants.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0, b: 1000 });
+  });
+
+  it('guarda o instante lógico da entrada e filtra o extrato por ele', () => {
+    const session = new Session({
+      id: 'receipt', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('receipt'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.advanceBy(1000);
+    session.record('antes');
+    session.advanceBy(1000);
+    session.enter(character('b')); // entra em nowMs = 2000
+    session.record('depois');
+    session.advanceBy(1000);
+    session.record('mais-tarde');
+    expect(session.snapshot().joinedAtMs).toEqual({ a: 0, b: 2000 });
+
+    // O instante sobrevive ao snapshot: retomado, o extrato do mesmo jeito filtra.
+    const restored = Session.fromSnapshot(session.snapshot(), joinedRuleset(), Rng.fromSeed('r'));
+    expect(restored.snapshot().joinedAtMs).toEqual({ a: 0, b: 2000 });
+    expect(restored.leave('b', 'manual-exit')?.receipt.notableEvents.map((e) => e.type))
+      .toEqual(['depois', 'mais-tarde']);
+
+    // O extrato de quem entrou tarde não leva o que aconteceu antes dele.
+    const departure = session.leave('b', 'manual-exit');
+    expect(departure?.receipt.notableEvents.map((e) => e.type)).toEqual(['depois', 'mais-tarde']);
+
+    // O de quem estava desde o zero leva tudo, como sempre.
+    const end = session.end('manual-exit');
+    expect(end[0]?.notableEvents.map((e) => e.type))
+      .toEqual(['antes', 'depois', 'mais-tarde', 'ended']);
+  });
+
+  it('um snapshot antigo, sem joinedAtMs, restaura como zero (extrato com tudo)', () => {
+    const session = new Session({
+      id: 'legacy-join', contentVersion: 'v1', ruleset: joinedRuleset(),
+      rng: Rng.fromSeed('legacy-join'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    session.record('evento');
+    const { joinedAtMs: _dropped, ...legacy } = session.snapshot();
+    const restored = Session.fromSnapshot(legacy, joinedRuleset(), Rng.fromSeed('x'));
+    const receipt = restored.end('manual-exit')[0];
+    expect(receipt?.notableEvents.map((e) => e.type)).toEqual(['evento', 'ended']);
+  });
+});
+
 describe('skill é estado de personagem e sobrevive ao snapshot (CMB-05, #333)', () => {
   const melee = skillSchema.parse({
     id: 'melee', name: 'Melee', startingLevel: 10,
@@ -576,5 +651,75 @@ describe('skill é estado de personagem e sobrevive ao snapshot (CMB-05, #333)',
     expect(resumed.aggregates.xpGained).toBe(session.aggregates.xpGained);
     expect(resumed.getRngState()).toEqual(session.getRngState());
     expect(restored.skills.getState()).toEqual(hero.skills.getState());
+  });
+});
+
+describe('DPS/HPS por evento com janela de 60 s (#431, ADR 0032 d.14)', () => {
+  /**
+   * Dois golpes de 100 (t=0 e t=30 s) e uma cura de 60 (t=0), agendados como EVENTOS: é o que
+   * garante o carimbo lógico no instante exato, igual a 1 Hz e a 10 Hz (invariante 2).
+   */
+  function performanceRuleset(): Ruleset {
+    return {
+      type: 'hunt',
+      hz: () => 10,
+      onEnter(session, character) {
+        session.scheduleIn('hit', 0, { priority: EventPriority.Attack, subject: character.id });
+        session.scheduleIn('hit', 30_000, { priority: EventPriority.Attack, subject: character.id });
+        session.scheduleIn('heal', 0, { priority: EventPriority.Upkeep, subject: character.id });
+      },
+      onCreatureDied: () => {},
+      onEnd: () => {},
+      onEvent(session, event) {
+        if (event.kind === 'hit') session.creditDamage(event.subject, 100);
+        if (event.kind === 'heal') session.creditHealing(event.subject, 60);
+      },
+    };
+  }
+
+  function sessionWithPerformance(): Session {
+    const session = new Session({
+      id: 'perf', contentVersion: 'v1', ruleset: performanceRuleset(),
+      rng: Rng.fromSeed('perf'), createdAtMs: 0,
+    });
+    session.enter(character('a'));
+    return session;
+  }
+
+  it('a janela é aparada na LEITURA: 200/60 em t=45 s, só o segundo golpe em t=75 s, zero em t=95 s', () => {
+    const session = sessionWithPerformance();
+    for (let t = 100; t <= 45_000; t += 100) session.advanceBy(100);
+    // Os dois golpes estão dentro dos 60 s (0 e 30 s de idade). O total da sessão é a soma.
+    expect(session.dpsOf('a', session.nowMs)).toBeCloseTo(200 / 60, 10);
+    expect(session.hpsOf('a', session.nowMs)).toBeCloseTo(60 / 60, 10);
+    expect(session.aggregatesOf('a').damageDealt).toBe(200);
+    expect(session.aggregatesOf('a').healingDone).toBe(60);
+
+    // t=75 s: o golpe de t=0 saiu da janela (75 s) e o de t=30 fica (45 s) — só o segundo conta.
+    // O critério da #431 dizia "em t=95 s só o segundo conta"; com o segundo golpe em t=30 s
+    // ele já saiu em t=95 (65 s), e é por isso que os dois pontos são prensados aqui: t=75
+    // isola o segundo e t=95 zera. A janela é de 60 s, nunca recontada do total.
+    session.advanceBy(30_000);
+    expect(session.dpsOf('a', session.nowMs)).toBeCloseTo(100 / 60, 10);
+    expect(session.hpsOf('a', session.nowMs)).toBe(0);
+
+    // t=95 s: os dois golpes saíram da janela; o total da sessão NÃO muda (não é recontado).
+    session.advanceBy(20_000);
+    expect(session.dpsOf('a', session.nowMs)).toBe(0);
+    expect(session.hpsOf('a', session.nowMs)).toBe(0);
+    expect(session.aggregatesOf('a').damageDealt).toBe(200);
+  });
+
+  it('1 Hz e 10 Hz produzem a mesma janela e o mesmo total', () => {
+    const runAt = (stepMs: number): { dps: number; hps: number; damage: number } => {
+      const session = sessionWithPerformance();
+      for (let t = stepMs; t <= 45_000; t += stepMs) session.advanceBy(stepMs);
+      return {
+        dps: session.dpsOf('a', session.nowMs),
+        hps: session.hpsOf('a', session.nowMs),
+        damage: session.aggregatesOf('a').damageDealt,
+      };
+    };
+    expect(runAt(1_000)).toEqual(runAt(100));
   });
 });

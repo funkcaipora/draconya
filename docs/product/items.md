@@ -16,6 +16,8 @@ O inventário segue o paradigma de capacidade do Tibia, com stack máximo de 100
 
 O jogador pode configurar tipos de item para autovenda: ao dropar, o item é vendido automaticamente e o gold é creditado direto, sem passar pela mochila. O limite é 5 tipos configuráveis para contas Free e 20 para Premium. Itens que caem sem estar configurados para autovenda tentam entrar no inventário normalmente e, faltando espaço, seguem para a Caixa de Loot da Sessão.
 
+A autovenda **individual** (fora de party) do §22.1 segue **não implementada**. O M20 implementou a versão **de party** — coleta e venda automática configuradas pelo **líder**, com o limite (5/20) vindo do Premium do **personagem líder** —, que mora em `party.md`; não confundir as duas. O campo `value` é o mesmo que a autovenda individual vai usar.
+
 O sistema de imbuement usa o Tibia como referência funcional: slots fixos por tipo de equipamento, efeito temporário com duração de 24 horas de tempo efetivo de hunt (o relógio não corre fora de hunt), aplicação exigindo materiais e uma taxa em gold, com suporte a múltiplos tiers de efeito. Os materiais devem cair de monstros de diferentes faixas de level, com o objetivo de que personagens de level baixo produzam materiais relevantes para personagens avançados — mantendo demanda por conteúdo antigo e girando o mercado.
 
 Itens lendários vêm de monstros ou de recompensa individual de boss, nunca são craftados, nunca ficam soulbound, continuam negociáveis mesmo depois de usados/equipados e não têm limite semanal de negociação. Todo lendário precisa registrar permanentemente, desde o MVP, quem o obteve originalmente, data, horário e a origem relevante (monstro/boss) — esse histórico sustenta o marketplace de dinheiro real da Fase 2 (`monetization.md`, §35) e o valor histórico do item.
@@ -33,7 +35,7 @@ Itens lendários vêm de monstros ou de recompensa individual de boss, nunca sã
 - Sem itens físicos no chão.
 - Item sem espaço/capacidade vai para a Caixa de Loot da Sessão.
 - Caixa de Loot da Sessão expira 30 minutos após o fim da sessão.
-- Autovenda: até 5 tipos configuráveis (Free) ou 20 (Premium); fluxo drop → venda automática → gold, sem passar pela mochila.
+- Autovenda: até 5 tipos configuráveis (Free) ou 20 (Premium); fluxo drop → venda automática → gold, sem passar pela mochila. **Individual (fora de party) ainda não implementada**; a versão **de party** (líder) entrou no M20 e vive em `party.md`.
 - Imbuement: slots fixos por tipo de item; duração de 24h de tempo efetivo de hunt; relógio parado fora de hunt; exige materiais + taxa em gold.
 - Lendários: nunca soulbound, sempre negociáveis, sem limite semanal de negociação; proveniência (personagem original, data, horário, origem) registrada permanentemente desde o drop.
 

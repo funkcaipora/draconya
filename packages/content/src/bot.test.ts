@@ -4,7 +4,7 @@ import { buildContent } from './content.js';
 import {
   BOT_CATEGORIES, BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema,
   botConditionSchema, botConfigV2Schema, botExitRuleSchema, botLureSchema, botRingSwapSchema,
-  botTargetingSchema,
+  botRuleSchema, botTargetingSchema,
 } from './schemas.js';
 import type { BotConfig, BotConfigV2, BotExitRule, BotSlot } from './schemas.js';
 
@@ -55,14 +55,26 @@ const content = buildContent({
     id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },
   }],
-  spells: [{
-    id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
-    effect: { kind: 'heal', amount: 60 },
-  }],
-  supplies: [{
-    id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
-    effect: { kind: 'heal', amount: 80 },
-  }],
+  spells: [
+    {
+      id: 'strong-heal', name: 'Cura Forte', manaCost: 20, cooldownMs: 1_000,
+      effect: { kind: 'heal', amount: 60 },
+    },
+    {
+      id: 'heal-friend-test', name: 'Cura em Amigo', manaCost: 25, cooldownMs: 1_000,
+      effect: { kind: 'heal', amount: 50, target: 'friend', range: 4 },
+    },
+  ],
+  supplies: [
+    {
+      id: 'health-potion', name: 'Poção de Vida', price: 45, group: 'potion',
+      effect: { kind: 'heal', amount: 80 },
+    },
+    {
+      id: 'mana-potion-friend', name: 'Poção de Mana em Amigo', price: 50, group: 'potion',
+      effect: { kind: 'mana', amount: 100, target: 'friend', range: 1 },
+    },
+  ],
   items: [
     {
       id: 'spike-sword', name: 'Spike Sword', kind: 'weapon',
@@ -429,5 +441,104 @@ describe('o interruptor por regra (#162)', () => {
       config({ heal: [rule(30), rule(55), { ...rule(80), enabled: false }, rule(90)] }), content,
     );
     expect(problems.length).toBeGreaterThan(0);
+  });
+});
+
+describe('follow de membro e alvo de regra (§24-30, ADR 0035 d.9 e d.10)', () => {
+  it('follow ausente é none, e os três kind parseiam', () => {
+    // Mutação que mata: tirar o `.default({ kind: 'none' })` — toda configuração salva antes
+    // deste campo viraria inválida.
+    expect(config().follow).toEqual({ kind: 'none' });
+    for (const follow of [
+      { kind: 'none' }, { kind: 'leader' }, { kind: 'member', characterId: 'abc' },
+    ]) {
+      expect(botConfigSchema.parse({ ...config(), follow }).follow).toEqual(follow);
+    }
+    expect(botConfigSchema.safeParse({ ...config(), follow: { kind: 'guild' } }).success).toBe(false);
+  });
+
+  it('target ausente é self, e os três kind parseiam', () => {
+    // Mutação que mata: tirar o `.default({ kind: 'self' })` — toda regra salva sem `target`
+    // reprovaria.
+    expect(botRuleSchema.parse(rule(30)).target).toEqual({ kind: 'self' });
+    for (const target of [
+      { kind: 'self' }, { kind: 'lowest-hp-member' }, { kind: 'member', characterId: 'abc' },
+    ]) {
+      expect(botRuleSchema.parse({ ...rule(30), target }).target).toEqual(target);
+    }
+  });
+
+  it('recusa alvo diferente de self em attack e rune, nomeando a categoria', () => {
+    // Mutação que mata: trocar `category === 'attack' || category === 'rune'` por só uma delas.
+    const attack = validateBotConfig(
+      config({
+        attack: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'strong-heal' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(attack).toHaveLength(1);
+    expect(attack[0]).toContain('attack');
+
+    const rune = validateBotConfig(
+      config({
+        rune: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'strong-heal' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(rune).toHaveLength(1);
+    expect(rune[0]).toContain('rune');
+  });
+
+  it('recusa alvo em outro personagem quando a magia é self-only, e aceita quando ela é friend', () => {
+    // Mutação que mata: remover a checagem `effect.target === 'friend'`, deixando qualquer
+    // heal/mana valer como alvo de terceiro.
+    const selfOnly = validateBotConfig(
+      config({ heal: [{ ...rule(50), target: { kind: 'lowest-hp-member' } }] }), // do: strong-heal
+      content,
+    );
+    expect(selfOnly).toHaveLength(1);
+    expect(selfOnly[0]).toContain('heal');
+
+    const friendTargetable = validateBotConfig(
+      config({
+        heal: [{
+          ...rule(50), do: { kind: 'spell', spellId: 'heal-friend-test' },
+          target: { kind: 'lowest-hp-member' },
+        }],
+      }),
+      content,
+    );
+    expect(friendTargetable).toEqual([]);
+  });
+
+  it('a mesma regra vale para supply: self-only recusa, friend aceita', () => {
+    const selfOnly = validateBotConfig(
+      config({
+        potion: [{
+          ...rule(50), do: { kind: 'supply', supplyId: 'health-potion' },
+          target: { kind: 'member', characterId: 'abc' },
+        }],
+      }),
+      content,
+    );
+    expect(selfOnly).toHaveLength(1);
+    expect(selfOnly[0]).toContain('potion');
+
+    const friendTargetable = validateBotConfig(
+      config({
+        potion: [{
+          ...rule(50), do: { kind: 'supply', supplyId: 'mana-potion-friend' },
+          target: { kind: 'member', characterId: 'abc' },
+        }],
+      }),
+      content,
+    );
+    expect(friendTargetable).toEqual([]);
   });
 });

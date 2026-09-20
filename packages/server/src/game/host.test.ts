@@ -1,5 +1,5 @@
 import {
-  CharacterRuntime, HuntRuleset, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
+  CharacterRuntime, HuntRuleset, PartyFullError, Rng, Session, createHuntSession, statsForLevel, totalXpForLevel,
   type EndReason, type Ruleset, type SessionSnapshot,
 } from '@draconya/sim';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -1441,6 +1441,7 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 40, goldSpent: 0, kills: 12, deaths: 0,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
     },
     notableEvents: [{ atMs: 1_000, type: 'level-up', detail: '4' }],
     ledgerSeq: 0, endedReason: null,
@@ -4531,7 +4532,7 @@ describe('a party no hospedeiro: um extrato por membro, saída por dentro do sim
 
 describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com os N, os seguintes se anexam', () => {
   const party = {
-    sessionId: 's-party', leaderId: 'a', mode: 'split' as const, huntId: 'arena', difficulty: 'cautious',
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
     members: [
       { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0, name: 'Ana' } },
       { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0, name: 'Bia' } },
@@ -4587,6 +4588,102 @@ describe('o ticket de party no hospedeiro (#195): o primeiro cria a sessão com 
   });
 });
 
+describe('a entrada numa sessão em curso (#402, ADR 0035 D7)', () => {
+  // A party já criou a hunt com dois donos; o terceiro chega por um ticket `join: true` para o
+  // MESMO `sessionId`. O host admite (`session.enter`) sem criar uma segunda hunt, e recusa
+  // tipado quando a sessão não está neste nó, quando a versão divergiu ou quando lotou.
+  function lateJoin(over: { contentVersion?: string; fullAt?: number } = {}) {
+    const registered: string[] = [];
+    let created = 0;
+    const cap = over.fullAt;
+    const ruleset: Ruleset = {
+      type: 'hunt',
+      hz: () => 1,
+      onEnter: (session) => {
+        if (cap !== undefined && session.participants.length > cap) {
+          throw new PartyFullError('arena', cap);
+        }
+      },
+      onEvent: () => {},
+      onCreatureDied: () => {},
+      onEnd: () => {},
+    };
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: over.contentVersion ?? 'v-test', logger,
+      directory: {
+        register: async (characterId: string) => { registered.push(characterId); return true; },
+        succeed: async () => true, release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+      } as unknown as SessionDirectory,
+      createSession: (characterId, _initial, ticket) => {
+        created += 1;
+        const session = new Session({ id: ticket?.sessionId ?? `s-${characterId}`, contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('p'), createdAtMs: 0 });
+        for (const member of ticket?.members ?? [{ characterId }]) {
+          session.enter(new CharacterRuntime({
+            id: member.characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+            level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+          }));
+        }
+        return session;
+      },
+      createParticipant: (characterId) => new CharacterRuntime({
+        id: characterId, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+        level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+      }),
+    });
+    return { host, registered, created: () => created };
+  }
+
+  const base = {
+    sessionId: 's-party', leaderId: 'a', shareCosts: false, splitLoot: false, huntId: 'arena', difficulty: 'cautious',
+    members: [
+      { characterId: 'a', accountId: 'acc-a', initialCharacter: { level: 8, xp: 0 } },
+      { characterId: 'b', accountId: 'acc-b', initialCharacter: { level: 8, xp: 0 } },
+    ],
+  };
+  const joiner = {
+    ...base, join: true as const,
+    members: [{ characterId: 'c', accountId: 'acc-c', initialCharacter: { level: 8, xp: 0 } }],
+  };
+
+  it('admits the newcomer into the hosted session without creating a second hunt (RF-09)', async () => {
+    // Mutação que mata: `#prepare` criando uma sessão nova para o ticket de join — a segunda
+    // hunt com um `sessionId` diferente, e o jogador sozinho onde deveria estar a party.
+    const { host, registered, created } = lateJoin();
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    expect(created()).toBe(1);
+    const before = host.sessionFor('a')?.participants.length ?? 0;
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: true });
+    expect(created()).toBe(1);
+    expect(host.sessionFor('c')?.id).toBe('s-party');
+    expect(host.sessionFor('c')?.participants.length).toBe(before + 1);
+    expect(registered).toContain('c');
+  });
+
+  it('refuses a session that is not hosted here (RF-10)', async () => {
+    const { host } = lateJoin();
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'session-not-here' });
+  });
+
+  it('refuses a content-version mismatch before admitting (RF-10)', async () => {
+    const { host } = lateJoin({ contentVersion: 'v-other' });
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'content-version' });
+  });
+
+  it('propagates the sim cap as `party-full` without leaving a ghost participant (RF-10)', async () => {
+    const { host } = lateJoin({ fullAt: 2 });
+    await host.prepare('a', base.members[0]?.initialCharacter, 'acc-a', base);
+    const participants = host.sessionFor('a')?.participants.length;
+    const result = await host.prepare('c', joiner.members[0]?.initialCharacter, 'acc-c', joiner);
+    expect(result).toEqual({ created: false, refused: 'party-full' });
+    expect(host.sessionFor('a')?.participants.length).toBe(participants);
+    expect(host.sessionFor('c')).toBeUndefined();
+  });
+});
+
 describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
   // Uma hunt de verdade com dois donos em modo compartilhado: o `session-state` de cada
   // visualizador leva os agregados DELE e o bloco da party; a bolsa e o settlement viram
@@ -4596,14 +4693,25 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     attackIntervalMs: 2000, speed: 300, aggroRadius: 4, attackRange: 1,
     loot: { gold: { chance: 1, min: 3, max: 3 }, items: [] },
   };
-  function partyHunt(options?: { mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean }) {
+  const richWithLoot = {
+    ...rich,
+    loot: { gold: { chance: 1, min: 3, max: 3 }, items: [{ itemId: 'loot-sword', chance: 1, min: 1, max: 1 }] },
+  };
+  function partyHunt(options?: {
+    mode?: 'shared' | 'split'; shareCosts?: boolean; splitLoot?: boolean; lootItems?: boolean;
+  }) {
     const mode = options?.mode ?? 'shared';
-    const raw = rawTestContent();
-    const content = buildContent({
-      ...raw,
-      monsters: [rich],
+    const raw = {
+      ...rawTestContent(),
+      ...(options?.lootItems === true
+        ? { items: [{ id: 'loot-sword', name: 'Loot Sword', kind: 'weapon', slot: 'hand', weight: 10, value: 30, attack: 1 }] }
+        : {}),
+      monsters: [options?.lootItems === true ? richWithLoot : rich],
       progression: [{ ...TEST_PROGRESSION, startingMana: 0 }],
-    });
+    };
+    // A aparência é DERIVADA (FUN-94): o item novo precisa da linha, e `rawTestContent` já
+    // rodou `placeholderAppearances` sem ele — rederivar é o que evita o `ContentError`.
+    const content = buildContent({ ...raw, appearances: [placeholderAppearances(raw)] });
     const stats = statsForLevel(1, null, content.progression);
     let now = 0;
     const member = (id: string) => new CharacterRuntime({
@@ -4661,7 +4769,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
       ['b', true, 100, null, 1, 0],
     ]);
     const capacity = () => session()?.participants.reduce((n, p) => n + p.capacity, 0) ?? 0;
-    expect(leadState.partyBag).toEqual({ gold: 0, items: [], weight: 0, capacity: capacity() });
+    expect(leadState.partyBag).toMatchObject({ gold: 0, items: [], weight: 0, capacity: capacity() });
 
     // Mutação que mata: analisador da SOMA — os dois receberiam os mesmos números.
     session()?.credit('lead', 'xpGained', 7);
@@ -4697,6 +4805,9 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     if (settlement?.type !== 'party-settlement') throw new Error('sem party-settlement');
     expect(settlement.total).toBe(lastBag.gold);
     expect(settlement.shares.map((s) => s.characterId).sort()).toEqual(['b', 'lead']);
+    // O motivo viaja desde o `sim` (#400, RF-05): a saída é `leave`.
+    expect(settlement.reason).toBe('leave');
+    expect(settlement.itemId).toBeUndefined();
     const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
     if (state?.type !== 'party-state') throw new Error('sem party-state');
     expect(state.members.map((m) => [m.characterId, m.vocationId, m.level, m.manaPercent])).toEqual([
@@ -4714,6 +4825,13 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     // Attach inicial leva party embutida no session-state; nenhum party-state isolado foi enviado
     expect(partyStatesOf(lead.socket).length).toBe(0);
 
+    // O `onEnter` emite `party-state` em TODA entrada com party (#397): a formação inicial
+    // (lead + b) deixa eventos na fila, entregues no primeiro ciclo. Consome-os para medir só
+    // as mudanças ao vivo, que é o assunto deste teste.
+    runFor(100);
+    const baseline = partyStatesOf(lead.socket).length;
+    expect(baseline).toBeGreaterThan(0);
+
     const s = session();
     if (!s) throw new Error('sem session');
     const memberB = s.participants.find((p) => p.id === 'b');
@@ -4724,8 +4842,8 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     memberB.mana = 100;
     runFor(100);
     let states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(1);
-    expect(states[0]).toMatchObject({
+    expect(states.length).toBe(baseline + 1);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', manaPercent: 100 }),
@@ -4734,15 +4852,15 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(1);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 1);
 
     // 2. Modificar level dispara mais 1 party-state
     memberB.level = 2;
     memberB.xp = totalXpForLevel(2, TEST_PROGRESSION as Progression);
     runFor(100);
     states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(2);
-    expect(states[1]).toMatchObject({
+    expect(states.length).toBe(baseline + 2);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', level: 2 }),
@@ -4751,14 +4869,14 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(2);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 2);
 
     // 3. Modificar vocação dispara mais 1 party-state
     memberB.vocationId = 'knight';
     runFor(100);
     states = partyStatesOf(lead.socket);
-    expect(states.length).toBe(3);
-    expect(states[2]).toMatchObject({
+    expect(states.length).toBe(baseline + 3);
+    expect(states[states.length - 1]).toMatchObject({
       type: 'party-state',
       members: expect.arrayContaining([
         expect.objectContaining({ characterId: 'b', vocationId: 'knight' }),
@@ -4767,7 +4885,7 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
 
     // Ciclos seguintes sem mudança não duplicam envio
     runFor(300);
-    expect(partyStatesOf(lead.socket).length).toBe(3);
+    expect(partyStatesOf(lead.socket).length).toBe(baseline + 3);
   });
 
   it('#partyBlock populates shareCosts and splitLoot with defaults and explicit overrides (#359)', () => {
@@ -4791,6 +4909,195 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const combDState = combDLead.socket.received().find((m) => m.type === 'session-state');
     if (combDState?.type !== 'session-state') throw new Error('sem session-state');
     expect(combDState.party).toMatchObject({ leaderId: 'lead', mode: 'split', shareCosts: false, splitLoot: true });
+  });
+
+  it('o líder muda os eixos por party-settings, e o party-state seguinte reflete (#400, RF-01)', () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    // Partida em `shared`: os dois eixos ligados. O líder desliga os dois.
+    host.handle(lead.viewer, { type: 'party-settings', shareCosts: false, splitLoot: false });
+    runFor(100);
+    const state = lead.socket.received().filter((m) => m.type === 'party-state').at(-1);
+    if (state?.type !== 'party-state') throw new Error('sem party-state');
+    expect(state.settings).toEqual({ shareCosts: false, splitLoot: false });
+    expect(state.shareCosts).toBe(false);
+    expect(state.splitLoot).toBe(false);
+    expect(state.mode).toBe('split');
+  });
+
+  it('quem não é líder recebe system-message e a party não muda (#400, RF-02)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+    const ruleset = session()?.ruleset as HuntRuleset;
+    const antes = ruleset.party?.shareCosts;
+    host.handle(b.viewer, { type: 'party-settings', shareCosts: false });
+    runFor(100);
+    const warning = b.socket.received().find((m) => m.type === 'system-message');
+    expect(warning).toMatchObject({ type: 'system-message', level: 'warning' });
+    expect(ruleset.party?.shareCosts).toBe(antes);
+    expect(lead.socket.received().some((m) => m.type === 'system-message')).toBe(false);
+  });
+
+  it('o líder propõe encerrar para todos, a votação vai a TODOS e o último sim encerra (#432)', async () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+
+    // Quem não é líder não propõe: recusa tipada e nenhuma votação abre (ADR 0032 d.14).
+    host.handle(b.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    expect(b.socket.received().some((m) => m.type === 'system-message')).toBe(true);
+    expect(b.socket.received().some((m) => m.type === 'party-end-vote')).toBe(false);
+
+    // O líder propõe: os DOIS visualizadores recebem o estado, e a proposta carrega o sim dele.
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    const opened = b.socket.received().filter((m) => m.type === 'party-end-vote').at(-1);
+    if (opened?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(opened).toMatchObject({ active: true, approved: ['lead'] });
+    expect(lead.socket.received().some((m) => m.type === 'party-end-vote' && m.active)).toBe(true);
+
+    // O último sim encerra a sessão com `party-vote`.
+    host.handle(b.viewer, { type: 'party-end-vote', approve: true });
+    runFor(500);
+    // A sucessão roda fora do ciclo e é assíncrona (grava o extrato, depois troca a sessão);
+    // `flush` entrega o `session-ended` que o `#succeed` enfileirou no visualizador.
+    await vi.waitFor(() => {
+      expect(host.sessionFor('lead')?.ruleset.type).toBe('city');
+    });
+    host.flush();
+    const ended = lead.socket.received().filter((m) => m.type === 'session-ended').at(-1);
+    if (ended?.type !== 'session-ended') throw new Error('sem session-ended');
+    expect(ended.reason).toBe('party-vote');
+  });
+
+  it('recusar derruba a votação e a sessão continua (#432)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    host.handle(b.viewer, { type: 'party-end-vote', approve: false });
+    runFor(100);
+    const last = b.socket.received().filter((m) => m.type === 'party-end-vote').at(-1);
+    if (last?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(last.active).toBe(false);
+    expect(session()?.ended).toBeNull();
+  });
+
+  it('quem reanexa no meio da votação recebe o estado dela (#432)', () => {
+    const { host, runFor } = partyHunt();
+    const lead = attach(host, 'lead');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-end-vote', approve: true });
+    runFor(100);
+    // `b` só aparece depois da proposta: o attach precisa levar a votação em curso.
+    const b = attach(host, 'b');
+    const state = b.socket.received().find((m) => m.type === 'party-end-vote');
+    if (state?.type !== 'party-end-vote') throw new Error('sem party-end-vote');
+    expect(state).toMatchObject({ active: true, approved: ['lead'] });
+  });
+
+  it('#partyBlock monta party-state/party-bag v2 do ruleset — settings, loot, connected, value, overweight, reservations, eligible (#400, RF-03)', () => {
+    const { host, runFor, session } = partyHunt({ lootItems: true });
+    const lead = attach(host, 'lead');
+    const b = attach(host, 'b');
+    runFor(20_000);
+    // O `session-state` de `b` foi montado DEPOIS de os dois anexarem: é onde `connected` já
+    // enxerga os dois (o de `lead` nasceu antes de `b` chegar).
+    const state = b.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('sem session-state');
+    expect(state.party?.settings).toEqual({ shareCosts: true, splitLoot: true });
+    expect(state.party?.loot).toEqual({ collect: null, autoSell: [], autoSellLimit: 5, leaderPremium: false });
+    expect(state.party?.members.map((m) => [m.characterId, m.connected])).toEqual([['lead', true], ['b', true]]);
+    // `joinedAtMs` chega ao fio pelo acessor `Session.joinedAtMsOf` (#397, D12) — quem entrou
+    // pela porta normal da sessão tem o instante lógico da entrada.
+    for (const member of state.party?.members ?? []) {
+      expect(member.joinedAtMs).toEqual(expect.any(Number));
+    }
+
+    const bagMessage = lead.socket.received().filter((m) => m.type === 'party-bag').at(-1);
+    if (bagMessage?.type !== 'party-bag') throw new Error('sem party-bag');
+    // Nada é somado no host: peso/valor vêm do `partySummary`, OVERWEIGHT/reservas do `sim`.
+    const simSummary = (session()?.ruleset as HuntRuleset).partySummary(session() as Session);
+    expect(bagMessage.value).toBe(simSummary?.bagValue);
+    expect(bagMessage.value).toBeGreaterThan(0);
+    expect(bagMessage.overweight).toBe(false);
+    expect(bagMessage.reservations?.map((r) => r.characterId)).toEqual(['lead', 'b']);
+    const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
+    expect(bag?.items.length ?? 0).toBeGreaterThan(0);
+    expect(bagMessage.items[0]?.eligible).toEqual(['lead', 'b']);
+  });
+
+  it('party-state.members leva DPS/HPS e os totais, e a variação reenvia ao vivo (#431, ADR 0032 d.14)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    const partyStatesOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-state');
+    const before = partyStatesOf(lead.socket).length;
+
+    // O dano e a cura são de eventos de verdade no `sim`; o host só TRADUZ o acumulador e a
+    // janela — nada é somado aqui.
+    session()?.creditDamage('lead', 120);
+    session()?.creditHealing('lead', 60);
+    runFor(200);
+    const states = partyStatesOf(lead.socket);
+    expect(states.length).toBeGreaterThan(before);
+    const state = states.at(-1);
+    if (state?.type !== 'party-state') throw new Error('sem party-state');
+    const member = state.members.find((m) => m.characterId === 'lead');
+    if (member === undefined) throw new Error('sem membro lead');
+    expect(member.damageDealt).toBeGreaterThanOrEqual(120);
+    expect(member.healingDone).toBeGreaterThanOrEqual(60);
+    expect(member.dps).toBeGreaterThan(0);
+    expect(member.hps).toBeGreaterThan(0);
+    // O creditado à mão está no total; qualquer dano de bot que a hunt tenha produzido soma.
+    expect(member.damageDealt).toBeGreaterThanOrEqual(120);
+    expect(member.dps).toBeCloseTo(session()?.dpsOf('lead', session()?.nowMs ?? 0) ?? 0, 8);
+  });
+
+  it('analyzer.party e session-state.partySummary aparecem só com party (#400, RF-04)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    const state = lead.socket.received().find((m) => m.type === 'session-state');
+    if (state?.type !== 'session-state') throw new Error('sem session-state');
+    expect(state.partySummary).toMatchObject({
+      players: 2, uniqueVocations: 1, xpPercent: 125, shareCosts: true, splitLoot: true,
+      autoSell: { used: 0, limit: 5 },
+    });
+
+    session()?.credit('lead', 'xpGained', 7);
+    session()?.credit('lead', 'suppliesUsed', 2);
+    runFor(200);
+    const analyzer = lead.socket.received().filter((m) => m.type === 'analyzer').at(-1);
+    if (analyzer?.type !== 'analyzer') throw new Error('sem analyzer');
+    expect(analyzer.party?.players).toBe(2);
+    expect(analyzer.party?.totalXp).toBeGreaterThanOrEqual(7);
+    expect(analyzer.party?.totalSupplies).toBeGreaterThanOrEqual(2);
+  });
+
+  it('party-settlement repassa reason e itemId do sim (#400, RF-05)', () => {
+    const { host, runFor } = partyHunt({ lootItems: true });
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    host.handle(lead.viewer, { type: 'party-settings', autoSell: ['loot-sword'] });
+    runFor(20_000);
+    const autoSell = lead.socket.received()
+      .filter((m) => m.type === 'party-settlement')
+      .find((m) => m.reason === 'auto-sell');
+    expect(autoSell).toMatchObject({
+      type: 'party-settlement', reason: 'auto-sell', itemId: 'loot-sword',
+    });
   });
 
   it('broadcasts party-spending to all viewers on spending or bag change, and previews settlement in shared mode', () => {
@@ -4824,14 +5131,15 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     expect(spendingOf(lead.socket).length).toBe(1);
     expect(spendingOf(b.socket).length).toBe(1);
 
-    // 2. Loot na bolsa: soma dos estimatedShares bate com bag.gold
+    // 2. Loot na bolsa: soma dos estimatedShares bate com o gold da bolsa
     runFor(20_000);
     const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
-    expect(bag?.gold).toBeGreaterThan(0);
+    const bagGold = bag?.gold.reduce((n, entry) => n + entry.amount, 0) ?? 0;
+    expect(bagGold).toBeGreaterThan(0);
     const lastSpending = spendingOf(lead.socket).at(-1);
     if (lastSpending?.type !== 'party-spending') throw new Error('sem party-spending');
     const sumEstimated = lastSpending.shares.reduce((sum, s) => sum + (s.estimatedShare ?? 0), 0);
-    expect(sumEstimated).toBe(bag?.gold);
+    expect(sumEstimated).toBe(bagGold);
 
     // Avançar tempo após settle ou sem mudanças não duplica
     const countAfterLoot = spendingOf(lead.socket).length;
@@ -4887,12 +5195,122 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const soloState = soloSocket.received().find((m) => m.type === 'session-state');
     if (soloState?.type !== 'session-state') throw new Error('sem session-state');
     expect(soloState.partySpending).toBeUndefined();
+    // Solo não tem `party` nem `partySummary` (#400, RF-04): D8, campo de sistema inexistente
+    // é omitido, nunca um zero fabricado.
+    expect(soloState.party).toBeUndefined();
+    expect(soloState.partySummary).toBeUndefined();
 
     for (let t = 0; t < 300; t += 100) { now += 100; soloHost.cycle(); }
     soloHost.flush();
 
     const spendingMessages = soloSocket.received().filter((m) => m.type === 'party-spending');
     expect(spendingMessages).toHaveLength(0);
+    // E nenhum `analyzer` leva a seção PARTY em solo.
+    for (const analyzer of soloSocket.received().filter((m) => m.type === 'analyzer')) {
+      expect(analyzer).not.toHaveProperty('party');
+    }
+  });
+});
+
+describe('o follow-state no fio (#401, ADR 0035 decisão 9)', () => {
+  // O ruleset de teste é MÍNIMO, como o da "party no hospedeiro": expõe `followStateOf` (o
+  // contrato que a #398 entrega) e emite o evento pelo mesmo `session.scheduleIn` do
+  // `member-left`. Sem `HuntRuleset` de verdade — a mecânica de Follow é da #398.
+  type FollowSnapshot = { active: boolean; targetId: string; reason?: 'dead' | 'left' | 'unreachable' };
+  const INTERRUPT = 'interrupt-follow';
+  function followRuleset(current: Record<string, FollowSnapshot | undefined>) {
+    return {
+      type: 'hunt', hz: () => 10,
+      onEnter: () => {}, onCreatureDied: () => {}, onEnd: () => {},
+      onEvent: (session: Session, event: { kind: string }) => {
+        if (event.kind !== INTERRUPT) return;
+        for (const [characterId, state] of Object.entries(current)) {
+          if (state !== undefined) session.emit({ kind: 'follow-state', characterId, ...state });
+        }
+      },
+      followStateOf: (characterId: string) => current[characterId],
+    } as unknown as Ruleset;
+  }
+  const member = (id: string) => new CharacterRuntime({
+    id, position: { x: 0, y: 0, z: 7 }, health: 100, maxHealth: 100, mana: 0, maxMana: 0,
+    level: 8, xp: 0, goldDelta: 0, alive: true, cooldowns: {},
+  });
+  function followHost() {
+    let now = 0;
+    const directory = {
+      register: async () => true, succeed: async () => true,
+      release: async () => {}, releaseSlot: async () => {}, renew: async () => {},
+    } as unknown as SessionDirectory;
+    const receipts = { save: async () => {} } as unknown as ReceiptStore;
+    const current: Record<string, FollowSnapshot | undefined> = { a: undefined, b: undefined };
+    const ruleset = followRuleset(current);
+    let shared: Session | null = null;
+    const host = new SessionHost({
+      nodeId: 'n1', contentVersion: 'v-test', logger, now: () => now, receipts, directory,
+      createSession: (characterId) => {
+        if (shared === null) {
+          shared = new Session({ id: 's-follow', contentVersion: 'v-test', ruleset, rng: Rng.fromSeed('f'), createdAtMs: 0 });
+          shared.enter(member('a'));
+          shared.enter(member('b'));
+        }
+        if (shared.participants.every((p) => p.id !== characterId)) shared.enter(member(characterId));
+        return shared;
+      },
+    });
+    const runFor = (ms: number) => { for (let t = 0; t < ms; t += 100) { now += 100; host.cycle(); } host.flush(); };
+    return { host, current, runFor, session: () => shared as Session | null };
+  }
+  const attach = (host: SessionHost, characterId: string) => {
+    const socket = new FakeSocket();
+    const viewer = host.attach(socket, characterId);
+    host.handle(viewer, { type: 'session-attach' });
+    host.flush();
+    return { socket, viewer };
+  };
+
+  it('chega SÓ a quem olha o personagem do evento, nunca aos outros da sessão (RF-01)', async () => {
+    const { host, current, runFor, session } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    await host.prepare('b', undefined, 'acc-b');
+    const a = attach(host, 'a');
+    const b = attach(host, 'b');
+    // Nada de follow no attach: os dois começam sem interrupção.
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+    expect(b.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+
+    current.a = { active: false, targetId: 'b', reason: 'unreachable' };
+    session()?.scheduleIn(INTERRUPT, 100, { priority: 0 });
+    runFor(200);
+
+    // Mutação que mata: reusar `#presentParty` (broadcast) — `b` também receberia.
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toEqual([
+      { type: 'follow-state', active: false, targetId: 'b', reason: 'unreachable' },
+    ]);
+    expect(b.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
+  });
+
+  it('quem reconecta durante uma interrupção sem visualizador recebe o estado atual (RF-02)', async () => {
+    const { host, current, runFor, session } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    // Interrompe enquanto NINGUÉM olha: o evento é drenado e descartado, mas a verdade fica.
+    current.a = { active: false, targetId: 'b', reason: 'dead' };
+    session()?.scheduleIn(INTERRUPT, 100, { priority: 0 });
+    runFor(200);
+
+    // Mutação que mata: só entregar pelo evento drenado — o attach não traria nada.
+    const a = attach(host, 'a');
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toEqual([
+      { type: 'follow-state', active: false, targetId: 'b', reason: 'dead' },
+    ]);
+  });
+
+  it('quem reconecta com o Follow ativo NÃO recebe follow-state redundante (RF-03)', async () => {
+    const { host, current } = followHost();
+    await host.prepare('a', undefined, 'acc-a');
+    current.a = { active: true, targetId: 'b' };
+    // Mutação que mata: mandar sempre no attach — aqui apareceria uma mensagem `active: true`.
+    const a = attach(host, 'a');
+    expect(a.socket.received().filter((m) => m.type === 'follow-state')).toHaveLength(0);
   });
 });
 

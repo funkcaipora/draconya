@@ -11,9 +11,14 @@
 // mão aqui — e cai para o id cru, sem cor, quando o catálogo não o reconhece (nó `game` ou
 // conteúdo divergente). Nada aparece quando `vocationId` é `null` ou, para level/mana, quando o
 // campo é `undefined` (D8: o cliente não fabrica o que o servidor não mandou). Gasto ainda
-// espera SV-18, DPS/HPS esperam E2; expulsar é ação da FORMAÇÃO (`PartyPanel.tsx`, SV-22/#358),
-// não deste painel. O modo (`split`/`shared`) continua texto: os interruptores de rateio e loot
-// exigem SV-23, pois o modo é FIXADO na proposta (ADR 0027 decisão 5).
+// espera SV-18; a linha DPS/HPS chegou com a PT-01 (#431): a taxa e os totais vêm prontos em
+// `party-state.members[]`, e a linha só aparece quando o servidor os mandou.
+//
+// O rodapé ganhou os DOIS interruptores do líder (#405, ADR 0035 D1): "Rateio de custos" e
+// "Dividir loot" leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
+// nunca escrito à mão) e o líder os liga/desliga EM TEMPO DE HUNT. O clique manda INTENÇÃO
+// (`party-settings`, invariante 4); quem decide se aplica é o host, e a tela só reflete o
+// `party-state` que volta. O membro vê os dois desabilitados.
 //
 // O botão usa `leave-hunt`, não `partyActions.leave()`: depois do start a party HTTP já foi
 // consumida, enquanto o opcode 10 retira somente este personagem da sessão compartilhada.
@@ -23,19 +28,15 @@ import { useHudSlice } from '../state/useSlice.js';
 import { sendIntent } from '../net/current.js';
 import { leaveHunt } from './HuntActions.js';
 import { percentFromWorld } from './party-member-view.js';
+import { shareCostsOf, splitLootOf } from './party-loot-format.js';
+import { compactPerformance, performanceRate } from './party-performance-format.js';
 import { Button } from './ui/Button.js';
 import { IconButton } from './ui/IconButton.js';
 import { Panel } from './ui/Panel.js';
+import { Switch } from './ui/Switch.js';
 import { VitalBar } from './ui/VitalBar.js';
 
 export const HEALTH_POLL_MS = 1_000;
-
-/**
- * Duplicado de propósito, e não importado de `PartyPanel.tsx` — a formação, que esta issue NÃO
- * toca (DS-16 é quem redesenha a formação, dentro do modal de caçada). Um módulo só para duas
- * entradas acoplaria dois arquivos que precisam poder mudar em issues diferentes sem se tocar.
- */
-const MODE_TEXT: Record<'split' | 'shared', string> = { split: 'Dividido', shared: 'Compartilhado' };
 
 /** A letra que representa a vocação (SV-11, #347) — a inicial do NOME, nunca do id. */
 export function vocationAbbreviation(name: string): string {
@@ -50,6 +51,7 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   const partyView = useHudSlice((state) => state.party);
   const me = useHudSlice((state) => state.characterId);
   const catalogue = useHudSlice((state) => state.catalogue);
+  const endVote = useHudSlice((state) => state.partyEndVote);
   const [, tick] = useState(0);
   useEffect(() => {
     if (partyView === null) return;
@@ -58,10 +60,89 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
   }, [partyView]);
   if (partyView === null) return null;
 
+  // O líder é quem muda os dois eixos (PRD §33). O membro VÊ o estado, sem clicar.
+  const leader = partyView.leaderId === me;
+  // A votação de encerrar (#432, ADR 0032 d.14): o líder propõe, cada membro presente aprova em
+  // até 60 s. O estado vem do SERVIDOR (`party-end-vote`); a tela nunca decide que a votação
+  // começou nem que ela passou — só espelha e manda intenção (invariante 4).
+  const voteActive = endVote?.active === true;
+  const approved = endVote?.approved ?? [];
+  const iApproved = me !== null && approved.includes(me);
+  const endVoteFooter = voteActive ? (
+    <div className="party-end-vote">
+      <p className="party-end-vote-note">
+        {`Encerrando para todos · ${String(approved.length)}/${String(partyView.members.length)} aprovaram`}
+      </p>
+      {leader ? (
+        <Button
+          variant="danger"
+          size="sm"
+          block
+          className="party-end-vote-cancel"
+          onClick={() => { sendIntent({ type: 'party-end-vote', approve: false }); }}
+        >
+          Cancelar encerramento
+        </Button>
+      ) : iApproved ? (
+        <p className="party-end-vote-waiting">Você aprovou · aguardando os demais</p>
+      ) : (
+        <div className="party-end-vote-actions">
+          <Button
+            variant="gold"
+            size="sm"
+            className="party-end-vote-approve"
+            onClick={() => { sendIntent({ type: 'party-end-vote', approve: true }); }}
+          >
+            Aprovar
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            className="party-end-vote-decline"
+            onClick={() => { sendIntent({ type: 'party-end-vote', approve: false }); }}
+          >
+            Recusar
+          </Button>
+        </div>
+      )}
+    </div>
+  ) : leader ? (
+    <Button
+      variant="danger"
+      size="sm"
+      block
+      className="party-end-vote-propose"
+      onClick={() => { sendIntent({ type: 'party-end-vote', approve: true }); }}
+    >
+      Encerrar para todos
+    </Button>
+  ) : null;
   const footer = (
     <div className="party-footer">
       <p className="party-footer-note">Parar no meio da caçada exige o sim de todos.</p>
-      <p className="party-mode">{MODE_TEXT[partyView.mode]}</p>
+      <div className="party-footer-toggles">
+        <Switch
+          title="Rateio de custos"
+          tone="gold"
+          on={shareCostsOf(partyView)}
+          disabled={!leader}
+          // Intenção, nunca o valor final (invariante 4): quem decide se aplica é o host, que
+          // devolve o `party-state` atualizado ou um `system-message` de recusa.
+          {...(leader
+            ? { onChange: (on: boolean) => { sendIntent({ type: 'party-settings', shareCosts: on }); } }
+            : {})}
+        />
+        <Switch
+          title="Dividir loot"
+          tone="gold"
+          on={splitLootOf(partyView)}
+          disabled={!leader}
+          {...(leader
+            ? { onChange: (on: boolean) => { sendIntent({ type: 'party-settings', splitLoot: on }); } }
+            : {})}
+        />
+      </div>
+      {endVoteFooter}
       <Button
         variant="danger"
         size="sm"
@@ -121,8 +202,9 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
                   <span className="party-companion-level">{`LV ${String(member.level)}`}</span>
                 )}
               </div>
-              {/* Gasto (SV-18), DPS/HPS (E2) e expulsão (formação, SV-22/#358) ficam de fora:
-                  o HUD não fabrica valores que o servidor não transmitiu. */}
+              {/* Gasto (SV-18) e expulsão (formação, SV-22/#358) ficam de fora: o HUD não
+                  fabrica valores que o servidor não transmitiu. DPS/HPS (PT-01, #431) aparece
+                  quando o `party-state` trouxe a taxa e o total. */}
               <div className="party-companion-vitals">
                 <span className="party-hp-row">
                   <span className="party-hp" aria-label={`HP de ${member.name}`}>
@@ -139,6 +221,22 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
                   </span>
                 )}
               </div>
+              {(member.dps !== undefined || member.hps !== undefined) && (
+                <div className="party-companion-perf">
+                  {member.dps !== undefined && (
+                    <span>
+                      <b>{`DPS ${performanceRate(member.dps)}`}</b>
+                      {member.damageDealt !== undefined && ` · ${compactPerformance(member.damageDealt)}`}
+                    </span>
+                  )}
+                  {member.hps !== undefined && (
+                    <span>
+                      <b>{`HPS ${performanceRate(member.hps)}`}</b>
+                      {member.healingDone !== undefined && ` · ${compactPerformance(member.healingDone)}`}
+                    </span>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

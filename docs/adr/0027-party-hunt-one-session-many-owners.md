@@ -1,6 +1,6 @@
 # 0027 — Party de hunt: uma sessão com N donos, XP por vocação única e dois modos de loot e custo
 
-**Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes)
+**Status:** aceito — decisão 5 emendada por #359 (custo e loot como dois eixos independentes) e pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md); decisões 8 e 9 emendadas pelo [ADR 0035](0035-party-v2-runtime-settings-shared-bag-and-live-join.md)
 **Data:** 2026-09-15
 **Contexto técnico:** `packages/sim` (session, hunt ruleset, novo `party.ts`), `packages/content`
 (`party/`, `item.value`), `packages/protocol` (party no ticket e no `session-state`),

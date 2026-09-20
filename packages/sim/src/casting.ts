@@ -259,6 +259,12 @@ export function castSpell(
    * sabe quais skills alimentam magia é o conteúdo — e este arquivo não conhece catálogo.
    */
   scaling: SpellScaling = NO_SCALING,
+  /**
+   * Quem recebe cura/mana. Ausente: o próprio lançador — o comportamento de sempre. O PAGAMENTO
+   * continua sendo do `caster` (a mana sai dele); só o benefício vai ao `recipient` (§26-30,
+   * ADR 0035 d.10).
+   */
+  recipient: CharacterRuntime = caster,
 ): CastResult {
   if (caster.level < spell.minLevel) {
     return { ok: false, reason: 'level-too-low', retryInMs: NOT_WAITING };
@@ -345,7 +351,7 @@ export function castSpell(
     case 'heal':
       return {
         ok: true,
-        healed: executeHealing(caster, caster, effect, scaling, combat, rng),
+        healed: executeHealing(caster, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: 0,
       };
     case 'heal-over-time':
@@ -412,6 +418,12 @@ export function useSupply(
   scaling?: SpellScaling,
   /** Quem paga (#192). Ausente: o próprio usuário, do saldo dele — o solo de sempre. */
   purse: Purse = ownPurse(user),
+  /**
+   * Quem recebe cura/mana. Ausente: o próprio usuário — o comportamento de sempre. O PAGAMENTO
+   * continua saindo da `purse` de quem usa; só o benefício vai ao `recipient` (§26-30, ADR
+   * 0033 d.10).
+   */
+  recipient: CharacterRuntime = user,
   /**
    * O relógio LÓGICO da sessão. Ausente é "não inicia cooldown" — caminho de fixture que prova
    * o gold sem a mecânica de tempo. O ruleset em produção sempre passa `session.nowMs`, e é o
@@ -481,7 +493,7 @@ export function useSupply(
       startSupplyCooldown(user, supply, nowMs);
       return {
         ok: true,
-        healed: executeHealing(user, user, effect, scaling, combat, rng),
+        healed: executeHealing(user, recipient, effect, scaling, combat, rng),
         manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
       };
     }
@@ -493,7 +505,7 @@ export function useSupply(
     // Poção: número fixo, sem sorteio nem contexto de combate — o caminho de sempre.
     return {
       ok: true,
-      healed: restore(user, 'health', effect.amount ?? 0),
+      healed: restore(recipient, 'health', effect.amount ?? 0),
       manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
     };
   }
@@ -507,7 +519,7 @@ export function useSupply(
   return {
     ok: true,
     healed: 0,
-    manaRestored: restore(user, 'mana', supply.effect.amount),
+    manaRestored: restore(recipient, 'mana', supply.effect.amount),
     damage: 0,
     hits: NO_HITS,
     goldSpent: supply.price,

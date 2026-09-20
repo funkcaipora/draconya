@@ -137,7 +137,7 @@ describe('PartyMembers', () => {
     expect(html).toContain('title="Gerenciar party"');
   });
 
-  it('puts the note, mode, and leave button in the footer in that order', async () => {
+  it('puts the note, the two leader switches and the leave button in the footer in that order', async () => {
     hud.set((state) => ({ ...state, party: {
       leaderId: 'me', mode: 'shared', members: [
         { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
@@ -145,16 +145,60 @@ describe('PartyMembers', () => {
     } }));
     const html = await render();
     const noteIndex = html.indexOf('Parar no meio da caçada exige o sim de todos.');
-    const modeIndex = html.indexOf('Compartilhado');
+    const shareIndex = html.indexOf('title="Rateio de custos"');
+    const splitIndex = html.indexOf('title="Dividir loot"');
     const leaveIndex = html.indexOf('Sair da party');
     expect(noteIndex).toBeGreaterThan(-1);
-    expect(modeIndex).toBeGreaterThan(noteIndex);
-    expect(leaveIndex).toBeGreaterThan(modeIndex);
+    expect(shareIndex).toBeGreaterThan(noteIndex);
+    expect(splitIndex).toBeGreaterThan(shareIndex);
+    expect(leaveIndex).toBeGreaterThan(splitIndex);
     expect(html).toContain('ui-button-danger');
     expect(html).toContain('party-footer-leave');
+    expect(html).toContain('party-footer-toggles');
+    // O modo como TEXTO saiu: os dois eixos do kit (#405, ADR 0035 D1) são os interruptores.
+    expect(html).not.toContain('Compartilhado');
   });
 
-  it('does not invent gasto, DPS/HPS, or a kick button — those belong to other issues/panels', async () => {
+  it('RF-01: the leader sees both switches enabled, reflecting shareCosts/splitLoot', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'split', shareCosts: true, splitLoot: false, members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    const html = await render();
+    // `aria-checked` é o estado que o SERVIDOR mandou, nunca o clique otimista (invariante 4).
+    expect(html).toMatch(/title="Rateio de custos"[^>]*aria-checked="true"/);
+    expect(html).toMatch(/title="Dividir loot"[^>]*aria-checked="false"/);
+    // O líder pode clicar: nenhum dos dois nasce desabilitado.
+    expect(html).not.toMatch(/title="Rateio de custos"[^>]*disabled/);
+    expect(html).not.toMatch(/title="Dividir loot"[^>]*disabled/);
+  });
+
+  it('RF-02: a non-leader sees both switches disabled, still reflecting the state', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'lead', mode: 'shared', shareCosts: true, splitLoot: true, members: [
+        { characterId: 'lead', name: 'Ana', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    const html = await render();
+    expect(html).toMatch(/title="Rateio de custos"[^>]*disabled/);
+    expect(html).toMatch(/title="Dividir loot"[^>]*disabled/);
+    // O membro VÊ o estado; só não pode mudá-lo.
+    expect(html).toMatch(/title="Rateio de custos"[^>]*aria-checked="true"/);
+    expect(html).toMatch(/title="Dividir loot"[^>]*aria-checked="true"/);
+  });
+
+  it('RF-01/02: the leader click sends `party-settings` (intention), never a resolved value', async () => {
+    // Sem DOM no ambiente de teste, o clique se prova pela costura: o handler do líder chama
+    // `sendIntent` com o opcode de intenção, e o membro nem recebe `onChange`.
+    const source = await readFile(new URL('./PartyMembers.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'party-settings', shareCosts: on })");
+    expect(source).toContain("sendIntent({ type: 'party-settings', splitLoot: on })");
+    expect(source).toContain('disabled={!leader}');
+  });
+
+  it('does not invent gasto, DPS/HPS, or a kick button when the server sent none of them', async () => {
     hud.set((state) => ({ ...state, party: {
       leaderId: 'me', mode: 'split', members: [
         { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
@@ -166,6 +210,26 @@ describe('PartyMembers', () => {
     expect(html).not.toContain('DPS');
     expect(html).not.toContain('HPS');
     expect(html).not.toContain('Remover da party');
+  });
+
+  it('renders the "DPS · total / HPS · total" line when party-state carries it (#431, ADR 0032 d.14)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'lead', mode: 'shared', members: [
+        {
+          characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80, vocationId: null,
+          dps: 12, hps: 3, damageDealt: 135_700, healingDone: 20_200,
+        },
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55, vocationId: null },
+      ],
+    } }));
+    const html = await render();
+    expect(html).toContain('party-companion-perf');
+    expect(html).toContain('DPS 12');
+    expect(html).toContain('· 135.7k');
+    expect(html).toContain('HPS 3');
+    expect(html).toContain('· 20.2k');
+    // O membro SEM os campos não ganha a linha — o HUD não fabrica um "DPS 0".
+    expect((html.match(/party-companion-perf/g) ?? []).length).toBe(1);
   });
 
   it('omits the vocation and level badges, and the mana bar, when the fields are null/undefined (D8, SV-11 #347)', async () => {
@@ -264,5 +328,64 @@ describe('PartyMembers', () => {
     const source = await readFile(new URL('./PartyMembers.tsx', import.meta.url), 'utf8');
     expect(source).toContain('leaveHunt(sendIntent)');
     expect(source).toMatch(/onClick=\{[^}]*leaveHunt\(sendIntent\)[^}]*\}/);
+  });
+
+  it('the leader sees "Encerrar para todos"; a member does not (#432)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    expect(await render()).toContain('Encerrar para todos');
+
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'other', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    } }));
+    expect(await render()).not.toContain('Encerrar para todos');
+  });
+
+  it('an active vote shows the count and the leader can cancel it (#432)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'me', mode: 'shared', members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    }, partyEndVote: { active: true, proposedAtMs: 0, approved: ['me'] } }));
+    const html = await render();
+    expect(html).toContain('Encerrando para todos · 1/2 aprovaram');
+    expect(html).toContain('Cancelar encerramento');
+    // O diálogo substitui o botão de propor enquanto a votação corre.
+    expect(html).not.toContain('Encerrar para todos');
+  });
+
+  it('a member approves or declines an active vote; after approving, waits (#432)', async () => {
+    const partyState = {
+      leaderId: 'other', mode: 'shared' as const, members: [
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
+        { characterId: 'other', name: 'Outra', alive: true, healthPercent: 100, vocationId: null },
+      ],
+    };
+    hud.set((state) => ({ ...state, party: partyState, partyEndVote: { active: true, proposedAtMs: 0, approved: [] } }));
+    const pending = await render();
+    expect(pending).toContain('Aprovar');
+    expect(pending).toContain('Recusar');
+
+    hud.set((state) => ({ ...state, party: partyState, partyEndVote: { active: true, proposedAtMs: 0, approved: ['me'] } }));
+    const approved = await render();
+    expect(approved).toContain('Você aprovou');
+    expect(approved).not.toContain('Aprovar<');
+    expect(approved).not.toContain('Recusar');
+  });
+
+  it('sends `party-end-vote` intention, never a resolved outcome (#432)', async () => {
+    // Sem DOM no ambiente de teste, a costura se prova no fonte: aprovar/propor manda
+    // `approve: true` e recusar manda `approve: false` — o servidor é quem decide.
+    const source = await readFile(new URL('./PartyMembers.tsx', import.meta.url), 'utf8');
+    expect(source).toContain("sendIntent({ type: 'party-end-vote', approve: true })");
+    expect(source).toContain("sendIntent({ type: 'party-end-vote', approve: false })");
   });
 });

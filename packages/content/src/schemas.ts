@@ -740,16 +740,23 @@ export const supplySchema = z.object({
      * os mesmos da magia de cura — `amount` fixo, `basePower` provisório ou `formula` canônica —
      * e a runa escala pelo MAGIC LEVEL. `range` é o alcance da runa (catalogado; no motor v1 a
      * runa de cura cura o próprio usuário, como a poção).
+     * `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10).
      */
     z.object({
       kind: z.literal('heal'),
       amount: z.number().int().positive().optional(),
       basePower: z.number().int().positive().optional(),
       formula: spellFormulaSchema.optional(),
+      /** `self` cura quem usa; `friend` cura um membro da party (§26, ADR 0035 d.10). */
+      target: z.enum(['self', 'friend']).optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
     }),
-    z.object({ kind: z.literal('mana'), amount: z.number().int().positive() }),
+    z.object({
+      kind: z.literal('mana'), amount: z.number().int().positive(),
+      target: z.enum(['self', 'friend']).optional(),
+      range: z.number().int().positive().optional(),
+    }),
     /**
      * Runa de ataque (#165, ADR 0026 d.8; #476): o dano sai de UM mecanismo — o Base Power do
      * TibiaWiki convertido pela mesma fórmula das magias (`combat.spellPower`, #155) ou a
@@ -1447,6 +1454,17 @@ export const partySchema = z.object({
   xpPoolPercentByUniqueVocations: z.record(z.string().regex(/^[1-9]\d*$/), z.number().int().min(100)),
   /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
   matchmakingLevelRange: z.number().int().nonnegative().default(0),
+  /**
+   * Quantos TIPOS de item o líder pode marcar para venda automática (§8, §42.1, ADR 0035 d.2).
+   * `free`/`premium` são o status do PERSONAGEM líder (D3 do plano) — a conta não entra aqui.
+   * OPCIONAL no TIPO e preenchido com `{ free: 5, premium: 20 }` no parse: fixtures antigas de
+   * `RawContent` (content.test.ts, server/testing, tools/bench) não conhecem VIP e continuam
+   * válidas sem tocar o campo, e as que montam uma `PartyConfig` à mão não declaram o default.
+   */
+  autoSellItemTypes: z.object({
+    free: z.number().int().nonnegative(),
+    premium: z.number().int().nonnegative(),
+  }).optional(),
   _open: z.string().optional(),
 }).superRefine((party, ctx) => {
   let previous = 0;
@@ -1462,7 +1480,17 @@ export const partySchema = z.object({
     }
     previous = percent;
   }
-});
+}).transform((party): {
+  id: 'baseline';
+  maxMembers: number;
+  xpPoolPercentByUniqueVocations: Record<string, number>;
+  matchmakingLevelRange: number;
+  autoSellItemTypes?: { free: number; premium: number } | undefined;
+  _open?: string | undefined;
+} => ({
+  ...party,
+  autoSellItemTypes: party.autoSellItemTypes ?? { free: 5, premium: 20 },
+}));
 
 export type PartyConfig = z.infer<typeof partySchema>;
 
@@ -1830,6 +1858,14 @@ export const botRingSwapSchema = z.object({
   'removeAbove precisa ser maior que equipBelow: limiares iguais trocam o anel a cada golpe',
 );
 
+/** O alvo de uma regra de cura/suporte (§26-30, ADR 0035 d.10). */
+export const botRuleTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('self') }),
+  z.object({ kind: z.literal('lowest-hp-member') }),
+  z.object({ kind: z.literal('member'), characterId: z.string().min(1) }),
+]);
+export type BotRuleTarget = z.infer<typeof botRuleTargetSchema>;
+
 /**
  * Uma linha de slot da v1: a condição e o que fazer quando ela vale. Preservada com outro nome
  * porque é o INPUT da migração — o motor executa a v2.
@@ -1844,7 +1880,26 @@ export const botRuleV1Schema = z.object({
   enabled: z.boolean().optional(),
   when: botConditionSchemaV1,
   do: botActionV1Schema,
-});
+  /**
+   * Quem recebe a ação (§26-30, ADR 0035 d.10). Só faz sentido em `heal`/`potion`/`support` —
+   * `validateBotConfig` recusa `target ≠ self` em `attack`/`rune` e em ação cujo efeito não
+   * aceita amigo. Com alvo ≠ `self`, a condição `hp` do `when` passa a ler o HP do CANDIDATO
+   * (o `sim` resolve isso — aqui é só a forma).
+   *
+   * OPCIONAL no TIPO, preenchido com `self` no parse: a configuração é persistida e as fixtures
+   * de `sim`/cliente montam a regra à mão, então exigir o campo obrigaria toda fixture a
+   * declarar o default. O comportamento é o de `.default({ kind: 'self' })`.
+   */
+  target: botRuleTargetSchema.optional(),
+}).transform((rule): {
+  enabled?: boolean | undefined;
+  when: z.infer<typeof botConditionSchemaV1>;
+  do: z.infer<typeof botActionV1Schema>;
+  target?: BotRuleTarget | undefined;
+} => ({
+  ...rule,
+  target: rule.target ?? { kind: 'self' },
+}));
 
 /** Alias da v1, para o motor e os leitores que ainda não migraram. */
 export const botRuleSchema = botRuleV1Schema;
@@ -1873,6 +1928,12 @@ export const botSlotSchema = z.object({
   when: z.array(botConditionSchema).default([]),
   hotkey: botHotkeySchema.optional(),
   auto: z.boolean().default(true),
+/**
+   * Quem recebe a ação (§26-30, ADR 0035 d.10). OPCIONAL: a barra v2 nasce da migração e as
+   * fixtures montam o slot à mão; ausente é `self` (quem compila resolve com `?? { kind: 'self' }`).
+   * Com alvo ≠ `self`, a condição `hp` de `when` lê o HP do CANDIDATO resolvido pelo ruleset.
+   */
+  target: botRuleTargetSchema.optional(),
 });
 export type BotSlot = z.infer<typeof botSlotSchema>;
 
@@ -1944,6 +2005,19 @@ export const botStanceSchema = z.enum(['offensive', 'balanced', 'defensive']);
 export type BotStance = z.infer<typeof botStanceSchema>;
 
 /**
+ * Quem o personagem segue (§24-25, ADR 0035 d.9). Campo SEPARADO da postura
+ * (`targeting.posture.kind === 'follow'` continua "persegue o monstro atual") — não é
+ * renomeação, é vocabulário novo. `characterId` não é conferido contra a party aqui: a
+ * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
+ */
+export const botFollowSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('none') }),
+  z.object({ kind: z.literal('leader') }),
+  z.object({ kind: z.literal('member'), characterId: z.string().min(1) }),
+]);
+export type BotFollow = z.infer<typeof botFollowSchema>;
+
+/**
  * A configuração v2 (ADR 0032 d.1): quatro conjuntos de 24 slots, automações, postura, e o
  * `targeting`/`exit`/`lure` herdados da v1 (a migração os copia intactos).
  */
@@ -1956,6 +2030,12 @@ export const botConfigV2Schema = z.object({
   targeting: botTargetingSchema.default(defaultTargeting),
   exit: z.array(botExitRuleSchema).default(() => []),
   lure: botLureSchema.optional(),
+  /**
+   * Quem o personagem segue (§24-25, ADR 0035 d.9), herança da v1 (a migração o copia intacto).
+   * Campo SEPARADO da postura. `characterId` não é conferido contra a party aqui: a
+   * configuração sobrevive à hunt, e quem valida o membro é o `sim` (§30).
+   */
+  follow: botFollowSchema.default({ kind: 'none' }),
 });
 export type BotConfigV2 = z.infer<typeof botConfigV2Schema>;
 
@@ -2047,6 +2127,12 @@ export const botConfigV1Schema = z.object({
    */
   lure: botLureSchema.optional(),
   ringSwap: botRingSwapSchema.optional(),
+  /**
+   * Quem o personagem segue (§24-25, ADR 0035 d.9). Campo SEPARADO da postura
+   * (`targeting.posture.kind === 'follow'` continua "persegue o monstro atual") — não é
+   * renomeação, é vocabulário novo.
+   */
+  follow: botFollowSchema.default({ kind: 'none' }),
   heal: z.array(botRuleV1Schema),
   potion: z.array(botRuleV1Schema),
   attack: z.array(botRuleV1Schema),
@@ -2069,6 +2155,90 @@ export type BotConfig = z.infer<typeof botConfigV1Schema>;
 
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
+
+/**
+ * O efeito de uma magia, como o ARQUIVO o descreve. Fica separado de `spellSchema` porque o
+ * campo `effect` o transforma depois: `target` é OPCIONAL no TIPO e preenchido com `self` no
+ * parse (ver `spellSchema`), para as fixtures de `sim`/cliente que montam uma `Spell` à mão não
+ * precisarem declarar o default.
+ */
+export const spellEffectSchema = z.discriminatedUnion('kind', [
+  /** Cura o próprio lançador, ou um membro da party com `target: 'friend'` (§26, ADR 0035 d.10), ou aliados em área (Mass Healing, #475). */
+  z.object({
+    kind: z.literal('heal'),
+    basePower: z.number().int().positive().optional(),
+    amount: z.number().int().positive().optional(),
+    formula: spellFormulaSchema.optional(),
+    /** `self` cura quem lança (o de hoje); `friend` cura um membro da party. */
+    target: z.enum(['self', 'friend']).optional(),
+    /** Obrigatório com `target: 'friend'`, proibido com `'self'` — `buildContent` confere. */
+    range: z.number().int().positive().optional(),
+    /** Forma de grupo (Mass Healing): `circle` centrado no lançador. `buildContent` confere. */
+    area: spellAreaSchema.optional(),
+  }),
+  /**
+   * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
+   * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor. `range` é o
+   * alcance até o alvo principal; obrigatório em forma centrada no alvo, proibido em forma
+   * self-origin (`buildContent` confere).
+   */
+  z.object({
+    kind: z.literal('damage'),
+    basePower: z.number().int().positive().optional(),
+    power: z.number().int().positive().optional(),
+    /**
+     * A fórmula canônica (#474). Presente, ela VENCE o `basePower` na hora do cálculo; o
+     * `basePower` continua sendo o número de exibição do catálogo (ADR 0033). Ausente, o
+     * caminho é o `basePower` × `combat.spellPower` de sempre, bit a bit.
+     */
+    formula: spellFormulaSchema.optional(),
+    range: z.number().int().positive().optional(),
+    area: spellAreaSchema.optional(),
+    /**
+     * O TIPO de dano da magia (CMB-03). Ausente é `arcane` — o `kind: magic` do v1 —, para a
+     * magia cujo elemento o conteúdo ainda não declarou. Onde o catálogo o diz (fogo, gelo,
+     * energia, terra, morte, sagrado), o arquivo declara.
+     */
+    damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+  }),
+  /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
+  z.object({
+    kind: z.literal('heal-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    durationMs: z.number().int().positive(),
+  }),
+  /**
+   * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
+   * ao ALVO. Cada tique passa pelo MESMO resolver canônico do golpe (`resolveDamage`), com o
+   * `source: 'spell'` e o tipo declarado — nunca escrita direta de vida.
+   */
+  z.object({
+    kind: z.literal('damage-over-time'),
+    amount: z.number().int().positive(),
+    intervalMs: z.number().int().positive(),
+    durationMs: z.number().int().positive(),
+    range: z.number().int().positive(),
+    damageType: z.enum(DAMAGE_TYPES).default('arcane'),
+  }),
+  /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
+  z.object({
+    kind: z.literal('haste'),
+    speedPercent: z.number().int().positive(),
+    durationMs: z.number().int().positive(),
+    damageDealtPercent: damagePercentBySource.optional(),
+  }),
+  /** Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs`. */
+  z.object({
+    kind: z.literal('buff'),
+    durationMs: z.number().int().positive(),
+    damageDealtPercent: damagePercentBySource.optional(),
+    damageTakenPercent: z.number().int().optional(),
+  }),
+  /** Dano vira mana enquanto vale. */
+  z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
+]);
+export type SpellEffect = z.infer<typeof spellEffectSchema>;
 
 /**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
@@ -2118,86 +2288,13 @@ export const spellSchema = z.object({
    * é inacessível até lá — por construção, não por regra escrita em outro lugar.
    */
   vocationId: z.string().min(1).optional(),
-  effect: z.discriminatedUnion('kind', [
-    /**
-     * Cura o próprio lançador — ou, em ÁREA centrada nele, os aliados dentro da forma (#475,
-     * Mass Healing). Três mecanismos, um só por magia (`buildContent` confere): o número fixo
-     * (`amount`), o Base Power provisório (`basePower`, ADR 0026 d.5) ou a `formula` canônica,
-     * que VENCE o `basePower` — o BP continua sendo o número de exibição (ADR 0033).
-     *
-     * A cura escala com o MAGIC LEVEL em toda vocação (não com a skill de magia da vocação):
-     * é a mesma regra da runa de cura (#165), e é o que `spellSkill` não podia expressar.
-     */
-    z.object({
-      kind: z.literal('heal'),
-      basePower: z.number().int().positive().optional(),
-      amount: z.number().int().positive().optional(),
-      formula: spellFormulaSchema.optional(),
-      /** Forma de grupo (Mass Healing): `circle` centrado no lançador. `buildContent` confere. */
-      area: spellAreaSchema.optional(),
-    }),
-    /**
-     * Dano no alvo. Passa por `resolveDamage` com `kind: 'magic'`, então armadura mágica e
-     * esquiva valem — os dois são conteúdo (`combat/baseline.json`), não motor. `range` é o
-     * alcance até o alvo principal; obrigatório em forma centrada no alvo, proibido em forma
-     * self-origin (`buildContent` confere).
-     */
-    z.object({
-      kind: z.literal('damage'),
-      basePower: z.number().int().positive().optional(),
-      power: z.number().int().positive().optional(),
-      /**
-       * A fórmula canônica (#474). Presente, ela VENCE o `basePower` na hora do cálculo; o
-       * `basePower` continua sendo o número de exibição do catálogo (ADR 0033). Ausente, o
-       * caminho é o `basePower` × `combat.spellPower` de sempre, bit a bit.
-       */
-      formula: spellFormulaSchema.optional(),
-      range: z.number().int().positive().optional(),
-      area: spellAreaSchema.optional(),
-      /**
-       * O TIPO de dano da magia (CMB-03). Ausente é `arcane` — o `kind: magic` do v1 —, para a
-       * magia cujo elemento o conteúdo ainda não declarou. Onde o catálogo o diz (fogo, gelo,
-       * energia, terra, morte, sagrado), o arquivo declara.
-       */
-      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
-    }),
-    /** Cura `amount` a cada `intervalMs`, por `durationMs` (Recovery). */
-    z.object({
-      kind: z.literal('heal-over-time'),
-      amount: z.number().int().positive(),
-      intervalMs: z.number().int().positive(),
-      durationMs: z.number().int().positive(),
-    }),
-    /**
-     * Dano ao longo do tempo (CMB-07): `amount` a cada `intervalMs`, por `durationMs`, aplicado
-     * ao ALVO. Cada tique passa pelo MESMO resolver canônico do golpe (`resolveDamage`), com o
-     * `source: 'spell'` e o tipo declarado — nunca escrita direta de vida.
-     */
-    z.object({
-      kind: z.literal('damage-over-time'),
-      amount: z.number().int().positive(),
-      intervalMs: z.number().int().positive(),
-      durationMs: z.number().int().positive(),
-      range: z.number().int().positive(),
-      damageType: z.enum(DAMAGE_TYPES).default('arcane'),
-    }),
-    /** Velocidade +`speedPercent` % por `durationMs`; Swift Foot também baixa o dano causado. */
-    z.object({
-      kind: z.literal('haste'),
-      speedPercent: z.number().int().positive(),
-      durationMs: z.number().int().positive(),
-      damageDealtPercent: damagePercentBySource.optional(),
-    }),
-    /** Postura (Protector, Blood Rage, Sharpshooter…): percentuais por `durationMs`. */
-    z.object({
-      kind: z.literal('buff'),
-      durationMs: z.number().int().positive(),
-      damageDealtPercent: damagePercentBySource.optional(),
-      damageTakenPercent: z.number().int().optional(),
-    }),
-    /** Dano vira mana enquanto vale. */
-    z.object({ kind: z.literal('mana-shield'), durationMs: z.number().int().positive() }),
-  ]),
+  /**
+   * O efeito, com `target` preenchido com `self` no parse quando ausente — o comportamento de
+   * `.default('self')`, mas OPCIONAL no tipo, pela razão registrada em `spellEffectSchema`.
+   */
+  effect: spellEffectSchema.transform((effect): SpellEffect =>
+    effect.kind === 'heal' ? { ...effect, target: effect.target ?? 'self' } : effect,
+  ),
   _open: z.string().optional(),
 });
 

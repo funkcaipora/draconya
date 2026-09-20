@@ -22,7 +22,7 @@ const spellSlot = (over: Partial<BotSlot> = {}): BotSlot => ({
 });
 
 const draft = (over: Partial<SlotDraft> = {}): SlotDraft => ({
-  do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, ...over,
+  do: { kind: 'spell', spellId: 'heal' }, when: [], auto: true, target: { kind: 'self' }, ...over,
 });
 
 describe('hotkeyConflict — a tecla é única DENTRO do conjunto (DT-02)', () => {
@@ -70,14 +70,14 @@ describe('slotFromDraft — o rascunho vira o slot do contrato', () => {
   });
 
   it('omite hotkey ausente e preserva auto: false', () => {
-    const slot = slotFromDraft({ do: { kind: 'spell', spellId: 'heal' }, when: [], auto: false });
+    const slot = slotFromDraft({ do: { kind: 'spell', spellId: 'heal' }, when: [], auto: false, target: { kind: 'self' } });
     expect(slot).toEqual({ do: { kind: 'spell', spellId: 'heal' }, when: [], auto: false });
     expect(slot !== null && 'hotkey' in slot).toBe(false);
   });
 
   it('materializa o suprimento abstrato sem reposição', () => {
     const slot = slotFromDraft({
-      do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true,
+      do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true, target: { kind: 'self' },
     });
     expect(slot).toEqual({
       do: { kind: 'supply', supplyId: 'health-potion' }, when: [], auto: true,
@@ -87,7 +87,7 @@ describe('slotFromDraft — o rascunho vira o slot do contrato', () => {
 
 describe('draftFromSlot — abrir carrega o que está salvo (UC-ACTION-002)', () => {
   it('slot nulo vira rascunho vazio com automática ligada', () => {
-    expect(draftFromSlot(null)).toEqual({ do: null, when: [], auto: true });
+    expect(draftFromSlot(null)).toEqual({ do: null, when: [], auto: true, target: { kind: 'self' } });
   });
 
   it('round-trip preserva ação, condições, tecla e auto', () => {

@@ -21,7 +21,9 @@ export interface WorkerCommand {
   readonly rampMs: number;
   /** Tamanho da party (#198). 1 é solo. */
   readonly party: number;
-  readonly partyMode: 'split' | 'shared';
+  /** Os dois eixos do ADR 0035 D1 (#407): substituem o antigo `partyMode`. */
+  readonly shareCosts: boolean;
+  readonly splitLoot: boolean;
 }
 
 export interface WorkerResult {
@@ -52,8 +54,9 @@ async function run(command: WorkerCommand): Promise<WorkerResult> {
       await new Promise((resolve) => { setTimeout(resolve, command.rampMs); });
     }
     if (i < parties) {
-      pending.push(openParty({ ...sessionOptions, size, partyMode: command.partyMode })
-        .then((sessions) => { open.push(...sessions); }));
+      pending.push(openParty({
+        ...sessionOptions, size, shareCosts: command.shareCosts, splitLoot: command.splitLoot,
+      }).then((sessions) => { open.push(...sessions); }));
     } else {
       pending.push(openSession(sessionOptions).then((session) => { open.push(session); }));
     }
