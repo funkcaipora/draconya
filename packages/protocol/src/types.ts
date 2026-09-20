@@ -189,9 +189,14 @@ export const C2S_SCHEMAS = {
   /**
    * Escolher o alvo no mundo/Batalha (AB-09, ADR 0032 d.5). INTENÇÃO: o cliente diz QUAL
    * criatura pelo id numérico do servidor; quem decide se ela é alvo válido é o servidor
-   * (invariante 4).
+   * (invariante 4). `creatureId: 0` é o CANCELAMENTO explícito (#470, RF-01), como no Canary.
+   * `seq` é monotônico por cliente e volta no ack (`target-changed`/`target-cancel`) para o
+   * cliente descartar resposta obsoleta (RF-02). Opcional: um cliente anterior não o manda.
    */
-  'select-target': z.object({ creatureId: z.number().int().nonnegative() }),
+  'select-target': z.object({
+    creatureId: z.number().int().nonnegative(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
 } as const satisfies Record<C2SName, z.ZodType>;
 
 /** Quem está na party (#196): só os PRESENTES; quem saiu some da lista. */
@@ -782,7 +787,11 @@ export const S2C_SCHEMAS = {
   'player-stats': z.object({
     health: z.number(), maxHealth: z.number(), mana: z.number(), maxMana: z.number(),
     level: z.number().int(), xp: z.number(), capacity: z.number(), gold: z.number(), staminaMs: z.number(),
-    targetId: z.number().int().nonnegative().nullable().default(null),
+    /**
+     * O alvo NÃO mora mais aqui (#470, DT-01). Ele era batimento geral e mascarava a
+     * confirmação e a recusa do `select-target`; agora viaja em `target-changed` /
+     * `target-cancel`, que dizem exatamente o que o jogador fez.
+     */
     /**
      * A munição escolhida por família (#152, ADR 0026 decisão 3), a forma do Huntera
      * (`ammo-selection`): `null` é "nenhuma escolhida". `default`: um nó `game` anterior manda
@@ -850,6 +859,26 @@ export const S2C_SCHEMAS = {
    * isso, e um campo a mais aqui é um campo a mais para versionar depois.
    */
   'player-count': z.object({ count: z.number().int().nonnegative() }),
+  /**
+   * O alvo autoritativo do jogador (#470, RF-03/RF-04). `creatureId` positivo é a criatura
+   * selecionada; `null` é o cancelamento CONFIRMADO (o cliente mandou `creatureId: 0`). Não é
+   * recusa — a recusa é `target-cancel`, e misturar as duas faria o cliente não saber se o
+   * alvo caiu porque ele cancelou ou porque o servidor recusou.
+   *
+   * `seq` é o número do `select-target` que originou a mudança; ausente quando a troca veio do
+   * auto-target do servidor (#444) ou de um nó `game` anterior.
+   */
+  'target-changed': z.object({
+    creatureId: z.number().int().positive().nullable(),
+    seq: z.number().int().nonnegative().optional(),
+  }),
+  /**
+   * A recusa do `select-target` (#470, RF-04): criatura desconhecida ou morta. Nada mudou, e o
+   * `seq` permite ao cliente saber QUAL tentativa foi recusada (edge case de ack obsoleto).
+   */
+  'target-cancel': z.object({
+    seq: z.number().int().nonnegative().optional(),
+  }),
 } as const satisfies Record<S2CName, z.ZodType>;
 
 export type C2SProps<N extends C2SName> = z.infer<(typeof C2S_SCHEMAS)[N]>;

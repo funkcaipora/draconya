@@ -29,7 +29,11 @@ export type CombatTraceEventKind =
   | 'supply-used'
   | 'monster-ability-cast'
   | 'shot'
-  /** O protocolo de alvo ainda não existe (#470): a referência está em `targeting.trace.ts`. */
+  /**
+   * O alvo mudou (#470). Não é um `DomainEvent` do `sim` — o protocolo de alvo vive no
+   * `SessionHost`, que confirma `select-target` e o auto-target —, e por isso o kind fica
+   * reservado aqui para quando a apresentação do alvo entrar num trace (M24-03/#471).
+   */
   | 'target-changed';
 
 /**

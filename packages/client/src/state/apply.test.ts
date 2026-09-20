@@ -352,7 +352,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
@@ -370,7 +369,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 150, maxHealth: 185, mana: 30, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 125,
@@ -410,7 +408,6 @@ describe('HUD deltas', () => {
         type: 'player-stats',
         health: 140, maxHealth: 185, mana: 25, maxMana: 35,
         level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
         ammo: { arrow: null, bolt: null },
         vocationId: null,
         speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
@@ -427,21 +424,17 @@ describe('HUD deltas', () => {
     });
   });
 
-  it('clears the target when player-stats says there is none', () => {
+  it('clears the target when target-changed says there is none (#470)', () => {
     hud.set((state) => ({ ...state, targetId: 7 }));
-    applyMessage(
-      {
-        type: 'player-stats',
-        health: 140, maxHealth: 185, mana: 25, maxMana: 35,
-        level: 8, xp: 4_200, capacity: 400, gold: 0, staminaMs: 86_400_000,
-        targetId: null,
-        ammo: { arrow: null, bolt: null },
-        vocationId: null,
-        speed: 0, skills: {}, magicLevel: { level: 0, percentToNext: 0 },
-      },
-      0,
-    );
+    // `null` é cancelamento CONFIRMADO, e limpa a moldura.
+    applyMessage({ type: 'target-changed', creatureId: null }, 0);
     expect(hud.get().targetId).toBeNull();
+
+    // A seleção confirmada grava o id; a recusa (`target-cancel`) NÃO mexe no alvo.
+    applyMessage({ type: 'target-changed', creatureId: 42, seq: 1 }, 0);
+    expect(hud.get().targetId).toBe(42);
+    applyMessage({ type: 'target-cancel', seq: 3 }, 0);
+    expect(hud.get().targetId).toBe(42);
   });
 
   it('measures latency from the round trip', () => {

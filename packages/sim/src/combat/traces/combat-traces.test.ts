@@ -21,7 +21,7 @@ import {
 } from './runes.trace.js';
 import { DAMAGE_ELEMENT_ORACLE, damageEventOrderTrace, resolveOracleCase } from './damage.trace.js';
 import {
-  TARGETING_GAPS, TARGETING_ORACLE, chooseOracleTarget, countOracleTargets,
+  TARGETING_ORACLE, chooseOracleTarget, countOracleTargets,
 } from './targeting.trace.js';
 
 const goldenTraces = [
@@ -137,8 +137,10 @@ describe('lacunas da referência: o número atual e a issue que o muda (RF-05)',
   });
 
   it('toda lacuna do M24 nomeia a issue que a fecha', () => {
+    // As lacunas de ALVO que existiam na #469 foram fechadas pela #470 (protocolo e
+    // cancelamento), e o trace deixou de carregá-las. As que restam são de outras issues.
     const all: readonly CombatTraceGap[] = [
-      ...healingGaps, ...runesGaps, ...TARGETING_GAPS,
+      ...healingGaps, ...runesGaps,
     ];
     expect(all.length).toBeGreaterThan(0);
     for (const gap of all) expect(gap.task).toMatch(/^#\d+$/);

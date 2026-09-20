@@ -1,18 +1,20 @@
-// Trace de alvo (RF-01 da #469).
+// Trace de alvo (RF-01 da #469; protocolo fechado na #470).
 //
 // A referência é o Canary/OTClient: escolher alvo, cancelar (toggle), re-selecionar, perder o
 // alvo quando ele morre ou sai de cena, e MANTER o alvo quando ele está fora do alcance
 // melee mas dentro do alcance da magia/runa.
 //
-// O que existe hoje é a ESCOLHA pura (`targeting.ts`, FUN-85) e o alvo escolhido do runner
-// (AB-09/#444), que vive dentro da `HuntRuleset`. O que NÃO existe é o protocolo de alvo:
-// nenhum `target-changed` é emitido, e não há como o jogador cancelar (toggle). A #470 fecha
-// isso — e este arquivo é o contrato dela.
+// O protocolo de alvo que faltava na #469 chegou com a #470: `select-target` aceita
+// `creatureId: 0` como cancelamento, e o servidor confirma com `target-changed` ou recusa com
+// `target-cancel` — mensagens dedicadas, fora do `player-stats`. Aqui o oráculo continua sendo
+// de ESTADO, porque este pacote é PURO (invariante 1): ele prende a escolha e a apresentação,
+// não o fio. O contrato do fio mora em `packages/protocol/src/messages.ts` e o round-trip em
+// `packages/server/src/game/host.test.ts`.
 //
-// Aqui o oráculo é de ESTADO: dado um conjunto de monstros e um raio, quem é escolhido. A
-// última caso prende o coração do requisito: a arma não "limpa" o alvo, ela só não o alcança —
-// quem decide se o alvo é visto é o raio da busca, e um raio maior (magia/runa) continua
-// enxergando.
+// A última caso prende o coração do requisito: a arma não "limpa" o alvo, ela só não o
+// alcança — quem decide se o alvo é visto é o raio da busca, e um raio maior (magia/runa)
+// continua enxergando. É a mesma separação que `selectedTargetOf`/`attackTargetOf` fazem na
+// `HuntRuleset` (`hunt.test.ts`).
 
 import type { BotTargeting } from '@draconya/content';
 import { compileTargeting, countTargets, selectTarget } from '../../targeting.js';
@@ -106,22 +108,3 @@ export function countOracleTargets(case_: TargetingOracleCase): number {
     compileTargeting(case_.targeting), case_.monsters, case_.from, case_.maxDistance,
   );
 }
-
-/**
- * O protocolo de alvo é a #470. Hoje não há evento `target-changed` — nem cancelamento
- * (toggle) —, e é por isso que o trace de alvo é de ESTADO, não de evento.
- */
-export const TARGETING_GAPS = [
-  {
-    id: 'no-target-protocol',
-    reference: 'OTClient v8 envia target-changed ao selecionar, trocar e cancelar o alvo.',
-    current: 'Nenhum `target-changed` é emitido; o alvo do runner viaja no snapshot.',
-    task: '#470',
-  },
-  {
-    id: 'no-toggle-cancel',
-    reference: 'Clicar de novo no alvo cancela a seleção (toggle).',
-    current: '`chooseTarget` só seleciona; não há caminho para limpar o alvo escolhido.',
-    task: '#470',
-  },
-] as const;

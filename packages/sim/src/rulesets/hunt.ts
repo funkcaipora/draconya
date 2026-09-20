@@ -281,8 +281,10 @@ function runnerState(runner: Runner): RunnerState {
     ...(runner.automationWarned.size === 0
       ? {}
       : { automationWarned: Object.fromEntries(runner.automationWarned) }),
-    ...(runner.chosenTarget === null ? {} : { chosenTarget: runner.chosenTarget }),
-    ...(runner.chosenTargetPinned ? { chosenTargetPinned: true } : {}),
+    ...(runner.attackTarget === null && runner.botCandidate === null
+      ? {}
+      : { chosenTarget: runner.attackTarget ?? runner.botCandidate }),
+    ...(runner.attackTarget === null ? {} : { chosenTargetPinned: true }),
     ...(runner.botConfig === undefined ? {} : { botConfig: runner.botConfig }),
     ...(runner.pendingExit === null ? {} : { pendingExit: runner.pendingExit }),
   };
@@ -618,20 +620,23 @@ interface Runner {
   /** O golpe está engatilhado? Ver `#onPlayerAttack`. */
   playerAttackReady: boolean;
   /**
-   * O alvo ESCOLHIDO, por subject do monstro (`m:<id>`). É o override do jogador (AB-09, ADR
-   * 0032 d.5) E o alvo do auto-target (#444): ao surgir um monstro na tela (raio de busca) o
-   * alvo é preenchido automaticamente com o melhor da política, e sobrevive a snapshots até
-   * morrer ou sair da tela.
-   */
-  chosenTarget: string | null;
-  /**
-   * O alvo escolhido é do JOGADOR (`true`, AB-09) ou do auto-target (`false`, #444)?
+   * O alvo de ATAQUE explícito, por subject do monstro (`m:<id>`): o override do jogador
+   * (AB-09, ADR 0032 d.5) e o alvo que o bot decide seguir (#480). É EXCLUSIVO — quem mandou
+   * seguir um não quer bater em outro no caminho —, e `setAttackTarget` é a única porta de
+   * escrita, o que põe jogador e bot no mesmo pipeline (#470).
    *
-   * A diferença é o que fazer quando ele sai do alcance: o alvo do jogador é EXCLUSIVO — quem
-   * mandou seguir um não quer bater em outro no caminho —, enquanto o do auto-target é só a
-   * mira corrente, e o golpe cai no que estiver ao alcance enquanto ele se aproxima.
+   * Separado de `botCandidate` (#470): antes os dois dividiam `chosenTarget` mais um booleano
+   * `chosenTargetPinned`, e a apresentação usava o alvo de ATAQUE — que é recortado pelo
+   * alcance da arma e fazia o alvo sumir da tela fora do corpo a corpo.
    */
-  chosenTargetPinned: boolean;
+  attackTarget: string | null;
+  /**
+   * O candidato do AUTO-TARGET (#444): o melhor monstro na tela, escolhido pela política,
+   * quando não há alvo de ataque válido. É só a mira corrente — sai do alcance e a política
+   * reassume —, e `selectedTargetOf` o expõe para a apresentação independentemente do alcance
+   * da arma (RF-05).
+   */
+  botCandidate: string | null;
   /** Está CORRENDO para juntar monstros (§13.7)? Começa juntando. */
   running: boolean;
   /** Que anel estava no dedo quando a máquina equipou o dela (§13.8). `null` = vazio. */
@@ -658,12 +663,17 @@ export interface RunnerState {
    */
   readonly automationWarned?: Readonly<Record<string, string>>;
   /**
-   * O alvo escolhido/auto-selecionado (#444). Precisa entrar no snapshot: o alvo persiste no
-   * runner até morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem
-   * alvo" — snapshot anterior, que cai na política no primeiro evento.
+   * O alvo selecionado (#444). Precisa entrar no snapshot: o alvo persiste no runner até
+   * morrer ou sair da tela, e a hunt retomada continua mirando nele. Ausente é "sem alvo" —
+   * snapshot anterior, que cai na política no primeiro evento.
+   *
+   * O NOME do campo é o do formato persistido e não mudou com o #470: na memória ele virou
+   * `attackTarget` + `botCandidate`, e `#runnerStateOf`/`#newRunner` fazem a tradução. Renomear
+   * a chave do snapshot exigiria bump de formato e tolerância de leitura por uma mudança que
+   * não altera o que é gravado (ADR 0014).
    */
   readonly chosenTarget?: string | null;
-  /** O alvo é do jogador (AB-09) ou do auto-target (#444)? Ausente é auto (`false`). */
+  /** O alvo é do jogador (AB-09/#480) ou do auto-target (#444)? Ausente é auto (`false`). */
   readonly chosenTargetPinned?: boolean;
   readonly botConfig?: BotConfigV2;
   readonly pendingExit?: ExitReason;
@@ -927,12 +937,47 @@ export class HuntRuleset implements Ruleset {
   chooseTarget(session: Session, characterId: string, subject: string): boolean {
     const monster = this.#monsterBySubject.get(subject);
     if (monster === undefined || !monster.alive) return false;
-    const runner = this.#runners.get(characterId);
-    if (runner === undefined) return false;
-    runner.chosenTarget = subject;
-    // Clique do jogador: o alvo é EXCLUSIVO e não cai na política se sair do alcance (AB-09).
-    runner.chosenTargetPinned = true;
+    const character = findById(session.participants, characterId);
+    if (character === null) return false;
+    this.setAttackTarget(character, monster);
     return true;
+  }
+
+  /**
+   * O monstro vivo por subject, ou `null` (#470). É a ponte do host: o `select-target` chega
+   * com o id numérico do fio, e quem o traduz para o runtime é `#subjectOfCreature` do host;
+   * aqui ele resolve o subject validado no runtime que `setAttackTarget` recebe.
+   */
+  monsterBySubject(subject: string): MonsterRuntime | null {
+    const monster = this.#monsterBySubject.get(subject);
+    return monster !== undefined && monster.alive ? monster : null;
+  }
+
+  /**
+   * O alvo de ATAQUE explícito (#470): o jogador (AB-09) e, a partir da #480, o bot. `null`
+   * limpa — é o cancelamento do `creatureId: 0`. É a ÚNICA porta de escrita do `attackTarget`,
+   * para jogador e bot não terem dois pipelines que divergem.
+   *
+   * Não valida: quem valida é quem resolve o runtime (o host contra o id do fio, o bot contra a
+   * política), e o alvo morto é limpo na primeira leitura por `#attackTargetOfRunner`.
+   */
+  setAttackTarget(character: CharacterRuntime, target: MonsterRuntime | null): void {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return;
+    runner.attackTarget = target === null ? null : target.subject;
+  }
+
+  /**
+   * O alvo SELECIONADO para a apresentação (#470, RF-05): o alvo de ataque se houver, senão o
+   * candidato do auto-target. **Não é recortado pelo alcance da arma** — é o que mantém o
+   * alvo na tela enquanto a criatura está viva e na sessão (o raio de busca), mesmo fora do
+   * corpo a corpo. Não muta: apresentação não escreve estado quente (invariante 3).
+   */
+  selectedTargetOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined) return null;
+    return this.#liveTargetOf(runner.attackTarget, character)
+      ?? this.#liveTargetOf(runner.botCandidate, character);
   }
 
   /** Os cadáveres no chão agora (FUN-123): quem reanexa precisa vê-los no `session-state`. */
@@ -1159,8 +1204,10 @@ export class HuntRuleset implements Ruleset {
       pendingExit: state?.pendingExit ?? null,
       botReady: {},
       playerAttackReady: state?.playerAttackReady ?? true,
-      chosenTarget: state?.chosenTarget ?? null,
-      chosenTargetPinned: state?.chosenTargetPinned ?? false,
+      // O snapshot guarda um alvo só (#470): `chosenTargetPinned` dizia se ele era do
+      // jogador. Na memória ele vira `attackTarget` (explícito) ou `botCandidate` (auto).
+      attackTarget: state?.chosenTargetPinned === true ? (state.chosenTarget ?? null) : null,
+      botCandidate: state?.chosenTargetPinned === true ? null : (state?.chosenTarget ?? null),
       running: state?.luring ?? true,
       ringReplaced: state?.ringReplaced ?? null,
       warnedExhausted: state?.warnedExhausted ?? false,
@@ -2625,10 +2672,15 @@ export class HuntRuleset implements Ruleset {
    */
   #targetInRange(character: CharacterRuntime, range: number | undefined): MonsterRuntime | null {
     const maxDistance = range ?? 1;
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) {
-      if (distance(character.position, chosen.position) <= maxDistance) return chosen;
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      if (distance(character.position, attack.position) <= maxDistance) return attack;
       if (this.#isPinned(character)) return null;
+    }
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= maxDistance) {
+      return candidate;
     }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, maxDistance,
@@ -3644,8 +3696,9 @@ export class HuntRuleset implements Ruleset {
     this.#monsterBySubject.delete(subject);
     this.#monsters = this.#monsters.filter((m) => m.id !== monster.id);
     // O alvo escolhido morreu: o auto-target reavalia AGORA para o próximo mais próximo na tela
-    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e é
-    // `#chosenMonsterOf` quem o limpa — não há um segundo lugar para esquecer de limpar.
+    // (#444, AB-09). O alvo antigo aponta para um subject que acabou de sair do índice, e são
+    // `#attackTargetOfRunner`/`#botCandidateOf` que o limpam — não há um segundo lugar para
+    // esquecer de limpar.
     for (const character of session.participants) this.#autoSelectTarget(session, character);
     // Um emit aqui, e não uma varredura de `#monsters` por ciclo no hospedeiro: com 5.000
     // instâncias, quem conta o custo é a fila, não o laço de quem olha (FUN-103).
@@ -3988,12 +4041,20 @@ export class HuntRuleset implements Ruleset {
    * batendo no monstro colado enquanto a runa espera o alvo distante.
    */
   #attackTarget(character: CharacterRuntime): MonsterRuntime | null {
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) {
-      if (distance(character.position, chosen.position) <= this.#attackRangeOf(character)) {
-        return chosen;
-      }
-      if (this.#isPinned(character)) return null;
+    // O alvo explícito (jogador ou bot, #470) vem primeiro e é EXCLUSIVO.
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) {
+      return distance(character.position, attack.position) <= this.#attackRangeOf(character)
+        ? attack
+        : null;
+    }
+    // O candidato do auto-target (#444) é só a mira corrente: fora do alcance da arma, o golpe
+    // cai no melhor da política, e é isso que mantém o corpo a corpo batendo no monstro colado
+    // enquanto a runa espera o alvo distante.
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null
+      && distance(character.position, candidate.position) <= this.#attackRangeOf(character)) {
+      return candidate;
     }
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#attackRangeOf(character),
@@ -4001,29 +4062,40 @@ export class HuntRuleset implements Ruleset {
   }
 
   /**
-   * O alvo ESCOLHIDO vivo, dentro do raio de busca; senão limpa e devolve `null` (AB-09). O
-   * getter também limpa se o monstro sumiu — cinto e suspensório como o `#luring`.
+   * O monstro vivo, dentro do raio de busca; senão `null`. **NÃO muta** — é a leitura que
+   * `selectedTargetOf` usa para a apresentação (invariante 3).
    */
-  #chosenMonsterOf(character: CharacterRuntime): MonsterRuntime | null {
-    const runner = this.#runners.get(character.id);
-    if (runner === undefined || runner.chosenTarget === null) return null;
-    const monster = this.#monsterBySubject.get(runner.chosenTarget);
-    if (monster === undefined || !monster.alive) {
-      runner.chosenTarget = null;
-      runner.chosenTargetPinned = false;
-      return null;
-    }
+  #liveTargetOf(subject: string | null, character: CharacterRuntime): MonsterRuntime | null {
+    if (subject === null) return null;
+    const monster = this.#monsterBySubject.get(subject);
+    if (monster === undefined || !monster.alive) return null;
     if (distance(character.position, monster.position) > (this.#options.targetSearchRadius ?? 8)) {
-      runner.chosenTarget = null;
-      runner.chosenTargetPinned = false;
       return null;
     }
     return monster;
   }
 
-  /** O alvo corrente é do JOGADOR (AB-09)? Sem runner, não há alvo — e não há o que fixar. */
+  /** O alvo de ATAQUE vivo; limpa o campo se morreu ou saiu da tela. `null` se não há. */
+  #attackTargetOfRunner(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.attackTarget === null) return null;
+    const monster = this.#liveTargetOf(runner.attackTarget, character);
+    if (monster === null) runner.attackTarget = null;
+    return monster;
+  }
+
+  /** O candidato do AUTO-TARGET vivo; limpa o campo se morreu ou saiu da tela. */
+  #botCandidateOf(character: CharacterRuntime): MonsterRuntime | null {
+    const runner = this.#runners.get(character.id);
+    if (runner === undefined || runner.botCandidate === null) return null;
+    const monster = this.#liveTargetOf(runner.botCandidate, character);
+    if (monster === null) runner.botCandidate = null;
+    return monster;
+  }
+
+  /** O alvo corrente é EXPLÍCITO — do jogador (AB-09) ou do bot (#480)? */
   #isPinned(character: CharacterRuntime): boolean {
-    return this.#runners.get(character.id)?.chosenTargetPinned === true;
+    return (this.#runners.get(character.id)?.attackTarget ?? null) !== null;
   }
 
   /**
@@ -4045,35 +4117,36 @@ export class HuntRuleset implements Ruleset {
    * expresso — quem já está ao alcance não precisa ser seguido.
    */
   #approachTarget(character: CharacterRuntime): MonsterRuntime | null {
-    const chosen = this.#chosenMonsterOf(character);
-    if (chosen !== null) return chosen;
+    const attack = this.#attackTargetOfRunner(character);
+    if (attack !== null) return attack;
+    const candidate = this.#botCandidateOf(character);
+    if (candidate !== null) return candidate;
     return selectTarget(
       this.#targetingOf(character), this.#monsters, character.position, this.#options.targetSearchRadius ?? 8,
     );
   }
 
   /**
-   * Auto-target (#444): sem alvo escolhido válido, seleciona o melhor monstro na TELA — o raio
-   * de busca, o mesmo de `#approachTarget` — e o guarda em `chosenTarget`. É o que faz um
+   * Auto-target (#444): sem alvo de ataque válido, seleciona o melhor monstro na TELA — o raio
+   * de busca, o mesmo de `#approachTarget` — e o guarda em `botCandidate`. É o que faz um
    * monstro que surge ao longe virar alvo na hora, mesmo fora do alcance da arma: quem o leva
    * até lá é `#attackTarget`/`#targetInRange`, cada um com o seu alcance.
    *
-   * NÃO sobrepõe o clique do jogador: com um alvo vivo e na tela, sai sem tocar em nada. Quando
-   * ele morre ou sai da tela, `#chosenMonsterOf` limpa o campo e a chamada seguinte já reavalia
-   * para o próximo mais próximo.
+   * NÃO sobrepõe o alvo do jogador nem de #480: com um `attackTarget` vivo e na tela, sai sem
+   * tocar em nada. Quando ele morre ou sai da tela, `#attackTargetOfRunner` limpa o campo e a
+   * chamada seguinte já reavalia para o próximo mais próximo.
    */
   #autoSelectTarget(session: Session, character: CharacterRuntime): void {
     const runner = this.#runners.get(character.id);
     if (runner === undefined || !character.alive) return;
-    // Valida e limpa o alvo atual; com um vivo na tela, não há o que reavaliar.
-    if (this.#chosenMonsterOf(character) !== null) return;
+    // Valida e limpa os dois campos; com um alvo explícito ou um candidato vivo, nada a fazer.
+    if (this.#attackTargetOfRunner(character) !== null) return;
+    if (this.#botCandidateOf(character) !== null) return;
 
     const best = this.#approachTarget(character);
     const next = best === null ? null : best.subject;
-    if (next === runner.chosenTarget) return;
-    runner.chosenTarget = next;
-    // Alvo do motor, não do jogador: sai do alcance e a política reassume (`#attackTarget`).
-    runner.chosenTargetPinned = false;
+    if (next === runner.botCandidate) return;
+    runner.botCandidate = next;
     if (next === null) return;
     // O alvo novo pode destravar uma regra e um golpe engatilhados: reavalia agora, e não no
     // próximo múltiplo de um relógio.

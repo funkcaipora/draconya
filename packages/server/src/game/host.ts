@@ -349,7 +349,6 @@ function skillProgressOf(
 function playerStatsOf(
   character: CharacterRuntime | undefined,
   skillCatalog?: ReadonlyMap<string, Skill>,
-  targetId: number | null = null,
 ): PlayerStats {
   const skills: Record<string, SkillProgress> = {};
   if (character !== undefined && skillCatalog !== undefined) {
@@ -367,7 +366,6 @@ function playerStatsOf(
     capacity: character?.capacity ?? 0,
     gold: character === undefined ? 0 : character.gold + character.goldDelta,
     staminaMs: character?.staminaMs ?? 0,
-    targetId,
     vocationId: character?.vocationId ?? null,
     // A munição escolhida por família (#152, ADR 0026 d.3). `null` é "a básica da família".
     ammo: {
@@ -416,7 +414,6 @@ function sameStats(a: PlayerStats, b: PlayerStats): boolean {
     && a.xp === b.xp
     && a.capacity === b.capacity
     && a.gold === b.gold
-    && a.targetId === b.targetId
     && a.ammo.arrow === b.ammo.arrow
     && a.ammo.bolt === b.ammo.bolt
     && staminaMinute(a.staminaMs) === staminaMinute(b.staminaMs)
@@ -621,6 +618,20 @@ interface HostedSession {
    * é apresentação; o `sim` muda o que tem de mudar de qualquer jeito (invariante 3).
    */
   readonly sentStats: Map<string, PlayerStats>;
+  /**
+   * O último alvo ENTREGUE a quem olha cada personagem (#470), por `characterId`, como id
+   * numérico de criatura ou `null`. É o gatilho do `target-changed` no ciclo: comparar um
+   * número por personagem custa nada, e mandar o alvo a 10 Hz custaria a banda que o
+   * `player-stats` deixou de gastar. Entrada AUSENTE é "ninguém recebeu ainda" — o
+   * `session-attach` e o primeiro ciclo com visualizador escrevem.
+   */
+  readonly sentTarget: Map<string, number | null>;
+  /**
+   * O último `seq` de `select-target` processado, por `characterId` (#470). Um `seq` anterior
+   * é mensagem atrasada e é ignorado em silêncio, como o `walk` fora do ritmo: processar
+   * fora de ordem faria o alvo oscilar entre duas seleções do mesmo cliente.
+   */
+  readonly lastTargetSeq: Map<string, number>;
   /**
    * O último analisador ENTREGUE (FUN-110), por sessão — os agregados são da sessão, não do
    * personagem. `null` é "ninguém recebeu ainda", e o primeiro ciclo com visualizador manda;
@@ -1146,8 +1157,9 @@ export class SessionHost {
         this.#requestUseSlot(viewer, message.set, message.slot);
         return;
       case 'select-target':
-        // INTENÇÃO (invariante 4): o cliente diz QUAL criatura; quem valida o alvo é o servidor.
-        this.#requestSelectTarget(viewer, message.creatureId);
+        // INTENÇÃO (invariante 4): o cliente diz QUAL criatura (ou `0`, cancelar); quem valida
+        // o alvo e confirma/recusa é o servidor (#470).
+        this.#requestSelectTarget(viewer, message.creatureId, message.seq);
         return;
       case 'unequip':
         this.#requestUnequip(viewer, message.slot);
@@ -1335,28 +1347,66 @@ export class SessionHost {
     // é mana, vida e gold, e isso sai no `player-stats` abaixo. Mudança de corpo tem o
     // `equipment-changed` como caminho próprio.
     const character = this.#participantOf(hosted, viewer.characterId);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    const stats = playerStatsOf(character, this.#options.skillCatalog);
     hosted.sentStats.set(viewer.characterId, stats);
     this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
   }
 
   /**
-   * O jogador escolheu um alvo clicando (AB-09, ADR 0032 d.5). Id desconhecido ou morto é
-   * IGNORADO em silêncio, como o `walk` recusado — um cliente com bug em laço não gera tráfego
-   * de volta. Sucesso é `player-stats.targetId` imediato.
+   * O jogador escolheu (ou cancelou) um alvo clicando (#470, AB-09, ADR 0032 d.5).
+   *
+   * `creatureId: 0` é CANCELAMENTO explícito (RF-01), como o `creatureId == 0` do Canary:
+   * limpa o alvo de ataque e confirma com `target-changed { creatureId: null }`. Criatura
+   * desconhecida ou morta é RECUSA, com `target-cancel` — nada muda, e o cliente sabe que a
+   * tentativa falhou em vez de achar que o alvo sumiu. Criatura válida vira `target-changed`
+   * com o id confirmado (RF-04).
+   *
+   * `seq` é monotônico por cliente e volta no ack. Um `seq` anterior a um já processado é
+   * mensagem atrasada e é ignorado em silêncio — processar fora de ordem faria o alvo oscilar
+   * entre duas seleções do mesmo cliente (edge case de ack obsoleto).
    */
-  #requestSelectTarget(viewer: Viewer, creatureId: number): void {
+  #requestSelectTarget(viewer: Viewer, creatureId: number, seq: number | undefined): void {
     const hosted = this.#hostedSession(viewer.characterId);
     if (hosted === undefined) return;
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
-    if (ruleset.chooseTarget === undefined) return;
-    const subject = this.#subjectOfCreature(hosted, creatureId);
-    if (subject === null) return;
-    if (!ruleset.chooseTarget(hosted.session, viewer.characterId, subject)) return;
+    if (ruleset.setAttackTarget === undefined || ruleset.monsterBySubject === undefined) return;
     const character = this.#participantOf(hosted, viewer.characterId);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
-    hosted.sentStats.set(viewer.characterId, stats);
-    this.#sendToViewersOf(hosted, viewer.characterId, { type: 'player-stats', ...stats });
+    if (character === undefined) return;
+
+    if (seq !== undefined) {
+      const last = hosted.lastTargetSeq.get(viewer.characterId);
+      if (last !== undefined && seq < last) return;
+      hosted.lastTargetSeq.set(viewer.characterId, seq);
+    }
+
+    if (creatureId === 0) {
+      ruleset.setAttackTarget(character, null);
+      this.#sendTargetChanged(hosted, viewer.characterId, null, seq);
+      return;
+    }
+
+    const subject = this.#subjectOfCreature(hosted, creatureId);
+    const monster = subject === null ? null : ruleset.monsterBySubject(subject);
+    if (monster === null) {
+      viewer.send({ type: 'target-cancel', ...(seq === undefined ? {} : { seq }) });
+      return;
+    }
+    ruleset.setAttackTarget(character, monster);
+    this.#sendTargetChanged(hosted, viewer.characterId, creatureId, seq);
+  }
+
+  /**
+   * O alvo autoritativo para quem olha o personagem (#470): a confirmação imediata de um
+   * `select-target`, ou a troca que o auto-target (#444) fez sozinho. Escreve `sentTarget` —
+   * o que acabou de sair É o último entregue.
+   */
+  #sendTargetChanged(
+    hosted: HostedSession, characterId: string, creatureId: number | null, seq: number | undefined,
+  ): void {
+    hosted.sentTarget.set(characterId, creatureId);
+    this.#sendToViewersOf(hosted, characterId, {
+      type: 'target-changed', creatureId, ...(seq === undefined ? {} : { seq }),
+    });
   }
 
   /** O subject do `sim` por trás do id numérico que o cliente clicou. `null` é desconhecido. */
@@ -1424,7 +1474,7 @@ export class SessionHost {
       });
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    const stats = playerStatsOf(character, this.#options.skillCatalog);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
     this.#sendInventory(character.id);
@@ -1456,7 +1506,7 @@ export class SessionHost {
       return;
     }
     hosted.dirty.add(character.id);
-    const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+    const stats = playerStatsOf(character, this.#options.skillCatalog);
     hosted.sentStats.set(character.id, stats);
     this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
   }
@@ -1681,6 +1731,9 @@ export class SessionHost {
       // `creature-health` explicam a mudança, e o HUD que recebe o número novo antes do golpe
       // que o causou mostra o dano duas vezes — uma no HUD, outra no número flutuante.
       this.#presentStats(hosted);
+      // E o alvo, se mudou (#470): o auto-target troca sozinho, e o `player-stats` deixou de
+      // levá-lo. DEPOIS dos eventos pelo mesmo motivo dos vitais.
+      this.#presentTarget(hosted);
       this.#presentConditions(hosted);
       // E o analisador, se um abate, um loot, um gasto ou um evento entrou (FUN-110): sem
       // isto a janela ficava em zero a hunt inteira, até o jogador reconectar.
@@ -2032,11 +2085,34 @@ export class SessionHost {
       // tem ciclo. Quem não tem visualizador próprio fica de fora pela mesma razão do `if`
       // acima: `sentStats` guarda o que foi ENTREGUE, e a ninguém não se entrega nada.
       if (this.#watchers(hosted, character.id) === 0) continue;
-      const stats = playerStatsOf(character, this.#options.skillCatalog, this.#targetIdOf(hosted, character));
+      const stats = playerStatsOf(character, this.#options.skillCatalog);
       const last = hosted.sentStats.get(character.id);
       if (last !== undefined && sameStats(last, stats)) continue;
       hosted.sentStats.set(character.id, stats);
       this.#sendToViewersOf(hosted, character.id, { type: 'player-stats', ...stats });
+    }
+  }
+
+  /**
+   * O alvo selecionado, para quem olha CADA personagem, quando mudou (#470, RF-04).
+   *
+   * Substitui o `player-stats.targetId`: o alvo tem mensagem própria, e o gatilho é a
+   * comparação do id ENTREGUE — como `sentStats`. Sem visualizador não se compara nada
+   * (invariante 3); o `sim` muda o alvo de qualquer jeito, e quem anexa depois recebe o
+   * estado no `session-attach`.
+   *
+   * É por aqui que a tela vê o auto-target (#444) trocar sozinho: o `sim` escolhe o próximo
+   * monstro e o ciclo entrega a mudança, sem depender de um `select-target` do cliente.
+   */
+  #presentTarget(hosted: HostedSession): void {
+    if (hosted.viewers.size === 0) return;
+    for (const character of hosted.session.participants) {
+      if (this.#watchers(hosted, character.id) === 0) continue;
+      const targetId = this.#selectedTargetIdOf(hosted, character);
+      const last = hosted.sentTarget.get(character.id);
+      if (last !== undefined && last === targetId) continue;
+      hosted.sentTarget.set(character.id, targetId);
+      this.#sendToViewersOf(hosted, character.id, { type: 'target-changed', creatureId: targetId });
     }
   }
 
@@ -2160,9 +2236,14 @@ export class SessionHost {
     viewer.send(state);
     hosted.sentSpending = partySpendingSharesOf(hosted) ?? null;
     const participant = this.#participantOf(hosted, characterId);
-    const stats = playerStatsOf(participant, this.#options.skillCatalog, this.#targetIdOf(hosted, participant));
+    const stats = playerStatsOf(participant, this.#options.skillCatalog);
     hosted.sentStats.set(characterId, stats);
     viewer.send({ type: 'player-stats', ...stats });
+    // E o alvo selecionado (#470): tem mensagem própria, e sem ela quem reanexa com um alvo
+    // vivo o perderia até o próximo ciclo — na Cidade, que não tem ciclo, para sempre.
+    const targetId = this.#selectedTargetIdOf(hosted, participant);
+    hosted.sentTarget.set(characterId, targetId);
+    viewer.send({ type: 'target-changed', creatureId: targetId });
     const snapshot = participant === undefined ? new Map() : conditionsSnapshotOf(participant);
     hosted.sentConditions.set(characterId, snapshot);
     viewer.send({
@@ -2612,6 +2693,8 @@ export class SessionHost {
       dirty: new Set(),
       sentItemsLooted: next.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentTarget: new Map(),
+      lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,
@@ -3007,10 +3090,19 @@ export class SessionHost {
     return assigned;
   }
 
-  #targetIdOf(hosted: HostedSession, character: CharacterRuntime | undefined): number | null {
+  /**
+   * O id numérico do alvo SELECIONADO para apresentação (#470, RF-05): `selectedTargetOf` do
+   * ruleset, que NÃO é recortado pelo alcance da arma. Antes daqui saía `attackTargetOf` — o
+   * alvo de combate —, e o alvo sumia da tela ao sair do corpo a corpo.
+   *
+   * `.get` e não `#creatureId`: quem não recebeu id numérico nunca apareceu para o cliente, e
+   * um alvo que a tela não desenha não pode ser destacado. Monstro visível já tem id pelo
+   * `session-state`.
+   */
+  #selectedTargetIdOf(hosted: HostedSession, character: CharacterRuntime | undefined): number | null {
     if (character === undefined) return null;
     const ruleset = hosted.session.ruleset as Partial<HuntRuleset>;
-    const target = ruleset.attackTargetOf?.(character) ?? null;
+    const target = ruleset.selectedTargetOf?.(character) ?? null;
     return target === null ? null : (hosted.creatureIds.get(target.subject) ?? null);
   }
 
@@ -3029,7 +3121,6 @@ export class SessionHost {
     const self = playerStatsOf(
       this.#participantOf(hosted, characterId),
       this.#options.skillCatalog,
-      this.#targetIdOf(hosted, this.#participantOf(hosted, characterId)),
     );
 
     // Quem está no CAMPO DE VISÃO, e não a sessão inteira (FUN-33). Numa praça de duzentos, o
@@ -3317,6 +3408,8 @@ export class SessionHost {
       dirty: new Set(),
       sentItemsLooted: session.aggregates.itemsLooted,
       sentStats: new Map(),
+      sentTarget: new Map(),
+      lastTargetSeq: new Map(),
       sentAnalyzer: new Map(),
       sentBestiary: new Map(),
       sentParty: null,

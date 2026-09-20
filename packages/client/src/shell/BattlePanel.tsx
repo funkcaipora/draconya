@@ -3,8 +3,8 @@
 //
 // Segue o padrão que `PartyMembers.tsx` já usa (ADR 0007): `world` não tem `subscribe` — um
 // `creature-move` não pode causar render de React —, então a lista é amostrada por INTERVALO,
-// no mesmo `HEALTH_POLL_MS` de 1 s. `targetId` chega em `player-stats` e é limpo a cada
-// `session-state` (#341, SV-05): a criatura que o bot está batendo ganha a moldura
+// no mesmo `HEALTH_POLL_MS` de 1 s. `targetId` chega em `target-changed` (#470) e é limpo a
+// cada `session-state` (#341, SV-05): a criatura que o bot está batendo ganha a moldura
 // `.battle-row-selected` (#348, SV-12) — nenhuma linha é clicável nesta issue.
 //
 // Não existe, no protocolo de hoje, um campo que diga "isto é um monstro" — `creature-appear`

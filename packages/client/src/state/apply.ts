@@ -165,14 +165,24 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         level: message.level, xp: message.xp,
         capacity: message.capacity, gold: message.gold,
         staminaMs: message.staminaMs,
-        // `null` é "sem alvo" e LIMPA a moldura — `?? state.targetId` deixaria o último alvo preso.
-        targetId: message.targetId,
+        // O alvo NÃO vem mais daqui (#470): ele tem `target-changed`, logo abaixo. Manter um
+        // `targetId` neste `set` reintroduziria o batimento geral que a DT-01 aposentou.
         // A munição escolhida por família (#152): `null` é "nenhuma", e a tela mostra o que veio.
         ammo: message.ammo,
         vocationId: message.vocationId,
         speed: message.speed,
         skills: skillsOf(message.skills, state.skills),
       }));
+      return;
+
+    // `target-changed` (#470): o alvo autoritativo, confirmado ou trocado pelo auto-target.
+    // `null` é cancelamento confirmado e LIMPA a moldura — `?? state.targetId` prenderia o
+    // último alvo na tela. `target-cancel` (a recusa) não muda nada, e por isso não tem `set`.
+    case 'target-changed':
+      hud.set((state) => ({ ...state, targetId: message.creatureId }));
+      return;
+
+    case 'target-cancel':
       return;
 
     case 'experience-gain':
@@ -358,9 +368,10 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
         partyBag: message.partyBag ?? null,
         lastSettlement: null,
         onlinePlayers: message.onlinePlayers ?? null,
-        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats` e
-        // `active-conditions` logo depois dele, no mesmo attach (#341, SV-05). Zerar aqui é o
-        // que impede a moldura e a barra de uma sessão anterior de sobreviverem à reanexação.
+        // Alvo e condições NÃO viajam no `session-state`: o host manda `player-stats`,
+        // `target-changed` (#470) e `active-conditions` logo depois dele, no mesmo attach
+        // (#341, SV-05). Zerar aqui é o que impede a moldura e a barra de uma sessão anterior
+        // de sobreviverem à reanexação.
         targetId: null,
         huntId: message.huntId ?? null,
         difficulty: message.difficulty ?? null,

@@ -563,7 +563,6 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     type: 'player-stats',
     health: 150, maxHealth: 150, mana: 20, maxMana: 20,
     level: 8, xp: 4200, capacity: 400, gold: 100, staminaMs: 86400000,
-    targetId: null,
     ammo: { arrow: null, bolt: null },
     vocationId: 'knight',
     speed: 292,
@@ -589,7 +588,6 @@ describe('skills, magic level and speed in player-stats and session-state (#340,
     const decoded = decodeS2C(encodeS2C(rawOlderNode as S2CMessage));
     expect(decoded).toEqual([{
       ...rawOlderNode,
-      targetId: null,
       ammo: { arrow: null, bolt: null },
       speed: 0,
       skills: {},
@@ -879,36 +877,60 @@ describe('active-conditions, hunt identity and targetId (#341, SV-05)', () => {
     expect(decodeS2C(encodeS2C(citySession as S2CMessage))).toEqual([citySession]);
   });
 
-  it('round trips player-stats with targetId (number and null)', () => {
-    const statsWithTarget: S2CMessage = {
+  it('round trips player-stats without a target field: the target has its own message (#470)', () => {
+    // O alvo saiu de `player-stats` (DT-01): um nó novo manda `target-changed`. O que se prende
+    // aqui é que o campo NÃO existe — um host que voltasse a mandá-lo seria ignorado, e o
+    // cliente novo não tem onde lê-lo. Mutação que mata: reintroduzir `targetId` no schema.
+    const stats: S2CMessage = {
       type: 'player-stats',
-      health: 100,
-      maxHealth: 100,
-      mana: 50,
-      maxMana: 50,
-      level: 5,
-      xp: 1000,
-      capacity: 300,
-      gold: 50,
-      staminaMs: 50000,
-      targetId: 42,
-      ammo: { arrow: null, bolt: null },
-      vocationId: 'knight',
-      speed: 250,
-      skills: {},
-      magicLevel: { level: 0, percentToNext: 0 },
+      health: 100, maxHealth: 100, mana: 50, maxMana: 50,
+      level: 5, xp: 1000, capacity: 300, gold: 50, staminaMs: 50000,
+      ammo: { arrow: null, bolt: null }, vocationId: 'knight', speed: 250,
+      skills: {}, magicLevel: { level: 0, percentToNext: 0 },
     };
-    expect(decodeS2C(encodeS2C(statsWithTarget))).toEqual([statsWithTarget]);
+    expect('targetId' in stats).toBe(false);
+    expect(decodeS2C(encodeS2C(stats))).toEqual([stats]);
+  });
+});
 
-    const statsNullTarget: S2CMessage = {
-      ...statsWithTarget,
-      targetId: null,
-    };
-    expect(decodeS2C(encodeS2C(statsNullTarget))).toEqual([statsNullTarget]);
+describe('target protocol (#470, AB-09)', () => {
+  it('allocates S2C 32 and 33, and they do not collide', () => {
+    // Invariante 5: os números vivem só aqui. Mutação que mata: reusar 30/31 ou duplicar 32.
+    expect(SERVER_TO_CLIENT['target-changed']).toBe(32);
+    expect(SERVER_TO_CLIENT['target-cancel']).toBe(33);
+    expect(CLIENT_TO_SERVER['select-target']).toBe(18);
+  });
 
-    // An older node sending player-stats without targetId decodes to targetId: null
-    const { targetId: _t, ...olderStats } = statsWithTarget;
-    expect(decodeS2C(encodeS2C(olderStats as S2CMessage))).toEqual([statsNullTarget]);
+  it('select-target is intention only, accepts 0 as cancel and carries seq (RF-01, RF-02)', () => {
+    // `creatureId: 0` é o cancelamento explícito, como no Canary. Mutação que mata: `.positive()`
+    // no lugar de `.nonnegative()` — o zero passa a ser recusado no fio.
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 0 }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 7, seq: 3 }).success).toBe(true);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 7, seq: -1 }).success).toBe(false);
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: -1 }).success).toBe(false);
+    // Um cliente anterior não manda `seq`: o schema não pode recusá-lo.
+    expect(C2S_SCHEMAS['select-target'].safeParse({ creatureId: 7 }).success).toBe(true);
+  });
+
+  it('round trips target-changed with a creature, null and an optional seq', () => {
+    const selected: S2CMessage = { type: 'target-changed', creatureId: 42, seq: 1 };
+    const cleared: S2CMessage = { type: 'target-changed', creatureId: null, seq: 2 };
+    const auto: S2CMessage = { type: 'target-changed', creatureId: 42 };
+    for (const message of [selected, cleared, auto]) {
+      expect(decodeS2C(encodeS2C(message))).toEqual([message]);
+    }
+    // `null` é cancelamento confirmado; o zero NÃO é criatura — não existe criatura 0.
+    expect(decodeS2C(encodeS2C({ type: 'target-changed', creatureId: 0 } as S2CMessage))).toBeNull();
+  });
+
+  it('round trips target-cancel with and without seq, and it is S2C only', () => {
+    const withSeq: S2CMessage = { type: 'target-cancel', seq: 5 };
+    const withoutSeq: S2CMessage = { type: 'target-cancel' };
+    expect(decodeS2C(encodeS2C(withSeq))).toEqual([withSeq]);
+    expect(decodeS2C(encodeS2C(withoutSeq))).toEqual([withoutSeq]);
+    // Invariante 4: o cliente pede, o servidor confirma ou recusa. Ele nunca manda o resultado.
+    expect(C2S_SCHEMAS).not.toHaveProperty('target-changed');
+    expect(C2S_SCHEMAS).not.toHaveProperty('target-cancel');
   });
 });
 

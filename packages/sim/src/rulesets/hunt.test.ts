@@ -6304,6 +6304,44 @@ describe('estado dos slots (AB-09, UC-BAR-003)', () => {
 });
 
 describe('alvo escolhido (AB-09, ADR 0032 d.5)', () => {
+  it('selectedTargetOf mantém o alvo fora do alcance da arma; attackTargetOf não (#470, RF-05)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    // Só `a` na TELA: a 3 tiles, fora do alcance 1 do corpo a corpo e dentro do raio de busca.
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    // A apresentação enxerga o alvo; o combate corpo a corpo, não. É a separação do #470.
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+  });
+
+  it('setAttackTarget seleciona e cancela; o candidato do auto-target sobrevive ao cancelamento (#470)', () => {
+    const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
+    session.advanceBy(1);
+    const [a, b, c] = [...ruleset.monsters];
+    if (a === undefined || b === undefined || c === undefined) throw new Error('faltam ratos');
+    a.position = { x: hero.position.x + 3, y: hero.position.y };
+    b.position = { x: hero.position.x + 30, y: hero.position.y };
+    c.position = { x: hero.position.x + 31, y: hero.position.y };
+    ruleset.configureBot(session, botConfigV2([]), 'hero');
+
+    ruleset.setAttackTarget(hero, a);
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+    // Alvo explícito fora do corpo a corpo é EXCLUSIVO: não cai na política.
+    expect(ruleset.attackTargetOf(hero)).toBeNull();
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBe(true);
+
+    // Cancelar limpa o alvo de ATAQUE; o candidato do auto-target (#444) continua na tela.
+    ruleset.setAttackTarget(hero, null);
+    expect(ruleset.getState().runners?.[hero.id]?.chosenTargetPinned).toBeUndefined();
+    expect(ruleset.selectedTargetOf(hero)?.subject).toBe(a.subject);
+  });
+
   it('sobrepõe a política enquanto vive; a morte cai no mais próximo (RF-05/RF-06)', () => {
     const { session, hero, ruleset } = withSpells(botConfigV2([]), { mana: 200 }, 'bold');
     // Um tique para os três ratos nascerem.
