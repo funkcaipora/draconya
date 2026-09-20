@@ -1439,6 +1439,7 @@ describe('snapshot que não volta é CREDITADO antes de sumir (FUN-55)', () => {
     aggregates: {
       durationMs: 600_000, xpGained: 900, goldGained: 40, goldSpent: 0, kills: 12, deaths: 0,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
     },
     notableEvents: [{ atMs: 1_000, type: 'level-up', detail: '4' }],
     ledgerSeq: 0, endedReason: null,
@@ -4942,6 +4943,34 @@ describe('a party no fio (#196, ADR 0027 decisão 9)', () => {
     const bag = (session()?.ruleset as HuntRuleset).getState().partyBag;
     expect(bag?.items.length ?? 0).toBeGreaterThan(0);
     expect(bagMessage.items[0]?.eligible).toEqual(['lead', 'b']);
+  });
+
+  it('party-state.members leva DPS/HPS e os totais, e a variação reenvia ao vivo (#431, ADR 0032 d.14)', () => {
+    const { host, runFor, session } = partyHunt();
+    const lead = attach(host, 'lead');
+    attach(host, 'b');
+    runFor(100);
+    const partyStatesOf = (socket: FakeSocket) => socket.received().filter((m) => m.type === 'party-state');
+    const before = partyStatesOf(lead.socket).length;
+
+    // O dano e a cura são de eventos de verdade no `sim`; o host só TRADUZ o acumulador e a
+    // janela — nada é somado aqui.
+    session()?.creditDamage('lead', 120);
+    session()?.creditHealing('lead', 60);
+    runFor(200);
+    const states = partyStatesOf(lead.socket);
+    expect(states.length).toBeGreaterThan(before);
+    const state = states.at(-1);
+    if (state?.type !== 'party-state') throw new Error('sem party-state');
+    const member = state.members.find((m) => m.characterId === 'lead');
+    if (member === undefined) throw new Error('sem membro lead');
+    expect(member.damageDealt).toBeGreaterThanOrEqual(120);
+    expect(member.healingDone).toBeGreaterThanOrEqual(60);
+    expect(member.dps).toBeGreaterThan(0);
+    expect(member.hps).toBeGreaterThan(0);
+    // O creditado à mão está no total; qualquer dano de bot que a hunt tenha produzido soma.
+    expect(member.damageDealt).toBeGreaterThanOrEqual(120);
+    expect(member.dps).toBeCloseTo(session()?.dpsOf('lead', session()?.nowMs ?? 0) ?? 0, 8);
   });
 
   it('analyzer.party e session-state.partySummary aparecem só com party (#400, RF-04)', () => {

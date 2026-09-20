@@ -75,6 +75,13 @@ const Aggregates = z.object({
   suppliesUsed: z.number().int().optional(),
   bestBasicHit: z.number().optional(),
   bestSpellHit: z.number().optional(),
+  /**
+   * O dano causado e a cura feita na SESSÃO (#431, ADR 0032 d.14). Totais acumulados por
+   * evento, como os demais — opcionais pela mesma razão de deploy em rolagem da FUN-78, e o
+   * cliente mostra "—" quando ausentes, nunca zero.
+   */
+  damageDealt: z.number().optional(),
+  healingDone: z.number().optional(),
 });
 
 /**
@@ -239,6 +246,16 @@ export const PartyState = z.object({
     joinedAtMs: z.number().nonnegative().optional(),
     /** Tem viewer anexado agora — não confundir com "vivo": morto pode estar conectado. */
     connected: z.boolean().optional(),
+    /**
+     * DPS/HPS do membro e os totais da sessão (#431, ADR 0032 d.14): dano causado e cura feita
+     * nos últimos 60 s, lidos da janela do `sim` com carimbo lógico. `dps`/`hps` são a taxa
+     * (soma / 60 s); `damageDealt`/`healingDone`, o acumulado. Opcionais: um nó `game` anterior
+     * manda sem, e o painel simplesmente não desenha a linha (D8, nunca zero fabricado).
+     */
+    dps: z.number().nonnegative().optional(),
+    hps: z.number().nonnegative().optional(),
+    damageDealt: z.number().nonnegative().optional(),
+    healingDone: z.number().nonnegative().optional(),
   })),
 });
 

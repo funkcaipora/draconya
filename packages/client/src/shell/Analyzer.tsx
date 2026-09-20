@@ -94,6 +94,14 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
       <Line label="Supplies" value={optionalCount(aggregates.suppliesUsed)} />
       <Line label="Maior golpe" value={optionalCount(aggregates.bestBasicHit)} />
       <Line label="Maior magia" value={optionalCount(aggregates.bestSpellHit)} />
+      {/* Dano causado e cura feita na sessão (PT-01, #431): só quando o servidor os mandou —
+          um nó anterior manda sem, e zero seria uma afirmação que ele não fez (D8). */}
+      {aggregates.damageDealt !== undefined && (
+        <Line label="Dano causado" value={count(aggregates.damageDealt)} />
+      )}
+      {aggregates.healingDone !== undefined && (
+        <Line label="Cura feita" value={count(aggregates.healingDone)} />
+      )}
       {/* Só aparece com morte — "Mortes: 0" afirmaria o que ninguém disse. `danger`: inspirado
           no `color(c)` do handoff (`Hud.jsx`, `c === "red"`). */}
       {aggregates.deaths > 0 && <Line label="Mortes" value={count(aggregates.deaths)} danger />}

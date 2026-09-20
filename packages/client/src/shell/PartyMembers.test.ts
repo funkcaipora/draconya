@@ -198,7 +198,7 @@ describe('PartyMembers', () => {
     expect(source).toContain('disabled={!leader}');
   });
 
-  it('does not invent gasto, DPS/HPS, or a kick button — those belong to other issues/panels', async () => {
+  it('does not invent gasto, DPS/HPS, or a kick button when the server sent none of them', async () => {
     hud.set((state) => ({ ...state, party: {
       leaderId: 'me', mode: 'split', members: [
         { characterId: 'me', name: 'Eu', alive: true, healthPercent: 100, vocationId: null },
@@ -210,6 +210,26 @@ describe('PartyMembers', () => {
     expect(html).not.toContain('DPS');
     expect(html).not.toContain('HPS');
     expect(html).not.toContain('Remover da party');
+  });
+
+  it('renders the "DPS · total / HPS · total" line when party-state carries it (#431, ADR 0032 d.14)', async () => {
+    hud.set((state) => ({ ...state, party: {
+      leaderId: 'lead', mode: 'shared', members: [
+        {
+          characterId: 'lead', name: 'Ana', alive: true, healthPercent: 80, vocationId: null,
+          dps: 12, hps: 3, damageDealt: 135_700, healingDone: 20_200,
+        },
+        { characterId: 'me', name: 'Eu', alive: true, healthPercent: 55, vocationId: null },
+      ],
+    } }));
+    const html = await render();
+    expect(html).toContain('party-companion-perf');
+    expect(html).toContain('DPS 12');
+    expect(html).toContain('· 135.7k');
+    expect(html).toContain('HPS 3');
+    expect(html).toContain('· 20.2k');
+    // O membro SEM os campos não ganha a linha — o HUD não fabrica um "DPS 0".
+    expect((html.match(/party-companion-perf/g) ?? []).length).toBe(1);
   });
 
   it('omits the vocation and level badges, and the mana bar, when the fields are null/undefined (D8, SV-11 #347)', async () => {

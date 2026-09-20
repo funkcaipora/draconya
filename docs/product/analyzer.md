@@ -143,8 +143,15 @@ Caçada — o mesmo objeto em `session-state.partySummary` (o `party` do `sessio
 sendo o roster, #196): `players`, `uniqueVocations`, `xpPercent`, `totalXp`, `totalSupplies`,
 `shareCosts`, `splitLoot`, `bagValue`, `bagWeight` e `autoSell: { used, limit }`. `autoSell.limit`
 é o limite do **personagem líder** (`autoSellItemTypes`, D2) e `used` é quantos ids ele guardou; a
-"parte estimada" de cada um continua vindo de `party-spending` (`estimatedShare`). Fora do M20:
-DPS/HPS por membro é a PT-01 (ADR 0032 d.14, issue própria) — não existe ainda.
+"parte estimada" de cada um continua vindo de `party-spending` (`estimatedShare`).
+
+A **PT-01** (#431, ADR 0032 d.14) acrescentou **DPS e HPS por membro**: `party-state.members[].{
+dps, hps, damageDealt, healingDone}` e `analyzer.aggregates.{damageDealt, healingDone}` (todos
+opcionais). O `sim` acumula dano causado e cura feita por EVENTO, com carimbo lógico, e mantém uma
+janela de 60 s aparada na LEITURA — nunca por tick (invariante 2). `dps`/`hps` são a taxa da
+janela; `damageDealt`/`healingDone` são os totais da sessão. O dano contado é o **aplicado**
+(overkill e mana shield ficam de fora), e a janela não viaja no snapshot: uma sessão retomada
+recomeça a janela, os totais continuam. O painel da party mostra a linha "DPS · HPS" por membro.
 
 ## Em aberto
 

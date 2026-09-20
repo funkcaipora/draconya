@@ -217,6 +217,7 @@ describe('the live analyzer (FUN-110)', () => {
     aggregates: {
       durationMs: 650_000, xpGained: 1_000, goldGained: 340, goldSpent: 120, kills: 13, deaths: 0,
       itemsLooted: 5, suppliesUsed: 7, bestBasicHit: 88, bestSpellHit: 140,
+      damageDealt: 12_000, healingDone: 3_400,
     },
     notableEvents: [{ atMs: 1_000, type: 'level-up' }],
   };
@@ -837,6 +838,7 @@ describe('party-state v2 (#393)', () => {
       {
         characterId: 'p1', name: 'Alice', alive: true, healthPercent: 100,
         vocationId: 'knight', level: 20, manaPercent: 80, joinedAtMs: 1_000, connected: true,
+        dps: 12.5, hps: 3, damageDealt: 4_500, healingDone: 900,
       },
       {
         characterId: 'p2', name: 'Bob', alive: false, healthPercent: 0,
@@ -845,13 +847,13 @@ describe('party-state v2 (#393)', () => {
     ],
   };
 
-  it('round trips settings, loot and the member metadata', () => {
-    // Mutação que mata: tirar o `.optional()` de `settings`/`loot`/`joinedAtMs`/`connected`
+  it('round trips settings, loot, the member metadata and the DPS/HPS (#431)', () => {
+    // Mutação que mata: tirar o `.optional()` de `settings`/`loot`/`joinedAtMs`/`connected`/`dps`
     // (o decode do nó anterior devolve `null`).
     expect(decodeS2C(encodeS2C(v2))).toEqual([v2]);
   });
 
-  it('decodes a v1 party-state without the new fields', () => {
+  it('decodes a v1 party-state without the new fields, DPS/HPS included (#431)', () => {
     const v1 = {
       type: 'party-state',
       leaderId: 'p1',
@@ -865,6 +867,10 @@ describe('party-state v2 (#393)', () => {
     const member = (decoded?.[0]?.['members'] as Array<Record<string, unknown>>)[0];
     expect(member).not.toHaveProperty('joinedAtMs');
     expect(member).not.toHaveProperty('connected');
+    expect(member).not.toHaveProperty('dps');
+    expect(member).not.toHaveProperty('hps');
+    expect(member).not.toHaveProperty('damageDealt');
+    expect(member).not.toHaveProperty('healingDone');
   });
 
   it('keeps the #359 top-level axes for a node that still reads them', () => {

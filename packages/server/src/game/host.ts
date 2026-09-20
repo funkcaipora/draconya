@@ -223,6 +223,7 @@ const VOCATION_REFUSAL: Readonly<Record<VocationRefusal, string>> = {
 const EMPTY_AGGREGATES: Aggregates = {
   durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
   itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+  damageDealt: 0, healingDone: 0,
 };
 
 /**
@@ -411,7 +412,9 @@ function sameAnalyzer(sent: SentAnalyzer, aggregates: Aggregates, eventCount: nu
     && a.itemsLooted === aggregates.itemsLooted
     && a.suppliesUsed === aggregates.suppliesUsed
     && a.bestBasicHit === aggregates.bestBasicHit
-    && a.bestSpellHit === aggregates.bestSpellHit;
+    && a.bestSpellHit === aggregates.bestSpellHit
+    && a.damageDealt === aggregates.damageDealt
+    && a.healingDone === aggregates.healingDone;
 }
 
 /** Compara as duas seções PARTY entregues por último, campo a campo — como `sameAnalyzer`. */
@@ -558,6 +561,10 @@ function sameParty(a: S2CProps<'party-state'>, b: S2CProps<'party-state'>): bool
       || x.healthPercent !== y.healthPercent || x.vocationId !== y.vocationId
       || x.level !== y.level || x.manaPercent !== y.manaPercent
       || x.joinedAtMs !== y.joinedAtMs || x.connected !== y.connected
+      // DPS/HPS (#431): a taxa da janela muda quando a amostra vence ou um golpe entra — é
+      // exatamente a variação que precisa reenviar o `party-state` ao vivo.
+      || x.dps !== y.dps || x.hps !== y.hps
+      || x.damageDealt !== y.damageDealt || x.healingDone !== y.healingDone
     ) return false;
   }
   return true;
@@ -2377,6 +2384,7 @@ export class SessionHost {
         },
         members: hosted.session.participants.map((member) => {
           const joinedAtMs = joinTimes.joinedAtMsOf?.(member.id);
+          const totals = hosted.session.aggregatesOf(member.id);
           return {
             characterId: member.id,
             name: this.#nameByCharacter.get(member.id) ?? member.id,
@@ -2391,6 +2399,12 @@ export class SessionHost {
               : 0,
             ...(joinedAtMs === undefined ? {} : { joinedAtMs }),
             connected: this.#watchers(hosted, member.id) > 0,
+            // DPS/HPS (#431): a janela é lida AGORA, no instante do ciclo — o `sim` não mantém
+            // taxa nenhuma, só amostras carimbadas, e a taxa sai da divisão de 60 s.
+            dps: hosted.session.dpsOf(member.id, hosted.session.nowMs),
+            hps: hosted.session.hpsOf(member.id, hosted.session.nowMs),
+            damageDealt: totals.damageDealt,
+            healingDone: totals.healingDone,
           };
         }),
       },

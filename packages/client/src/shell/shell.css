@@ -1294,6 +1294,16 @@ body {
 .party-companion-vitals { display: grid; gap: 2px; margin: 4px 0 3px; }
 .party-hp-row { display: flex; align-items: center; gap: 6px; }
 .party-hp { flex: 1 1 auto; min-width: 0; }
+/* DPS/HPS por membro (#431, ADR 0032 d.14): DPS à esquerda, HPS à direita, como o kit. */
+.party-companion-perf {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font: 7px var(--font-mono);
+  color: var(--text-faint);
+}
+.party-companion-perf b { color: var(--text-muted); font-weight: 700; }
 
 /* Rodapé do kit: a nota é estática; os dois interruptores do líder (#405, ADR 0033 D1) moram
    aqui e são a única parte editável em tempo de hunt. O botão é uma exceção local menor que o
