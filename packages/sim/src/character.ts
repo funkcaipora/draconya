@@ -147,8 +147,29 @@ export type AmmoResult = { readonly ok: true } | { readonly ok: false; readonly 
 
 /** Por que a vocação não foi escolhida (#154). Tipada: o jogador merece saber qual foi. */
 export type VocationRefusal = 'level-too-low' | 'already-chosen';
+
+/**
+ * Como uma peça do kit inicial acabou (#496). `equipped` vestiu; `in-backpack` coube no
+ * inventário mas não vestiu — o escudo do Paladin, impedido pelo bow de duas mãos; `in-loot-box`
+ * não coube nem em peso.
+ */
+export type VocationPieceStatus = 'equipped' | 'in-backpack' | 'in-loot-box';
+
+export interface VocationPieceResult {
+  readonly itemId: string;
+  readonly status: VocationPieceStatus;
+}
+
 export type VocationResult =
-  | { readonly ok: true; readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none' }
+  | {
+      readonly ok: true;
+      readonly weapon: 'equipped' | 'in-backpack' | 'in-loot-box' | 'none';
+      /**
+       * O destino de cada peça do kit, na ordem do conteúdo (#496). Ausente é a arma legada da
+       * #154 — o caminho de `weapon`; o kit completo não o usa.
+       */
+      readonly kit?: readonly VocationPieceResult[];
+    }
   | { readonly ok: false; readonly reason: VocationRefusal };
 
 export interface VocationChoiceOptions {
@@ -159,6 +180,15 @@ export interface VocationChoiceOptions {
   readonly instanceId: string;
   /** Os tamanhos de container (#160), para a arma achar lugar. */
   readonly rules: ContainerRules;
+  /**
+   * O kit completo da vocação (#496), na ordem do conteúdo — a ordem é contrato: o escudo é
+   * equipado DEPOIS da arma, e é por isso que o bow o deixa na mochila e não o contrário.
+   *
+   * O `slot` da peça é declaração de conteúdo; o slot de verdade sai do item (`equip` lê a
+   * definição), e o boot (`buildContent`) já recusou a peça declarada no lugar errado. Ausente
+   * é a arma legada da #154 — `weapon` no argumento.
+   */
+  readonly kitItems?: ReadonlyArray<{ readonly item: Item }>;
 }
 
 export class CharacterRuntime {
@@ -270,14 +300,17 @@ export class CharacterRuntime {
   /**
    * Escolhe a vocação (#154, ADR 0026 decisão 1) — uma vez, no level da escolha ou depois.
    *
-   * A arma entra pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
-   * mãos). A escolha vale MESMO que a arma não vista: sem capacidade ela vai para a Caixa de
-   * Loot, com escudo vestido e bow ela fica na mochila — perder a vocação por causa de peso
+   * Os itens entram pelos caminhos que já existem: `add` (peso) e `equip` (vocação, level, duas
+   * mãos). A escolha vale MESMO que um item não vista: sem capacidade ele vai para a Caixa de
+   * Loot, com escudo vestido e bow ele fica na mochila — perder a vocação por causa de peso
    * seria punir a decisão pela mochila. `retarget` NÃO é chamado: a tabela da vocação vale do
    * próximo level em diante (`progression.ts`), e o ruleset já lê `vocationId` a cada level up.
    *
-   * `weapon` é `null` para a vocação sem arma inicial — só no conteúdo de teste; as quatro
-   * reais têm a sua.
+   * Com `kitItems` (#496) é o kit completo que entra: cada peça ganha identidade própria
+   * (`${instanceId}:${itemId}` — numa cópia da Cidade o id da sessão é compartilhado, e o id do
+   * item no fim é o que não colide), `origin: 'vocation-choice'`, e o resultado reporta o
+   * destino de cada uma. `weapon` é `null` quando nem kit nem arma existem — só no conteúdo de
+   * teste.
    */
   chooseVocation(vocation: Vocation, weapon: Item | null, options: VocationChoiceOptions): VocationResult {
     if (this.vocationId !== null) return { ok: false, reason: 'already-chosen' };
@@ -286,6 +319,13 @@ export class CharacterRuntime {
     // A vocação PRIMEIRO: `equip` confere `requires.vocationId` contra `this.vocationId`, e a
     // arma exige exatamente a que está sendo escolhida.
     this.vocationId = vocation.id;
+    if (options.kitItems !== undefined && options.kitItems.length > 0) {
+      const kit: VocationPieceResult[] = [];
+      for (const { item } of options.kitItems) {
+        kit.push({ itemId: item.id, status: this.#grantKitPiece(item, options) });
+      }
+      return { ok: true, weapon: 'none', kit };
+    }
     if (weapon === null) return { ok: true, weapon: 'none' };
 
     const carried: CarriedItem = {
@@ -301,6 +341,28 @@ export class CharacterRuntime {
     // `equip` troca com o que está na mão: a machete volta para a mochila sozinha.
     const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
     return { ok: true, weapon: equipped.ok ? 'equipped' : 'in-backpack' };
+  }
+
+  /**
+   * Uma peça do kit (#496): entra pelo peso (`add`), veste pelo slot do item (`equip`), e o que
+   * não veste fica em segurança onde já está. O lugar da mochila NUNCA recusa kit — só o peso
+   * recusa, e a Caixa segura.
+   */
+  #grantKitPiece(item: Item, options: VocationChoiceOptions): VocationPieceStatus {
+    const carried: CarriedItem = {
+      instanceId: `${options.instanceId}:${item.id}`,
+      itemId: item.id,
+      quantity: 1,
+      origin: 'vocation-choice',
+    };
+    if (!this.inventory.add(carried, options.catalog, this, options.rules).ok) {
+      this.lootBox.push(carried);
+      return 'in-loot-box';
+    }
+    // `equip` troca com o que está no slot: a machete volta para a mochila sozinha. A peça
+    // impedida pelas duas mãos (o escudo com o bow vestido) fica na mochila, onde já está.
+    const equipped = this.inventory.equip(carried.instanceId, this, options.catalog);
+    return equipped.ok ? 'equipped' : 'in-backpack';
   }
 
   getState(): CharacterState {

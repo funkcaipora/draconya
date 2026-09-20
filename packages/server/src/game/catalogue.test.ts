@@ -115,6 +115,7 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       items: [
         ...(raw.items ?? []),
         { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+        { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14 },
       ],
       vocations: [
         { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
@@ -128,6 +129,31 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
       { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
     ]);
     expect(vocationLevel).toBe(8);
+  });
+
+  it('derives the display weapon from the starting kit when the kit is the grant (#496)', () => {
+    // As vocações reais declaram o kit, não a arma: o diálogo precisa continuar mostrando a
+    // arma que a vocação entrega. Mutação que mata: filtrar por `startingWeaponItemId` — as
+    // quatro vocações reais, kit-only, sumiriam do diálogo e ninguém escolheria nada.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withKit = {
+      ...raw,
+      items: [
+        ...(raw.items ?? []),
+        { id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21, requires: { vocationId: 'knight' } },
+        { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14 },
+      ],
+      vocations: [
+        {
+          id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+          startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
+        },
+      ],
+    };
+    const content = buildContent({ ...withKit, appearances: [placeholderAppearances(withKit)] });
+    expect(buildCatalogue(content).vocations).toEqual([
+      { id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25, startingWeaponItemId: 'steel-axe' },
+    ]);
   });
 
   it('leva os monstros — id e nome, em ordem de id — para a tela do Bestiário (FUN-113)', () => {

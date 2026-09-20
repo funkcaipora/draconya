@@ -180,16 +180,27 @@ export function buildCatalogue(content: Content): Catalogue {
     })),
     // As vocações e o level da escolha (#154): o diálogo do level 8 lê daqui — a tela não
     // pode ter o 8 em código. Só os ganhos e a arma inicial (id de item); nada de fórmula.
+    //
+    // A arma de EXIBIÇÃO (#496) sai do kit quando é ele quem concede — o campo legado
+    // `startingWeaponItemId` sobrevive como fallback do conteúdo de teste. A vocação sem
+    // arma nenhuma (conteúdo de teste) fica de fora: sem arma não há o que escolher.
     vocations: [...content.vocations.values()]
-      .filter((vocation) => vocation.startingWeaponItemId !== undefined)
-      .map((vocation) => ({
-        id: vocation.id,
-        name: vocation.name,
-        healthPerLevel: vocation.healthPerLevel,
-        manaPerLevel: vocation.manaPerLevel,
-        capacityPerLevel: vocation.capacityPerLevel,
-        startingWeaponItemId: vocation.startingWeaponItemId as string,
-      })),
+      .map((vocation) => {
+        const kitWeapon = vocation.startingKit
+          .map((piece) => content.items.get(piece.itemId))
+          .find((item) => item?.kind === 'weapon' && item.slot === 'hand');
+        const weaponItemId = vocation.startingWeaponItemId ?? kitWeapon?.id;
+        if (weaponItemId === undefined) return null;
+        return {
+          id: vocation.id,
+          name: vocation.name,
+          healthPerLevel: vocation.healthPerLevel,
+          manaPerLevel: vocation.manaPerLevel,
+          capacityPerLevel: vocation.capacityPerLevel,
+          startingWeaponItemId: weaponItemId,
+        };
+      })
+      .filter((vocation) => vocation !== null),
     vocationLevel: content.progression.vocationLevel,
     progression: {
       startingSpeed: content.progression.startingSpeed,

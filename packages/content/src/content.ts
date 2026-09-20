@@ -788,6 +788,46 @@ export function buildContent(raw: RawContent): Content {
       problems.push(`vocation/${vocation.id}: "${weapon.id}" precisa exigir a própria vocação`);
     }
   }
+  // O kit inicial de cada vocação (#496): item que existe, no slot declarado (quando o é),
+  // exigindo no máximo a própria vocação — o escudo do kit veste em qualquer um —, e um por
+  // slot, porque a segunda peça do mesmo slot é declaração morta: ela nasce na mochila e o
+  // slot declarado mente. Arma de duas mãos com escudo NÃO é recusada: o kit do Paladin é
+  // exatamente isso, e o `Inventory.equip` dá o estado certo (escudo na mochila).
+  for (const vocation of vocations.values()) {
+    const kitSlots = new Set<string>();
+    for (const piece of vocation.startingKit) {
+      const item = itemDefinitions.get(piece.itemId);
+      if (item === undefined) {
+        problems.push(`vocation/${vocation.id}: o kit inicial aponta item "${piece.itemId}", que não existe`);
+        continue;
+      }
+      if (piece.slot !== undefined && item.slot !== piece.slot) {
+        problems.push(
+          `vocation/${vocation.id}: "${piece.itemId}" do kit se veste em "${item.slot ?? 'nenhum'}", não em "${piece.slot}"`,
+        );
+      }
+      if (
+        item.requires.vocationId !== undefined
+        && item.requires.vocationId !== vocation.id
+      ) {
+        problems.push(`vocation/${vocation.id}: "${piece.itemId}" do kit exige a vocação "${item.requires.vocationId}"`);
+      }
+      const slot = piece.slot ?? item.slot;
+      if (slot !== undefined && kitSlots.has(slot)) {
+        problems.push(`vocation/${vocation.id}: o kit tem duas peças em "${slot}"`);
+      }
+      if (slot !== undefined) kitSlots.add(slot);
+    }
+    // Arma legada e kit juntos (#496): a arma já é peça do kit, e os dois declarados em
+    // desacordo são duas verdades para o mesmo grant — o host prefere o kit, e o campo ficaria
+    // só a mentira de exibição. O boot exige que a arma declarada seja uma das peças.
+    if (vocation.startingWeaponItemId !== undefined && vocation.startingKit.length > 0
+      && !vocation.startingKit.some((piece) => piece.itemId === vocation.startingWeaponItemId)) {
+      problems.push(
+        `vocation/${vocation.id}: a arma inicial "${vocation.startingWeaponItemId}" não é peça do startingKit — declare um ou o outro`,
+      );
+    }
+  }
   const mapData = parseAll('map', raw.maps ?? [], tilemapSchema, problems);
   const routeData = parseAll('route', raw.routes ?? [], routeSchema, problems);
 

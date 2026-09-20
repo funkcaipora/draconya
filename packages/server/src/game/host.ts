@@ -1624,9 +1624,14 @@ export class SessionHost {
 
   /**
    * Escolher a vocação (#154, ADR 0026 decisão 1). Processada NA CHEGADA, como equipar. Quem
-   * decide é o `sim`; o host resolve vocação e arma no conteúdo fixado na sessão (invariante
-   * 7), traduz a recusa, e no sucesso manda vitais e inventário — na Cidade não há ciclo que
-   * os compare.
+   * decide é o `sim`; o host resolve vocação, kit e arma no conteúdo fixado na sessão
+   * (invariante 7), traduz a recusa, e no sucesso manda vitais e inventário — na Cidade não há
+   * ciclo que os compare.
+   *
+   * O kit completo (#496) é o caminho novo: cada peça de `startingKit` resolvida no catálogo,
+   * na ordem do conteúdo — a ordem é contrato, e é ela que veste a arma ANTES do escudo, para o
+   * bow de duas mãos deixar o escudo na mochila e não o contrário. `startingWeaponItemId` é o
+   * fallback legado para a vocação que não declara kit.
    */
   #requestVocation(viewer: Viewer, vocationId: string): void {
     const hosted = this.#hostedSession(viewer.characterId);
@@ -1643,6 +1648,7 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'Essa vocação não existe.' });
       return;
     }
+    const catalog = this.#options.itemCatalog ?? EMPTY_ITEMS;
     const weapon = vocation.startingWeaponItemId === undefined
       ? null
       : this.#options.itemCatalog?.get(vocation.startingWeaponItemId) ?? null;
@@ -1650,24 +1656,51 @@ export class SessionHost {
       viewer.send({ type: 'system-message', level: 'warning', text: 'A arma dessa vocação não existe.' });
       return;
     }
-    const result = character.chooseVocation(vocation, weapon, {
-      catalog: this.#options.itemCatalog ?? EMPTY_ITEMS,
+    let kitItems: { item: Item }[] = [];
+    if (vocation.startingKit.length > 0) {
+      kitItems = [];
+      for (const piece of vocation.startingKit) {
+        const item = this.#options.itemCatalog?.get(piece.itemId) ?? null;
+        if (item === null) {
+          viewer.send({
+            type: 'system-message', level: 'warning',
+            text: `Uma peça do kit dessa vocação ("${piece.itemId}") não existe.`,
+          });
+          return;
+        }
+        kitItems.push({ item });
+      }
+    }
+    const result = character.chooseVocation(vocation, kitItems.length > 0 ? null : weapon, {
+      catalog,
       vocationLevel,
       // Uma por personagem, e com o id DELE no meio: numa cópia da Cidade dois personagens
       // compartilham `session.id`, e `${session.id}:${lootSeq}` colidiria na chave primária
-      // de `item_instance`. O prefixo da sessão é o que `acquiredBy` filtra.
+      // de `item_instance`. O prefixo da sessão é o que `acquiredBy` filtra. Cada peça do kit
+      // recebe o id do item no fim, porque são N identidades, não uma.
       instanceId: `${hosted.session.id}:${character.id}:vocation`,
       rules: this.#containerRules(character),
+      ...(kitItems.length > 0 ? { kitItems } : {}),
     });
     if (!result.ok) {
       viewer.send({ type: 'system-message', level: 'warning', text: VOCATION_REFUSAL[result.reason] });
       return;
     }
-    if (result.weapon === 'in-loot-box') {
-      viewer.send({
-        type: 'system-message', level: 'info',
-        text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
-      });
+    if (result.kit === undefined) {
+      if (result.weapon === 'in-loot-box') {
+        viewer.send({
+          type: 'system-message', level: 'info',
+          text: 'A arma da sua vocação não coube na mochila e foi para a Caixa de Loot.',
+        });
+      }
+    } else {
+      for (const piece of result.kit) {
+        if (piece.status !== 'in-loot-box') continue;
+        viewer.send({
+          type: 'system-message', level: 'info',
+          text: `A peça "${catalog.get(piece.itemId)?.name ?? piece.itemId}" do seu kit não coube na mochila e foi para a Caixa de Loot.`,
+        });
+      }
     }
     hosted.dirty.add(character.id);
     const stats = playerStatsOf(character, this.#options.skillCatalog);

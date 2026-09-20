@@ -1495,6 +1495,101 @@ describe('a arma inicial da vocação (#154, ADR 0026 decisão 3)', () => {
   });
 });
 
+describe('o kit inicial da vocação é conteúdo, e o boot confere (#496)', () => {
+  const axe = {
+    id: 'steel-axe', name: 'Steel Axe', kind: 'weapon', slot: 'hand', weight: 41, value: 0, attack: 21,
+    weapon: { kind: 'melee', range: 1 }, requires: { vocationId: 'knight' },
+  };
+  const shield = { id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14 };
+  const withKit = (vocations: unknown[], items: unknown[] = [axe, shield]) =>
+    base({ vocations, items });
+  const knightWithKit = {
+    ...knight,
+    startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
+  };
+
+  it('aceita o kit, e o JSON normaliza a peça sem slot declarado', () => {
+    const content = buildContent(withKit([
+      { ...knightWithKit, startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield' }] },
+    ]));
+    expect(content.vocations.get('knight')?.startingKit).toEqual([
+      { itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield' },
+    ]);
+  });
+
+  it('recusa item fantasma, e diz qual vocação e qual item', () => {
+    expect(() => buildContent(withKit([
+      { ...knightWithKit, startingKit: [{ itemId: 'espada-de-luz', slot: 'hand' }] },
+    ]))).toThrow(/aponta item "espada-de-luz"/);
+  });
+
+  it('recusa peça declarada no slot que não é o do item', () => {
+    expect(() => buildContent(withKit([
+      { ...knightWithKit, startingKit: [{ itemId: 'steel-axe', slot: 'head' }] },
+    ]))).toThrow(/do kit se veste em "hand", não em "head"/);
+  });
+
+  it('recusa peça que exige OUTRA vocação: o kit é do dono', () => {
+    // O escudo sem `requires` veste em qualquer um — é por isso que o kit do Knight é ele.
+    // Mas uma arma de outra vocação no kit é declaração impossível de vestir.
+    const wand = {
+      id: 'wand-of-vortex', name: 'Wand of Vortex', kind: 'weapon', slot: 'hand', weight: 19, value: 0,
+      weapon: { kind: 'wand', range: 3 }, requires: { vocationId: 'sorcerer' },
+    };
+    expect(() => buildContent(withKit([
+      { ...knightWithKit, startingKit: [{ itemId: 'wand-of-vortex', slot: 'hand' }] },
+    ], [wand]))).toThrow(/exige a vocação "sorcerer"/);
+  });
+
+  it('aceita a peça que exige a PRÓPRIA vocação, como a arma de sempre', () => {
+    const content = buildContent(withKit([knightWithKit]));
+    expect(content.vocations.get('knight')?.startingKit).toHaveLength(2);
+  });
+
+  it('recusa duas peças no mesmo slot: a segunda nasceria na mochila com o slot declarado mentindo', () => {
+    const sword = { ...axe, id: 'spike-sword', name: 'Spike Sword' };
+    expect(() => buildContent(withKit([
+      { ...knightWithKit, startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'spike-sword', slot: 'hand' }] },
+    ], [axe, sword]))).toThrow(/duas peças em "hand"/);
+  });
+
+  it('aceita arma de duas mãos com escudo: é o kit do Paladin, e o `equip` dá o estado certo', () => {
+    // O kit de nascimento recusa a combinação porque é gravado sem passar por `equip`; o kit
+    // da vocação passa por `equip`, e o escudo impedido fica na mochila. Recusar aqui fecharia
+    // o kit clássico do arqueiro.
+    const bow = { ...axe, id: 'bow', name: 'Bow', twoHanded: true, weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' }, requires: { vocationId: 'paladin' } };
+    const paladin = { ...knight, id: 'paladin', name: 'Paladin', capacityPerLevel: 20 };
+    const arrow = { id: 'arrow', name: 'Arrow', family: 'arrow', attack: 25, price: 1 };
+    const content = buildContent(base({
+      items: [bow, shield],
+      ammunition: [arrow],
+      vocations: [{ ...paladin, startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }] }],
+    }));
+    expect(content.vocations.get('paladin')?.startingKit).toHaveLength(2);
+  });
+
+  it('arma legada e kit juntos têm de concordar: a arma declarada é peça do kit', () => {
+    // O host prefere o kit; um `startingWeaponItemId` fora dele seria a arma que o jogador vê
+    // no diálogo e NÃO recebe. O boot é o lugar da divergência.
+    const content = buildContent(withKit([
+      { ...knightWithKit, startingWeaponItemId: 'steel-axe' },
+    ]));
+    expect(content.vocations.get('knight')?.startingWeaponItemId).toBe('steel-axe');
+    const machete = {
+      id: 'machete', name: 'Machete', kind: 'weapon', slot: 'hand', weight: 16.5, value: 0, attack: 12,
+      weapon: { kind: 'melee', range: 1 },
+    };
+    expect(() => buildContent(withKit([
+      { ...knightWithKit, startingWeaponItemId: 'machete' },
+    ], [axe, shield, machete]))).toThrow(/não é peça do startingKit/);
+  });
+
+  it('sem kit no JSON, a vocação concede só a arma legada — o conteúdo de teste continua de pé', () => {
+    const content = buildContent(base({ vocations: [{ ...knight, startingWeaponItemId: 'steel-axe' }], items: [axe] }));
+    expect(content.vocations.get('knight')?.startingKit).toEqual([]);
+  });
+});
+
 describe('magia de vocação (#156–#159)', () => {
   it('recusa uma magia cuja vocação não existe', () => {
     // Uma magia órfã subiria muda e nunca seria lançada por ninguém. Mutação que mata: tirar a

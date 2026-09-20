@@ -7,7 +7,7 @@ import {
   BOT_VOCABULARY_VERSION, BOT_VOCABULARY_VERSION_V1, botConfigSchema, buildContent, compileItem,
   itemSchema, migrateBotConfigV1, placeholderAppearances,
 } from '@draconya/content';
-import type { Ammunition, Appearances, BotConfig, Progression, RawContent } from '@draconya/content';
+import type { Ammunition, Appearances, BotConfig, Progression, RawContent, Vocation } from '@draconya/content';
 import type { OutfitColors, S2CMessage } from '@draconya/protocol';
 import { createLogger } from '../log.js';
 import type { SessionDirectory } from '../directory.js';
@@ -4198,7 +4198,7 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   };
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
-    startingWeaponItemId: 'steel-axe', spellSkill: 'magic',
+    startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [],
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4332,6 +4332,115 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
 
       expect(saved).toHaveLength(1);
       expect(saved[0]).toMatchObject({ reason: 'drain', vocation: 'knight' });
+    });
+  });
+
+  describe('o kit completo da vocação (#496)', () => {
+    const shield = {
+      ...compileItem(itemSchema.parse({
+        id: 'wooden-shield', name: 'Wooden Shield', kind: 'shield', slot: 'shield', weight: 40, value: 0, defense: 14,
+      })),
+      appearanceId: 2,
+    };
+    const bow = {
+      ...compileItem(itemSchema.parse({
+        id: 'bow', name: 'Bow', kind: 'weapon', slot: 'hand', weight: 31, value: 0, twoHanded: true,
+        weapon: { kind: 'distance', range: 6, ammoFamily: 'arrow' }, requires: { vocationId: 'paladin' },
+      })),
+      appearanceId: 2,
+    };
+    const kitVocations: Map<string, Vocation> = new Map([
+      ['knight', {
+        id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
+        spellSkill: 'magic',
+        startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
+      }],
+      ['paladin', {
+        id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
+        spellSkill: 'distance',
+        startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
+      }],
+    ]);
+    const kitCatalog = new Map([[axe.id, axe], [shield.id, shield], [bow.id, bow]]);
+
+    const atLevel = (level: number, vocationId = 'knight', capacity = 400) => {
+      const { host, sessions } = buildHost(countingRuleset().ruleset, {
+        itemCatalog: kitCatalog, vocations: kitVocations, vocationLevel: 8, level,
+      });
+      const socket = new FakeSocket();
+      const viewer = host.attach(socket, 'p1');
+      host.flush();
+      const before = socket.received().length;
+      const hero = sessions[0]?.participants[0] as CharacterRuntime;
+      hero.capacity = capacity;
+      host.handle(viewer, { type: 'choose-vocation', vocationId });
+      host.flush();
+      return { hero, socket, before };
+    };
+
+    it('equips the weapon AND the shield: the inventory message carries both slots', () => {
+      const { hero, socket, before } = atLevel(8);
+
+      expect(hero.vocationId).toBe('knight');
+      expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
+      expect(hero.inventory.equippedAt('shield')?.itemId).toBe('wooden-shield');
+      // Cada peça com a identidade própria: id de sessão e personagem no meio, id do item no fim.
+      expect(hero.inventory.equippedAt('hand')?.instanceId).toBe('s-p1:p1:vocation:steel-axe');
+      expect(hero.inventory.equippedAt('shield')?.instanceId).toBe('s-p1:p1:vocation:wooden-shield');
+      expect(hero.inventory.equippedAt('hand')?.origin).toBe('vocation-choice');
+      const after = socket.received().slice(before);
+      expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
+      const inventory = after.filter((m) => m.type === 'inventory').at(-1);
+      expect(inventory?.type === 'inventory' && inventory.equipped['hand']?.itemId).toBe('steel-axe');
+      expect(inventory?.type === 'inventory' && inventory.equipped['shield']?.itemId).toBe('wooden-shield');
+    });
+
+    it('the bow leaves the shield in the backpack: visible in the inventory, no warning', () => {
+      const { hero, socket, before } = atLevel(8, 'paladin');
+
+      expect(hero.vocationId).toBe('paladin');
+      expect(hero.inventory.equippedAt('hand')?.itemId).toBe('bow');
+      expect(hero.inventory.equippedAt('shield')).toBeNull();
+      expect([...hero.inventory.items()].some((item) => item.itemId === 'wooden-shield')).toBe(true);
+      const after = socket.received().slice(before);
+      // Ficar na mochila é o estado esperado do kit do arqueiro, não uma surpresa: sem mensagem.
+      expect(after.filter((m) => m.type === 'system-message')).toHaveLength(0);
+    });
+
+    it('a piece that does not fit goes to the loot box, with a message naming it', () => {
+      // A vocação não pode ser punida pela mochila: o que coube veste, o que não coube vai
+      // para a Caixa, e a escolha vale inteira. Mutação que mata: devolver `ok: false`.
+      const { hero, socket, before } = atLevel(8, 'knight', 70);
+
+      expect(hero.vocationId).toBe('knight');
+      expect(hero.inventory.equippedAt('hand')?.itemId).toBe('steel-axe');
+      expect(hero.lootBox.map((item) => item.itemId)).toEqual(['wooden-shield']);
+      const after = socket.received().slice(before);
+      const infos = after.filter((m) => m.type === 'system-message' && m.level === 'info');
+      expect(infos).toHaveLength(1);
+      expect(infos[0]?.type === 'system-message' && infos[0]?.text).toContain('Wooden Shield');
+    });
+
+    it('the kit travels in the receipt with both pieces and the provenance', async () => {
+      const saved: Array<Record<string, unknown>> = [];
+      const receipts = { save: async (r: Record<string, unknown>) => { saved.push(r); } } as unknown as ReceiptStore;
+      const { host, sessions } = buildHost(countingRuleset().ruleset, {
+        itemCatalog: kitCatalog, vocations: kitVocations, vocationLevel: 8, receipts,
+      });
+      await host.prepare('p1', undefined, 'a1');
+      const viewer = host.attach(new FakeSocket(), 'p1');
+      (sessions[0]?.participants[0] as CharacterRuntime).capacity = 400;
+      host.handle(viewer, { type: 'choose-vocation', vocationId: 'knight' });
+      await host.release('p1', 1000, 'logout');
+
+      expect(saved[0]).toMatchObject({
+        vocation: 'knight',
+        equipment: { hand: 's-p1:p1:vocation:steel-axe', shield: 's-p1:p1:vocation:wooden-shield' },
+        acquired: [
+          { instanceId: 's-p1:p1:vocation:steel-axe', itemId: 'steel-axe', origin: 'vocation-choice' },
+          { instanceId: 's-p1:p1:vocation:wooden-shield', itemId: 'wooden-shield', origin: 'vocation-choice' },
+        ],
+      });
     });
   });
 });

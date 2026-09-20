@@ -284,6 +284,7 @@ antes de gravar a linha. Os números do Tibia (TibiaWiki) e os ids do pacote 13.
 | steel axe (Knight) | 7773 | attack 21, 41 oz |
 | bow (Paladin) | 3350 | `twoHanded`, 31 oz — sem attack: o dano é da munição |
 | wand of vortex (Sorcerer) / snakebite rod (Druid) | 3074 / 3066 | 19 oz — alcance, mana e dano entram no motor pela #152 |
+| wooden shield | 3412 | `kind: shield`, `slot: shield`, defense 14, 40 oz — peça do kit de vocação desde #496 |
 
 `kind: 'container'` e `slot: 'back'` andam juntos, e `twoHanded` só em arma — `buildContent`
 recusa o resto. **Como a arma bate é da arma** (#152, CMB-05): `weapon: { kind, family, range,
@@ -298,6 +299,17 @@ range: 1 }`, normalizado no boot; campo de um tipo em arma de outro, ou `weapon`
 recusado. O projétil da wand e do rod mora em `appearances.weapons[itemId].missile`, de um lado só
 como `spells`. A arma de vocação exige a vocação (`requires.vocationId`), e é isso que a segura
 até o level 8: o personagem nasce sem vocação.
+
+**O kit da vocação (#496) é o grant completo do level 8**, em `startingKit` de cada
+`vocations/*.json` — arma + `wooden-shield`, com o escudo do Paladin na mochila, porque o bow é
+de duas mãos e o `equip` veste a arma ANTES do escudo (a ordem do kit é contrato). O boot confere
+cada peça: existe, está no slot declarado (quando o é), exige no máximo a PRÓPRIA vocação, e não
+há duas no mesmo slot — a segunda nasceria na mochila com o slot declarado mentindo. Arma de
+duas mãos com escudo NÃO é recusada aqui (diferente do kit de nascimento, que é gravado direto
+no banco): esse kit passa por `equip`, e o estado impedido é alcançável. `startingWeaponItemId`
+sobrevive como fallback legado do conteúdo de teste — se ele e o kit coexistem, o boot exige que
+a arma declarada seja uma das peças, porque o host prefere o kit e o campo ficaria só a mentira
+de exibição; é daí que o `catalogue` deriva a arma que o diálogo do level 8 mostra.
 
 ## Munição (#151, AB-02, ADR 0032 decisão 7)
 
