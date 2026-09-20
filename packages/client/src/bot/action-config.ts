@@ -15,7 +15,8 @@
 
 import { BOT_CONDITION_KINDS_V2 } from '@draconya/content';
 import type {
-  BotActionV2, BotConditionKindV2, BotConditionV2, BotConfigV2, BotHotkey, BotOperator, BotSlot,
+  BotActionV2, BotConditionKindV2, BotConditionV2, BotConfigV2, BotHotkey, BotOperator,
+  BotRuleTarget, BotSlot,
 } from '@draconya/content';
 
 /** Um conjunto da configuração v2 — a assinatura de `hotkeyConflict`/`draftProblem`. */
@@ -30,6 +31,11 @@ export interface SlotDraft {
   readonly when: readonly BotConditionV2[];
   readonly hotkey?: BotHotkey;
   readonly auto: boolean;
+  /**
+   * Quem recebe a ação (§26-30, ADR 0035 d.10). Só tem efeito quando a ação aceita amigo; a
+   * tela zera para `self` ao escolher uma ação que não aceita, e quem valida é o servidor.
+   */
+  readonly target: BotRuleTarget;
 }
 
 /**
@@ -96,11 +102,12 @@ export function blankConditionV2(kind: BotConditionKindV2): BotConditionV2 {
 
 /** O rascunho que abre o modal: o slot atual, ou um vazio (`do: null`). */
 export function draftFromSlot(slot: BotSlot | null): SlotDraft {
-  if (slot === null) return { do: null, when: [], auto: true };
+  if (slot === null) return { do: null, when: [], auto: true, target: { kind: 'self' } };
   return {
     do: slot.do,
     when: slot.when,
     auto: slot.auto,
+    target: slot.target ?? { kind: 'self' },
     ...(slot.hotkey === undefined ? {} : { hotkey: slot.hotkey }),
   };
 }
@@ -115,6 +122,8 @@ export function slotFromDraft(draft: SlotDraft): BotSlot | null {
     do: draft.do,
     when: [...draft.when],
     auto: draft.auto,
+    // `self` é o default do servidor: omitir mantém o round-trip de um slot que nunca teve alvo.
+    ...(draft.target.kind === 'self' ? {} : { target: draft.target }),
     ...(draft.hotkey === undefined ? {} : { hotkey: draft.hotkey }),
   };
 }

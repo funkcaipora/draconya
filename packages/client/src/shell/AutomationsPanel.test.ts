@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { BotAutomation } from '@draconya/content';
 import { AutomationsPanel } from './AutomationsPanel.js';
 import { INITIAL_HUD, hud } from '../state/hud.js';
-import type { Catalogue } from '../state/hud.js';
-import { INITIAL_BOT, bot } from '../bot/store.js';
+import type { Catalogue, PartyView } from '../state/hud.js';
+import { INITIAL_BOT, bot, edit } from '../bot/store.js';
 
 // O painel AUTOMAÇÕES (AB-12, #427), régua `docs/kit-reference/10-hud-hunt.png`. `prerender` roda
 // sem DOM: o que se prende é a ESTRUTURA — as linhas com interruptor/nome/resumo/⚙/×, o
@@ -113,5 +113,99 @@ describe('AutomationsPanel — a fiação (RF-08)', () => {
     expect(source).toContain('AutomationConfigModal');
     // O remetente é da `Shell` (dono único do singleton): o painel não o instala nem o limpa.
     expect(source).not.toContain('setConfigSender');
+  });
+});
+
+describe('AutomationsPanel — Follow de membro (#406, ADR 0035 d.9/§24-25.1)', () => {
+  const member = (characterId: string, name: string) => ({
+    characterId, name, alive: true, healthPercent: 100, vocationId: null,
+  });
+  const party = (members: ReturnType<typeof member>[]): PartyView => ({
+    leaderId: members[0]?.characterId ?? 'p1', mode: 'split', members,
+  });
+
+  it('RF-01: fora de party o Select "Seguir" não aparece', async () => {
+    const html = await render();
+    expect(html).not.toContain('>Seguir<');
+    expect(html).not.toContain('Não seguir');
+    expect(html).not.toContain('Líder da party');
+  });
+
+  it('RF-01: em party lista Não seguir, Líder e cada membro pelo nome', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru'), member('p3', 'Cid')]),
+    }));
+    const html = await render();
+    expect(html).toContain('>Seguir<');
+    expect(html).toContain('Não seguir');
+    expect(html).toContain('Líder da party');
+    for (const name of ['Ana', 'Bru', 'Cid']) expect(html).toContain(`>${name}<`);
+  });
+
+  it('DT-04: o próprio personagem não entra na lista de membros', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'p1',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru')]),
+    }));
+    const html = await render();
+    expect(html).toContain('>Bru<');
+    // "Ana" só apareceria se a opção do próprio fosse oferecida de novo (o `none` já é isso).
+    expect(html).not.toContain('>Ana<');
+  });
+
+  it('RF-03: a lista é AO VIVO — um novo `party-state` muda as opções sem remontar', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru')]),
+    }));
+    expect(await render()).toContain('>Bru<');
+
+    hud.set((state) => ({ ...state, party: party([member('p3', 'Cid')]) }));
+    const html = await render();
+    expect(html).toContain('>Cid<');
+    expect(html).not.toContain('>Bru<');
+  });
+
+  it('o follow do rascunho vem selecionado — member, leader e none', async () => {
+    hud.set((state) => ({
+      ...state,
+      characterId: 'me',
+      party: party([member('p1', 'Ana'), member('p2', 'Bru')]),
+    }));
+
+    edit((draft) => ({ ...draft, follow: { kind: 'member', characterId: 'p2' } }));
+    expect(await render()).toMatch(/<option[^>]*value="member:p2"[^>]*selected/);
+
+    edit((draft) => ({ ...draft, follow: { kind: 'leader' } }));
+    expect(await render()).toMatch(/<option[^>]*value="leader"[^>]*selected/);
+
+    edit((draft) => ({ ...draft, follow: { kind: 'none' } }));
+    expect(await render()).toMatch(/<option[^>]*value="none"[^>]*selected/);
+  });
+
+  it('RF-02: escolher uma opção chama `setFollow` (o painel agenda o bot-config) — por fonte', async () => {
+    const source = await readFile(new URL('./AutomationsPanel.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('setFollow(');
+    expect(source).toContain("{ kind: 'member', characterId: value.slice('member:'.length) }");
+    expect(source).toContain("{ kind: 'leader' }");
+    expect(source).toContain("{ kind: 'none' }");
+  });
+
+  it('RF-04: `followState.active === false` mostra o texto exato do §25.1; `null`/`true` não', async () => {
+    // Sem o servidor ter dito nada, a tela NÃO inventa "interrompido" (D8).
+    expect(await render()).not.toContain('Follow interrompido');
+
+    hud.set((state) => ({
+      ...state,
+      followState: { active: false, targetId: 'p1', reason: 'dead' },
+    }));
+    expect(await render()).toContain('Follow interrompido — alvo indisponível.');
+
+    hud.set((state) => ({ ...state, followState: { active: true, targetId: 'p1' } }));
+    expect(await render()).not.toContain('Follow interrompido');
   });
 });

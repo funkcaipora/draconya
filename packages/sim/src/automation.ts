@@ -68,7 +68,7 @@ const IDLE: AutomationOutcome = { kind: 'idle' };
 /** OU: vazio é FALSO — uma automação sem condição de entrada nunca entra (DT-01). */
 function anyOf(conditions: readonly BotConditionV2[]): (view: BotView) => boolean {
   if (conditions.length === 0) return () => false;
-  const predicates = conditions.map(compileCondition);
+  const predicates = conditions.map((condition) => compileCondition(condition));
   return (view) => {
     for (let i = 0; i < predicates.length; i += 1) {
       if ((predicates[i] as (v: BotView) => boolean)(view)) return true;

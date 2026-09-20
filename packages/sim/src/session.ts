@@ -95,6 +95,12 @@ export interface SessionSnapshot {
    * a restauração atribui `aggregates` inteiro ao único participante que existia então.
    */
   readonly aggregatesByCharacter?: Readonly<Record<string, Aggregates>>;
+  /**
+   * O instante lógico em que cada participante entrou (#397, ADR 0035 decisão 6). Opcional:
+   * snapshot anterior não tem, e a ausência de uma chave equivale a `0` — o comportamento de
+   * hoje, em que o extrato leva TODOS os eventos notáveis da sessão.
+   */
+  readonly joinedAtMs?: Readonly<Record<string, number>>;
   readonly notableEvents: readonly NotableEvent[];
   readonly ledgerSeq: number;
   readonly endedReason: EndReason | null;
@@ -109,7 +115,13 @@ export type EndReason =
   | 'exit-rule'
   | 'death'
   | 'drain'
-  | 'completed';
+  | 'completed'
+  /**
+   * A party votou encerrar para todos (#432, ADR 0032 d.14): o líder propôs, todos os presentes
+   * aprovaram dentro de 60 s. Sair sozinho continua `manual-exit`; isto é o encerramento
+   * coletivo, e é o único motivo novo que o ADR 0032 acrescenta.
+   */
+  | 'party-vote';
 
 export interface NotableEvent {
   readonly atMs: number;
@@ -146,6 +158,28 @@ export interface Aggregates {
   bestBasicHit: number;
   /** O maior dano de magia da sessão, do ALVO que levou mais — não a soma de uma área. */
   bestSpellHit: number;
+  /**
+   * O dano TOTAL que o personagem causou na sessão (#431, ADR 0032 d.14). É a soma do que saiu
+   * da barra do alvo (`applied.healthDamage`), não o resolvido do `best*Hit` — overkill e
+   * absorção por mana shield não inflam o DPS. O recorte dos últimos 60 s é `dpsOf`, lido da
+   * janela de amostras, nunca recontado por tick.
+   */
+  damageDealt: number;
+  /** A cura TOTAL que o personagem FEZ na sessão — quem lançou, nunca quem recebeu. */
+  healingDone: number;
+}
+
+/**
+ * A janela do DPS/HPS, em milissegundos (#431, ADR 0032 d.14). É a régua de `dpsOf`/`hpsOf`, e
+ * o divisor da taxa é `PERFORMANCE_WINDOW_MS / 1000` — 60 s. O número é de conteúdo e pode
+ * mudar sem ADR; o que o ADR fixa é a forma.
+ */
+export const PERFORMANCE_WINDOW_MS = 60_000;
+
+/** Uma amostra carimbada no relógio LÓGICO da sessão: quanto, e em que instante aconteceu. */
+interface PerformanceSample {
+  readonly atMs: number;
+  readonly amount: number;
 }
 
 /**
@@ -180,6 +214,7 @@ export function zeroAggregates(): Aggregates {
   return {
     durationMs: 0, xpGained: 0, goldGained: 0, goldSpent: 0, kills: 0, deaths: 0,
     itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+    damageDealt: 0, healingDone: 0,
   };
 }
 
@@ -317,6 +352,22 @@ export class Session {
    */
   readonly aggregates: Aggregates = zeroAggregates();
   readonly #aggregatesByCharacter = new Map<string, Aggregates>();
+  /**
+   * As amostras carimbadas do DPS/HPS por participante (#431, ADR 0032 d.14). Não é estado do
+   * snapshot: são a JANELA dos últimos 60 s, e uma sessão retomada recomeça a janela (os totais
+   * da sessão vivem nos agregados). `creditDamage`/`creditHealing` aparam na ESCRITA para o vetor
+   * não crescer numa hunt de oito horas sem leitor, e `dpsOf`/`hpsOf` aparam de novo na LEITURA —
+   * nada por tick (invariante 2).
+   */
+  readonly #performanceSamples = new Map<string, {
+    readonly damage: PerformanceSample[];
+    readonly healing: PerformanceSample[];
+  }>();
+  /**
+   * Instante lógico de entrada de cada participante (#397). Não é evento de domínio: é dado
+   * estrutural da sessão, como `#aggregatesByCharacter` — só o `Session` escreve.
+   */
+  readonly #joinedAtMs = new Map<string, number>();
   /** Os extratos do `end`, memoizados: `end` duas vezes devolve os mesmos, sem `seq` novo. */
   #receipts: readonly Receipt[] | null = null;
 
@@ -366,11 +417,18 @@ export class Session {
     }
     if (snapshot.aggregatesByCharacter !== undefined) {
       for (const [id, own] of Object.entries(snapshot.aggregatesByCharacter)) {
-        session.#aggregatesByCharacter.set(id, { ...own });
+        // `zeroAggregates()` preenche as chaves que o snapshot antigo não tinha (#431): `credit`
+        // somaria em `undefined` e viraria `NaN` no primeiro golpe.
+        session.#aggregatesByCharacter.set(id, { ...zeroAggregates(), ...own });
       }
     } else if (snapshot.participants.length === 1 && snapshot.participants[0] !== undefined) {
       // Snapshot anterior ao #187: um dono só, e a soma É o agregado dele.
       session.#aggregatesByCharacter.set(snapshot.participants[0].id, { ...snapshot.aggregates });
+    }
+    if (snapshot.joinedAtMs !== undefined) {
+      for (const [id, atMs] of Object.entries(snapshot.joinedAtMs)) {
+        session.#joinedAtMs.set(id, atMs);
+      }
     }
     if (snapshot.ruleset !== undefined) ruleset.restore?.(snapshot.ruleset);
     ruleset.onResume?.(session);
@@ -412,7 +470,19 @@ export class Session {
   enter(character: CharacterRuntime): void {
     if (this.#endedReason) throw new Error(`session ${this.id} has already ended`);
     this.participants.push(character);
-    this.ruleset.onEnter(this, character);
+    this.#joinedAtMs.set(character.id, this.#logicalNowMs);
+    try {
+      this.ruleset.onEnter(this, character);
+    } catch (error) {
+      // `onEnter` pode recusar por lotação (#397) sem que a sessão PRÉ-EXISTENTE seja afetada —
+      // reverte a admissão para deixar `participants` exatamente como estava antes da tentativa.
+      // Sem isto, os outros N-1 membros de uma hunt já em curso herdariam um (N+1)º fantasma:
+      // contado em `session.participants`, sem runner, sem posição no mundo, sem bot armado.
+      const index = this.participants.indexOf(character);
+      if (index >= 0) this.participants.splice(index, 1);
+      this.#joinedAtMs.delete(character.id);
+      throw error;
+    }
   }
 
   /**
@@ -439,7 +509,18 @@ export class Session {
     // mesmo jeito, e isso é inofensivo: o que o ledger exige é unicidade, não continuidade.
     const receipt = this.#receiptFor(character, reason);
     this.#aggregatesByCharacter.delete(characterId);
+    this.#performanceSamples.delete(characterId);
     return { character, receipt };
+  }
+
+  /**
+   * O instante LÓGICO em que `characterId` entrou na sessão (#397, D7). `undefined` para quem
+   * não é participante — e para um snapshot anterior ao #397, que não gravou o campo. É a leitura
+   * que o hospedeiro faz para montar `party-state.members[].joinedAtMs` (D12): sem ela, o
+   * `joinedAtMs` ficaria preso no snapshot e nunca chegaria ao fio.
+   */
+  joinedAtMsOf(characterId: string): number | undefined {
+    return this.#joinedAtMs.get(characterId);
   }
 
   /**
@@ -471,14 +552,89 @@ export class Session {
     this.aggregates[key] += delta;
   }
 
+  /**
+   * O dano causado pelo personagem (#431): soma o total da sessão E carimba a amostra da janela.
+   * Escreva por aqui — nunca `credit(id, 'damageDealt', n)` direto —, senão o total e a janela
+   * divergem.
+   */
+  creditDamage(characterId: string, amount: number): void {
+    if (amount <= 0) return;
+    this.credit(characterId, 'damageDealt', amount);
+    const samples = this.#recordPerformance(characterId).damage;
+    samples.push({ atMs: this.#logicalNowMs, amount });
+    this.#prunePerformance(samples, this.#logicalNowMs);
+  }
+
+  /** A cura feita pelo personagem (#431): quem LANÇOU, nunca quem recebeu. Ver `creditDamage`. */
+  creditHealing(characterId: string, amount: number): void {
+    if (amount <= 0) return;
+    this.credit(characterId, 'healingDone', amount);
+    const samples = this.#recordPerformance(characterId).healing;
+    samples.push({ atMs: this.#logicalNowMs, amount });
+    this.#prunePerformance(samples, this.#logicalNowMs);
+  }
+
+  /**
+   * O DPS do personagem em `nowMs`: a soma das amostras dos últimos 60 s dividida por 60. A
+   * janela é aparada AQUI, na leitura — o tempo que passou desde o último evento é o que tira a
+   * amostra velha, e nada roda por tick (invariante 2).
+   */
+  dpsOf(characterId: string, nowMs: number): number {
+    return this.#windowSum(this.#performanceSamples.get(characterId)?.damage, nowMs)
+      / (PERFORMANCE_WINDOW_MS / 1_000);
+  }
+
+  /** O HPS do personagem em `nowMs`, pela mesma janela e a mesma régua de `dpsOf`. */
+  hpsOf(characterId: string, nowMs: number): number {
+    return this.#windowSum(this.#performanceSamples.get(characterId)?.healing, nowMs)
+      / (PERFORMANCE_WINDOW_MS / 1_000);
+  }
+
+  #recordPerformance(characterId: string): {
+    readonly damage: PerformanceSample[];
+    readonly healing: PerformanceSample[];
+  } {
+    let samples = this.#performanceSamples.get(characterId);
+    if (samples === undefined) {
+      samples = { damage: [], healing: [] };
+      this.#performanceSamples.set(characterId, samples);
+    }
+    return samples;
+  }
+
+  /**
+   * Soma as amostras dentro da janela e apara as que já saíram. A poda na ESCRITA usa o relógio
+   * do instante do fato; a da LEITURA enxerga o tempo que passou sem evento nenhum — as duas são
+   * recortes da MESMA janela, nunca um acumulador paralelo.
+   */
+  #windowSum(samples: PerformanceSample[] | undefined, nowMs: number): number {
+    if (samples === undefined) return 0;
+    this.#prunePerformance(samples, nowMs);
+    let sum = 0;
+    for (const sample of samples) sum += sample.amount;
+    return sum;
+  }
+
+  /** Tira da frente da lista o que passou da janela. A lista é ordenada por carimbo. */
+  #prunePerformance(samples: PerformanceSample[], nowMs: number): void {
+    let first = 0;
+    while (first < samples.length
+      && nowMs - (samples[first] as PerformanceSample).atMs > PERFORMANCE_WINDOW_MS) first += 1;
+    if (first > 0) samples.splice(0, first);
+  }
+
   #receiptFor(character: CharacterRuntime, reason: EndReason): Receipt {
+    // `?? 0` cobre quem entrou antes desta issue existir (snapshot restaurado sem a chave) e o
+    // próprio primeiro participante de uma sessão nova, cujo `joinedAtMs` é o instante zero da
+    // sessão — os dois casos devem levar TODOS os eventos, que é o comportamento de hoje.
+    const joinedAtMs = this.#joinedAtMs.get(character.id) ?? 0;
     return {
       sessionId: this.id,
       characterId: character.id,
       reason,
       seq: ++this.ledgerSeq,
       aggregates: { ...this.aggregatesOf(character.id) },
-      notableEvents: [...this.notableEvents],
+      notableEvents: this.notableEvents.filter((event) => event.atMs >= joinedAtMs),
     };
   }
 
@@ -667,6 +823,9 @@ export class Session {
       aggregatesByCharacter: Object.fromEntries(
         [...this.#aggregatesByCharacter].map(([id, own]) => [id, { ...own }]),
       ),
+      ...(this.#joinedAtMs.size === 0 ? {} : {
+        joinedAtMs: Object.fromEntries(this.#joinedAtMs),
+      }),
       notableEvents: [...this.notableEvents],
       ledgerSeq: this.ledgerSeq,
       endedReason: this.#endedReason,

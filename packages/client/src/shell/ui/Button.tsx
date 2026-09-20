@@ -9,6 +9,8 @@ export interface ButtonProps {
   disabled?: boolean;
   icon?: React.ReactNode;
   type?: 'button' | 'submit';
+  /** Tooltip nativo — também é onde um botão desabilitado explica POR QUE está desabilitado. */
+  title?: string;
   onClick?: () => void;
   children?: React.ReactNode;
   className?: string;
@@ -21,6 +23,7 @@ export function Button({
   disabled = false,
   icon,
   type = 'button',
+  title,
   onClick,
   children,
   className,
@@ -34,7 +37,7 @@ export function Button({
   ].filter((value): value is string => value !== null).join(' ');
 
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={classes}>
+    <button type={type} disabled={disabled} title={title} onClick={onClick} className={classes}>
       {icon}
       {children}
     </button>

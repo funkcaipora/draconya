@@ -17,7 +17,7 @@ import { buildCatalogue } from './game/catalogue.js';
 import { createApi } from './api/server.js';
 import { createGame } from './game/server.js';
 import {
-  CityShard, createBotConfigValidator, createCitySessionFactory, createSessionBuilder,
+  CityShard, createBotConfigValidator, createCitySessionFactory, createLateJoiner, createSessionBuilder,
   createSessionRestorer,
 } from './game/sessions.js';
 import { createJobs } from './jobs/scheduler.js';
@@ -137,6 +137,8 @@ async function main(): Promise<void> {
               isCharacterActive: (accountId, characterId) =>
                 directory.isActive(accountId, characterId),
               locateSession: (characterId) => directory.lookup(characterId),
+              // A lotação VIVA e o nó do líder do `/join` em curso (#402): o `api` só LÊ.
+              directory,
               // O `api` escreve a linha do personagem aqui — e isso NÃO é estado quente
               // (invariante 9): o extrato só existe depois que a sessão dona acabou, e é
               // exatamente a mesma escrita que o `jobs` faria dez segundos depois. Sem ela,
@@ -150,6 +152,7 @@ async function main(): Promise<void> {
               matchmakingLevelRange: content.party.matchmakingLevelRange,
               partyLimits: {
                 maxMembers: content.party.maxMembers,
+                contentVersion: content.version,
                 difficultiesOf: (huntId: string) => {
                   const hunt = content.hunts.get(huntId);
                   return hunt === undefined ? null : Object.keys(hunt.difficulties);
@@ -175,6 +178,8 @@ async function main(): Promise<void> {
       // dariam duas praças que nunca se veem, e o defeito seria invisível até alguém tentar
       // encontrar um amigo.
       createSession: createCitySessionFactory(content, nowMs, cityShard),
+      // O recém-chegado numa hunt em curso (#402): o MESMO `characterFromTicket` do caminho solo.
+      createParticipant: createLateJoiner(content, nowMs),
       snapshots,
       receipts,
       restoreSession: createSessionRestorer(content),

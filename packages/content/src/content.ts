@@ -544,6 +544,12 @@ export function buildContent(raw: RawContent): Content {
       if ((effect.basePower === undefined) === (effect.amount === undefined)) {
         problems.push(`${where}: cura precisa de basePower OU amount, um dos dois`);
       }
+      if (effect.target === 'friend' && effect.range === undefined) {
+        problems.push(`${where}: cura em outro personagem precisa de range`);
+      }
+      if (effect.target === 'self' && effect.range !== undefined) {
+        problems.push(`${where}: cura em si mesmo não tem alcance`);
+      }
     }
     if (effect.kind === 'damage') {
       if ((effect.basePower === undefined) === (effect.power === undefined)) {
@@ -556,6 +562,21 @@ export function buildContent(raw: RawContent): Content {
       }
       if (!selfOrigin && effect.range === undefined) {
         problems.push(`${where}: dano no alvo precisa de range`);
+      }
+    }
+  }
+  // O par `target`/`range` do supply (cura e mana) copia a MESMA regra do dano da magia: um
+  // efeito que alcança outro personagem precisa de alcance, e um que cura quem usa não tem
+  // nenhum. Sem isto, uma poção `target: 'friend'` sem `range` subiria muda.
+  for (const supply of supplies.values()) {
+    const where = `supply/${supply.id}`;
+    const effect = supply.effect;
+    if (effect.kind === 'heal' || effect.kind === 'mana') {
+      if (effect.target === 'friend' && effect.range === undefined) {
+        problems.push(`${where}: efeito em outro personagem precisa de range`);
+      }
+      if (effect.target === 'self' && effect.range !== undefined) {
+        problems.push(`${where}: efeito em si mesmo não tem alcance`);
       }
     }
   }

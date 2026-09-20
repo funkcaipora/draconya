@@ -50,6 +50,7 @@ const receiptOf = (sessionId: string, characterId: string, overrides = {}): Omit
   aggregates: {
     durationMs: 600_000, xpGained: 900, goldGained: 500, goldSpent: 120, kills: 12, deaths: 0,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
   },
   notableEvents: [{ atMs: 1_000, type: 'level-up' }],
   ...overrides,
@@ -323,6 +324,7 @@ describe.runIf(ready)('a progressão volta para o personagem (FUN-54)', () => {
       aggregates: {
         durationMs: 1000, xpGained: -5000, goldGained: 0, goldSpent: 0, kills: 0, deaths: 1,
        itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+       damageDealt: 0, healingDone: 0,
       },
     }));
 
@@ -422,6 +424,7 @@ describe.runIf(ready)('a coluna `gold` bate com o ledger (FUN-57)', () => {
         aggregates: {
           durationMs: 1_000, xpGained: 0, goldGained: gained, goldSpent: spent,
           kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+          damageDealt: 0, healingDone: 0,
         },
       }));
       // Um extrato por varredura: a ordem entre eles é o que o piso torna significativo.
@@ -449,6 +452,7 @@ describe.runIf(ready)('a coluna `gold` bate com o ledger (FUN-57)', () => {
         aggregates: {
           durationMs: 1_000, xpGained: 0, goldGained: gained, goldSpent: spent,
           kills: 0, deaths: 0, itemsLooted: 0, suppliesUsed: 0, bestBasicHit: 0, bestSpellHit: 0,
+          damageDealt: 0, healingDone: 0,
         },
       }));
       await writePendingReceipts({

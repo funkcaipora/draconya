@@ -135,19 +135,36 @@ export interface MonsterAbilityCast {
 export type CombatEvent =
   | CreatureHit | CreatureHealed | SpellCast | SupplyUsed | Shot | MonsterAbilityCast;
 
-/** A bolsa da party mudou (#192): o que há nela, e quanto cabe. */
+/** A bolsa da party mudou (#192): o que há nela, quanto vale, quanto cabe e o que está reservado. */
 export interface PartyBagChanged {
   readonly kind: 'party-bag-changed';
   readonly gold: number;
   readonly items: readonly CarriedItem[];
   readonly weight: number;
+  /** Σ da capacidade DISPONÍVEL dos presentes — não a total (#396). */
   readonly capacity: number;
+  /** Quanto a bolsa vende agora (PRD §10). */
+  readonly value: number;
+  /** `peso > Σ disponível` (§14). */
+  readonly overweight: boolean;
+  /** A reserva proporcional de cada membro (§11-§13), para o mapa de capacidade do HUD. */
+  readonly reservations: ReadonlyArray<{
+    readonly characterId: string;
+    readonly reserved: number;
+    readonly available: number;
+  }>;
 }
 
-/** A bolsa foi vendida e dividida (#192): ao sair alguém, e no fim. */
+/**
+ * A bolsa foi vendida e dividida (#192): a cada saída, no fim e ao desligar `splitLoot`, além
+ * da VENDA AUTOMÁTICA no drop (#395). `reason` diz qual dos quatro momentos gerou o extrato;
+ * `itemId` só acompanha `'auto-sell'`, e a venda automática NÃO entra em `notableEvents`.
+ */
 export interface PartySettlement {
   readonly kind: 'party-settlement';
   readonly total: number;
+  readonly reason: 'leave' | 'end' | 'toggle' | 'auto-sell';
+  readonly itemId?: string;
   readonly shares: ReadonlyArray<{ readonly characterId: string; readonly gold: number }>;
 }
 
@@ -174,4 +191,42 @@ export interface MemberLeft {
   readonly departure: Departure;
 }
 
-export type PartyEvent = PartyBagChanged | PartySettlement | PartyState | MemberLeft;
+/**
+ * O follow de UM personagem mudou de estado (ADR 0035 d.9, §D10, #398): ligou/retomou, ou foi
+ * INTERROMPIDO sem escolher outro alvo. `targetId` é sempre o alvo CONFIGURADO — inclusive ao
+ * desligar, para o cliente saber qual follow parou. `reason` só acompanha `active: false`.
+ *
+ * Não existe `'disconnected'`: o `sim` não conhece sockets (invariante 3), e a hunt roda sem
+ * ninguém olhando. É a divergência registrada do PRD §25.1/§30 — ver D10.
+ */
+export interface FollowState {
+  readonly kind: 'follow-state';
+  readonly characterId: string;
+  readonly active: boolean;
+  readonly targetId: string;
+  readonly reason?: 'dead' | 'left' | 'unreachable';
+}
+
+/**
+ * A votação para encerrar a hunt para TODOS (#432, ADR 0032 d.14): o líder propõe e cada membro
+ * presente aprova em até 60 s. `active: false` é o fim da votação — expirou, alguém recusou, ou
+ * a sessão encerrou. `approved` é quem já aprovou, na ordem de aprovação; `proposedAtMs` é o
+ * instante lógico da proposta e vale `0` quando não há votação.
+ *
+ * A votação é da SESSÃO, não de um personagem: o cliente inteiro precisa vê-la, e é por isso que
+ * ela não mora num `party-state.members[]`.
+ */
+export interface PartyEndVote {
+  readonly kind: 'party-end-vote';
+  readonly active: boolean;
+  readonly proposedAtMs: number;
+  readonly approved: readonly string[];
+}
+
+export type PartyEvent =
+  | PartyBagChanged
+  | PartySettlement
+  | PartyState
+  | MemberLeft
+  | FollowState
+  | PartyEndVote;

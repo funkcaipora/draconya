@@ -35,6 +35,11 @@ import {
 } from './combat-scenario.js';
 
 const HUNTS = Number(process.env['HUNTS'] ?? 5_000);
+/**
+ * Personagens por instância (#407, ADR 0035 D12): 1 é o solo de sempre; 8 é o teto que o M20
+ * introduz. É a medição dos laços de até 8 por abate, supply e golpe que o plano §5 prevê.
+ */
+const PARTY = Math.max(1, Number(process.env['PARTY'] ?? 1));
 /** Minutos SIMULADOS, não de espera: o relógio é parâmetro (invariante 1). */
 const MINUTES = Number(process.env['MINUTES'] ?? 10);
 /** Desanexada roda a 1 Hz (ADR 0003). É o cenário da issue. */
@@ -87,7 +92,9 @@ for (let i = 0; i < HUNTS; i++) {
   const session = createHuntSession({
     id: `${sessionPrefix}-${i}`, content, huntId, difficulty, createdAtMs: 0,
   });
-  session.enter(characterFor(i));
+  // PARTY personagens por instância: o cenário do solo é `PARTY=1`, e o de 8 exercita os
+  // laços por participante que o M20 acrescentou (#407).
+  for (let p = 0; p < PARTY; p++) session.enter(characterFor(i * PARTY + p));
   sessions.push(session);
 }
 
@@ -191,6 +198,7 @@ console.log(`gc forçado          ${(globalThis as { gc?: unknown }).gc !== unde
 console.log('--- cenário ---------------------------------------------------------');
 console.log(`cenário             ${SCENARIO}${COMBAT ? ' (pipeline de combate do M19)' : ' (motor, FUN-46)'}`);
 console.log(`hunts               ${HUNTS.toLocaleString('pt-BR')} desanexadas a ${HZ} Hz`);
+console.log(`party por sessão    ${PARTY}${PARTY > 1 ? ' (laços do M20)' : ''}`);
 console.log(`monstros por hunt   ${(monsters / HUNTS).toFixed(1)} vivos ao fim`);
 console.log(`simulado            ${MINUTES} min (${ticks.toLocaleString('pt-BR')} ticks)`);
 console.log(`medidos             ${measuredTicks.toLocaleString('pt-BR')} (os ${warmupTicks} primeiros aquecem o JIT)`);

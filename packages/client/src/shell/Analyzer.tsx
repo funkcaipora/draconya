@@ -18,13 +18,16 @@
 // `Box`/`Line`, e o botão "⤢ Abrir completo" abre o `AnalyzerModal` com as dez linhas do kit.
 
 import { useEffect, useState, type ReactNode } from 'react';
-import type { Aggregates, BotVocabulary, NotableEvent } from '../state/hud.js';
+import type {
+  Aggregates, BotVocabulary, NotableEvent, PartySpendingView, PartySummary,
+} from '../state/hud.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { describeEvent } from './event-text.js';
 import type { EventNames } from './event-text.js';
 import { FloatingWindow } from './FloatingWindow.js';
 import { IconButton } from './ui/IconButton.js';
 import { Kicker } from './ui/Kicker.js';
+import { xpBonusLabel, xpMultiplierLabel } from './party-loot-format.js';
 import { AnalyzerModal } from './AnalyzerModal.js';
 import {
   count, duration, formatClock, gold, goldRate, optionalCount, rate as ratePerHour,
@@ -93,6 +96,14 @@ function SessionBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsed
       <Line label="Supplies" value={optionalCount(aggregates.suppliesUsed)} />
       <Line label="Maior golpe" value={optionalCount(aggregates.bestBasicHit)} />
       <Line label="Maior magia" value={optionalCount(aggregates.bestSpellHit)} />
+      {/* Dano causado e cura feita na sessão (PT-01, #431): só quando o servidor os mandou —
+          um nó anterior manda sem, e zero seria uma afirmação que ele não fez (D8). */}
+      {aggregates.damageDealt !== undefined && (
+        <Line label="Dano causado" value={count(aggregates.damageDealt)} />
+      )}
+      {aggregates.healingDone !== undefined && (
+        <Line label="Cura feita" value={count(aggregates.healingDone)} />
+      )}
       {/* Só aparece com morte — "Mortes: 0" afirmaria o que ninguém disse. `danger`: inspirado
           no `color(c)` do handoff (`Hud.jsx`, `c === "red"`). */}
       {aggregates.deaths > 0 && <Line label="Mortes" value={count(aggregates.deaths)} danger />}
@@ -111,6 +122,43 @@ function HourBox({ aggregates, elapsedMs }: { aggregates: Aggregates; elapsedMs:
       <Line label="Gastos" value={goldRate(aggregates.goldSpent, elapsedMs)} />
       <Line label="Saldo" value={goldRate(balance, elapsedMs)} />
       <Line label="Mortos" value={ratePerHour(aggregates.kills, elapsedMs)} />
+    </Box>
+  );
+}
+
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11). Só monta com `analyzer.party` — ausência é
+ * solo, ou nó `game` anterior ao #400, nunca "0 jogadores" (D8).
+ *
+ * "Sua XP" é o agregado do VIEWER (`aggregates.xpGained`), que o host manda por personagem; "Sua
+ * parte" é `party-spending.estimatedShare` (DT-03), que já existia e era descartado — duplicá-lo
+ * em `analyzer.party` faria as duas mensagens divergirem na primeira que atualizasse só uma.
+ */
+function PartyBox({ summary, aggregates, spending, me }: {
+  summary: PartySummary; aggregates: Aggregates;
+  spending: PartySpendingView | null; me: string | null;
+}) {
+  const mine = spending?.shares.find((share) => share.characterId === me);
+  return (
+    <Box title="Party">
+      <Line label="Jogadores" value={count(summary.players)} />
+      <Line label="Vocações únicas" value={count(summary.uniqueVocations)} />
+      <Line label="Bônus de XP" value={xpBonusLabel(summary.xpPercent)} />
+      <Line label="Multiplicador" value={xpMultiplierLabel(summary.xpPercent)} />
+      <Line label="XP total" value={count(summary.totalXp)} />
+      <Line label="Sua XP" value={count(aggregates.xpGained)} />
+      <Line label="Rateio" value={summary.shareCosts ? 'Ativo' : 'Inativo'} />
+      <Line label="Supplies totais" value={gold(summary.totalSupplies)} />
+      {mine?.estimatedShare !== undefined && (
+        <Line label="Sua parte" value={gold(mine.estimatedShare)} />
+      )}
+      <Line label="Divisão de lucro" value={summary.splitLoot ? 'Ativa' : 'Inativa'} />
+      <Line label="Valor da bolsa" value={gold(summary.bagValue)} />
+      <Line label="Peso da bolsa" value={`${summary.bagWeight.toLocaleString('pt-BR')} oz`} />
+      <Line
+        label="Venda automática"
+        value={`${String(summary.autoSell.used)} / ${String(summary.autoSell.limit)}`}
+      />
     </Box>
   );
 }
@@ -164,6 +212,8 @@ export function Events({ events }: { events: readonly NotableEvent[] }) {
  */
 export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?: () => void }) {
   const analyzer = useHudSlice((state) => state.analyzer);
+  const partySpending = useHudSlice((state) => state.partySpending);
+  const me = useHudSlice((state) => state.characterId);
 
   const [forceOpen, setForceOpen] = useState(false);
   useEffect(() => {
@@ -204,6 +254,15 @@ export function Analyzer({ open = false, onToggle }: { open?: boolean; onToggle?
     >
       <SessionBox aggregates={aggregates} elapsedMs={elapsedMs} />
       <HourBox aggregates={aggregates} elapsedMs={elapsedMs} />
+      {/* A caixa PARTY só existe com `analyzer.party` (solo, ou nó anterior, não a monta). */}
+      {analyzer.party !== undefined && (
+        <PartyBox
+          summary={analyzer.party}
+          aggregates={aggregates}
+          spending={partySpending}
+          me={me}
+        />
+      )}
       <Events events={analyzer.notableEvents} />
       <AnalyzerModal
         open={expandedOpen}

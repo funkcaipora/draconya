@@ -14,6 +14,7 @@ import type { CharacterRouteOptions } from './characters.js';
 import { createTicketHandler, type TicketRouteDependencies } from './tickets.js';
 import { registerPartyRoutes } from './party.js';
 import type { PartyRouteDependencies } from './party.js';
+import { registerFriendRoutes } from './friends.js';
 
 export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly auth?: AuthService;
@@ -27,6 +28,8 @@ export interface ApiDependencies extends Partial<TicketRouteDependencies> {
   readonly locateSession?: (
     characterId: string,
   ) => Promise<{ sessionId: string; type: string } | null>;
+  /** O diretório de sessões: a LOTACÃO VIVA do `/join` em curso (#402) e o nó do líder. */
+  readonly directory?: PartyRouteDependencies['directory'];
   /** A party antes da hunt (#195): o formulário em Redis e os limites do conteúdo. */
   readonly party?: PartyRouteDependencies['party'];
   readonly partyLimits?: PartyRouteDependencies['limits'];
@@ -152,10 +155,11 @@ export function buildApi(
   const partyLimits = dependencies.partyLimits;
   const locateSession = dependencies.locateSession;
   const settleProgress = dependencies.settleProgress;
+  const directory = dependencies.directory;
   if (
     tickets !== undefined && party !== undefined && partyLimits !== undefined
     && auth !== undefined && repository !== undefined && locateSession !== undefined
-    && settleProgress !== undefined
+    && settleProgress !== undefined && directory !== undefined
   ) {
     registerPartyRoutes(app, {
       party,
@@ -166,8 +170,23 @@ export function buildApi(
       listItemInstances: repository.listItemInstances.bind(repository),
       settleProgress,
       locateSession,
+      directory,
       limits: partyLimits,
       ...(dependencies.matchmakingLevelRange === undefined ? {} : { matchmakingLevelRange: dependencies.matchmakingLevelRange }),
+    });
+  }
+
+  // Amigos (§21, ADR 0031 decisão 6) precisa de auth, repositório e do diretório para o
+  // online/onde; sem qualquer um deles não existe — mesma guarda do bloco de party acima.
+  if (auth !== undefined && repository !== undefined && locateSession !== undefined) {
+    registerFriendRoutes(app, {
+      authenticate: auth.authenticate.bind(auth),
+      ownsCharacter: repository.ownsCharacter.bind(repository),
+      getCharacterByName: repository.getCharacterByName.bind(repository),
+      addFriend: repository.addFriend.bind(repository),
+      listFriends: repository.listFriends.bind(repository),
+      removeFriend: repository.removeFriend.bind(repository),
+      locateSession,
     });
   }
 

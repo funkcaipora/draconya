@@ -33,8 +33,12 @@ describe('loadContent', () => {
     // schema — este teste prende que o conteúdo REAL passa, e diz quais itens ainda têm o
     // preço em aberto (zero com `_open`), para o próximo item nascer com decisão.
     const content = loadContent(DATA);
-    expect(content.party.maxMembers).toBe(4);
-    expect(content.party.xpPoolPercentByUniqueVocations).toEqual({ '1': 125, '2': 150, '3': 175, '4': 200 });
+    expect(content.party.maxMembers).toBe(8);
+    expect(content.party.xpPoolPercentByUniqueVocations).toEqual({
+      '1': 125, '2': 150, '3': 175, '4': 200,
+      '5': 200, '6': 200, '7': 200, '8': 200,
+    });
+    expect(content.party.autoSellItemTypes).toEqual({ free: 5, premium: 20 });
     for (const item of content.items.values()) {
       expect(item.value, `item "${item.id}"`).toBeGreaterThanOrEqual(0);
     }
@@ -526,7 +530,7 @@ const EXCLUDED_SPELLS = [
   'cure-poison', 'cure-bleeding', 'cure-curse', 'cure-electrification', 'cure-burning',
   'inflict-wound', 'holy-flash', 'ignite', 'electrify', 'curse', 'envenom',
   'shield-bash', 'shield-slam', 'challenge', 'train-party', 'protect-party', 'enchant-party',
-  'heal-friend', 'heal-party', 'elemental-synthesis', 'shared-conservation',
+  'heal-party', 'elemental-synthesis', 'shared-conservation',
   'arrow-call', 'conjure-arrow', 'conjure-explosive-arrow', 'enchant-spear', 'conjure-wand-of-darkness',
   'food', 'summon-creature', 'master-of-decay', 'master-of-flames', 'master-of-thunder',
   'light-healing-sorcerer', 'intense-healing-sorcerer',
@@ -560,7 +564,7 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     });
   }
 
-  it('has exactly the catalogue: 14 + 15 + 23 + 23 vocation spells, plus the three generic ones', () => {
+  it('has exactly the catalogue: 14 + 15 + 23 + 24 vocation spells, plus the three generic ones', () => {
     const byVocation = new Map<string | undefined, number>();
     for (const spell of content.spells.values()) {
       byVocation.set(spell.vocationId, (byVocation.get(spell.vocationId) ?? 0) + 1);
@@ -568,12 +572,36 @@ describe('the vocation spell catalogues (#156–#159)', () => {
     expect(byVocation.get('knight')).toBe(14);
     expect(byVocation.get('paladin')).toBe(15);
     expect(byVocation.get('sorcerer')).toBe(23);
-    expect(byVocation.get('druid')).toBe(23);
+    expect(byVocation.get('druid')).toBe(24);
     expect(byVocation.get(undefined)).toBe(3);
   });
 
   it('leaves out, by name, what the engine does not express (ADR 0026 decisão 5)', () => {
     for (const excluded of EXCLUDED_SPELLS) expect(content.spells.has(excluded), excluded).toBe(false);
+  });
+
+  it('a Exura Sio entra no catálogo com alvo em terceiro e alcance (§26, ADR 0035 d.10)', () => {
+    // Emenda ao ADR 0026 d.5: a magia sai da lista de excluídas e passa a ter `target`/`range`.
+    // Mutação que mata: manter `'heal-friend'` em `EXCLUDED_SPELLS` — a magia não carregaria.
+    const spell = content.spells.get('heal-friend-druid');
+    expect(spell?.vocationId).toBe('druid');
+    const effect = spell?.effect;
+    expect(effect?.kind).toBe('heal');
+    if (effect?.kind !== 'heal') throw new Error('heal-friend-druid deveria ser uma cura');
+    expect(effect.target).toBe('friend');
+    expect(effect.range).toBeDefined();
+  });
+
+  it('as poções de vida e mana curam um membro da party, com alcance provisório (§26)', () => {
+    // RF-05: a poção deixa de ser só sobre quem usa. `range: 1` é provisório e está no `_open`
+    // do arquivo — a decisão final de alcance é do design do cliente.
+    for (const id of ['health-potion', 'mana-potion']) {
+      const effect = content.supplies.get(id)?.effect;
+      expect(effect?.kind === 'heal' || effect?.kind === 'mana', id).toBe(true);
+      if (effect?.kind !== 'heal' && effect?.kind !== 'mana') throw new Error(id);
+      expect(effect.target, id).toBe('friend');
+      expect(effect.range, id).toBe(1);
+    }
   });
 
   it('the Knight scales spells by the weapon skill and the Paladin by distance; the mages by magic', () => {

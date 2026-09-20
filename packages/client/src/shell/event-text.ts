@@ -20,6 +20,7 @@ const REASON_TEXT: Record<string, string> = {
   death: 'morte',
   drain: 'manutenção',
   completed: 'concluída',
+  'party-vote': 'votação da party',
 };
 
 const SKILL_TEXT: Record<string, string> = {

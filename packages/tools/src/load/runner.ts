@@ -104,8 +104,9 @@ async function runWorker(options: LoadOptions, sessions: number): Promise<Sessio
       mode: options.mode,
       durationMs: options.durationMs,
       huntId: options.huntId,
-    party: options.party,
-    partyMode: options.partyMode,
+      party: options.party,
+      shareCosts: options.shareCosts,
+      splitLoot: options.splitLoot,
       difficulty: options.difficulty,
       pingIntervalMs: options.pingIntervalMs,
       rampMs: options.rampMs,
@@ -146,7 +147,8 @@ export async function runLoad(): Promise<number> {
     huntId: options.huntId,
     difficulty: options.difficulty,
     party: options.party,
-    partyMode: options.partyMode,
+    shareCosts: options.shareCosts,
+    splitLoot: options.splitLoot,
   }, samples, { before, after });
 
   console.log(formatReport(report));

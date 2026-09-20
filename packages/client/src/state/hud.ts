@@ -118,6 +118,30 @@ export type BestiaryCounts = Readonly<S2CProps<'bestiary'>['counts']>;
 export type PartyView = Readonly<S2CProps<'party-state'>>;
 export type PartyBagView = Readonly<S2CProps<'party-bag'>>;
 export type PartySettlementView = Readonly<S2CProps<'party-settlement'>>;
+/**
+ * O gasto de cada membro e a prévia de rateio (#354, SV-18). Chega em `party-spending` e é o
+ * que dá a "Sua parte" do analisador (DT-03): `analyzer.party` não duplica `estimatedShare`.
+ */
+export type PartySpendingView = Readonly<S2CProps<'party-spending'>>;
+/**
+ * A votação de encerrar a hunt para todos (#432, ADR 0032 d.14). `null` até o servidor mandar o
+ * primeiro `party-end-vote`; `active: false` é o fim da votação, e a tela só mostra o diálogo
+ * enquanto o servidor disser que ela corre.
+ */
+export type PartyEndVoteView = Readonly<S2CProps<'party-end-vote'>>;
+/**
+ * O estado do Follow do PRÓPRIO personagem (#406, ADR 0035 d.9/§25.1). `null` até o primeiro
+ * `follow-state` desta sessão, ou depois de reanexar sem a mensagem ter chegado de novo ainda —
+ * a tela não mostra "interrompido" nesse vazio, só quando o SERVIDOR disse que sim (D8: o
+ * cliente não fabrica o que o servidor não mandou).
+ */
+export type FollowStateView = Readonly<S2CProps<'follow-state'>>;
+/**
+ * A seção PARTY do analisador (§32, ADR 0035 d.11) — o mesmo bloco de `analyzer.party` e de
+ * `session-state.partySummary`. Ausente é solo, ou nó `game` anterior ao #400: nunca "0
+ * jogadores" (D8).
+ */
+export type PartySummary = NonNullable<S2CProps<'analyzer'>['party']>;
 
 /**
  * O que o personagem carrega e veste (§21.5, FUN-90).
@@ -162,6 +186,11 @@ export interface AnalyzerState {
   readonly receivedAtMs: number;
   /** A sessão já acabou? Aí o relógio PARA: o extrato é definitivo. */
   readonly ended: boolean;
+  /**
+   * A seção PARTY (§32, ADR 0035 d.11), do `analyzer.party`/`session-state.partySummary`.
+   * `undefined` é solo, ou nó `game` anterior ao #400 — a caixa inteira não monta (D8).
+   */
+  readonly party: PartySummary | undefined;
 }
 
 export const INITIAL_ANALYZER: AnalyzerState = {
@@ -170,6 +199,7 @@ export const INITIAL_ANALYZER: AnalyzerState = {
   notableEvents: [],
   receivedAtMs: 0,
   ended: false,
+  party: undefined,
 };
 
 export interface HudState {
@@ -256,6 +286,21 @@ export interface HudState {
   readonly party: PartyView | null;
   readonly partyBag: PartyBagView | null;
   readonly lastSettlement: PartySettlementView | null;
+  /**
+   * O último `party-spending` (#354, SV-18; #405 DT-03). `null` até chegar — a "Sua parte" do
+   * analisador só aparece quando este pacote existe, nunca com um valor inventado.
+   */
+  readonly partySpending: PartySpendingView | null;
+  /**
+   * A votação de encerrar a hunt para todos (#432). `null` até chegar; `active: false` é uma
+   * votação que terminou — a tela não fabrica um diálogo que o servidor não abriu.
+   */
+  readonly partyEndVote: PartyEndVoteView | null;
+  /**
+   * O Follow do PRÓPRIO personagem (#406, ADR 0035 d.9/§25.1). `null` até o servidor mandar
+   * `follow-state`; a tela só mostra "Follow interrompido" quando `active === false`.
+   */
+  readonly followState: FollowStateView | null;
 
   readonly targetId: number | null;
   readonly conditions: readonly ActiveCondition[];
@@ -297,6 +342,9 @@ export const INITIAL_HUD: HudState = {
   party: null,
   partyBag: null,
   lastSettlement: null,
+  partySpending: null,
+  partyEndVote: null,
+  followState: null,
   targetId: null,
   conditions: [],
   conditionsReceivedAtMs: 0,

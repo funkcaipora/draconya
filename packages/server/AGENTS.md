@@ -727,7 +727,9 @@ quatro e cinco segundos cada, e o grupo do Postgres termina antes de o outro com
 ## Testes de autenticação e admissão
 
 `TEST_REDIS_URL` deve apontar para um Redis descartável; os bancos listados em `testing/redis.ts`
-são apagados pelos testes — hoje 1 a 15, e a lista é verificada, não confiada.
+são apagados pelos testes — hoje 1 a 16, e a lista é verificada, não confiada. O Redis de teste
+precisa de **32 bancos** (`--databases 32`): o `party-v2-exit.postgres.test.ts` usa o 16, e o
+padrão de 16 (0–15) faria `SELECT 16` cair no banco 0 em silêncio.
 `DATABASE_TEST_URL` aponta para Postgres de teste, com um schema exclusivo por suíte. O CI
 fornece os dois. Ver ADR 0017 para a ordem Postgres → Redis e separação entre sessão HTTP,
 `state` e ticket. Nenhum vínculo de conta é decidido somente por e-mail.

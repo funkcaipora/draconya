@@ -28,6 +28,8 @@ export interface GameDependencies {
   readonly tickets?: TicketService;
   readonly createSession?: SessionFactory;
   readonly contentVersion?: string;
+  /** Constrói UM personagem para entrar numa sessão em curso (#402). */
+  readonly createParticipant?: SessionHostOptions['createParticipant'];
   /** Onde a sessão é guardada para sobreviver à queda do processo (FUN-28). */
   readonly snapshots?: SnapshotStore;
   readonly receipts?: ReceiptStore;
@@ -115,6 +117,9 @@ export function createGame(
       nodeId,
       contentVersion: dependencies.contentVersion ?? 'unknown',
       createSession: dependencies.createSession,
+      ...(dependencies.createParticipant === undefined
+        ? {}
+        : { createParticipant: dependencies.createParticipant }),
       logger,
       ...(dependencies.directory === undefined ? {} : { directory: dependencies.directory }),
       ...(dependencies.snapshots === undefined ? {} : { snapshots: dependencies.snapshots }),
@@ -226,10 +231,13 @@ export function createGame(
         try {
           const claim = await tickets.consume(ticket, nodeId);
           let created = false;
+          let refused: 'party-full' | 'content-version' | 'session-not-here' | undefined;
           if (claim !== null) {
-            ({ created } = await host.prepare(
+            const prepared = await host.prepare(
               claim.characterId, claim.initialCharacter, claim.accountId, claim.party,
-            ));
+            );
+            created = prepared.created;
+            refused = prepared.refused;
           }
           // Cliente desistiu enquanto Redis/diretório respondiam. Tocar em `response`
           // depois do abort derruba o processo inteiro.
@@ -246,6 +254,17 @@ export function createGame(
           response.cork(() => {
             if (claim === null) {
               response.writeStatus('401 Unauthorized').end();
+              return;
+            }
+            // A recusa da admissão em curso (#402): fecha com o motivo, sem `upgrade`. É o
+            // mesmo desfecho do `onEnter` do #397, e o cliente tenta de novo pelo `/join`.
+            if (refused !== undefined) {
+              const status = {
+                'party-full': '409 Conflict',
+                'content-version': '409 Conflict',
+                'session-not-here': '503 Service Unavailable',
+              }[refused];
+              response.writeStatus(status).end(refused);
               return;
             }
             response.upgrade<SocketData>(

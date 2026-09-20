@@ -6,10 +6,10 @@
 // existem — e a inicial do nome enquanto isso não acontece (cidade recém-entrada, ou a corrida
 // entre o `welcome` e o primeiro `session-state`/`creature-appear`). Nome em Cinzel,
 // "VOCAÇÃO · LV N", a pill de gold, o wordmark ao centro com a contagem de jogadores online
-// (SV-15, #351 — "—" até o primeiro `player-count` ou `session-state.onlinePlayers`) e os CINCO
+// (SV-15, #351 — "—" até o primeiro `player-count` ou `session-state.onlinePlayers`) e os SEIS
 // ícones PNG de 36 px que abrem as janelas, na MESMA ordem do kit (`Hud.jsx:2`): Personagem,
-// Hunts, Analisador, Cyclopedia, Chat. Nenhum ícone para sistema inexistente (Loja, Guild,
-// Amigos, Prey, Configurações) — D8: o cliente nunca mostra o que o servidor não disse que
+// Hunts, Analisador, Cyclopedia, Amigos (#404) e Chat. Nenhum ícone para sistema inexistente
+// (Loja, Guild, Prey, Configurações) — D8: o cliente nunca mostra o que o servidor não disse que
 // existe.
 //
 // Bot e Inventário SAÍRAM daqui (R1-09, RC-09/#322 — revoga DS-08 de docs/design-system-plan.md):
@@ -32,22 +32,23 @@ import { OutfitSprite } from './OutfitSprite.js';
 import { HEALTH_POLL_MS } from './PartyMembers.js';
 import type { ChatBadgeTier } from './chat-badge.js';
 
-export type WindowId = 'character' | 'hunts' | 'inventory' | 'analyzer' | 'bestiary' | 'chat';
+export type WindowId = 'character' | 'hunts' | 'inventory' | 'analyzer' | 'bestiary' | 'social' | 'chat';
 // 'inventory' continua válido como chave de `open` (Shell.tsx o usa para o cabeçalho do
 // EquipmentPanel) — só não aparece no array `WINDOWS` abaixo, que é o que desenha a nav.
 
 /**
- * Os CINCO ícones da barra, na ORDEM do kit (`Hud.jsx:2` — `nav` = [character, combat, analyzer,
- * loot(Cyclopedia), guild, social, prey, chat], sem os três que não têm sistema — RC-09/#322).
- * `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono do projeto, copiada do
- * handoff (D9). `glyph` é o texto de reserva enquanto a imagem não carrega: NUNCA emoji
- * (D9 — "nenhum emoji, só glifos e PNG").
+ * Os SEIS ícones da barra, na ORDEM do kit (`Hud.jsx:2` — `nav` = [character, combat, analyzer,
+ * loot(Cyclopedia), guild, social, prey, chat], sem os que não têm sistema — RC-09/#322 e
+ * Amigos/#404). `icon` é o arquivo em `public/hud-icons/<icon>.png` — arte do dono do projeto,
+ * copiada do handoff (D9). `glyph` é o texto de reserva enquanto a imagem não carrega: NUNCA
+ * emoji (D9 — "nenhum emoji, só glifos e PNG").
  */
 const WINDOWS: ReadonlyArray<{ id: WindowId; label: string; icon: string; glyph: string }> = [
   { id: 'character', label: 'Personagem', icon: 'character', glyph: 'PER' },
   { id: 'hunts', label: 'Hunts', icon: 'combat', glyph: 'HNT' },
   { id: 'analyzer', label: 'Analisador', icon: 'analyzer-chart', glyph: 'ANL' },
   { id: 'bestiary', label: 'Cyclopedia', icon: 'bestiary', glyph: 'CYC' },
+  { id: 'social', label: 'Amigos', icon: 'social', glyph: 'AMG' },
   { id: 'chat', label: 'Chat', icon: 'chat', glyph: 'CHT' },
 ];
 

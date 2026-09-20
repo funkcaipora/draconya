@@ -13,7 +13,7 @@
 // cru na lista, e o líder vê um `×` em cada OUTRO membro (nunca em si — para isso existe
 // `leave`). SV-19 (#355) rotula a dificuldade com a contagem de monstros do catálogo.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
 import { party, partyActions } from '../party/store.js';
 import type { HuntListing } from '../state/hud.js';
@@ -23,9 +23,6 @@ const DIFFICULTY_TEXT: Record<string, string> = {
   cautious: 'Cauteloso', bold: 'Ousado', reckless: 'Agressivo',
 };
 const MODE_TEXT = { split: 'Dividido', shared: 'Compartilhado' } as const;
-
-/** De quanto em quanto tempo a tela pergunta ao servidor pela party (DT-01). */
-export const POLL_MS = 2_000;
 
 /**
  * O rótulo do pull no seletor de dificuldade — "Ousado · 4" como o Huntera mostra (SV-19,
@@ -48,14 +45,9 @@ export function PartyPanel({ hunts }: { hunts: readonly HuntListing[] }) {
   const [difficulty, setDifficulty] = useState(hunts[0]?.difficulties[0] ?? '');
   const [mode, setMode] = useState<'split' | 'shared'>('split');
 
-  // O polling só enquanto há party (ou enquanto se está entrando): sem party não há o que
-  // perguntar, e um `setInterval` por tela aberta seria uma requisição a cada 2 s para nada.
-  const polling = state.party !== null || state.entering || state.seeking;
-  useEffect(() => {
-    if (!polling) return;
-    const id = setInterval(() => { void partyActions.refresh(); }, POLL_MS);
-    return () => { clearInterval(id); };
-  }, [polling]);
+  // O polling de `/mine` subiu para o `Shell` (#404, DT-01): o convite precisa aparecer em
+  // qualquer tela (D7), e um `setInterval` por componente aberto correria vários `refresh()`
+  // concorrentes a cada 2 s.
 
   if (me === null) return null;
   const current = state.party;

@@ -12,9 +12,10 @@
 import { useState } from 'react';
 import type { BotAutomation } from '@draconya/content';
 import { useHudSlice, useStoreSlice } from '../state/useSlice.js';
-import { bot, removeAutomation, toggleAutomation } from '../bot/store.js';
+import { bot, removeAutomation, setFollow, toggleAutomation } from '../bot/store.js';
 import { automationSummary, blankAutomation } from '../bot/automation-text.js';
 import { Panel } from './ui/Panel.js';
+import { Select } from './ui/Select.js';
 import { Switch } from './ui/Switch.js';
 import { IconButton } from './ui/IconButton.js';
 import { Button } from './ui/Button.js';
@@ -33,7 +34,11 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   const isCollapsed = collapsed ?? !open;
   const toggle = onToggle ?? (() => { setOpen((value) => !value); });
   const catalogue = useHudSlice((state) => state.catalogue);
+  const party = useHudSlice((state) => state.party);
+  const me = useHudSlice((state) => state.characterId);
+  const followState = useHudSlice((state) => state.followState);
   const automations = useStoreSlice(bot, (state) => state.draft.automations);
+  const follow = useStoreSlice(bot, (state) => state.draft.follow);
   const save = useStoreSlice(bot, (state) => state.save);
   const reason = useStoreSlice(bot, (state) => state.reason);
   const [adding, setAdding] = useState(false);
@@ -63,6 +68,39 @@ export function AutomationsPanel({ collapsed, onToggle }: AutomationsPanelProps)
   return (
     <>
       <Panel dock title="Automações" className="automations-panel" {...panelProps}>
+        {/* Follow de membro (#406, ADR 0035 d.9): campo separado da postura — `posture.follow`
+            persegue o MONSTRO; este segue um PERSONAGEM. Fora de party não há a quem seguir (§24). */}
+        {party !== null && (
+          <div className="automation-follow">
+            <Select
+              label="Seguir"
+              size="sm"
+              options={[
+                { value: 'none', label: 'Não seguir' },
+                { value: 'leader', label: 'Líder da party' },
+                ...party.members.filter((member) => member.characterId !== me)
+                  .map((member) => ({ value: `member:${member.characterId}`, label: member.name })),
+              ]}
+              value={follow === undefined || follow.kind === 'none'
+                ? 'none'
+                : follow.kind === 'leader'
+                  ? 'leader'
+                  : `member:${follow.characterId}`}
+              onChange={(value) => {
+                if (value === 'leader') { setFollow({ kind: 'leader' }); return; }
+                if (value.startsWith('member:')) {
+                  setFollow({ kind: 'member', characterId: value.slice('member:'.length) });
+                  return;
+                }
+                setFollow({ kind: 'none' });
+              }}
+            />
+          </div>
+        )}
+        {/* §25.1: só aparece quando o SERVIDOR disse que o follow parou — nunca um palpite local (D8). */}
+        {followState?.active === false && (
+          <p className="system-warning">Follow interrompido — alvo indisponível.</p>
+        )}
         <ul className="automation-list">
           {automations.map((automation, index) => (
             <li

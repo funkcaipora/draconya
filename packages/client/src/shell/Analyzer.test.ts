@@ -24,6 +24,7 @@ function setActiveAnalyzer(overrides: Partial<AnalyzerState> = {}): void {
     ...state,
     analyzer: {
       sessionType: 'hunt', aggregates, notableEvents: [], receivedAtMs: 0, ended: false,
+      party: undefined,
       ...overrides,
     },
   }));
@@ -120,6 +121,18 @@ describe('Analyzer — caixa "Sessão" (RF-02)', () => {
     expect(html).not.toMatch(/Loot<\/span><b>0</);
     expect(html).not.toMatch(/Supplies<\/span><b>0</);
   });
+
+  it('"Dano causado" e "Cura feita" só aparecem quando o servidor os mandou (#431)', async () => {
+    setActiveAnalyzer();
+    const without = await render(createElement(Analyzer, { open: true }));
+    expect(without).not.toContain('Dano causado');
+    expect(without).not.toContain('Cura feita');
+
+    setActiveAnalyzer({ aggregates: { ...aggregates, damageDealt: 135_700, healingDone: 20_200 } });
+    const withTotals = await render(createElement(Analyzer, { open: true }));
+    expect(withTotals).toContain('<span>Dano causado</span><b>135.700</b>');
+    expect(withTotals).toContain('<span>Cura feita</span><b>20.200</b>');
+  });
 });
 
 describe('Analyzer — caixa "Por hora" (RF-03)', () => {
@@ -175,5 +188,63 @@ describe('Analyzer — janela flutuante (#315, RF-01..RF-06)', () => {
 
     setActiveAnalyzer({ sessionType: 'city' });
     expect(await render(createElement(Analyzer, { open: true }))).toBe('');
+  });
+});
+
+describe('Analyzer — caixa PARTY (#405, §32, ADR 0035 d.11)', () => {
+  const summary = {
+    players: 4, uniqueVocations: 3, xpPercent: 175, totalXp: 10_000,
+    totalSupplies: 40, shareCosts: true, splitLoot: true,
+    bagValue: 1_300, bagWeight: 120, autoSell: { used: 2, limit: 5 },
+  };
+
+  it('RF-07: renders the PARTY box with the §32 fields when `analyzer.party` exists', async () => {
+    hud.set((state) => ({ ...state, characterId: 'me' }));
+    setActiveAnalyzer({ party: summary });
+    const html = await render(createElement(Analyzer, { open: true }));
+
+    expect(html).toContain('Party');
+    expect(html).toContain('<span>Jogadores</span><b>4</b>');
+    expect(html).toContain('<span>Vocações únicas</span><b>3</b>');
+    // O pool de 175 % é bônus +75 % e multiplicador 1,75x.
+    expect(html).toContain('<span>Bônus de XP</span><b>+75%</b>');
+    expect(html).toContain('<span>Multiplicador</span><b>1,75x</b>');
+    expect(html).toContain('<span>XP total</span><b>10.000</b>');
+    expect(html).toContain('<span>Sua XP</span><b>1.000</b>');
+    expect(html).toContain('<span>Rateio</span><b>Ativo</b>');
+    expect(html).toContain('<span>Supplies totais</span><b>40 gp</b>');
+    expect(html).toContain('<span>Divisão de lucro</span><b>Ativa</b>');
+    expect(html).toContain('<span>Valor da bolsa</span><b>1.300 gp</b>');
+    expect(html).toContain('<span>Peso da bolsa</span><b>120 oz</b>');
+    expect(html).toContain('<span>Venda automática</span><b>2 / 5</b>');
+  });
+
+  it('RF-07: no PARTY box when `analyzer.party` is undefined — ausência é solo (D8)', async () => {
+    setActiveAnalyzer();
+    const html = await render(createElement(Analyzer, { open: true }));
+    expect(html).not.toContain('<span>Jogadores</span>');
+    expect(html).not.toContain('<span>Venda automática</span>');
+    expect(html).not.toContain('Valor da bolsa');
+  });
+
+  it('RF-07/DT-03: "Sua parte" only appears with `party-spending`, never an invented value', async () => {
+    hud.set((state) => ({ ...state, characterId: 'me' }));
+    setActiveAnalyzer({ party: summary });
+
+    const without = await render(createElement(Analyzer, { open: true }));
+    expect(without).toContain('<span>Rateio</span>');
+    expect(without).not.toContain('Sua parte');
+
+    hud.set((state) => ({
+      ...state,
+      partySpending: {
+        shares: [
+          { characterId: 'other', goldSpent: 10, estimatedShare: 5 },
+          { characterId: 'me', goldSpent: 20, estimatedShare: 44 },
+        ],
+      },
+    }));
+    const withSpending = await render(createElement(Analyzer, { open: true }));
+    expect(withSpending).toContain('<span>Sua parte</span><b>44 gp</b>');
   });
 });

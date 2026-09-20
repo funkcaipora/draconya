@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, characters, itemInstances } from './schema.js';
+import { accounts, characters, friends, itemInstances } from './schema.js';
 
 export interface AccountRecord {
   readonly id: string;
@@ -83,6 +83,27 @@ export type CharacterActiveCheck = (
   characterId: string,
 ) => Promise<boolean>;
 
+/** Uma linha da tabela `friend` (Amigos, §21): a amizade é um fato, não uma presença. */
+export interface FriendRecord {
+  readonly id: string;
+  readonly characterId: string;
+  readonly friendCharacterId: string;
+  readonly createdAt: Date;
+}
+
+/**
+ * A vista que `GET /api/friends` precisa, já com nome/vocação/level — uma JOIN só, não um
+ * lookup por amigo (a tabela `friend` não guarda accountId, e não deveria: accountId é do
+ * personagem, não da amizade).
+ */
+export interface FriendView {
+  readonly characterId: string;
+  readonly name: string;
+  readonly vocation: string | null;
+  readonly level: number;
+  readonly createdAt: Date;
+}
+
 export interface GameRepository {
   ensureAccount(identity: { externalAuthId: string; email: string }): Promise<AccountRecord>;
   /**
@@ -103,6 +124,17 @@ export interface GameRepository {
   listCharacters(accountId: string): Promise<readonly CharacterRecord[]>;
   getCharacter(accountId: string, characterId: string): Promise<CharacterRecord | null>;
   ownsCharacter(accountId: string, characterId: string): Promise<boolean>;
+  /**
+   * Resolve um personagem pelo nome (Amigos, §21). Mesma normalização do índice único
+   * (`character_name_unique`) que já impede dois personagens ativos com nomes que só diferem
+   * em maiúscula/acentuação — quem busca "Jose" precisa achar "José".
+   */
+  getCharacterByName(name: string): Promise<CharacterRecord | null>;
+  /** Direção única (ADR 0031 decisão 6): não cria a amizade recíproca. */
+  addFriend(characterId: string, friendCharacterId: string): Promise<FriendRecord>;
+  listFriends(characterId: string): Promise<readonly FriendView[]>;
+  /** `false` se o par não existia — remover o que não é amigo é idempotente, não é erro. */
+  removeFriend(characterId: string, friendCharacterId: string): Promise<boolean>;
   withOwnedCharacter<T>(
     accountId: string,
     characterId: string,
@@ -232,6 +264,65 @@ export class DrizzleGameRepository implements GameRepository {
 
   async ownsCharacter(accountId: string, characterId: string): Promise<boolean> {
     return (await this.getCharacter(accountId, characterId)) !== null;
+  }
+
+  async getCharacterByName(name: string): Promise<CharacterRecord | null> {
+    // A MESMA normalização do índice único (`character_name_unique`), e não `ilike`: um nome
+    // já é único no jogo inteiro por essa regra, e duplicá-la aqui com outra comparação
+    // arriscaria "José" e "jose" responderem personagens diferentes num lugar e o mesmo no
+    // outro. `normalize(..., NFC)` casa com a forma canônica que a criação exige.
+    const rows = await this.#db
+      .select()
+      .from(characters)
+      .where(and(
+        sql`lower(normalize(${characters.name}, NFC)) = lower(normalize(${name}, NFC))`,
+        isNull(characters.deletedAt),
+      ))
+      .limit(1);
+    return rows[0] === undefined ? null : toCharacter(rows[0]);
+  }
+
+  async addFriend(characterId: string, friendCharacterId: string): Promise<FriendRecord> {
+    if (characterId === friendCharacterId) throw new CannotFriendSelfError();
+    try {
+      const [created] = await this.#db
+        .insert(friends)
+        .values({ id: randomUUID(), characterId, friendCharacterId })
+        .returning();
+      if (created === undefined) throw new Error('failed to create friend');
+      return toFriend(created);
+    } catch (error) {
+      if (isUniqueViolation(error, 'friend_pair_unique')) throw new FriendAlreadyExistsError();
+      throw error;
+    }
+  }
+
+  async listFriends(characterId: string): Promise<readonly FriendView[]> {
+    return this.#db
+      .select({
+        characterId: friends.friendCharacterId,
+        name: characters.name,
+        vocation: characters.vocation,
+        level: characters.level,
+        createdAt: friends.createdAt,
+      })
+      .from(friends)
+      .innerJoin(characters, eq(characters.id, friends.friendCharacterId))
+      // Amigo cujo personagem foi soft-deleted nunca aparece, mesmo com a linha `friend`
+      // intacta — a limpeza da tabela é passiva (não há job de poda nesta versão).
+      .where(and(eq(friends.characterId, characterId), isNull(characters.deletedAt)))
+      .orderBy(asc(friends.createdAt));
+  }
+
+  async removeFriend(characterId: string, friendCharacterId: string): Promise<boolean> {
+    const deleted = await this.#db
+      .delete(friends)
+      .where(and(
+        eq(friends.characterId, characterId),
+        eq(friends.friendCharacterId, friendCharacterId),
+      ))
+      .returning();
+    return deleted.length > 0;
   }
 
   async withOwnedCharacter<T>(
@@ -367,6 +458,31 @@ export class CharacterNameTakenError extends Error {
     super('character name already exists');
     this.name = 'CharacterNameTakenError';
   }
+}
+
+/** O par `(character_id, friend_character_id)` já existia — duplo clique ou retry de rede. */
+export class FriendAlreadyExistsError extends Error {
+  constructor() {
+    super('friend already added');
+    this.name = 'FriendAlreadyExistsError';
+  }
+}
+
+/** Um personagem não pode ser amigo de si mesmo (o CHECK `friend_not_self` também recusa). */
+export class CannotFriendSelfError extends Error {
+  constructor() {
+    super('a character cannot friend itself');
+    this.name = 'CannotFriendSelfError';
+  }
+}
+
+function toFriend(row: typeof friends.$inferSelect): FriendRecord {
+  return {
+    id: row.id,
+    characterId: row.characterId,
+    friendCharacterId: row.friendCharacterId,
+    createdAt: row.createdAt,
+  };
 }
 
 function toAccount(row: typeof accounts.$inferSelect): AccountRecord {
