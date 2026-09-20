@@ -121,6 +121,18 @@ describe('Analyzer — caixa "Sessão" (RF-02)', () => {
     expect(html).not.toMatch(/Loot<\/span><b>0</);
     expect(html).not.toMatch(/Supplies<\/span><b>0</);
   });
+
+  it('"Dano causado" e "Cura feita" só aparecem quando o servidor os mandou (#431)', async () => {
+    setActiveAnalyzer();
+    const without = await render(createElement(Analyzer, { open: true }));
+    expect(without).not.toContain('Dano causado');
+    expect(without).not.toContain('Cura feita');
+
+    setActiveAnalyzer({ aggregates: { ...aggregates, damageDealt: 135_700, healingDone: 20_200 } });
+    const withTotals = await render(createElement(Analyzer, { open: true }));
+    expect(withTotals).toContain('<span>Dano causado</span><b>135.700</b>');
+    expect(withTotals).toContain('<span>Cura feita</span><b>20.200</b>');
+  });
 });
 
 describe('Analyzer — caixa "Por hora" (RF-03)', () => {

@@ -11,8 +11,8 @@
 // mão aqui — e cai para o id cru, sem cor, quando o catálogo não o reconhece (nó `game` ou
 // conteúdo divergente). Nada aparece quando `vocationId` é `null` ou, para level/mana, quando o
 // campo é `undefined` (D8: o cliente não fabrica o que o servidor não mandou). Gasto ainda
-// espera SV-18, DPS/HPS esperam E2; expulsar é ação da FORMAÇÃO (`PartyPanel.tsx`, SV-22/#358),
-// não deste painel.
+// espera SV-18; a linha DPS/HPS chegou com a PT-01 (#431): a taxa e os totais vêm prontos em
+// `party-state.members[]`, e a linha só aparece quando o servidor os mandou.
 //
 // O rodapé ganhou os DOIS interruptores do líder (#405, ADR 0033 D1): "Rateio de custos" e
 // "Dividir loot" leem `party-state.shareCosts`/`splitLoot` (com `mode` como fallback derivado,
@@ -29,6 +29,7 @@ import { sendIntent } from '../net/current.js';
 import { leaveHunt } from './HuntActions.js';
 import { percentFromWorld } from './party-member-view.js';
 import { shareCostsOf, splitLootOf } from './party-loot-format.js';
+import { compactPerformance, performanceRate } from './party-performance-format.js';
 import { Button } from './ui/Button.js';
 import { IconButton } from './ui/IconButton.js';
 import { Panel } from './ui/Panel.js';
@@ -144,8 +145,9 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
                   <span className="party-companion-level">{`LV ${String(member.level)}`}</span>
                 )}
               </div>
-              {/* Gasto (SV-18), DPS/HPS (E2) e expulsão (formação, SV-22/#358) ficam de fora:
-                  o HUD não fabrica valores que o servidor não transmitiu. */}
+              {/* Gasto (SV-18) e expulsão (formação, SV-22/#358) ficam de fora: o HUD não
+                  fabrica valores que o servidor não transmitiu. DPS/HPS (PT-01, #431) aparece
+                  quando o `party-state` trouxe a taxa e o total. */}
               <div className="party-companion-vitals">
                 <span className="party-hp-row">
                   <span className="party-hp" aria-label={`HP de ${member.name}`}>
@@ -162,6 +164,22 @@ export function PartyMembers({ partyLootOpen, onToggleLoot, onManage }: {
                   </span>
                 )}
               </div>
+              {(member.dps !== undefined || member.hps !== undefined) && (
+                <div className="party-companion-perf">
+                  {member.dps !== undefined && (
+                    <span>
+                      <b>{`DPS ${performanceRate(member.dps)}`}</b>
+                      {member.damageDealt !== undefined && ` · ${compactPerformance(member.damageDealt)}`}
+                    </span>
+                  )}
+                  {member.hps !== undefined && (
+                    <span>
+                      <b>{`HPS ${performanceRate(member.hps)}`}</b>
+                      {member.healingDone !== undefined && ` · ${compactPerformance(member.healingDone)}`}
+                    </span>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

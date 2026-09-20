@@ -2286,8 +2286,9 @@ export class HuntRuleset implements Ruleset {
     if (aim === null) {
       // Magia de cura: o que repôs, se repôs. `healed` já é o que ENTROU na barra, não o que
       // o efeito prometia — e de vida cheia é zero, sem número nenhum a flutuar. O anúncio é do
-      // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou.
-      this.#emitHealed(session, recipient, result.healed, 'spell');
+      // RECIPIENT: curar um amigo acende a barra dele, não a de quem lançou. O HPS, ao
+      // contrário, é de QUEM lançou (#431) — por isso o `character.id` como curador.
+      this.#emitHealed(session, recipient, result.healed, 'spell', character.id);
       return result;
     }
 
@@ -2315,6 +2316,9 @@ export class HuntRuleset implements Ruleset {
       session.credit(character.id, 'bestSpellHit', damage);
       // Aplicar é também ATRIBUIR: o dano de magia conta para quem matou, como o do golpe.
       const applied = monster.receiveDamage(damage);
+      // O DPS soma o APLICADO (#431), pela mesma razão do `#land`: a manopla do overkill não
+      // entra na conta do dano causado.
+      session.creditDamage(character.id, applied);
       recordDamage(monster.contribution, character.id, applied);
       // O golpe antes da barra, com o APLICADO — a mesma regra do `#strike`.
       session.emit({
@@ -2496,7 +2500,8 @@ export class HuntRuleset implements Ruleset {
     if (!target.alive) return;
     if (tick.kind === 'heal') {
       if (target instanceof CharacterRuntime) {
-        this.#emitHealed(session, target, target.heal(tick.amount), 'spell');
+        // A cura feita é de quem aplicou a condição (`sourceId`), não de quem a carrega (#431).
+        this.#emitHealed(session, target, target.heal(tick.amount), 'spell', condition.sourceId);
       }
       return;
     }
@@ -2730,7 +2735,7 @@ export class HuntRuleset implements Ruleset {
           : this.#spellHits.map((m) => ({ creatureId: m.subject, position: this.#at(m) })),
         tiles: aim === null ? NO_TILES : [...this.#aimTiles],
       });
-      if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply');
+      if (aim === null) this.#emitHealed(session, recipient, result.healed, 'supply', character.id);
       else this.#applyHits(session, character, result.hits);
       return result;
     }
@@ -3252,9 +3257,15 @@ export class HuntRuleset implements Ruleset {
    */
   #emitHealed(
     session: Session, character: CharacterRuntime, amount: number,
-    source: CreatureHealed['source'],
+    source: CreatureHealed['source'], healerId?: string,
   ): void {
     if (amount <= 0) return;
+    // A cura FEITA conta para quem lançou (#431): o evento acende a barra do RECIPIENT, mas o
+    // HPS é do healer. O guarda de participante descarta um `sourceId` que não seja personagem
+    // (a condição de um monstro, por exemplo) — `creditHealing` somaria num id que não é dono.
+    if (healerId !== undefined && session.participants.some((p) => p.id === healerId)) {
+      session.creditHealing(healerId, amount);
+    }
     session.emit({
       kind: 'creature-healed', creatureId: character.id, amount, source,
       position: this.#at(character),
@@ -3505,11 +3516,14 @@ export class HuntRuleset implements Ruleset {
     // Life leech (CMB-08): o que de fato repôs no atacante, já clampado no teto. Atacante cheio,
     // ou alvo integralmente absorvido pela mana, informa zero e não emite evento — o número
     // verde não mente.
-    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech');
+    this.#emitHealed(session, character, applied.lifeLeechApplied, 'leech', character.id);
     // O maior hit é o RESOLVIDO, não o aplicado (§16.1): um golpe de 300 num monstro com 10 de
     // vida foi um golpe de 300. Guardar o aplicado faria o recorde depender de quão morto o
     // alvo já estava, e o jogador nunca veria o número que ele de fato bateu.
     session.credit(character.id, 'bestBasicHit', outcome.resolvedDamage);
+    // O DPS, ao contrário do recorde, soma o APLICADO (#431): overkill e absorção por mana
+    // shield não são dano que saiu da barra de ninguém.
+    session.creditDamage(character.id, applied.healthDamage);
   }
 
   /**
