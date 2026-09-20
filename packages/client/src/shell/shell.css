@@ -591,6 +591,21 @@ body {
 /* Cooldown visual: a tecla continua disparável — quem recusa é o servidor (invariante 4). */
 .action-slot-cooldown { opacity: .6; }
 
+/* Ação com disparo automático ligado: pulso dourado sutil na borda */
+@keyframes action-slot-auto-pulse {
+  0%, 100% {
+    border-color: var(--gold-3);
+    box-shadow: 0 0 0 1px rgba(201, 162, 77, 0.35), 0 0 4px rgba(201, 162, 77, 0.4);
+  }
+  50% {
+    border-color: var(--gold-5);
+    box-shadow: 0 0 0 1px rgba(242, 221, 163, 0.7), 0 0 8px rgba(227, 194, 111, 0.85);
+  }
+}
+.action-slot-auto {
+  animation: action-slot-auto-pulse 2s ease-in-out infinite;
+}
+
 /* ---- O modal de configuração de slot (#437, AB-11, régua da imagem #435, ADR 0033) ---------- */
 .action-config-top {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -611,31 +626,71 @@ body {
   display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px;
   border: 1px solid transparent; border-radius: 3px; background: none; cursor: pointer;
   color: var(--parchment-1); font: 9px var(--font-mono); text-align: left;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.action-config-list button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--border-subtle);
 }
 .action-config-list button[aria-pressed="true"] {
   border-color: var(--border-gold); background: var(--surface-slot);
 }
-.action-config-list button.is-locked { opacity: .55; }
+.action-config-list button.is-locked {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.action-config-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.action-config-item-lock {
+  margin-left: auto;
+  font: 700 8px var(--font-mono);
+  color: var(--danger);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(214, 72, 72, 0.12);
+  padding: 1px 4px;
+  border-radius: 2px;
+  border: 1px solid rgba(214, 72, 72, 0.25);
+  white-space: nowrap;
+}
 .action-config-detail {
-  display: flex; flex-direction: column; gap: 8px; padding: 4px 6px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px; padding: 8px 10px; overflow-y: auto;
   border: 1px solid var(--ash-5); border-radius: 3px; background: var(--surface-slot);
 }
-.action-config-detail header { display: flex; align-items: center; gap: 8px; }
+.action-config-detail header {
+  display: flex; align-items: center; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--ash-4);
+}
 .action-config-detail h3 {
-  margin: 0; color: var(--parchment-1); font: 600 12px var(--font-display); flex: 1; min-width: 0;
+  margin: 0; color: var(--gold-5); font: 600 14px var(--font-display); flex: 1; min-width: 0;
 }
 .action-config-req {
-  color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .04em; white-space: nowrap;
+  color: var(--gold-4); font: 600 9px var(--font-mono); letter-spacing: .04em; white-space: nowrap;
+  background: var(--ash-3); padding: 2px 6px; border-radius: 3px; border: 1px solid var(--ash-5);
 }
 .action-config-detail dl {
-  margin: 0; display: grid; grid-template-columns: 84px 1fr; gap: 4px 6px; align-items: baseline;
+  margin: 0; display: grid; grid-template-columns: 96px 1fr; gap: 6px 8px; align-items: baseline;
 }
 .action-config-detail dt {
-  margin: 0; color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .04em;
+  margin: 0; color: var(--gold-4); font: 600 9px var(--font-mono); letter-spacing: .05em;
   text-transform: uppercase;
 }
-.action-config-detail dd { margin: 0; color: var(--parchment-1); font: 9px var(--font-mono); }
-.action-config-description { margin: 0; color: var(--text-muted); font: 8px var(--font-mono); line-height: 1.6; }
+.action-config-detail dd { margin: 0; color: var(--parchment-1); font: 500 11px var(--font-mono); }
+.action-config-detail dd[data-label="Custo"] { color: #72b6ff; }
+.action-config-detail dd[data-label="Cooldown"] { color: var(--gold-5); }
+.action-config-detail dd[data-label="Cura"] { color: var(--ok); font-weight: 600; }
+.action-config-detail dd[data-label="Dano"] { color: var(--blood-7); font-weight: 600; }
+.action-config-detail dd[data-label="Preço"] { color: var(--gold-5); font-weight: 600; }
+.action-config-detail dd[data-label="Tipo de dano"] { color: var(--parchment-2); font-weight: 600; }
+.action-config-description {
+  margin: 4px 0 0; padding-top: 8px; border-top: 1px solid var(--ash-4);
+  color: var(--parchment-1); font: 11px/1.6 var(--font-mono);
+}
 .action-config-conditions-head { padding: 8px 2px 2px; }
 .action-config-hint { color: var(--text-faint); font: 7px var(--font-mono); letter-spacing: .06em; }
 .action-config-actions { display: flex; gap: 8px; }
@@ -1203,21 +1258,36 @@ body {
    lista. Coluna de 16 px com o quadrado tracejado do kit antes do nome (Hud.jsx:62 — placeholder,
    sprite real fica de fora por ora, R7-06); linhas com `margin: 1px 0` (não `gap`, R7 — achado do
    verificador) e "%" sem espaço (Hud.jsx:63). */
-.battle-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.battle-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
 .battle-row {
+  width: 100%;
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) auto;
   grid-template-areas: "icon name percent" "icon bar bar";
   column-gap: 6px; row-gap: 2px;
   align-items: center;
-  margin: 1px 0;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  color: var(--parchment-1);
+  font: 9px var(--font-mono);
+  text-align: left;
+  box-sizing: border-box;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+.battle-row:hover {
+  background: var(--ash-2);
+  border-color: var(--ash-5);
 }
 .battle-icon {
   grid-area: icon; width: 16px; height: 16px;
   border: 1px dashed var(--ash-6); border-radius: 2px; background: var(--surface-slot);
 }
 .battle-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.battle-percent { grid-area: percent; color: var(--text-faint); font-size: 11px; }
+.battle-percent { grid-area: percent; color: var(--text-faint); font-size: 11px; text-align: right; }
 .battle-bar {
   grid-area: bar; display: block; height: 3px; background: var(--ash-3); border-radius: 2px;
   overflow: hidden;
@@ -1226,9 +1296,11 @@ body {
 .battle-bar-ok .battle-bar-fill { background: var(--ok); }
 .battle-bar-warn .battle-bar-fill { background: var(--warn); }
 .battle-bar-danger .battle-bar-fill { background: var(--danger); }
-.battle-row-selected {
-  border: 1px solid var(--blood-5); border-radius: 3px; background: var(--surface-selected);
-  margin: -2px -4px; padding: 2px 4px;
+.battle-row-selected,
+.battle-row-selected:hover {
+  border: 1px solid var(--blood-5);
+  border-radius: 3px;
+  background: var(--surface-selected);
 }
 .battle-row-selected .battle-name { color: var(--blood-7); }
 
