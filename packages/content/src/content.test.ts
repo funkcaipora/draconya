@@ -1480,6 +1480,39 @@ describe('grupo de magia (#155, ADR 0026 decisão 5)', () => {
   });
 });
 
+describe('a fórmula canônica de dano (#474)', () => {
+  const formula = { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 };
+  const iceStrike = {
+    id: 'ice-strike', name: 'Ice Strike', manaCost: 12, cooldownMs: 2000,
+    effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'ice', formula },
+  };
+
+  it('aceita basePower junto da fórmula — a fórmula vence, o BP fica de exibição', () => {
+    const content = buildContent(base({ spells: [iceStrike] }));
+    expect(content.spells.get('ice-strike')?.effect)
+      .toMatchObject({ basePower: 45, formula: { skillMin: 1.403 } });
+  });
+
+  it('aceita a fórmula sozinha, sem basePower', () => {
+    const only = { ...iceStrike, effect: { kind: 'damage', range: 3, damageType: 'ice', formula } };
+    expect(() => buildContent(base({ spells: [only] }))).not.toThrow();
+  });
+
+  it('recusa `power` junto de fórmula/basePower: dois mecanismos de dano', () => {
+    // Mutação que mata: aceitar os dois e deixar a precedência implícita — a magia sairia com
+    // o dano errado sem nada acusar.
+    const both = { ...iceStrike, effect: { ...iceStrike.effect, power: 10 } };
+    expect(() => buildContent(base({ spells: [both] })))
+      .toThrow(/power OU basePower\/formula/);
+  });
+
+  it('recusa dano sem mecanismo nenhum', () => {
+    const none = { ...iceStrike, effect: { kind: 'damage', range: 3, damageType: 'ice' } };
+    expect(() => buildContent(base({ spells: [none] })))
+      .toThrow(/power OU basePower\/formula/);
+  });
+});
+
 describe('condições e campos declarativos (CMB-07, #334)', () => {
   const dot = { kind: 'damage-over-time', amount: 5, intervalMs: 1_000, damageType: 'earth' };
   const condition = { key: 'poison', merge: 'strongest', durationMs: 4_000, effect: dot };

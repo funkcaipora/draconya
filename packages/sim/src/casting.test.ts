@@ -372,6 +372,85 @@ describe('o catálogo do Tibia (#155, ADR 0026 decisão 5)', () => {
   });
 });
 
+describe('a fórmula canônica do Canary (#474)', () => {
+  // Ice Strike (`exori frigo`): min = level/5 + ML×1.403 + 8, max = level/5 + ML×2.203 + 13.
+  // O `basePower` 45 continua no arquivo como número de exibição (ADR 0033); a fórmula vence.
+  const canaryIceStrike: Spell = {
+    ...strike, id: 'ice-strike', manaCost: 12, cooldownMs: 2_000,
+    group: 'attack', groupCooldownMs: 2_000, minLevel: 8, vocationId: 'sorcerer',
+    effect: {
+      kind: 'damage', basePower: 45, range: 3, damageType: 'ice',
+      formula: { levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 8, baseMax: 13 },
+    },
+  };
+  const mage = (): CharacterRuntime => {
+    const caster = hero({ level: 50, mana: 100 });
+    caster.vocationId = 'sorcerer';
+    return caster;
+  };
+  const scaling = { skillLevel: 40, powerScale: 1 };
+
+  it('level 50 e ML 40 rendem a faixa Canary 74~111, não a do basePower', () => {
+    const result = castSpell(mage(), canaryIceStrike, near({ distance: 3 }), 0, combat, rng(), scaling);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // min = 10 + 40×1.403 + 8 = 74; max = 10 + 40×2.203 + 13 = 111. Sem armadura o golpe é o
+    // poder sorteado. Mutação que mata: cair no `basePower` (45) daria uma faixa de 382~518.
+    expect(result.hits[0]).toBeGreaterThanOrEqual(74);
+    expect(result.hits[0]).toBeLessThanOrEqual(111);
+  });
+
+  it('a fórmula VENCE o basePower, e a mana e o cooldown saem normalmente', () => {
+    const caster = mage();
+    const comFormula = castSpell(caster, canaryIceStrike, near({ distance: 3 }), 0, combat, rng(), scaling);
+    const soBasePower = castSpell(
+      mage(), { ...canaryIceStrike, effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'ice' } },
+      near({ distance: 3 }), 0, combat, rng(), scaling,
+    );
+    expect(comFormula.ok && comFormula.hits[0]).toBeLessThanOrEqual(111);
+    expect(soBasePower.ok && soBasePower.hits[0]).toBeGreaterThan(111);
+    expect(caster.mana).toBe(88);
+    expect(caster.cooldowns.isReady(spellCooldownKey('ice-strike'), 1_999)).toBe(false);
+    expect(caster.cooldowns.isReady(spellCooldownKey('ice-strike'), 2_000)).toBe(true);
+  });
+
+  it('a fórmula consome exatamente os MESMOS sorteios que o basePower (ordem de RNG intacta)', () => {
+    // Trocar a fórmula muda o NÚMERO do dano, nunca a posição/quantidade de sorteio: os dois
+    // caminhos fazem UM `rng.integer` pelo poder, e o resolver canônico faz o resto. Se a
+    // fórmula introduzisse um sorteio a mais, o estado do RNG divergiria aqui — e toda hunt
+    // retomada da mesma semente passaria a render outra coisa (ADR 0031, DT-03).
+    const formulaRng = rng();
+    const baseRng = rng();
+    castSpell(mage(), canaryIceStrike, near({ distance: 3 }), 0, combat, formulaRng, scaling);
+    castSpell(
+      mage(),
+      { ...canaryIceStrike, effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'ice' } },
+      near({ distance: 3 }), 0, combat, baseRng, scaling,
+    );
+    expect(formulaRng.getState()).toEqual(baseRng.getState());
+  });
+
+  it('sem mana a magia é recusada, a mana fica intacta e o cooldown NÃO é consumido (RF-04)', () => {
+    const caster = hero({ level: 50, mana: 11 });
+    caster.vocationId = 'sorcerer';
+    expect(castSpell(caster, canaryIceStrike, near({ distance: 3 }), 0, combat, rng(), scaling))
+      .toEqual({ ok: false, reason: 'not-enough-mana', retryInMs: 0 });
+    expect(caster.mana).toBe(11);
+    expect(caster.cooldowns.isReady(spellCooldownKey('ice-strike'), 0)).toBe(true);
+    expect(caster.cooldowns.isReady('group:attack', 0)).toBe(true);
+  });
+
+  it('o grupo `attack` tranca as outras magias do grupo por 2000ms (RF-05)', () => {
+    const caster = mage();
+    expect(castSpell(caster, canaryIceStrike, near({ distance: 3 }), 0, combat, rng(), scaling).ok).toBe(true);
+    const flame: Spell = { ...canaryIceStrike, id: 'flame-strike', effect: { kind: 'damage', basePower: 45, range: 3, damageType: 'fire' } };
+    expect(castSpell(caster, flame, near({ distance: 3 }), 500, combat, rng(), scaling))
+      .toEqual({ ok: false, reason: 'group-cooldown', retryInMs: 1_500 });
+    // No vencimento do grupo, outra magia do grupo passa — o cooldown é do GRUPO, não da magia.
+    expect(castSpell(caster, flame, near({ distance: 3 }), 2_000, combat, rng(), scaling).ok).toBe(true);
+  });
+});
+
 describe('a runa Avalanche — supply de ataque em área (#165, ADR 0026 decisão 8)', () => {
   const rune: Supply = {
     id: 'avalanche-rune', name: 'Avalanche Rune', price: 14, group: 'attack', groupCooldownMs: 2_000,

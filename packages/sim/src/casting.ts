@@ -14,8 +14,8 @@
 // `AGENTS.md` deste pacote é explícito sobre não pagar a atribuição duas vezes. Este arquivo
 // cuida do LANÇADOR: portão, custo e cooldown.
 
-import type { Combat, CompiledMitigation, Spell, Supply } from '@draconya/content';
-import { spellPowerRange } from '@draconya/content';
+import type { Combat, CompiledMitigation, Spell, SpellFormula, Supply } from '@draconya/content';
+import { evaluateSpellPower, spellPowerRange } from '@draconya/content';
 import type { CharacterRuntime } from './character.js';
 import { resolveDamage } from './combat/damage.js';
 import type { ConditionState } from './conditions.js';
@@ -158,17 +158,24 @@ const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
 /**
  * O poder de um efeito: o BP convertido e sorteado (UMA rolagem por chamada — ordem é
  * contrato), ou o fixo escalado pelas skills por uso.
+ *
+ * A magia que declara `formula` (#474) entra pela fórmula canônica; a que não declara continua
+ * exatamente no caminho do `basePower` × `combat.spellPower`, bit a bit (ADR 0031). Os dois
+ * caminhos consomem UM `rng.integer`, então a ordem de sorteio não muda para ninguém.
  */
 function powerOf(
   effect: {
     readonly basePower?: number | undefined;
     readonly power?: number | undefined;
     readonly amount?: number | undefined;
+    readonly formula?: SpellFormula | undefined;
   },
   caster: CharacterRuntime, scaling: SpellScaling, combat: Combat, rng: Rng,
 ): number {
-  if (effect.basePower !== undefined) {
-    const { min, max } = spellPowerRange(effect.basePower, caster.level, scaling.skillLevel, combat.spellPower);
+  if (effect.basePower !== undefined || effect.formula !== undefined) {
+    const { min, max } = evaluateSpellPower(
+      effect.formula, effect.basePower ?? 0, caster.level, scaling.skillLevel, combat.spellPower,
+    );
     return rng.integer(min, max);
   }
   return Math.round((effect.power ?? effect.amount ?? 0) * scaling.powerScale);

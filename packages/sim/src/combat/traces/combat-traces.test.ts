@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import type { Spell } from '@draconya/content';
 import { runTrace } from './harness.js';
 import type { CombatTraceEvent, CombatTraceGap } from './types.js';
-import { spellTraces } from './spells.trace.js';
+import { spellSingleTargetTrace, spellTraces } from './spells.trace.js';
 import { healingGaps, healingTraces } from './healing.trace.js';
 import {
   CANARY_CIRCLE_RADIUS_3_TILES, avalancheTrace, circleRadiusThreeTiles, runesGaps,
@@ -184,5 +184,19 @@ describe('lacunas da referência: o número atual e a issue que o muda (RF-05)',
     ];
     expect(all.length).toBeGreaterThan(0);
     for (const gap of all) expect(gap.task).toMatch(/^#\d+$/);
+  });
+
+  it('a fórmula de magia é a canônica do Canary, não a conversão provisória (#474 fechada)', () => {
+    // O trace da Ice Strike roda com level 50 e ML 40 e declara a `formula` do Canary. Os dois
+    // golpes têm de cair na faixa `level/5 + ML×1.403 + 8 = 74` a `level/5 + ML×2.203 + 13 = 111`.
+    // Mutação que mata: cair no `basePower` 45 daria 382~518, e este teste reprova.
+    const hits = spellSingleTargetTrace.run()
+      .filter((event) => event.kind === 'creature-hit')
+      .map((event) => Number(event.payload.amount));
+    expect(hits).toHaveLength(2);
+    for (const hit of hits) {
+      expect(hit).toBeGreaterThanOrEqual(74);
+      expect(hit).toBeLessThanOrEqual(111);
+    }
   });
 });

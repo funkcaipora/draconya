@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema } from './schemas.js';
+import { botConditionSchema, botConfigV2Schema, botSetSchema, botTargetPolicySchema, huntSchema, itemSchema, spellFormulaSchema } from './schemas.js';
+
+describe('spellFormulaSchema — a fórmula canônica do #474', () => {
+  it('aplica o default do levelFactor (1/5) e os bases 0', () => {
+    // O arquivo pode declarar só os coeficientes de skill; o resto é o default da referência.
+    // Mutação que mata: remover o default e deixar `levelFactor` indefinido no cálculo.
+    const parsed = spellFormulaSchema.parse({ skillMin: 1.403, skillMax: 2.203 });
+    expect(parsed).toEqual({ levelFactor: 0.2, skillMin: 1.403, skillMax: 2.203, baseMin: 0, baseMax: 0 });
+  });
+
+  it('exige os coeficientes de skill', () => {
+    expect(() => spellFormulaSchema.parse({ skillMin: 1 })).toThrow();
+  });
+});
+
 
 describe('huntSchema (#360)', () => {
   const validHunt = {

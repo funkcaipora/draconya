@@ -1997,6 +1997,37 @@ export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
 export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
 
 /**
+ * A fórmula canônica de uma magia de dano (#474, ADR 0019 e ADR 0026 decisão 5).
+ *
+ * O mecanismo é do motor; os coeficientes são do conteúdo. A fórmula é a mesma que o Canary
+ * registra por `onGetFormulaValues`:
+ *
+ * ```text
+ * min = level × levelFactor + skill × skillMin + baseMin
+ * max = level × levelFactor + skill × skillMax + baseMax
+ * ```
+ *
+ * `levelFactor` é `1 / 5` por padrão (o `level / 5` da referência); `skill` é a skill que a
+ * vocação usa para magia (`vocation.spellSkill` — `magic`, e `distance` no Paladin, `melee` no
+ * Knight). A magia SEM `formula` continua no caminho provisório de `basePower` ×
+ * `combat.spellPower`, bit a bit (ADR 0031, migração aditiva).
+ */
+export const spellFormulaSchema = z.object({
+  /** Quanto o level pesa. Default `0.2` — o `level / 5` da referência. */
+  levelFactor: z.number().default(0.2),
+  /** Coeficiente do skill no piso da faixa. */
+  skillMin: z.number(),
+  /** Coeficiente do skill no teto da faixa. */
+  skillMax: z.number(),
+  /** Constante somada ao piso. Default `0`. */
+  baseMin: z.number().default(0),
+  /** Constante somada ao teto. Default `0`. */
+  baseMax: z.number().default(0),
+});
+
+export type SpellFormula = z.infer<typeof spellFormulaSchema>;
+
+/**
  * Uma magia (FUN-74, §4.1, §9.2; o catálogo do Tibia em #155).
  *
  * Tudo em CONTEÚDO: custo, cooldown, grupo, alcance, forma e efeito. O motor não sabe quanto
@@ -2007,7 +2038,8 @@ export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as
  * conhece, e uma magia com efeito desconhecido é recusada no boot em vez de virar uma linha
  * morta que ninguém explica. Dano e cura vêm por `basePower` (o BP do TibiaWiki, convertido
  * por `combat.spellPower`) OU por número fixo (`power`/`amount`) — um dos dois, nunca ambos
- * (`buildContent` confere).
+ * (`buildContent` confere). Dano de ataque pode declarar ainda a `formula` canônica (#474), que
+ * vence o `basePower` no cálculo; ela é ADITIVA e não muda a magia que não a declara.
  */
 export const spellSchema = z.object({
   id: z.string().min(1),
@@ -2060,6 +2092,12 @@ export const spellSchema = z.object({
       kind: z.literal('damage'),
       basePower: z.number().int().positive().optional(),
       power: z.number().int().positive().optional(),
+      /**
+       * A fórmula canônica (#474). Presente, ela VENCE o `basePower` na hora do cálculo; o
+       * `basePower` continua sendo o número de exibição do catálogo (ADR 0033). Ausente, o
+       * caminho é o `basePower` × `combat.spellPower` de sempre, bit a bit.
+       */
+      formula: spellFormulaSchema.optional(),
       range: z.number().int().positive().optional(),
       area: spellAreaSchema.optional(),
       /**

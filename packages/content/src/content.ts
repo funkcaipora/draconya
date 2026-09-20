@@ -546,8 +546,13 @@ export function buildContent(raw: RawContent): Content {
       }
     }
     if (effect.kind === 'damage') {
-      if ((effect.basePower === undefined) === (effect.power === undefined)) {
-        problems.push(`${where}: dano precisa de basePower OU power, um dos dois`);
+      // O dano sai de UM mecanismo: o número fixo (`power`) OU a faixa escalada (`basePower`
+      // e/ou a `formula` canônica da #474). Fixo junto de escalado é ambiguidade — qual vence
+      // ninguém sabe, e a magia sairia com o dano errado em silêncio.
+      const fixed = effect.power !== undefined;
+      const scaled = effect.basePower !== undefined || effect.formula !== undefined;
+      if (fixed === scaled) {
+        problems.push(`${where}: dano precisa de power OU basePower/formula, um dos dois`);
       }
       const selfOrigin = effect.area !== undefined
         && (effect.area.shape !== 'circle' || effect.area.centered === 'caster');
