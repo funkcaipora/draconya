@@ -169,15 +169,17 @@ describe('o painel Batalha (#254)', () => {
     expect(html).not.toContain('battle-row-selected');
   });
 
-  it('a linha da Batalha é um botão que manda select-target (RF-05)', async () => {
+  it('a linha da Batalha é um botão que manda select-target pelo rastreador (RF-05, #471)', async () => {
     // `prerender` não dispara evento: o botão e a intenção são presos pelo HTML e pela fonte,
-    // o mesmo precedente de `HuntActions.test.ts`.
+    // o mesmo precedente de `HuntActions.test.ts`. O clique passa pelo MESMO `targetTracker` do
+    // Viewport — é o que faz a Battle List e a moldura lerem o mesmo `hud.targetId` (RF-04) e o
+    // segundo clique no alvo atual cancelar (RF-02, coberto em `state/target.test.ts`).
     world.selfId = 99;
     world.creatures.set(1, creature(1, { name: 'Rat' }));
     const html = await render(createElement(BattlePanel));
     const listHtml = html.slice(html.indexOf('battle-list'));
     expect(listHtml).toContain('<button type="button" class="battle-row"');
     const source = await readFile(new URL('./BattlePanel.tsx', import.meta.url), 'utf8');
-    expect(source).toContain("sendIntent({ type: 'select-target', creatureId: row.id })");
+    expect(source).toContain('targetTracker.selectTarget(row.id, sendIntent)');
   });
 });

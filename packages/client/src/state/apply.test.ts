@@ -2,6 +2,7 @@ import type { S2CMessage } from '@draconya/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyMessage } from './apply.js';
 import { INITIAL_HUD, hud, perHour, subscribeSlice } from './hud.js';
+import { targetTracker } from './target.js';
 import { INITIAL_BOT, bot, emptyDraft, toConfig } from '../bot/store.js';
 import { MISSILE_BASE_MS, MISSILE_PER_TILE_MS } from '../world/effects.js';
 import { TRANSIENT_CAP, clearTransients, interpolate, world } from './world.js';
@@ -15,6 +16,10 @@ beforeEach(() => {
   clearTransients();
   hud.set(() => INITIAL_HUD);
   bot.set(() => INITIAL_BOT);
+  // O rastreador de alvo é um singleton da conexão, e o teste compartilha o módulo: sem o
+  // reset, o `lastAppliedSeq` de um caso faria o `target-changed { seq: 1 }` do seguinte ser
+  // descartado como obsoleto.
+  targetTracker.reset();
 });
 
 function spawn(id: number, position = at(0, 0)): S2CMessage {
@@ -451,6 +456,41 @@ describe('HUD deltas', () => {
     const chat = hud.get().chat;
     expect(chat).toHaveLength(200);
     expect(chat[chat.length - 1]?.text).toBe('249');
+  });
+});
+
+describe('o alvo e a reconciliação por seq no apply (#471)', () => {
+  it('descarta o ack obsoleto: o seq mais novo manda', () => {
+    // seq 2 confirmado antes do seq 1 (latência/ordem): o ack antigo não pode voltar a moldura.
+    // Mutação que mata: aplicar `target-changed` sem consultar o `seq` (o `case` da #470).
+    applyMessage({ type: 'target-changed', creatureId: 2, seq: 2 }, 0);
+    applyMessage({ type: 'target-changed', creatureId: 1, seq: 1 }, 0);
+
+    expect(hud.get().targetId).toBe(2);
+  });
+
+  it('target-cancel desfaz a seleção otimista e devolve o alvo confirmado (RF-04)', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    // O clique pinta a moldura antes do servidor; a recusa é o que faz voltar.
+    targetTracker.selectTarget(9, () => {});
+    expect(hud.get().targetId).toBe(9);
+
+    applyMessage({ type: 'target-cancel', seq: 1 }, 0);
+    expect(hud.get().targetId).toBe(5);
+  });
+
+  it('creature-disappear limpa o alvo da criatura que sumiu (RF-05)', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    applyMessage({ type: 'creature-disappear', id: 5 }, 0);
+
+    expect(hud.get().targetId).toBeNull();
+  });
+
+  it('creature-disappear de OUTRA criatura não mexe no alvo', () => {
+    applyMessage({ type: 'target-changed', creatureId: 5, seq: 1 }, 0);
+    applyMessage({ type: 'creature-disappear', id: 6 }, 0);
+
+    expect(hud.get().targetId).toBe(5);
   });
 });
 

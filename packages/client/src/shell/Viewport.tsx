@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { MouseEvent } from 'react';
 import type { AssetPack } from '../assets/pack.js';
 import { sendIntent } from '../net/current.js';
+import { targetTracker } from '../state/target.js';
 import { useHudSlice } from '../state/useSlice.js';
 import { world } from '../state/world.js';
 import { TextureBook } from '../world/textures.js';
@@ -90,8 +91,9 @@ export function Viewport() {
     if (!(event.target instanceof HTMLCanvasElement)) return;
     const id = handleRef.current?.creatureAt(event.clientX, event.clientY) ?? null;
     if (id === null || id === world.selfId) return;
-    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido.
-    sendIntent({ type: 'select-target', creatureId: id });
+    // INTENÇÃO (invariante 4): o servidor confere se o id é alvo válido. O rastreador antecipa
+    // a moldura no mesmo quadro e decide o toggle quando o clique é no alvo atual (#471).
+    targetTracker.selectTarget(id, sendIntent);
   };
 
   useEffect(() => {

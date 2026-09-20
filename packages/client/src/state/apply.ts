@@ -10,6 +10,7 @@
 
 import type { OutfitColors, S2CMessage, SkillProgress as ProtocolSkillProgress } from '@draconya/protocol';
 import { appendCapped, hud, slotKey, type PlayerSkills, type SkillProgress, type SlotState } from './hud.js';
+import { targetTracker } from './target.js';
 import { botResult, loadConfig } from '../bot/store.js';
 import { partyEntered } from '../party/store.js';
 
@@ -124,6 +125,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
 
     case 'creature-disappear':
       world.creatures.delete(message.id);
+      // Morte/despawn limpa a moldura NA HORA (RF-05), sem depender do ciclo do alvo: o
+      // cadáver some e o alvo junto, e não há servidor a esperar para isso.
+      targetTracker.handleTargetGone(message.id);
       return;
 
     // --- transitórios do combate (FUN-106): entram com o instante local, e é o viewport quem
@@ -175,14 +179,17 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       }));
       return;
 
-    // `target-changed` (#470): o alvo autoritativo, confirmado ou trocado pelo auto-target.
-    // `null` é cancelamento confirmado e LIMPA a moldura — `?? state.targetId` prenderia o
-    // último alvo na tela. `target-cancel` (a recusa) não muda nada, e por isso não tem `set`.
+    // `target-changed` (#470/#471): o alvo autoritativo, confirmado ou trocado pelo auto-target.
+    // O rastreador aplica a confirmação e descarta o ack obsoleto por `seq` (RF-03); `null` é
+    // cancelamento confirmado e LIMPA a moldura.
     case 'target-changed':
-      hud.set((state) => ({ ...state, targetId: message.creatureId }));
+      targetTracker.handleTargetChanged(message.creatureId, message.seq);
       return;
 
+    // `target-cancel` (#471): a recusa do `select-target`. Desfaz a seleção otimista e devolve a
+    // moldura ao último alvo confirmado pelo servidor (RF-03/RF-04), nunca à tentativa recusada.
     case 'target-cancel':
+      targetTracker.handleTargetCancel(message.seq);
       return;
 
     case 'experience-gain':
@@ -344,6 +351,9 @@ export function applyMessage(message: S2CMessage, nowMs: number): void {
       // A configuração de bot em vigor (FUN-111), para a tela abrir com o que a hunt executa.
       // Store própria, pela mesma razão do resto do bot: o HP mexendo não redesenha um campo.
       if (message.botConfig !== undefined) loadConfig(message.botConfig);
+      // A reanexação zera a sequência do alvo: um `target-cancel` atrasado da sessão anterior
+      // não pode fazer rollback para um alvo que já não existe (#471).
+      targetTracker.reset();
       hud.set((state) => ({
         ...state,
         health: message.self.health, maxHealth: message.self.maxHealth,
