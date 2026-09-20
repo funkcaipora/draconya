@@ -909,6 +909,13 @@ export async function mountViewport(
       // (`tile-stack.ts`), lida da última repintura e interpolada ao longo do passo.
       const lift = offset === 0 ? liftOf(creature, position, nowMs) : 0;
       const lifted = { x: screen.x - lift, y: screen.y - lift };
+      // A moldura do alvo (#428) é o TILE que a criatura OCUPA — o walking tile, o mesmo da
+      // ordem (#386) —, e nunca o retângulo do sprite: um quadro de 64×64 transborda o tile e
+      // faria a moldura cobrir quatro. `lift` sobe a moldura com a elevação, como barra e nome.
+      if (creature.id === targetId) {
+        const tileScreen = toScreen({ x: tile.x + offset, y: tile.y + offset }, center, view);
+        targetRect = `${tileScreen.x - lift},${tileScreen.y - lift},${TILE},${TILE}`;
+      }
       paintOverlay(head, creature, lifted);
       // O sprite mora num container que ANDA com a janela: posição local = tela − raiz.
       const local = { x: lifted.x - floorsRoot.x, y: lifted.y - floorsRoot.y };
@@ -922,11 +929,6 @@ export async function mountViewport(
         sprite.height = texture.height;
         sprite.x = local.x + TILE - texture.width - displacement.x;
         sprite.y = local.y + TILE - texture.height - displacement.y;
-        // A moldura do alvo (#428) usa o retângulo de TELA do sprite — o sprite mora no
-        // container do andar, que anda com a janela; a moldura mora no `overlay` global.
-        if (creature.id === targetId) {
-          targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
-        }
         continue;
       }
       // Sem quadro (ainda, ou nunca): o retângulo de antes — no mesmo lugar e sob o mesmo
@@ -937,9 +939,6 @@ export async function mountViewport(
       sprite.x = local.x + 3;
       sprite.y = local.y + 3;
       sprite.tint = shade(creature.id === world.selfId ? COLOR_SELF : COLOR_CREATURE, offset);
-      if (creature.id === targetId) {
-        targetRect = `${sprite.x + floorsRoot.x},${sprite.y + floorsRoot.y},${sprite.width},${sprite.height}`;
-      }
     }
 
     for (const [id, sprite] of sprites) {

@@ -15,10 +15,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('pixi.js', () => import('./testing/pixi-fake.js'));
 
-import { Container, drawOrder, Graphics, Sprite, Texture } from './testing/pixi-fake.js';
+import { Container, drawOrder, Graphics, Sprite, Texture, type GraphicsOp } from './testing/pixi-fake.js';
 import { SyntheticArt, type SyntheticCatalog } from './testing/art.js';
 import { mountTestViewport, resetWorld, sceneOf, testClock } from './testing/harness.js';
-import { prefetchTiles, renderTiles, visibleTiles, viewFor, zoomFor } from './camera.js';
+import { prefetchTiles, renderTiles, TILE, toScreen, visibleTiles, viewFor, zoomFor } from './camera.js';
 import { CREATURE_SLOT, sceneZIndex } from './depth.js';
 import { veilTint } from './floors.js';
 import type { Scene, TileStack } from './scene.js';
@@ -34,6 +34,8 @@ const DOG = 22;
 /** O outfit COM `shift` (8, 8) e o mesmo em 64×64: o walking tile e o deslocamento (#386). */
 const SHIFTED = 23;
 const BIG_SHIFTED = 24;
+/** O outfit 64×64 SEM `shift`: a moldura não pode herdar a largura do quadro (#428). */
+const BIG = 25;
 
 const CATALOG: SyntheticCatalog = {
   [GRASS]: { kind: 'object' },
@@ -45,6 +47,7 @@ const CATALOG: SyntheticCatalog = {
   [DOG]: { kind: 'outfit' },
   [SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 } },
   [BIG_SHIFTED]: { kind: 'outfit', displacement: { x: 8, y: 8 }, size: { width: 2, height: 2 } },
+  [BIG]: { kind: 'outfit', size: { width: 2, height: 2 } },
 };
 
 beforeEach(resetWorld);
@@ -699,6 +702,97 @@ describe('viewport: walking tile e displacement de outfit (issue #386)', () => {
     const sprite = viewport.creatureSprite(1) as Sprite;
     expect(sprite.texture).toBe(Texture.WHITE);
     expect(sprite.width).toBe(26);
+  });
+});
+
+/**
+ * A moldura do alvo (#428): o quadrado vermelho é o TILE que a criatura OCUPA — o walking
+ * tile da ordem (#386) —, nunca o retângulo do sprite. Um quadro de 64×64 transborda o tile e
+ * fazia a moldura cobrir quatro; um outfit com `shift` deslocava a moldura junto do desenho; o
+ * retângulo de reserva de 26 px encolhia a moldura. O self fica no centro da câmera (10, 10) e
+ * os alvos a leste, para a posição de tela esperada sair de `toScreen` sem mágica.
+ */
+describe('viewport: moldura do alvo no TILE ocupado (#428)', () => {
+  const SELF = { x: 10, y: 10, z: 7 };
+  const VIEW = viewFor(576, 448, 1);
+  const AT = toScreen({ x: 12, y: 10 }, SELF, VIEW);
+  const DEST = toScreen({ x: 13, y: 10 }, SELF, VIEW);
+
+  type Test = Awaited<ReturnType<typeof mountTestViewport>>;
+
+  /** O `Graphics` da moldura é o filho 0 do `overlay`; o retângulo dele neste quadro. */
+  const frameRect = (viewport: Test): GraphicsOp | undefined =>
+    (viewport.layers().overlay.children[0] as Graphics).ops.find((op) => op.kind === 'rect');
+
+  /** Monta com o self em (10, 10), o alvo 2 em (12, 10), e dá UM quadro depois de marcar o alvo. */
+  async function targeted(appearance: number, withArt = true): Promise<Test> {
+    const clock = testClock();
+    const art = withArt ? new SyntheticArt(CATALOG, { now: clock.now }) : null;
+    const viewport = await mountTestViewport({ scene: fieldScene(20, 20, [7]), art, clock });
+    viewport.spawnSelf(1, SELF, RAT);
+    viewport.spawn(2, { x: 12, y: 10, z: 7 }, appearance);
+    await viewport.tick(0);
+    await viewport.tick(16);
+    viewport.handle.setTargetId(2);
+    await viewport.tick(32);
+    return viewport;
+  }
+
+  it('RF-01: alvo 32×32 desenha a moldura no tile, 32×32', async () => {
+    expect(frameRect(await targeted(RAT))).toEqual({
+      kind: 'rect', x: AT.x, y: AT.y, width: TILE, height: TILE,
+    });
+  });
+
+  it('RF-02: alvo 64×64 continua com a moldura de UM tile, não de quatro', async () => {
+    expect(frameRect(await targeted(BIG))).toEqual({
+      kind: 'rect', x: AT.x, y: AT.y, width: TILE, height: TILE,
+    });
+  });
+
+  it('RF-03: sem pacote, o retângulo de reserva do alvo também é UM tile', async () => {
+    expect(frameRect(await targeted(0, false))).toEqual({
+      kind: 'rect', x: AT.x, y: AT.y, width: TILE, height: TILE,
+    });
+  });
+
+  it('RF-04: o `displacement` do outfit NÃO desloca a moldura', async () => {
+    expect(frameRect(await targeted(SHIFTED))).toEqual({
+      kind: 'rect', x: AT.x, y: AT.y, width: TILE, height: TILE,
+    });
+  });
+
+  it('RF-05: a moldura segue o walking tile durante o passo, não o sprite', async () => {
+    const clock = testClock();
+    const art = new SyntheticArt(CATALOG, { now: clock.now });
+    const viewport = await mountTestViewport({ scene: fieldScene(20, 20, [7]), art, clock });
+    viewport.spawnSelf(1, SELF, RAT);
+    viewport.spawn(2, { x: 12, y: 10, z: 7 }, RAT);
+    await viewport.tick(0);
+    await viewport.tick(16);
+    viewport.handle.setTargetId(2);
+    viewport.step(2, { x: 12, y: 10, z: 7 }, { x: 13, y: 10, z: 7 }, 1000, 400);
+
+    await viewport.tick(1000);
+    expect(frameRect(viewport)).toEqual({ kind: 'rect', x: AT.x, y: AT.y, width: TILE, height: TILE });
+
+    await viewport.tick(1200);
+    expect(frameRect(viewport)).toEqual({
+      kind: 'rect', x: DEST.x, y: DEST.y, width: TILE, height: TILE,
+    });
+
+    await viewport.tick(1400);
+    expect(frameRect(viewport)).toEqual({
+      kind: 'rect', x: DEST.x, y: DEST.y, width: TILE, height: TILE,
+    });
+  });
+
+  it('RF-06: sem alvo, a moldura some no quadro seguinte', async () => {
+    const viewport = await targeted(RAT);
+    expect(frameRect(viewport)).toBeDefined();
+    viewport.handle.setTargetId(null);
+    await viewport.tick(48);
+    expect(frameRect(viewport)).toBeUndefined();
   });
 });
 
