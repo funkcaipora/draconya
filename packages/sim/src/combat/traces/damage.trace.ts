@@ -1,4 +1,4 @@
-// Trace de dano (RF-02 da #469).
+// Trace de dano (RF-02 da #469; consolidado pela #473).
 //
 // Duas camadas:
 //
@@ -8,6 +8,11 @@
 //   2. a ORDEM de emissão de um golpe elemental contra o personagem — `creature-hit` antes do
 //      `creature-health` (FUN-109), com o APLICADO, não o resolvido.
 //
+// A #473 consolidou o pipeline: armadura e escudo SÓ no físico, mitigação elemental integral,
+// `damageType` preservado no outcome e suporte a dano composto (primary/secondary). O oráculo
+// não mudou de número — a #473 é aditiva —, e ganhou o caso de fraqueza de 10 % e a travessia
+// do `damageType`.
+//
 // A referência é o Canary (§18): armadura por tipo, resistência por fração, piso sem revogar
 // imunidade. A taxonomia de oito tipos é o contrato da emenda do ADR 0031 (CMB-03).
 
@@ -15,7 +20,7 @@ import { compileMitigation } from '@draconya/content';
 import type { DamageType } from '@draconya/content';
 import { Rng } from '../../rng.js';
 import { resolveDamage } from '../damage.js';
-import type { DamageIntent } from '../damage.js';
+import type { DamageIntent, DamageOutcome } from '../damage.js';
 import { runTrace, TRACE_COMBAT } from './harness.js';
 import type { CombatGoldenTrace } from './types.js';
 
@@ -73,6 +78,11 @@ export const DAMAGE_ELEMENT_ORACLE: readonly DamageElementOracleCase[] = [
     resistances: { fire: -0.5 }, resolved: 150,
   },
   {
+    // #473: o exemplo do próprio issue — fraqueza de 10 % rende 110 % do poder.
+    id: 'fire-vulnerability-ten-percent', damageType: 'fire', rawDamage: 100, armor: 0,
+    resistances: { fire: -0.1 }, resolved: 110,
+  },
+  {
     id: 'fire-immunity-zeroes', damageType: 'fire', rawDamage: 100, armor: 0,
     immunities: ['fire'], resolved: 0,
   },
@@ -85,9 +95,17 @@ export const DAMAGE_ELEMENT_ORACLE: readonly DamageElementOracleCase[] = [
 
 /** Resolve um caso do oráculo pelo ponto canônico. Usado pelo teste e pela revisão. */
 export function resolveOracleCase(case_: DamageElementOracleCase): number {
+  return resolveOracleOutcome(case_).resolvedDamage;
+}
+
+/**
+ * O outcome INTEIRO de um caso (#473, RF-05): o mesmo ponto canônico, sem descartar o que a
+ * #473 exige que o resultado preserve — o `damageType` resolvido.
+ */
+export function resolveOracleOutcome(case_: DamageElementOracleCase): DamageOutcome {
   return resolveDamage(
     intent(case_.damageType, case_.rawDamage), defenderOf(case_), 'pve', TRACE_COMBAT, noDodge(),
-  ).resolvedDamage;
+  );
 }
 
 /** Um golpe de fogo e um físico no herói: o evento carrega o APLICADO, e sai antes da barra. */

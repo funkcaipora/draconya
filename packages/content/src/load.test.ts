@@ -20,6 +20,18 @@ describe('loadContent', () => {
     expect(content.version).toMatch(/^[0-9a-f]{8}$/);
   });
 
+  it('o baseline aplica armadura e escudo SÓ ao físico (#473)', () => {
+    // A coluna de armadura e a lista de bloqueio são CONTEÚDO, nunca lógica (§12.1): `physical`
+    // vale 1 e todo elemento vale 0, e `blockTypes` aprova só o físico. Sem esta trava, ligar a
+    // armadura em um elemento passaria despercebido e o dano elemental já entregue mudaria.
+    const { combat } = loadContent(DATA);
+    expect(combat.armorEffectiveness.physical).toBe(1);
+    for (const [type, value] of Object.entries(combat.armorEffectiveness)) {
+      if (type !== 'physical') expect(value, `tipo "${type}"`).toBe(0);
+    }
+    expect(combat.defense?.blockTypes).toEqual(['physical']);
+  });
+
   it('carrega o Bestiário real: cinco marcos crescentes e +1 % por marco (FUN-113, §18)', () => {
     // Opcional no `buildContent` (fixture), obrigatório no conteúdo de verdade: sem ele o
     // abate conta e nunca vale nada. Mutação que mata: apagar `bestiary/` de `load.ts`.

@@ -91,6 +91,10 @@ interface DamageIntent {
   readonly rawDamage: number;
   readonly source: DamageSource;
   readonly damageType: DamageType;
+  readonly secondary?: {         // dano composto (#473); ausente é o default neutro
+    readonly rawDamage: number;
+    readonly damageType: DamageType;
+  };
 }
 
 interface DamageOutcome {
@@ -106,6 +110,7 @@ interface DamageOutcome {
   readonly dodged: boolean;
   readonly critical: boolean;        // crítico rolou e ativou (CMB-08)
   readonly resolvedDamage: number;   // o que o ruleset aplica
+  readonly secondaryOutcome?: DamageOutcome; // o componente secundário, se declarado (#473)
 }
 ```
 
@@ -113,6 +118,23 @@ O outcome é **efêmero**: nunca vai ao cliente e nunca entra no snapshot. O rul
 aplicando só `resolvedDamage` — `receiveDamage`, atribuição, `creature-hit` e `resolveDeath` não
 mudaram. O resolver não cobra mana nem gold, não agenda evento, não escreve vida, não atribui
 dano e não decide morte.
+
+### O pipeline canônico e o dano composto (#473)
+
+A #473 consolidou o pipeline sem mudar número nenhum — é aditiva sob o mesmo `combat-v1`:
+
+- **Armadura e escudo incidem SÓ onde o conteúdo manda.** `armorEffectiveness` vale 1 apenas em
+  `physical` e 0 em todo o resto, e `defense.blockTypes` aprova só `physical`. Dano elemental
+  atravessa os dois estágios — sem consumir a rolagem de bloqueio — e aplica a tabela de
+  resistência/fraqueza/imunidade do alvo.
+- **Sem splitting em área.** Em magia e runa de área o poder é rolado e aplicado de forma
+  independente por alvo: o primeiro alvo leva o mesmo golpe com um ou com cinco monstros na
+  forma, e o total cresce com a contagem de alvos.
+- **O `damageType` resolvido fica no outcome** (RF-05), e o `secondaryOutcome` estrutura o dano
+  composto para o dia em que um golpe tiver dois componentes: declarado, o secundário passa
+  pelos mesmos estágios contra o mesmo defensor — inclusive a própria rolagem de Dodge — e é
+  resolvido depois do primário inteiro. **Nenhum conteúdo o declara ainda**, e ausente ele não
+  consome rolagem nenhuma: o v1 segue bit a bit.
 
 ### A taxonomia de dano (CMB-03)
 

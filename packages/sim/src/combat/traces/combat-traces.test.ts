@@ -19,7 +19,7 @@ import { healingGaps, healingTraces } from './healing.trace.js';
 import {
   CANARY_CIRCLE_RADIUS_3_TILES, avalancheTrace, circleRadiusThreeTiles, runesGaps,
 } from './runes.trace.js';
-import { DAMAGE_ELEMENT_ORACLE, damageEventOrderTrace, resolveOracleCase } from './damage.trace.js';
+import { DAMAGE_ELEMENT_ORACLE, damageEventOrderTrace, resolveOracleCase, resolveOracleOutcome } from './damage.trace.js';
 import {
   TARGETING_ORACLE, chooseOracleTarget, countOracleTargets,
 } from './targeting.trace.js';
@@ -118,6 +118,49 @@ describe('casos de borda: morte no meio de uma área não corrompe os alvos segu
       .filter((event) => event.kind === 'creature-health')
       .map((event) => event.payload.health);
     expect(health).toEqual([0, 150, 150]);
+  });
+});
+
+describe('pipeline canônico do #473: sem splitting e com o tipo preservado', () => {
+  const blast: Spell = {
+    id: 'blast', name: 'Blast', manaCost: 20, cooldownMs: 4_000, minLevel: 1,
+    effect: {
+      kind: 'damage', power: 50, range: 3, damageType: 'fire',
+      area: { shape: 'circle', radius: 1, centered: 'target' },
+    },
+  };
+  const hitsOf = (events: readonly CombatTraceEvent[]): number[] =>
+    events.filter((event) => event.kind === 'creature-hit')
+      .map((event) => Number(event.payload.amount));
+
+  it('RF-04: 1 alvo e 5 alvos rendem o MESMO golpe por alvo, sem divisão de dano', () => {
+    // A área rola o poder UMA vez por alvo e aplica integralmente em cada um. Se houvesse
+    // splitting/cap, o total de 5 alvos não passaria do de 1 — o mesmo sorteio inicial cai no
+    // primeiro alvo das duas cenas, então é ele a âncora da igualdade.
+    const scene = (monsters: readonly { id: number; x: number; y: number }[]) => runTrace({
+      seed: 'm24-no-split',
+      hero: { position: { x: 0, y: 0, z: 7 }, mana: 100, maxMana: 100 },
+      monsters: monsters.map(({ id, x, y }) => ({
+        id, monsterId: 'rat', position: { x, y }, health: 500,
+      })),
+      steps: [{ dtMs: 1000, action: { kind: 'spell', spell: blast } }],
+    }).events;
+    const one = hitsOf(scene([{ id: 1, x: 2, y: 0 }]));
+    const five = hitsOf(scene([
+      { id: 1, x: 2, y: 0 }, { id: 2, x: 3, y: 0 }, { id: 3, x: 2, y: 1 },
+      { id: 4, x: 2, y: -1 }, { id: 5, x: 3, y: 1 },
+    ]));
+    expect(one).toHaveLength(1);
+    expect(five).toHaveLength(5);
+    expect(five[0]).toBe(one[0]);
+    expect(five.reduce((sum, amount) => sum + amount, 0)).toBeGreaterThan(one[0] as number * 2);
+    for (const amount of five) expect(amount).toBeGreaterThan(0);
+  });
+
+  it('RF-05: o outcome preserva o damageType de cada caso do oráculo', () => {
+    for (const case_ of DAMAGE_ELEMENT_ORACLE) {
+      expect(resolveOracleOutcome(case_).damageType).toBe(case_.damageType);
+    }
   });
 });
 
