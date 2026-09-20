@@ -27,9 +27,15 @@ importers:
       eslint:
         specifier: ^10.10.0
         version: 10.10.0(jiti@2.7.0)
+      ioredis:
+        specifier: ^6.0.0
+        version: 6.0.0
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       tsx:
         specifier: ^4.23.13
         version: 4.23.13

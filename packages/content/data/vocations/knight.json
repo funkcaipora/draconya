@@ -4,6 +4,15 @@
   "healthPerLevel": 15,
   "manaPerLevel": 5,
   "capacityPerLevel": 25,
-  "startingWeaponItemId": "steel-axe",
-  "spellSkill": "melee"
+  "spellSkill": "melee",
+  "startingKit": [
+    {
+      "itemId": "steel-axe",
+      "slot": "hand"
+    },
+    {
+      "itemId": "wooden-shield",
+      "slot": "shield"
+    }
+  ]
 }

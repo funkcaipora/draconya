@@ -522,11 +522,19 @@ outra vocação não sobrescreve. Volta pelo ticket (`InitialCharacter.vocation`
 ou ausente), entra em `CharacterRuntime.vocationId` e nos stats de entrada (`statsForLevel` com
 a vocação), e vai ao cliente em `player-stats.vocationId` e `session-state.self.vocationId`. A
 escolha é `choose-vocation` (opcode 15), processada na chegada como `equip`; o host resolve a
-vocação e a arma no conteúdo fixado (`vocations`, `vocationLevel`, `itemCatalog`) e o `sim`
-decide (`chooseVocation`). A arma nasce com `instanceId` `${sessionId}:${characterId}:vocation`
-— **com o id do personagem no meio**, porque numa cópia da Cidade dois personagens compartilham
+vocação e o grant no conteúdo fixado (`vocations`, `vocationLevel`, `itemCatalog`) e o `sim`
+decide (`chooseVocation`). **Desde #496 o grant é o kit completo** (`startingKit`: arma +
+`wooden-shield`): o host resolve cada peça do catálogo, na ORDEM do conteúdo (a arma veste antes
+do escudo — é isso que deixa o escudo do Paladin na mochila com o bow de duas mãos), e o `sim`
+reporta o destino de cada peça; peça sem capacidade vai para a Caixa de Loot, com mensagem
+nomeando o item. `startingWeaponItemId` é o fallback legado, e cada instância nasce com
+`instanceId` `${sessionId}:${characterId}:vocation:<item>` (a arma legada,
+`${sessionId}:${characterId}:vocation`) — **com o id do personagem no meio**, porque numa cópia
+da Cidade dois personagens compartilham
 `session.id` e `${sessionId}:${lootSeq}` colidiria na chave primária de `item_instance` — e
-`origin: 'vocation-choice'`, que o ledger grava (`item.origin ?? 'loot'`).
+`origin: 'vocation-choice'`, que o ledger grava (`item.origin ?? 'loot'`). O `catalogue` deriva a
+arma que o diálogo do level 8 mostra da peça de mão do kit — as vocações reais são kit-only, e
+um filtro pelo campo legado as apagaria do diálogo.
 
 **O shard não credita progresso, mas grava estado.** Antes de #154 a Cidade nunca gravava
 extrato: `equip` e agora a vocação feitos na praça sumiam no logout. Agora cada

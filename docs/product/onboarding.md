@@ -1,6 +1,6 @@
 # Onboarding e tutorial
 
-**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação implementada (#154, ADR 0026); o kit de nascimento é dado na criação do personagem (#153); tutorial pendente
+**Status:** parcial — criação inicial de personagem implementada; a escolha de vocação implementada (#154, ADR 0026) com o kit completo por vocação (#496); o kit de nascimento é dado na criação do personagem (#153); tutorial pendente
 **PRD:** §7.4, §8
 **Épico:** E14 (tutorial guiado do level 1 ao 8 com escolha de vocação). E0 cobre o que precede o tutorial — CRUD e criação inicial de personagem.
 
@@ -36,14 +36,18 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
 
 ## Decidido (ADR 0026)
 
-- **Como se escolhe (implementado, #154):** o jogo oferece as quatro vocações quando
+- **Como se escolhe (implementado, #154; kit completo desde #496):** o jogo oferece as quatro
+  vocações quando
   `level >= progression.vocationLevel` (8, e o número vem do catálogo — a tela não o tem em
   código) e a vocação ainda é nula — um diálogo com nome, papel, os três ganhos por level e a
   arma inicial de cada uma —, em qualquer sessão (Cidade ou hunt), sem NPC nem lugar; um clique
   manda `choose-vocation` (opcode 15), e a escolha é uma só, sem troca (`already-chosen`). O
-  `sim` grava `vocationId`, cria a arma como `CarriedItem` com `origin: 'vocation-choice'` e a
-  veste; a machete volta para a mochila. Sem capacidade para a arma ela vai para a Caixa de Loot,
-  com escudo vestido e bow ela fica na mochila — a escolha vale mesmo assim. Os stats NÃO mudam
+  `sim` grava `vocationId` e concede o **kit completo da vocação** (`startingKit` — arma +
+  escudo, desde #496) como `CarriedItem` com `origin: 'vocation-choice'`, vestindo o que
+  couber; a machete volta para a mochila. A ordem do kit é contrato — a arma veste antes do
+  escudo —, e é por isso que o bow de duas mãos deixa o `wooden-shield` na mochila. Sem
+  capacidade para uma peça ela vai para a Caixa de Loot, com mensagem nomeando o item — a
+  escolha vale mesmo assim. Os stats NÃO mudam
   na hora: a tabela da vocação vale do próximo level em diante (`progression.md`).
 - **Como persiste:** `characters.vocation` é escrita UMA vez pelo `jobs`
   (`coalesce(vocation, $1)`), a partir do extrato — o da hunt, ou o **extrato de estado
@@ -55,10 +59,14 @@ Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. O conteúdo exato de c
   `equip` na praça já tinha.
 - **Com o que se nasce:** machete na mão, leather helmet/armor/legs/boots no corpo e a mochila
   nas costas — dados na criação do personagem, não dropados (a exceção ao §21.1 registrada em
-  `items.md`). No level 8 a arma da vocação troca de lugar com a machete. Implementado (#153):
+  `items.md`). No level 8 o kit da vocação entra por cima: a arma troca de lugar com a
+  machete e o escudo veste no slot dele. Implementado (#153):
   as peças e os slots estão em `progression.startingKit`
   (`packages/content/data/progression/baseline.json`), e o boot recusa kit com item que não
-  existe, no slot errado, que exija level ou vocação, ou com duas peças no mesmo slot. A
+  existe, no slot errado, que exija level ou vocação, ou com duas peças no mesmo slot. O kit da
+  vocação é outro dado (`startingKit` em `vocations/*.json`, #496), conferido pelo boot do
+  mesmo jeito — com a diferença de que arma de duas mãos e escudo são válidos lá (é o kit do
+  Paladin), porque esse kit passa por `equip` e o estado impedido é alcançável. A
   mochila é um item nas costas até os containers do #160.
 
 ## Divergências do PRD

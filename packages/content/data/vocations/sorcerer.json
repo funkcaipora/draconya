@@ -4,5 +4,14 @@
   "healthPerLevel": 5,
   "manaPerLevel": 30,
   "capacityPerLevel": 10,
-  "startingWeaponItemId": "wand-of-vortex"
+  "startingKit": [
+    {
+      "itemId": "wand-of-vortex",
+      "slot": "hand"
+    },
+    {
+      "itemId": "wooden-shield",
+      "slot": "shield"
+    }
+  ]
 }

@@ -1154,6 +1154,18 @@ export const huntSchema = z.object({
   description: z.string().min(1).optional(),
 });
 
+/**
+ * Uma peça do kit inicial (#496): o item e, opcionalmente, o slot em que se declara. O slot é
+ * opcional porque o item já diz onde veste — declará-lo é documentar a intenção, e
+ * `buildContent` recusa a declaração que não bate com o item.
+ */
+export const startingKitPieceSchema = z.object({
+  itemId: z.string().min(1),
+  slot: z.enum(ITEM_SLOTS).optional(),
+});
+
+export type StartingKitPiece = z.infer<typeof startingKitPieceSchema>;
+
 export const vocationSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1167,8 +1179,23 @@ export const vocationSchema = z.object({
    * confere que o item existe, é `kind: 'weapon'` e exige ESTA vocação — uma arma que qualquer
    * um veste não é "a arma da vocação". Opcional no SCHEMA, e não no conteúdo real: as quatro
    * vocações têm a sua, e o conteúdo de teste que não fala de item precisa de vocação sem arma.
+   *
+   * Legada desde o kit completo por vocação (#496): quando `startingKit` é declarado, é ele
+   * quem diz o que a vocação concede — a arma já é a primeira peça dele, e o campo só sobrevive
+   * para o conteúdo de teste e o fallback do host. Os dois juntos são conferidos no boot.
    */
   startingWeaponItemId: z.string().min(1).optional(),
+  /**
+   * O kit que a vocação concede ao ser escolhida, no level da escolha (#496): peça e slot
+   * declarado. O slot é a declaração de intenção — `equip` veste pelo slot DO ITEM, e
+   * `buildContent` recusa a peça declarada num slot que não é o dele. Opcional, porque o item
+   * já diz onde veste.
+   *
+   * Arma de duas mãos com escudo É válida aqui — é o kit do Paladin: o `Inventory.equip` veste
+   * a arma e o escudo fica na mochila, um estado alcançável, diferente do kit de nascimento
+   * (gravado direto no banco, sem passar por `equip`), que recusa a combinação.
+   */
+  startingKit: z.array(startingKitPieceSchema).default([]),
   /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.

@@ -4,6 +4,15 @@
   "healthPerLevel": 10,
   "manaPerLevel": 15,
   "capacityPerLevel": 20,
-  "startingWeaponItemId": "bow",
-  "spellSkill": "distance"
+  "spellSkill": "distance",
+  "startingKit": [
+    {
+      "itemId": "bow",
+      "slot": "hand"
+    },
+    {
+      "itemId": "wooden-shield",
+      "slot": "shield"
+    }
+  ]
 }
