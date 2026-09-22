@@ -466,3 +466,214 @@ referência para a autovenda (§22) e para a action bar, quando entrarem.
 - **A munição é seleção por família**, com a grátis por padrão e as pagas debitando gold por
   tiro (ADR 0026, decisão 3).
 - **O gold não ocupa lugar**, como já era aqui.
+
+---
+
+# Parte IV — 2026-09-22: o bot por dentro, lido de uma party de level 300+
+
+**Fonte:** conta própria, personagem `Funkcaipora` (Royal Paladin 360), numa party de quatro
+(EK 306 líder, ED 354, MS 324) na hunt **Issavi Steppe**, ~11 minutos de socket decodificado
+(83.446 frames) mais a leitura da barra de ações pela própria interface. Tudo continua sendo
+**especificação de domínio** no sentido do ADR 0019: o que o jogador vê e configura, e o que o
+servidor manda — nunca o código deles.
+
+## 23. O decodificador, agora exato
+
+A §12 dizia "xorshift"; a função é esta, lida do bundle (`chunk-FGPCPUBX.js`) e reescrita:
+
+```ts
+const SALT = 1213550164;
+function unmask(bytes: Uint8Array, seed: number) {
+  let r = (seed ^ SALT) >>> 0; if (r === 0) r = SALT;
+  for (let n = 0; n < bytes.length; n++) {
+    if ((n & 3) === 0) { r ^= r << 13; r >>>= 0; r ^= r >>> 17; r ^= r << 5; r >>>= 0; }
+    bytes[n] ^= (r >>> ((n & 3) << 3)) & 255;
+  }
+}
+// frame = u32 seed LE + unmask(resto): u8 flags + corpo; flags&1 = deflate-raw (>= 8 KiB),
+// flags==2 = lote de (u32 len + frame). Corpo: JSON [opcode, props].
+```
+
+O gancho em `WebSocket.prototype.send` continua sendo o caminho (o `ping` a cada 5 s entrega
+o socket vivo). As tabelas `ut` (S2C, 177 opcodes) e `je` (C2S, 180) estão no mesmo chunk.
+
+## 24. A barra de ações é o bot — regra por slot
+
+Vinte slots. Cada slot é **uma ação** (aba `Magias`, `Runas` ou `Itens`) mais **uma lista de
+condições**, e o servidor dispara a ação sozinho quando a regra passa ("Bebe sozinha quando a
+regra dela passa"). O editor de um slot tem exatamente isto:
+
+- **Ação:** uma magia da vocação (paladin: Haste, Intense Healing, Ethereal Spear, Divine
+  Healing, Divine Missile, Divine Caldera, Salvation, Strong Ethereal Spear, Swift Foot,
+  Sharpshooter), uma runa (UH, HMM, Fireball, Holy Missile, Icicle, Stone Shower,
+  Thunderstorm, Avalanche, GFB, Explosion, SD) ou uma poção. Runa e poção mostram o **custo em
+  gold por uso** no próprio slot (UH 160, Avalanche 55, SD 150, Ultimate Spirit 195, Strong
+  Mana 108); a magia mostra mana e cooldown ("160 de mana · 4s de cooldown").
+- **Condições:** `sujeito × atributo × comparador × valor`, com `%` opcional. Sujeito:
+  `Você | Alvo | Área | Aliado | No alcance`. Atributo: `HP | Mana | Alvos | Preso |
+  Paralisado | Magic shield`. Comparador: `< | <= | == | >= | >`. `Aliado` ganha um
+  multiplicador `×1…×6` ("quantos aliados"). **Todas precisam bater; sem condição, dispara
+  sempre.**
+- **Alvo da cura** (só cura): `Você mesmo | Membro da party com menos vida | Membro da party:
+  <nome> | Jogador pelo nome…`.
+- **Monstros ignorados** (só ataque): lista por ação.
+- **Ativada** (liga/desliga sem apagar — o slot fica com `rule-off`).
+- **Conjuntos:** `Default`, salvar como novo, limpar, "abrir o builder", **copiar como
+  código** e **importar por código** — o preset é serializável e compartilhável.
+
+A configuração real do Funkcaipora, do jeito que estava:
+
+| # | Ação | Condições | Estado |
+|---|------|-----------|--------|
+| 1 | Ultimate Spirit Potion | Você HP ≤ 30% | on |
+| 2 | Ultimate Spirit Potion | Você HP ≤ 60% **e** Você Mana ≤ 60% | on |
+| 3 | Strong Mana Potion | Você Mana ≤ 60% | on |
+| 5 | Divine Caldera (área) | Você Mana ≥ 20% **e** Área Alvos ≥ 2 | **off** |
+| 6 | Divine Healing (`exura san`) | Você HP < 85% **e** Você HP > 75% | on |
+| 7 | Salvation (`exura gran san`) | Você HP ≤ 75% | on |
+| 10 | Ultimate Healing Rune | Alvo da cura HP ≤ 50%, alvo = membro com menos vida | on |
+| 13 | Avalanche Rune | Área Alvos ≥ 2 | on |
+| 14 | Strong Ethereal Spear (`exori gran con`) | (nenhuma) | on |
+| 15 | Ethereal Spear | Você Mana ≥ 20% | off |
+| 16 | Divine Missile | Você Mana ≥ 20% | off |
+| 17 | Sudden Death Rune | (nenhuma) | on |
+| 18 | Swift Foot (`utamo tempo san`) | Você Mana ≥ 70% | on |
+| 19 | Haste | Você Mana ≥ 20% **e** Você Paralisado == 1 | on |
+| 20 | Sharpshooter | Você HP ≥ 80% **e** No alcance Alvos ≥ 1 | off |
+
+Duas regras vêm do catálogo, não do slot: Swift Foot "só lança sem nada no alcance e acaba no
+momento em que você ataca"; Sharpshooter "sem defesa, 30% mais lento e sem cura ou suporte
+enquanto durar".
+
+## 25. Estratégia de alvo, e o que "Seguir" faz de fato
+
+O `select` "Alvo" tem `nearest | boss | lowest-health | highest-health |
+lowest-health-percent | highest-health-percent` (a §6 tinha cinco; **`boss` é novo**) mais um
+`follow-member-<id>` por membro da party. Numa versão do mesmo select aparece
+`follow-party-leader` genérico.
+
+Com `follow-member-12116` (o knight) ligado, 150 trocas de alvo em 11 minutos disseram o que a
+opção significa:
+
+- **O alvo é o monstro adjacente ao membro seguido.** Em todas as trocas com monstro a 1 tile
+  do knight, o escolhido estava a 1 tile do knight — e a 2–6 do paladin. Não é o mais próximo
+  do paladin nem o de menor vida entre todos; é o que o knight está segurando.
+- **Sem monstro colado no knight** (início do pull), o alvo é o que o knight escolheu ao
+  longe (7 tiles dele, 9 do paladin).
+- **O alvo é pegajoso:** zero trocas com o alvo ainda vivo. A troca vem **0–100 ms depois**
+  do `creature-disappear` do alvo anterior — no mesmo tick ou no seguinte.
+- `player-target { targetId | null }` é a única mensagem: o servidor decide, o cliente
+  só exibe.
+
+## 26. Postura e distância — e a nota de changelog
+
+Três posturas (`defensive | balanced | aggressive`, "Defesa total / Equilibrado / Ataque
+total") e um número, **"Distância dos inimigos"** (3 no Funkcaipora). O changelog do jogo, no
+mesmo dia da captura, diz o que a distância significa em party:
+
+> Os setups de distância de personagens Caster/Ranged agora utilizam o Knight/Tank da Party
+> como referência, quando aplicável. Casters e ranged tentarão manter melhor o posicionamento
+> em relação ao Knight. O Paladin, quando configurado para distância 1, passa a preferir ficar
+> ao lado do Knight, em vez de ocupar o mesmo tile.
+
+A referência da distância segue uma prioridade, anotada pelo dono do projeto na mesma data:
+**boss > monstro > knight da party (se configurado)** — o ranged mede a distância do boss quando
+há boss, do monstro quando não há, e do knight só quando o jogador escolheu segui-lo.
+
+O tráfego confirma: distância de cada membro ao knight, contada a cada passo de qualquer um
+dos dois —
+
+| Membro | Distância (moda) | Faixa com 90% dos passos | No mesmo tile |
+|--------|------------------|--------------------------|---------------|
+| RP (distância 3) | 3 | 2–5 | 1 em 3.000 |
+| ED | 4 | 3–6 | 1 |
+| MS | 4 | 3–6 | 0 |
+
+- O seguidor **reage no mesmo tick ou no seguinte**: 580 passos a 0 ms do passo do knight,
+  283 a 100 ms, 78 a 200 ms.
+- Ele anda a **150/200 ms por tile** (speed 868; chão 130 e 150: `ceil50(1000 × chão /
+  speed)`), diagonal 550 (`ceil50(3×)`). Os monstros confirmam a fórmula com chão 150: speed
+  366 → 450 ms, 386 → 400, 445 e 482 → 350, 518 → 300; diagonal 366 → 1.250.
+- Distância de projétil: 1 a **7** tiles (`projectile-move`), com o alvo a 2–6.
+
+## 27. Cadência: dois relógios de ataque e quatro grupos de cooldown
+
+`player-stats.cooldowns` é `{ attack, heal, support, item, spells: { <id>: ms } }`, e o teto
+observado de cada um diz o tamanho:
+
+| Grupo / magia | Cooldown |
+|---------------|----------|
+| `attack` (arma **e** runa de ataque) | 2.000 ms |
+| `heal` | 1.000 ms |
+| `support` | 2.000 ms |
+| `item` (poção) | 1.000 ms |
+| avalanche-rune, sudden-death-rune | 2.000 ms |
+| ultimate-healing-rune, divine-healing, salvation | 1.000 ms |
+| strong-ethereal-spear | 8.000 ms |
+| swift-foot | 10.000 ms |
+
+- **A arma tem relógio próprio:** flechas a cada 2.000–2.100 ms (144 de 150 intervalos).
+- **A runa de ataque tem outro:** Avalanche a cada 2.000–2.100 ms também, mas **defasada** da
+  flecha em 1,5–1,9 s na maioria dos ciclos — ela dispara assim que o grupo `attack` da runa
+  libera, sem esperar a flecha. `player-stats` mostra `attack` e `avalanche-rune` com o
+  mesmo valor logo após o lançamento (1.6xx), e `strong-ethereal-spear` com o dela.
+- **Diamond arrow acerta em área:** um disparo de flecha gerou `creature-hit` em 1 a 14
+  criaturas no mesmo instante (moda 5–12); Avalanche, em 2 a 17. É por isso que o RP de
+  distância 3 mata a 1,4k de DPS com um alvo só selecionado.
+- **Crystalline arrow é a reserva:** 30 disparos em 231 foram `crystallinearrow` — a regra de
+  munição (`set-ammo-rules`, §20) troca quando a principal acaba ou por condição.
+
+## 28. O que a rotação fez em 11 minutos
+
+Ditos do paladin (`creature-say`, com `itemId` quando é item), contra o HP% que o servidor
+tinha acabado de mandar em `creature-health`:
+
+- `exura san` (Divine Healing) — 84 vezes, sempre com HP entre 85 e 100% *lido depois da
+  cura*, o que bate com a janela 75–85% no instante do disparo.
+- `exura gran san` (Salvation) — 26, com HP lido 77–91%: disparou abaixo de 75%.
+- `Aaaah...` (`itemId 237`, Strong Mana Potion) — 22, com mana lida 63–64%: regra ≤ 60%.
+  Ultimate Spirit Potion não foi usada (HP nunca ficou ≤ 30%, nem ≤ 60% com mana ≤ 60%).
+- `Ultimate Healing` (runa 3160) — 17, com o HP do paladin em 89–90%: **curou outro membro**
+  (alvo da cura = "membro com menos vida", ≤ 50%).
+- `exori gran con` — a cada 8 s exatos quando há alvo; `Avalanche` a cada 2 s com ≥ 2 no
+  raio; `Sudden Death` só 3 vezes (sem condição, mas compete pelo grupo `attack`).
+- `utamo tempo san` (Swift Foot) — só com **zero monstros na tela**, em pares 10 s
+  apartados, entre pulls: "lança sem nada no alcance e acaba ao atacar".
+
+O knight (líder): `exeta res` 80 e `exeta amp res` 43 (puxa a aggro para si), `exori gran`
+79, `exori min` 69, `exura ico` 358, `exura med ico` 109, `utamo tempo` 40, `utani hur` 17,
+e **482 poções**. O druid: `exura sio "<nome>"` 268 vezes, quase sempre no knight — o alvo
+da cura dele é "Membro da party: Sucuri", não "menos vida" (só 103 das 268 foram no membro de
+menor HP%).
+
+## 29. O que a hunt manda além do combate
+
+- `hunt-analyzer-update` a cada ~10 s: `durationMs`, `kills`, `experience`,
+  `rawExperience`, `damageInput: [{ channel: fire|earth|holy|energy|physical|death, value }]`,
+  `loot: [{ itemId, name, count, value }]`, `lootValue`, `supplies: [...]`, `waste`. É o
+  analisador inteiro, calculado no servidor.
+- `party-update`: `leaderId`, `members: [{ id, name, vocation, level, healthPercent,
+  manaPercent, dps, hps, damageTotal, healTotal, staminaMinutes, followsLeader }]`,
+  `sharedCosts: { active, inHunt, offerPending, spent: [{ id, gold }] }` — o **rateio de
+  gasto** é do servidor e aparece no painel ("Gasto médio do grupo / Sua parte: paga").
+- `creature-restore { id, value, vital: health|mana }`, `creature-critical { id }`,
+  `creature-turn { id, direction }`, `world-effect { position, appearanceId, delayMs? }`
+  (10.643 em 155 s — é o efeito por tile de cada área).
+- Regras de saída e venda ligadas ao grupo: "Saindo sozinho: alguém do grupo sair" e
+  "Vendendo sozinho: a bolsa encher, a cada 30 minutos" (`set-hunt-exit-rules`,
+  `set-hunt-sell-rules`).
+- C2S do bot: `battle-settings`, `set-action-slot`, `save-/select-/delete-action-bar-preset`,
+  `import-action-bar`, `request-action-bar-preset`, `set-action-bar-managed`,
+  `sort-action-bar`, `clear-action-bar`, `party-follow-leader`, `set-ammo-rules`,
+  `select-ammo`, `set-auto-loot`. S2C: `action-bar-update`, `action-bar-presets`,
+  `battle-settings-update`, `player-target`.
+
+## 30. O que NÃO dá para concluir daqui
+
+- **Como o knight escolhe o alvo dele** — só se vê o resultado (o monstro que ele segura).
+- **A ordem de avaliação dos slots** quando duas regras passam no mesmo tick (a barra
+  parece ser avaliada da esquerda para a direita, mas 11 minutos não separam isso de
+  "cura antes de ataque").
+- **O que "Preso" e "Magic shield" medem** exatamente, e o que `boss` faz sem boss na hunt.
+- **Se a distância é mantida por A\* ou por passo guloso** — o seguidor nunca ficou preso,
+  mas a Issavi Steppe é aberta.
