@@ -127,7 +127,7 @@ mesma porta que a arte e fica fora do Git, em `things/maps/`:
 pnpm map:fetch                                   # baixa e confere o SHA-256 fixado em scripts/fetch-map.ts
 pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32369,32241,7
 pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
-pnpm map:import --id rotworm-caves --x 32090..32175 --y 32300..32400 --z 9..9
+pnpm map:import --id rotworm-caves --x 33098..33185 --y 32401..32473 --z 8..8
 pnpm map:import --check                          # dentro do pnpm check; sem o OTBM, avisa e pula
 ```
 

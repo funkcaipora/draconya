@@ -166,36 +166,43 @@ importada.
 A decisão 8 acima decide a Rat Cellars; esta emenda repete a forma para a segunda hunt do
 Draconya, a oitava do catálogo do Huntera, primeira com loot de item de verdade.
 
-**O recorte** é `x ∈ [32090, 32175]`, `y ∈ [32300, 32400]`, z9 — uma caverna do mapa comunitário
-diferente da Rat Cellars, encontrada de outro jeito: sem terreno do Huntera capturado para a
-Rotworm Caves (a conta de teste bateu numa tela de escolha de vocação antes de chegar lá,
-`docs/reference/huntera-observed.md` §35), o lugar veio do arquivo de spawn do próprio Canary
-(`data-otservbr-global/world/otservbr-monster.xml`, v3.6.1): o maior bolsão do mapa que só tem
-Rotworm e Carrion Worm, sem nenhum outro monstro, num andar único — z9, `x 32097..32158`,
-`y 32312..32395` (46 rotworms e 19 carrion worms; §34). **O recorte em si é escolha nossa**
-(a mesma decisão 8 acima, não cópia do recorte do Huntera — §35): a caixa importada,
-`x 32090..32175, y 32300..32400, z 9..9`, é uma margem sobre o bolsão. `pnpm map:import --id
-rotworm-caves --x 32090..32175 --y 32300..32400 --z 9..9` (sem `--keep-from`, ao contrário do
-texto acima — ver abaixo) lê 7.349 tiles (86×101), com 3.160 andáveis e 4.189 bloqueados, e
-lista 6 candidatos a escada (autorados em `floorChanges` só se algum dia a Rotworm Caves ganhar
-um segundo andar; por ora `floorChanges` fica `[]` e a rota simplesmente não pisa neles).
+**O recorte** é `x ∈ [33098, 33185]`, `y ∈ [32401, 32473]`, z8 — a caverna de rotworms de
+Darashia, a mesma que o Huntera usa. A #511 tinha recortado outra caverna (`x ∈ [32090, 32175]`,
+`y ∈ [32300, 32400]`, z9, achada pelo maior bolsão de spawn do arquivo do Canary): três vezes
+maior e mais aberta, mas não a de verdade. O terreno capturado de dentro da hunt do Huntera
+(`docs/reference/huntera-observed.md` Parte VI §36–§38, 2026-09-22 à noite: `otbm:
+rotworm-cave.otbm:479f7f7c0c7f`, 6.321 tiles numa caixa 88×73, 902 andáveis) foi casado contra o
+`otservbr.otbm` por votação de assinaturas chão+item — 472 votos para o deslocamento
+`(+32091, +31392, z8)` contra 65 do segundo colocado, o mesmo método que já tinha achado a Rat
+Cellars exata (198 votos). `pnpm map:import --id rotworm-caves --x 33098..33185 --y 32401..32473
+--z 8..8` lê 6.321 tiles, com 902 andáveis e 5.419 bloqueados, e lista 0 candidatos a escada.
 
-**Sem `--keep-from` desta vez, por construção diferente do recorte.** A Rat Cellars precisou
-aparar até a componente andável que contém o bueiro; a região da Rotworm Caves já **é** uma
-componente andável única — os 3.160 tiles andáveis são todos alcançáveis por busca em largura
-4-direcional a partir de um tile interno, sem ilhas —, então `--keep-from` não teria nada a
-cortar e só introduziria o defeito de `pnpm map:import --check` reportar o mapa como `stale`
-para sempre (`checkMaps` nunca reaplica `keepFrom` ao regenerar).
+**Sem `--keep-from`, mas por outro motivo do que na primeira versão desta emenda.** Ao contrário
+do que se pensava, esta caixa NÃO é uma componente andável única: são duas — uma principal de
+823 tiles (a caverna de fato) e um corredor isolado de 79 tiles na borda direita, sem conexão com
+a principal dentro da caixa (Parte VI §38). `--keep-from` apararia a caixa para a bbox da
+componente principal, perdendo a correspondência 88×73 com o recorte do Huntera; em vez disso, a
+rota simplesmente nunca visita o corredor isolado — verificado tile a tile (nenhum tile da rota
+tem `x ≥ 78`, a coluna onde o corredor isolado começa).
 
-**A rota** usa 14 dos 58 pontos de spawn de Rotworm do mesmo arquivo de spawn do Canary, dentro
-do recorte, convertidos para coordenada local — mais do que o molde de ~14 pontos por rota
-usa —, escolhidos por ordenação angular ao redor do centroide da nuvem inteira de 58 pontos,
-para cobrir a caverna sem aglomerar do mesmo lado. `pnpm route:trace --id rotworm-caves --map
-rotworm-caves --z 9 --via … --spawn …` (os 14 pares exatos estão registrados no comentário de
-entrega da #511) fecha um laço de 372 tiles, verificado antes de gravar: nenhuma das 14 pernas
-pisa nos 6 candidatos a escada. Um dos 58 pontos do arquivo de spawn, `(42,101)`, fica um tile
-fora do recorte (a altura local é 101, índices 0..100) — não é erro, é o único dos 58 fora da
-caixa, e por isso não entra nos `--via` escolhidos; a lista completa não foi "corrigida".
+**A rota** usa 13 dos 35 pontos de spawn de Rotworm do arquivo de spawn do Canary dentro da
+caixa (a Terramite, 7 pontos, fica de fora — o Huntera usa só Rotworm), todos na componente
+principal. A primeira tentativa — os 13 escolhidos por ordenação angular direta ao redor do
+centroide, com `--via` igual a `--spawn` — fechava um laço de 276 tiles, mas uma simulação de
+dez minutos no pull Cauteloso (nível 8 desarmado) morria em ~70 s: um dos pontos ficava junto a
+um funil de 2 tiles de largura que prendia o combate corpo a corpo. A versão final evita os 9
+pontos do lobo que só se alcança por aquele funil e separa o FORMATO do laço (`--via`, 26 pontos,
+para maximizar o tempo de caminhada entre os dois lugares que o `Spawner` mantém sempre ativos no
+Cauteloso) da lista DECLARADA de spawn (`--spawn`, um subconjunto de 13): `pnpm route:trace --id
+rotworm-caves --map rotworm-caves --z 8 --via … --spawn …` (os pares exatos estão no comentário
+de entrega da #515) fecha um laço de 444 tiles com 13 pontos de spawn, verificado antes de
+gravar: nenhuma perna pisa no corredor isolado. Mesmo assim, a sobrevivência de dez minutos no
+Cauteloso não foi confirmada em simulação de trial (morte medida entre 272 s e 357 s, contra os
+8–30 HP de margem, sem morrer, que o recorte anterior da #511 media nas mesmas condições) — a
+caverna de Darashia é genuinamente menor. Contra o mapa REAL e com o bot padrão do personagem
+(cura automática, FUN-114) — o cenário que o Huntera de fato usa —, o teste de dez minutos
+sobrevive com HP mínimo 74/165, próximo do 116/170 do Druid observado (Parte VI §36); ver
+`docs/product/hunt.md` §"Em aberto" para o registro deste risco.
 
 **O monstro** é o rotworm do Canary v3.6.1 (65 HP, 40 XP, ataque 24–30, armadura 8, speed 180),
 sem elementos — a Cyclopedia não lista nenhum, ao contrário do rato (que resiste terra e
