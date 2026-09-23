@@ -1,0 +1,10 @@
+{
+  "id": "legion-helmet",
+  "name": "Legion Helmet",
+  "kind": "armor",
+  "slot": "head",
+  "weight": 31,
+  "value": 22,
+  "armor": 4,
+  "_open": "Loot do Rotworm (TibiaWiki: armor 4, 31 oz). value 22 é o preço de NPC do Tibia, provisório — nenhum NPC de venda existe ainda."
+}

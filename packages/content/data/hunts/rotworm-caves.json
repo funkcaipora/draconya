@@ -1,0 +1,44 @@
+{
+  "id": "rotworm-caves",
+  "name": "Rotworm Caves",
+  "recommendedLevel": 8,
+  "mapId": "rotworm-caves",
+  "routeId": "rotworm-caves",
+  "ambience": "cavern",
+  "description": "Cavernas úmidas dominadas por rotworms — vermes lentos que aguentam apanhar bastante antes de cair.",
+  "corpseTtlMs": 10000,
+  "spawnClearRadius": 3,
+  "difficulties": {
+    "cautious": {
+      "monsterCount": 2,
+      "composition": [
+        {
+          "monsterId": "rotworm",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
+    },
+    "bold": {
+      "monsterCount": 5,
+      "composition": [
+        {
+          "monsterId": "rotworm",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
+    },
+    "reckless": {
+      "monsterCount": 8,
+      "composition": [
+        {
+          "monsterId": "rotworm",
+          "weight": 1
+        }
+      ],
+      "respawnDelayMs": 2000
+    }
+  },
+  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs e spawnClearRadius: os mesmos provisórios da Rat Cellars, sem captura própria da Rotworm Caves no Huntera."
+}

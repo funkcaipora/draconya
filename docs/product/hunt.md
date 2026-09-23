@@ -418,20 +418,22 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Parâmetro | Valor previsto | Onde mora em packages/content |
 |---|---|---|
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
-| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) | `data/hunts/*.json`, campo `monsterCount` |
+| Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) — Rat Cellars e Rotworm Caves usam o mesmo molde de três pulls | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22) | `data/hunts/*.json`, campo `respawnDelayMs` |
-| Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
-| Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
+| Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
-| Ambiente da cena (só apresentação) | `cavern` em Rat Cellars — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
-| Texto de apresentação (`description`, só apresentação) | Rat Cellars tem; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
+| Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
+| Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
 | Passo manual (`walk` do jogador) | um por vez, por personagem: o hospedeiro recusa o que chega antes de o passo anterior acabar (FUN-122); o passo do bot conta a partir dele | `packages/server/src/game/host.ts` (`#walkingUntil`), `packages/sim/src/rulesets/hunt.ts` (`requestMove`) — mecanismo |
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
 | O rato (números do Huntera Cyclopedia, Parte V §32) | 20 HP, 5 XP, ataque 3–4 sorteado por golpe, armadura 1, speed 172; +20 % de dano de terra e sagrado, −10 % de gelo e morte; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
-| Loot por abate | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
+| Loot por abate (Rat Cellars) | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
+| O rotworm (números do Canary v3.6.1, #511) | 65 HP, 40 XP, ataque 24–30 sorteado por golpe, armadura 8, speed 180; sem elementos (Cyclopedia não lista nenhum) | `data/monsters/rotworm.json` |
+| Loot por abate (Rotworm Caves, #511) | Rotworm: gold 71,76 %, 1–17; sword 3 %; mace 4,5 %; meat 20 %; ham 20,12 %; worm 3 % (1–3 un.); lump of dirt 10 %; legion helmet 1,89 % | `data/monsters/rotworm.json`, bloco `loot` |
 
 ## Em aberto
 
@@ -466,3 +468,13 @@ importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota 
 `pnpm route:trace` sobre ele — um laço de 160 tiles com 14 pontos de spawn onde o mapa real põe
 rato —, e o rato do Tibia (20 HP, 5 XP, 3–4 de ataque, speed 172, gold e queijo). A entrada
 continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).
+
+**A Rotworm Caves é a oitava hunt do catálogo do Huntera** (#511), a segunda do Draconya: o
+recorte real importado (86×101, andar 9, 3 160 tiles andáveis, `ambience: cavern`, ADR 0025
+emenda), a rota traçada por `pnpm route:trace` sobre ele — um laço de 372 tiles com 14 pontos de
+spawn escolhidos por ordenação angular ao redor do centroide dos 58 pontos de spawn do Canary —,
+e o rotworm do Canary v3.6.1 (65 HP, 40 XP, 24–30 de ataque, armadura 8, speed 180). É a primeira
+hunt do Draconya com loot de verdade além do gold: sete itens (`sword`, `mace`, `meat`, `ham`,
+`worm`, `lump-of-dirt`, `legion-helmet`), com `value` de TibiaWiki provisório para as três peças
+de equipamento e `0` para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada
+continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.

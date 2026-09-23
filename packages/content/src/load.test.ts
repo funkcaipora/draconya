@@ -134,6 +134,27 @@ describe('loadContent', () => {
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
   });
 
+  it('a Rotworm Caves é a caverna real, com os três pulls e o rotworm do Canary (#511)', () => {
+    const content = loadContent(DATA);
+    const map = content.maps.get('rotworm-caves');
+    const route = content.routes.get('rotworm-caves');
+    expect(map?.source?.file).toBe('otservbr.otbm');
+    expect(map?.width).toBe(86);
+    expect(map?.height).toBe(101);
+    expect(map?.z).toBe(9);
+    expect(route?.tiles.length).toBe(372);
+    expect(route?.spawnPoints.length).toBe(14);
+    const rotworm = content.monsters.get('rotworm');
+    expect(rotworm?.class).toBe('vermin');
+    expect(rotworm?.attack).toEqual({ min: 24, max: 30 });
+    expect(rotworm?.speed).toBe(180);
+    expect(rotworm?.corpseAppearanceId).toBe(5967);
+    expect(rotworm?.loot.items.map((i) => i.itemId).sort()).toEqual(
+      ['ham', 'legion-helmet', 'lump-of-dirt', 'mace', 'meat', 'sword', 'worm'].sort(),
+    );
+    expect(content.items.get('worm')?.appearanceId).toBe(3492);
+  });
+
   it('a Cidade é Thais: entrada no templo, andável, e cada escada tem a volta (FUN-120)', () => {
     // O mapa importado é gerado; o que é AUTORADO — entrada e escadas — é o que este teste
     // prende. Uma escada sem a volta é um andar de onde ninguém desce.

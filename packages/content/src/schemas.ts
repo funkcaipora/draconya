@@ -1001,9 +1001,9 @@ export interface MonsterAbility {
 /**
  * As classes de monstro que a Cyclopedia usa para agrupar o Bestiário (SV-20, ADR 0030,
  * `Modals.jsx:187-195` do kit renderizado — a SideList de categorias). Vocabulário FECHADO e
- * crescido por monstro real: hoje só `rat` existe em `packages/content/data/monsters/`, e ele é
- * um roedor — por isso o vocabulário nasce com UM valor. Uma classe nova entra na mesma PR que
- * cria o primeiro monstro dela, nunca antes (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
+ * crescido por monstro real: hoje `rat` (mammal) e `rotworm` (vermin) existem em
+ * `packages/content/data/monsters/` — a segunda classe entra na mesma PR que cria o primeiro
+ * monstro dela, como a primeira entrou (§1 de `docs/kit-fidelity-plan.md`: nenhum dado de
  * mentira vira constante — pré-popular as onze categorias do `data.js` do kit sem nenhum
  * monstro real de oito delas seria exatamente isso).
  *
@@ -1013,7 +1013,7 @@ export interface MonsterAbility {
  * `BOT_CATEGORIES`/`heal` (traduzido para "Cura" em `packages/client/src/shell/BotPanel.tsx:39`).
  * Ver Decisão técnica DT-02.
  */
-export const MONSTER_CLASSES = ['mammal'] as const;
+export const MONSTER_CLASSES = ['mammal', 'vermin'] as const;
 export type MonsterClass = (typeof MONSTER_CLASSES)[number];
 
 export const monsterSchema = z.strictObject({
