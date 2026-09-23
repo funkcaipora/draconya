@@ -677,3 +677,84 @@ menor HP%).
 - **O que "Preso" e "Magic shield" medem** exatamente, e o que `boss` faz sem boss na hunt.
 - **Se a distância é mantida por A\* ou por passo guloso** — o seguidor nunca ficou preso,
   mas a Issavi Steppe é aberta.
+
+---
+
+# Parte V — 2026-09-22: Rat Cellars e Rotworm Caves, catálogo e Cyclopedia
+
+**Fonte:** conta de teste (`Liesh Onshaw`, level 8, sem vocação), mensagens `hunt-catalog` e
+`cyclopedia-catalog` decodificadas do socket na tela de personagem. **Não houve captura dentro
+das hunts**: ao entrar no jogo o personagem caiu numa escolha permanente de vocação, que é do
+dono da conta, e nada foi escolhido. Spawn, cadáver e rota destas duas hunts continuam com os
+valores da Parte II (§15) e os `[ABERTO]` de `docs/product/hunt.md`. Os números de referência
+do Canary (v3.6.1, `data-otservbr-global/monster/`) entram ao lado como **especificação de
+domínio** (ADR 0019): números, nunca código.
+
+## 31. O catálogo tem 73 hunts, e a oitava é a Rotworm Caves
+
+`rat-hunt` (Rat Cellars) é a primeira; depois Spider Nest, Troll Hills, Swamp Troll Cave, Orc
+Camp, Folda Icefields, Bone Crypt, **`rotworm-hunt` (Rotworm Caves)**, Dwarf Mines, Minotaur
+Maze… Cada uma tem **um monstro só** — nem Cave Rat nem Carrion Worm existem no catálogo deles
+(154 monstros na Cyclopedia). Os três tiers são iguais nas duas: `Cautious 2 · Bold 5 ·
+Reckless 8`.
+
+| | Rat Cellars | Rotworm Caves |
+|---|---|---|
+| `id` | `rat-hunt` | `rotworm-hunt` |
+| descrição | "Damp cellars full of rats. The classic first hunt." | "Sluggish rotworms that take a beating." |
+| monstro (`outfitId`) | Rat (21) | Rotworm (26) |
+| loot (raridade) | gold coin (common), cheese (common) | gold coin (common), sword e mace (semi-rare), meat e ham (uncommon), worm (semi-rare), lump of dirt (uncommon), legion helmet (semi-rare) |
+| recorde solo | 2.066 XP/h · 1.293 gp/h | 9.346 XP/h · 2.610 gp/h |
+
+Os itens do loot vêm com os números do item: sword `3264` (atk 14, def 12, 35 oz, 2 slots de
+imbuement, `sword`), mace `3286` (atk 16, def 11, 38 oz, `club`), legion helmet `3374`
+(armor 4, 31 oz, helmet), meat `3577` (13 oz), ham `3582` (20 oz), worm `3492` (0,05 oz),
+lump of dirt `9692` (0,68 oz), gold coin `3031` (0,1 oz), cheese `3607` (4 oz).
+
+## 32. A Cyclopedia deles: o monstro em números
+
+```
+rat      maxHealth 20  experience 5   speed 172  attack 3–4  a cada 2.000 ms
+         elements { earth +20, holy +20, ice −10, death −10 }   killsRequired 2500
+         loot: gold coin (common, max 4) · cheese (common)
+rotworm  maxHealth 65  experience 40  speed 180  attack 24–30 a cada 2.000 ms
+         elements: nenhum   killsRequired 2500
+         loot: gold coin (common, max 17) · sword · mace (semi-rare) · meat · ham (uncommon)
+               worm (semi-rare, max 3) · lump of dirt (uncommon) · legion helmet (semi-rare)
+```
+
+`elements` é o **modificador de dano recebido em porcentagem** (earth +20 = sofre 20 % a
+mais de terra) — o mesmo sinal do `percent` do Canary. O `speed` deles é o do Canary
+**mais 100** (rat 67+100 = 167 ≈ 172? não: o rato do Canary anda a 67 e o deles a 172;
+rotworm 58 → 180 — a relação não é linear e fica como observação, não como fórmula).
+
+## 33. O que o Canary diz dos mesmos dois monstros
+
+Do `rat.lua` e do `rotworm.lua` (v3.6.1), só os números que a Cyclopedia deles não mostra:
+
+| | Rat | Rotworm |
+|---|---|---|
+| `armor` / `defense` / `mitigation` | 1 / 5 / 0,07 | 8 / 10 / 0,28 |
+| `corpse` | 5964 | 5967 |
+| melee | 0–8 a cada 2.000 ms | 0–40 a cada 2.000 ms |
+| loot (chance em 1/100.000) | gold coin 100.000 (max 4) · cheese 39.410 | gold coin 71.760 (max 17) · sword 3.000 · mace 4.500 · meat 20.000 · ham 20.120 · worm 3.000 (max 3) · lump of dirt 10.000 · legion helmet 1.890 |
+
+As raridades do Huntera **batem com estas chances**: `common` ≥ 70 %, `uncommon` 10–20 %,
+`semi-rare` 2–5 %. É a tabela que o Draconya usa para converter raridade em `chance`.
+
+## 34. Onde fica a caverna, no mapa comunitário
+
+Sem o terreno deles, a caverna vem do `otservbr.otbm` pelos spawns do próprio Canary
+(`world/otservbr-monster.xml`): o maior bolsão **só de Rotworm e Carrion Worm** do mapa,
+sem nenhum outro monstro, é um andar único em **z 9, x 32097..32158, y 32312..32395** (46
+rotworms e 19 carrion worms). Recortado na caixa `x 32090..32175, y 32300..32400, z 9..9`
+o importador lê ~7.300 tiles, ~3.200 andáveis numa **componente única**, 6 degraus de escada
+(que a rota não pode pisar) e nenhuma aparência desconhecida no pacote 1332. A Rat Cellars,
+para comparar, tem 2.043 andáveis em 118 × 80.
+
+## 35. O que NÃO dá para concluir daqui
+
+- **Nada de dentro das hunts:** respawn, cadáver, rota do bot, dano real por golpe. A Parte
+  II (§15) registrou um rato novo 1,0–2,5 s depois de um sumir — é o único número de spawn.
+- **O recorte deles da Rotworm Caves.** O nosso é escolha nossa (ADR 0025), não cópia.
+- **Chance de loot deles.** Só a raridade; a chance vem do Canary (§33).
