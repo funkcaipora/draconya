@@ -420,7 +420,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
 | Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) — Rat Cellars e Rotworm Caves usam o mesmo molde de três pulls | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo número, decidido de forma independente (a #510 não bloqueou a #511) | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |

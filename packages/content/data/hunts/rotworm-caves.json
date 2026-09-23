@@ -40,5 +40,5 @@
       "respawnDelayMs": 2000
     }
   },
-  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo número que a #510 propõe para a Rat Cellars (ainda não mesclada) — decisão paralela, não bloqueada por ela (ver Rastreabilidade). corpseTtlMs e spawnClearRadius: os mesmos provisórios da Rat Cellars, sem captura própria da Rotworm Caves no Huntera."
+  "_open": "recommendedLevel 8: o Huntera não mostra recomendação (§31); usado o gate padrão de vocação (progression.vocationLevel). respawnDelayMs 2000: o mesmo valor adotado na Rat Cellars (#510, PR #512), a partir da observação do Huntera (Parte II §15). corpseTtlMs e spawnClearRadius: os mesmos provisórios da Rat Cellars, sem captura própria da Rotworm Caves no Huntera."
 }
