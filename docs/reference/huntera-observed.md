@@ -758,3 +758,71 @@ para comparar, tem 2.043 andáveis em 118 × 80.
   II (§15) registrou um rato novo 1,0–2,5 s depois de um sumir — é o único número de spawn.
 - **O recorte deles da Rotworm Caves.** O nosso é escolha nossa (ADR 0025), não cópia.
 - **Chance de loot deles.** Só a raridade; a chance vem do Canary (§33).
+
+---
+
+# Parte VI — 2026-09-22 (noite): dentro da Rat Cellars e da Rotworm Caves
+
+**Fonte:** a mesma conta de teste, agora **Druid** (escolha do dono da conta), 4,8 min dentro
+da Rat Cellars e 4,1 min dentro da Rotworm Caves, tier Cautious, socket decodificado
+(3.026 e 3.192 frames úteis), terreno das duas hunts capturado. O personagem lutou de punho
+(nenhuma arma na barra) e só lançou Light Healing sozinho — o bot padrão de um personagem
+novo é **uma** regra: poção de vida com HP ≤ 70 %, postura `defensive`, `keep-distance 3`,
+alvo `nearest` (`action-bar-update` e `battle-settings-update` na entrada).
+
+## 36. Os números medidos por dentro
+
+| | Rat | Rotworm |
+|---|---|---|
+| HP (dano até morrer, abates solo) | 22 e 22 (11 pares golpe→% batem em 20) | 66 (32 pares batem em 62,5) |
+| dano no jogador por golpe | 3–4 (331 golpes) | 24–30, mediana 26 (93 golpes) |
+| intervalo de ataque do monstro | ~2.050 ms | ~2.050–2.400 ms |
+| XP por abate (level 8, bônus de level +190 %) | 15 (base 5) | 116 (base 40) |
+| loot visto | gold 2–3 (2 de 2), cheese (1 de 2) | gold 7, lump of dirt (1 abate) |
+| **cadáver no chão** | **29.995 ms** (aparência 5964) | **29.986 ms** (aparência 5967) |
+| passo do monstro reto / diagonal | 800 / ~2.300 ms (speed 172) | 750 / ~2.200 ms (speed 180) |
+| passo do jogador reto / diagonal | 450 / ~1.400 ms (speed 294) | igual |
+
+Tudo cabe na fórmula da §26: `ceil50(1000 × 130 / 172) = 800`, `ceil50(1000 × 130 / 180) =
+750`, `ceil50(1000 × 130 / 294) = 450`, diagonal `ceil50(3×)`. O chão das duas cavernas
+vale 130. **O cadáver dura 30 s nas duas** — o `[ABERTO]` de `corpseTtlMs` (10 s) fecha
+aqui. O golpe de punho do jogador saiu a cada ~2.050 ms, igual ao do monstro.
+
+## 37. O que "solo" quer dizer lá: instância compartilhada
+
+`instance-enter` deu `rat-hunt-385` e `rotworm-hunt-402` — **shards numerados**, não uma
+instância por personagem — e o fluxo de `creature-appear` trouxe mais de uma dúzia de outros
+jogadores reais (com level, montaria e outfit) caçando no mesmo mapa. "Solo" é a regra de
+posse de loot e XP, não isolamento físico. Consequência para quem mede: os pares
+`creature-disappear → creature-appear` misturam respawn de verdade com monstro entrando e
+saindo do raio de visão por causa dos outros; a mediana ficou em ~2,3 s (rato) e ~6,8 s
+(rotworm), com distância mediana de 33 e 3,6 tiles entre morte e nascimento — **ruído, não
+número**. O raio de aggro também não se isola: monstro novo aparece a 16–21 tiles (a borda
+da rede) e o primeiro passo fecha para 11–13.
+
+O Draconya **não copia isto**: a hunt é uma sessão instanciada (ADR 0027), e é o que permite
+o resultado não depender de quem mais está no mapa (invariante 3).
+
+## 38. A Rotworm Caves deles é a caverna de rotworms de Darashia
+
+O terreno (`otbm:rotworm-cave.otbm:479f7f7c0c7f`, 6.321 tiles numa caixa 88 × 73, 902
+andáveis) foi casado contra o `otservbr.otbm` por votação de assinaturas chão + item: **472
+votos** para o deslocamento `(+32091, +31392, z8)` contra 65 do segundo colocado, e o mesmo
+método devolve a Rat Cellars exata (198 votos em `(+31018, +31154, z8)`). A caverna é a de
+**Darashia, z 8, `x 33098..33185, y 32401..32473`** — o importador lê exatamente 6.321 tiles
+e 902 andáveis, os mesmos números deles, sem candidato a escada, com 35 spawns de Rotworm (e 7
+de Terramite, que eles não usam) do arquivo de spawns do Canary dentro da caixa. É uma
+componente principal de 823 tiles mais um corredor isolado de 79 na borda direita. O nosso
+recorte da #511 (§34) era outra caverna, três vezes maior e mais aberta; a paridade pede a de
+Darashia.
+
+O bot deles andou 38 tiles distintos no bueiro e 174 na caverna, revisitando — **caminhada
+oportunista atrás do alvo mais próximo**, não laço fixo. É a diferença que o ADR 0009 assume
+de propósito.
+
+## 39. O que NÃO dá para concluir daqui
+
+- **Respawn e aggro** (§37): a instância compartilhada contamina os pares.
+- **Chance dos itens raros do rotworm**: um abate só.
+- **Analisador**: `hunt-analyzer-update` não é enviado a conta sem Premium.
+- **Os pulls Bold e Reckless**: só o Cautious foi jogado.
