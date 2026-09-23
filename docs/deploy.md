@@ -233,11 +233,11 @@ oficial, que a origem não serve e o Draconya não usa.
 
 **Esse caminho NÃO traz a pilha dos mapas.** Desde a FUN-121 o cliente desenha o mundo a partir de
 `things/<versão>/maps/<mapId>.json` — a pilha de aparências por tile de cada mapa do conteúdo
-(Thais e a Rat Cellars), que `pnpm map:import` deriva do OTBM na sua máquina (ADR 0025) e que
-nunca é versionada nem vai na imagem. A origem não a serve, e sem ela o jogo abre com a grade
-lisa de reserva: templo sem chão, bueiro sem parede, e nenhum erro além do 404 na aba de rede.
-Ela sobe pela sua máquina — é a subpasta `maps/` inteira, dois arquivos por versão hoje
-(1,0 MB na 13.32):
+(Thais, a Rat Cellars e a Rotworm Caves), que `pnpm map:import` deriva do OTBM na sua máquina
+(ADR 0025) e que nunca é versionada nem vai na imagem. A origem não a serve, e sem ela o jogo
+abre com a grade lisa de reserva: templo sem chão, bueiro sem parede, e nenhum erro além do 404
+na aba de rede. Ela sobe pela sua máquina — é a subpasta `maps/` inteira, três arquivos por
+versão hoje (1,2 MB na 13.32):
 
 ```bash
 rsync -av things/1332/maps/ root@<servidor>:/root/things/1332/maps/
@@ -262,12 +262,12 @@ volume:
 
 - `catalog-content.json`, o `appearances-<hash>.dat` que ele aponta e as folhas
   `sprites-<hash>.bmp.lzma` (81 MB na 13.32) — o mundo;
-- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`; 1,0 MB na 13.32) —
-  a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e não só o
-  `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar o mesmo
-  hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra região ou
-  outro OTBM muda de conteúdo no mesmo caminho, e o `Cache-Control` de um ano esconde a troca
-  de quem já o tinha — por isso a conferência é pelo hash.
+- `maps/<mapId>.json`, um por mapa do conteúdo (`thais`, `rat-cellars`, `rotworm-caves`; 1,2 MB
+  na 13.32) — a pilha de cada tile, saída de `pnpm map:import`. Confira contra a sua máquina, e
+  não só o `200`: `curl -s <APP_ORIGIN>/things/1332/maps/thais.json | shasum -a 256` tem de dar
+  o mesmo hash de `shasum -a 256 things/1332/maps/thais.json`. Um mapa reimportado com outra
+  região ou outro OTBM muda de conteúdo no mesmo caminho, e o `Cache-Control` de um ano esconde
+  a troca de quem já o tinha — por isso a conferência é pelo hash.
 
 `library/` (índices, folhas PNG, quadros por id — 900 MB) é a biblioteca de consulta do Claude
 Code e continua fora: não é servida nem lida pelo cliente — a casca (painéis, barras, slots)

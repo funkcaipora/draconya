@@ -160,3 +160,43 @@ Emenda o ADR 0008 (mapa na mesma classe da arte) e o ADR 0019 (o cadáver visual
 "decisão nossa em que o TFS é o exemplo do que não fazer"; o loot no chão continua sendo). O
 ADR 0009 continua de pé: a rota da hunt segue fixa e sem pathfinding, agora sobre uma grade
 importada.
+
+## Emenda — 2026-09-22 (#511): a Rotworm Caves é o mesmo recorte, outra caverna
+
+A decisão 8 acima decide a Rat Cellars; esta emenda repete a forma para a segunda hunt do
+Draconya, a oitava do catálogo do Huntera, primeira com loot de item de verdade.
+
+**O recorte** é `x ∈ [32090, 32175]`, `y ∈ [32300, 32400]`, z9 — uma caverna do mapa comunitário
+diferente da Rat Cellars, encontrada do mesmo jeito: casando as assinaturas de terreno do
+Huntera contra o `otservbr.otbm`. `pnpm map:import --id rotworm-caves --x 32090..32175
+--y 32300..32400 --z 9..9` (sem `--keep-from`, ao contrário do texto acima — ver abaixo) lê
+7.349 tiles (86×101), com 3.160 andáveis e 4.189 bloqueados, e lista 6 candidatos a escada
+(autorados em `floorChanges` só se algum dia a Rotworm Caves ganhar um segundo andar; por ora
+`floorChanges` fica `[]` e a rota simplesmente não pisa neles).
+
+**Sem `--keep-from` desta vez, por construção diferente do recorte.** A Rat Cellars precisou
+aparar até a componente andável que contém o bueiro; a região da Rotworm Caves já **é** uma
+componente andável única — os 3.160 tiles andáveis são todos alcançáveis por busca em largura
+4-direcional a partir de um tile interno, sem ilhas —, então `--keep-from` não teria nada a
+cortar e só introduziria o defeito de `pnpm map:import --check` reportar o mapa como `stale`
+para sempre (`checkMaps` nunca reaplica `keepFrom` ao regenerar).
+
+**A rota** usa 14 dos 58 pontos de spawn que o Cyclopedia do Huntera lista para a Rotworm
+Caves — mais do que o molde de ~14 pontos por rota usa —, escolhidos por ordenação angular ao
+redor do centroide da nuvem inteira de 58 pontos, para cobrir a caverna sem aglomerar do mesmo
+lado. `pnpm route:trace --id rotworm-caves --map rotworm-caves --z 9 --via … --spawn …` (os 14
+pares exatos estão registrados no comentário de entrega da #511) fecha um laço de 372 tiles,
+verificado antes de gravar: nenhuma das 14 pernas pisa nos 6 candidatos a escada. Um dos 58
+pontos do Cyclopedia, `(42,101)`, fica um tile fora do recorte (a altura local é 101, índices
+0..100) — não é erro, é o único dos 58 fora da caixa, e por isso não entra nos `--via`
+escolhidos; a lista completa não foi "corrigida".
+
+**O monstro** é o rotworm do Canary v3.6.1 (65 HP, 40 XP, ataque 24–30, armadura 8, speed 180),
+sem elementos — a Cyclopedia não lista nenhum, ao contrário do rato (que resiste terra e
+sagrado). É bem mais forte que o rato, e por isso o critério de sobrevivência de dez minutos
+desarmado só é medido no pull Cauteloso (2 vivos); Ousado e Agressivo pressupõem equipamento
+que ainda não existe.
+
+**A entrada continua pelo menu**, abrindo uma instância — sem portal na cidade, como a Rat
+Cellars. Três tamanhos de pull com os nomes do Huntera (2/5/8) e `respawnDelayMs: 2000` — o
+mesmo número que a #510 propõe para a Rat Cellars, adotado aqui de forma independente.

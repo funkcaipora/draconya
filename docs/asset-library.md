@@ -127,6 +127,7 @@ mesma porta que a arte e fica fora do Git, em `things/maps/`:
 pnpm map:fetch                                   # baixa e confere o SHA-256 fixado em scripts/fetch-map.ts
 pnpm map:import --id thais --x 32275..32458 --y 32153..32291 --z 4..7 --entry 32369,32241,7
 pnpm map:import --id rat-cellars --x 32022..32139 --y 32168..32247 --z 8
+pnpm map:import --id rotworm-caves --x 32090..32175 --y 32300..32400 --z 9..9
 pnpm map:import --check                          # dentro do pnpm check; sem o OTBM, avisa e pula
 ```
 
@@ -158,6 +159,10 @@ andares ficam com o que cai na caixa resultante. Id desconhecido só conta no qu
 largura pelos quatro vizinhos entre pontos de passagem, laço fechado, e cada spawn ancorado no
 índice da rota mais próximo. A Rat Cellars foi traçada com os lugares onde o mapa real põe rato
 como pontos de spawn; o `raio` de cada um é até onde o monstro procura tile livre para nascer.
+A Rotworm Caves (#511) tem 58 pontos de spawn do Canary dentro do recorte — mais do que o
+molde de ~14 usa —, e por isso 14 deles foram escolhidos por ordenação angular ao redor do
+centroide da nuvem inteira, para cobrir a caverna sem aglomerar do mesmo lado (`--via`/`--spawn`
+exatos registrados no comentário de entrega da #511).
 
 O leitor (`scripts/otbm.ts`) é iterativo e recorta por região sem alocar o resto: os 184 MB
 inteiros passam em ~0,6 s. O formato foi lido de documentação pública e conferido contra o

@@ -2,7 +2,8 @@
   "id": "baseline",
   "pack": "tibia-1332",
   "monsters": {
-    "rat": 21
+    "rat": 21,
+    "rotworm": 26
   },
   "characters": {
     "default": 128
@@ -24,7 +25,14 @@
     "life-ring": 3052,
     "blessing-charge": 3155,
     "glacier-amulet": 815,
-    "wooden-shield": 3412
+    "wooden-shield": 3412,
+    "sword": 3264,
+    "mace": 3286,
+    "meat": 3577,
+    "ham": 3582,
+    "worm": 3492,
+    "lump-of-dirt": 9692,
+    "legion-helmet": 3374
   },
   "ammunition": {
     "arrow": {
@@ -53,7 +61,8 @@
     }
   },
   "corpses": {
-    "rat": 5964
+    "rat": 5964,
+    "rotworm": 5967
   },
   "maps": {},
   "spells": {

@@ -1,0 +1,55 @@
+{
+  "id": "rotworm",
+  "name": "Rotworm",
+  "class": "vermin",
+  "recommendedLevel": 8,
+  "health": 65,
+  "experience": 40,
+  "attack": {
+    "min": 24,
+    "max": 30
+  },
+  "armor": 8,
+  "attackIntervalMs": 2000,
+  "speed": 180,
+  "aggroRadius": 4,
+  "loot": {
+    "gold": {
+      "chance": 0.7176,
+      "min": 1,
+      "max": 17
+    },
+    "items": [
+      {
+        "itemId": "sword",
+        "chance": 0.03
+      },
+      {
+        "itemId": "mace",
+        "chance": 0.045
+      },
+      {
+        "itemId": "meat",
+        "chance": 0.20
+      },
+      {
+        "itemId": "ham",
+        "chance": 0.2012
+      },
+      {
+        "itemId": "worm",
+        "chance": 0.03,
+        "min": 1,
+        "max": 3
+      },
+      {
+        "itemId": "lump-of-dirt",
+        "chance": 0.10
+      },
+      {
+        "itemId": "legion-helmet",
+        "chance": 0.0189
+      }
+    ]
+  }
+}
