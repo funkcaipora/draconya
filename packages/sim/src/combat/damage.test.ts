@@ -373,6 +373,29 @@ describe('pipeline canônico elemental, físico e mitigações (#473)', () => {
       .toBe(110);
   });
 
+  it('#510: o rato do Tibia (Huntera Cyclopedia) sofre +20 % de terra/sagrado e −10 % de gelo/morte', () => {
+    // packages/content/data/monsters/rat.json — os quatro sinais de mitigation.resistances,
+    // traduzidos do "elements" do Huntera (docs/reference/huntera-observed.md Parte V §32):
+    // "earth +20, holy +20" é o rato SOFRENDO mais (vulnerabilidade → negativo no schema);
+    // "ice −10, death −10" é o rato sofrendo menos (resistência → positivo). Sinal fixado pelo
+    // ADR 0031, emenda 2026-09-17: negativo amplifica, positivo reduz.
+    const rat = {
+      armor: 1, dodgeChance: 0,
+      mitigation: compileMitigation({
+        resistances: { earth: -0.2, holy: -0.2, ice: 0.1, death: 0.1 },
+        immunities: [],
+      }),
+    };
+    expect(resolveDamage(hit(100, 'earth'), rat, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(120);
+    expect(resolveDamage(hit(100, 'holy'), rat, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(120);
+    expect(resolveDamage(hit(100, 'ice'), rat, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(90);
+    expect(resolveDamage(hit(100, 'death'), rat, 'pve', combat, rigged(false)).resolvedDamage)
+      .toBe(90);
+  });
+
   it('#473: golpe composto resolve o secundário com os mesmos estágios', () => {
     // Primário físico sofre armadura 20; o secundário de fogo passa intacto. Cada componente
     // tem o próprio `resolvedDamage`, e o secundário NÃO recursa.
