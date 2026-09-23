@@ -122,7 +122,12 @@ describe('loadContent', () => {
     expect(hunt?.corpseTtlMs).toBeGreaterThan(0);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
-    expect(rat?.attack).toEqual({ min: 0, max: 8 });
+    // packages/content/data/monsters/rat.json — números do Huntera (docs/reference/
+    // huntera-observed.md Parte V §32, 2026-09-22), não mais o provisório da FUN-123.
+    expect(rat?.attack).toEqual({ min: 3, max: 4 });
+    expect(rat?.mitigation.resistances).toEqual({
+      physical: 0, energy: 0, earth: -0.2, fire: 0, ice: 0.1, holy: -0.2, death: 0.1, arcane: 0,
+    });
     expect(rat?.speed).toBe(172);
     expect(rat?.corpseAppearanceId).toBe(5964);
     expect(rat?.loot.items.map((i) => i.itemId)).toEqual(['cheese']);

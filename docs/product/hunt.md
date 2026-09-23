@@ -420,7 +420,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Tamanhos de pull | 3 (Cauteloso, Ousado, Agressivo — `cautious`/`bold`/`reckless`) | `data/hunts/*.json`, campo `difficulties` |
 | Monstros vivos por pull (Cauteloso / Ousado / Agressivo) | 2 / 5 / 8 na Rat Cellars, TOTAL da instância, espalhado pelos pontos do laço (cópia do Huntera; SV-19 leva em `difficultyDetails` no catálogo) | `data/hunts/*.json`, campo `monsterCount` |
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
-| Prazo de respawn | 30 s em Rat Cellars `[ABERTO — valor provisório; a captura do Huntera registra um rato novo 1,0–2,5 s depois de um sumir]` | `data/hunts/*.json`, campo `respawnDelayMs` |
+| Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22) | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
 | Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
@@ -430,7 +430,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Personagem desarmado (ataque, intervalo, alcance, armadura, esquiva) | [ABERTO — valor provisório: 25 / 2000 ms / 1 tile / 4 / 5%] | `data/combat/baseline.json`, bloco `player` |
 | Velocidade do personagem (escala do Tibia) | 278 no level 1, +2 por level [ABERTO — valor provisório, lido do Huntera] | `data/progression/baseline.json`, `startingSpeed` / `speedPerLevel` |
 | Duração do passo | `ceil50(chão × 1000 / speed)` ms, diagonal × 3; chão sem velocidade declarada vale 150 | `packages/sim/src/movement.ts` (`movementDuration`) — mecanismo, não balanceamento |
-| O rato (números do mapa real, Canary) | 20 HP, 5 XP, ataque 0–8 sorteado por golpe, armadura 1, speed 172; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
+| O rato (números do Huntera Cyclopedia, Parte V §32) | 20 HP, 5 XP, ataque 3–4 sorteado por golpe, armadura 1, speed 172; +20 % de dano de terra e sagrado, −10 % de gelo e morte; o `defense 5` do Canary fica `[ABERTO]` — o motor só tem `armor` | `data/monsters/rat.json` |
 | Loot por abate | Rat: gold 100 %, 1–4; queijo 39,4 % (`items/cheese.json`, aparência 3607) | `data/monsters/*.json`, bloco `loot` |
 
 ## Em aberto
@@ -464,5 +464,5 @@ indo direto à caixa da sessão. Quem reanexa vê os cadáveres que ainda estão
 **A Rat Cellars é o bueiro de ratos de Rookgaard** (FUN-123), como no Huntera: o recorte real
 importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota traçada por
 `pnpm route:trace` sobre ele — um laço de 160 tiles com 14 pontos de spawn onde o mapa real põe
-rato —, e o rato do Tibia (20 HP, 5 XP, 0–8 de ataque, speed 172, gold e queijo). A entrada
+rato —, e o rato do Tibia (20 HP, 5 XP, 3–4 de ataque, speed 172, gold e queijo). A entrada
 continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).
