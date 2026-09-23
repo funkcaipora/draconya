@@ -119,7 +119,7 @@ describe('loadContent', () => {
     expect(Object.keys(hunt?.difficulties ?? {})).toEqual(['cautious', 'bold', 'reckless']);
     expect(Object.values(hunt?.difficulties ?? {}).map((d) => d.monsterCount)).toEqual([2, 5, 8]);
     expect(hunt?.ambience).toBe('cavern');
-    expect(hunt?.corpseTtlMs).toBeGreaterThan(0);
+    expect(hunt?.corpseTtlMs).toBe(30000);
     const rat = content.monsters.get('rat');
     expect(rat?.class).toBe('mammal');
     // packages/content/data/monsters/rat.json — números do Huntera (docs/reference/
@@ -134,16 +134,20 @@ describe('loadContent', () => {
     expect(content.items.get('cheese')?.appearanceId).toBe(3607);
   });
 
-  it('a Rotworm Caves é a caverna real, com os três pulls e o rotworm do Canary (#511)', () => {
+  it('a Rotworm Caves é a caverna de Darashia do Huntera, com os três pulls e o rotworm do Canary (#515)', () => {
     const content = loadContent(DATA);
     const map = content.maps.get('rotworm-caves');
     const route = content.routes.get('rotworm-caves');
     expect(map?.source?.file).toBe('otservbr.otbm');
-    expect(map?.width).toBe(86);
-    expect(map?.height).toBe(101);
-    expect(map?.z).toBe(9);
-    expect(route?.tiles.length).toBe(372);
-    expect(route?.spawnPoints.length).toBe(14);
+    expect(map?.width).toBe(88);
+    expect(map?.height).toBe(73);
+    expect(map?.z).toBe(8);
+    expect(route?.tiles.length).toBe(444);
+    expect(route?.spawnPoints.length).toBe(13);
+    // A caixa importada tem duas componentes andáveis (Huntera Parte VI §38): a principal, de
+    // 823 tiles, e um corredor isolado de 79 na borda direita (a partir de x === 78). A rota
+    // nunca visita o corredor isolado — só a componente principal.
+    expect(route?.tiles.every((t) => t.x < 80)).toBe(true);
     const rotworm = content.monsters.get('rotworm');
     expect(rotworm?.class).toBe('vermin');
     expect(rotworm?.attack).toEqual({ min: 24, max: 30 });

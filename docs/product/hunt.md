@@ -422,7 +422,7 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 | Rota | lista ordenada de tiles, fixa por hunt | `data/routes/*.json`, apontada pelo `routeId` da hunt |
 | Prazo de respawn | 2 s em Rat Cellars — meio da faixa 1,0–2,5 s que a captura do Huntera registrou (Parte II §15 + Cyclopedia Parte V §32, 2026-09-22); 2 s também na Rotworm Caves (#511), o mesmo valor (#510, PR #512) | `data/hunts/*.json`, campo `respawnDelayMs` |
 | Raio livre do spawn | 3 tiles em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; o bow alcança 6]`; `0` desliga | `data/hunts/*.json`, campo `spawnClearRadius` (#236) |
-| Prazo do cadáver no chão (só visual) | 10 s em Rat Cellars e em Rotworm Caves `[ABERTO — valor provisório; a captura não fechou um par appear→disappear]` | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
+| Prazo do cadáver no chão (só visual) | 30 s em Rat Cellars e em Rotworm Caves (RESOLVIDO, Huntera Parte VI §36) | `data/hunts/*.json`, campo `corpseTtlMs`; a arte em `appearances.corpses` |
 | Atraso da saída solo (`exitDelayMs`) | 5 000 ms (#360); ausente é saída imediata | `data/hunts/*.json`, campo `exitDelayMs` |
 | Ambiente da cena (só apresentação) | `cavern` em Rat Cellars e em Rotworm Caves — o cliente escurece o mundo; ausente é superfície (FUN-121) | `data/hunts/*.json`, campo `ambience` |
 | Texto de apresentação (`description`, só apresentação) | Rat Cellars e Rotworm Caves têm; as demais hunts (quando existirem) ganham o texto na própria issue de conteúdo que as criar | `data/hunts/*.json`, campo `description` |
@@ -440,6 +440,16 @@ trocar a representação do tempo dentro do tick, foi tirar o tick do meio.
 Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. Os dois da tabela acima são deste
 projeto, não do PRD: o personagem precisa de números de ataque e de velocidade para a hunt render,
 e o PRD é silencioso sobre os dois porque assume equipamento — que ainda não existe. A densidade de referência (2/4/8/12) é explicitamente descrita como ponto de partida, não como número final — cada hunt define sua própria composição em conteúdo.
+
+**A margem de sobrevivência do pull Cauteloso na Rotworm Caves é estreita, e ficou mais estreita
+com o recorte de Darashia (#515).** O recorte anterior (#511) media 8–30 HP de folga (de 185) em
+dez minutos desarmado, sem morrer; o recorte de Darashia — menor, por construção do próprio
+Huntera (Parte VI §38) — morreu em simulação de trial entre 272 s e 357 s de dez, mesmo com o
+laço desenhado para maximizar o tempo de caminhada tranquila entre encontros. `monsterCount`,
+`respawnDelayMs` e os números do monstro são de outras decisões (ADR 0025) e não mudam aqui; contra
+o mapa REAL e com o bot padrão do personagem (cura automática, FUN-114) — o cenário que o Huntera
+de fato usa —, o teste de dez minutos sobrevive, com HP mínimo 74/165, próximo do 116/170 que o
+Druid observado mediu (Parte VI §36).
 
 ## Divergências do PRD
 
@@ -469,12 +479,14 @@ importado (118×80, andar 8, 2 043 tiles andáveis, `ambience: cavern`), a rota 
 rato —, e o rato do Tibia (20 HP, 5 XP, 3–4 de ataque, speed 172, gold e queijo). A entrada
 continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025).
 
-**A Rotworm Caves é a oitava hunt do catálogo do Huntera** (#511), a segunda do Draconya: o
-recorte real importado (86×101, andar 9, 3 160 tiles andáveis, `ambience: cavern`, ADR 0025
-emenda), a rota traçada por `pnpm route:trace` sobre ele — um laço de 372 tiles com 14 pontos de
-spawn escolhidos por ordenação angular ao redor do centroide dos 58 pontos de spawn do Canary —,
-e o rotworm do Canary v3.6.1 (65 HP, 40 XP, 24–30 de ataque, armadura 8, speed 180). É a primeira
-hunt do Draconya com loot de verdade além do gold: sete itens (`sword`, `mace`, `meat`, `ham`,
-`worm`, `lump-of-dirt`, `legion-helmet`), com `value` de TibiaWiki provisório para as três peças
-de equipamento e `0` para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada
-continua pelo menu, abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.
+**A Rotworm Caves é a caverna de rotworms de Darashia do Huntera** (#515), a segunda hunt do
+Draconya: o recorte real importado (88×101→88×73, andar 8, 902 tiles andáveis em duas
+componentes — 823 na principal e 79 num corredor isolado que a rota nunca visita — `ambience:
+cavern`, ADR 0025 emenda, Parte VI §38), a rota traçada por `pnpm route:trace` sobre ele — um
+laço de 444 tiles com 13 pontos de spawn escolhidos dentro da componente principal, evitando um
+funil estreito que prendia o combate corpo a corpo —, e o rotworm do Canary v3.6.1 (65 HP, 40
+XP, 24–30 de ataque, armadura 8, speed 180). É a primeira hunt do Draconya com loot de verdade
+além do gold: sete itens (`sword`, `mace`, `meat`, `ham`, `worm`, `lump-of-dirt`,
+`legion-helmet`), com `value` de TibiaWiki provisório para as três peças de equipamento e `0`
+para as quatro de comida/curiosidade (sem NPC de venda ainda). A entrada continua pelo menu,
+abrindo uma instância — sem portal na cidade (ADR 0025), como a Rat Cellars.

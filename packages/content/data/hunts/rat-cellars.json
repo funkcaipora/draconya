@@ -6,7 +6,7 @@
   "routeId": "rat-cellars",
   "ambience": "cavern",
   "description": "Os porões de pedra sob Rookgaard, a ilha que recebe todo aventureiro no primeiro dia. Ratos disputam caixotes e barris pelos corredores baixos — o primeiro perigo que toda espada aprende a enfrentar.",
-  "corpseTtlMs": 10000,
+  "corpseTtlMs": 30000,
   "spawnClearRadius": 3,
   "difficulties": {
     "cautious": {
@@ -40,5 +40,5 @@
       "respawnDelayMs": 2000
     }
   },
-  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs: RESOLVIDO em 2000 ms (#510) — Huntera Parte II §15 registrou um rato novo 1,0–2,5 s depois de um sumir; 2 s é o meio da faixa observada, e a Cyclopedia (Parte V §32) não traz este número. corpseTtlMs [ABERTO — valor provisório: 10 s; a captura não fechou nenhum par appear→disappear]. spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."
+  "_open": "Três pulls como no Huntera (Cautious 2 · Bold 5 · Reckless 8, docs/reference/huntera-observed.md §15), em vez das quatro dificuldades do PRD. respawnDelayMs: RESOLVIDO em 2000 ms (#510) — Huntera Parte II §15 registrou um rato novo 1,0–2,5 s depois de um sumir; 2 s é o meio da faixa observada, e a Cyclopedia (Parte V §32) não traz este número. corpseTtlMs: RESOLVIDO em 30000 ms (Huntera Parte VI §36, #515). spawnClearRadius [ABERTO — valor provisório: 3 tiles (#236); fora do alcance do golpe desarmado (1) e do passo de cada lado; o bow alcança 6 e ainda pode matar no instante do nascimento]."
 }
