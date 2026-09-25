@@ -74,14 +74,20 @@ function rawCombatContent(): RawContent {
             presentation: { missileKey: 'fire-missile', impactKey: 'fire-impact' },
             condition: {
               key: 'burn', merge: 'refresh', durationMs: 4_000,
-              effect: { kind: 'damage-over-time', amount: 4, intervalMs: 1_000, damageType: 'fire' },
+              effect: {
+                kind: 'damage-over-time', form: 'rounds',
+                rounds: [{ count: 4, intervalMs: 1_000, damage: 4 }], damageType: 'fire',
+              },
             },
             field: {
               id: 'fire-field', durationMs: 5_000,
               shape: { shape: 'circle', radius: 1, centered: 'target' },
               condition: {
                 key: 'fire-field', merge: 'refresh', durationMs: 5_000,
-                effect: { kind: 'damage-over-time', amount: 3, intervalMs: 1_000, damageType: 'fire' },
+                effect: {
+                  kind: 'damage-over-time', form: 'rounds',
+                  rounds: [{ count: 5, intervalMs: 1_000, damage: 3 }], damageType: 'fire',
+                },
               },
             },
           },
