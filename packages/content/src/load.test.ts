@@ -543,7 +543,7 @@ type SpellRow = {
 };
 const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
   knight: {
-    'bruise-bane': { level: 1, mana: 10, group: 'healing', groupMs: 2000, cdMs: 1000, kind: 'heal', bp: 15 },
+    'bruise-bane': { level: 1, mana: 10, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 15 },
     'lesser-front-sweep': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 14 },
     'wound-cleansing': { level: 8, mana: 40, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 70 },
     'haste-knight': { level: 14, mana: 60, group: 'support', groupMs: 2000, cdMs: 2000, kind: 'haste' },
@@ -557,7 +557,7 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'recovery-knight': { level: 50, mana: 75, group: 'healing', groupMs: 1000, cdMs: 60000, kind: 'heal-over-time' },
     'front-sweep': { level: 70, mana: 200, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 80 },
     'fierce-berserk': { level: 90, mana: 340, group: 'attack', groupMs: 2000, cdMs: 6000, kind: 'damage', bp: 90 },
-    'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 2000, cdMs: 600000, kind: 'heal', bp: 500 },
+    'intense-wound-cleansing': { level: 80, mana: 200, group: 'healing', groupMs: 1000, cdMs: 600000, kind: 'heal', bp: 500 },
   },
   paladin: {
     'lesser-ethereal-spear': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 9 },
