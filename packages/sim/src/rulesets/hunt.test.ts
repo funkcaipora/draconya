@@ -5234,6 +5234,74 @@ describe('follow de membro (§D10, #398)', () => {
       active: false, targetId: 'b', reason: 'dead',
     });
   });
+
+  it('member: um corredor em U que o passo guloso não resolve sozinho — o BFS limitado acha o desvio (#527)', () => {
+    // Geometria de uma QA ao vivo, real (Darashia Dragon Lair, z10, x 30..51) — reproduzida
+    // aqui em coordenadas locais (x local = x real − 30): o seguidor ficava em (40,11), o líder
+    // oito tiles ao sul em (41,19), e os TRÊS candidatos do passo guloso (ADR 0009: direção +
+    // dois vizinhos) na direção sudeste eram todos parede — (41,12) e (40,12) pela fileira
+    // y=12 (`#####.....##....######`, x=40 e 41 bloqueados), (41,11) pela fileira y=11
+    // (`####.......#....######`, x=41 bloqueado). O único jeito de verdade é recuar para
+    // oeste (x ≤ 39/local 9) e descer pelo corredor estreito (x local 8..11) até ficar
+    // adjacente ao líder — o guloso (ADR 0009, três candidatos só) nunca tenta isso sozinho.
+    const uCorridorMap = {
+      id: 'arena', z: 7,
+      grid: [
+        '####.......#....######', // y=0 (y real 11): x local 11 (=x real 41) é parede
+        '#####.....##....######', // y=1 (y real 12): x local 10 e 11 (=x real 40,41) são parede
+        '#####.......##########', // y=2: conector — abre de x local 5 a 11
+        '########....##########', // y=3..8 (y real 14..19): corredor só em x local 8..11
+        '########....##########',
+        '########....##########',
+        '########....##########',
+        '########....##########',
+        '########....##########',
+      ],
+    };
+    const uCorridorRoute = {
+      id: 'arena-loop', mapId: 'arena',
+      tiles: [{ x: 10, y: 0, z: 7 }, { x: 9, y: 0, z: 7 }],
+      spawnPoints: [],
+    };
+
+    const scenario = (hz: number) => {
+      const { session } = followSession({
+        content: followContent({ maps: [uCorridorMap], routes: [uCorridorRoute] }),
+        botConfigs: { b: botConfig({ follow: { kind: 'member', characterId: 'a' } }) },
+      });
+      session.enter(member('a'));
+      session.enter(member('b'));
+      const a = session.participants.find((p) => p.id === 'a');
+      const b = session.participants.find((p) => p.id === 'b');
+      if (a === undefined || b === undefined) throw new Error('a sessão perdeu um membro');
+      a.position = { x: 11, y: 8, z: 7 };
+      b.position = { x: 10, y: 0, z: 7 };
+      stand(session, 'a');
+      // A ocupação do mundo é INCREMENTAL desde a entrada (`onEnter`) — sobrescrever `.position`
+      // à mão, como acima, não a atualiza: ela continua achando que `a`/`b` estão nos tiles
+      // ONDE FORAM COLOCADOS na entrada, não onde este teste os pôs depois. Um placeholder que
+      // entra e sai marca a ocupação como desatualizada (`onLeave`), e o PRÓXIMO evento
+      // processado remonta do zero a partir de `session.participants` — já refletindo as
+      // posições de cima.
+      session.enter(member('placeholder'));
+      session.leave('placeholder', 'manual-exit');
+
+      run(session, 30_000, 1000 / hz);
+      return { distance: chebyshev(a.position, b.position), bPosition: { ...b.position } };
+    };
+
+    const at1Hz = scenario(1);
+    expect(
+      at1Hz.distance,
+      `1 Hz: seguidor ficou em ${JSON.stringify(at1Hz.bPosition)}, nunca alcançou o líder`,
+    ).toBe(1);
+
+    const at10Hz = scenario(10);
+    expect(
+      at10Hz.distance,
+      `10 Hz: seguidor ficou em ${JSON.stringify(at10Hz.bPosition)}, nunca alcançou o líder`,
+    ).toBe(1);
+  });
 });
 
 describe('XP em party (#190, ADR 0027 decisão 3)', () => {
