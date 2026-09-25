@@ -764,6 +764,17 @@ export const S2C_SCHEMAS = {
           level: z.number().int().positive().optional(),
           magicLevel: z.number().int().nonnegative().optional(),
         }).default({}),
+        /**
+         * A vocação exigida (#524, kit level 200) — uma, várias, ou `null`/ausente, sem
+         * requisito. O mesmo contrato de `content.supplySchema.requires.vocationId`
+         * (`VocationRequirement`); o protocolo não importa de `content` (é a base da pilha), e
+         * por isso repete a forma, como já faz com `spells[].vocationId`. Poção como a Strong
+         * Health Potion é Knight/Paladin; a Great Mana Potion é uma LISTA de três. Opcional SEM
+         * `default`, como `targets`/`groupCooldownMs` abaixo: um nó `game` anterior manda sem, e
+         * a tela sem o campo trata como "sem requisito conhecido" — nunca bloqueia por dado que
+         * não chegou (RF-09).
+         */
+        vocationId: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable().optional(),
 /** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
         targets: z.enum(['self', 'friend']).optional(),
         /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */

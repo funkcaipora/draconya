@@ -413,4 +413,42 @@ describe('entriesOf — por level exigido e depois por nome', () => {
     expect(unvocatedEntries.map((e) => (e.kind === 'spell' ? e.spell.id : null)))
       .toEqual(['universal']);
   });
+
+  it('filtra suprimentos por vocationId — string, lista, e o suprimento universal (#524, kit level 200)', () => {
+    // O mesmo defeito da magia sem filtro, para poção: sem isto a tela oferece a Strong Health
+    // Potion (Knight/Paladin) a um Sorcerer, que configura uma ação que o servidor sempre recusa.
+    const vocCatalogue: Catalogue = {
+      ...catalogue,
+      bot: {
+        ...catalogue.bot,
+        supplies: [
+          supply({ id: 'universal-potion', name: 'Universal Potion', group: 'potion', vocationId: null }),
+          supply({
+            id: 'strong-health-potion', name: 'Strong Health Potion', group: 'potion',
+            vocationId: ['knight', 'paladin'],
+          }),
+          supply({ id: 'great-spirit-potion', name: 'Great Spirit Potion', group: 'potion', vocationId: 'paladin' }),
+        ],
+      },
+    };
+
+    // As três têm o mesmo `requiredLevel` (sem `requires.level`, cai em 1): o desempate é por
+    // nome — "Great Spirit" < "Strong Health" < "Universal".
+    const knightEntries = entriesOf(vocCatalogue, 'Itens', 'knight');
+    expect(knightEntries.map((e) => (e.kind === 'supply' ? e.supply.id : null)))
+      .toEqual(['strong-health-potion', 'universal-potion']);
+
+    const paladinEntries = entriesOf(vocCatalogue, 'Itens', 'paladin');
+    expect(paladinEntries.map((e) => (e.kind === 'supply' ? e.supply.id : null)))
+      .toEqual(['great-spirit-potion', 'strong-health-potion', 'universal-potion']);
+
+    const sorcererEntries = entriesOf(vocCatalogue, 'Itens', 'sorcerer');
+    expect(sorcererEntries.map((e) => (e.kind === 'supply' ? e.supply.id : null)))
+      .toEqual(['universal-potion']);
+
+    // Sem `vocationId` no chamador (contexto sem personagem): NENHUM filtro, tudo aparece.
+    const unfiltered = entriesOf(vocCatalogue, 'Itens');
+    expect(unfiltered.map((e) => (e.kind === 'supply' ? e.supply.id : null)))
+      .toEqual(['great-spirit-potion', 'strong-health-potion', 'universal-potion']);
+  });
 });

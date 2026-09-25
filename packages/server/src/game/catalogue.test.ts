@@ -256,6 +256,33 @@ describe('o catálogo do que existe (FUN-79, FUN-89)', () => {
     });
   });
 
+  it('a vocação do suprimento vai para o catálogo — ausente vira `null`, e não some (#524)', () => {
+    // Sem isto a tela do bot oferece a Strong Health Potion (Knight/Paladin) para um Sorcerer
+    // configurar, o `Save` nunca bloqueia (não há como a tela saber), e `useSupply` recusa TODO
+    // uso em silêncio — o defeito que o cabeçalho deste arquivo descreve.
+    const { appearances: _placeholder, ...raw } = rawTestContent();
+    const withVocationalSupplies = {
+      ...raw,
+      supplies: [
+        ...(raw.supplies ?? []),
+        {
+          id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+          requires: { level: 50, vocationId: ['knight', 'paladin'] },
+          effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+        },
+      ],
+    };
+    const { bot } = buildCatalogue(
+      buildContent({ ...withVocationalSupplies, appearances: [placeholderAppearances(withVocationalSupplies)] }),
+    );
+    const strong = bot.supplies.find((supply) => supply.id === 'strong-health-potion');
+    expect(strong?.vocationId).toEqual(['knight', 'paladin']);
+
+    const potion = bot.supplies.find((supply) => supply.id === 'health-potion');
+    expect(potion?.vocationId).toBeNull();
+    expect('vocationId' in (potion ?? {})).toBe(true);
+  });
+
   it('a runa leva group, os requisitos e o detalhe do efeito — o Base Power inclusive (#165, AB-09, ADR 0033)', () => {
     // A tela desabilita a runa abaixo do level, como faz com magia. Desde o ADR 0033 o Base
     // Power VAI no `detail`: é o número que o painel converte com `spellPowerRange` para

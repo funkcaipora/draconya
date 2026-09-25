@@ -115,6 +115,11 @@ export function buildCatalogue(content: Content): Catalogue {
             ? {}
             : { magicLevel: supply.requires.magicLevel }),
         },
+        // A vocação (#524, kit level 200): `null` — e não ausente — quando o suprimento não
+        // exige nenhuma, como `spell.vocationId` já faz acima. Sem isto a tela do bot oferece a
+        // Strong Health Potion (Knight/Paladin) para um Sorcerer configurar, e o servidor recusa
+        // TODO uso em silêncio — o defeito que o cabeçalho deste arquivo descreve.
+        vocationId: supply.requires.vocationId ?? null,
         groupCooldownMs: supply.groupCooldownMs,
         ...(supply.description === undefined ? {} : { description: supply.description }),
         detail: detailOf(supply.effect),
