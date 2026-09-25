@@ -68,6 +68,47 @@ condição/DOT e campo por tile, e prende que 100 ms, 1000 ms e a retomada produ
 snapshot** — prazos de DOT e de campo inclusive — e que o vencimento do campo é o instante de
 aplicação mais a `durationMs` do conteúdo.
 
+## O `combat-v2` (#522, ADR 0037 d.5)
+
+O ADR 0031 exige registro aqui sempre que o contrato muda de propósito. O `combat-v2` é o
+próximo perfil livre depois do `combat-v1` (`packages/content/src/schemas.ts`, `COMBAT_V2`):
+`migrationPolicy: 'breaking'`, dano de arma pela fórmula do Canary
+(`Weapons::getMaxWeaponDamage`) com variância pela normal truncada, e chance de acerto à
+distância por skill e tile — o que o ADR 0037 decisão 5 pediu para o M28
+(`docs/adr/0037-tfs-canary-fidelity-except-action-bar-and-automation.md`, mesclado ao main por
+outra branch do M28, ainda ausente nesta). `packages/content/data/combat/baseline.json` já
+declara `combat-v2`: é o perfil que toda hunt nova roda.
+
+O que muda, e o que NÃO muda:
+
+- **A MITIGAÇÃO é a mesma dos dois perfis.** `resolveMitigation` (`combat/damage.ts`, renomeado
+  de `resolveCombatV1`) resolve `combat-v1` e `combat-v2` identicamente — Dodge, defesa/escudo,
+  crítico, armadura, piso, resistência e imunidade continuam a mesma ordem e a mesma posição de
+  RNG. A matriz de oráculos desta página (a tabela acima) vale para os dois perfis, sem
+  duplicação: nada nela testa fórmula de arma.
+- **O que o `combat-v2` muda vive ANTES do resolver**, em `combat/weapon-power.ts`
+  (`resolveWeaponPower`, despachado por `combat.compatibilityProfile`) e `combat/
+  distance-hit.ts` (`rollDistanceHit`) — o `rawDamage` que chega em `resolveDamage` já é o
+  resultado da fórmula nova, e o acerto/erro do tiro já foi decidido antes de `resolveDamage`
+  ser chamado.
+- **A sequência de RNG por golpe muda de forma NOVA e documentada**: a normal truncada
+  (`normalRandomInt`) consome um número VARIÁVEL de sorteios por chamada — duas frações por
+  tentativa de Box-Muller, rejeitando fora de `[0,1]` — ao contrário do `spread` do v1, que
+  consumia zero ou um sorteio fixo. Isso é esperado e testado: o que a invariância de
+  frequência/retomada prova é que a sequência é determinística por SEMENTE, não que o número de
+  sorteios por golpe é constante.
+
+### Oráculos do `combat-v2`
+
+Cada peça tem a própria matriz de oráculos escritos à mão, no mesmo formato desta página:
+
+| Arquivo | O que prende |
+|---|---|
+| `packages/sim/src/combat/weapon-power.test.ts` | tabela (attack, skill, level, attackFactor, vocationMultiplier) → faixa `[min, max]` igual à conta do Canary; distribuição (média/desvio) da normal truncada numa amostra grande; retrocompatibilidade — sem `combat`, ou com `combat-v1`, a fórmula não muda |
+| `packages/sim/src/combat/distance-hit.test.ts` | a tabela por skill/distância (1–7); o balde `ammunition.maxHitChance` (#524) — tabela ou chance fixa; o bônus/malus `weapon.hitChance` (#524); a rolagem sempre consumida |
+| `packages/sim/src/rulesets/weapons.test.ts` (`combat-v2: chance de acerto à distância`) | o `#strike` fim a fim: skill baixa erra mais que skill alta à mesma distância, `combat-v1` continua sempre acertando, 1 Hz == 10 Hz com a chance ligada |
+| `packages/server/src/game/rat-cellars.test.ts`, `rotworm-caves.test.ts` | conformance do CONTEÚDO REAL sob `combat-v2` — inclusive frequência-invariância (`dez minutos a 1 Hz e a 10 Hz...`) |
+
 ## Benchmark: o cenário misto
 
 ```

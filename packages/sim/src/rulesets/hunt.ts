@@ -45,6 +45,7 @@ import type { DamageOutcome, Defender } from '../combat/damage.js';
 import { applyDamageOutcome } from '../combat/outcome.js';
 import type { DefenseSource } from '../combat/defense.js';
 import { resolveWeaponPower } from '../combat/weapon-power.js';
+import { rollDistanceHit } from '../combat/distance-hit.js';
 import { forgetActor, recordDamage, resolveDeath } from '../death.js';
 import type { KillCredit, Victim } from '../death.js';
 import type { BestiaryConfig } from '../bestiary.js';
@@ -4511,6 +4512,17 @@ const slots = bot.groups.get(group);
         kind: 'shot', attackerId: character.id, targetId: monster.subject,
         weaponItemId: weapon.id, ammoId: ammo.id, from: this.#at(character), to: this.#at(monster),
       });
+      // Chance de acerto (#522, `combat-v2`): o tiro sai e paga o preço mesmo errando — só o
+      // DANO depende da rolagem. `combat-v1` (sem `distanceHitChance`) sempre acerta.
+      const hit = this.#rollDistanceHit(session, character, monster, ammo, how);
+      // A prática é do TIRO, não do acerto (CMB-05): imunidade, bloqueio e agora o erro de
+      // pontaria não impedem a skill de subir — ela sai do gatilho da família, nunca do dano.
+      this.#practice(session, character, how.family, 1);
+      if (!hit) {
+        // A munição é ABSTRATA: nada de pilha a consumir. O tiro errou, mas já pagou o preço, e
+        // o próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
+        return;
+      }
       // O `base` da fórmula e o TIPO são da MUNIÇÃO (o bow não tem attack próprio), e a família
       // e a escala vêm do perfil da arma. Uma alocação por tiro, como o `defender` acima.
       const power = how.power;
@@ -4530,7 +4542,6 @@ const slots = bot.groups.get(group);
         defender, 'pve', this.#options.combat, session.rng,
       );
       this.#land(session, character, monster, result, 'melee');
-      this.#practice(session, character, profile.family, 1);
       // A munição é ABSTRATA: nada de pilha a consumir. O tiro que saiu já pagou o preço, e o
       // próximo usa a mesma seleção (ou a básica da família) enquanto houver gold.
       return;
@@ -4583,21 +4594,27 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * O poder bruto de um golpe pelo PERFIL (CMB-05), com a postura por último.
+   * O poder bruto de um golpe pelo PERFIL (CMB-05, `combat-v2` em #522), com a postura por
+   * último.
    *
    * A skill que escala é a da FAMÍLIA, não uma por nome: o ruleset lê `family.skillId` do
    * conteúdo e o nível do personagem, MAIS o bônus de equipamento da mesma skill (#524: a
    * Paladin Armor soma em `distance` — o crossbow bate mais forte com ela vestida). Corpo a
-   * corpo e distância recebem a postura (`buff`); wand/rod têm faixa fixa e não passam por ela
-   * — como sempre, e o bônus entra sem efeito aí (`resolveWeaponPower` ignora `skillLevel` no
-   * caminho `fixedDamage`, ver o comentário de `weapon-power.ts`).
+   * corpo e distância recebem a postura (`buff`);
+   * wand/rod têm faixa fixa e não passam por ela — como sempre. O multiplicador de vocação
+   * (`meleeDamageMultiplier`/`distDamageMultiplier`, #522) só o `combat-v2` lê; passar o valor
+   * sempre é inofensivo — o v1 nunca teve multiplicador de vocação.
    */
   #weaponPower(session: Session, character: CharacterRuntime, profile: WeaponProfile): number {
     const family = this.#options.weaponFamilies.get(profile.family);
-    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
-    const skillLevel = (skill === undefined ? 0 : character.skills.levelOf(skill))
-      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
-    const power = resolveWeaponPower(profile, character.level, skillLevel, session.rng);
+    const skillLevel = this.#skillLevelOf(character, family);
+    const vocation = this.#vocationOf(character);
+    const vocationMultiplier = family?.kind === 'distance'
+      ? vocation?.distDamageMultiplier ?? 1
+      : vocation?.meleeDamageMultiplier ?? 1;
+    const power = resolveWeaponPower(
+      profile, character.level, skillLevel, session.rng, this.#options.combat, vocationMultiplier,
+    );
     if (family?.kind === 'distance') {
       return Math.round(power * character.conditions.damageDealtScale('distance'));
     }
@@ -4605,6 +4622,39 @@ const slots = bot.groups.get(group);
       return Math.round(power * character.conditions.damageDealtScale('melee'));
     }
     return power;
+  }
+
+  /** O nível da skill que a família aponta; sem família ou skill no catálogo, zero. */
+  #skillLevelOf(character: CharacterRuntime, family: CompiledWeaponFamily | undefined): number {
+    const skill = family === undefined ? undefined : this.#options.skills.get(family.skillId);
+    // O bônus de equipamento da mesma skill (#524) entra aqui — no dano E na chance de acerto à
+    // distância (#522), como a skill do Tibia já inclui o `skillDist` do item.
+    return (skill === undefined ? 0 : character.skills.levelOf(skill))
+      + (family === undefined ? 0 : character.inventory.skillBonus(this.#options.items, family.skillId));
+  }
+
+  /**
+   * A chance de acerto à distância (#522, `combat-v2`): uma rolagem por tiro, SEMPRE consumida
+   * quando o conteúdo declara `combat.distanceHitChance` — a mesma regra do bloqueio e do
+   * crítico (ADR 0031). Conteúdo `combat-v1` (sem a tabela) não rola nada e sempre acerta, o
+   * que preserva o v1 bit a bit — nenhum sorteio novo entra na sequência de uma hunt legada.
+   *
+   * `ammo.hitChance` (#522) e `ammo.maxHitChance`/`how.hitChance` (#524, só dado até aqui)
+   * entram como o caminho direto, o balde da munição e o bônus/malus do arco — ver
+   * `combat/distance-hit.ts`.
+   */
+  #rollDistanceHit(
+    session: Session, character: CharacterRuntime, monster: MonsterRuntime, ammo: Ammunition,
+    how: ResolvedWeapon,
+  ): boolean {
+    const table = this.#options.combat.distanceHitChance;
+    if (table === undefined) return true;
+    const family = this.#options.weaponFamilies.get('distance');
+    const skillLevel = this.#skillLevelOf(character, family);
+    const tiles = distance(character.position, monster.position);
+    return rollDistanceHit(
+      tiles, skillLevel, table, session.rng, ammo.maxHitChance, ammo.hitChance, how.hitChance,
+    );
   }
 
   /**

@@ -927,10 +927,22 @@ export const ammunitionSchema = z.strictObject({
   /** Gold debitado por tiro. Sem munição grátis: o preço é > 0, e o gold no tiro é o custo. */
   price: z.number().int().positive(),
   /**
-   * O `maxhitchance` da munição (#524, o power bolt tem `91`). Só dado, como `weapon.hitChance`
-   * — a chance de acerto por skill/distância é da issue #522.
+   * O `maxhitchance` da munição (#524, o power bolt tem `91`) — o BALDE (`combat.
+   * distanceHitChance`, #522) que a tabela por skill/distância usa. `91` não bate nenhum dos
+   * três baldes que o Canary modela (75/90/100), então a munição especial cai na chance FIXA
+   * (`else { chance = maxHitChance; }` do Canary) — nem skill nem distância importam.
    */
   maxHitChance: z.number().int().min(0).max(100).optional(),
+  /**
+   * O `hitchance` DIRETO do Canary (`it.hitChance`, #522): quando declarado e diferente de
+   * zero, IGNORA `maxHitChance` e a tabela inteira — chance FIXA, sem skill nem distância. É o
+   * caminho da munição/arma de arremesso avulsa (viper star `hitchance=80`, leaf star `90`) —
+   * `it.hitChance != 0` é conferido ANTES de `it.maxHitChance` em `WeaponDistance::useWeapon`.
+   * Distinto de `weapon.hitChance` (#524): aquele é o bônus/malus ADITIVO do arco, somado ao
+   * que a munição calcular por qualquer um dos dois caminhos — os dois vêm do MESMO atributo
+   * `hitchance` do Canary, lido em papéis diferentes conforme o item é o arco ou o disparado.
+   */
+  hitChance: z.number().int().min(0).max(100).optional(),
   requires: z.object({
     level: z.number().int().positive().optional(),
   }).default(() => ({})),
@@ -1440,6 +1452,15 @@ export const vocationSchema = z.object({
    */
   startingKit: z.array(startingKitPieceSchema).default([]),
   /**
+   * O `meleeDamage`/`distDamage` de `vocations.xml` (Canary, #522): multiplicador do dano MÁXIMO
+   * de arma desta vocação, corpo a corpo e distância — aplicado em `resolveWeaponPower` sob o
+   * `combat-v2` (ADR 0037 decisão 5). `1` em toda vocação no Canary hoje: não há vocação que
+   * bata mais forte de arma por decreto, só por skill/level/equipamento. Fica em conteúdo, não
+   * constante mágica (§12.1), para o dia em que balancear precisar de outro valor.
+   */
+  meleeDamageMultiplier: z.number().positive().default(1),
+  distDamageMultiplier: z.number().positive().default(1),
+  /**
    * Marcador de valor ainda não decidido no PRD. Palpite disfarçado de decisão é o que faz
    * ninguém lembrar de voltar — o carregador avisa no boot, e o `docs-check` conta.
    */
@@ -1587,11 +1608,35 @@ export const COMBAT_V1: CombatCompatibilityProfile = {
 };
 
 /**
+ * O perfil `combat-v2` (ADR 0037, decisão 5): o próximo id livre depois do `combat-v1` — o
+ * `combat-v2` que o ADR 0032 tinha reservado para a postura nunca chegou a existir em código, e
+ * é por isso que esta é a primeira vez que o id é usado. **Rompimento**: o dano de arma passa a
+ * ser o do Canary (fórmula, variância pela normal truncada e `attackFactor`), com chance de
+ * acerto à distância por skill e por tile. Uma sessão fixada no `combat-v1` continua nele
+ * (invariante 7); retomar sob um perfil `breaking` diferente do que a criou é recusado, nunca
+ * reinterpretado (ADR 0031).
+ *
+ * As exceções de produto do `combat-v1` mudam de forma: `player-always-hit` do v1 cobria
+ * corpo a corpo E distância; o Canary não rola acerto ofensivo em corpo a corpo no PvE (o piso
+ * da fórmula é quem faz um golpe "fraco", nunca um "miss"), então a exceção fica só
+ * `player-always-hit-melee` — a DISTÂNCIA passa a rolar a chance de acerto do Tibia por skill e
+ * tile (§ do Canary `WeaponDistance::useWeapon`), deixando de ser exceção. O Dodge **fica**: a
+ * #522 confirma que ele corresponde ao charm de esquiva do Tibia (metade do dano, não zera), e
+ * `dodge-halves-damage` continua listada. `pve-only-bestiary-bonus` é estrutural e não muda.
+ */
+export const COMBAT_V2: CombatCompatibilityProfile = {
+  id: 'combat-v2',
+  referenceRelease: 'tibia-13.32',
+  productExceptions: ['player-always-hit-melee', 'dodge-halves-damage', 'pve-only-bestiary-bonus'],
+  migrationPolicy: 'breaking',
+};
+
+/**
  * Os perfis que o motor sabe executar. Perfil fora daqui derruba o boot, sem fallback: o
  * resolver não reinterpreta uma fórmula que não conhece (ADR 0031).
  */
 export const COMBAT_PROFILES: ReadonlyMap<string, CombatCompatibilityProfile> =
-  new Map([[COMBAT_V1.id, COMBAT_V1]]);
+  new Map([[COMBAT_V1.id, COMBAT_V1], [COMBAT_V2.id, COMBAT_V2]]);
 
 /**
  * Os modificadores avançados de um golpe (CMB-08): crítico, life leech e mana leech.
@@ -1716,7 +1761,118 @@ export const combatSchema = z.object({
     skillFactor: z.number().nonnegative(),
     spread: z.number().min(0).max(1),
   }).default({ levelFactor: 0.06, skillFactor: 0.15, spread: 0.15 }),
+  /**
+   * O dano de arma do `combat-v2` (#522, ADR 0037 decisão 5) — `Weapons::getMaxWeaponDamage` do
+   * Canary, com a variância pela normal truncada (`normal_random`, `packages/sim/src/combat/
+   * weapon-power.ts`):
+   *
+   * ```text
+   * maxDamage = round(coefficient × attackFactor × attack × skill + ⌊level/5⌋) × vocationMultiplier
+   * minDamage = ⌊level/5⌋ (corpo a corpo: 0 se attack ≤ 0)
+   * damage    = normalRandom(minDamage, maxDamage)
+   * ```
+   *
+   * `meleeCoefficient`/`distanceCoefficient` são os `0,085`/`0,09` do Canary
+   * (`Weapons::getMaxWeaponDamage`, `isMelee`). `attackFactor` é o `getAttackFactor()` do modo
+   * de luta (ofensivo 1,0 / equilibrado 0,75 / defensivo 0,5) — o Draconya **não tem seletor de
+   * postura ainda** (o primitivo de "Postura Defensiva/Balanceada/Atacante" nunca foi montado,
+   * `docs/hud-contract-plan.md`), então o valor é uma CONSTANTE de conteúdo fixada em `1,0`
+   * (ofensivo), e não o estado por personagem que uma UI de postura vai um dia escolher — trocar
+   * um escalar fixo por uma leitura de `CharacterState` não muda a fórmula nem exige perfil novo.
+   * `vocationMultiplier` vem de `vocation.meleeDamageMultiplier`/`distDamageMultiplier` — 1,0 em
+   * toda vocação no Canary hoje (`vocations.xml`), e por isso em conteúdo e não constante mágica.
+   * Obrigatório quando `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
+   */
+  weaponDamage: z.object({
+    meleeCoefficient: z.number().positive(),
+    distanceCoefficient: z.number().positive(),
+    attackFactor: z.number().positive(),
+  }).optional(),
+  /**
+   * A chance de acerto à distância do `combat-v2` (#522): só a DISTÂNCIA rola acerto ofensivo —
+   * corpo a corpo continua sem rolagem (`player-always-hit-melee`). Mecanismo original do
+   * Draconya (ADR 0019: só número e caso de borda vêm do Canary, nunca código) que reproduz
+   * `WeaponDistance::useWeapon` — as TRÊS tabelas que o Canary modela (baldes 75 uma mão, 90
+   * duas mãos e 100), não só a de 90% que o catálogo usa hoje:
+   *
+   * ```text
+   * se ammunition.hitChance declarado e ≠ 0:
+   *   percent = ammunition.hitChance                    (caminho DIRETO — ignora tudo abaixo)
+   * senão:
+   *   balde   = ammunition.maxHitChance ?? defaultMaxHitChance
+   *   bucket  = buckets.find(b => b.maxHitChance === balde)
+   *   se bucket ausente:  percent = balde                (balde que a tabela não modela: flat)
+   *   senão:
+   *     tier = bucket.tiers.find(t => t.distance === distância)
+   *     se tier ausente:  percent = 0                     (distância fora da tabela: MISS)
+   *     senão:            percent = clamp(⌊min(skill, tier.skillCap) × tier.perSkill⌋ + tier.flat, 0, 100)
+   * percent = clamp(percent + (weapon.hitChance ?? 0), 0, 100)   (bônus/malus do arco, #524)
+   * hit     = rng.chance(percent / 100)               (uma rolagem por tiro, sempre consumida)
+   * ```
+   *
+   * `ammunition.hitChance` (#522, inteiro 0–100) é o `it.hitChance` DIRETO do Canary — conferido
+   * ANTES de `maxHitChance`, e quando ≠ 0 ignora a tabela inteira (a munição/arma de arremesso
+   * avulsa com chance fixa: viper star 80%, leaf star 90%).
+   * `ammunition.maxHitChance` (#524, inteiro 0–100) é o `it.maxHitChance` do Canary: ausente,
+   * usa `defaultMaxHitChance` (90 — munição de duas mãos é a única família que o catálogo tem);
+   * um valor que não bate nenhum `bucket.maxHitChance` declarado — o power bolt do Tibia declara
+   * 91, e nem 75 nem 90 nem 100 estão nos `buckets` de baixo se algum dia sobrar de fora — vira
+   * chance FIXA (`else { chance = maxHitChance; }` do Canary), nunca um erro.
+   * Distância fora de `tiers`, DENTRO de um balde reconhecido, é MISS (0%) — o `default: chance
+   * = it.hitChance;` de cada `switch` do Canary, que vale 0 porque só se chega a essa tabela
+   * quando `it.hitChance` já é 0. **Não** é o teto do balde: um catálogo real nunca teria uma
+   * arma de alcance > 7 hoje, mas se tivesse, o Canary erraria sempre no tile 8 — não acertaria
+   * quase sempre.
+   * `weapon.hitChance` (#524, inteiro -100–100) é o bônus/malus da ARMA — a besta real soma ao
+   * percentual que a munição calculou, por QUALQUER um dos caminhos acima, sempre. Os três
+   * campos de item são "só dado" desde o #524 (`ammunition.maxHitChance`, `weapon.hitChance`) e
+   * o #522 (`ammunition.hitChance`); o #522 é quem passa a lê-los todos. Obrigatório quando
+   * `compatibilityProfile` é `combat-v2`; `buildContent` recusa a ausência.
+   */
+  distanceHitChance: z.object({
+    /**
+     * O balde default (90, munição de duas mãos) quando `ammunition.maxHitChance` está ausente
+     * — o Canary auto-seleciona por `ammoType` (`!= AMMO_NONE` → 90, senão 75); o catálogo do
+     * Draconya só tem munição de duas mãos hoje, então o default é sempre 90.
+     */
+    defaultMaxHitChance: z.number().int().min(0).max(100),
+    /**
+     * As tabelas por balde RECONHECIDO. O Canary só tem fórmula própria para 75/90/100 — um
+     * `maxHitChance` fora daqui (declarado na munição, ou este `defaultMaxHitChance`) vira
+     * chance FIXA, nunca erro de conteúdo.
+     */
+    buckets: z.array(z.object({
+      maxHitChance: z.number().int().min(0).max(100),
+      tiers: z.array(z.object({
+        distance: z.number().int().positive(),
+        skillCap: z.number().nonnegative(),
+        perSkill: z.number().nonnegative(),
+        flat: z.number(),
+      })),
+    })).superRefine((buckets, context) => {
+      const seen = new Set<number>();
+      for (const bucket of buckets) {
+        if (seen.has(bucket.maxHitChance)) {
+          context.addIssue({
+            code: 'custom', message: `distanceHitChance.buckets tem maxHitChance ${bucket.maxHitChance} duplicado`,
+          });
+        }
+        seen.add(bucket.maxHitChance);
+      }
+    }),
+  }).optional(),
   _open: z.string().optional(),
+}).superRefine((combat, context) => {
+  // A #522/ADR 0037: perfil `combat-v2` sem os blocos novos é conteúdo que o resolver de poder
+  // de arma não sabe executar — recusar no boot, nunca por um `??` silencioso no caminho quente.
+  if (combat.compatibilityProfile === 'combat-v2') {
+    if (combat.weaponDamage === undefined) {
+      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "weaponDamage"' });
+    }
+    if (combat.distanceHitChance === undefined) {
+      context.addIssue({ code: 'custom', message: 'combat-v2 exige o bloco "distanceHitChance"' });
+    }
+  }
 });
 
 export type Combat = z.infer<typeof combatSchema>;

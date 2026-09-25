@@ -4234,6 +4234,7 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
   const knight = {
     id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
     startingWeaponItemId: 'steel-axe', spellSkill: 'magic', startingKit: [], skillMultipliers: {},
+    meleeDamageMultiplier: 1, distDamageMultiplier: 1,
   };
   const vocations = new Map([[knight.id, knight]]);
   const itemCatalog = new Map([[axe.id, axe]]);
@@ -4387,12 +4388,12 @@ describe('a escolha de vocação pelo socket (#154, ADR 0026 decisão 1)', () =>
     const kitVocations: Map<string, Vocation> = new Map([
       ['knight', {
         id: 'knight', name: 'Knight', healthPerLevel: 15, manaPerLevel: 5, capacityPerLevel: 25,
-        spellSkill: 'magic', skillMultipliers: {},
+        spellSkill: 'magic', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'steel-axe', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
       ['paladin', {
         id: 'paladin', name: 'Paladin', healthPerLevel: 10, manaPerLevel: 15, capacityPerLevel: 20,
-        spellSkill: 'distance', skillMultipliers: {},
+        spellSkill: 'distance', skillMultipliers: {}, meleeDamageMultiplier: 1, distDamageMultiplier: 1,
         startingKit: [{ itemId: 'bow', slot: 'hand' }, { itemId: 'wooden-shield', slot: 'shield' }],
       }],
     ]);
