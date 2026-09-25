@@ -195,8 +195,26 @@ function effectValue(entry: ActionEntry, detail: EffectDetail, context: DetailCo
     const range = spellPowerRange(detail.basePower, context.level, context.magicLevel, context.spellPower);
     return `${String(range.min)}~${String(range.max)}`;
   }
+  // A faixa fixa da poção do Tibia (#524, kit level 200): min~max já vêm prontos do catálogo —
+  // ao contrário do `basePower`, não há fórmula para rodar aqui, só mostrar.
+  if (detail.amountRange !== undefined) return `${String(detail.amountRange.min)}~${String(detail.amountRange.max)}`;
   if (detail.power !== undefined) return String(detail.power);
   if (detail.amount !== undefined) return String(detail.amount);
+  return null;
+}
+
+/**
+ * O valor da linha Mana da poção de espírito (#524): `alsoMana` é `amount` fixo OU
+ * `amountRange` sorteado — a mesma dupla do efeito principal, só que sem `basePower`/`power`
+ * (a poção de espírito nunca escala por fórmula). `null` omite a linha (RF-09), como sempre.
+ */
+function alsoManaValue(detail: EffectDetail): string | null {
+  const alsoMana = detail.alsoMana;
+  if (alsoMana === undefined) return null;
+  if (alsoMana.amountRange !== undefined) {
+    return `${String(alsoMana.amountRange.min)}~${String(alsoMana.amountRange.max)}`;
+  }
+  if (alsoMana.amount !== undefined) return String(alsoMana.amount);
   return null;
 }
 
@@ -234,6 +252,10 @@ export function actionDetail(entry: ActionEntry, context: DetailContext): Action
     }
     const value = effectValue(entry, detail, context);
     if (value !== null) rows.push({ label: valueLabel(effect), value });
+    // A poção de espírito (#524, kit level 200) cura E repõe mana no MESMO uso: uma linha
+    // "Mana" à parte, logo abaixo da linha "Cura" que o bloco acima já montou.
+    const mana = alsoManaValue(detail);
+    if (mana !== null) rows.push({ label: 'Mana', value: mana });
   }
 
   rows.push({ label: 'Custo', value: costOf(entry) });

@@ -64,6 +64,77 @@ describe('actionDetail — a tabela da spec §6', () => {
     ]);
   });
 
+  it('heal com amountRange (a poção do Tibia) mostra min~max, sem passar por spellPowerRange (#524)', () => {
+    const entry: ActionEntry = {
+      kind: 'supply',
+      supply: supply({
+        id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, groupCooldownMs: 1000,
+        effect: 'heal', detail: { amountRange: { min: 250, max: 350 } },
+      }),
+    };
+    const detail = actionDetail(entry, context());
+    expect(detail.rows).toEqual([
+      { label: 'Tipo', value: 'Cura' },
+      { label: 'Área', value: 'Single' },
+      { label: 'Cura', value: '250~350' },
+      { label: 'Custo', value: '115 gold' },
+      { label: 'Cooldown', value: '1s' },
+    ]);
+  });
+
+  it('mana com amountRange mostra min~max', () => {
+    const entry: ActionEntry = {
+      kind: 'supply',
+      supply: supply({
+        id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, groupCooldownMs: 1000,
+        effect: 'mana', detail: { amountRange: { min: 115, max: 185 } },
+      }),
+    };
+    const detail = actionDetail(entry, context());
+    expect(detail.rows).toEqual([
+      { label: 'Tipo', value: 'Mana' },
+      { label: 'Área', value: 'Single' },
+      { label: 'Mana', value: '115~185' },
+      { label: 'Custo', value: '150 gold' },
+      { label: 'Cooldown', value: '1s' },
+    ]);
+  });
+
+  it('a poção de espírito mostra Cura E Mana, duas linhas do mesmo uso (`alsoMana`, #524)', () => {
+    const entry: ActionEntry = {
+      kind: 'supply',
+      supply: supply({
+        id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, groupCooldownMs: 1000,
+        effect: 'heal',
+        detail: {
+          amountRange: { min: 250, max: 350 },
+          alsoMana: { amountRange: { min: 100, max: 200 } },
+        },
+      }),
+    };
+    const detail = actionDetail(entry, context());
+    expect(detail.rows).toEqual([
+      { label: 'Tipo', value: 'Cura' },
+      { label: 'Área', value: 'Single' },
+      { label: 'Cura', value: '250~350' },
+      { label: 'Mana', value: '100~200' },
+      { label: 'Custo', value: '225 gold' },
+      { label: 'Cooldown', value: '1s' },
+    ]);
+  });
+
+  it('`alsoMana` com amount fixo (não faixa) também mostra a linha Mana', () => {
+    const entry: ActionEntry = {
+      kind: 'supply',
+      supply: supply({
+        id: 'fixed-spirit', name: 'Fixed Spirit', price: 1, groupCooldownMs: 1000,
+        effect: 'heal', detail: { amount: 300, alsoMana: { amount: 150 } },
+      }),
+    };
+    const detail = actionDetail(entry, context());
+    expect(detail.rows).toContainEqual({ label: 'Mana', value: '150' });
+  });
+
   it('mana com amount fixo', () => {
     const entry: ActionEntry = {
       kind: 'supply',

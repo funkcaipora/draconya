@@ -1127,6 +1127,57 @@ describe('catalogue supply vocationId (#524, kit level 200)', () => {
   });
 });
 
+describe('catalogue effect detail — amountRange and alsoMana (#524, kit level 200)', () => {
+  const catalogue = (supplies: unknown[]): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [], items: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+    bot: {
+      vocabularyVersion: 1, groups: [], automations: [], setNames: [], hotkeys: [],
+      setCount: 4, slotsPerSet: 24, spells: [], supplies,
+    },
+  } as unknown as S2CMessage);
+
+  it('round-trips a faixa fixa (a poção do Tibia, sem escalar por level/ML)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+      effect: 'heal', detail: { amountRange: { min: 250, max: 350 } },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({ amountRange: { min: 250, max: 350 } });
+  });
+
+  it('round-trips `alsoMana` (a poção de espírito, cura E mana no mesmo uso)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+      effect: 'heal',
+      detail: {
+        amountRange: { min: 250, max: 350 },
+        alsoMana: { amountRange: { min: 100, max: 200 } },
+      },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({
+      amountRange: { min: 250, max: 350 },
+      alsoMana: { amountRange: { min: 100, max: 200 } },
+    });
+  });
+
+  it('leaves an older node without amountRange/alsoMana absent, not invented (RF-09)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'health-potion', name: 'Health Potion', price: 45, group: 'potion', effect: 'heal',
+      detail: { amount: 80 },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({ amount: 80 });
+    expect(parsed.bot.supplies[0]?.detail).not.toHaveProperty('amountRange');
+    expect(parsed.bot.supplies[0]?.detail).not.toHaveProperty('alsoMana');
+  });
+
+  it('rejects a non-positive bound — the schema is display-only, but a negative number is never valid', () => {
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue([{
+      id: 'x', name: 'X', price: 1, group: 'potion', effect: 'heal',
+      detail: { amountRange: { min: -1, max: 10 } },
+    }])).success).toBe(false);
+  });
+});
+
 describe('the #393 opcodes do not burn or duplicate any number', () => {
   it('adds 19 and 32 and keeps the burned lists empty', () => {
     expect(CLIENT_TO_SERVER['party-settings']).toBe(19);

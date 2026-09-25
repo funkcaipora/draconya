@@ -44,6 +44,11 @@ function detailOf(effect: Spell['effect'] | Supply['effect']): EffectDetail {
   if ('basePower' in effect && effect.basePower !== undefined) detail.basePower = effect.basePower;
   if ('power' in effect && effect.power !== undefined) detail.power = effect.power;
   if ('amount' in effect) detail.amount = effect.amount;
+  // A faixa fixa da poção do Tibia (#524, kit level 200) — `amount` sorteado, não escalado por
+  // level/ML; e a mana da poção de espírito, reposta no MESMO uso. Só `supply.effect.heal` tem
+  // os dois; `'in'` estreita por construção, como todo campo acima.
+  if ('amountRange' in effect && effect.amountRange !== undefined) detail.amountRange = effect.amountRange;
+  if ('alsoMana' in effect && effect.alsoMana !== undefined) detail.alsoMana = effect.alsoMana;
   if ('intervalMs' in effect) detail.intervalMs = effect.intervalMs;
   if ('durationMs' in effect) detail.durationMs = effect.durationMs;
   if ('speedPercent' in effect) detail.speedPercent = effect.speedPercent;
