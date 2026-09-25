@@ -581,7 +581,7 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'buzz': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'scorch': { level: 1, mana: 8, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 10 },
     'magic-patch-sorcerer': { level: 1, mana: 6, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 10 },
-    'apprentices-strike-sorcerer': { level: 6, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
+    'apprentices-strike-sorcerer': { level: 8, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'flame-strike-sorcerer': { level: 14, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'ice-strike-sorcerer': { level: 15, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'energy-strike-sorcerer': { level: 12, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
@@ -607,7 +607,7 @@ const VOCATION_SPELLS: Record<string, Record<string, SpellRow>> = {
     'mud-attack': { level: 1, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'chill-out': { level: 1, mana: 8, group: 'attack', groupMs: 2000, cdMs: 4000, kind: 'damage', bp: 10 },
     'magic-patch-druid': { level: 1, mana: 6, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 10 },
-    'apprentices-strike-druid': { level: 6, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
+    'apprentices-strike-druid': { level: 8, mana: 6, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 15 },
     'flame-strike-druid': { level: 14, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'ice-strike-druid': { level: 15, mana: 20, group: 'attack', groupMs: 2000, cdMs: 2000, kind: 'damage', bp: 45 },
     'heal-friend-druid': { level: 18, mana: 120, group: 'healing', groupMs: 1000, cdMs: 1000, kind: 'heal', bp: 60 },
@@ -721,6 +721,19 @@ describe('the vocation spell catalogues (#156–#159)', () => {
       if (effect.formula === undefined && !isFixedAmount) missing.push(supply.id);
     }
     expect(missing).toEqual([]);
+  });
+
+  it("Apprentice's Strike é dano de FOGO, level 8 (revisão de #523)", () => {
+    // `data/scripts/spells/attack/apprentice's_strike.lua`: COMBAT_FIREDAMAGE, spell:level(8).
+    // A primeira leitura do #523 trouxe a fórmula certa mas deixou `damageType`/`minLevel`
+    // como estavam (energy/6) — o efeito visual já era fogo desde a #219, então a mecânica
+    // ficou em desacordo com o que o jogador via na tela.
+    for (const id of ['apprentices-strike-druid', 'apprentices-strike-sorcerer']) {
+      const spell = content.spells.get(id);
+      expect(spell?.minLevel, id).toBe(8);
+      expect(spell?.effect.kind, id).toBe('damage');
+      if (spell?.effect.kind === 'damage') expect(spell.effect.damageType, id).toBe('fire');
+    }
   });
 
   it('a allowlist do que NÃO vem do Canary não cresce sem ninguém notar', () => {
