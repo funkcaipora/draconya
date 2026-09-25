@@ -29,6 +29,7 @@ import type {
 } from '@draconya/content';
 import { CharacterRuntime } from '../character.js';
 import { areaTiles, directionOf, isSelfOrigin, tileKey } from '../area.js';
+import type { AreaSource } from '../area.js';
 import {
   NOT_IN_CATALOG, balanceOf, castSpell, executeHealing, groupCooldownKey,
   ownPurse, spellCooldownKey, supplyCooldownKey, useSupply,
@@ -58,7 +59,7 @@ import {
   xpByDamage, xpShare,
 } from '../party.js';
 import type { MemberCapacity, PartyBagState } from '../party.js';
-import type { LootItem, LootSupply } from '../loot.js';
+import type { LootAmmunition, LootItem, LootSupply } from '../loot.js';
 import type { CarriedItem, ContainerRules, EquipmentObserver, Wearer } from '../inventory.js';
 import { compileBot, percentOf } from '../bot.js';
 import type { BotActuator, BotView, CompiledBot, CompiledSlot, CooldownOfAction } from '../bot.js';
@@ -3332,7 +3333,7 @@ const slots = bot.groups.get(group);
    *
    * O campo pertence ao ruleset, nunca ao `Tilemap` (DT-01): conteúdo é imutável e fixado.
    */
-  applyField(session: Session, spec: FieldSpec, at: WorldPoint): TileFieldState {
+  applyField(session: Session, spec: FieldSpec, at: WorldPoint, source: AreaSource = 'spell'): TileFieldState {
     const subject = fieldSubject(spec.id);
     const previous = this.#fields.get(spec.id);
     const interval = specTickIntervalMs(spec.condition);
@@ -3352,7 +3353,11 @@ const slots = bot.groups.get(group);
         : session.nowMs + interval;
     const field: TileFieldState = {
       id: spec.id,
-      tiles: areaTiles(spec.shape, at, 'south', at),
+      // `source` (#523, achado da revisão do #536): o campo de uma ability de monstro usa a
+      // MESMA tabela de anéis que a área de dano dela — senão o campo de fogo do Dragon Lord
+      // cobriria 69 tiles em vez dos 21 que o raio 4 do Canary de fato cobre, enquanto a bola
+      // de fogo do mesmo ataque já usa os 21 certos.
+      tiles: areaTiles(spec.shape, at, 'south', at, source),
       expiresAtMs: session.nowMs + spec.durationMs,
       condition: spec.condition,
       ...(nextTickAtMs === undefined ? {} : { nextTickAtMs }),
@@ -4213,10 +4218,11 @@ const slots = bot.groups.get(group);
         ));
       }
     }
-    // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria é a mesma
-    // da magia (`areaTiles`), e o campo é indexado por tile — nenhum passo varre a lista.
+    // O campo da ability (CMB-07): UMA vez, centrado no alvo principal. A geometria usa a
+    // tabela de anéis de MONSTRO (#523), como a área de dano da própria ability — `source:
+    // 'monster'` é o que faz o campo de fogo do Dragon Lord cobrir os mesmos 21 tiles da bola.
     if (ability.field !== undefined) {
-      this.applyField(session, ability.field, this.#at(primary));
+      this.applyField(session, ability.field, this.#at(primary), 'monster');
     }
   }
 
@@ -4564,7 +4570,14 @@ const slots = bot.groups.get(group);
       // NÃO sai. Nada de dano inventado nem de munição grátis (ADR 0026 d.3): sem gold, a regra
       // de saída `out-of-gold` encerra a hunt, como para a poção.
       if (ammo === null) return;
-      if (ammo.price > 0) {
+      // O estoque de loot (#520, revisão do #536) é gasto ANTES do gold — a mesma regra do
+      // supply em `useSupply`. Estoque é PESSOAL, nunca rateado: quem tem Burst Arrow no
+      // estoque atira das PRÓPRIAS, e o resto da party continua pagando gold pelas delas.
+      const stock = character.ammunitionStock.get(ammo.id) ?? 0;
+      if (stock > 0) {
+        if (stock <= 1) character.ammunitionStock.delete(ammo.id);
+        else character.ammunitionStock.set(ammo.id, stock - 1);
+      } else if (ammo.price > 0) {
         // O rateio do §4 inclui a MUNIÇÃO paga (#394): com `shareCosts` ligado quem paga é a
         // purse compartilhada — a MESMA do supply, com o resto do atirador. O `#ammoFor` já
         // conferiu `canAfford` pela purse; aqui só se debita. Sem rateio, o comportamento de
@@ -4791,9 +4804,10 @@ const slots = bot.groups.get(group);
   /**
    * A munição que o tiro usa (#152, ADR 0026 d.3): a escolhida da família, ou a BÁSICA dela.
    *
-   * `null` é "não atira": a família não tem munição no catálogo, ou o saldo não cobre o preço.
-   * **Não existe munição grátis** — sem gold o tiro não sai, e é a regra de saída `out-of-gold`
-   * que encerra a hunt. O preço é conferido ANTES do gold sair, e o débito fica em `#strike`.
+   * `null` é "não atira": a família não tem munição no catálogo, ou não há gold NEM estoque de
+   * loot (#520, revisão do #536) que cubra o tiro. **Não existe munição grátis** — sem gold e
+   * sem estoque o tiro não sai, e é a regra de saída `out-of-gold` que encerra a hunt. O preço
+   * é conferido ANTES do gold sair, e o débito (ou o consumo do estoque) fica em `#strike`.
    */
   #ammoFor(character: CharacterRuntime, family: AmmoFamily): Ammunition | null {
     const chosenId = character.ammo.get(family);
@@ -4801,7 +4815,9 @@ const slots = bot.groups.get(group);
     const ammo = chosen !== undefined && chosen.family === family
       ? chosen
       : this.#basicAmmo.get(family) ?? null;
-    if (ammo === null || balanceOf(character) < ammo.price) return null;
+    if (ammo === null) return null;
+    const hasStock = (character.ammunitionStock.get(ammo.id) ?? 0) > 0;
+    if (!hasStock && balanceOf(character) < ammo.price) return null;
     return ammo;
   }
 
@@ -4900,10 +4916,11 @@ const slots = bot.groups.get(group);
         // `#deliverToBag` rebalanceia e emite SEMPRE (mesmo sem itens: o gold muda o `value`),
         // então o `#emitBag` que existia aqui para o drop de gold puro sumiu (DT-03).
         this.#deliverToBag(session, loot.items);
-        // Supply (#520): não passa pela bolsa — é abstrato, sem peso e sem settlement a
-        // liquidar depois. Dividido por igual entre os MESMOS presentes que a bolsa usa
+        // Supply e munição (#520): não passam pela bolsa — são abstratos, sem peso e sem
+        // settlement a liquidar depois. Divididos entre os MESMOS presentes que a bolsa usa
         // (`presentAtDrop`, D4/§16.1), não o `eligible` de XP.
         this.#creditSupplies(session, session.participants, loot.supplies);
+        this.#creditAmmunition(session, session.participants, loot.ammunition);
       }
     } else if (definition !== undefined && recipient !== null) {
       // Gold vira DELTA no personagem e agregado na sessão. O extrato leva os dois ao ledger
@@ -4914,8 +4931,9 @@ const slots = bot.groups.get(group);
       // O item cai DEPOIS do gold, na ordem da tabela — a ordem dos sorteios é contrato
       // (FUN-63), e acrescentar destino não muda sorteio nenhum.
       this.#deliverLoot(session, recipient, loot.items);
-      // Supply (#520): o recipiente do loot leva o estoque inteiro, como o gold.
+      // Supply e munição (#520): o recipiente do loot leva o estoque inteiro, como o gold.
       this.#creditSupplies(session, [recipient], loot.supplies);
+      this.#creditAmmunition(session, [recipient], loot.ammunition);
     }
     // A XP é da PARTY (#190, ADR 0027 decisão 3): pool por vocações únicas, dividido por igual
     // entre os elegíveis — e em solo o elegível é o matador, pela mesma condição de sempre.
@@ -5429,30 +5447,85 @@ const slots = bot.groups.get(group);
   }
 
   /**
-   * Credita o ESTOQUE de supply do loot (#520) a quem recebeu o drop: em solo/split o
-   * recipiente sozinho leva tudo; em shared, dividido por igual entre os presentes no abate
-   * (`splitEqually`, o mesmo do auto-sell), resto um a um nos primeiros.
-   *
+   * Credita o ESTOQUE de supply do loot (#520) a quem recebeu o drop — ver `#creditStock`.
    * Supply é ABSTRATO (AB-01, ADR 0032 d.6): sem peso, sem instância, sem OVERWEIGHT — o
-   * estoque É o destino final, e não passa pela bolsa nem pelo `#settle` como item. O catálogo
-   * é conferido ANTES de gastar um supply, como `#deliverLoot` faz com item: `buildContent`
-   * recusa loot de supply inexistente no boot, e isto só dispara com conteúdo mudando sob uma
-   * sessão em voo.
+   * estoque É o destino final, e não passa pela bolsa nem pelo `#settle` como item.
    */
   #creditSupplies(
     session: Session, recipients: readonly CharacterRuntime[], supplies: readonly LootSupply[],
   ): void {
-    if (recipients.length === 0 || supplies.length === 0) return;
-    for (const rolled of supplies) {
-      if (this.#options.supplies.get(rolled.supplyId) === undefined) continue;
-      const shares = splitEqually(rolled.quantity, recipients.length);
+    this.#creditStock(
+      session, recipients, supplies,
+      (line) => line.supplyId,
+      (id) => this.#options.supplies.get(id) !== undefined,
+      (member) => member.supplyStock,
+    );
+  }
+
+  /**
+   * Credita o ESTOQUE de munição FÍSICA do loot (#520, revisão do #536) — a mesma mecânica e a
+   * mesma razão do `#creditSupplies`: munição continua abstrata no TIRO (ADR 0026 d.7), mas o
+   * que caiu em loot (Burst Arrow, Power Bolt) precisa existir como estoque para ser gasto
+   * antes do gold (`#ammoFor`/`#strike`).
+   */
+  #creditAmmunition(
+    session: Session, recipients: readonly CharacterRuntime[], ammunition: readonly LootAmmunition[],
+  ): void {
+    this.#creditStock(
+      session, recipients, ammunition,
+      (line) => line.ammunitionId,
+      (id) => this.#options.ammunition.get(id) !== undefined,
+      (member) => member.ammunitionStock,
+    );
+  }
+
+  /**
+   * O mecanismo comum de `#creditSupplies`/`#creditAmmunition` (#520): em solo/split o
+   * recipiente sozinho leva tudo; em shared, dividido entre os presentes no abate.
+   *
+   * **O resto vai para recipientes SORTEADOS, não sempre para o primeiro da lista** (achado da
+   * revisão do #536): a quantidade comum é 1 (uma Strong Health Potion para 4 presentes), e
+   * `splitEqually` — certo para o rateio de GOLD em `#settle`, que soma MUITOS drops numa bolsa
+   * antes de dividir UMA vez — sempre manda o resto para o índice 0. Aplicado abate a abate,
+   * isso credita a MESMA pessoa toda vez. Aqui o resto é sorteado sem reposição (embaralhamento
+   * parcial de Fisher-Yates) com o `Rng` da sessão — o mesmo sorteio que `#lootRecipient` já usa
+   * para o destinatário em modo `split` —, e ao longo de muitos abates cada presente recebe a
+   * unidade extra proporcionalmente.
+   *
+   * O catálogo é conferido ANTES de gastar um id, como `#deliverLoot` faz com item:
+   * `buildContent` recusa loot de supply/munição inexistente no boot, e isto só dispara com
+   * conteúdo mudando sob uma sessão em voo.
+   */
+  #creditStock<T extends { readonly quantity: number }>(
+    session: Session, recipients: readonly CharacterRuntime[], rolled: readonly T[],
+    idOf: (line: T) => string, existsInCatalog: (id: string) => boolean,
+    stockOf: (member: CharacterRuntime) => Map<string, number>,
+  ): void {
+    if (recipients.length === 0 || rolled.length === 0) return;
+    for (const line of rolled) {
+      const id = idOf(line);
+      if (!existsInCatalog(id)) continue;
+      const base = Math.floor(line.quantity / recipients.length);
+      const remainder = line.quantity - base * recipients.length;
+      const shares = new Array<number>(recipients.length).fill(base);
+      // Fisher-Yates parcial: sorteia `remainder` índices DISTINTOS entre os `recipients.length`
+      // presentes, um a um, sem reposição — cada um consome exatamente uma rolagem do Rng.
+      const order = recipients.map((_, i) => i);
+      for (let i = 0; i < remainder; i += 1) {
+        const pick = session.rng.integer(i, order.length - 1);
+        const chosen = order[pick] as number;
+        order[pick] = order[i] as number;
+        order[i] = chosen;
+        shares[chosen] = (shares[chosen] ?? 0) + 1;
+      }
       for (let i = 0; i < recipients.length; i += 1) {
         const share = shares[i] ?? 0;
         if (share === 0) continue;
         const member = recipients[i] as CharacterRuntime;
-        member.supplyStock.set(rolled.supplyId, (member.supplyStock.get(rolled.supplyId) ?? 0) + share);
-        // Conta no ANALISADOR como o item (§16.1): o supply caiu, e é isso que importa para
-        // "quantos itens caíram" — não há um agregado separado só para supply.
+        const stock = stockOf(member);
+        stock.set(id, (stock.get(id) ?? 0) + share);
+        // Conta no ANALISADOR como o item (§16.1): caiu, e é isso que importa para "quantos
+        // itens caíram" — não há um agregado separado só para supply/munição.
         session.credit(member.id, 'itemsLooted', share);
       }
     }

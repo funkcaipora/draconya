@@ -7205,6 +7205,121 @@ describe('Dragon do TFS: melee, bola, onda, cura e fuga com os números reais (#
     const distanceAfter = Math.abs(monster.position.x) + Math.abs(monster.position.y);
     expect(distanceAfter).toBeGreaterThanOrEqual(distanceBefore);
   });
+
+  it('o campo de fogo do Dragon Lord (#520) cobre os MESMOS 21 tiles da bola — `source: \'monster\'` (achado da revisão do #536)', () => {
+    // Antes da correção, `applyField` chamava `areaTiles` sem `source`, caindo no default
+    // `'spell'` — o mesmo raio 4 que dá 21 tiles na bola de fogo (tabela de monstro) daria 69
+    // no campo (tabela de magia). `firefield` com chance 1: sem depender de sorteio.
+    const dragonLordField = {
+      ...dragon, id: 'dragon-lord', name: 'Dragon Lord',
+      abilities: [
+        {
+          id: 'firefield', cadenceMs: 2000, chance: 1, target: { range: 7 }, power: 0,
+          damageType: 'fire' as const,
+          field: {
+            id: 'dragon-lord-firefield', durationMs: 200_000,
+            shape: { shape: 'circle' as const, radius: 4, centered: 'target' as const },
+            condition: {
+              key: 'burning', merge: 'refresh' as const, durationMs: 70_000,
+              effect: { kind: 'damage-over-time' as const, amount: 20, intervalMs: 10_000, damageType: 'fire' as const },
+            },
+          },
+        },
+      ],
+      defenses: [],
+    };
+    const fieldHunt = {
+      ...hunt,
+      difficulties: {
+        cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
+        bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'dragon-lord', weight: 1 }] },
+      },
+    };
+    const loaded = buildContent(raw({ monsters: [dragonLordField], hunts: [fieldHunt], combat: [pacifist] }));
+    const session = createHuntSession({
+      id: 'dragon-lord-field', content: loaded, huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+    });
+    session.enter(heroLevel200());
+    const ruleset = session.ruleset as HuntRuleset;
+    run(session, 3_000, 100);
+    expect(ruleset.fields).toHaveLength(1);
+    expect(ruleset.fields[0]?.tiles).toHaveLength(21);
+  });
+});
+
+describe('estoque de supply/munição do loot: solo, split e shared não enviesado (#520, revisão do #536)', () => {
+  // Um monstro fraco (morre num golpe do herói desarmado) que sempre solta 1 de supply E 1 de
+  // munição — chance 1 tira o sorteio da conta, e a quantidade 1 é o caso comum (Strong Health
+  // Potion do Dragon/Dragon Lord) que expõe o enviesamento de `splitEqually` na revisão do #536.
+  const looter = {
+    ...rat, id: 'looter', health: 1,
+    loot: {
+      items: [
+        { supplyId: 'health-potion', chance: 1, min: 1, max: 1 },
+        { ammunitionId: 'arrow', chance: 1, min: 1, max: 1 },
+      ],
+    },
+  };
+  const looterHunt = {
+    ...hunt,
+    difficulties: {
+      cautious: { ...hunt.difficulties.cautious, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
+      bold: { ...hunt.difficulties.bold, composition: [{ monsterId: 'looter', weight: 1 }], respawnDelayMs: 200 },
+    },
+  };
+  const loaded = () => content({ monsters: [looter], hunts: [looterHunt] });
+  const partyMember = (id: string) => {
+    const stats = statsForLevel(1, null, progression as Progression);
+    return new CharacterRuntime({
+      id, position: { x: 0, y: 0, z: 7 },
+      health: stats.maxHealth, maxHealth: stats.maxHealth,
+      mana: 0, maxMana: stats.maxMana, level: 1, xp: 0, vocationId: null,
+      staminaMs: stamina.maxMs, staminaUpdatedAtMs: 0,
+      gold: 0, goldDelta: 0, alive: true, cooldowns: {},
+    });
+  };
+
+  it('solo: o matador leva o estoque inteiro', () => {
+    const { session, hero } = start({ loaded: loaded() });
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    expect(hero.supplyStock.get('health-potion')).toBeGreaterThan(0);
+    expect(hero.ammunitionStock.get('arrow')).toBeGreaterThan(0);
+  });
+
+  it('shared, quantidade NÃO divisível (1 para 3 presentes): ao longo de muitos abates, NÃO é sempre o mesmo membro (achado da revisão do #536)', () => {
+    // Antes da correção, `splitEqually(1, 3)` sempre devolvia `[1, 0, 0]` — o presente de
+    // índice 0 levava TODA unidade indivisível, abate após abate. Aqui os três entram na
+    // mesma ordem em toda sessão (a semente é a mesma), então se o defeito ainda existisse
+    // só 'a' teria estoque ao final — os outros dois ficariam em zero.
+    const a = partyMember('a');
+    const b = partyMember('b');
+    const c = partyMember('c');
+    const session = createHuntSession({
+      id: 'shared-stock', content: loaded(), huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'shared' },
+    });
+    for (const m of [a, b, c]) session.enter(m);
+    run(session, 15_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(5);
+    const stocked = [a, b, c].filter((m) => (m.supplyStock.get('health-potion') ?? 0) > 0);
+    expect(stocked.length).toBeGreaterThan(1);
+  });
+
+  it('split: um elegível sorteado leva o estoque inteiro do abate — nunca fica dividido num só drop', () => {
+    const a = partyMember('a');
+    const b = partyMember('b');
+    const session = createHuntSession({
+      id: 'split-stock', content: loaded(), huntId: 'arena', difficulty: 'cautious', createdAtMs: 0,
+      partyOptions: { leaderId: 'a', mode: 'split' },
+    });
+    for (const m of [a, b]) session.enter(m);
+    run(session, 5_000, 100);
+    expect(session.aggregates.kills).toBeGreaterThan(0);
+    // A soma bate com o total de abates recompensados: cada drop de 1 caiu inteiro em alguém.
+    const total = (a.supplyStock.get('health-potion') ?? 0) + (b.supplyStock.get('health-potion') ?? 0);
+    expect(total).toBeGreaterThan(0);
+  });
 });
 
 describe('condições generalizadas, dano contínuo e campos de tile (CMB-07)', () => {

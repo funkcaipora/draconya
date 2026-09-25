@@ -262,6 +262,54 @@ describe('o bow atira a munição abstrata e debita o preço no tiro (#152, ADR 
   });
 });
 
+describe('o estoque de munição do loot é gasto ANTES do gold (#520, revisão do #536)', () => {
+  it('com estoque, atira SEM debitar gold — o agregado `goldSpent` não sobe', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 3);
+    session.advanceBy(50);
+    expect(hero.goldDelta).toBe(0);
+    expect(session.aggregates.goldSpent).toBe(0);
+    expect(hero.ammunitionStock.get('arrow')).toBe(2);
+  });
+
+  it('esgota o estoque em 1: some do Map, e o PRÓXIMO tiro já cobra gold', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 100, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 1);
+    session.advanceBy(50); // primeiro tiro: do estoque.
+    expect(hero.ammunitionStock.has('arrow')).toBe(false);
+    expect(hero.goldDelta).toBe(0);
+    session.advanceBy(1_000); // cooldown do bow: o segundo tiro sai depois.
+    expect(hero.goldDelta).toBe(-1);
+  });
+
+  it('SEM gold mas COM estoque, o tiro sai — o estoque não depende do saldo', () => {
+    const { session, hero, ruleset } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    hero.ammunitionStock.set('arrow', 1);
+    session.advanceBy(50);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(true);
+    const rat = ruleset.monsters[0];
+    if (rat === undefined) throw new Error('sem rato');
+    expect(rat.health).toBeLessThan(1_000);
+  });
+
+  it('SEM gold e SEM estoque, o tiro não sai — a regra `out-of-gold` continua de pé', () => {
+    const { session, hero } = start({
+      inventory: armed('bow'), gold: 0, ammo: { arrow: 'arrow' },
+    });
+    session.advanceBy(50);
+    const events = session.drainEvents();
+    expect(events.some((e) => e.kind === 'shot')).toBe(false);
+    expect(hero.goldDelta).toBe(0);
+  });
+});
+
 describe('a seleção de munição sobrevive ao snapshot (#152)', () => {
   it('a escolha viaja no personagem e volta na retomada', () => {
     const { session, hero, loaded } = start({
