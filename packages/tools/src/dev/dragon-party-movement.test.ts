@@ -85,7 +85,15 @@ interface SweepResult {
   readonly maxTogetherBreachMs: number;
   readonly followerArrivedOnLeaderFloorFirst: readonly string[];
   readonly floorsWithKills: readonly number[];
+  readonly cohesionSamples: number;
+  readonly cohesionWithinRadius: number;
 }
+
+// Raio de coesão do TESTE — mais folgado que o do líder (`PARTY_REGROUP_RADIUS`, 7, em
+// `hunt.ts`) de propósito: uma amostra pode cair NO MEIO de uma correção (o líder acabou de
+// decidir segurar o passo, mas o seguidor ainda não fechou a distância desta vez), e o teste
+// mede "a party está coesa na maior parte do tempo", não "em CADA amostra exata".
+const COHESION_RADIUS = 10;
 
 /**
  * Roda uma semente até `totalMs` (ou a hunt terminar antes), forçando abate rápido para não
@@ -107,6 +115,8 @@ function runSweepSeed(content: Content, seedId: string, bounds: SweepBounds): Sw
   let maxTogetherBreachMs = 0;
   const followerArrivedOnLeaderFloorFirst: string[] = [];
   const leaderVisitedFloors = new Set<number>();
+  let cohesionSamples = 0;
+  let cohesionWithinRadius = 0;
 
   for (let elapsed = 0; elapsed < totalMs && session.ended === null; elapsed += stepMs) {
     weakenNearby(ruleset, session);
@@ -140,6 +150,21 @@ function runSweepSeed(content: Content, seedId: string, bounds: SweepBounds): Sw
     }
     lastPosition.set('knight', { x: leader.position.x, y: leader.position.y, z: leader.position.z });
 
+    // Coesão (#527, pedido numa QA ao vivo depois de cae00cb: sem haste igual entre vocações o
+    // líder — que nunca esperava — seguia sozinho por dezenas de tiles). Só conta enquanto
+    // houver seguidor vivo: a party inteira reduzida ao líder não tem o que medir.
+    const aliveFollowers = session.participants.filter((p) => p.id !== 'knight' && p.alive);
+    if (aliveFollowers.length > 0) {
+      cohesionSamples += 1;
+      const allSameFloor = aliveFollowers.every((f) => f.position.z === leader.position.z);
+      const maxFollowerDistance = allSameFloor
+        ? Math.max(...aliveFollowers.map((f) => Math.max(
+          Math.abs(f.position.x - leader.position.x), Math.abs(f.position.y - leader.position.y),
+        )))
+        : Number.POSITIVE_INFINITY;
+      if (allSameFloor && maxFollowerDistance <= COHESION_RADIUS) cohesionWithinRadius += 1;
+    }
+
     for (const character of session.participants) {
       if (character.id === 'knight') continue;
       const sameFloorAsLeader = character.position.z === leader.position.z;
@@ -166,6 +191,8 @@ function runSweepSeed(content: Content, seedId: string, bounds: SweepBounds): Sw
     maxTogetherBreachMs,
     followerArrivedOnLeaderFloorFirst,
     floorsWithKills: [...killsByFloor.entries()].filter(([, count]) => count > 0).map(([z]) => z),
+    cohesionSamples,
+    cohesionWithinRadius,
   };
 }
 
@@ -177,6 +204,12 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
   const TOTAL_MS = 10 * 60_000;
   const IDLE_BOUND_MS = 480_000;
   const STRANDED_BOUND_MS = 8 * 60_000;
+  // O líder agora ESPERA a party (`#partyRegroupBlocked`, `hunt.ts`) antes de andar sozinho ou
+  // de atravessar andar — coesão deixa de ser "eventualmente se resolve" e passa a ser "a
+  // maioria do tempo, com folga". 90 % é abaixo de 100 % de propósito: perseguir um alvo em
+  // combate, o passo de regroup em si, e a própria janela de amostragem (a cada `stepMs`, não a
+  // cada evento) sempre deixam uma minoria de amostras momentaneamente fora do raio.
+  const MIN_COHESION_RATIO = 0.9;
 
   it.each(Array.from({ length: SEED_COUNT }, (_unused, i) => i))('semente %i, 5000 ms/passo (20 Hz aproximado)', (seedIndex) => {
     const result = runSweepSeed(real(), `dragon-party-real-5000-${String(seedIndex)}`, {
@@ -194,6 +227,14 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
     ).toBeLessThanOrEqual(30);
     expect(result.floorsWithKills.length, `semente ${String(seedIndex)}: nenhum abate`)
       .toBeGreaterThanOrEqual(1);
+    if (result.cohesionSamples > 0) {
+      const ratio = result.cohesionWithinRadius / result.cohesionSamples;
+      expect(
+        ratio,
+        `semente ${String(seedIndex)}: party coesa (≤ ${String(COHESION_RADIUS)} tiles, mesmo `
+          + `andar) só em ${(ratio * 100).toFixed(1)}% das amostras`,
+      ).toBeGreaterThanOrEqual(MIN_COHESION_RATIO);
+    }
   });
 
   // **INVARIANTE 3 (#527, pedido numa QA ao vivo depois de 037fe29): a hunt desanexada tica a
@@ -218,6 +259,14 @@ describe('a party de dragões (bot config REAL) atravessa os três andares JUNTA
     ).toBeLessThanOrEqual(30);
     expect(result.floorsWithKills.length, `semente ${String(seedIndex)} a 1 Hz: nenhum abate`)
       .toBeGreaterThanOrEqual(1);
+    if (result.cohesionSamples > 0) {
+      const ratio = result.cohesionWithinRadius / result.cohesionSamples;
+      expect(
+        ratio,
+        `semente ${String(seedIndex)} a 1 Hz: party coesa (≤ ${String(COHESION_RADIUS)} tiles, `
+          + `mesmo andar) só em ${(ratio * 100).toFixed(1)}% das amostras`,
+      ).toBeGreaterThanOrEqual(MIN_COHESION_RATIO);
+    }
   });
 });
 
