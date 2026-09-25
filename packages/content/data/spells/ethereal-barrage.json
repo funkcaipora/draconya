@@ -18,5 +18,5 @@
       "centered": "target"
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. BP não publicado; 100 é provisório."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. BP não publicado; 100 é provisório. Varredura do #523 (Canary opentibiabr/canary main, 2026-09-24, data/scripts/spells/attack/**): nenhum nome, palavra mágica ou efeito do catálogo bate com esta magia — não existe correspondente real no Canary/TibiaWiki. Mantida como conteúdo próprio do Draconya (a divergência que o ADR 0037 pede para marcar com o motivo), fora da paridade e da conformidade de fórmula (load.test.ts, NOT_FROM_CANARY); não integra o roteiro de level 200 do #523."
 }

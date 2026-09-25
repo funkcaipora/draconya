@@ -17,5 +17,5 @@
       "centered": "target"
     }
   },
-  "_open": "Valores de referência. Área de raio 1 (o alvo mais os oito vizinhos) e poder por alvo menor que o do golpe único, com o Tibia como referência funcional — a proporção certa entre alvo único e área depende de quantos monstros uma hunt real junta, que ainda não foi medido."
+  "_open": "Valores de referência. Área de raio 1 (o alvo mais os oito vizinhos) e poder por alvo menor que o do golpe único, com o Tibia como referência funcional — a proporção certa entre alvo único e área depende de quantos monstros uma hunt real junta, que ainda não foi medido. Nota do #523: fora da conformidade de fórmula do Canary de propósito — é uma das três magias GENÉRICAS pré-vocação (sem `vocationId`), e o Tibia real não dá magia nenhuma antes da escolha de vocação no level 8; não existe \"fórmula do Canary\" para uma magia que o Canary não tem. `load.test.ts` (`NOT_FROM_CANARY`) as exclui da checagem por nome."
 }

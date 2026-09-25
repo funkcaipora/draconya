@@ -12,7 +12,14 @@
     "kind": "damage",
     "basePower": 15,
     "range": 3,
-    "damageType": "energy"
+    "damageType": "energy",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 0.4,
+      "skillMax": 0.7,
+      "baseMin": 3,
+      "baseMax": 5
+    }
   },
-  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior. a mesma do Sorcerer (DT-02)."
+  "_open": "Efeito corrigido para 16 (CONST_ME_HITBYFIRE) em 2026-09-15, conferido visualmente no pacote de arte (issue #219): sprite de uma chama. O effect 15 anterior era CONST_ME_MAGIC_GREEN (brilho verde), herdado do palpite anterior. a mesma do Sorcerer (DT-02). Fórmula do Canary (`data/scripts/spells/attack/apprentice's_strike.lua`, main, 2026-09-24)."
 }

@@ -9,8 +9,11 @@
 // Há DOIS caminhos, e a escolha é do conteúdo (#474, ADR 0019):
 //
 //   1. `formula` presente — a fórmula canônica do Canary, com os coeficientes da magia:
-//      `min = level × levelFactor + skill × skillMin + baseMin` (idem `max`). O mecanismo é do
-//      motor, os coeficientes são do conteúdo;
+//      `min = level × levelFactor + skill × skillMin + attack × attackMin +
+//      skill × attack × skillAttackMin + baseMin` (idem `max`). Os três últimos termos só
+//      existem para a magia baseada em arma (#523: Groundshaker, Berserk, Fierce Berserk, Front
+//      Sweep, Whirlwind Throw); toda outra magia os deixa ausentes e `attack` nunca entra na
+//      conta. O mecanismo é do motor, os coeficientes são do conteúdo;
 //   2. `formula` ausente — a conversão provisória do Base Power (ADR 0026 decisão 5), bit a bit
 //      como antes. É o que preserva a migração aditiva do ADR 0031: magia sem fórmula não muda.
 
@@ -41,6 +44,11 @@ export function spellPowerRange(
  *
  * `fallbackPower` é `combat.spellPower` e só é lido no caminho sem fórmula; `basePower` é o
  * número de exibição (ADR 0033) e só vale quando não há fórmula.
+ *
+ * `attack` (#523) é o ataque da arma equipada — `0` para toda magia que não declara
+ * `attackMin`/`attackMax`/`skillAttackMin`/`skillAttackMax`, porque os coeficientes ausentes já
+ * zeram a contribuição dele; `sim` é quem resolve o valor real (`Inventory.weaponAttack`), e
+ * este módulo continua puro (`content` não conhece inventário).
  */
 export function evaluateSpellPower(
   formula: SpellFormula | undefined,
@@ -48,12 +56,20 @@ export function evaluateSpellPower(
   level: number,
   skillLevel: number,
   fallbackPower: Combat['spellPower'],
+  attack = 0,
 ): { readonly min: number; readonly max: number } {
   if (formula === undefined) {
     return spellPowerRange(basePower, level, skillLevel, fallbackPower);
   }
   const levelTerm = level * formula.levelFactor;
-  const min = Math.max(1, Math.floor(levelTerm + skillLevel * formula.skillMin + formula.baseMin));
-  const max = Math.max(min, Math.floor(levelTerm + skillLevel * formula.skillMax + formula.baseMax));
+  const skillAttack = skillLevel * attack;
+  const min = Math.max(1, Math.floor(
+    levelTerm + skillLevel * formula.skillMin + attack * (formula.attackMin ?? 0)
+      + skillAttack * (formula.skillAttackMin ?? 0) + formula.baseMin,
+  ));
+  const max = Math.max(min, Math.floor(
+    levelTerm + skillLevel * formula.skillMax + attack * (formula.attackMax ?? 0)
+      + skillAttack * (formula.skillAttackMax ?? 0) + formula.baseMax,
+  ));
   return { min, max };
 }

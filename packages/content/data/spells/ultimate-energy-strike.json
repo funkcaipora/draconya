@@ -1,0 +1,29 @@
+{
+  "id": "ultimate-energy-strike",
+  "name": "Ultimate Energy Strike",
+  "description": "Lança um raio de energia no seu alvo atual.",
+  "vocationId": "sorcerer",
+  "minLevel": 100,
+  "manaCost": 100,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 30000,
+  "secondaryGroup": {
+    "name": "ultimatestrikes",
+    "cooldownMs": 30000
+  },
+  "effect": {
+    "kind": "damage",
+    "basePower": 180,
+    "range": 3,
+    "damageType": "energy",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 4.5,
+      "skillMax": 7.3,
+      "baseMin": 35,
+      "baseMax": 55
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#523; ADR 0037): o topo da linha `X Strike` do Sorcerer (level 100), `exori max vis` no Canary — falta entre `energy-strike-sorcerer.json` (`exori vis`) e `strong-energy-strike.json` (`exori gran vis`). Fonte `data/scripts/spells/attack/ultimate_energy_strike.lua` (main, 2026-09-24): `spell:id(155)`, level 100, mana 100, cooldown 30s, grupo `attack` 2s + grupo secundário `ultimatestrikes` 30s (`SECONDARY_GROUPS` ganhou o valor neste PR — hoje só esta magia o usa; Ultimate Flame/Ice/Terra Strike não entraram no catálogo porque a lista de magias de level 200 da issue só pede `exori max vis`), `range 3`, `COMBAT_ENERGYDAMAGE`, sem área (mira frontal/no alvo, `needCasterTargetOrDirection`, mesma família de Death Strike/Energy Strike). Fórmula: `min = level/5 + ML×4,5 + 35`, `max = level/5 + ML×7,3 + 55`. `basePower` é só o número de exibição do catálogo (ADR 0033). Efeito reaproveita `effect 12`/`missile 5` da Strong Energy Strike/Energy Strike. Conferência visual pendente (biblioteca 1332 parcial)."
+}

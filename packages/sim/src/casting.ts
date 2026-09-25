@@ -158,6 +158,13 @@ export interface SpellScaling {
    * provisório do `basePower` e mantém o v1 bit a bit.
    */
   readonly magicLevel?: number;
+  /**
+   * O ataque da arma equipada (#523), para a magia cuja fórmula do Canary soma `skill` e
+   * `attack` (Groundshaker, Berserk, Fierce Berserk, Front Sweep, Whirlwind Throw). Ausente é
+   * `0`: o mesmo valor que uma magia sem arma, ou um alvo desarmado, já receberia — nenhuma
+   * fórmula sem `attackMin`/`attackMax`/`skillAttackMin`/`skillAttackMax` lê este campo.
+   */
+  readonly weaponAttack?: number;
 }
 
 const NO_SCALING: SpellScaling = { skillLevel: 0, powerScale: 1 };
@@ -195,6 +202,7 @@ function powerOf(
     const skill = effect.kind === 'heal' ? scaling.magicLevel ?? scaling.skillLevel : scaling.skillLevel;
     const { min, max } = evaluateSpellPower(
       effect.formula, effect.basePower ?? 0, caster.level, skill, combat.spellPower,
+      scaling.weaponAttack ?? 0,
     );
     return rng.integer(min, max);
   }

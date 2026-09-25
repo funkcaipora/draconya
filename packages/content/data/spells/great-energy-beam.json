@@ -17,7 +17,7 @@
     "basePower": 155,
     "area": {
       "shape": "beam",
-      "length": 8
+      "length": 7
     },
     "damageType": "energy",
     "formula": {
@@ -27,5 +27,5 @@
       "baseMax": 0
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Área do Canary (`data/scripts/spells/attack/great_energy_beam.lua`, main, 2026-09-24): AREA_BEAM8 tem 7 tiles de alcance; fórmula e grupo secundário já batiam."
 }

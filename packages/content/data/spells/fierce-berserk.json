@@ -1,0 +1,30 @@
+{
+  "id": "fierce-berserk",
+  "name": "Fierce Berserk",
+  "description": "Causa dano mágico numa área de 3x3 ao seu redor.",
+  "vocationId": "knight",
+  "minLevel": 90,
+  "manaCost": 340,
+  "group": "attack",
+  "groupCooldownMs": 2000,
+  "cooldownMs": 6000,
+  "effect": {
+    "kind": "damage",
+    "basePower": 90,
+    "area": {
+      "shape": "circle",
+      "radius": 1,
+      "centered": "caster"
+    },
+    "formula": {
+      "levelFactor": 0.22,
+      "skillMin": 1.21,
+      "skillMax": 3.3,
+      "baseMin": 0,
+      "baseMax": 0,
+      "attackMin": 2.42,
+      "attackMax": 6.6
+    }
+  },
+  "_open": "Magia que faltava no catálogo (#523; ADR 0037): o ult de área do Knight (level 90), `exori gran` no Canary. Fonte `data/scripts/spells/attack/fierce_berserk.lua` (main, 2026-09-24): `spell:id(105)`, level 90, mana 340, cooldown 6s, grupo `attack` 2s, `AREA_SQUARE1X1` (a mesma da Berserk, `circle radius 1 centered caster`, 9 tiles), `COMBAT_PHYSICALDAMAGE`. Fórmula: `min = ((level/5) + (skill + 2×attack)×1.1) × 1.1`, `max = ((level/5) + (skill + 2×attack)×3) × 1.1` — o `attack` pesa o DOBRO do skill (ao contrário de Groundshaker/Berserk, que somam os dois igual), daí `attackMin`/`attackMax` valerem o dobro de `skillMin`/`skillMax` já com o ×1,1 externo dobrado. `basePower` é só o número de exibição do catálogo (ADR 0033, caminho `combat.spellPower`) — a rolagem real usa `formula`. Efeito reaproveita o `effect` 10 da Berserk (mesma mecânica de área no próprio personagem); sem projétil, como toda magia de área centrada no lançador. Conferência visual pendente (biblioteca 1332 parcial, ver docs/combat-presentation-audit.md)."
+}

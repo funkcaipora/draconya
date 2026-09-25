@@ -1,26 +1,26 @@
 {
   "id": "protector",
   "name": "Protector",
-  "description": "Reduz o dano que você causa e recebe em 15%, por 10 segundos.",
+  "description": "Reduz o dano que você causa em 35% e o dano que recebe em 15%, por 10 segundos.",
   "vocationId": "knight",
-  "minLevel": 20,
-  "manaCost": 20,
+  "minLevel": 55,
+  "manaCost": 200,
   "group": "support",
   "groupCooldownMs": 2000,
   "cooldownMs": 2000,
   "secondaryGroup": {
-    "name": "stance",
+    "name": "focus",
     "cooldownMs": 2000
   },
   "effect": {
     "kind": "buff",
     "durationMs": 10000,
     "damageDealtPercent": {
-      "melee": -15,
-      "distance": -15,
-      "spell": -15
+      "melee": -35,
+      "distance": -35,
+      "spell": -35
     },
     "damageTakenPercent": -15
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. +30 % shielding não existe (sem defesa de escudo); fica só a redução de dano."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. +30 % shielding não existe (sem defesa de escudo); fica só a redução de dano. Level, mana, grupo secundário e redução de dano do Canary (`data/scripts/spells/support/protector.lua`, main, 2026-09-24): level 20→55, mana 20→200, grupo `stance`→`focus`, `BUFF_DAMAGEDEALT 65` é dano causado ×0,65 (−35%, não −15%); `BUFF_DAMAGERECEIVED 85` (−15% tomado) já batia."
 }

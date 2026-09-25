@@ -90,7 +90,9 @@ export function areaTiles(
       return tiles;
     }
     case 'cleave':
-      return row(origin, f, s, 1, 3);
+      // Os dois tiles ao LADO do lançador (#523, AREA_WAVE6 do Canary) — não o próprio tile,
+      // e não uma fileira à frente: `sideTiles` fica em `distance` 0, perpendicular.
+      return sideTiles(origin, s);
     case 'beam': {
       const tiles: WorldPoint[] = [];
       for (let k = 1; k <= shape.length; k += 1) tiles.push(...row(origin, f, s, k, 1));
@@ -104,6 +106,14 @@ export function areaTiles(
       return tiles;
     }
   }
+}
+
+/** Os dois tiles perpendiculares ao lançador, na mesma fileira — nunca o próprio tile (`cleave`). */
+function sideTiles(origin: WorldPoint, s: WorldPoint): WorldPoint[] {
+  return [
+    { x: origin.x - s.x, y: origin.y - s.y, z: origin.z },
+    { x: origin.x + s.x, y: origin.y + s.y, z: origin.z },
+  ];
 }
 
 /** A fileira a `distance` tiles à frente, com `width` (ímpar) tiles centrados na linha da frente. */

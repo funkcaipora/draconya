@@ -157,7 +157,7 @@ describe('actionDetail — a tabela da spec §6', () => {
     expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Feixe 8' });
   });
 
-  it('área cleave vira "Frontal 3"', () => {
+  it('área cleave vira "Lateral 2" (#523: os dois tiles ao lado, não mais à frente)', () => {
     const entry: ActionEntry = {
       kind: 'spell',
       spell: spell({
@@ -165,7 +165,7 @@ describe('actionDetail — a tabela da spec §6', () => {
         detail: { basePower: 10, area: { shape: 'cleave' } },
       }),
     };
-    expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Frontal 3' });
+    expect(actionDetail(entry, context()).rows).toContainEqual({ label: 'Área', value: 'Lateral 2' });
   });
 
   it('damage-over-time mostra "N a cada Xs por Ys"', () => {

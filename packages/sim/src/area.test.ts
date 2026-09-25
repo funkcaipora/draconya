@@ -29,16 +29,23 @@ describe('areaTiles', () => {
     expect(keys(south)).toEqual(['10,11,7', '9,12,7', '10,12,7', '11,12,7']);
   });
 
-  it('cleave is the three tiles in front; beam is a straight line', () => {
+  it('cleave is the two tiles beside the caster (AREA_WAVE6, #523); beam is a straight line', () => {
     for (const direction of ['north', 'east', 'south', 'west'] as Direction[]) {
-      expect(areaTiles({ shape: 'cleave' }, origin, direction)).toHaveLength(3);
+      // Nunca o próprio tile do lançador, nunca uma fileira à frente — Front Sweep gira ao
+      // redor do corpo, não golpeia adiante.
+      const cleave = areaTiles({ shape: 'cleave' }, origin, direction);
+      expect(cleave).toHaveLength(2);
+      expect(cleave.every((t) => tileKey(t) !== tileKey(origin))).toBe(true);
       const beam = areaTiles({ shape: 'beam', length: 8 }, origin, direction);
       expect(beam).toHaveLength(8);
       // Uma coordenada fixa, a outra andando: é uma linha.
       const fixed = direction === 'north' || direction === 'south' ? 'x' : 'y';
       expect(new Set(beam.map((t) => t[fixed])).size).toBe(1);
     }
-    expect(keys(areaTiles({ shape: 'cleave' }, origin, 'north'))).toEqual(['9,9,7', '10,9,7', '11,9,7']);
+    // Olhando para o norte, o lado é o eixo x — os dois vizinhos horizontais do lançador.
+    expect(keys(areaTiles({ shape: 'cleave' }, origin, 'north'))).toEqual(['9,10,7', '11,10,7']);
+    // Olhando para o leste, o lado é o eixo y.
+    expect(keys(areaTiles({ shape: 'cleave' }, origin, 'east'))).toEqual(['10,9,7', '10,11,7']);
     expect(keys(areaTiles({ shape: 'beam', length: 3 }, origin, 'south'))).toEqual(['10,11,7', '10,12,7', '10,13,7']);
   });
 

@@ -115,23 +115,25 @@ export const spellAreaTrace: CombatGoldenTrace = {
 
 /**
  * Forma que sai do LANÇADOR (self-origin): a direção é a do passo, e aqui ninguém andou, então
- * é `south`. O `cleave` são os três tiles à frente — dois monstros caem neles.
+ * é `south`. O `cleave` (#523, AREA_WAVE6 do Canary) são os dois tiles ao LADO do lançador,
+ * perpendiculares à direção — nunca o tile dele, nunca um à frente ou atrás. Olhando para o
+ * sul, o lado é o eixo x: dois monstros caem nele, um terceiro atrás (norte) não é atingido.
  */
 export const spellSelfOriginTrace: CombatGoldenTrace = {
   id: 'spell-self-origin',
-  description: 'Front Sweep (cleave) acerta os três tiles à frente, na direção do lançador',
+  description: 'Front Sweep (cleave) acerta os dois tiles ao lado do lançador, perpendiculares à direção',
   reference: {
     source: 'canary',
-    sections: ['§19 Area Combat', '#155', 'ADR 0026 decisão 5'],
+    sections: ['§19 Area Combat', '#155', '#523', 'ADR 0026 decisão 5'],
     note: 'Onda, cleave, feixe e círculo no lançador não exigem alvo nem alcance.',
   },
   seed: 'm24-spell-self',
   advancePlanMs: [1000, 1000],
   expected: [
-    { atMs: 0, kind: 'spell-cast', subject: 'hero', payload: { casterId: 'hero', spellId: 'front-sweep', targets: ['m:1', 'm:2'], tileCount: 3 } },
-    { atMs: 0, kind: 'creature-hit', subject: 'm:1', payload: { creatureId: 'm:1', attackerId: 'hero', amount: 30, source: 'spell', position: { x: 0, y: 1, z: 7 } } },
+    { atMs: 0, kind: 'spell-cast', subject: 'hero', payload: { casterId: 'hero', spellId: 'front-sweep', targets: ['m:1', 'm:2'], tileCount: 2 } },
+    { atMs: 0, kind: 'creature-hit', subject: 'm:1', payload: { creatureId: 'm:1', attackerId: 'hero', amount: 30, source: 'spell', position: { x: 1, y: 0, z: 7 } } },
     { atMs: 0, kind: 'creature-health', subject: 'm:1', payload: { creatureId: 'm:1', health: 170, maxHealth: 200 } },
-    { atMs: 0, kind: 'creature-hit', subject: 'm:2', payload: { creatureId: 'm:2', attackerId: 'hero', amount: 30, source: 'spell', position: { x: -1, y: 1, z: 7 } } },
+    { atMs: 0, kind: 'creature-hit', subject: 'm:2', payload: { creatureId: 'm:2', attackerId: 'hero', amount: 30, source: 'spell', position: { x: -1, y: 0, z: 7 } } },
     { atMs: 0, kind: 'creature-health', subject: 'm:2', payload: { creatureId: 'm:2', health: 170, maxHealth: 200 } },
   ],
   gaps: [],
@@ -139,8 +141,8 @@ export const spellSelfOriginTrace: CombatGoldenTrace = {
     seed: 'm24-spell-self',
     hero: { position: { x: 0, y: 0, z: 7 }, mana: 100, maxMana: 100 },
     monsters: [
-      { id: 1, monsterId: 'troll', position: { x: 0, y: 1 }, health: 200 },
-      { id: 2, monsterId: 'troll', position: { x: -1, y: 1 }, health: 200 },
+      { id: 1, monsterId: 'troll', position: { x: 1, y: 0 }, health: 200 },
+      { id: 2, monsterId: 'troll', position: { x: -1, y: 0 }, health: 200 },
       { id: 3, monsterId: 'troll', position: { x: 0, y: -1 }, health: 200 },
     ],
     steps: [{ dtMs: 1000, action: { kind: 'spell', spell: FRONT_SWEEP } }, { dtMs: 1000 }],

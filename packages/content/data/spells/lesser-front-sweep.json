@@ -1,7 +1,7 @@
 {
   "id": "lesser-front-sweep",
   "name": "Lesser Front Sweep",
-  "description": "Causa dano mágico nos três tiles à sua frente.",
+  "description": "Gira a arma e causa dano mágico nos dois tiles ao seu lado.",
   "vocationId": "knight",
   "minLevel": 1,
   "manaCost": 6,
@@ -13,7 +13,16 @@
     "basePower": 14,
     "area": {
       "shape": "cleave"
+    },
+    "formula": {
+      "levelFactor": 0.22,
+      "skillMin": 0,
+      "skillMax": 0,
+      "baseMin": 7.7,
+      "baseMax": 15.4,
+      "skillAttackMin": 0.022,
+      "skillAttackMax": 0.044
     }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. Fórmula do Canary (`data/scripts/spells/attack/lesser_front_sweep.lua`, main, 2026-09-24): escala pelo PRODUTO skill × attack, não pela soma."
 }

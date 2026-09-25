@@ -93,10 +93,11 @@ describe('a Rat Cellars real (FUN-123)', () => {
 });
 
 describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)', () => {
-  // Um personagem de level 80 de cada vocação lança UMA magia de cada tipo da vocação dele:
+  // Um personagem de level 100 de cada vocação lança UMA magia de cada tipo da vocação dele:
   // sai com `ok`, paga a mana e tranca os livros de cooldown certos. Outra vocação leva
   // `wrong-vocation`; um level abaixo, `level-too-low`. São os NÚMEROS reais passando pelo
-  // motor — `casting.test.ts` testa o motor com magias sintéticas.
+  // motor — `casting.test.ts` testa o motor com magias sintéticas. Level 100 (não mais 80,
+  // #523): Strong Ethereal Spear e Fierce Berserk pedem 90, Ultimate Energy Strike pede 100.
   const caster = (content: Content, vocationId: string, level: number): CharacterRuntime => {
     const vocation = content.vocations.get(vocationId) ?? null;
     const stats = statsForLevel(level, vocation, content.progression);
@@ -116,7 +117,7 @@ describe('o catálogo de magias por vocação com o conteúdo REAL (#156–#159)
       const oneOfEach = new Map(mine.map((s) => [s.effect.kind, s]));
       let now = 0;
       for (const spell of oneOfEach.values()) {
-        const hero = caster(content, vocationId, 80);
+        const hero = caster(content, vocationId, 100);
         // Self-origin ou no alvo: a mira sintética serve às duas — `distance` 1 cabe em todo
         // alcance, e a forma que sai do lançador ignora a distância.
         const result = castSpell(hero, spell, spell.effect.kind === 'damage' ? aim : null, now, content.combat, Rng.fromSeed(spell.id));

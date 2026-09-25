@@ -19,7 +19,14 @@
       "shape": "beam",
       "length": 5
     },
-    "damageType": "death"
+    "damageType": "death",
+    "formula": {
+      "levelFactor": 0.2,
+      "skillMin": 5.5,
+      "skillMax": 9,
+      "baseMin": 0,
+      "baseMax": 0
+    }
   },
-  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia usa 5×5 em cruz; aqui um feixe de 5."
+  "_open": "TibiaWiki 2026-09-12 (conferir ao gravar). Efeito/projétil das constantes do protocolo (CONST_ME/CONST_ANI), auditados em 2026-09-18 contra a biblioteca local 1332 (manifesto parcial: 47/4171 folhas, sprite de efeito/projétil indisponível) — conferência visual pendente, id mantido. Ver docs/combat-presentation-audit.md. o Tibia usa 5×5 em cruz; aqui um feixe de 5. Fórmula do Canary (`data/scripts/spells/attack/great_death_beam.lua`, main, 2026-09-24). No Canary real esta magia é level 300 + `needLearn` (Wheel of Destiny, grade 1/2/3 — mecanismo que o Draconya não modela); o level 66 é mantido como aproximação pré-existente, documentada aqui em vez de a magia ficar inacessível sem o sistema de grades."
 }

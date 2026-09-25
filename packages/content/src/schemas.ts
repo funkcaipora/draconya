@@ -650,7 +650,14 @@ export const spellAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('cross'), radius: z.number().int().positive() }),
   /** Cone à frente: a fileira k (1..length) tem largura 2·⌊k/2⌋+1 → 1, 3, 3, 5, 5. */
   z.object({ shape: z.literal('wave'), length: z.number().int().positive() }),
-  /** Os três tiles imediatamente à frente (Front Sweep). */
+  /**
+   * Os dois tiles ao LADO do lançador, perpendiculares à direção dele — não inclui o próprio
+   * tile (Front Sweep, Lesser Front Sweep). Corrigido no #523 contra a matriz real do Canary
+   * (`AREA_WAVE6` em `data/scripts/lib/register_spells.lua`: `{0,0,0,0,0} {0,1,3,1,0}
+   * {0,0,0,0,0}`, `3` é o lançador e os dois `1` ficam na MESMA fileira, não numa fileira à
+   * frente): o nome "cleave" ficou do desenho antigo (3 tiles um passo à frente), que
+   * confundia direção — Front Sweep é um giro ao redor do corpo, não um golpe adiante.
+   */
   z.object({ shape: z.literal('cleave') }),
   /** Linha reta de `length` tiles à frente, largura 1. */
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
@@ -685,6 +692,21 @@ export const spellFormulaSchema = z.object({
   baseMin: z.number().default(0),
   /** Constante somada ao teto. Default `0`. */
   baseMax: z.number().default(0),
+  /**
+   * O termo de ATAQUE DA ARMA (#523). O Canary usa `CALLBACK_PARAM_SKILLVALUE` — em vez de
+   * `(player, level, maglevel)` o callback recebe `(player, skill, attack, factor)` — para
+   * Groundshaker, Berserk, Fierce Berserk, Front Sweep e Whirlwind Throw: a magia soma o
+   * `attack` da arma equipada ao skill antes de escalar, então skill sozinho (`skillMin`/
+   * `skillMax`) não basta. `attackMin`/`attackMax` são o coeficiente LINEAR do `attack`;
+   * `skillAttackMin`/`skillAttackMax` são o coeficiente do PRODUTO `skill × attack` (Brutal
+   * Strike, Front Sweep, Lesser Front Sweep somam `skill * attack`, não `skill + attack`).
+   * Ausentes — o caso de toda magia que não é baseada em arma —, o `attack` que `sim` passa
+   * nunca entra na conta: é o que preserva bit a bit toda fórmula que já existia antes do #523.
+   */
+  attackMin: z.number().optional(),
+  attackMax: z.number().optional(),
+  skillAttackMin: z.number().optional(),
+  skillAttackMax: z.number().optional(),
 });
 
 export type SpellFormula = z.infer<typeof spellFormulaSchema>;
@@ -2181,7 +2203,7 @@ export type BotLimits = z.infer<typeof botSchema>;
 export type BotConfig = z.infer<typeof botConfigV1Schema>;
 
 export const SPELL_GROUPS = ['attack', 'healing', 'support'] as const;
-export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special'] as const;
+export const SECONDARY_GROUPS = ['stance', 'focus', 'great-beams', 'special', 'ultimatestrikes'] as const;
 
 /**
  * O efeito de uma magia, como o ARQUIVO o descreve. Fica separado de `spellSchema` porque o
