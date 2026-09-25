@@ -3872,6 +3872,41 @@ describe('o combate e os vitais chegam ao cliente (FUN-109)', () => {
     expect(ofType(all, 'creature-hit').some((h) => h.kind === 'spell' && h.id === heroId)).toBe(true);
   });
 
+  it('a defesa de cura própria do monstro vira effect pela chave semântica, e é muda sem linha (#518)', () => {
+    // A defesa de cura própria (#518) não tem lançamento prévio como a ability — o efeito sai
+    // direto no ramo de `creature-healed`, reusando a MESMA chave/tabela `appearances.abilities`
+    // da ability à distância (`spit-hit` → effect 8, CMB-06). Chave sem linha continua muda: a
+    // cura aconteceu no `sim` (o número em verde prova), e derrubar a apresentação por falta de
+    // arte esconderia que ela funcionou — o mesmo argumento do teste acima, do outro lado.
+    const defense = (impactKey: string) => ({
+      id: 'self-heal', cadenceMs: 500, chance: 1,
+      heal: { min: 40, max: 40 }, presentation: { impactKey },
+    });
+
+    const comLinha = hunt({ rat: { health: 1_000, defenses: [defense('spit-hit')] } });
+    // Deixa o SPAWN (evento na fila) acontecer antes de pegar o monstro e feri-lo — sem vida
+    // faltando não há o que curar, e o teste mediria o vazio.
+    comLinha.runFor(100);
+    const ratComLinha = (comLinha.host.sessionFor('hero')?.ruleset as HuntRuleset).monsters[0];
+    if (ratComLinha === undefined) throw new Error('sem monstro');
+    ratComLinha.receiveDamage(500);
+    comLinha.runFor(1_000);
+    const allComLinha = comLinha.received();
+    expect(ofType(allComLinha, 'creature-hit').some((h) => h.kind === 'heal')).toBe(true);
+    expect(ofType(allComLinha, 'effect').some((e) => e.effectId === 8)).toBe(true);
+
+    const semLinha = hunt({ rat: { health: 1_000, defenses: [defense('nope')] } });
+    semLinha.runFor(100);
+    const ratSemLinha = (semLinha.host.sessionFor('hero')?.ruleset as HuntRuleset).monsters[0];
+    if (ratSemLinha === undefined) throw new Error('sem monstro');
+    ratSemLinha.receiveDamage(500);
+    semLinha.runFor(1_000);
+    const allSemLinha = semLinha.received();
+    // A cura ainda acontece — só o efeito visual é que falta.
+    expect(ofType(allSemLinha, 'creature-hit').some((h) => h.kind === 'heal')).toBe(true);
+    expect(ofType(allSemLinha, 'effect').filter((e) => e.effectId === 8)).toHaveLength(0);
+  });
+
   it('golpe em criatura que o cliente ainda NÃO conhece é descartado; o session-attach é quem a apresenta', () => {
     // O rato nasceu com ninguém olhando: o `creature-appear` dele foi drenado para o nada, e
     // ele não tem id numérico. Quem chega depois liga o socket mas ainda não pediu o mundo —
