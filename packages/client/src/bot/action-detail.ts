@@ -8,7 +8,7 @@
 // verdade continua exclusiva do servidor. Campo ausente no catálogo (nó `game` anterior à
 // #436) nunca vira número inventado: a linha correspondente é OMITIDA (RF-09).
 
-import { spellPowerRange } from '@draconya/content';
+import { matchesVocationRequirement, spellPowerRange } from '@draconya/content';
 import type { Catalogue, SupplyDefinition } from '../state/hud.js';
 
 export type SpellEntry = Catalogue['bot']['spells'][number];
@@ -42,7 +42,19 @@ export function actionEntryId(entry: ActionEntry): string {
   return entry.kind === 'spell' ? entry.spell.id : entry.supply.id;
 }
 
-/** Todas as entradas de uma aba, por level exigido e depois por nome. Se a vocação for informada, filtra magias. */
+/**
+ * Casa a vocação do personagem com o requisito de um suprimento (#524, kit level 200): a mesma
+ * função de `Inventory#meets`/`useSupply` em `sim` — `matchesVocationRequirement` de
+ * `@draconya/content`. `vocationId === undefined` é "sem filtro" (chamador sem contexto de
+ * personagem, o mesmo caso do filtro de magia acima); `null` do requisito (ou ausente — nó
+ * `game` anterior ao #524) é "sem requisito nenhum" e devolve sempre `true`.
+ */
+function supplyVocationMatches(supply: SupplyDefinition, vocationId: string | null | undefined): boolean {
+  if (vocationId === undefined) return true;
+  return matchesVocationRequirement(supply.vocationId ?? undefined, vocationId);
+}
+
+/** Todas as entradas de uma aba, por level exigido e depois por nome. Se a vocação for informada, filtra magias e suprimentos. */
 export function entriesOf(
   catalogue: Catalogue,
   tab: ActionTab,
@@ -58,6 +70,7 @@ export function entriesOf(
         .map((spell) => ({ kind: 'spell', spell }))
     : (catalogue.bot.supplies ?? [])
       .filter((supply) => (tab === 'Runas' ? supply.group === 'attack' : supply.group !== 'attack'))
+      .filter((supply) => supplyVocationMatches(supply, vocationId))
       .map((supply) => ({ kind: 'supply', supply }));
   return [...entries].sort((a, b) => {
     const byLevel = requiredLevel(a) - requiredLevel(b);
@@ -182,8 +195,26 @@ function effectValue(entry: ActionEntry, detail: EffectDetail, context: DetailCo
     const range = spellPowerRange(detail.basePower, context.level, context.magicLevel, context.spellPower);
     return `${String(range.min)}~${String(range.max)}`;
   }
+  // A faixa fixa da poção do Tibia (#524, kit level 200): min~max já vêm prontos do catálogo —
+  // ao contrário do `basePower`, não há fórmula para rodar aqui, só mostrar.
+  if (detail.amountRange !== undefined) return `${String(detail.amountRange.min)}~${String(detail.amountRange.max)}`;
   if (detail.power !== undefined) return String(detail.power);
   if (detail.amount !== undefined) return String(detail.amount);
+  return null;
+}
+
+/**
+ * O valor da linha Mana da poção de espírito (#524): `alsoMana` é `amount` fixo OU
+ * `amountRange` sorteado — a mesma dupla do efeito principal, só que sem `basePower`/`power`
+ * (a poção de espírito nunca escala por fórmula). `null` omite a linha (RF-09), como sempre.
+ */
+function alsoManaValue(detail: EffectDetail): string | null {
+  const alsoMana = detail.alsoMana;
+  if (alsoMana === undefined) return null;
+  if (alsoMana.amountRange !== undefined) {
+    return `${String(alsoMana.amountRange.min)}~${String(alsoMana.amountRange.max)}`;
+  }
+  if (alsoMana.amount !== undefined) return String(alsoMana.amount);
   return null;
 }
 
@@ -221,6 +252,10 @@ export function actionDetail(entry: ActionEntry, context: DetailContext): Action
     }
     const value = effectValue(entry, detail, context);
     if (value !== null) rows.push({ label: valueLabel(effect), value });
+    // A poção de espírito (#524, kit level 200) cura E repõe mana no MESMO uso: uma linha
+    // "Mana" à parte, logo abaixo da linha "Cura" que o bloco acima já montou.
+    const mana = alsoManaValue(detail);
+    if (mana !== null) rows.push({ label: 'Mana', value: mana });
   }
 
   rows.push({ label: 'Custo', value: costOf(entry) });

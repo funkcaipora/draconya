@@ -1083,6 +1083,101 @@ describe('catalogue bot targets (#393)', () => {
   });
 });
 
+describe('catalogue supply vocationId (#524, kit level 200)', () => {
+  const catalogue = (supplies: unknown[]): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [], items: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+    bot: {
+      vocabularyVersion: 1, groups: [], automations: [], setNames: [], hotkeys: [],
+      setCount: 4, slotsPerSet: 24, spells: [], supplies,
+    },
+  } as unknown as S2CMessage);
+
+  it('accepts a single vocation, a list, null, and an older node without the field', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([
+      {
+        id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+        effect: 'heal', vocationId: ['knight', 'paladin'],
+      },
+      {
+        id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+        effect: 'heal', vocationId: 'paladin',
+      },
+      {
+        id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, group: 'potion',
+        effect: 'mana', vocationId: null,
+      },
+      // Opcional SEM `default` (RF-09): um nó `game` anterior manda sem, e o cliente lê ausente
+      // como "sem requisito conhecido" — o mesmo tratamento de `targets`, acima.
+      { id: 'health-potion', name: 'Health Potion', price: 45, group: 'potion', effect: 'heal' },
+    ]));
+    expect(parsed.bot.supplies[0]?.vocationId).toEqual(['knight', 'paladin']);
+    expect(parsed.bot.supplies[1]?.vocationId).toBe('paladin');
+    expect(parsed.bot.supplies[2]?.vocationId).toBeNull();
+    expect(parsed.bot.supplies[3]?.vocationId).toBeUndefined();
+  });
+
+  it('rejects a vocationId list with fewer than two entries — a list exists to say "more than one"', () => {
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue([
+      { id: 'x', name: 'X', price: 1, group: 'potion', effect: 'heal', vocationId: [] },
+    ])).success).toBe(false);
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue([
+      { id: 'x', name: 'X', price: 1, group: 'potion', effect: 'heal', vocationId: ['knight'] },
+    ])).success).toBe(false);
+  });
+});
+
+describe('catalogue effect detail — amountRange and alsoMana (#524, kit level 200)', () => {
+  const catalogue = (supplies: unknown[]): S2CMessage => ({
+    type: 'catalogue',
+    hunts: [], items: [], monsters: [], ammunition: [], vocations: [], vocationLevel: 0,
+    bot: {
+      vocabularyVersion: 1, groups: [], automations: [], setNames: [], hotkeys: [],
+      setCount: 4, slotsPerSet: 24, spells: [], supplies,
+    },
+  } as unknown as S2CMessage);
+
+  it('round-trips a faixa fixa (a poção do Tibia, sem escalar por level/ML)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+      effect: 'heal', detail: { amountRange: { min: 250, max: 350 } },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({ amountRange: { min: 250, max: 350 } });
+  });
+
+  it('round-trips `alsoMana` (a poção de espírito, cura E mana no mesmo uso)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+      effect: 'heal',
+      detail: {
+        amountRange: { min: 250, max: 350 },
+        alsoMana: { amountRange: { min: 100, max: 200 } },
+      },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({
+      amountRange: { min: 250, max: 350 },
+      alsoMana: { amountRange: { min: 100, max: 200 } },
+    });
+  });
+
+  it('leaves an older node without amountRange/alsoMana absent, not invented (RF-09)', () => {
+    const parsed = S2C_SCHEMAS.catalogue.parse(catalogue([{
+      id: 'health-potion', name: 'Health Potion', price: 45, group: 'potion', effect: 'heal',
+      detail: { amount: 80 },
+    }]));
+    expect(parsed.bot.supplies[0]?.detail).toEqual({ amount: 80 });
+    expect(parsed.bot.supplies[0]?.detail).not.toHaveProperty('amountRange');
+    expect(parsed.bot.supplies[0]?.detail).not.toHaveProperty('alsoMana');
+  });
+
+  it('rejects a non-positive bound — the schema is display-only, but a negative number is never valid', () => {
+    expect(S2C_SCHEMAS.catalogue.safeParse(catalogue([{
+      id: 'x', name: 'X', price: 1, group: 'potion', effect: 'heal',
+      detail: { amountRange: { min: -1, max: 10 } },
+    }])).success).toBe(false);
+  });
+});
+
 describe('the #393 opcodes do not burn or duplicate any number', () => {
   it('adds 19 and 32 and keeps the burned lists empty', () => {
     expect(CLIENT_TO_SERVER['party-settings']).toBe(19);

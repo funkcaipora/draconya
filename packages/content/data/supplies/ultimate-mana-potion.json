@@ -1,0 +1,19 @@
+{
+  "id": "ultimate-mana-potion",
+  "name": "Ultimate Mana Potion",
+  "description": "Recupera entre 425 e 575 pontos de mana. Nível 130 ou mais, Sorcerer ou Druid.",
+  "price": 350,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "mana",
+    "amountRange": { "min": 425, "max": 575 },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 130,
+    "vocationId": ["sorcerer", "druid"]
+  },
+  "_open": "Kit level 200 (#524). Canary `potions.lua`, item id 23373: `mana = {425, 575}`, `vocations = {SORCERER, DRUID}`, `level = 130`. `price` 350: preço uniforme de NPCs (TibiaWiki via tibiascape.com/library/items/ultimate-mana-potion)."
+}

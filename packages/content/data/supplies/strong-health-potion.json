@@ -1,0 +1,19 @@
+{
+  "id": "strong-health-potion",
+  "name": "Strong Health Potion",
+  "description": "Cura entre 250 e 350 pontos de vida. Nível 50 ou mais, Cavaleiro ou Paladino.",
+  "price": 115,
+  "group": "potion",
+  "groupCooldownMs": 1000,
+  "effect": {
+    "kind": "heal",
+    "amountRange": { "min": 250, "max": 350 },
+    "target": "friend",
+    "range": 1
+  },
+  "requires": {
+    "level": 50,
+    "vocationId": ["knight", "paladin"]
+  },
+  "_open": "Kit level 200 (#524, faz parte do loot de Dragon per #520 também — reaproveitar se já existir). Canary `data/scripts/actions/items/potions.lua`, item id 236: `health = {250, 350}`, `vocations = {PALADIN, KNIGHT, MONK}`, `level = 50` — Monk não existe no Draconya, omitido. Faixa fixa SEM escalar por level/ML (`effect.amountRange`, #524 — a mesma cura no level 50 e no 200), como a poção real do Tibia. `price` 115: preço uniforme de 31 NPCs (TibiaWiki via tibiascape.com/library/items/strong-health-potion). `target`/`range` seguem o padrão de `health-potion.json` (§26, ADR 0035 d.10)."
+}

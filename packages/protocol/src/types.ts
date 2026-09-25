@@ -418,6 +418,12 @@ export const catalogueAreaSchema = z.discriminatedUnion('shape', [
   z.object({ shape: z.literal('beam'), length: z.number().int().positive() }),
 ]);
 
+/** Uma faixa `[min, max]` de exibição (#524) — a poção do Tibia, que sorteia dentro dela sem escalar por level/ML. */
+const catalogueAmountRangeSchema = z.object({
+  min: z.number().int().positive(),
+  max: z.number().int().positive(),
+});
+
 /**
  * O detalhe de exibição de um efeito (#436, ADR 0033): os números que o painel do
  * `ActionConfigModal` mostra. Tudo opcional — cada `kind` preenche o que tem. NÃO é o efeito
@@ -430,6 +436,21 @@ export const catalogueEffectDetailSchema = z.object({
   basePower: z.number().int().positive().optional(),
   power: z.number().int().positive().optional(),
   amount: z.number().int().positive().optional(),
+  /**
+   * A faixa fixa de `amount` (#524, kit level 200): a poção do Tibia cura/repõe um valor
+   * ALEATÓRIO entre min e max, sem escalar por level/ML — diferente de `basePower`, que o
+   * painel converte com `spellPowerRange`. Espelha `content.supplySchema.effect.amountRange`.
+   */
+  amountRange: catalogueAmountRangeSchema.optional(),
+  /**
+   * Mana reposta JUNTO da cura, no MESMO uso (#524: a poção de espírito do Tibia). Espelha
+   * `content.supplySchema.effect.heal.alsoMana` — `amount` fixo OU `amountRange` sorteado, a
+   * mesma dupla do campo principal.
+   */
+  alsoMana: z.object({
+    amount: z.number().int().positive().optional(),
+    amountRange: catalogueAmountRangeSchema.optional(),
+  }).optional(),
   intervalMs: z.number().int().positive().optional(),
   durationMs: z.number().int().positive().optional(),
   speedPercent: z.number().int().positive().optional(),
@@ -764,6 +785,17 @@ export const S2C_SCHEMAS = {
           level: z.number().int().positive().optional(),
           magicLevel: z.number().int().nonnegative().optional(),
         }).default({}),
+        /**
+         * A vocação exigida (#524, kit level 200) — uma, várias, ou `null`/ausente, sem
+         * requisito. O mesmo contrato de `content.supplySchema.requires.vocationId`
+         * (`VocationRequirement`); o protocolo não importa de `content` (é a base da pilha), e
+         * por isso repete a forma, como já faz com `spells[].vocationId`. Poção como a Strong
+         * Health Potion é Knight/Paladin; a Great Mana Potion é uma LISTA de três. Opcional SEM
+         * `default`, como `targets`/`groupCooldownMs` abaixo: um nó `game` anterior manda sem, e
+         * a tela sem o campo trata como "sem requisito conhecido" — nunca bloqueia por dado que
+         * não chegou (RF-09).
+         */
+        vocationId: z.union([z.string().min(1), z.array(z.string().min(1)).min(2)]).nullable().optional(),
 /** Pode mirar um amigo (#392, #393)? Opcional SEM `default`, como em `spells[]`. */
         targets: z.enum(['self', 'friend']).optional(),
         /** Os números de EXIBIÇÃO (#436, ADR 0033), como em `spells[]`. Opcionais SEM `default`. */

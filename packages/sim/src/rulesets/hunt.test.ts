@@ -210,6 +210,23 @@ const items = [
     weight: 5.5, value: 0, charges: 2,
     mitigation: { resistances: { fire: 0.2 } },
   },
+  // O anel com carga (#524, o Might Ring): MESMO mecanismo do colar, no slot `finger` — as duas
+  // peças gastam INDEPENDENTE quando as duas protegem o mesmo tipo.
+  {
+    id: 'charge-ring', name: 'Charge Ring', kind: 'ring', slot: 'finger',
+    weight: 1, value: 0, charges: 2,
+    mitigation: { resistances: { fire: 0.2 } },
+  },
+  // Boots of haste (#524): bônus de velocidade PASSIVO enquanto vestido.
+  {
+    id: 'fast-boots', name: 'Fast Boots', kind: 'armor', slot: 'feet',
+    weight: 1, value: 0, bonuses: { speed: 50 },
+  },
+  // Item de bônus de skill (#524, Hat of the Mad/Paladin Armor): soma na skill `distance`.
+  {
+    id: 'sharp-hat', name: 'Sharp Hat', kind: 'armor', slot: 'head',
+    weight: 1, value: 0, bonuses: { skill: { skillId: 'melee', amount: 20 } },
+  },
 ];
 
 // A munição é ABSTRATA (ADR 0026 d.3): sem item, sem pilha, sem peso. Cada tiro debita o preço.
@@ -7541,6 +7558,48 @@ describe('carga e duração do equipamento (#421, ADR 0032 d.8)', () => {
     expect(hero.inventory.equippedAt('neck')?.charges).toBe(2);
   });
 
+  // O anel com carga (#524, alargado de `#consumeAmuletCharge` para o slot `finger`): mesmo
+  // mecanismo do colar, e as duas peças gastam INDEPENDENTE quando vestidas juntas.
+  const withAmuletAndRing = (charges: number): InventoryState => ({
+    backpack: [],
+    equipped: {
+      neck: { instanceId: 'a1', itemId: 'glacier-amulet', quantity: 1, charges },
+      finger: { instanceId: 'r1', itemId: 'charge-ring', quantity: 1, charges },
+    },
+  });
+
+  it('o anel gasta carga por golpe protegido, como o colar (#524)', () => {
+    const loaded = content({ monsters: [{ ...rat, health: 100_000, damageType: 'fire' }] });
+    const { session, hero, ruleset } = start({ loaded, inventory: withAmuletAndRing(2) });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    const events: DomainEvent[] = [];
+    for (let t = 0; t < 12_000 && session.ended === null; t += 100) {
+      session.advanceBy(100);
+      events.push(...session.drainEvents());
+    }
+    expect(events.some((e) => e.kind === 'creature-hit' && e.creatureId === 'hero'
+      && String(e.attackerId).startsWith('m:'))).toBe(true);
+    // As DUAS peças protegem o MESMO golpe de fogo e gastam independente: as duas esgotam juntas.
+    expect(hero.inventory.equippedAt('neck')).toBeNull();
+    expect(hero.inventory.equippedAt('finger')).toBeNull();
+  });
+
+  it('um golpe só gasta UMA carga do anel, não duas (RF-05 do anel)', () => {
+    const loaded = content({ monsters: [{ ...rat, health: 100_000, damageType: 'fire' }] });
+    const { session, hero, ruleset } = start({ loaded, inventory: withAmuletAndRing(2) });
+    session.advanceBy(50);
+    const target = ruleset.monsters[0];
+    if (target !== undefined) target.position = { ...hero.position, y: hero.position.y + 1 };
+    // Só o PRIMEIRO golpe do monstro (2000 ms de intervalo, ver `rat` na fixture) — bem antes
+    // do segundo, para medir UMA carga gasta, não duas.
+    session.advanceBy(1_000);
+    session.drainEvents();
+    expect(hero.inventory.equippedAt('finger')?.charges).toBe(1);
+    expect(hero.inventory.equippedAt('neck')?.charges).toBe(1);
+  });
+
   it('equipar item com durationMs agenda o vencimento no instante exato (RF-01)', () => {
     const loaded = content();
     const { session, hero } = start({
@@ -7631,6 +7690,60 @@ describe('carga e duração do equipamento (#421, ADR 0032 d.8)', () => {
     expect(resumedHero.inventory.equippedAt('finger')?.instanceId).toBe('r1');
     resumed.advanceBy(1);
     expect(resumedHero.inventory.equippedAt('finger')).toBeNull();
+  });
+});
+
+describe('bônus de equipamento — kit level 200 (#524)', () => {
+  it('boots of haste soma direto em character.speed ao entrar na hunt', () => {
+    const loaded = content();
+    const withBoots: InventoryState = {
+      backpack: [],
+      equipped: { feet: { instanceId: 'b1', itemId: 'fast-boots', quantity: 1 } },
+    };
+    const bare = start({ loaded });
+    const booted = start({ loaded, inventory: withBoots });
+    // +50 do `bonuses.speed` da fixture, exatamente — nada mais muda entre os dois.
+    expect(booted.hero.speed).toBe(bare.hero.speed + 50);
+  });
+
+  it('calçar a bota em voo muda a velocidade no MESMO evento, sem esperar o próximo passo', () => {
+    const loaded = content();
+    const { session, hero } = start({
+      loaded,
+      inventory: { backpack: [{ instanceId: 'b1', itemId: 'fast-boots', quantity: 1 }], equipped: {} },
+    });
+    const before = hero.speed;
+    expect(hero.inventory.equip('b1', hero, loaded.items).ok).toBe(true);
+    expect(hero.speed).toBe(before + 50);
+    expect(hero.inventory.unequip('feet', { backpackSlots: 0, satchelSlots: 20, row: 1 }).ok).toBe(true);
+    expect(hero.speed).toBe(before);
+  });
+
+  it('o bônus de skill do item soma no poder da arma da MESMA skill (Paladin Armor no crossbow)', () => {
+    const loaded = content();
+    const bare = start({
+      loaded,
+      inventory: {
+        backpack: [],
+        equipped: { hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 } },
+      },
+    });
+    const hatted = start({
+      loaded,
+      inventory: {
+        backpack: [],
+        equipped: {
+          hand: { instanceId: 'w1', itemId: 'sword', quantity: 1 },
+          head: { instanceId: 'h1', itemId: 'sharp-hat', quantity: 1 },
+        },
+      },
+    });
+    // As duas leem a MESMA skill (`melee`, a família `sword` — ver `weaponFamilies` acima); o
+    // sharp-hat soma +20 nela — o bônus só existe enquanto o item está vestido, e
+    // `Inventory.skillBonus` é quem `#weaponPower` consulta (o mecanismo real do Paladin Armor
+    // no crossbow é o mesmo, só a skill muda para `distance`).
+    expect(hatted.hero.inventory.skillBonus(loaded.items, 'melee'))
+      .toBe(bare.hero.inventory.skillBonus(loaded.items, 'melee') + 20);
   });
 });
 

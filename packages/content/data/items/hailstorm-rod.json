@@ -1,0 +1,21 @@
+{
+  "id": "hailstorm-rod",
+  "name": "Hailstorm Rod",
+  "kind": "weapon",
+  "slot": "hand",
+  "weight": 27,
+  "value": 2000,
+  "requires": {
+    "level": 33,
+    "vocationId": "druid"
+  },
+  "weapon": {
+    "kind": "wand",
+    "family": "rod",
+    "range": 3,
+    "damageType": "ice",
+    "manaPerHit": 13,
+    "damage": { "min": 56, "max": 74 }
+  },
+  "_open": "Kit level 200 (#524), Druid. Level 33, `mana` 13/golpe, `fromDamage`/`toDamage` 56-74, `wandType=\"ice\"` (declarado em `weapon.damageType`, CMB-03) e weight 2700 (27 oz) do Canary `items.xml` id 3067 (`Druid;true, Elder Druid`), 2026-09-24. `value` 2000: Haroun compra por esse preço (TibiaWiki via tibiascape.com/library/items/hailstorm-rod)."
+}

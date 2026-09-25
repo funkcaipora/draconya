@@ -44,6 +44,11 @@ function detailOf(effect: Spell['effect'] | Supply['effect']): EffectDetail {
   if ('basePower' in effect && effect.basePower !== undefined) detail.basePower = effect.basePower;
   if ('power' in effect && effect.power !== undefined) detail.power = effect.power;
   if ('amount' in effect) detail.amount = effect.amount;
+  // A faixa fixa da poção do Tibia (#524, kit level 200) — `amount` sorteado, não escalado por
+  // level/ML; e a mana da poção de espírito, reposta no MESMO uso. Só `supply.effect.heal` tem
+  // os dois; `'in'` estreita por construção, como todo campo acima.
+  if ('amountRange' in effect && effect.amountRange !== undefined) detail.amountRange = effect.amountRange;
+  if ('alsoMana' in effect && effect.alsoMana !== undefined) detail.alsoMana = effect.alsoMana;
   if ('intervalMs' in effect) detail.intervalMs = effect.intervalMs;
   if ('durationMs' in effect) detail.durationMs = effect.durationMs;
   if ('speedPercent' in effect) detail.speedPercent = effect.speedPercent;
@@ -115,6 +120,11 @@ export function buildCatalogue(content: Content): Catalogue {
             ? {}
             : { magicLevel: supply.requires.magicLevel }),
         },
+        // A vocação (#524, kit level 200): `null` — e não ausente — quando o suprimento não
+        // exige nenhuma, como `spell.vocationId` já faz acima. Sem isto a tela do bot oferece a
+        // Strong Health Potion (Knight/Paladin) para um Sorcerer configurar, e o servidor recusa
+        // TODO uso em silêncio — o defeito que o cabeçalho deste arquivo descreve.
+        vocationId: supply.requires.vocationId ?? null,
         groupCooldownMs: supply.groupCooldownMs,
         ...(supply.description === undefined ? {} : { description: supply.description }),
         detail: detailOf(supply.effect),

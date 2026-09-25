@@ -284,7 +284,14 @@ describe('loadContent', () => {
       ['axe', 'club', 'distance', 'fist', 'rod', 'sword', 'wand'],
     );
     // Os projéteis da wand e do rod: energia (5) e terra pequena (39), conferidos de olho.
-    expect(content.appearances?.weapons).toEqual({ 'wand-of-vortex': { missile: 5 }, 'snakebite-rod': { missile: 39 } });
+    // O kit level 200 (#524) acrescenta a Wand of Starstorm (energia, 5) e a Hailstorm Rod
+    // (gelo, 29 — a mesma da ice-strike, CMB-06).
+    expect(content.appearances?.weapons).toEqual({
+      'wand-of-vortex': { missile: 5 },
+      'snakebite-rod': { missile: 39 },
+      'wand-of-starstorm': { missile: 5 },
+      'hailstorm-rod': { missile: 29 },
+    });
     const distance = content.skills.get('distance');
     expect(distance?.gain).toEqual({ on: 'distance-hit', points: 1 });
     expect(distance?.startingLevel).toBe(10);

@@ -555,6 +555,140 @@ describe('quem paga o supply é a Purse (#192, ADR 0027)', () => {
   });
 });
 
+describe('a poção do Tibia — faixa fixa, espírito e requisito de vocação (#524, kit level 200)', () => {
+  // `hero()` tem `maxHealth`/`maxMana` 100, curtos demais para as faixas de 250-350 do Tibia — a
+  // cura sairia CLAMPADA pelo teto e o teste mediria o teto, não a faixa. Pools grandes aqui.
+  const bigHero = (over: Partial<{
+    health: number; mana: number; level: number; gold: number; vocationId: string | null;
+  }> = {}): CharacterRuntime => {
+    const runtime = new CharacterRuntime({
+      id: 'hero', position: { x: 1, y: 1, z: 7 },
+      health: over.health ?? 10, maxHealth: 2_000,
+      mana: over.mana ?? 0, maxMana: 2_000,
+      level: over.level ?? 60, xp: 0, vocationId: over.vocationId ?? null,
+      staminaMs: null, staminaUpdatedAtMs: 0,
+      gold: over.gold ?? 1_000, goldDelta: 0, alive: true, cooldowns: {},
+    });
+    return runtime;
+  };
+
+  const strongHeal: Supply = {
+    id: 'strong-health-potion', name: 'Strong Health Potion', price: 115, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 50, vocationId: ['knight', 'paladin'] },
+    effect: { kind: 'heal', amountRange: { min: 250, max: 350 } },
+  };
+  const strongMana: Supply = {
+    id: 'strong-mana-potion', name: 'Strong Mana Potion', price: 150, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 50 },
+    effect: { kind: 'mana', amountRange: { min: 115, max: 185 } },
+  };
+  const spirit: Supply = {
+    id: 'great-spirit-potion', name: 'Great Spirit Potion', price: 225, group: 'potion',
+    groupCooldownMs: 1_000,
+    requires: { level: 80, vocationId: 'paladin' },
+    effect: {
+      kind: 'heal', amountRange: { min: 250, max: 350 },
+      alsoMana: { amountRange: { min: 100, max: 200 } },
+    },
+  };
+
+  it('sorteia a cura DENTRO da faixa, com o RNG da sessão — nunca fora dela', () => {
+    // Um `bigHero` NOVO por rodada — não só a vida resetada: 20 usos a 115 gold cada estourariam
+    // o saldo de um personagem só, e a recusa por `not-enough-gold` não é o que este teste mede.
+    for (let seed = 0; seed < 20; seed += 1) {
+      const paladino = bigHero({ level: 60, health: 10, gold: 1_000 });
+      paladino.vocationId = 'paladin';
+      const result = useSupply(
+        paladino, strongHeal, null, undefined, Rng.fromSeed(`s${seed}`), undefined, undefined,
+        paladino, 0,
+      );
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.healed).toBeGreaterThanOrEqual(250);
+        expect(result.healed).toBeLessThanOrEqual(350);
+        expect(paladino.health).toBe(10 + result.healed);
+      }
+    }
+  });
+
+  it('sem `rng` (caminho de fixture), a faixa cai no MÍNIMO — determinístico, nunca undefined', () => {
+    const paladino = bigHero({ level: 60, health: 10, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    expect(useSupply(paladino, strongHeal)).toMatchObject({ ok: true, healed: 250 });
+  });
+
+  it('recusa por LEVEL: a poção pede 50, quem tem 49 não bebe', () => {
+    const cavaleiro = bigHero({ level: 49, gold: 1_000 });
+    cavaleiro.vocationId = 'knight';
+    expect(useSupply(cavaleiro, strongHeal)).toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+  });
+
+  it('recusa por VOCAÇÃO — lista de duas: nem sorcerer nem druid bebem a poção de knight/paladin', () => {
+    const sorcerer = bigHero({ level: 60, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    expect(useSupply(sorcerer, strongHeal)).toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+
+    const cavaleiro = bigHero({ level: 60, gold: 1_000 });
+    cavaleiro.vocationId = 'knight';
+    expect(useSupply(cavaleiro, strongHeal).ok).toBe(true);
+    const paladino = bigHero({ level: 60, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    expect(useSupply(paladino, strongHeal).ok).toBe(true);
+  });
+
+  it('poção de mana com faixa TAMBÉM confere level — gap que não existia antes do #524', () => {
+    const novato = bigHero({ level: 10, mana: 0, gold: 1_000 });
+    expect(useSupply(novato, strongMana)).toEqual({ ok: false, reason: 'level-too-low', retryInMs: 0 });
+    const veterano = bigHero({ level: 60, mana: 0, gold: 1_000 });
+    const result = useSupply(veterano, strongMana, null, undefined, Rng.fromSeed('mana'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.manaRestored).toBeGreaterThanOrEqual(115);
+      expect(result.manaRestored).toBeLessThanOrEqual(185);
+    }
+  });
+
+  it('poção de mana SEM `requires.vocationId` vale para qualquer vocação (a strong mana potion do Tibia)', () => {
+    const sorcerer = bigHero({ level: 60, mana: 0, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    expect(useSupply(sorcerer, strongMana, null, undefined, Rng.fromSeed('any')).ok).toBe(true);
+  });
+
+  it('a poção de espírito cura E repõe mana no MESMO uso (`alsoMana`)', () => {
+    const paladino = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    paladino.vocationId = 'paladin';
+    const result = useSupply(paladino, spirit, null, undefined, Rng.fromSeed('spirit'));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.healed).toBeGreaterThanOrEqual(250);
+      expect(result.healed).toBeLessThanOrEqual(350);
+      expect(result.manaRestored).toBeGreaterThanOrEqual(100);
+      expect(result.manaRestored).toBeLessThanOrEqual(200);
+    }
+    // As duas barras de fato mudaram — não é só o `CastSuccess` mentindo.
+    expect(paladino.health).toBeGreaterThan(10);
+    expect(paladino.mana).toBeGreaterThan(0);
+  });
+
+  it('quem não é Paladino não bebe a poção de espírito, e nada muda', () => {
+    const druida = bigHero({ level: 90, health: 10, mana: 0, gold: 1_000 });
+    druida.vocationId = 'druid';
+    expect(useSupply(druida, spirit)).toEqual({ ok: false, reason: 'wrong-vocation', retryInMs: 0 });
+    expect(druida.health).toBe(10);
+    expect(druida.mana).toBe(0);
+  });
+
+  it('a recusa por vocação/level do supply NÃO tem prazo, como a da magia', () => {
+    const sorcerer = bigHero({ level: 60, gold: 1_000 });
+    sorcerer.vocationId = 'sorcerer';
+    const recusa = useSupply(sorcerer, strongHeal);
+    expect(recusa.ok).toBe(false);
+    if (!recusa.ok) expect(recusa.retryInMs).toBe(0);
+  });
+});
+
 describe('a fórmula canônica de cura e as runas UH/IH (#475)', () => {
   // Light Healing (`exura`): min = level/5 + ML×1.4 + 8, max = level/5 + ML×2.0 + 11.
   const canaryLightHealing: Spell = {

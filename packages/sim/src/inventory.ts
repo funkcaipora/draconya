@@ -21,7 +21,7 @@
 // container, sem item largado — o §26 do documento de referência lista isso como rejeição
 // deliberada, e é o que dispensa metade do modelo de mundo de uma engine de MMO.
 
-import { DAMAGE_TYPES } from '@draconya/content';
+import { DAMAGE_TYPES, matchesVocationRequirement } from '@draconya/content';
 import type {
   CompiledMitigation, DamageType, Item, ItemOrigin, ItemSlot, Progression, RingEffect,
 } from '@draconya/content';
@@ -353,10 +353,7 @@ export class Inventory {
     if (definition.requires.level !== undefined && wearer.level < definition.requires.level) {
       return { ok: false, reason: 'level-too-low' };
     }
-    if (
-      definition.requires.vocationId !== undefined
-      && wearer.vocationId !== definition.requires.vocationId
-    ) {
+    if (!matchesVocationRequirement(definition.requires.vocationId, wearer.vocationId)) {
       return { ok: false, reason: 'wrong-vocation' };
     }
 
@@ -564,13 +561,7 @@ export class Inventory {
     if (definition.requires.level !== undefined && wearer.level < definition.requires.level) {
       return false;
     }
-    if (
-      definition.requires.vocationId !== undefined
-      && wearer.vocationId !== definition.requires.vocationId
-    ) {
-      return false;
-    }
-    return true;
+    return matchesVocationRequirement(definition.requires.vocationId, wearer.vocationId);
   }
 
   /** A armadura somada do que está vestido. Zero é ninguém vestido, e é um número honesto. */
@@ -626,6 +617,33 @@ export class Inventory {
     const ring = this.equippedAt('finger');
     if (ring === null) return null;
     return catalog.get(ring.itemId)?.ringEffect ?? null;
+  }
+
+  /**
+   * O bônus de UMA skill do que está vestido, somado (#524): o Hat of the Mad soma na `magic`
+   * (que aqui É o magic level, FUN-92), a Paladin Armor na `distance`. Molde de `armor()`: uma
+   * varredura dos poucos slots equipados, não uma tabela por skill — o custo por leitura é
+   * limitado e não depende do catálogo.
+   */
+  skillBonus(catalog: ReadonlyMap<string, Item>, skillId: string): number {
+    let total = 0;
+    for (const carried of this.#equipped.values()) {
+      const bonus = catalog.get(carried.itemId)?.bonuses?.skill;
+      if (bonus !== undefined && bonus.skillId === skillId) total += bonus.amount;
+    }
+    return total;
+  }
+
+  /**
+   * A velocidade somada do que está vestido (#524: boots of haste). Molde de `armor()` — soma
+   * simples, e zero é ninguém com bônus de velocidade, o caso comum.
+   */
+  speedBonus(catalog: ReadonlyMap<string, Item>): number {
+    let total = 0;
+    for (const carried of this.#equipped.values()) {
+      total += catalog.get(carried.itemId)?.bonuses?.speed ?? 0;
+    }
+    return total;
   }
 }
 
