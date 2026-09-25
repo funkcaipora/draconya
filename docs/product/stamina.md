@@ -71,9 +71,39 @@ seria mentira. O que ele deixa de ganhar é XP.
 | Taxa de recuperação fora de hunt | 1:1 (1 min = 1 min) | `packages/content/data/stamina/baseline.json`, `recoveryRatio` |
 | Taxa de recuperação em treino | 1:1 (1 min = 1 min) | mesma taxa: treino é "fora de hunt" e não tem entrada própria |
 
+## Direção planejada (ADR 0043, emenda 2026-09-25 — "copie do Huntera")
+
+O comportamento acima é o **implementado hoje**; o que segue é o alvo do M32, ainda não
+construído. O [ADR 0043](../adr/0043-tibia-stamina-and-food-only-regeneration.md) propõe stamina
+do Tibia com faixas; a emenda de 2026-09-25 (resposta do dono, "copie do Huntera", à luz de
+`docs/reference/huntera-observed.md`) revisou essa proposta:
+
+- **Teto: 12 h** (`staminaMs: 43.200.000`), não os 42 h que o ADR 0043 propunha originalmente —
+  o Huntera opera com 12 h cheios na Cidade. O consumo em hunt continua 1:1, sem mudança.
+- **Recuperação fora de hunt:** `[ABERTO]`. A razão por faixa do Canary (1 min a cada 180 s, depois
+  a cada 360 s) NÃO foi adotada — ela era calculada contra o teto de 42 h que caiu, e o Huntera
+  nunca teve sua razão de recuperação passiva medida. Fica mantida a recuperação atual, 1:1, como
+  valor provisório até uma captura medir a razão real.
+- **Faixas de XP/loot por stamina baixa:** `[ABERTO]`. As faixas do Canary (1,5× Premium acima de
+  2.340 min, 0,5× em 840 min ou menos, corte de loot em 840 min ou menos) também eram calculadas
+  contra o teto de 42 h; sem reescalonamento contra os novos 720 min, e sem confirmação do
+  Huntera (a conta observada tinha "Bônus de Premium" inativo), ficam como pendência.
+- **Sem comida.** A regeneração de vida/mana (hoje um sistema separado, fora do escopo deste
+  documento) passa a depender só de "estar em hunt agora" — a tela do Huntera diz "Regeneração de
+  vida/mana: só em caçadas", e o socket confirma `healthRegen`/`manaRegen` zerados na Cidade. Isto
+  reverte a proposta anterior do ADR 0043 de condicionar a regeneração a um item de comida; nenhum
+  consumível de comida entra em `content/items`.
+
+Ver a emenda "2026-09-25: decisões do dono" no fim do ADR 0043 para a citação completa da
+evidência (parte/linha de `huntera-observed.md`) e a captura que falta para fechar a recuperação
+e as faixas.
+
 ## Em aberto
 
-Nenhum `[ABERTO]` do PRD atinge diretamente este sistema.
+Nenhum `[ABERTO]` do PRD atinge diretamente este sistema. A direção planejada do M32 (seção
+acima) tem duas pendências: a razão de recuperação fora de hunt `[ABERTO]` e as faixas de
+XP/loot por stamina baixa `[ABERTO]`, as duas aguardando captura do Huntera (ver
+`docs/tibia-parity-plan.md` §6).
 
 ## Divergências do PRD
 
