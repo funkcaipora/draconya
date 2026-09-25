@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL_HUD, hud } from '../state/hud.js';
 import { world } from '../state/world.js';
 import { createConnection, type SocketLike } from './connection.js';
+import { offerWsUrl, takeWsUrl } from './pending-ticket.js';
 
 class FakeSocket implements SocketLike {
   binaryType = '';
@@ -27,14 +28,20 @@ class FakeSocket implements SocketLike {
   }
 }
 
-function harness() {
+function harness(overrides: { requestTicket?: () => Promise<string> } = {}) {
   const sockets: FakeSocket[] = [];
+  const urls: string[] = [];
+  let requestTicketCalls = 0;
   const pending: Array<{ fn: () => void; delayMs: number }> = [];
   const connection = createConnection({
     apiUrl: 'http://api',
     characterId: 'c1',
-    requestTicket: async () => 'ws://node/?ticket=t',
-    openSocket: () => {
+    requestTicket: async () => {
+      requestTicketCalls += 1;
+      return overrides.requestTicket === undefined ? 'ws://node/?ticket=t' : overrides.requestTicket();
+    },
+    openSocket: (url) => {
+      urls.push(url);
       const socket = new FakeSocket();
       sockets.push(socket);
       return socket;
@@ -53,7 +60,7 @@ function harness() {
     const due = pending.splice(0, pending.length);
     for (const entry of due) entry.fn();
   };
-  return { connection, sockets, pending, runPending };
+  return { connection, sockets, urls, requestTicketCalls: () => requestTicketCalls, pending, runPending };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -62,6 +69,9 @@ beforeEach(() => {
   hud.set(() => INITIAL_HUD);
   world.creatures.clear();
   world.selfId = null;
+  // A fila de ticket oferecido é um módulo só (#197): um teste anterior que ofereceu e não
+  // consumiu vazaria para o próximo. `takeWsUrl` também CONSOME, então isto já limpa.
+  takeWsUrl();
 });
 
 describe('connection', () => {
@@ -184,11 +194,86 @@ describe('connection', () => {
     expect(pending).toHaveLength(1);
     expect(hud.get().connection).toBe('reconnecting');
   });
+
+  it('restart with a pending wsUrl opens exactly that URL, with no extra retry (#197, #527)', async () => {
+    // A party entra na hunt assim: `enter(wsUrl)` oferece o ticket e reinicia a conexão — o
+    // `restart` tem que abrir o socket NAQUELE endereço, não pedir um novo por `POST /api/tickets`.
+    const { connection, sockets, urls, requestTicketCalls, pending } = harness();
+    connection.start();
+    await flush();
+    sockets[0]?.onopen?.({});
+    expect(urls).toEqual(['ws://node/?ticket=t']);
+
+    offerWsUrl('ws://party-node/?ticket=party-1');
+    connection.restart();
+    await flush();
+
+    expect(urls).toEqual(['ws://node/?ticket=t', 'ws://party-node/?ticket=party-1']);
+    expect(sockets).toHaveLength(2);
+    // Nenhuma tentativa a mais agendada: `restart` reconecta na hora, não cai no backoff.
+    expect(pending).toHaveLength(0);
+    expect(requestTicketCalls()).toBe(1);
+  });
+
+  it('restart without a pending ticket requests a fresh one from the api (#527)', async () => {
+    const { connection, sockets, urls, requestTicketCalls } = harness();
+    connection.start();
+    await flush();
+    sockets[0]?.onopen?.({});
+
+    connection.restart();
+    await flush();
+
+    expect(sockets).toHaveLength(2);
+    expect(urls).toEqual(['ws://node/?ticket=t', 'ws://node/?ticket=t']);
+    expect(requestTicketCalls()).toBe(2);
+  });
+
+  it("the old socket's onclose does not schedule a retry after restart (#527)", async () => {
+    // Mutação que mata: sem zerar os handlers do socket velho ANTES de fechar, o `onclose` do
+    // fechamento intencional agendaria uma reconexão duplicada — dois sockets brigando pela
+    // mesma sessão.
+    const { connection, sockets, pending } = harness();
+    connection.start();
+    await flush();
+    const first = sockets[0];
+    first?.onopen?.({});
+
+    offerWsUrl('ws://party-node/?ticket=party-1');
+    connection.restart();
+    await flush();
+
+    expect(sockets).toHaveLength(2);
+    expect(pending).toHaveLength(0);
+    // O `onclose` do socket velho — disparado pelo `close()` que `restart` chamou, como um
+    // WebSocket de verdade faria — não pode agendar nada: os handlers já foram zerados.
+    first?.onclose?.({});
+    expect(pending).toHaveLength(0);
+    expect(sockets).toHaveLength(2);
+  });
+
+  it('restart never leaves the status at idle, and keeps sending intent afterward', async () => {
+    const { connection, sockets } = harness();
+    connection.start();
+    await flush();
+    sockets[0]?.onopen?.({});
+    expect(hud.get().connection).toBe('connected');
+
+    connection.restart();
+    // Entre o fechamento e o novo socket abrir, o status é "conectando" — nunca "idle": uma
+    // troca de sessão não é uma queda, e "idle" pareceria que a conexão foi encerrada de vez.
+    expect(hud.get().connection).toBe('connecting');
+    await flush();
+    sockets[1]?.onopen?.({});
+    expect(hud.get().connection).toBe('connected');
+
+    connection.send({ type: 'ping', t: 1 });
+    expect(sockets[1]?.requests()).toContain('ping');
+  });
 });
 
 describe('o ticket oferecido por fora (#197)', () => {
-  it('is used once before asking the api, then the api is asked again', async () => {
-    const { offerWsUrl, takeWsUrl } = await import('./pending-ticket.js');
+  it('is used once before asking the api, then the api is asked again', () => {
     offerWsUrl('ws://party/?ticket=p');
     expect(takeWsUrl()).toBe('ws://party/?ticket=p');
     expect(takeWsUrl()).toBeNull();

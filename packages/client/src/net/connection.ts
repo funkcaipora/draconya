@@ -37,6 +37,14 @@ export interface ConnectionOptions {
 export interface Connection {
   start(): void;
   stop(): void;
+  /**
+   * Fecha o socket atual DE PROPÓSITO e reconecta na hora (#197, #527): é como a party entra
+   * na hunt — `enter(wsUrl)` oferece o ticket (`offerWsUrl`) e chama isto. Faz parte da
+   * interface, e não só de `net/current.ts`, porque `restartConnection` só existe se o objeto
+   * que `setConnection` guardou tiver o método — sem ele no retorno de `createConnection`, a
+   * chamada virava um `false` silencioso e o ticket oferecido nunca era usado.
+   */
+  restart(): void;
   send(message: C2SMessage): void;
   readonly status: ConnectionStatus;
 }
@@ -91,15 +99,25 @@ export function createConnection(options: ConnectionOptions): Connection {
     if (!running) return;
     setStatus(attempt === 0 ? 'connecting' : 'reconnecting');
 
+    // O ticket oferecido por fora (#197) — o `start` da party, o `/mine` de cada membro, um
+    // convite aceito — vale ANTES de pedir um novo por `POST /api/tickets`: é assim que a
+    // party entra na hunt pelo MESMO `connect` de sempre, sem um segundo caminho de socket.
+    // `takeWsUrl` é de uso único — se este ficar velho ou for recusado, `scheduleRetry` chama
+    // `connect` de novo e a fila já está vazia, então a PRÓXIMA tentativa pede um ticket normal.
+    const offered = takeWsUrl();
     let wsUrl: string;
-    try {
-      wsUrl = await requestTicket(options.apiUrl, options.characterId);
-    } catch {
-      // Ticket recusado pode ser transitório (nó reiniciando) ou definitivo (sem sessão).
-      // Tentar de novo com espera é o comportamento certo para os dois: o definitivo vira
-      // uma sequência de falhas visível, não um travamento silencioso.
-      scheduleRetry();
-      return;
+    if (offered !== null) {
+      wsUrl = offered;
+    } else {
+      try {
+        wsUrl = await requestTicket(options.apiUrl, options.characterId);
+      } catch {
+        // Ticket recusado pode ser transitório (nó reiniciando) ou definitivo (sem sessão).
+        // Tentar de novo com espera é o comportamento certo para os dois: o definitivo vira
+        // uma sequência de falhas visível, não um travamento silencioso.
+        scheduleRetry();
+        return;
+      }
     }
     if (!running) return;
 
@@ -141,6 +159,26 @@ export function createConnection(options: ConnectionOptions): Connection {
     target.send(encodeC2S(message));
   }
 
+  /**
+   * Fecha o socket atual, se houver, e cancela a espera pendente — sem deixar o `onclose` do
+   * fechamento intencional agendar uma reconexão que ninguém pediu. Base de `stop` (encerra) e
+   * `restart` (reconecta na hora): as duas precisam do MESMO cuidado de zerar os handlers
+   * ANTES de fechar.
+   */
+  function closeCurrent(): void {
+    cancelRetry?.();
+    cancelRetry = null;
+    const open = socket;
+    socket = null;
+    if (open !== null) {
+      open.onopen = null;
+      open.onmessage = null;
+      open.onclose = null;
+      open.onerror = null;
+      open.close();
+    }
+  }
+
   return {
     start() {
       if (running) return;
@@ -150,20 +188,18 @@ export function createConnection(options: ConnectionOptions): Connection {
     },
     stop() {
       running = false;
-      cancelRetry?.();
-      cancelRetry = null;
-      const open = socket;
-      socket = null;
-      // Zerar os handlers antes de fechar: senão o `onclose` do fechamento intencional
-      // agenda uma reconexão que ninguém pediu.
-      if (open !== null) {
-        open.onopen = null;
-        open.onmessage = null;
-        open.onclose = null;
-        open.onerror = null;
-        open.close();
-      }
+      closeCurrent();
       setStatus('idle');
+    },
+    restart() {
+      // Reconecta na hora — nunca passa por `idle`: é uma troca de sessão (party, convite
+      // aceito), não uma queda. `attempt` volta a zero para o status mostrar "conectando", não
+      // "reconectando" (que soa a falha), e para o backoff não herdar a espera de uma queda
+      // anterior que não tem nada a ver com isto.
+      running = true;
+      attempt = 0;
+      closeCurrent();
+      void connect();
     },
     send(message) {
       if (socket !== null && status === 'connected') sendOn(socket, message);
