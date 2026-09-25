@@ -435,6 +435,24 @@ function fixedAmount(
   return amount ?? 0;
 }
 
+/**
+ * Gasta UM do estoque do supply antes de cobrar gold (#520, revisão do #536): uma Strong
+ * Health Potion caída do Dragon (`CharacterRuntime.supplyStock`, creditada por `#creditSupplies`
+ * em `hunt.ts`) é usável de verdade, não só um número que credita e nunca se gasta.
+ *
+ * O estoque é PESSOAL — ao contrário do gold, nunca passa por `Purse` nem por rateio de party:
+ * quem tem três poções no estoque usa as PRÓPRIAS três, e o resto da party continua pagando
+ * gold pelas delas. Devolve `true` quando gastou (o chamador pula o pagamento em gold inteiro,
+ * inclusive a checagem `canAfford`); `false` sem estoque, e o caminho de sempre continua.
+ */
+function spendStock(user: CharacterRuntime, supplyId: string): boolean {
+  const stock = user.supplyStock.get(supplyId) ?? 0;
+  if (stock <= 0) return false;
+  if (stock <= 1) user.supplyStock.delete(supplyId);
+  else user.supplyStock.set(supplyId, stock - 1);
+  return true;
+}
+
 export function useSupply(
   user: CharacterRuntime,
   supply: Supply,
@@ -474,10 +492,15 @@ export function useSupply(
     }
     if (aim === null || aim.targets.length === 0) return { ok: false, reason: 'no-target', retryInMs: NOT_WAITING };
     if (aim.distance > supply.effect.range) return { ok: false, reason: 'out-of-range', retryInMs: NOT_WAITING };
-    if (!purse.canAfford(supply.price)) return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockDamage = (user.supplyStock.get(supply.id) ?? 0) > 0;
+    if (!hasStockDamage && !purse.canAfford(supply.price)) {
+      return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
+    }
     // Chamador sem contexto de combate: a runa não existe para ele — nunca dano sem `rng`.
     if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
-    purse.pay(supply.price);
+    const paidFromStockDamage = hasStockDamage && spendStock(user, supply.id);
+    if (!paidFromStockDamage) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
     const hits: number[] = [];
     let total = 0;
@@ -499,7 +522,10 @@ export function useSupply(
       hits.push(result.resolvedDamage);
       total += result.resolvedDamage;
     }
-    return { ok: true, healed: 0, manaRestored: 0, damage: total, hits, goldSpent: supply.price };
+    return {
+      ok: true, healed: 0, manaRestored: 0, damage: total, hits,
+      goldSpent: paidFromStockDamage ? 0 : supply.price,
+    };
   }
 
   // Runa de cura escalada (#475): a `formula` canônica (ou o `basePower` provisório) escala
@@ -520,23 +546,27 @@ export function useSupply(
       && (scaling?.magicLevel ?? scaling?.skillLevel ?? 0) < supply.requires.magicLevel) {
       return { ok: false, reason: 'magic-level-too-low', retryInMs: NOT_WAITING };
     }
+    // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+    const hasStockHeal = (user.supplyStock.get(supply.id) ?? 0) > 0;
     if (effect.basePower !== undefined || effect.formula !== undefined) {
       if (combat === undefined || rng === undefined || scaling === undefined) return NOT_IN_CATALOG;
-      if (!purse.canAfford(supply.price)) {
+      if (!hasStockHeal && !purse.canAfford(supply.price)) {
         return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
       }
-      purse.pay(supply.price);
+      const paidFromStockRune = hasStockHeal && spendStock(user, supply.id);
+      if (!paidFromStockRune) purse.pay(supply.price);
       startSupplyCooldown(user, supply, nowMs);
       return {
         ok: true,
         healed: executeHealing(user, recipient, effect, scaling, combat, rng),
-        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: supply.price,
+        manaRestored: 0, damage: 0, hits: NO_HITS, goldSpent: paidFromStockRune ? 0 : supply.price,
       };
     }
-    if (!purse.canAfford(supply.price)) {
+    if (!hasStockHeal && !purse.canAfford(supply.price)) {
       return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
     }
-    purse.pay(supply.price);
+    const paidFromStockPotion = hasStockHeal && spendStock(user, supply.id);
+    if (!paidFromStockPotion) purse.pay(supply.price);
     startSupplyCooldown(user, supply, nowMs);
     // Poção: `amount` fixo OU `amountRange` sorteado (#524), sem contexto de combate — a runa
     // de cura é a única que passa por `executeHealing` acima. `alsoMana` (grande poção de
@@ -547,7 +577,7 @@ export function useSupply(
       manaRestored: effect.alsoMana === undefined
         ? 0
         : restore(recipient, 'mana', fixedAmount(effect.alsoMana.amount, effect.alsoMana.amountRange, rng)),
-      damage: 0, hits: NO_HITS, goldSpent: supply.price,
+      damage: 0, hits: NO_HITS, goldSpent: paidFromStockPotion ? 0 : supply.price,
     };
   }
 
@@ -560,11 +590,14 @@ export function useSupply(
   if (!matchesVocationRequirement(supply.requires.vocationId, user.vocationId)) {
     return { ok: false, reason: 'wrong-vocation', retryInMs: NOT_WAITING };
   }
-  if (!purse.canAfford(supply.price)) {
+  // O estoque (#520) é conferido no lugar do gold — sem ele, a checagem de saldo de sempre.
+  const hasStockMana = (user.supplyStock.get(supply.id) ?? 0) > 0;
+  if (!hasStockMana && !purse.canAfford(supply.price)) {
     return { ok: false, reason: 'not-enough-gold', retryInMs: NOT_WAITING };
   }
 
-  purse.pay(supply.price);
+  const paidFromStockMana = hasStockMana && spendStock(user, supply.id);
+  if (!paidFromStockMana) purse.pay(supply.price);
   startSupplyCooldown(user, supply, nowMs);
   return {
     ok: true,
@@ -572,7 +605,7 @@ export function useSupply(
     manaRestored: restore(recipient, 'mana', fixedAmount(supply.effect.amount, supply.effect.amountRange, rng)),
     damage: 0,
     hits: NO_HITS,
-    goldSpent: supply.price,
+    goldSpent: paidFromStockMana ? 0 : supply.price,
   };
 }
 

@@ -308,26 +308,29 @@ const lootRollSchema = z.object({
  * gold é campo no personagem (`character.gold`), não item — por isso tem lugar próprio, em vez
  * de um `itemId: "gold-coin"` que o código teria que reconhecer por nome.
  *
- * `items` aceita `itemId` OU `supplyId` (#520): poção é suprimento ABSTRATO (`supplies/*.json`,
- * AB-01), e não existia no catálogo de item — sem isso, uma poção no loot de monstro não tinha
- * como ser declarada. `supplyId` credita o ESTOQUE do supply (`CharacterRuntime.supplyStock`,
- * `character.ts`) de quem recebe o drop, e NÃO passa pela mochila: sem peso, sem instância, sem
- * a Caixa de Loot — o mesmo motivo de gold não ser item. O `.refine` recusa a linha ambígua (as
- * duas chaves) ou vazia (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo
- * existente que só declara `itemId` continua válido sem mudar uma vírgula.
+ * `items` aceita `itemId` OU `supplyId` OU `ammunitionId` (#520): poção e munição física são
+ * ABSTRATAS (`supplies/*.json`/`ammunition/*.json`, AB-01/ADR 0026 d.7) e não existiam no
+ * catálogo de item — sem isso, um Burst Arrow ou uma Strong Health Potion no loot de monstro
+ * não tinham como ser declarados. `supplyId`/`ammunitionId` creditam o ESTOQUE
+ * (`CharacterRuntime.supplyStock`/`ammunitionStock`, `character.ts`) de quem recebe o drop, e
+ * NÃO passam pela mochila: sem peso, sem instância, sem a Caixa de Loot — o mesmo motivo de
+ * gold não ser item. O `.refine` recusa a linha ambígua (duas ou mais chaves) ou vazia
+ * (nenhuma) — o mesmo formato do `itemId` sozinho, então um arquivo existente que só declara
+ * `itemId` continua válido sem mudar uma vírgula.
  */
 export const lootTableSchema = z.object({
   gold: lootRollSchema.optional(),
   /**
-   * Itens de verdade OU supply. `buildContent` confere cada `itemId`/`supplyId` contra o
-   * catálogo correspondente (FUN-76 / AB-01).
+   * Itens de verdade, supply OU munição. `buildContent` confere cada `itemId`/`supplyId`/
+   * `ammunitionId` contra o catálogo correspondente (FUN-76 / AB-01 / ADR 0026 d.7).
    */
   items: z.array(lootRollSchema.safeExtend({
     itemId: z.string().min(1).optional(),
     supplyId: z.string().min(1).optional(),
+    ammunitionId: z.string().min(1).optional(),
   }).refine(
-    (line) => (line.itemId !== undefined) !== (line.supplyId !== undefined),
-    { message: 'loot: declare itemId OU supplyId, nunca os dois nem nenhum' },
+    (line) => [line.itemId, line.supplyId, line.ammunitionId].filter((id) => id !== undefined).length === 1,
+    { message: 'loot: declare exatamente um de itemId, supplyId ou ammunitionId' },
   )).default([]),
 });
 

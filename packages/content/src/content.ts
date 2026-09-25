@@ -1054,8 +1054,9 @@ export function buildContent(raw: RawContent): Content {
   // recusado é o item FANTASMA. Aceitar a linha creditaria no primeiro abate um item que nunca
   // vai poder ser desenhado, equipado nem vendido, e o sintoma chegaria dias depois.
   //
-  // Loot de SUPPLY (#520) é a mesma conferência do outro lado: a linha declara `itemId` OU
-  // `supplyId` (o schema já garante isso), e cada um confere contra o catálogo dele.
+  // Loot de SUPPLY e de MUNIÇÃO (#520) é a mesma conferência do outro lado: a linha declara
+  // exatamente um de `itemId`/`supplyId`/`ammunitionId` (o schema já garante isso), e cada um
+  // confere contra o catálogo dele.
   for (const monster of monsterDefinitions.values()) {
     for (const line of monster.loot.items) {
       if (line.itemId !== undefined) {
@@ -1068,6 +1069,12 @@ export function buildContent(raw: RawContent): Content {
         if (supplies.has(line.supplyId)) continue;
         problems.push(
           `monstro "${monster.id}": loot.items referencia supply "${line.supplyId}", que não `
+            + 'existe no catálogo',
+        );
+      } else if (line.ammunitionId !== undefined) {
+        if (ammunitionDefinitions.has(line.ammunitionId)) continue;
+        problems.push(
+          `monstro "${monster.id}": loot.items referencia munição "${line.ammunitionId}", que não `
             + 'existe no catálogo',
         );
       }

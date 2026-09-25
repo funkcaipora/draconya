@@ -30,6 +30,7 @@
       { "itemId": "steel-shield", "chance": 0.14893 },
       { "itemId": "crossbow", "chance": 0.10085 },
       { "itemId": "dragons-tail", "chance": 0.09883 },
+      { "ammunitionId": "burst-arrow", "chance": 0.07976, "min": 1, "max": 10 },
       { "itemId": "longsword", "chance": 0.04027 },
       { "itemId": "steel-helmet", "chance": 0.03005 },
       { "itemId": "broadsword", "chance": 0.01995 },

@@ -128,14 +128,23 @@ export interface CharacterState {
   readonly ammo?: Readonly<Partial<Record<AmmoFamily, string>>>;
   /**
    * O ESTOQUE de supply que caiu em loot (#520): `supplyId → quantidade`, creditado por quem
-   * recebe o drop (`rollLoot`/`LootSupply`, `packages/sim/src/loot.ts`) — nunca escrito por
-   * `useSupply`. Supply continua abstrato (AB-01, ADR 0032 d.6: sem pilha, sem reposição no
-   * USO); o estoque é só o RECEBIMENTO de um drop, e ainda não tem consumidor — como
-   * `staticAttack` no monstro (#518), aceito e persistido, mas nenhum caminho de `useSupply`
-   * gasta dele ainda (divergência registrada em `docs/product/items.md`). Ausente é nenhum
-   * estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`.
+   * recebe o drop (`rollLoot`/`LootSupply`, `packages/sim/src/loot.ts`). Supply continua
+   * abstrato no CATÁLOGO (AB-01, ADR 0032 d.6: sem pilha própria) — mas `useSupply` (revisão do
+   * #536) gasta DESTE estoque primeiro, e só cobra gold quando ele acaba: uma Strong Health
+   * Potion caída do Dragon é usável de verdade, não só um número que credita e nunca se gasta.
+   * Ausente é nenhum estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`. Persistido em
+   * `character.supply_stock` (jsonb) — ver `packages/server/src/db/schema.ts`.
    */
   readonly supplyStock?: Readonly<Record<string, number>>;
+  /**
+   * O ESTOQUE de munição FÍSICA que caiu em loot (#520): `ammunitionId → quantidade`, a mesma
+   * forma e a mesma regra do `supplyStock` — munição continua abstrata no TIRO (ADR 0026 d.7:
+   * cada disparo debita `price` do gold por família escolhida, sem item físico), mas o que caiu
+   * em loot (Burst Arrow, Power Bolt) é gasto ANTES do gold, uma unidade por tiro daquela
+   * família. Ausente é nenhum estoque, sem bump de `SNAPSHOT_FORMAT_VERSION`. Persistido em
+   * `character.ammunition_stock` (jsonb).
+   */
+  readonly ammunitionStock?: Readonly<Record<string, number>>;
   readonly cooldowns: Partial<CooldownState>;
   /**
    * Para onde o personagem olha (#155): é de onde saem onda, cleave e feixe. Gravada pelo passo
@@ -237,6 +246,8 @@ export class CharacterRuntime {
   readonly ammo: Map<AmmoFamily, string>;
   /** O estoque de supply do loot (#520). Só a sessão dona escreve — ver `CharacterState.supplyStock`. */
   readonly supplyStock: Map<string, number>;
+  /** O estoque de munição do loot (#520). Ver `CharacterState.ammunitionStock`. */
+  readonly ammunitionStock: Map<string, number>;
   readonly cooldowns: Cooldowns;
   /** Para onde olha. Só o passo escreve. */
   direction: Direction;
@@ -270,6 +281,7 @@ export class CharacterRuntime {
     this.contribution = Contribution.fromState(state.contribution);
     this.ammo = new Map(Object.entries(state.ammo ?? {}) as [AmmoFamily, string][]);
     this.supplyStock = new Map(Object.entries(state.supplyStock ?? {}));
+    this.ammunitionStock = new Map(Object.entries(state.ammunitionStock ?? {}));
     this.cooldowns = Cooldowns.fromState(state.cooldowns);
     this.direction = state.direction ?? 'south';
     this.conditions = Conditions.fromState(state.conditions);
@@ -404,6 +416,7 @@ export class CharacterRuntime {
       contribution: this.contribution.getState(),
       ...(this.ammo.size === 0 ? {} : { ammo: Object.fromEntries(this.ammo) }),
       ...(this.supplyStock.size === 0 ? {} : { supplyStock: Object.fromEntries(this.supplyStock) }),
+      ...(this.ammunitionStock.size === 0 ? {} : { ammunitionStock: Object.fromEntries(this.ammunitionStock) }),
       cooldowns: this.cooldowns.getState(),
       direction: this.direction,
       ...(this.conditions.size === 0 ? {} : { conditions: this.conditions.getState() }),

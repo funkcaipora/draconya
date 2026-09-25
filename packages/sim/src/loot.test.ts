@@ -28,7 +28,8 @@ describe('rollLoot', () => {
   });
 
   it('tabela vazia é zero e nada, não erro', () => {
-    expect(rollLoot(table(), Rng.fromSeed('loot'))).toEqual({ gold: 0, items: [], supplies: [] });
+    expect(rollLoot(table(), Rng.fromSeed('loot')))
+      .toEqual({ gold: 0, items: [], supplies: [], ammunition: [] });
   });
 
   it('a mesma semente produz a mesma sequência', () => {
@@ -73,6 +74,7 @@ describe('rollLoot', () => {
       gold: 7,
       items: [{ itemId: 'first', quantity: 2 }, { itemId: 'second', quantity: 1 }],
       supplies: [],
+      ammunition: [],
     });
   });
 
@@ -95,6 +97,27 @@ describe('rollLoot', () => {
         { itemId: 'small-diamond', quantity: 1 },
       ],
       supplies: [{ supplyId: 'strong-health-potion', quantity: 2 }],
+      ammunition: [],
     });
+  });
+
+  it('ammunitionId cai em `ammunition`, separado de `items` e `supplies` (#520, revisão do #536)', () => {
+    // Munição física (Burst Arrow, Power Bolt) é a TERCEIRA alternativa da linha — mesma regra
+    // de posição/sorteio do supply, balde diferente.
+    const rng = Rng.fromSeed('ammo');
+    const result = rollLoot(table({
+      items: [
+        { itemId: 'dragon-ham', chance: 1, min: 1, max: 1 },
+        { ammunitionId: 'burst-arrow', chance: 1, min: 1, max: 10 },
+        { supplyId: 'strong-health-potion', chance: 1, min: 1, max: 1 },
+      ],
+    }), rng);
+    expect(result.gold).toBe(0);
+    expect(result.items).toEqual([{ itemId: 'dragon-ham', quantity: 1 }]);
+    expect(result.supplies).toEqual([{ supplyId: 'strong-health-potion', quantity: 1 }]);
+    expect(result.ammunition).toHaveLength(1);
+    expect(result.ammunition[0]?.ammunitionId).toBe('burst-arrow');
+    expect(result.ammunition[0]?.quantity).toBeGreaterThanOrEqual(1);
+    expect(result.ammunition[0]?.quantity).toBeLessThanOrEqual(10);
   });
 });
