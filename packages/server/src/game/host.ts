@@ -3618,7 +3618,11 @@ export class SessionHost {
       const definition = this.#options.monsterCatalog?.get(monster.monsterId);
       creatures.push({
         id: this.#creatureId(hosted, monster.subject),
-        position: { ...monster.position, z: ruleset.floor ?? 0 },
+        // O andar do MONSTRO (#519, hunt multiandar), nunca o padrão da instância: numa hunt de
+        // andar único os dois sempre bateram, e é só por isso que `ruleset.floor` nunca apareceu
+        // errado até aqui. `?? ruleset.floor ?? 0` sobra para o monstro de snapshot anterior a
+        // esta issue, sem `z` nenhum na posição.
+        position: { ...monster.position, z: monster.position.z ?? ruleset.floor ?? 0 },
         appearanceId: definition?.outfitId ?? 0,
         name: definition?.name ?? monster.monsterId,
         health: monster.health,
