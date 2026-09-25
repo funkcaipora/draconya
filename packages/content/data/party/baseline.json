@@ -1,12 +1,8 @@
 {
   "id": "baseline",
   "maxMembers": 8,
-  "xpPoolPercentByUniqueVocations": {
-    "1": 120, "2": 130, "3": 160, "4": 200,
-    "5": 200, "6": 200, "7": 200, "8": 200
-  },
   "matchmakingLevelRange": 0,
   "autoSellItemTypes": { "free": 5, "premium": 20 },
   "sharedExperience": { "rangeTiles": 30, "floors": 1, "levelRangeDivisor": 1.5, "activityWindowMs": 120000 },
-  "_open": "§15.3 (ADR 0027 emenda 2026-09-24, #525): tabela do TFS/Canary — `1 + n × (5 × (n − 1) + 10) / 100` para n > 1, 1,20 para n ≤ 1 (`data/events/scripts/party.lua` do TFS `Party:onShareExperience`; o `onShareExperience` do Canary é uma fórmula quadrática diferente mas rende os MESMOS números para n = 1..4). \"Nenhuma\" vocação (level < 8) NÃO conta mais como vocação única — o TFS exclui `VOCATION_NONE` explicitamente; antes deste fix ela contava, e a tabela {125,150,175,200} era um palpite nunca sourced. Teto batido em 4 vocações reais (Knight/Paladin/Sorcerer/Druid, `packages/content/data/vocations/`); \"5\"..\"8\" repetem 200 só porque o schema exige uma chave por membro até `maxMembers` (matchmakingLevelRange é §43.2, ainda aberto). autoSellItemTypes é §8/§42.1 — 5 Free / 20 Premium do personagem líder. sharedExperience é `Party::canUseSharedExperience` do TFS/Canary — ver o comentário do schema em packages/content/src/schemas.ts."
+  "_open": "§15.3 (ADR 0027 emenda 2026-09-24/25, #525): o multiplicador de XP compartilhada NÃO é mais dado deste arquivo — é `sharedExperiencePercent` em packages/sim/src/party.ts, a fórmula do Canary (`data/events/scripts/party.lua`, `Party:onShareExperience`) copiada em código, porque é mecanismo (como `movementDuration`), não balanceamento; uma tabela indexada só por vocações únicas não conseguia expressar o desconto do Canary por TAMANHO da party (>= 4 membros, não >= 4 vocações). A chave `xpPoolPercentByUniqueVocations` existiu aqui até o #525 corrigir contra a fonte real — um `RawContent` antigo com essa chave continua carregando (schema não estrito, campo ignorado). matchmakingLevelRange é §43.2, ainda aberto. autoSellItemTypes é §8/§42.1 — 5 Free / 20 Premium do personagem líder. sharedExperience é `Party::canUseSharedExperience` do TFS/Canary — ver o comentário do schema em packages/content/src/schemas.ts."
 }

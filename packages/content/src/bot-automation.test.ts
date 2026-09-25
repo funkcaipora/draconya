@@ -32,7 +32,7 @@ const base: RawContent = {
     },
   }],
   stamina: [{ id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 }],
-  party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 } }],
+  party: [{ id: 'baseline', maxMembers: 4 }],
   bot: [{
     id: 'baseline', vocabularyVersion: BOT_VOCABULARY_VERSION, categoryCooldownMs: 1_000,
     slots: { heal: 3, potion: 4, attack: 10, rune: 10, support: 10 },

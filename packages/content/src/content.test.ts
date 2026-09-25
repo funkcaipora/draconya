@@ -36,7 +36,7 @@ const combat = {
 };
 
 const stamina = { id: 'baseline', maxMs: 86_400_000, recoveryRatio: 1 };
-const party = { id: 'baseline', maxMembers: 8, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200, '6': 200, '7': 200, '8': 200 } };
+const party = { id: 'baseline', maxMembers: 8 };
 
 // As famílias de arma e as skills que elas escalam (CMB-05). O conteúdo real vive em
 // `data/weapon-families/` e `data/skills/`; aqui é o mínimo que faz uma arma montar. A fórmula
@@ -595,16 +595,20 @@ describe('o raio livre do spawn (#236)', () => {
   });
 });
 
-describe('a tabela da party (#188, ADR 0027)', () => {
-  it('refuses content without it: solo is a party of one, and the pool lives in content', () => {
+describe('a party (#188, ADR 0027; multiplicador de XP saiu do conteúdo no #525)', () => {
+  it('refuses content without it: solo is a party of one', () => {
     expect(() => buildContent({ ...base(), party: [] })).toThrow(/party\/baseline/);
   });
 
-  it('is indexed on the content, with the pool by unique vocations', () => {
+  it('is indexed on the content, sem o multiplicador de XP (§525: agora é fórmula em sim/party.ts)', () => {
     const content = buildContent(base());
     expect(content.party.maxMembers).toBe(8);
-    expect(content.party.xpPoolPercentByUniqueVocations['8']).toBe(200);
     expect(content.party.matchmakingLevelRange).toBe(0);
+    // Uma chave `xpPoolPercentByUniqueVocations` antiga num RawContent é IGNORADA, não recusada
+    // (schema não estrito) — não precisa migração para quem ainda a carrega.
+    expect(buildContent(base({
+      party: [{ ...party, xpPoolPercentByUniqueVocations: { '1': 999 } }],
+    })).party.maxMembers).toBe(8);
   });
 
   it('carrega o limite de venda automática, com default seguro para fixtures antigas (§8)', () => {
@@ -617,18 +621,8 @@ describe('a tabela da party (#188, ADR 0027)', () => {
     })).party.autoSellItemTypes).toEqual({ free: 1, premium: 3 });
   });
 
-  it('refuses a missing key, a decreasing percent, and maxMembers below two', () => {
-    // Mutação que mata: tirar o `superRefine` — a tabela `{ '1': 150, '2': 125 }` entraria, e o
-    // sim daria menos XP a uma party mais variada.
-    const table = (over: Record<string, unknown>) => () => buildContent({
-      ...base(),
-      party: [{ id: 'baseline', maxMembers: 4, xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200 }, ...over }],
-    });
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175 } })).toThrow(/sem a chave "4"/);
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 150, '2': 125, '3': 175, '4': 200 } })).toThrow(/menor que a anterior/);
-    expect(table({ maxMembers: 1 })).toThrow(ContentError);
-    // Chave a mais é inofensiva.
-    expect(table({ xpPoolPercentByUniqueVocations: { '1': 125, '2': 150, '3': 175, '4': 200, '5': 200 } })).not.toThrow();
+  it('refuses maxMembers below two', () => {
+    expect(() => buildContent(base({ party: [{ ...party, maxMembers: 1 }] }))).toThrow(ContentError);
   });
 });
 

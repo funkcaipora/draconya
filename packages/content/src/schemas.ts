@@ -1470,18 +1470,22 @@ export type Stamina = z.infer<typeof staminaSchema>;
 
 /**
  * A party de hunt (§15, ADR 0027, #188; fórmula e elegibilidade emendadas pelo ADR 0027 em
- * 2026-09-24, #525, fidelidade TFS/Canary do ADR 0037): o teto de membros, o pool de XP por
- * número de VOCAÇÕES ÚNICAS **reais** entre os membros elegíveis (sem vocação, level < 8, NÃO
- * conta — `Party:onShareExperience` do TFS exclui `VOCATION_NONE`) e a elegibilidade de XP
- * compartilhada (`Party::canUseSharedExperience` do TFS/Canary): nível dentro de 2/3 do maior da
- * party, alcance/andar do líder e atividade recente. Indexada só por vocações únicas: o número
- * de membros não entra no pool, só na divisão (o PRD pedia as duas dimensões; a segunda seria
- * coluna repetida). Percentuais NÃO DECRESCENTES e uma chave para cada `1..maxMembers`.
+ * 2026-09-24 e 2026-09-25, #525, fidelidade Canary do ADR 0037 decisão 4): o teto de membros e
+ * a elegibilidade de XP compartilhada (`Party::canUseSharedExperience` do TFS/Canary) — nível
+ * dentro de 2/3 do maior level do roster, alcance/andar do líder e atividade recente.
+ *
+ * O MULTIPLICADOR de XP não é mais tabela: é `sharedExperiencePercent` em `packages/sim/src/
+ * party.ts`, a fórmula do Canary (`Party:onShareExperience`) copiada em código — não é número
+ * de balanceamento, é MECANISMO, a mesma categoria de `movementDuration`/`resolveDamage`. Uma
+ * tabela indexada só por vocações únicas não conseguiria expressar o desconto do Canary por
+ * TAMANHO da party (`≥ 4` membros, não `≥ 4` vocações — ver o comentário de `sharedExperiencePercent`),
+ * e é por isso que saiu do conteúdo: `xpPoolPercentByUniqueVocations` existiu aqui até o #525
+ * corrigir contra a fonte, e uma chave desse nome num `RawContent` antigo é ignorada (schema não
+ * estrito) — não precisa migração.
  */
 export const partySchema = z.object({
   id: z.literal('baseline'),
   maxMembers: z.number().int().min(2).max(8),
-  xpPoolPercentByUniqueVocations: z.record(z.string().regex(/^[1-9]\d*$/), z.number().int().min(100)),
   /** §43.2, ainda aberto. `0` desliga: qualquer level entra na mesma fila. */
   matchmakingLevelRange: z.number().int().nonnegative().default(0),
   /**
@@ -1515,24 +1519,9 @@ export const partySchema = z.object({
     activityWindowMs: z.number().int().positive(),
   }).optional(),
   _open: z.string().optional(),
-}).superRefine((party, ctx) => {
-  let previous = 0;
-  for (let n = 1; n <= party.maxMembers; n++) {
-    const percent = party.xpPoolPercentByUniqueVocations[String(n)];
-    if (percent === undefined) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations sem a chave "${String(n)}"` });
-      return;
-    }
-    if (percent < previous) {
-      ctx.addIssue({ code: 'custom', message: `xpPoolPercentByUniqueVocations["${String(n)}"] é menor que a anterior` });
-      return;
-    }
-    previous = percent;
-  }
 }).transform((party): {
   id: 'baseline';
   maxMembers: number;
-  xpPoolPercentByUniqueVocations: Record<string, number>;
   matchmakingLevelRange: number;
   autoSellItemTypes?: { free: number; premium: number } | undefined;
   sharedExperience?: {
